@@ -23,6 +23,7 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
+use nexus_governed_control::governed::RecordBatch;
 use nexus_governed_control::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +100,88 @@ pub struct EffectRefusal {
     pub class: String,
 }
 
+/// M2c PR-B: the broker records a call still owes (a door halt's or a
+/// cancellation's, made in memory first). It is written by the call that
+/// made it, once that call holds no Mother lock, or by no one, and then the
+/// broker counts its records lost. It has no `Drop` of its own.
+#[derive(Default)]
+pub struct Owed(Vec<RecordBatch>);
+
+impl Owed {
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(RecordBatch::is_empty)
+    }
+
+    pub(crate) fn push(&mut self, batch: RecordBatch) {
+        self.0.push(batch);
+    }
+
+    pub(crate) fn extend(&mut self, other: Owed) {
+        self.0.extend(other.0);
+    }
+
+    /// Write every record, in order. Never called with a Mother lock held
+    /// (tests check it on every write).
+    pub fn write(self) {
+        #[cfg(test)]
+        if !self.is_empty() {
+            held::assert_none();
+        }
+        for batch in self.0 {
+            let _ = batch.write();
+        }
+    }
+}
+
+/// M2c PR-B (tests): which Mother locks this thread holds, so that every
+/// batch write can check it holds none.
+#[cfg(test)]
+pub(crate) mod held {
+    use std::cell::Cell;
+    use std::thread::LocalKey;
+
+    thread_local! {
+        static COORDINATOR: Cell<bool> = const { Cell::new(false) };
+        static PORT: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Set while a lock is held; restored when dropped (a thread-local
+    /// flag: no I/O, no lock).
+    pub(crate) struct Held {
+        key: &'static LocalKey<Cell<bool>>,
+        was: bool,
+    }
+
+    impl Held {
+        fn set(key: &'static LocalKey<Cell<bool>>) -> Self {
+            let was = key.with(|k| k.replace(true));
+            Self { key, was }
+        }
+
+        pub(crate) fn coordinator() -> Self {
+            Self::set(&COORDINATOR)
+        }
+
+        pub(crate) fn port() -> Self {
+            Self::set(&PORT)
+        }
+    }
+
+    impl Drop for Held {
+        fn drop(&mut self) {
+            let was = self.was;
+            self.key.with(|k| k.set(was));
+        }
+    }
+
+    pub(crate) fn assert_none() {
+        assert!(
+            !COORDINATOR.with(Cell::get) && !PORT.with(Cell::get),
+            "a broker record batch written while a Mother lock is held"
+        );
+    }
+}
+
 mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::adapter::GovernedPort {}
@@ -154,10 +237,11 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// whether the broker took the cancellation. Recovery and every end of
     /// a mission use it, so that a withdrawal that failed is an error.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal>;
-    /// M2a-S: the coordinator broke (a journal append failed): cancel every
-    /// broker run this port holds, and keep no run opened or taken back
-    /// later. It never waits for a broker call.
-    fn fence(&self);
+    /// M2a-S: the coordinator broke (a journal append failed): halt the
+    /// port's door, cancel every broker run this port holds, and keep no run
+    /// opened or taken back later. M2c PR-B: all of it in memory; the
+    /// records are returned, for the caller to write once it holds no lock.
+    fn fence(&self) -> Owed;
     /// M2a-S: a journaled action this port is not given back (claimed by
     /// two missions): recorded, so that withdrawing it is an error while
     /// the broker still holds it open.

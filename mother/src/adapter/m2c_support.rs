@@ -163,9 +163,9 @@ pub(crate) fn unexpected_dialogs() -> usize {
 
 // ------------------------------------------------- M2c-B oracle helpers
 //
-// Pre-registered with the PR-B oracles, against PR-A's API (dd503cdc). On
-// PR-A there is no halt, no record batch and no counter: those helpers
-// answer "none" there, and the oracles that need them are red.
+// Pre-registered with the PR-B oracles, against PR-A's API (dd503cdc),
+// where they answered "none" (no halt, no batch, no counter). Their bodies
+// now go through PR-B's API.
 
 /// A port over `control`, or none if the Owner says no to its door (or the
 /// broker refuses it).
@@ -189,16 +189,14 @@ pub(crate) fn door_open_run(port: &GovernedPort) -> Result<(), String> {
         .map_err(|e| e.class().to_string())
 }
 
-/// The halt records the broker counted lost (none on PR-A: no counter).
+/// The halt records the broker counted lost.
 pub(crate) fn halt_lost(control: &GovernedControl) -> u64 {
-    let _ = control;
-    0
+    control.status().halt_records.lost
 }
 
 /// The halt records the broker counts as still to write.
 pub(crate) fn halt_pending(control: &GovernedControl) -> u64 {
-    let _ = control;
-    0
+    control.status().halt_records.pending
 }
 
 /// Where a test may stop a Mother call (the child-process crash points and
@@ -214,19 +212,22 @@ pub(crate) enum CallPoint {
     AfterOwedWrite,
 }
 
-/// Run `hook` once at `point` of the next Mother call that reaches it (PR-A
-/// has none of these points: nothing runs).
+/// Run `hook` once at `point` of the next Mother call that reaches it.
 pub(crate) fn arm_call_point<P: EffectPort>(
     mother: &Coordinator<P>,
     point: CallPoint,
     hook: impl FnOnce() + Send + 'static,
 ) {
-    let _ = (mother, point);
-    drop(hook);
+    let slot = match point {
+        CallPoint::FenceToMarker => &mother.hooks.fence_to_marker,
+        CallPoint::BeforeOwedWrite => &mother.hooks.before_owed_write,
+        CallPoint::AfterOwedWrite => &mother.hooks.after_owed_write,
+    };
+    slot.arm(0, hook);
 }
 
 /// The port's fence, as the coordinator's break calls it (on PR-B its
 /// records are written here, with no lock held).
 pub(crate) fn fence_port(port: &GovernedPort) {
-    port.fence();
+    port.fence().write();
 }
