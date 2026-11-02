@@ -6,7 +6,10 @@
 //! while the Owner is asked, while a lane runs or while an effect runs: a
 //! call is reserved under the lock, made with the lock released, and its
 //! result is kept only if the mission did not move meanwhile. Stop never
-//! waits for a lane or an effect. (The journal append is the transition's
+//! waits for a lane or an effect in flight. It still waits for its own
+//! journal operations, for in-memory locks other calls hold, and for its
+//! broker records, which it writes after the cancellation has taken effect
+//! and while holding no lock. (The journal append is the transition's
 //! commit, a bounded local write, and is made under the lock so that the
 //! journal's order is the state machine's.)
 //!
@@ -368,7 +371,8 @@ struct Inner {
     /// M2a-S: the port's fence, run under this lock at the moment the
     /// store fails: no broker call enters the port from then on, an action
     /// executing at the broker is interrupted (its run is cancelled), and
-    /// every run the port holds is cancelled. It never waits.
+    /// every run the port holds is cancelled. It never waits for an effect,
+    /// and (M2c) does no evidence I/O: it returns its records.
     fence: Box<dyn Fn() -> Owed + Send>,
     /// M2c PR-B: the records the fence left (in memory only), taken out by
     /// `with_lock` before it releases this lock and written by the same

@@ -276,8 +276,9 @@ impl GovernedPort {
     }
 
     /// The check before every broker call: refused once fenced. It waits
-    /// only while the fence's critical section runs (the broker writing its
-    /// cancellations), and the fence never waits for it. A call that passed
+    /// only while the fence's critical section runs (M2c: the door's halt
+    /// and the sweep, in memory, with no evidence write), and the fence
+    /// never waits for it. A call that passed
     /// it just before the break goes on unwaited: on a run the fence
     /// cancels (the broker refuses it, or an executing action sees its
     /// run's cancellation token), or on a run it opens afterwards, which
