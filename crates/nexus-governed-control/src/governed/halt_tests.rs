@@ -17,12 +17,12 @@ use crate::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ControlConfirmer,
     GrantConfirmation, MissionConfirmation, MissionResumeConfirmation, ResumeConfirmation,
 };
-use crate::authority::clock::{Clock, ManualClock, SystemClock};
+use crate::authority::clock::ManualClock;
 use crate::authority::commitment::{
     CommitmentState, ExecutionGuard, FailureClass, PreparedAction, TargetIdentity,
 };
 use crate::authority::effect::{CapabilityKind, EffectClass};
-use crate::authority::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink, MemoryEvidence};
+use crate::authority::evidence::{EvidencePhase, EvidenceRecord, MemoryEvidence};
 use crate::authority::halt::{HaltReason, RecordBatch};
 use crate::authority::ids::{AgentId, CommitmentId, Digest, GrantId, RunId};
 use crate::authority::policy::GrantScope;
@@ -37,7 +37,7 @@ use crate::evidence_store::{Fault, PrimaryEvidence};
 use crate::harness_tests::{temp_root, Reply, TestServer, Yes};
 use crate::test_hooks::{at, Gate};
 use std::any::Any;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
