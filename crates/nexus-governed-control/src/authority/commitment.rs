@@ -274,6 +274,41 @@ struct Deferred {
 /// End records of transitions that have taken effect, not yet written.
 pub(crate) struct Unwritten(Vec<EvidenceRecord>);
 
+/// Where an ended entry's dues go as soon as they exist: its record, and
+/// its leases' ends.
+trait Owes {
+    fn record(&mut self, record: EvidenceRecord);
+    fn leases(&mut self, leases: &[LeaseId]);
+}
+
+impl Owes for Deferred {
+    fn record(&mut self, record: EvidenceRecord) {
+        self.records.push(record);
+    }
+
+    fn leases(&mut self, leases: &[LeaseId]) {
+        self.leases.extend(leases.iter().copied());
+    }
+}
+
+/// The dues of revocations made in one hold of the commitments lock: each
+/// record goes straight into `records` (a door halt's counted batch, §11
+/// C2), the leases are kept to end with no lock held.
+struct Revoking<'a, R: EndRecords> {
+    records: &'a mut R,
+    leases: Vec<LeaseId>,
+}
+
+impl<R: EndRecords> Owes for Revoking<'_, R> {
+    fn record(&mut self, record: EvidenceRecord) {
+        self.records.push(record);
+    }
+
+    fn leases(&mut self, leases: &[LeaseId]) {
+        self.leases.extend(leases.iter().copied());
+    }
+}
+
 /// Ends credential leases when their commitment ends (the broker).
 pub trait LeaseEnd: Send + Sync {
     fn end(&self, lease: LeaseId);
@@ -583,7 +618,7 @@ impl CommitmentRegistry {
     /// Move an entry that has not finished to the final `state`, under the
     /// lock: a transition under way for it is withdrawn (its record says
     /// which), and its evidence (`adjust` completes it) and lease ends are
-    /// owed.
+    /// owed, given to `owed` as soon as they exist.
     #[allow(clippy::too_many_arguments)]
     fn end_entry(
         &self,
@@ -592,7 +627,7 @@ impl CommitmentRegistry {
         state: CommitmentState,
         phase: EvidencePhase,
         now: Now,
-        deferred: &mut Deferred,
+        owed: &mut impl Owes,
         adjust: impl FnOnce(&mut EvidenceRecord),
     ) {
         entry.state = state;
@@ -604,10 +639,8 @@ impl CommitmentRegistry {
                 .push(("interrupted".into(), reservation.transition.as_str().into()));
         }
         adjust(&mut record);
-        deferred.records.push(record);
-        deferred
-            .leases
-            .extend(entry.prepared.leases.iter().copied());
+        owed.record(record);
+        owed.leases(&entry.prepared.leases);
     }
 
     /// Record a commitment for `agent` in `run`. The run must be active and
@@ -790,7 +823,7 @@ impl CommitmentRegistry {
     }
 
     /// Move an unconsumed entry to `Expired` or `Revoked`; its evidence and
-    /// lease ends are owed in `deferred`.
+    /// lease ends are owed, given to `owed` as soon as they exist.
     fn end_unconsumed(
         &self,
         id: CommitmentId,
@@ -798,14 +831,14 @@ impl CommitmentRegistry {
         state: CommitmentState,
         reason: &AuthorityError,
         now: Now,
-        deferred: &mut Deferred,
+        owed: &mut impl Owes,
     ) {
         let phase = if state == CommitmentState::Expired {
             EvidencePhase::Expired
         } else {
             EvidencePhase::Revoked
         };
-        self.end_entry(id, entry, state, phase, now, deferred, |record| {
+        self.end_entry(id, entry, state, phase, now, owed, |record| {
             record.failure = Some(reason.class());
             record.cancelled = matches!(
                 reason,
@@ -1349,8 +1382,8 @@ impl CommitmentRegistry {
     }
 
     /// End every unconsumed commitment whose run `pick` names, in the hold
-    /// of `entries` given; each record goes to `out` as soon as it is made.
-    /// Returns their leases.
+    /// of `entries` given; each record goes straight into `out` as it is
+    /// made, with no temporary in between. Returns their leases.
     fn revoke_where_in(
         &self,
         mut entries: MutexGuard<'_, HashMap<CommitmentId, Entry>>,
@@ -1359,7 +1392,10 @@ impl CommitmentRegistry {
         out: &mut impl EndRecords,
     ) -> Vec<LeaseId> {
         let now = self.now();
-        let mut leases = Vec::new();
+        let mut owed = Revoking {
+            records: out,
+            leases: Vec::new(),
+        };
         #[cfg(test)]
         let mut first = true;
         for (id, entry) in entries.iter_mut() {
@@ -1369,19 +1405,14 @@ impl CommitmentRegistry {
                     CommitmentState::Prepared | CommitmentState::Authorized
                 )
             {
-                let mut one = Deferred::default();
-                self.end_unconsumed(*id, entry, CommitmentState::Revoked, reason, now, &mut one);
-                for record in one.records {
-                    out.push(record);
-                }
-                leases.extend(one.leases);
+                self.end_unconsumed(*id, entry, CommitmentState::Revoked, reason, now, &mut owed);
                 #[cfg(test)]
                 if std::mem::take(&mut first) {
                     self.fire(crate::test_hooks::at::REVOKE_WHERE_FIRST);
                 }
             }
         }
-        leases
+        owed.leases
     }
 
     /// M2c PR-B: end `leases` through the lease-end slot, taken even if
