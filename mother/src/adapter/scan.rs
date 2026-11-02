@@ -67,7 +67,11 @@ fn scan_the_tree_is_what_the_scans_expect() {
         files.contains(&"src/adapter/mod.rs".to_string()),
         "{files:?}"
     );
-    assert!(files.contains(&"examples/walk.rs".to_string()), "{files:?}");
+    // M2c-A (A8): the walk lives in the host crate (N2).
+    assert!(
+        files.contains(&"host/examples/walk.rs".to_string()),
+        "{files:?}"
+    );
     assert!(files.len() >= 20, "{files:?}");
 }
 
@@ -203,8 +207,9 @@ fn scan_no_production_consent_confirmer() {
         if impls == 0 || test_only(&rel) {
             continue;
         }
+        // M2c-A (A8): the walk lives in the host crate (N2).
         assert_eq!(
-            rel, "examples/walk.rs",
+            rel, "host/examples/walk.rs",
             "a consent confirmer in Mother's production code"
         );
         walk_impls += impls;
@@ -217,6 +222,17 @@ fn scan_no_production_consent_confirmer() {
             );
             assert_ne!(body, "true", "an always-yes confirmer");
             assert!(!body.ends_with(";true"), "an always-yes confirmer: {body}");
+        }
+        // M2c-A (A8): the door and held-mission dialogs ask the Owner too.
+        for dialog in ["confirm_agent_door", "confirm_held_mission"] {
+            let bodies = bodies_of(&text, dialog);
+            assert_eq!(bodies.len(), 1, "the walk asks {dialog} once");
+            assert!(bodies[0].contains("stdin"), "walk: {dialog} must ask");
+            assert_ne!(bodies[0], "true", "walk: an always-yes {dialog}");
+            assert!(
+                !bodies[0].ends_with(";true"),
+                "walk: an always-yes {dialog}"
+            );
         }
         for other in [
             "confirm_action",
@@ -240,6 +256,7 @@ fn scan_no_production_consent_confirmer() {
     let mut files = Vec::new();
     rust_files(&workspace, &mut files);
     let mut broker_answers = 0;
+    let mut dialog_defaults = 0;
     for path in files {
         if path.starts_with(crate_root()) {
             continue;
@@ -271,6 +288,19 @@ fn scan_no_production_consent_confirmer() {
         // the confirmers are the `ControlConfirmer` trait (its default
         // answer) and its implementations; the broker's own entry points
         // named `confirm_mission` ask a confirmer and are not one.
+        // M2c-A (A8): nor to a door or a held mission.
+        for dialog in ["confirm_agent_door", "confirm_held_mission"] {
+            for block in confirmer_blocks(&text) {
+                for body in bodies_of(&block, dialog) {
+                    assert_ne!(body, "true", "{rel}: an always-yes {dialog}");
+                    assert!(!body.ends_with(";true"), "{rel}: an always-yes {dialog}");
+                    if path.starts_with(&broker) {
+                        assert_eq!(body, "false", "{rel}: a broker {dialog} that may say yes");
+                        dialog_defaults += 1;
+                    }
+                }
+            }
+        }
         if path.starts_with(&broker) {
             for block in confirmer_blocks(&text) {
                 for body in confirm_bodies(&block) {
@@ -283,6 +313,10 @@ fn scan_no_production_consent_confirmer() {
     assert!(
         broker_answers >= 1,
         "the broker's ControlConfirmer::confirm_mission default was not found"
+    );
+    assert!(
+        dialog_defaults >= 2,
+        "the broker's door and held-mission defaults were not found"
     );
 }
 
@@ -384,4 +418,121 @@ fn scan_the_confirmer_scan_recognises_an_always_yes_body() {
     let bodies = confirm_bodies(asks);
     assert_eq!(bodies.len(), 1);
     assert!(bodies[0].contains("stdin"));
+}
+
+// ---------------------------------------------------------------- M2c-A A8
+
+/// The modules a file declares, each with whether its declaration is
+/// under `#[cfg(test)]` (the line before it, comments and blanks aside).
+fn declared_modules(text: &str) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
+    let mut previous = "";
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+        let declaration = ["mod ", "pub mod ", "pub(crate) mod ", "pub(super) mod "]
+            .iter()
+            .find_map(|prefix| line.strip_prefix(prefix))
+            .and_then(|rest| rest.strip_suffix(';'));
+        if let Some(name) = declaration {
+            out.push((name.trim().to_string(), previous == "#[cfg(test)]"));
+        }
+        previous = line;
+    }
+    out
+}
+
+/// Every module of `mother/src` that is compiled outside tests: from
+/// `lib.rs`, each module not declared under `#[cfg(test)]`, recursively.
+fn production_modules() -> Vec<(String, String)> {
+    let src = crate_root().join("src");
+    let mut out = Vec::new();
+    let mut todo = vec![(src.join("lib.rs"), src.clone())];
+    while let Some((file, dir)) = todo.pop() {
+        let text = std::fs::read_to_string(&file).unwrap();
+        for (name, test_only) in declared_modules(&code(&text)) {
+            if test_only {
+                continue;
+            }
+            let flat = dir.join(format!("{name}.rs"));
+            let nested = dir.join(&name).join("mod.rs");
+            let child = if flat.exists() { flat } else { nested };
+            todo.push((child, dir.join(&name)));
+        }
+        let rel = file
+            .strip_prefix(crate_root())
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        out.push((rel, text));
+    }
+    out.sort();
+    out
+}
+
+#[test]
+fn scan_m2c_the_module_parser_reads_cfg_test_declarations() {
+    let text = "pub mod adapter;\n#[cfg(test)]\nmod test_home;\n// mod commented;\n#[cfg(test)]\n\npub(crate) mod support;\nmod plain;";
+    assert_eq!(
+        declared_modules(text),
+        vec![
+            ("adapter".to_string(), false),
+            ("test_home".to_string(), true),
+            ("support".to_string(), true),
+            ("plain".to_string(), false),
+        ]
+    );
+}
+
+/// A8 (design v3 §3 E7, N2): no module of Mother compiled outside tests
+/// constructs a broker or reaches the front door. The host crate holds the
+/// only production construction; this scan is an extra layer beside the
+/// type-level absence of every such path (A1).
+#[test]
+fn scan_m2c_no_broker_construction_in_mother_s_production_modules() {
+    let modules = production_modules();
+    let names: Vec<&str> = modules.iter().map(|(rel, _)| rel.as_str()).collect();
+    for expected in [
+        "src/lib.rs",
+        "src/adapter/mod.rs",
+        "src/coordinator.rs",
+        "src/effect.rs",
+    ] {
+        assert!(names.contains(&expected), "{names:?}");
+    }
+    assert!(
+        !names
+            .iter()
+            .any(|n| n.contains("oracles") || n.contains("test_home") || n.contains("m2c_")),
+        "{names:?}"
+    );
+    let needles: Vec<String> = [
+        ("GovernedControl", "::new"),
+        ("Authority", "::new"),
+        ("PrimaryEvidence", "::open"),
+        ("Tools", "::production"),
+        ("issue_agent", "_door"),
+        (".authority", "()"),
+        (".control", "()"),
+    ]
+    .iter()
+    .map(|(a, b)| format!("{a}{b}"))
+    .collect();
+    for (rel, text) in &modules {
+        let text = code(text);
+        for needle in &needles {
+            assert!(!text.contains(needle.as_str()), "{rel}: {needle}");
+        }
+    }
+}
+
+/// A8: the port acts through its door.
+#[test]
+fn scan_m2c_the_port_acts_through_its_door() {
+    let adapter = code(&std::fs::read_to_string(crate_root().join("src/adapter/mod.rs")).unwrap());
+    for needle in ["door.agent_action(", "door.cancel_run(", "door.open_run("] {
+        assert!(adapter.contains(needle), "adapter: {needle}");
+    }
 }

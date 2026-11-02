@@ -49,6 +49,70 @@
 //! ```compile_fail
 //! let _ = nexus_mother::consent::Consent::from_broker;
 //! ```
+//!
+//! M2c-A: the port goes over a broker-issued agent door, never over the
+//! front door (A1-c: each block fails with the error its tag names):
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! use nexus_mother::adapter::GovernedPort;
+//! fn port(door: AgentDoor) -> GovernedPort {
+//!     GovernedPort::new(door)
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(port: &nexus_mother::adapter::GovernedPort) {
+//!     let _ = port.control(); // no front door
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! use nexus_mother::effect::EffectPort;
+//! fn reach<P: EffectPort>(port: &P) {
+//!     let _ = P::broker(port); // no authority
+//! }
+//! ```
+//!
+//! ```compile_fail,E0308
+//! use nexus_governed_control::governed::GovernedControl;
+//! use std::sync::Arc;
+//! fn port(control: Arc<GovernedControl>) -> nexus_mother::adapter::GovernedPort {
+//!     nexus_mother::adapter::GovernedPort::new(control) // a door, not the front door
+//! }
+//! ```
+//!
+//! Mother builds no broker: the host does (A1-d).
+//!
+//! ```
+//! use nexus_mother::adapter::{FileJournal, GovernedPort, MOTHER_AGENT};
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_mother::adapter::Home;
+//! ```
+//!
+//! Consent asks through the port's door, whose confirmer the host bound;
+//! the coordinator takes no confirmer (A1-e).
+//!
+//! ```
+//! use nexus_mother::adapter::GovernedPort;
+//! use nexus_mother::coordinator::Coordinator;
+//! use nexus_mother::journal::MissionId;
+//! fn ask(mother: &Coordinator<GovernedPort>, id: MissionId) {
+//!     let _ = mother.request_consent(id);
+//! }
+//! ```
+//!
+//! ```compile_fail,E0061
+//! use nexus_governed_control::authority::approval::ControlConfirmer;
+//! use nexus_mother::adapter::GovernedPort;
+//! use nexus_mother::coordinator::Coordinator;
+//! use nexus_mother::journal::MissionId;
+//! fn ask(mother: &Coordinator<GovernedPort>, id: MissionId, owner: &dyn ControlConfirmer) {
+//!     let _ = mother.request_consent(id, owner);
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 

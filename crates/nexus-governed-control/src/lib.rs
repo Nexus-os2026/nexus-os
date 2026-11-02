@@ -95,6 +95,149 @@
 //!     let _ = a.commitments().begin(id, agent, run, d, d);
 //! }
 //! ```
+//!
+//! M2c-A: an agent acts only through an `AgentDoor`, which the front door
+//! issues after the owner's native yes. A door is bound to its agent and to
+//! the runs it opened or adopted; nothing reachable from it leads to the
+//! front door, the authority, the issuer or an owner API (A1-a: each block
+//! fails with the error its tag names). Its compiling twin uses what a door
+//! has:
+//!
+//! ```
+//! use nexus_governed_control::authority::approval::{
+//!     MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
+//! };
+//! use nexus_governed_control::authority::ids::{CommitmentId, RunId};
+//! use nexus_governed_control::governed::{AgentDoor, Intent, Lookup};
+//! fn uses(
+//!     door: &AgentDoor,
+//!     run: RunId,
+//!     id: CommitmentId,
+//!     intent: &Intent,
+//!     mission: &MissionConfirmation,
+//!     held: &MissionResumeConfirmation,
+//! ) {
+//!     let _ = (door.agent(), door.open_run(), door.agent_action(run, intent));
+//!     let _ = (door.cancel_run(run), door.finish_when_settled(run));
+//!     let _ = door.adopt(run, id);
+//!     let _: Lookup<_> = door.commitment(id);
+//!     let _ = (door.emergency_stopped(), door.clock().wall_ms());
+//!     let _ = door.confirm_mission(mission);
+//!     let approval: Result<MissionResumeApproval, _> = door.confirm_held_mission(held);
+//!     let _ = approval.map(|a| (a.contract_hash().len(), a.request().len(), a.evidence_seq()));
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.authority(); // no authority
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.control(); // no front door
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.open_owner_run(); // no owner run
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.authorize(); // no authorization
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.execute(); // no execution
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.request_grant(); // no grant
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.resume(); // no lift of the emergency stop
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.emergency_stop(); // not the owner's stop
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.issue_agent_door(); // no issuer
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
+//!     let _ = door.close(); // no close
+//! }
+//! ```
+//!
+//! A door and the owner's mission and resume approvals cannot be built
+//! outside the crate, by a literal or a crate-private constructor, and a
+//! door cannot be copied (A1-b):
+//!
+//! ```compile_fail,E0451
+//! use nexus_governed_control::governed::AgentDoor;
+//! fn forge(door: AgentDoor) -> AgentDoor {
+//!     AgentDoor { ..door } // the fields are private
+//! }
+//! ```
+//!
+//! ```compile_fail,E0624
+//! let _ = nexus_governed_control::governed::AgentDoor::new; // crate-private
+//! ```
+//!
+//! ```compile_fail,E0599
+//! use nexus_governed_control::governed::AgentDoor;
+//! fn twice(door: AgentDoor) -> (AgentDoor, AgentDoor) {
+//!     (door.clone(), door) // not Clone
+//! }
+//! ```
+//!
+//! ```compile_fail,E0451
+//! use nexus_governed_control::authority::approval::MissionResumeApproval;
+//! fn forge() -> MissionResumeApproval {
+//!     MissionResumeApproval { contract_hash: String::new(), request: String::new(), evidence_seq: 1 }
+//! }
+//! ```
+//!
+//! ```compile_fail,E0624
+//! let _ = nexus_governed_control::authority::approval::MissionResumeApproval::confirmed;
+//! ```
+//!
+//! ```compile_fail,E0599
+//! use nexus_governed_control::authority::approval::MissionResumeApproval;
+//! fn twice(a: MissionResumeApproval) -> (MissionResumeApproval, MissionResumeApproval) {
+//!     (a.clone(), a) // not Clone
+//! }
+//! ```
+//!
+//! ```compile_fail,E0451
+//! use nexus_governed_control::authority::approval::MissionApproval;
+//! fn forge() -> MissionApproval {
+//!     MissionApproval { contract_hash: String::new(), request: String::new(), evidence_seq: 1 }
+//! }
+//! ```
+//!
+//! ```compile_fail,E0624
+//! let _ = nexus_governed_control::authority::approval::MissionApproval::confirmed;
+//! ```
 
 #![deny(unsafe_code)]
 
