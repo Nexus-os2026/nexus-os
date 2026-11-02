@@ -9,8 +9,12 @@
 //!
 //! M2a: an R2 action is left waiting at the broker; the port remembers it
 //! and reports what the broker's record of it says (the Owner approves and
-//! runs it from the interface; Mother never does). The Owner's mission
-//! consent is asked at the broker's authority (`broker`), by the
+//! runs it from the interface; Mother never does).
+//!
+//! M2c: the port holds only an [`AgentDoor`] the host had issued (the Owner
+//! said yes to it). The door fixes Mother's agent and the host's confirmer,
+//! and acts only on the runs it opened or adopted. The Owner's consent to
+//! a mission and resume of a held one are asked through it, by the
 //! coordinator.
 //!
 //! [`FileJournal`] keeps the mission journal in a file in Mother's home
@@ -21,15 +25,17 @@ use crate::effect::{
     ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
 };
 use crate::journal::{JournalError, JournalStore, MissionId};
+use nexus_governed_control::authority::approval::{
+    MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
+};
 use nexus_governed_control::authority::clock::{Clock, SystemClock};
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::evidence::MemoryEvidence;
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
-use nexus_governed_control::authority::run::{RunClass, RunOrigin};
-use nexus_governed_control::authority::Authority;
+use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
-use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
+use nexus_governed_control::governed::{AgentDoor, AgentOutcome, GovernedControl, Intent, Lookup};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -105,9 +111,10 @@ struct Runs {
     unswept: Vec<RunId>,
 }
 
-/// The EffectPort over the governed-control broker.
+/// The EffectPort over the governed-control broker, through one agent door.
 pub struct GovernedPort {
-    control: Arc<GovernedControl>,
+    /// M2c: the port's only broker handle.
+    door: AgentDoor,
     /// M2a-S: `fenced` and every run registration are under this mutex, so
     /// a run registers either before the fence (which cancels it) or after
     /// (and cancels itself); every broker call checks `fenced` first.
@@ -145,12 +152,17 @@ pub struct GovernedPort {
     /// whether the port was fenced at that moment.
     #[cfg(test)]
     pub(crate) first_fence_cancel: crate::oracles::m2as_hooks::SeenSlot,
+    /// M2c (tests): run once the door answered a held-mission request,
+    /// before the coordinator takes the answer.
+    #[cfg(test)]
+    pub(crate) after_held_answer: crate::oracles::m2as_hooks::HookSlot,
 }
 
 impl GovernedPort {
-    pub fn new(control: Arc<GovernedControl>) -> Self {
+    /// A port over `door`, which the host issued after the Owner's yes.
+    pub fn new(door: AgentDoor) -> Self {
         Self {
-            control,
+            door,
             runs: Mutex::new(Runs::default()),
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
@@ -170,6 +182,8 @@ impl GovernedPort {
             in_broker_action: Default::default(),
             #[cfg(test)]
             first_fence_cancel: Default::default(),
+            #[cfg(test)]
+            after_held_answer: Default::default(),
         }
     }
 
@@ -186,10 +200,6 @@ impl GovernedPort {
     /// The broker run a mission opened, if any.
     pub fn run_of(&self, mission: MissionId) -> Option<RunId> {
         self.lock().open.get(&mission).copied()
-    }
-
-    pub fn control(&self) -> &Arc<GovernedControl> {
-        &self.control
     }
 
     /// M2a-S (tests): whether the port was fenced.
@@ -265,10 +275,7 @@ impl GovernedPort {
         }
         #[cfg(test)]
         self.before_open_run.fire();
-        let run = self
-            .control
-            .open_run(mother_agent(), RunOrigin::AgentGoal)
-            .map_err(|e| refused(e.class()))?;
+        let run = self.door.open_run().map_err(|e| refused(e.class()))?;
         let refusal = {
             let mut runs = self.lock();
             if runs.fenced {
@@ -290,7 +297,7 @@ impl GovernedPort {
     /// Cancel `run` at the broker (also once fenced: a cancellation only
     /// ever stops effects).
     fn cancel_run(&self, run: RunId) {
-        if self.control.cancel_run(run).is_err() {
+        if self.door.cancel_run(run).is_err() {
             self.cancel_failures.fetch_add(1, Ordering::SeqCst);
         }
     }
@@ -336,8 +343,8 @@ impl EffectPort for GovernedPort {
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
-        let asked_at = self.control.authority().clock().monotonic_ms();
-        match self.control.agent_action(&mother_agent(), run, &intent) {
+        let asked_at = self.door.clock().monotonic_ms();
+        match self.door.agent_action(run, &intent) {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
@@ -382,7 +389,7 @@ impl EffectPort for GovernedPort {
             };
         };
         if let Some(run) = run {
-            self.control.cancel_run(run).map_err(|e| {
+            self.door.cancel_run(run).map_err(|e| {
                 self.cancel_failures.fetch_add(1, Ordering::SeqCst);
                 refused(e.class())
             })?;
@@ -400,7 +407,8 @@ impl EffectPort for GovernedPort {
         let run = self.end(mission);
         // Fenced: the run is cancelled already.
         if let (Ok(()), Some(run)) = (entered, run) {
-            self.control.finish_when_settled(run);
+            // The run is this door's: only a run it opened is finished.
+            let _ = self.door.finish_when_settled(run);
         }
     }
 
@@ -446,11 +454,28 @@ impl EffectPort for GovernedPort {
     }
 
     fn emergency_stopped(&self) -> bool {
-        self.control.authority().runs().is_stopped()
+        self.door.emergency_stopped()
     }
 
-    fn broker(&self) -> &Authority {
-        self.control.authority()
+    /// Asked through the door, whose confirmer the host bound. Not fenced:
+    /// it has no effect, and an answer that comes after a break is
+    /// discarded by the coordinator.
+    fn confirm_mission(
+        &self,
+        request: &MissionConfirmation,
+    ) -> Result<MissionApproval, AuthorityError> {
+        self.door.confirm_mission(request)
+    }
+
+    /// Asked through the door, as [`EffectPort::confirm_mission`].
+    fn confirm_held_mission(
+        &self,
+        request: &MissionResumeConfirmation,
+    ) -> Result<MissionResumeApproval, AuthorityError> {
+        let answer = self.door.confirm_held_mission(request);
+        #[cfg(test)]
+        self.after_held_answer.fire();
+        answer
     }
 
     /// The broker's record of the action `mission` waits on. A port that
@@ -474,14 +499,14 @@ impl EffectPort for GovernedPort {
                 _ => return unknown(),
             }
         };
-        let authority = self.control.authority();
-        let Some(view) = authority.commitments().view(commitment) else {
+        // Only a commitment of one of this door's runs is known here.
+        let Lookup::Mine(view) = self.door.commitment(commitment) else {
             return unknown();
         };
         if view.run != run || view.agent != mother_agent() {
             return unknown();
         }
-        let clock = authority.clock();
+        let clock = self.door.clock();
         let status = status_of(&view, clock.wall_ms(), clock.monotonic_ms(), deadline);
         if status != ApprovalStatus::Waiting {
             self.lock().waiting.remove(&mission);
@@ -538,14 +563,17 @@ impl GovernedPort {
 
     /// Whether the broker no longer holds `pending` open, or holds it on
     /// `cancelled` (the run this withdrawal just cancelled): the broker's own
-    /// record of the commitment, never the record's run.
+    /// record of the commitment, never the record's run. Of a commitment
+    /// that is not this door's, the door says only whether it is settled
+    /// (final, and Mother's).
     fn withdrawn(&self, pending: &PendingAction, cancelled: Option<RunId>) -> bool {
         let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
             return false;
         };
-        match self.control.authority().commitments().view(commitment) {
-            None => true,
-            Some(view) => {
+        match self.door.commitment(commitment) {
+            Lookup::Unknown => true,
+            Lookup::NotMine { settled } => settled,
+            Lookup::Mine(view) => {
                 cancelled == Some(view.run)
                     || !matches!(
                         view.state,
@@ -557,14 +585,17 @@ impl GovernedPort {
         }
     }
 
-    /// [`EffectPort::settled`], once the fence was checked.
+    /// [`EffectPort::settled`], once the fence was checked. Of a commitment
+    /// that is not this door's, the door says only whether it is settled
+    /// (final, and Mother's).
     fn settled_inside(&self, pending: &PendingAction) -> bool {
         let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
             return false;
         };
-        match self.control.authority().commitments().view(commitment) {
-            None => true,
-            Some(view) => {
+        match self.door.commitment(commitment) {
+            Lookup::Unknown => true,
+            Lookup::NotMine { settled } => settled,
+            Lookup::Mine(view) => {
                 RunId::parse(&pending.run) == Some(view.run)
                     && view.agent == mother_agent()
                     && !matches!(
@@ -578,7 +609,10 @@ impl GovernedPort {
     }
 
     /// [`EffectPort::adopt`], once the fence was checked; its registration
-    /// checks `fenced` again, in the same critical section.
+    /// checks `fenced` again, in the same critical section. M2c: the broker
+    /// validates the action (Mother's agent, a live agent run of this
+    /// registry, its commitment) and the run joins this door's group first;
+    /// only then does the port register it (over-covering, never under).
     fn adopt_inside(&self, mission: MissionId, pending: &PendingAction) {
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),
@@ -586,19 +620,10 @@ impl GovernedPort {
         ) else {
             return;
         };
-        let authority = self.control.authority();
-        let live_run =
-            authority.runs().view(run).is_some_and(|view| {
-                view.agent == mother_agent() && !view.cancelled && !view.finished
-            }) && authority.runs().class(run) == Some(RunClass::Agent);
-        let Some(view) = authority
-            .commitments()
-            .view(commitment)
-            .filter(|view| live_run && view.run == run && view.agent == mother_agent())
-        else {
+        let Ok(view) = self.door.adopt(run, commitment) else {
             return;
         };
-        let clock = authority.clock();
+        let clock = self.door.clock();
         let deadline = adopted_deadline(
             pending.deadline_mono_ms,
             clock.monotonic_ms(),
@@ -762,8 +787,9 @@ impl JournalStore for FileJournal {
 
 /// Create `dir` and any missing directory above it private to this user
 /// (0700): the broker refuses a root below a directory others can change.
+/// (The host builds the broker's home with it.)
 #[cfg(unix)]
-fn create_private(dir: &Path) -> std::io::Result<()> {
+pub fn create_private(dir: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     std::fs::DirBuilder::new()
         .recursive(true)
@@ -772,7 +798,7 @@ fn create_private(dir: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(not(unix))]
-fn create_private(dir: &Path) -> std::io::Result<()> {
+pub fn create_private(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)
 }
 

@@ -25,6 +25,24 @@
 //! together with its poisoning (a Stop, a denial): every unfinished mission
 //! then comes back held, and only the Owner's resume (journaled) or Stop
 //! moves it. The holds are journaled with the session's opening.
+//!
+//! M2c: consent and resume are asked through the port's agent door, whose
+//! confirmer the host bound; the coordinator takes no confirmer. A resume
+//! follows the consent pattern: the request is reserved under the lock
+//! (replacing any earlier one, the generation moved), the Owner is asked
+//! with no lock held, and the answer is taken under the lock only for the
+//! request still current; it is consumed once. A resume takes effect only
+//! when `Resumed` is journaled, under the lock; the broker's record of the
+//! Owner's yes resumes nothing. What can land, and when:
+//!
+//! | What lands, and when | Outcome |
+//! |---|---|
+//! | Q2 reserved while Q1 is in its dialog | Q1's take fails (its request was replaced, the generation moved); Q2's answer is the only one that can count, once |
+//! | A Stop of the mission before the take (in the dialog, the broker's record or before the journal write) | the Stop's transition moves the generation and clears the request and the hold: the take discards the answer and returns `Stopped` |
+//! | A break (journal failure) before the take | the coordinator is broken: the take refuses |
+//! | A fence of the port outside a break (the public port fence; in PR-B also poison recovery, which halts the door outside the lock), after the broker's post-record check and before the take | the take may journal `Resumed`: the Owner's recorded yes exists, and the fenced port (in PR-B, the halted door) refuses every effect of the mission |
+//! | An emergency stop after the broker's post-record check | the take may journal `Resumed`; every effect of the mission is then refused by the broker. Resuming a held mission permits no effect by itself |
+//! | Anything after the take | acts on a resumed mission, as on any other |
 
 use crate::consent::{Consent, MissionSummary};
 use crate::contract::{sha256, ContractError, ContractHash, EffectKind, MissionContract};
@@ -37,7 +55,7 @@ use crate::lane::{
 };
 use crate::state::{transition, IllegalTransition, MissionState, Trigger};
 use nexus_governed_control::authority::approval::{
-    ControlConfirmer, MissionApproval, MissionConfirmation,
+    MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
@@ -110,6 +128,11 @@ pub enum CoordinatorError {
     Stopped,
     /// Another call is already working on this mission.
     Busy,
+    /// M2c: the Owner said no to resuming a held mission (it stays held).
+    Declined,
+    /// M2c: the Owner's answer to a resume came for a request that is no
+    /// longer current (replaced, or already taken): it is discarded.
+    ResumeStale,
     /// M2a-S: the mission is held after an unclean shutdown; only the
     /// Owner's resume or Stop moves it.
     Held,
@@ -174,6 +197,9 @@ struct Mission {
     reason: Option<String>,
     /// The broker request the Owner is being asked about (in memory).
     asking: Option<MissionConfirmation>,
+    /// M2c: the held-mission request the Owner is being asked about (in
+    /// memory), until its answer is taken or a transition clears it.
+    resume_asking: Option<MissionResumeConfirmation>,
     /// What the mission waits on in AwaitingApproval.
     waiting: Option<Waiting>,
     /// The effect last settled as awaiting approval, with no transition
@@ -224,6 +250,7 @@ impl Mission {
             prior_outputs: Vec::new(),
             reason: None,
             asking: None,
+            resume_asking: None,
             waiting: None,
             awaiting_settled: None,
             open_action: None,
@@ -290,6 +317,7 @@ impl Mission {
         self.generation += 1;
         self.dispatched_in_phase = dispatched;
         self.asking = None;
+        self.resume_asking = None;
         self.awaiting_settled = None;
     }
 
@@ -715,18 +743,15 @@ impl<P: EffectPort> Coordinator<P> {
         Ok(MissionSummary::of(id, &mission.contract))
     }
 
-    /// Ask the Owner, through the broker's native mission dialog. No lock
-    /// is held while the Owner answers. A consent is made only from the
-    /// broker's recorded yes to the exact hash and request asked about,
-    /// while the mission still awaits consent to that hash; the broker's no
-    /// denies the mission.
-    pub fn request_consent(
-        &self,
-        id: MissionId,
-        confirmer: &dyn ControlConfirmer,
-    ) -> Result<MissionState, CoordinatorError> {
+    /// Ask the Owner, through the broker's native mission dialog, by the
+    /// port's door (M2c: its confirmer is the host's). No lock is held
+    /// while the Owner answers. A consent is made only from the broker's
+    /// recorded yes to the exact hash and request asked about, while the
+    /// mission still awaits consent to that hash; the broker's no denies
+    /// the mission.
+    pub fn request_consent(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         let (request, generation) = self.consent_request(id)?;
-        let answer = self.port.broker().confirm_mission(&request, confirmer);
+        let answer = self.port.confirm_mission(&request);
         self.take_answer(id, generation, answer)
     }
 
@@ -1717,18 +1742,97 @@ impl<P: EffectPort> Coordinator<P> {
     /// goes on from its state as it would have after a clean restart.
     /// Mother never calls this herself: it is the Owner's decision, like
     /// Stop.
+    ///
+    /// M2c (S3): the Owner is asked natively, through the port's door,
+    /// naming the mission's contract hash and this request; no lock is held
+    /// meanwhile. Only a recorded yes to the request still current resumes
+    /// it; a no ([`CoordinatorError::Declined`]), a stale answer
+    /// ([`CoordinatorError::ResumeStale`]), a Stop meanwhile or a broker
+    /// refusal journal nothing, and the mission stays held (or stopped).
     pub fn resume(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        let (request, generation) = self.resume_request(id)?;
+        let answer = self.port.confirm_held_mission(&request);
+        self.take_resume(id, generation, answer)
+    }
+
+    /// M2c, a resume's reservation: the held mission's request, under a
+    /// label of its own, replacing any earlier request; the generation
+    /// moves, so a superseded request is stale. Returns the request and the
+    /// reservation.
+    pub(crate) fn resume_request(
+        &self,
+        id: MissionId,
+    ) -> Result<(MissionResumeConfirmation, u64), CoordinatorError> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
-        let state = mission.state;
         if mission.held.is_none() {
-            return Err(illegal(state, "resume"));
+            return Err(illegal(mission.state, "resume"));
         }
-        inner.append(id, Event::Resumed)?;
+        // A broken or closed coordinator asks the Owner nothing.
+        inner.usable()?;
+        let (seq, number) = (inner.next_seq, inner.next_request);
+        inner.next_request += 1;
         let mission = inner.mission(id)?;
-        mission.held = None;
-        mission.held_journaled = false;
-        Ok(state)
+        let summary = MissionSummary::of(id, &mission.contract);
+        let request = MissionResumeConfirmation {
+            mission: id.to_string(),
+            contract_hash: summary.hash.to_hex(),
+            request: format!("{id}/{seq}/{number}"),
+            held_reason: mission.held.clone().unwrap_or_default(),
+            summary: summary.lines(),
+        };
+        mission.resume_asking = Some(request.clone());
+        mission.generation += 1;
+        Ok((request, mission.generation))
+    }
+
+    /// M2c, a resume's take: only for the request still current (the
+    /// coordinator usable, the mission still held, the generation the one
+    /// reserved), which is then consumed and the generation moved, whatever
+    /// the answer. Only the broker's recorded yes to that exact hash and
+    /// request journals `Resumed` and clears the hold.
+    pub(crate) fn take_resume(
+        &self,
+        id: MissionId,
+        generation: u64,
+        answer: Result<MissionResumeApproval, AuthorityError>,
+    ) -> Result<MissionState, CoordinatorError> {
+        let mut inner = self.lock();
+        // An answer that comes after the break is discarded.
+        inner.usable()?;
+        let mission = inner.mission(id)?;
+        let current = mission.generation == generation
+            && mission.held.is_some()
+            && mission.resume_asking.is_some();
+        if !current {
+            return Err(if mission.state == MissionState::Stopped {
+                CoordinatorError::Stopped
+            } else {
+                CoordinatorError::ResumeStale
+            });
+        }
+        let Some(asked) = mission.resume_asking.take() else {
+            return Err(CoordinatorError::ResumeStale);
+        };
+        mission.generation += 1;
+        let state = mission.state;
+        let hash = mission.contract.hash().to_hex();
+        match answer {
+            Ok(approval)
+                if approval.contract_hash() == asked.contract_hash
+                    && approval.request() == asked.request
+                    && asked.contract_hash == hash =>
+            {
+                inner.append(id, Event::Resumed)?;
+                let mission = inner.mission(id)?;
+                mission.held = None;
+                mission.held_journaled = false;
+                Ok(state)
+            }
+            Ok(_) => Err(CoordinatorError::ResumeStale),
+            Err(AuthorityError::Declined) => Err(CoordinatorError::Declined),
+            Err(refused) => Err(CoordinatorError::Broker(refused.class().into())),
+        }
     }
 
     /// M2a-S (tests): whether the journal failed in this coordinator.

@@ -16,6 +16,7 @@ pub(crate) mod m2as_hooks;
 mod m2as_postcall;
 mod m2as_resume;
 mod m2as_review;
+pub(crate) mod m2c_confirmers;
 pub(crate) mod m2c_owner;
 mod mn01;
 mod review;
@@ -34,11 +35,12 @@ use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
 use crate::state::MissionState;
 use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
-    MissionConfirmation, ResumeConfirmation,
+    MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
+    ResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::authority::evidence::MemoryEvidence;
-use nexus_governed_control::authority::Authority;
+use nexus_governed_control::authority::{Authority, AuthorityError};
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::tool::ToolIntent;
@@ -94,9 +96,10 @@ struct PortState {
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
-/// hold the next effect until its mission is cancelled. Mission consent is
-/// asked of a real broker authority (with an in-memory evidence sink), so
-/// a consent is only ever made from the broker's own answer.
+/// hold the next effect until its mission is cancelled. Mission consent
+/// (and M2c's held-mission resume) is asked of a real broker authority
+/// (with an in-memory evidence sink) through the delegating test
+/// confirmer, so a consent is only ever made from the broker's own answer.
 pub struct RecordingPort {
     state: Mutex<PortState>,
     changed: Condvar,
@@ -292,8 +295,20 @@ impl EffectPort for RecordingPort {
         self.lock().emergency
     }
 
-    fn broker(&self) -> &Authority {
-        &self.broker
+    fn confirm_mission(
+        &self,
+        request: &MissionConfirmation,
+    ) -> Result<MissionApproval, AuthorityError> {
+        self.broker
+            .confirm_mission(request, &m2c_confirmers::Delegating)
+    }
+
+    fn confirm_held_mission(
+        &self,
+        request: &MissionResumeConfirmation,
+    ) -> Result<MissionResumeApproval, AuthorityError> {
+        self.broker
+            .confirm_held_mission(request, &m2c_confirmers::Delegating)
     }
 
     fn pending(&self, _: MissionId) -> Option<PendingAction> {

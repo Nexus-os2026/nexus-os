@@ -104,12 +104,15 @@ fn structure_the_adapter_calls_only_the_agent_side_of_the_broker() {
     ] {
         assert!(!adapter.contains(needle), "adapter: {needle}");
     }
+    // M2c-A (design §7.4): `RunOrigin::AgentGoal` and `.runs().is_stopped()`
+    // no longer occur in the adapter; the door's calls replace them (and A1
+    // pins that the port reaches nothing else).
     for needle in [
-        "RunOrigin::AgentGoal",
+        "door.open_run(",
         ".agent_action(",
         ".cancel_run(",
         ".finish_when_settled(",
-        ".runs().is_stopped()",
+        "door.emergency_stopped()",
     ] {
         assert!(adapter.contains(needle), "adapter: {needle}");
     }

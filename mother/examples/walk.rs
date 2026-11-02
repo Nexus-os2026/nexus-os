@@ -19,7 +19,8 @@ use nexus_governed_control::authority::approval::{
 };
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::egress::EgressIntent;
-use nexus_mother::adapter::{FileJournal, GovernedPort, Home, MOTHER_AGENT};
+use nexus_governed_control::governed::GovernedControl;
+use nexus_mother::adapter::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use nexus_mother::coordinator::{Advance, Coordinator, CoordinatorError, Lanes};
 use nexus_mother::effect::EffectRequest;
@@ -188,8 +189,8 @@ fn say_advance(a: &Advance) {
     println!("  {} → {}", a.from.as_str(), a.to.as_str());
 }
 
-fn mothers_runs(port: &GovernedPort) -> usize {
-    port.control()
+fn mothers_runs(owner: &GovernedControl) -> usize {
+    owner
         .authority()
         .runs()
         .views()
@@ -203,7 +204,7 @@ fn draft_and_ask(mother: &Coordinator<GovernedPort>, c: MissionContract) -> (Mis
     println!("  {id}: {}", mother.state(id).unwrap().as_str());
     mother.submit(id).expect("every question answered");
     println!("  {id}: {}", mother.state(id).unwrap().as_str());
-    let consented = mother.request_consent(id, &OwnerAtTheTerminal).is_ok();
+    let consented = mother.request_consent(id).is_ok();
     println!("  {id}: {}", mother.state(id).unwrap().as_str());
     (id, consented)
 }
@@ -216,7 +217,17 @@ fn main() {
             return;
         }
     };
-    let port = Arc::new(GovernedPort::new(home.control.clone()));
+    let door = match home
+        .control
+        .issue_agent_door(mother_agent(), Arc::new(OwnerAtTheTerminal))
+    {
+        Ok(door) => door,
+        Err(e) => {
+            eprintln!("No door for Mother: {e:?}");
+            return;
+        }
+    };
+    let port = Arc::new(GovernedPort::new(door));
     let journal = home.journal().expect("journal");
     println!("Mother's home for this walk: {}", home.dir.display());
     println!("No grants are given in this walk, so the broker allows no effect at all.");
@@ -252,7 +263,7 @@ fn main() {
     println!(
         "  Effects sent to the broker in run 1: {}. Broker runs Mother opened: {}.",
         port.performed(),
-        mothers_runs(&port)
+        mothers_runs(&home.control)
     );
     shut_down(restarted);
 
@@ -275,7 +286,7 @@ fn main() {
     // numbered from 1 again.
     let run2 = FileJournal::open(&home.dir.join("run2-journal.jsonl")).expect("journal");
     let mother = open(&run2, &port, lanes(asks.clone()));
-    let before = (port.performed(), mothers_runs(&port));
+    let before = (port.performed(), mothers_runs(&home.control));
 
     println!();
     println!("  Stop: consent to this one; Mother stops it before its Builder may fetch a page and write a file.");
@@ -325,7 +336,7 @@ fn main() {
     println!(
         "  Effects sent to the broker in run 2: {}. Broker runs Mother opened in run 2: {}.",
         port.performed() - before.0,
-        mothers_runs(&port) - before.1
+        mothers_runs(&home.control) - before.1
     );
     let entries = run2.load().map(|l| l.len()).unwrap_or(0);
     println!(

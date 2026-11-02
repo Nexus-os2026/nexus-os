@@ -7,14 +7,20 @@
 //! outside this crate only the adapter over the governed-control broker
 //! ([`crate::adapter::GovernedPort`]) is a port.
 //!
-//! The port also reaches the broker's authority, where the Owner is asked
-//! to consent to a mission (`Authority::confirm_mission`), and reports what
-//! became of an action that waits for the Owner's native approval. Mother
-//! never approves an action herself: the Owner does, at the broker.
+//! M2c: the port holds only a broker-issued agent door. Through it the Owner
+//! is asked, natively and through the confirmer the host bound to the
+//! door, to consent to a mission and to resume a held one; the port reports
+//! what became of an action that waits for the Owner's native approval.
+//! Mother never approves an action herself: the Owner does, at the broker.
+//! Nothing reachable from the port leads to the broker's front door or its
+//! authority.
 
 use crate::contract::EffectKind;
 use crate::journal::MissionId;
-use nexus_governed_control::authority::Authority;
+use nexus_governed_control::authority::approval::{
+    MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
+};
+use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::tool::ToolIntent;
@@ -115,8 +121,21 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     fn finish(&self, mission: MissionId);
     /// Whether the Owner's emergency stop holds.
     fn emergency_stopped(&self) -> bool;
-    /// The broker's authority, where the Owner consents to a mission.
-    fn broker(&self) -> &Authority;
+    /// M2c: ask the Owner, natively, to consent to a mission: the exact
+    /// contract hash and request. The approval exists only once the broker
+    /// recorded the yes. No effect.
+    fn confirm_mission(
+        &self,
+        request: &MissionConfirmation,
+    ) -> Result<MissionApproval, AuthorityError>;
+    /// M2c: ask the Owner, natively, to resume a held mission: the exact
+    /// contract hash and request. The approval records the yes; it resumes
+    /// nothing (the coordinator does, under its lock, if the request is
+    /// still current). No effect.
+    fn confirm_held_mission(
+        &self,
+        request: &MissionResumeConfirmation,
+    ) -> Result<MissionResumeApproval, AuthorityError>;
     /// What became of the action `mission` waits on (an effect that came
     /// back [`EffectOutcome::AwaitingApproval`]). Never approves it.
     fn approval(&self, mission: MissionId) -> ApprovalStatus;
