@@ -128,69 +128,78 @@
 //! }
 //! ```
 //!
-//! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.authority(); // no authority
-//! }
+//! Each absence is checked by naming the method as a path, never by calling
+//! it, so the block fails only because the method is absent, whatever its
+//! signature would be. The same form compiles for the front door's own
+//! methods (the owner's side), and for the door's:
+//!
+//! ```
+//! use nexus_governed_control::governed::{AgentDoor, GovernedControl};
+//! let _ = GovernedControl::authority;
+//! let _ = GovernedControl::open_owner_run;
+//! let _ = GovernedControl::authorize;
+//! let _ = GovernedControl::execute;
+//! let _ = GovernedControl::request_grant;
+//! let _ = GovernedControl::resume;
+//! let _ = GovernedControl::emergency_stop;
+//! let _ = GovernedControl::issue_agent_door;
+//! let _ = AgentDoor::open_run;
+//! let _ = AgentDoor::confirm_held_mission;
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.control(); // no front door
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::authority; // no authority
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.open_owner_run(); // no owner run
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::control; // no front door
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.authorize(); // no authorization
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::open_owner_run; // no owner run
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.execute(); // no execution
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::authorize; // no authorization
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.request_grant(); // no grant
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::execute; // no execution
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.resume(); // no lift of the emergency stop
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::request_grant; // no grant
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.emergency_stop(); // not the owner's stop
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::resume; // no lift of the emergency stop
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.issue_agent_door(); // no issuer
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::emergency_stop; // not the owner's stop
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(door: &nexus_governed_control::governed::AgentDoor) {
-//!     let _ = door.close(); // no close
-//! }
+//! let _ = nexus_governed_control::governed::AgentDoor::issue_agent_door; // no issuer
+//! ```
+//!
+//! ```compile_fail,E0599
+//! let _ = nexus_governed_control::governed::AgentDoor::close; // no close
 //! ```
 //!
 //! A door and the owner's mission and resume approvals cannot be built
 //! outside the crate, by a literal or a crate-private constructor, and a
 //! door cannot be copied (A1-b):
+//!
+//! The struct-update form compiles on a type whose fields are public, so a
+//! literal block fails only for privacy, whatever the fields are called:
+//!
+//! ```
+//! use nexus_governed_control::authority::approval::MissionResumeConfirmation;
+//! fn rebuild(c: MissionResumeConfirmation) -> MissionResumeConfirmation {
+//!     MissionResumeConfirmation { ..c }
+//! }
+//! ```
 //!
 //! ```compile_fail,E0451
 //! use nexus_governed_control::governed::AgentDoor;
@@ -212,8 +221,8 @@
 //!
 //! ```compile_fail,E0451
 //! use nexus_governed_control::authority::approval::MissionResumeApproval;
-//! fn forge() -> MissionResumeApproval {
-//!     MissionResumeApproval { contract_hash: String::new(), request: String::new(), evidence_seq: 1 }
+//! fn forge(approval: MissionResumeApproval) -> MissionResumeApproval {
+//!     MissionResumeApproval { ..approval } // the fields are private
 //! }
 //! ```
 //!
@@ -230,8 +239,8 @@
 //!
 //! ```compile_fail,E0451
 //! use nexus_governed_control::authority::approval::MissionApproval;
-//! fn forge() -> MissionApproval {
-//!     MissionApproval { contract_hash: String::new(), request: String::new(), evidence_seq: 1 }
+//! fn forge(approval: MissionApproval) -> MissionApproval {
+//!     MissionApproval { ..approval } // the fields are private
 //! }
 //! ```
 //!

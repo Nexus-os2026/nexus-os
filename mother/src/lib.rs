@@ -51,35 +51,38 @@
 //! ```
 //!
 //! M2c-A: the port goes over a broker-issued agent door, never over the
-//! front door (A1-c: each block fails with the error its tag names):
+//! front door (A1-c: each block fails with the error its tag names, and
+//! only for the property it names: an absent method is named as a path,
+//! and the constructor's type is checked as a function pointer). The same
+//! forms compile for what the port does have:
 //!
 //! ```
 //! use nexus_governed_control::governed::AgentDoor;
 //! use nexus_mother::adapter::GovernedPort;
-//! fn port(door: AgentDoor) -> GovernedPort {
-//!     GovernedPort::new(door)
+//! use nexus_mother::effect::EffectPort;
+//! let _: fn(AgentDoor) -> GovernedPort = GovernedPort::new;
+//! let _ = GovernedPort::run_of;
+//! fn reach<P: EffectPort>() {
+//!     let _ = P::confirm_mission;
 //! }
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn reach(port: &nexus_mother::adapter::GovernedPort) {
-//!     let _ = port.control(); // no front door
-//! }
+//! let _ = nexus_mother::adapter::GovernedPort::control; // no front door
 //! ```
 //!
 //! ```compile_fail,E0599
 //! use nexus_mother::effect::EffectPort;
-//! fn reach<P: EffectPort>(port: &P) {
-//!     let _ = P::broker(port); // no authority
+//! fn reach<P: EffectPort>() {
+//!     let _ = P::broker; // no authority
 //! }
 //! ```
 //!
 //! ```compile_fail,E0308
 //! use nexus_governed_control::governed::GovernedControl;
+//! use nexus_mother::adapter::GovernedPort;
 //! use std::sync::Arc;
-//! fn port(control: Arc<GovernedControl>) -> nexus_mother::adapter::GovernedPort {
-//!     nexus_mother::adapter::GovernedPort::new(control) // a door, not the front door
-//! }
+//! let _: fn(Arc<GovernedControl>) -> GovernedPort = GovernedPort::new; // a door, not the front door
 //! ```
 //!
 //! Mother builds no broker: the host does (A1-d).
