@@ -1,7 +1,8 @@
 //! M2c-A (PR-A) oracles on the real broker, pre-registered before the door
 //! exists (design v3 §7.1, §11 C3): A4 consent through the door, A5 resume
 //! asks the Owner (red on main: main resumes without asking), A6 resume is
-//! bound (the consent pattern), and A6-g (a fence outside a break).
+//! bound (the consent pattern), A6-g (a fence outside a break) and A6-h
+//! (added after Codex review 1: a stale take leaves the current request).
 //!
 //! They reach the port, consent and resume only through `m2c_support`, so
 //! they compile against main's API; when the port goes over the door only
@@ -185,6 +186,28 @@ fn m2c_a6_b_an_answer_is_taken_once(control: &Arc<GovernedControl>, origin: &str
     assert_eq!(resumed(&disk, id), 1, "taken once");
 }
 
+/// A6-h (Codex review 1, finding 3): two requests are both answered yes and
+/// both wait to be taken. Q1, superseded, is stale and leaves Q2's
+/// reservation as it was; Q2's take then resumes the mission, once.
+fn m2c_a6_h_a_stale_take_leaves_the_current_request(control: &Arc<GovernedControl>, origin: &str) {
+    let (disk, id, r) = held(control, origin, "a6-h");
+    let q1 = resume_request(&r.mother, id).unwrap();
+    let q1_yes = resume_reply(&r.port, &q1, true);
+    let q2 = resume_request(&r.mother, id).unwrap();
+    let q2_yes = resume_reply(&r.port, &q2, true);
+    let stale = take_resume(&r.mother, id, &q1, q1_yes);
+    assert_eq!(format!("{stale:?}"), "Err(ResumeStale)");
+    assert!(r.mother.held(id).is_some(), "a stale take resumed it");
+    assert_eq!(resumed(&disk, id), 0);
+    assert_eq!(
+        take_resume(&r.mother, id, &q2, q2_yes),
+        Ok(MissionState::Investigating),
+        "the stale take touched the current request"
+    );
+    assert_eq!(r.mother.held(id), None);
+    assert_eq!(resumed(&disk, id), 1, "exactly one Resumed");
+}
+
 /// A6-c: a Stop lands after the broker's record and before the take: the
 /// answer is discarded and the mission is Stopped; `Resumed` never written.
 fn m2c_a6_c_a_stop_before_the_take_wins(control: &Arc<GovernedControl>, origin: &str) {
@@ -284,6 +307,7 @@ pub(super) fn on_the_real_broker(home: &Home, origin: &str, listener: &TcpListen
     m2c_a5_resume_asks_the_owner(control, origin, &world);
     m2c_a6_a_a_superseded_yes_does_not_count(control, origin);
     m2c_a6_b_an_answer_is_taken_once(control, origin);
+    m2c_a6_h_a_stale_take_leaves_the_current_request(control, origin);
     m2c_a6_c_a_stop_before_the_take_wins(control, origin);
     m2c_a6_d_a_break_before_the_take_refuses(control, origin);
     m2c_a6_g_a_fence_outside_a_break_still_refuses_every_effect(control, origin, &world);
