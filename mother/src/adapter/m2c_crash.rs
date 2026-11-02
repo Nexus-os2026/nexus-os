@@ -333,13 +333,96 @@ impl Child {
 
     /// Break the coordinator; `marker` decides whether its poisoning works.
     fn break_it(&self, mother: &Coordinator<GovernedPort>, marker: bool) -> usize {
-        let victim = mother.draft(contract_with("")).unwrap();
+        let victim = self.victim(mother);
+        self.break_with(mother, victim, marker)
+    }
+
+    /// The mission whose Stop will break the coordinator, drafted before
+    /// any crash hook is armed (Architect decision 1).
+    fn victim(&self, mother: &Coordinator<GovernedPort>) -> MissionId {
+        mother.draft(contract_with("")).unwrap()
+    }
+
+    /// Break the coordinator with a Stop of `victim`.
+    fn break_with(
+        &self,
+        mother: &Coordinator<GovernedPort>,
+        victim: MissionId,
+        marker: bool,
+    ) -> usize {
         let at = self.home.gate.seen().len();
         self.poison.store(!marker, Ordering::SeqCst);
         self.appends.store(true, Ordering::SeqCst);
         let _ = mother.stop(victim);
         at
     }
+
+    /// Arm `point` to crash on this thread's next call that reaches it (the
+    /// breaking Stop), once it proved it is at that point: the coordinator
+    /// is broken, and the batch it is about to write (before the write) or
+    /// has just written (after it) is non-empty. Otherwise child 1 exits
+    /// with `VACUOUS` instead of aborting. Another thread's call reaching
+    /// the hook first (CR8's cancelled action) leaves it armed.
+    fn arm_proven(&self, mother: &Arc<Coordinator<GovernedPort>>, point: CallPoint, at: usize) {
+        let (home, dir, weak) = (self.home.clone(), self.dir.clone(), Arc::downgrade(mother));
+        let base = home.control.status().halt_records;
+        let proof = Box::new(move || {
+            if !weak.upgrade().is_some_and(|m| m.broken()) {
+                vacuous(&dir, "the coordinator is not broken");
+            }
+            let now = home.control.status().halt_records;
+            let batch = match point {
+                CallPoint::BeforeOwedWrite => now.pending > base.pending,
+                _ => {
+                    now.recorded + now.owed + now.uncertain
+                        > base.recorded + base.owed + base.uncertain
+                }
+            };
+            if !batch {
+                vacuous(&dir, "the batch at the crash point is empty");
+            }
+            crash_now(&home, &dir, at)
+        });
+        arm_on(
+            Arc::downgrade(mother),
+            point,
+            std::thread::current().id(),
+            proof,
+        );
+    }
+
+    /// After a breaking Stop whose proven hook never fired: not at the point.
+    fn missed(&self) -> ! {
+        vacuous(&self.dir, "the breaking call never reached the crash point")
+    }
+}
+
+/// Child 1's exit code when it is not at its named crash point.
+const VACUOUS: i32 = 86;
+
+/// Child 1 is not where it should crash: say why, and exit with `VACUOUS`.
+fn vacuous(dir: &Path, why: &str) -> ! {
+    let _ = std::fs::write(dir.join("vacuous.log"), why);
+    std::process::exit(VACUOUS);
+}
+
+/// Arm `point` for the next call on thread `on` that reaches it; a call on
+/// another thread re-arms it and goes on.
+fn arm_on(
+    mother: Weak<Coordinator<GovernedPort>>,
+    point: CallPoint,
+    on: std::thread::ThreadId,
+    hook: Box<dyn FnOnce() + Send>,
+) {
+    let Some(m) = mother.upgrade() else { return };
+    let again = mother.clone();
+    arm_call_point(&m, point, move || {
+        if std::thread::current().id() == on {
+            hook()
+        } else {
+            arm_on(again, point, on, hook)
+        }
+    });
 }
 
 /// Child 1: run to `point`, then abort.
@@ -358,15 +441,22 @@ fn child_one(point: &str, dir: &Path) -> ! {
                 mother.advance(x).unwrap();
             }
             let at = c.home.gate.seen().len();
-            let (point_at, marker) = match point {
-                "cr2" => (CallPoint::FenceToMarker, false),
-                "cr3" => (CallPoint::BeforeOwedWrite, true),
-                _ => (CallPoint::AfterOwedWrite, true),
+            let victim = c.victim(&mother);
+            if point == "cr2" {
+                let (home, dir) = (c.home.clone(), c.dir.clone());
+                arm_call_point(&mother, CallPoint::FenceToMarker, move || {
+                    crash_now(&home, &dir, at)
+                });
+                c.break_with(&mother, victim, false);
+                c.crash(at);
+            }
+            let point_at = match point {
+                "cr3" => CallPoint::BeforeOwedWrite,
+                _ => CallPoint::AfterOwedWrite,
             };
-            let (home, dir) = (c.home.clone(), c.dir.clone());
-            arm_call_point(&mother, point_at, move || crash_now(&home, &dir, at));
-            c.break_it(&mother, marker);
-            c.crash(at);
+            c.arm_proven(&mother, point_at, at);
+            c.break_with(&mother, victim, true);
+            c.missed();
         }
         "cr4" => {
             c.executing(&mother);
@@ -410,22 +500,18 @@ fn child_one(point: &str, dir: &Path) -> ! {
                 mother.advance(x).unwrap();
             }
             let at = c.home.gate.seen().len();
-            let (home, dir) = (c.home.clone(), c.dir.clone());
-            arm_call_point(&mother, CallPoint::BeforeOwedWrite, move || {
-                crash_now(&home, &dir, at)
-            });
-            c.break_it(&mother, true);
-            c.crash(at);
+            let victim = c.victim(&mother);
+            c.arm_proven(&mother, CallPoint::BeforeOwedWrite, at);
+            c.break_with(&mother, victim, true);
+            c.missed();
         }
         "cr8" => {
             c.executing(&mother);
             let at = c.home.gate.seen().len();
-            let (home, dir) = (c.home.clone(), c.dir.clone());
-            arm_call_point(&mother, CallPoint::AfterOwedWrite, move || {
-                crash_now(&home, &dir, at)
-            });
-            c.break_it(&mother, true);
-            c.crash(at);
+            let victim = c.victim(&mother);
+            c.arm_proven(&mother, CallPoint::AfterOwedWrite, at);
+            c.break_with(&mother, victim, true);
+            c.missed();
         }
         other => panic!("no crash point {other}"),
     }
@@ -535,7 +621,7 @@ fn m2c_crash_child() {
 
 /// Run one child to its end, within the bound; kill this child handle if it
 /// does not end.
-fn run_child(point: &str, phase: &str, dir: &Path) -> (bool, String) {
+fn run_child(point: &str, phase: &str, dir: &Path) -> (std::process::ExitStatus, String) {
     let exe = std::env::current_exe().unwrap();
     let mut child = Command::new(exe)
         .args([
@@ -575,7 +661,7 @@ fn run_child(point: &str, phase: &str, dir: &Path) -> (bool, String) {
     };
     let _ = reader.join();
     let text = output.lock().unwrap().clone();
-    (status.success(), text)
+    (status, text)
 }
 
 /// What child 1 had committed at its crash, from where the break began.
@@ -596,8 +682,13 @@ fn crash_case(point: &str) -> (Seen, Value) {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
     let dir = std::env::temp_dir().join(format!("nexus-mother-crash-{point}-{nanos}"));
-    let (clean, _) = run_child(point, "1", &dir);
-    assert!(!clean, "{point}: child 1 must crash");
+    let (status, _) = run_child(point, "1", &dir);
+    if status.code() == Some(VACUOUS) {
+        let why = std::fs::read_to_string(dir.join("vacuous.log")).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&dir);
+        panic!("{point}: child 1 was not at its named crash point: {why}");
+    }
+    assert!(!status.success(), "{point}: child 1 must crash");
     let log = std::fs::read_to_string(dir.join("seen.log")).unwrap_or_default();
     let mut lines = log.lines();
     let break_at: usize = lines
@@ -608,8 +699,8 @@ fn crash_case(point: &str) -> (Seen, Value) {
     let seen = Seen {
         after_break: lines.skip(break_at).map(str::to_string).collect(),
     };
-    let (clean, text) = run_child(point, "2", &dir);
-    assert!(clean, "{point}: child 2 ran to its end:\n{text}");
+    let (status, text) = run_child(point, "2", &dir);
+    assert!(status.success(), "{point}: child 2 ran to its end:\n{text}");
     let obs = text
         .lines()
         .find_map(|l| l.split_once("M2C-OBS ").map(|(_, obs)| obs))
