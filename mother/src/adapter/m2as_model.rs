@@ -35,7 +35,8 @@
 use super::m2as_support::{
     open_requests, owner_runs, rig, Disk, HookConfirmer, HookSlot, Rig, WorldServer,
 };
-use super::{mother_agent, GovernedPort, Home};
+use super::m2c_support::{consent, resume, Home};
+use super::{mother_agent, GovernedPort};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::EffectPort;
 use crate::journal::{verify, Event, JournalError, MemoryJournal, MissionId};
@@ -648,7 +649,7 @@ impl<'a> Seq<'a> {
                 self.note_runs();
                 let open_before = !open_requests(self.control, &self.runs).is_empty();
                 let was_broken = mother.broken();
-                let r = mother.request_consent(id, &owner);
+                let r = consent(&mother, id, &owner);
                 self.covered(3, was_broken, !slot.armed(), open_before);
                 self.log.push(format!("new {id} [{markers}] consent({yes}) with a failing stop of {victim} inside -> {r:?}"));
                 self.take_breaker(victim, &kept)?;
@@ -656,9 +657,9 @@ impl<'a> Seq<'a> {
             }
             _ => {
                 let r = if yes {
-                    mother.request_consent(id, &Yes)
+                    consent(&mother, id, &Yes)
                 } else {
-                    mother.request_consent(id, &No)
+                    consent(&mother, id, &No)
                 };
                 self.log.push(format!(
                     "new {id} [{markers}] submit {submitted:?} consent({yes}) -> {r:?}"
@@ -727,7 +728,7 @@ impl<'a> Seq<'a> {
         let Some(id) = self.pick() else {
             return Ok(());
         };
-        let r = self.mother().resume(id);
+        let r = resume(self.mother(), id, true);
         self.log.push(format!("resume {id} -> {r:?}"));
         if r.is_ok() {
             self.held.remove(&id);

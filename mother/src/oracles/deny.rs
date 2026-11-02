@@ -1,6 +1,7 @@
 //! Denial means zero effect: the Owner's no, and the broker's refusal.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 
 #[test]
 fn deny_the_owner_s_no_means_zero_effect_and_no_lane() {
@@ -8,23 +9,20 @@ fn deny_the_owner_s_no_means_zero_effect_and_no_lane() {
     let id = w.submitted(contract_with(
         "ASK-RESEARCHERA-NETWORK ASK-BUILDER-FILE ASK-BUILDER-PROCESS ASK-SENTINEL-MODELTOOL",
     ));
-    assert_eq!(
-        w.mother.request_consent(id, &No),
-        Err(CoordinatorError::Denied)
-    );
+    assert_eq!(consent(&w.mother, id, &No), Err(CoordinatorError::Denied));
     assert_eq!(w.mother.state(id), Some(MissionState::Denied));
     assert_eq!(w.mother.consented_hash(id), None);
     for _ in 0..6 {
         assert!(w.mother.advance(id).is_err());
     }
     // Asking again cannot turn a no into a yes, nor can a revision.
-    assert!(w.mother.request_consent(id, &Yes).is_err());
+    assert!(consent(&w.mother, id, &Yes).is_err());
     assert!(w.mother.revise(id, contract()).is_err());
     assert!(w.mother.submit(id).is_err());
     let w = w.restart();
     assert_eq!(w.mother.state(id), Some(MissionState::Denied));
     assert!(w.mother.advance(id).is_err());
-    assert!(w.mother.request_consent(id, &Yes).is_err());
+    assert!(consent(&w.mother, id, &Yes).is_err());
     assert_eq!(w.port.calls(), vec![], "a denied mission reached the port");
     assert_eq!(w.keyed_calls(), 0, "a lane ran for a denied mission");
 }

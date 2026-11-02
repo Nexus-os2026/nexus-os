@@ -22,6 +22,7 @@ mod state;
 mod stop;
 mod structure;
 
+use crate::adapter::m2c_support::consent;
 use crate::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{
@@ -743,10 +744,7 @@ impl World {
 
     pub fn approved(&self, contract: MissionContract) -> MissionId {
         let id = self.submitted(contract);
-        assert_eq!(
-            self.mother.request_consent(id, &Yes),
-            Ok(MissionState::Approved)
-        );
+        assert_eq!(consent(&self.mother, id, &Yes), Ok(MissionState::Approved));
         id
     }
 
@@ -773,7 +771,7 @@ impl World {
             MissionState::Denied => {
                 let id = self.submitted(contract());
                 assert_eq!(
-                    self.mother.request_consent(id, &No),
+                    consent(&self.mother, id, &No),
                     Err(CoordinatorError::Denied)
                 );
                 id

@@ -6,6 +6,7 @@
 
 use super::m2as_durability::*;
 use super::*;
+use crate::adapter::m2c_support::{consent, resume};
 use crate::journal::{Event, JournalError, JournalStore, SESSION};
 use crate::state::Trigger;
 use MissionState::*;
@@ -97,10 +98,10 @@ fn m2as_review_a_broken_coordinator_asks_the_owner_and_the_broker_nothing() {
     let (w, disk) = faulty_world();
     let id = reach(&w, AwaitingConsent);
     disk.fail(true, true);
-    assert!(w.mother.request_consent(id, &No).is_err());
+    assert!(consent(&w.mother, id, &No).is_err());
     disk.fail(false, false);
     let shown = Recording::default();
-    assert!(w.mother.request_consent(id, &shown).is_err());
+    assert!(consent(&w.mother, id, &shown).is_err());
     assert_eq!(
         shown.0.lock().unwrap().len(),
         0,
@@ -216,7 +217,7 @@ fn m2as_review_a_session_opening_cut_short_still_holds_every_mission() {
         )
         .unwrap();
         store.fail_after(n);
-        let resumed = w2.mother.resume(a);
+        let resumed = resume(&w2.mother, a, true);
         if n < 3 {
             assert!(resumed.is_err(), "{n}");
         }

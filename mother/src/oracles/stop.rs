@@ -3,6 +3,7 @@
 //! emergency stop is Mother's stop.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 use crate::journal::Event;
 use crate::state::Trigger;
 
@@ -36,7 +37,7 @@ fn stop_from_every_state_dispatches_nothing_more_and_survives_restart() {
                 assert!(w.mother.advance(id).is_err(), "{state:?}");
             }
             assert!(w.mother.submit(id).is_err(), "{state:?}");
-            assert!(w.mother.request_consent(id, &Yes).is_err(), "{state:?}");
+            assert!(consent(&w.mother, id, &Yes).is_err(), "{state:?}");
             assert!(w.mother.revise(id, contract()).is_err(), "{state:?}");
         };
         refuse_everything(&w);

@@ -19,7 +19,8 @@
 //! C2 of run R2; withdraw(M) is not Ok while C2 is open at the broker.
 
 use super::m2as_support::{executed, rig, Disk, Rig, WorldServer};
-use super::{GovernedPort, Home, MOTHER_AGENT};
+use super::m2c_support::{consent, port_for, Home};
+use super::MOTHER_AGENT;
 use crate::coordinator::{Coordinator, Lanes};
 use crate::effect::EffectPort;
 use crate::journal::{MemoryJournal, MissionId};
@@ -66,10 +67,7 @@ impl Flag {
 fn approved(r: &Rig, markers: &str) -> MissionId {
     let id = r.mother.draft(contract_with(markers)).unwrap();
     r.mother.submit(id).unwrap();
-    assert_eq!(
-        r.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&r.mother, id, &Yes), Ok(MissionState::Approved));
     id
 }
 
@@ -251,7 +249,7 @@ fn withdraw_is_an_error_while_a_handed_request_of_another_run_is_open(
     control: &Arc<GovernedControl>,
     origin: &str,
 ) {
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let mother = Coordinator::open(
         MemoryJournal::new(),
         port.clone(),
@@ -262,7 +260,7 @@ fn withdraw_is_an_error_while_a_handed_request_of_another_run_is_open(
     let approve = |markers: &str| {
         let id = mother.draft(contract_with(markers)).unwrap();
         mother.submit(id).unwrap();
-        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        assert_eq!(consent(&mother, id, &Yes), Ok(MissionState::Approved));
         for _ in 0..3 {
             mother.advance(id).unwrap();
         }

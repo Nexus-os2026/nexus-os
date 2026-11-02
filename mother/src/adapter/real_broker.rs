@@ -6,7 +6,8 @@
 //! emergency-stop controller, so one broker per process. The scenarios run
 //! in order on it, the emergency stop last.
 
-use super::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
+use super::m2c_support::{consent, port_for, resume, Home};
+use super::{mother_agent, FileJournal, GovernedPort, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{ApprovalStatus, EffectPort, PendingAction};
 use crate::journal::MissionId;
@@ -91,7 +92,7 @@ fn open_mother(home: &Home, port: &Arc<GovernedPort>) -> Coordinator<GovernedPor
 impl World {
     fn new() -> Self {
         let home = Home::fresh_temp("real-broker").unwrap();
-        let port = Arc::new(GovernedPort::new(home.control.clone()));
+        let port = Arc::new(port_for(&home.control, true));
         let mother = open_mother(&home, &port);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -171,10 +172,7 @@ impl World {
     fn approved(&self, markers: &str) -> MissionId {
         let id = self.mother.draft(contract_with(markers)).unwrap();
         self.mother.submit(id).unwrap();
-        assert_eq!(
-            self.mother.request_consent(id, &Yes),
-            Ok(MissionState::Approved)
-        );
+        assert_eq!(consent(&self.mother, id, &Yes), Ok(MissionState::Approved));
         id
     }
 
@@ -225,7 +223,7 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     let park = |mother: &Coordinator<GovernedPort>| {
         let id = mother.draft(contract_with(&post)).unwrap();
         mother.submit(id).unwrap();
-        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        assert_eq!(consent(mother, id, &Yes), Ok(MissionState::Approved));
         for _ in 0..3 {
             mother.advance(id).unwrap();
         }
@@ -243,7 +241,7 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     };
 
     // Park two requests through a first port.
-    let first = Arc::new(GovernedPort::new(w.home.control.clone()));
+    let first = Arc::new(port_for(&w.home.control, true));
     let mother = open(&first);
     let before = clock.monotonic_ms();
     let stopped = park(&mother);
@@ -265,7 +263,7 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     drop(first);
 
     // Rebuilt: a new coordinator and a brand-new port over the same broker.
-    let port = Arc::new(GovernedPort::new(w.home.control.clone()));
+    let port = Arc::new(port_for(&w.home.control, true));
     let mother = open(&port);
     assert_eq!(mother.state(stopped), Some(MissionState::AwaitingApproval));
     assert_eq!(mother.stop(stopped), Ok(MissionState::Stopped));
@@ -300,7 +298,10 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     // The rebuilt port still knows what the other mission waits on.
     // M2a-S (Owner decision): after a crash the mission is held until the
     // Owner resumes it.
-    assert_eq!(mother.resume(kept), Ok(MissionState::AwaitingApproval));
+    assert_eq!(
+        resume(&mother, kept, true),
+        Ok(MissionState::AwaitingApproval)
+    );
     assert_eq!(
         mother.advance(kept).unwrap().to,
         MissionState::AwaitingApproval
@@ -314,7 +315,7 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     drop(mother);
 
     // Durable: rebuilt once more, both stay stopped.
-    let again = open(&Arc::new(GovernedPort::new(w.home.control.clone())));
+    let again = open(&Arc::new(port_for(&w.home.control, true)));
     assert_eq!(again.state(stopped), Some(MissionState::Stopped));
     assert_eq!(again.state(kept), Some(MissionState::Stopped));
     assert_eq!(w.unserved(), 0, "nothing reached the world");
@@ -343,7 +344,7 @@ fn m2a_a_port_adopts_only_mother_s_own_actions(w: &World) {
     let mothers = control
         .open_run(mother_agent(), RunOrigin::AgentGoal)
         .unwrap();
-    let port = GovernedPort::new(control.clone());
+    let port = port_for(control, true);
     let forged = [(MissionId(9001), run), (MissionId(9002), mothers)];
     for (mission, run) in forged {
         port.adopt(
@@ -409,7 +410,7 @@ fn m2a_a_port_adopts_only_live_unclaimed_actions(w: &World) {
         commitment: view.id.to_string(),
         deadline_mono_ms: deadline,
     };
-    let port = GovernedPort::new(control.clone());
+    let port = port_for(control, true);
 
     // A cancelled run (its commitment revoked) is not taken back.
     let (cancelled, view) = park("cancelled");
@@ -559,7 +560,7 @@ fn real_broker_m1_oracles() {
 
     // Denial: zero effect.
     assert_eq!(
-        w.mother.request_consent(early, &No),
+        consent(&w.mother, early, &No),
         Err(CoordinatorError::Denied)
     );
     assert!(w.mother.advance(early).is_err());
@@ -776,7 +777,7 @@ fn m2a_an_adopted_deadline_is_within_the_remaining_lifetime(w: &World) {
     else {
         panic!("a POST waits for the Owner");
     };
-    let port = GovernedPort::new(control.clone());
+    let port = port_for(control, true);
     let wall_before = control.authority().clock().wall_ms();
     port.adopt(
         MissionId(9201),
@@ -813,7 +814,7 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
     // lines and each request's run and commitment.
     let scene = |round: usize| {
         let journal = MemoryJournal::new();
-        let port = Arc::new(GovernedPort::new(control.clone()));
+        let port = Arc::new(port_for(control, true));
         let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
         let mut requests = Vec::new();
         for n in 1..=3u64 {
@@ -825,7 +826,7 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
                 .unwrap();
             assert_eq!(id, MissionId(n));
             mother.submit(id).unwrap();
-            mother.request_consent(id, &Yes).unwrap();
+            consent(&mother, id, &Yes).unwrap();
             for _ in 0..3 {
                 mother.advance(id).unwrap();
             }
@@ -885,7 +886,7 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
     let (lines, requests) = scene(0);
     let journal = MemoryJournal::new();
     journal.set_lines(lines.clone());
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let mother = Coordinator::open(journal.clone(), port, lanes(), clock()).unwrap();
     let appends = journal.lines().len() - lines.len();
     assert!(appends >= 3, "{appends}");
@@ -914,7 +915,7 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
         let journal = MemoryJournal::new();
         journal.set_lines(lines);
         journal.fail_after(n);
-        let port = Arc::new(GovernedPort::new(control.clone()));
+        let port = Arc::new(port_for(control, true));
         assert!(
             Coordinator::open(journal, port, lanes(), clock()).is_err(),
             "append {n} failed, yet open succeeded"
@@ -939,7 +940,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
     let clock = || Arc::new(SystemClock::default());
     let scene = |round: usize| {
         let journal = MemoryJournal::new();
-        let port = Arc::new(GovernedPort::new(control.clone()));
+        let port = Arc::new(port_for(control, true));
         let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
         let mut requests = Vec::new();
         for n in 1..=2u64 {
@@ -950,7 +951,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
                 )))
                 .unwrap();
             mother.submit(id).unwrap();
-            mother.request_consent(id, &Yes).unwrap();
+            consent(&mother, id, &Yes).unwrap();
             for _ in 0..3 {
                 mother.advance(id).unwrap();
             }
@@ -965,7 +966,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
         let lane = mother.draft(contract_with("")).unwrap();
         assert_eq!(lane, MissionId(3));
         mother.submit(lane).unwrap();
-        mother.request_consent(lane, &Yes).unwrap();
+        consent(&mother, lane, &Yes).unwrap();
         mother.advance(lane).unwrap();
         assert_eq!(mother.state(lane), Some(MissionState::Investigating));
         drop(mother);
@@ -1033,7 +1034,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
     journal.set_lines(lines.clone());
     let mother = Coordinator::open(
         journal.clone(),
-        Arc::new(GovernedPort::new(control.clone())),
+        Arc::new(port_for(control, true)),
         lanes(),
         clock(),
     )
@@ -1054,7 +1055,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
         let journal = MemoryJournal::new();
         journal.set_lines(lines);
         journal.fail_after(n);
-        let port = Arc::new(GovernedPort::new(control.clone()));
+        let port = Arc::new(port_for(control, true));
         assert!(
             Coordinator::open(journal, port, lanes(), clock()).is_err(),
             "append {n} failed, yet open succeeded"
@@ -1072,7 +1073,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
 /// holds no such action.
 fn m2a_the_port_settles_only_mother_s_final_actions(w: &World) {
     let control = &w.home.control;
-    let port = GovernedPort::new(control.clone());
+    let port = port_for(control, true);
     let park = |agent: &AgentId, path: &str| {
         let run = control
             .open_run(agent.clone(), RunOrigin::AgentGoal)
@@ -1133,7 +1134,7 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
     // Park one request on a fresh journal; returns its run and commitment.
     let park = |name: &str| {
         let path = w.home.dir.join(format!("crash-{name}.jsonl"));
-        let port = Arc::new(GovernedPort::new(control.clone()));
+        let port = Arc::new(port_for(control, true));
         let mother = open(&path, &port);
         assert_eq!(
             mother.draft(contract_with(&format!(
@@ -1143,7 +1144,7 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
             Ok(id)
         );
         mother.submit(id).unwrap();
-        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        assert_eq!(consent(&mother, id, &Yes), Ok(MissionState::Approved));
         for _ in 0..3 {
             mother.advance(id).unwrap();
         }
@@ -1185,12 +1186,12 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
     // Recover with a brand-new port and coordinator; then once more, to
     // see the closure is not repeated.
     let recover = |path: &std::path::Path, expected: MissionState, run, commitment, point: &str| {
-        let mother = open(path, &Arc::new(GovernedPort::new(control.clone())));
+        let mother = open(path, &Arc::new(port_for(control, true)));
         assert_eq!(mother.state(id), Some(expected), "{point}");
         drop(mother);
         unapprovable(run, commitment, point);
         assert_eq!(closures(path, id), 1, "{point}: closure journaled once");
-        let again = open(path, &Arc::new(GovernedPort::new(control.clone())));
+        let again = open(path, &Arc::new(port_for(control, true)));
         assert_eq!(again.state(id), Some(expected), "{point}");
         drop(again);
         assert_eq!(closures(path, id), 1, "{point}: closure not repeated");
@@ -1210,7 +1211,7 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
     // B. The wait was journaled: the mission still waits and the Owner may
     // still approve; a Stop through the rebuilt port withdraws it.
     let (path, run, commitment) = park("b");
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let mother = open(&path, &port);
     assert_eq!(mother.state(id), Some(MissionState::AwaitingApproval));
     assert_eq!(

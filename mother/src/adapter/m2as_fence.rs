@@ -13,7 +13,8 @@
 use super::m2as_support::{
     executed, owner_runs, rig, Disk, HookConfirmer, HookSlot, Rig, WorldServer,
 };
-use super::{GovernedPort, Home};
+use super::m2c_support::{consent, Home};
+use super::GovernedPort;
 use crate::coordinator::Coordinator;
 use crate::journal::{Event, MemoryJournal, MissionId};
 use crate::oracles::{contract_with, Yes};
@@ -28,10 +29,7 @@ use std::sync::{Arc, Weak};
 fn approved(r: &Rig, markers: &str) -> MissionId {
     let id = r.mother.draft(contract_with(markers)).unwrap();
     r.mother.submit(id).unwrap();
-    assert_eq!(
-        r.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&r.mother, id, &Yes), Ok(MissionState::Approved));
     id
 }
 
@@ -190,7 +188,7 @@ fn a_consent_after_the_break_is_discarded(
         hook: hook.clone(),
         yes: true,
     };
-    assert!(r.mother.request_consent(b, &owner).is_err());
+    assert!(consent(&r.mother, b, &owner).is_err());
     assert!(!hook.armed(), "the hook ran");
     assert_ne!(r.mother.state(b), Some(MissionState::Approved));
     assert_eq!(r.mother.consented_hash(b), None);

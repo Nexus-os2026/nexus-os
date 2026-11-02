@@ -2,6 +2,7 @@
 //! independently of the implementation.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 use crate::contract::ContractHash;
 use crate::journal::Event;
 use crate::state::{transition, Trigger};
@@ -96,7 +97,7 @@ fn state_a_mission_walks_every_state_in_order() {
     let mut seen = vec![w.mother.state(id).unwrap()];
     w.mother.submit(id).unwrap();
     seen.push(w.mother.state(id).unwrap());
-    w.mother.request_consent(id, &Yes).unwrap();
+    consent(&w.mother, id, &Yes).unwrap();
     seen.push(w.mother.state(id).unwrap());
     let mut explanation = None;
     for _ in 0..5 {

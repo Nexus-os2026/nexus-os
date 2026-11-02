@@ -69,6 +69,8 @@ mod m2as_support;
 #[cfg(test)]
 mod m2as_sweep;
 #[cfg(test)]
+pub(crate) mod m2c_support;
+#[cfg(test)]
 mod real_broker;
 #[cfg(test)]
 mod scan;

@@ -13,6 +13,7 @@
 //! resumes (journaled) or stops it.
 
 use super::*;
+use crate::adapter::m2c_support::{consent, resume};
 use crate::journal::{Entry, Event, JournalError, JournalStore, SESSION};
 use crate::lane::InvocationId;
 use crate::state::Trigger;
@@ -231,7 +232,7 @@ pub(super) fn assert_held(w: &World, id: MissionId, state: MissionState, lanes: 
         );
     }
     assert_eq!(
-        w.mother.request_consent(id, &Yes),
+        consent(&w.mother, id, &Yes),
         Err(CoordinatorError::Held),
         "{state:?}"
     );
@@ -282,7 +283,7 @@ fn m2as_a_stop_neither_journaled_nor_poisoned_never_comes_back_working() {
         for _ in 0..3 {
             assert!(w.mother.advance(id).is_err(), "{state:?}");
         }
-        assert!(w.mother.request_consent(id, &Yes).is_err(), "{state:?}");
+        assert!(consent(&w.mother, id, &Yes).is_err(), "{state:?}");
         assert!(w.mother.draft(contract()).is_err(), "{state:?}");
         assert_eq!(w.port.effects().len(), effects, "{state:?}");
         assert_eq!(disk.inner.lines(), before, "{state:?}: journaled after");
@@ -317,7 +318,7 @@ fn m2as_a_stop_neither_journaled_nor_poisoned_never_comes_back_working() {
         }
         let w = crash(&w);
         assert_eq!(w.mother.state(id), Some(Stopped), "{state:?}");
-        assert_eq!(w.mother.resume(id).ok(), None, "{state:?}");
+        assert_eq!(resume(&w.mother, id, true).ok(), None, "{state:?}");
         assert!(w.mother.advance(id).is_err(), "{state:?}");
         assert_eq!(performs(&w), 0, "{state:?}");
     }
@@ -358,7 +359,7 @@ fn m2as_a_stop_that_returns_ok_holds_across_every_restart() {
         let w = crash(&w);
         assert_eq!(w.mother.state(id), Some(Stopped), "{state:?}");
         assert_eq!(w.mother.held(id), None, "{state:?}");
-        assert!(w.mother.resume(id).is_err(), "{state:?}");
+        assert!(resume(&w.mother, id, true).is_err(), "{state:?}");
         let (closed, w) = close_and_reopen(w);
         closed.unwrap();
         assert_eq!(w.mother.state(id), Some(Stopped), "{state:?}");
@@ -379,7 +380,7 @@ fn m2as_a_consent_denial_neither_journaled_nor_poisoned_never_comes_back_approva
     disk.fail(true, true);
     assert!(
         matches!(
-            w.mother.request_consent(id, &No),
+            consent(&w.mother, id, &No),
             Err(CoordinatorError::Journal(_))
         ),
         "a denial that is not durable is an error"
@@ -388,7 +389,7 @@ fn m2as_a_consent_denial_neither_journaled_nor_poisoned_never_comes_back_approva
     assert!(!disk.inner.is_poisoned());
 
     disk.fail(false, false);
-    assert!(w.mother.request_consent(id, &Yes).is_err());
+    assert!(consent(&w.mother, id, &Yes).is_err());
     assert!(w.mother.advance(id).is_err());
     assert_eq!(disk.inner.lines(), before, "journaled after the failure");
     assert_eq!(performs(&w), 0);
@@ -439,15 +440,12 @@ fn m2as_an_action_denial_neither_journaled_nor_poisoned_never_comes_back_working
 fn m2as_a_denial_that_returns_ok_holds_across_every_restart() {
     let w = world();
     let id = reach(&w, AwaitingConsent);
-    assert_eq!(
-        w.mother.request_consent(id, &No),
-        Err(CoordinatorError::Denied)
-    );
+    assert_eq!(consent(&w.mother, id, &No), Err(CoordinatorError::Denied));
     let w = crash(&w);
     assert_eq!(w.mother.state(id), Some(Denied));
     assert_eq!(w.mother.held(id), None);
-    assert!(w.mother.resume(id).is_err());
-    assert!(w.mother.request_consent(id, &Yes).is_err());
+    assert!(resume(&w.mother, id, true).is_err());
+    assert!(consent(&w.mother, id, &Yes).is_err());
 
     let w = world();
     let id = reach(&w, AwaitingApproval);
@@ -455,7 +453,7 @@ fn m2as_a_denial_that_returns_ok_holds_across_every_restart() {
     assert_eq!(w.mother.advance(id).unwrap().to, Denied);
     let w = crash(&w);
     assert_eq!(w.mother.state(id), Some(Denied));
-    assert!(w.mother.resume(id).is_err());
+    assert!(resume(&w.mother, id, true).is_err());
     assert!(w.mother.advance(id).is_err());
     assert_eq!(performs(&w), 0);
 }
@@ -486,7 +484,7 @@ fn m2as_a_crash_holds_every_unfinished_mission_until_the_owner_resumes() {
     for (state, id) in &ended {
         assert_eq!(w.mother.state(*id), Some(*state), "{state:?}");
         assert_eq!(w.mother.held(*id), None, "{state:?}");
-        assert!(w.mother.resume(*id).is_err(), "{state:?}");
+        assert!(resume(&w.mother, *id, true).is_err(), "{state:?}");
     }
     let waiting = ids.iter().find(|(s, _)| *s == AwaitingApproval).unwrap().1;
     assert!(!w.port.calls().contains(&PortCall::Cancel(waiting)));
@@ -495,7 +493,7 @@ fn m2as_a_crash_holds_every_unfinished_mission_until_the_owner_resumes() {
     // The Owner resumes one: journaled, and it carries on to Done,
     // sending its effects.
     let building = ids.iter().find(|(s, _)| *s == Building).unwrap().1;
-    assert_eq!(w.mother.resume(building), Ok(Building));
+    assert_eq!(resume(&w.mother, building, true), Ok(Building));
     assert_eq!(events_of(&w, building).last(), Some(&Event::Resumed));
     // The session's first record: its opening, then every hold, once.
     let session: Vec<Entry> =
@@ -510,7 +508,7 @@ fn m2as_a_crash_holds_every_unfinished_mission_until_the_owner_resumes() {
         assert_eq!(held[0].event, held_event(), "{state:?}");
     }
     assert_eq!(w.mother.held(building), None);
-    assert!(w.mother.resume(building).is_err(), "resume twice");
+    assert!(resume(&w.mother, building, true).is_err(), "resume twice");
     for _ in 0..3 {
         w.mother.advance(building).unwrap();
     }
@@ -520,13 +518,13 @@ fn m2as_a_crash_holds_every_unfinished_mission_until_the_owner_resumes() {
     // The others are still held; a resumed waiting mission is never
     // approved by Mother: she only asks the broker.
     assert_eq!(w.mother.advance(waiting), Err(CoordinatorError::Held));
-    assert_eq!(w.mother.resume(waiting), Ok(AwaitingApproval));
+    assert_eq!(resume(&w.mother, waiting, true), Ok(AwaitingApproval));
     assert_eq!(w.mother.advance(waiting).unwrap().to, AwaitingApproval);
     assert_eq!(performs(&w), 2);
 
     // The resume is durable: a clean restart keeps it resumed.
     let approved = ids.iter().find(|(s, _)| *s == Approved).unwrap().1;
-    assert_eq!(w.mother.resume(approved), Ok(Approved));
+    assert_eq!(resume(&w.mother, approved, true), Ok(Approved));
     let (closed, w) = close_and_reopen(w);
     closed.unwrap();
     assert_eq!(w.mother.held(approved), None);
@@ -579,7 +577,7 @@ fn m2as_a_clean_close_resumes_every_mission_normally() {
     assert_eq!(w.mother.state(building), Some(Done));
     assert_eq!(performs(&w), 2);
     let pending = ids.iter().find(|(s, _)| *s == AwaitingConsent).unwrap().1;
-    assert_eq!(w.mother.request_consent(pending, &Yes), Ok(Approved));
+    assert_eq!(consent(&w.mother, pending, &Yes), Ok(Approved));
 
     // And close again, cleanly.
     let (closed, w) = close_and_reopen(w);
@@ -655,7 +653,7 @@ fn m2as_no_clean_close_while_a_call_is_in_flight_and_nothing_after_close() {
     assert_eq!(w.mother.advance(id), Err(CoordinatorError::Closed));
     assert_eq!(w.mother.advance(other), Err(CoordinatorError::Closed));
     assert_eq!(w.mother.stop(id), Err(CoordinatorError::Closed));
-    assert_eq!(w.mother.resume(id), Err(CoordinatorError::Closed));
+    assert_eq!(resume(&w.mother, id, true), Err(CoordinatorError::Closed));
     assert_eq!(
         w.mother.draft(contract()).err(),
         Some(CoordinatorError::Closed)
