@@ -622,7 +622,7 @@ fn crash_case(point: &str) -> (Seen, Value) {
     (seen, obs)
 }
 
-fn mission<'a>(obs: &'a Value, n: u64) -> &'a Value {
+fn mission(obs: &Value, n: u64) -> &Value {
     &obs["missions"][format!("msn-{n:06}")]
 }
 
