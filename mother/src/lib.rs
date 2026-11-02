@@ -92,6 +92,39 @@
 //! let _: fn(Arc<GovernedControl>) -> GovernedPort = GovernedPort::new; // a door, not the front door
 //! ```
 //!
+//! The same absences, as probes that compile only while the method is
+//! absent: a real `GovernedPort::control`, or an `EffectPort::broker`, of
+//! any signature or generics, is chosen before the probe's `&mut self`
+//! method (or is ambiguous with it) and breaks this build:
+//!
+//! ```
+//! use nexus_mother::adapter::GovernedPort;
+//! struct Absent;
+//! trait Probe {
+//!     fn control(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for GovernedPort {}
+//! fn probe(mut port: GovernedPort) {
+//!     let _: Absent = port.control();
+//! }
+//! ```
+//!
+//! ```
+//! use nexus_mother::effect::EffectPort;
+//! struct Absent;
+//! trait Probe {
+//!     fn broker(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl<T: ?Sized> Probe for T {}
+//! fn reach<P: EffectPort>(mut p: P) {
+//!     let _: Absent = p.broker();
+//! }
+//! ```
+//!
 //! Mother builds no broker: the host does (A1-d).
 //!
 //! ```

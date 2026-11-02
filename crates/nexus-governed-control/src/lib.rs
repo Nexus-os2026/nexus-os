@@ -187,6 +187,88 @@
 //! let _ = nexus_governed_control::governed::AgentDoor::close; // no close
 //! ```
 //!
+//! The same absences, as probes that compile only while each method is
+//! absent (Codex re-check: a generic method would make a path negative
+//! fail for another reason, and stable rustdoc does not check error codes).
+//! Method lookup tries the door's own methods taking `self`, `&self` and
+//! `&mut self` before this trait's `&mut self` one, so a real `AgentDoor`
+//! method of any of these names, of any signature or generics, is chosen
+//! instead and breaks this build:
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! struct Absent;
+//! trait Probe {
+//!     fn authority(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn control(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn open_owner_run(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn authorize(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn execute(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn request_grant(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn resume(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn emergency_stop(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn issue_agent_door(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn close(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for AgentDoor {}
+//! fn probe(mut door: AgentDoor) {
+//!     let _: Absent = door.authority();
+//!     let _: Absent = door.control();
+//!     let _: Absent = door.open_owner_run();
+//!     let _: Absent = door.authorize();
+//!     let _: Absent = door.execute();
+//!     let _: Absent = door.request_grant();
+//!     let _: Absent = door.resume();
+//!     let _: Absent = door.emergency_stop();
+//!     let _: Absent = door.issue_agent_door();
+//!     let _: Absent = door.close();
+//! }
+//! ```
+//!
+//! The probes cannot see through `Deref`, and a `Deref` to the front door
+//! would be the worst escape: `AgentDoor` implements neither `Deref` nor
+//! `DerefMut` (with either one, the marker below is ambiguous and this
+//! build breaks):
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! trait AmbiguousIfDeref<A> {
+//!     fn some_item() {}
+//! }
+//! impl<T: ?Sized> AmbiguousIfDeref<()> for T {}
+//! struct InvalidDeref;
+//! impl<T: ?Sized + std::ops::Deref> AmbiguousIfDeref<InvalidDeref> for T {}
+//! let _ = <AgentDoor as AmbiguousIfDeref<_>>::some_item;
+//!
+//! trait AmbiguousIfDerefMut<A> {
+//!     fn some_item() {}
+//! }
+//! impl<T: ?Sized> AmbiguousIfDerefMut<()> for T {}
+//! struct InvalidDerefMut;
+//! impl<T: ?Sized + std::ops::DerefMut> AmbiguousIfDerefMut<InvalidDerefMut> for T {}
+//! let _ = <AgentDoor as AmbiguousIfDerefMut<_>>::some_item;
+//! ```
+//!
 //! A door and the owner's mission and resume approvals cannot be built
 //! outside the crate, by a literal or a crate-private constructor, and a
 //! door cannot be copied (A1-b):
