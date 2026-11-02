@@ -75,7 +75,7 @@ the host, tests included).
 | M2c: consent asks through the door's bound confirmer, once, with the exact request | `adapter/m2c_door.rs` (A4), broker `governed/door_tests.rs` (A4) |
 | M2c: resume asks: a held mission resumes only after the Owner's native dialog naming its contract hash, once per request (the table below) | `adapter/m2c_door.rs` (A5, A6), broker `governed/door_tests.rs` (A5, A6-f) |
 | M2a-S: after a break, no effect dispatched after the break executes; a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
-| M2c: a break halts the port's door at the broker (invariant (b) below): an effect already past the port's fenced check meets the halt at every admission step; the halt is in memory, under one broker lock at a time, each taken even if poisoned; its records are written by the call that made them, after it released the coordinator and port locks, or counted (`halt_records`) | broker `governed/halt_tests.rs` (B1–B18, R1–R5), `adapter/m2c_halt.rs` (M1–M8, A6-g), `adapter/m2c_crash.rs` (MC1–MC4, CR1–CR8) |
+| M2c: a break halts the port's door at the broker (invariant (b) below): an effect already past the port's fenced check meets the halt at every admission step; the halt is in memory, under one broker lock at a time, each taken even if poisoned; its records are written by the call that made them, after it released the coordinator and port locks, or counted (`halt_records`) | broker `governed/halt_tests.rs` (B1–B18, R1–R6; R6 is CR8's property, an Executing member that a fully written halt leaves unsettled), `adapter/m2c_halt.rs` (M1–M8, A6-g), `adapter/m2c_crash.rs` (MC1–MC4, CR1–CR7) |
 
 M2c: how a held mission resumes. The coordinator reserves a request
 under its lock (replacing any earlier one; the mission's generation
@@ -159,10 +159,14 @@ Coordinator rules the oracles pin:
   first step (under the broker's runs lock) alone refuses all admission;
   its second (the commitments lock, taken alone) waits for any admission
   in progress, which is what the return-time claim needs. The fence does
-  not wait for in-flight actions (Owner decision). A panic in the halt or
-  the sweep does not skip the rest (each broker lock is taken even if
-  poisoned; the sweep finishes, then the panic is resumed); records a
-  panic left unwritten are counted lost, never silently dropped. Every broker call the port makes (opening a run, an action, an
+  not wait for in-flight actions (Owner decision). A panic inside the
+  halt skips its remaining steps. Admission refusal survives it once the
+  halt has passed its runs barrier (its first step). The fence catches the
+  panic and goes on with its backstop sweep, which covers the port's
+  registered runs only, so later cleanup (another member's commitments,
+  leases or pending effects) may remain incomplete; the panic is then
+  resumed. Each broker lock is taken even if poisoned; records a panic
+  left unwritten are counted lost, never silently dropped. Every broker call the port makes (opening a run, an action, an
   approval query, adopting, a settled check, a cancellation, a finish)
   checks `fenced` first and is refused once it is set. A call that checked
   just before the break is not waited for, even one stalled where no
