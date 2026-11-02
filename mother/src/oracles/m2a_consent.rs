@@ -264,7 +264,20 @@ fn m2a_live_consent_is_minted_only_from_the_broker_s_approval() {
     let consent = code(CONSENT);
     let squeezed: String = consent.chars().filter(|c| !c.is_whitespace()).collect();
     assert!(squeezed.contains("pub(crate)fnfrom_broker(approval:MissionApproval,"));
-    // Mother's own confirmer trait is gone; the port reaches the broker.
+    // Mother's own confirmer trait is gone; consent is asked of the broker
+    // through the port's door.
     assert!(!consent.contains("pub trait"));
-    assert!(code(EFFECT).contains("fn broker(&self) -> &Authority;"));
+    let effect: String = code(EFFECT)
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let at = effect
+        .find("fnconfirm_mission(")
+        .expect("fn confirm_mission(");
+    let signature = &effect[at..at + effect[at..].find(';').expect("a declaration")];
+    assert!(
+        signature.ends_with("->Result<MissionApproval,AuthorityError>"),
+        "{signature}"
+    );
+    assert!(!effect.contains("fnbroker("));
 }
