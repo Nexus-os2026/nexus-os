@@ -33,13 +33,14 @@ use super::approval::{ActionConfirmation, ControlConfirmer, R2Approval};
 use super::clock::Clock;
 use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::{bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
+use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
 use super::run::{CancelToken, RunRegistry};
 use super::AuthorityError;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 /// The canonical identity of what an action acts on, as the domain resolved
@@ -273,6 +274,41 @@ struct Deferred {
 /// End records of transitions that have taken effect, not yet written.
 pub(crate) struct Unwritten(Vec<EvidenceRecord>);
 
+/// Where an ended entry's dues go as soon as they exist: its record, and
+/// its leases' ends.
+trait Owes {
+    fn record(&mut self, record: EvidenceRecord);
+    fn leases(&mut self, leases: &[LeaseId]);
+}
+
+impl Owes for Deferred {
+    fn record(&mut self, record: EvidenceRecord) {
+        self.records.push(record);
+    }
+
+    fn leases(&mut self, leases: &[LeaseId]) {
+        self.leases.extend(leases.iter().copied());
+    }
+}
+
+/// The dues of revocations made in one hold of the commitments lock: each
+/// record goes straight into `records` (a door halt's counted batch, §11
+/// C2), the leases are kept to end with no lock held.
+struct Revoking<'a, R: EndRecords> {
+    records: &'a mut R,
+    leases: Vec<LeaseId>,
+}
+
+impl<R: EndRecords> Owes for Revoking<'_, R> {
+    fn record(&mut self, record: EvidenceRecord) {
+        self.records.push(record);
+    }
+
+    fn leases(&mut self, leases: &[LeaseId]) {
+        self.leases.extend(leases.iter().copied());
+    }
+}
+
 /// Ends credential leases when their commitment ends (the broker).
 pub trait LeaseEnd: Send + Sync {
     fn end(&self, lease: LeaseId);
@@ -293,6 +329,28 @@ pub(crate) struct Inner {
     leases: Mutex<Arc<dyn LeaseEnd>>,
     /// Issues the reservation tokens.
     transitions: AtomicU64,
+    /// The broker's test hooks (tests).
+    #[cfg(test)]
+    hooks: Arc<crate::test_hooks::Hooks>,
+}
+
+/// Where revocation records go: an unwritten list (the emergency stop), or
+/// a counted batch (a door halt: every record is accounted for as soon as
+/// it exists, M2c §11 C2).
+pub(crate) trait EndRecords {
+    fn push(&mut self, record: EvidenceRecord);
+}
+
+impl EndRecords for Vec<EvidenceRecord> {
+    fn push(&mut self, record: EvidenceRecord) {
+        Vec::push(self, record);
+    }
+}
+
+impl EndRecords for RecordBatch {
+    fn push(&mut self, record: EvidenceRecord) {
+        RecordBatch::push(self, record);
+    }
 }
 
 /// The backend's commitments.
@@ -379,7 +437,39 @@ impl CommitmentRegistry {
             clock,
             leases: Mutex::new(Arc::new(NoLeases)),
             transitions: AtomicU64::new(0),
+            #[cfg(test)]
+            hooks: Arc::default(),
         }))
+    }
+
+    /// The broker's test hooks (tests).
+    #[cfg(test)]
+    pub(crate) fn hooks(&self) -> &Arc<crate::test_hooks::Hooks> {
+        &self.0.hooks
+    }
+
+    #[cfg(test)]
+    fn fire(&self, at: &'static str) {
+        self.0.hooks.fire(at);
+    }
+
+    /// Take the commitments lock and panic while holding it, which poisons
+    /// it (tests, on a thread the test joins).
+    #[cfg(test)]
+    pub(crate) fn panic_holding_entries(&self) {
+        let _entries = self
+            .0
+            .entries
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        panic!("the commitments lock is poisoned on purpose (test)");
+    }
+
+    /// The same for the lease-end slot (tests).
+    #[cfg(test)]
+    pub(crate) fn panic_holding_lease_slot(&self) {
+        let _slot = self.0.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        panic!("the lease-end slot is poisoned on purpose (test)");
     }
 
     /// Take and release this registry's locks once (tests).
@@ -502,11 +592,22 @@ impl CommitmentRegistry {
                     Err(self.ended(entry, AuthorityError::NotPending))
                 }
                 Some(entry) => {
+                    #[cfg(test)]
+                    self.fire(crate::test_hooks::at::COMPLETE_BEFORE_CHECK);
                     // Checked while still reserved: an end it finds records
                     // the transition it interrupted.
                     let live = self.live_check(id, entry, agent, run, now, &mut deferred);
                     entry.reserved = None;
-                    live.map(|cancel| finalize(entry, cancel))
+                    #[cfg(test)]
+                    if live.is_ok() {
+                        self.fire(crate::test_hooks::at::COMPLETE_CHECKED);
+                    }
+                    let finalized = live.map(|cancel| finalize(entry, cancel));
+                    #[cfg(test)]
+                    if finalized.is_ok() {
+                        self.fire(crate::test_hooks::at::COMPLETE_FINALIZED);
+                    }
+                    finalized
                 }
             }
         };
@@ -517,7 +618,7 @@ impl CommitmentRegistry {
     /// Move an entry that has not finished to the final `state`, under the
     /// lock: a transition under way for it is withdrawn (its record says
     /// which), and its evidence (`adjust` completes it) and lease ends are
-    /// owed.
+    /// owed, given to `owed` as soon as they exist.
     #[allow(clippy::too_many_arguments)]
     fn end_entry(
         &self,
@@ -526,7 +627,7 @@ impl CommitmentRegistry {
         state: CommitmentState,
         phase: EvidencePhase,
         now: Now,
-        deferred: &mut Deferred,
+        owed: &mut impl Owes,
         adjust: impl FnOnce(&mut EvidenceRecord),
     ) {
         entry.state = state;
@@ -538,10 +639,8 @@ impl CommitmentRegistry {
                 .push(("interrupted".into(), reservation.transition.as_str().into()));
         }
         adjust(&mut record);
-        deferred.records.push(record);
-        deferred
-            .leases
-            .extend(entry.prepared.leases.iter().copied());
+        owed.record(record);
+        owed.leases(&entry.prepared.leases);
     }
 
     /// Record a commitment for `agent` in `run`. The run must be active and
@@ -628,6 +727,8 @@ impl CommitmentRegistry {
             record.detail.push(("lease".into(), lease.to_string()));
         }
         self.record(&record)?;
+        #[cfg(test)]
+        self.fire(crate::test_hooks::at::PREPARE_BEFORE_INSERT);
         let view = entry.view(id);
         let mut deferred = Deferred::default();
         let now = self.now();
@@ -722,7 +823,7 @@ impl CommitmentRegistry {
     }
 
     /// Move an unconsumed entry to `Expired` or `Revoked`; its evidence and
-    /// lease ends are owed in `deferred`.
+    /// lease ends are owed, given to `owed` as soon as they exist.
     fn end_unconsumed(
         &self,
         id: CommitmentId,
@@ -730,20 +831,24 @@ impl CommitmentRegistry {
         state: CommitmentState,
         reason: &AuthorityError,
         now: Now,
-        deferred: &mut Deferred,
+        owed: &mut impl Owes,
     ) {
         let phase = if state == CommitmentState::Expired {
             EvidencePhase::Expired
         } else {
             EvidencePhase::Revoked
         };
-        self.end_entry(id, entry, state, phase, now, deferred, |record| {
+        self.end_entry(id, entry, state, phase, now, owed, |record| {
             record.failure = Some(reason.class());
             record.cancelled = matches!(
                 reason,
-                AuthorityError::RunCancelled | AuthorityError::EmergencyStopped
+                AuthorityError::RunCancelled
+                    | AuthorityError::EmergencyStopped
+                    | AuthorityError::Halted
             );
         });
+        #[cfg(test)]
+        self.fire(crate::test_hooks::at::END_UNCONSUMED_RECORDED);
     }
 
     /// End leases no commitment will list (their proposal was refused), or
@@ -893,6 +998,8 @@ impl CommitmentRegistry {
             token,
         };
         self.record(&record)?;
+        #[cfg(test)]
+        self.fire(crate::test_hooks::at::AUTHORIZE_RECORDED);
         self.complete(
             id,
             token,
@@ -1241,28 +1348,88 @@ impl CommitmentRegistry {
     /// at once; their records are returned to be written after the rest of
     /// the stop has taken effect.
     pub(crate) fn revoke_all(&self) -> Unwritten {
-        let mut deferred = Deferred::default();
+        let mut records = Vec::new();
+        let entries = self.entries();
+        let leases = self.revoke_where_in(
+            entries,
+            |_| true,
+            &AuthorityError::EmergencyStopped,
+            &mut records,
+        );
+        self.end_leases(&leases);
+        Unwritten(records)
+    }
+
+    /// M2c PR-B, a door halt's second step: under the commitments lock
+    /// alone, taken even if poisoned (it also waits for every `complete()`
+    /// in progress: the entries barrier), end every unconsumed commitment of
+    /// `runs`. Each end record goes into `batch` as soon as it exists (§11
+    /// C2). Returns the leases those commitments held, to end with no lock.
+    pub(crate) fn revoke_runs(
+        &self,
+        runs: &BTreeSet<RunId>,
+        reason: &AuthorityError,
+        batch: &mut RecordBatch,
+    ) -> Vec<LeaseId> {
+        let entries = self
+            .0
+            .entries
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        #[cfg(test)]
+        self.fire(crate::test_hooks::at::HALT_ENTRIES_TAKEN);
+        self.revoke_where_in(entries, |run| runs.contains(&run), reason, batch)
+    }
+
+    /// End every unconsumed commitment whose run `pick` names, in the hold
+    /// of `entries` given; each record goes straight into `out` as it is
+    /// made, with no temporary in between. Returns their leases.
+    fn revoke_where_in(
+        &self,
+        mut entries: MutexGuard<'_, HashMap<CommitmentId, Entry>>,
+        pick: impl Fn(RunId) -> bool,
+        reason: &AuthorityError,
+        out: &mut impl EndRecords,
+    ) -> Vec<LeaseId> {
         let now = self.now();
-        {
-            let mut entries = self.entries();
-            for (id, entry) in entries.iter_mut() {
-                if matches!(
+        let mut owed = Revoking {
+            records: out,
+            leases: Vec::new(),
+        };
+        #[cfg(test)]
+        let mut first = true;
+        for (id, entry) in entries.iter_mut() {
+            if pick(entry.run)
+                && matches!(
                     entry.state,
                     CommitmentState::Prepared | CommitmentState::Authorized
-                ) {
-                    self.end_unconsumed(
-                        *id,
-                        entry,
-                        CommitmentState::Revoked,
-                        &AuthorityError::EmergencyStopped,
-                        now,
-                        &mut deferred,
-                    );
+                )
+            {
+                self.end_unconsumed(*id, entry, CommitmentState::Revoked, reason, now, &mut owed);
+                #[cfg(test)]
+                if std::mem::take(&mut first) {
+                    self.fire(crate::test_hooks::at::REVOKE_WHERE_FIRST);
                 }
             }
         }
-        self.end_leases(&deferred.leases);
-        Unwritten(deferred.records)
+        owed.leases
+    }
+
+    /// M2c PR-B: end `leases` through the lease-end slot, taken even if
+    /// poisoned (a halt's third step). Never called with a lock held.
+    pub(crate) fn end_leases_even_if_poisoned(&self, leases: &[LeaseId]) {
+        if leases.is_empty() {
+            return;
+        }
+        let table = self
+            .0
+            .leases
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        for lease in leases {
+            table.end(*lease);
+        }
     }
 
     /// End every unconsumed commitment that can no longer start (it expired,

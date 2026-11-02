@@ -56,7 +56,7 @@ the host, tests included).
 |---|---|
 | MN-01: zero file, network, process, model-tool or spend effects before consent | `oracles/mn01.rs`, `adapter/real_broker.rs` |
 | Consent binds the exact hash; a changed contract voids it | `oracles/consent.rs` |
-| Stop from every state: no new dispatch, durable across restart, never waits | `oracles/stop.rs`, `adapter/real_broker.rs` |
+| Stop from every state: no new dispatch, durable across restart. Stop never waits for a lane or for an effect in flight. It still waits for its own journal operations, for in-memory locks other calls hold, and for its broker records, which it writes after the cancellation has taken effect and while holding no lock | `oracles/stop.rs`, `adapter/real_broker.rs`, `adapter/m2c_halt.rs` (M4) |
 | Denial (the Owner's no, the broker's refusal) means zero effect | `oracles/deny.rs`, `adapter/real_broker.rs` |
 | A planted "consent"/"approved" string grants nothing | `oracles/consent.rs` |
 | Journal tampering is detected and refused | `oracles/journal.rs`, `adapter/file_tests.rs` |
@@ -74,7 +74,8 @@ the host, tests included).
 | M2c: every door asks: the Owner's native yes is needed for every issuance of a door, in a new process or in the same one; no stored state decides it; a no or an unrecorded yes gives no door; live doors and memberships are bounded and reclaimed. (A coordinator reopened on an existing port reuses that port's door; the walk asks for a fresh door at every run and restart.) | broker `governed/door_tests.rs` (A7) |
 | M2c: consent asks through the door's bound confirmer, once, with the exact request | `adapter/m2c_door.rs` (A4), broker `governed/door_tests.rs` (A4) |
 | M2c: resume asks: a held mission resumes only after the Owner's native dialog naming its contract hash, once per request (the table below) | `adapter/m2c_door.rs` (A5, A6), broker `governed/door_tests.rs` (A5, A6-f) |
-| M2a-S: after a break, no effect dispatched after the break executes; an effect already dispatched (journaled and past the fenced check) may still enter the broker and is interrupted where the broker can, the same in-flight limit as an ordinary Stop (fenced at the broker; the fence's sweep is panic-safe); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
+| M2a-S: after a break, no effect dispatched after the break executes; a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
+| M2c: a break halts the port's door at the broker (invariant (b) below): an effect already past the port's fenced check meets the halt at every admission step; the halt is in memory, under one broker lock at a time, each taken even if poisoned; its records are written by the call that made them, after it released the coordinator and port locks, or counted (`halt_records`) | broker `governed/halt_tests.rs` (B1–B18, R1–R6; R6 is CR8's property, an Executing member that a fully written halt leaves unsettled), `adapter/m2c_halt.rs` (M1–M8, A6-g), `adapter/m2c_crash.rs` (MC1–MC4, CR1–CR7) |
 
 M2c: how a held mission resumes. The coordinator reserves a request
 under its lock (replacing any earlier one; the mission's generation
@@ -89,7 +90,7 @@ Owner's yes resumes nothing.
 | A second request is reserved while the first is in its dialog | the first one's answer is stale (its request was replaced, the generation moved); only the second can count, once |
 | A Stop of the mission before the take (in the dialog, during the broker's record, or before the journal write) | the Stop clears the request and the hold: the answer is discarded and the call returns `Stopped` |
 | A break (journal failure) before the take | the coordinator is broken: the take refuses |
-| A fence of the port outside a break (the public port fence; in PR-B also poison recovery, which halts the door outside the coordinator lock), after the broker's post-record check and before the take | the take may journal `Resumed`: the Owner's recorded yes exists, and the fenced port (in PR-B, the halted door) refuses every effect of the mission |
+| A fence of the port or a halt of its door outside a break (the public port fence, or poison recovery, which halts the door outside the coordinator lock), after the broker's post-record check and before the take | the take may journal `Resumed`: the Owner's recorded yes exists, and the fenced port and its halted door refuse every effect of the mission (A6-g, on the port fence and on a door halt) |
 | An emergency stop after the broker's post-record check | the take may journal `Resumed`; every effect of the mission is then refused by the broker. Resuming a held mission permits no effect by itself |
 | Anything after the take | acts on a resumed mission, as on any other |
 
@@ -143,28 +144,36 @@ Coordinator rules the oracles pin:
   approval. Replay refuses a session the live coordinator could not write
   (a clean close, or work, before the holds an unclean session requires).
 - M2a-S, the fence: at the moment the journal fails (under the coordinator
-  lock that marks it broken) the port is fenced: every registered run gets
-  a cancellation attempt; a failed attempt, including a panic, is counted;
-  anything still queued is swept on the next lock acquisition. A waiting
-  request on a cancelled run is refused by the broker itself, and the port
-  keeps no new run. The claim (invariant (b)): after a break, no
-  effect dispatched after the break executes; an effect already dispatched
-  (journaled and past the fenced check) may still enter the broker and is
-  interrupted where the broker can, the same in-flight limit as an
-  ordinary Stop. The fence does not wait for in-flight actions (Owner
-  decision); the broker's cancellation evidence writes can still block
-  (known limit, closed by M2c). Under the port's mutex it sets `fenced`
-  and cancels every run registered, then returns. A
-  panic while cancelling one run does not skip the others (the whole sweep
-  is done, then the panic is resumed; a sweep a panic cut short is
-  completed when the poisoned mutex is taken back). Every broker call the port makes (opening a run, an action, an
+  lock that marks it broken) the port is fenced. M2c: under the port's
+  mutex it sets `fenced`, halts the port's door at the broker, then sweeps
+  every registered run through the door's cancellation (a backstop), and
+  returns the records all of that made, unwritten. The coordinator keeps
+  them in its own state, takes them out before it releases its lock, and
+  writes them with no Mother lock held, after the poison marker was tried
+  (`with_lock`). A waiting request on a cancelled run is refused by the
+  broker itself, and the port keeps no new run.
+- M2c, invariant (b): after the fence's halt returns, the door's runs admit
+  no new commitment to Executing; no run is inserted into the door's
+  group; an action already Executing has its run's token set and stops at
+  its actuator's next check; and the halt did no evidence I/O. The halt's
+  first step (under the broker's runs lock) alone refuses all admission;
+  its second (the commitments lock, taken alone) waits for any admission
+  in progress, which is what the return-time claim needs. The fence does
+  not wait for in-flight actions (Owner decision). A panic inside the
+  halt skips its remaining steps. Admission refusal survives it once the
+  halt has passed its runs barrier (its first step). The fence catches the
+  panic and goes on with its backstop sweep, which covers the port's
+  registered runs only, so later cleanup (another member's commitments,
+  leases or pending effects) may remain incomplete; the panic is then
+  resumed. Each broker lock is taken even if poisoned; records a panic
+  left unwritten are counted lost, never silently dropped. Every broker call the port makes (opening a run, an action, an
   approval query, adopting, a settled check, a cancellation, a finish)
   checks `fenced` first and is refused once it is set. A call that checked
   just before the break is not waited for, even one stalled where no
   cancellation reaches it (a DNS lookup): it is interrupted where the
   broker can (its run is cancelled, so the broker refuses a step it has not
   begun, and an action executing on it sees its run's cancellation token);
-  see the in-flight known limit. Every run registration checks `fenced` in the same
+  M2c: it then meets the halt (below). Every run registration checks `fenced` in the same
   critical section as the fence: it comes before the fence's (which
   cancels the run) or after (and cancels the run itself, never giving it
   to the mission). The
@@ -204,11 +213,11 @@ Coordinator rules the oracles pin:
 - M2a-S: while a waiting mission is held, its request stays at the broker,
   where only the Owner's own native approval can run it. Mother does not
   ask about it or carry on from it until the Owner resumes the mission.
-- M2a-S: the fence cancels broker runs under the coordinator lock, so the
-  broker's cancellation record is written while that lock is held (Owner
-  decision). An effect already executing inside the broker when the
-  coordinator breaks sees its run's cancellation token; one past the point
-  where it checks it may complete. Without waiting, the broker can open a
+- M2c: the fence halts and cancels under the coordinator lock, in memory
+  only; the broker's records are written after that lock and the port's
+  are released (no lock held). An effect already executing inside the
+  broker when the coordinator breaks sees its run's cancellation token;
+  one past the point where it checks it may complete. Without waiting, the broker can open a
   run for a call that checked `fenced` just before the break; the port
   cancels it as it registers (it is recorded at the broker, cancelled). The oracles pin every call reserved but
   not yet handed to the broker.
@@ -264,25 +273,42 @@ Coordinator rules the oracles pin:
   missions, after which neither is handed back and a stopped mission's
   genuine request stays approvable until it expires (the Owner's emergency
   stop withdraws it).
-- **Known limit: the in-flight window (closed by planned mission M2c, a
-  broker-owned atomic halt).** An effect already dispatched before a break
-  (journaled and past the port's fenced check) may still enter the broker
-  after it; it is interrupted only where the broker can (a cancelled run,
-  an executing action's cancellation token), the same in-flight limit as
-  an ordinary Stop.
-- **Known limit: the fence can block on the broker's evidence store
-  (closed by planned mission M2c).** The fence (under the coordinator lock
-  and the port's mutex) and Stop wait for the broker's own evidence-store
-  writes of its cancellation records; a stalled evidence store stalls
-  them.
-- **Known limit: the sweep guarantees attempts, not success (closed by
-  planned mission M2c).** An incomplete sweep is finished only when the
-  next port call takes the lock; a call already past `enter()` does not
-  take it. In current code nothing panics outside the per-run
-  `catch_unwind` except possibly the drop of a second panic's payload
-  (`adapter/mod.rs:225`), and no such payload exists today. A run whose
-  cancellation panics before its token is set is not requeued: the sweep
-  guarantees attempts, not success.
+- **Closed by M2c, for admission: the in-flight window.** An effect
+  already past the port's fenced check before a break meets the door's
+  halt at the broker: at opening a run (a run opened just before the halt
+  may come back permanently cancelled, and every call on it is refused),
+  at `prepare`, approval, `authorize`, `complete`, the lease fill and the
+  credential re-checks. An action already Executing stops only
+  cooperatively, at its actuator's next check: a request already sent, the
+  gap between egress's last check and its send, a blocking DNS lookup
+  under way, a tool's filesystem effects before its spawn check, and
+  anything a process did before it was killed (reaping allows up to 5 s)
+  are not undone. The credential release is not one atomic boundary.
+  Cancellation is not containment.
+- **Closed by M2c, for locks: the fence can block on the store.** The
+  fence and Stop take effect before any evidence write, and no
+  coordinator, port or broker lock is held across one. The call that broke
+  the journal and Mother's Stop still return only after writing their own
+  records. A stalled store also blocks every other evidence writer,
+  because of the store's one mutex, as before.
+- **Closed by M2c: the sweep guarantees attempts.** The guarantee is now
+  the door's halt: in-memory steps, each under one broker lock taken alone
+  and even if poisoned. Admission is refused from its first step, and the
+  return-time claim needs its second. The sweep is a backstop.
+- **Known limit: lost history.** A halt's records that were never written
+  (a panic, a crash before the write, a coordinator left poisoned) are
+  lost history, not lost safety: the halt lives in memory. They are
+  counted (`ControlStatus.halt_records`: pending, recorded, owed,
+  uncertain, lost). After a restart a commitment is `unsettled` exactly
+  when its `Started` is durable and its end is not, whatever became of the
+  halt's records, and recovery is then required. A door halt is not
+  persisted: after any restart broker memory is empty, and every door asks
+  the Owner again.
+- **Known limit: lease ends write no record.** The halt (and a door's
+  cancellation) ends its runs' credential leases in memory; no evidence
+  phase exists for a lease end, so none is written (M2c adds no new
+  public phase for it). The lease's run cancellation and its revoked
+  commitments are recorded.
 - **Known limit: the adopted deadline (Owner decision, exact clamp in
   M2b).** A port that takes back a journaled action clamps its deadline to
   the action's remaining lifetime by the broker's wall-clock expiry, not to

@@ -112,7 +112,7 @@ fn a_panic_inside_the_fence_leaves_the_port_refusing(
     calm("hand", &|| port.hand(MissionId(9_403), &held));
     calm("cancel", &|| port.cancel(MissionId(9_404)));
     calm("finish", &|| port.finish(MissionId(9_405)));
-    calm("fence", &|| port.fence());
+    calm("fence", &|| port.fence().write());
 
     assert_eq!(mothers_runs(control), runs, "a run opened after the fence");
     assert_eq!(

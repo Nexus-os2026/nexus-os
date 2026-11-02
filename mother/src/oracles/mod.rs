@@ -285,10 +285,11 @@ impl EffectPort for RecordingPort {
 
     fn hand(&self, _: MissionId, _: &PendingAction) {}
 
-    fn fence(&self) {
+    fn fence(&self) -> crate::effect::Owed {
         let mut state = self.lock();
         state.fenced = true;
         self.changed.notify_all();
+        crate::effect::Owed::default()
     }
 
     fn emergency_stopped(&self) -> bool {

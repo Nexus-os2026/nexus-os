@@ -23,7 +23,7 @@
 //! with the Owner's yes, and hands the port only that door.
 
 use crate::effect::{
-    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
+    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed, PendingAction,
 };
 use crate::journal::{JournalError, JournalStore, MissionId};
 use nexus_governed_control::authority::approval::{
@@ -32,7 +32,9 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
-use nexus_governed_control::governed::{AgentDoor, AgentOutcome, Intent, Lookup};
+use nexus_governed_control::governed::{
+    AgentDoor, AgentOutcome, HaltReason, Intent, Lookup, RecordBatch,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -72,7 +74,11 @@ mod m2as_support;
 #[cfg(test)]
 mod m2as_sweep;
 #[cfg(test)]
+mod m2c_crash;
+#[cfg(test)]
 mod m2c_door;
+#[cfg(test)]
+mod m2c_halt;
 #[cfg(test)]
 pub(crate) mod m2c_support;
 #[cfg(test)]
@@ -196,38 +202,68 @@ impl GovernedPort {
 
     /// The broker run a mission opened, if any.
     pub fn run_of(&self, mission: MissionId) -> Option<RunId> {
-        self.lock().open.get(&mission).copied()
+        self.with_runs(|runs| runs.open.get(&mission).copied())
     }
 
     /// M2a-S (tests): whether the port was fenced.
     #[cfg(test)]
     pub(crate) fn fenced(&self) -> bool {
-        self.lock().fenced
+        self.with_runs(|runs| runs.fenced)
     }
 
     /// The port's mutex. A panic while it was held poisons it; the only
-    /// critical section that calls out is the fence's (it cancels runs at
-    /// the broker), which sets `fenced` first. A poisoned mutex is taken
-    /// back and its port treated as fenced, so every later call refuses
-    /// instead of panicking, and a sweep the panic cut short is completed
-    /// (its panic was raised already).
-    fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
-        self.runs.lock().unwrap_or_else(|poisoned| {
-            let mut runs = poisoned.into_inner();
-            runs.fenced = true;
-            let _ = self.sweep(&mut runs);
-            runs
-        })
+    /// critical section that calls out is the fence's (it halts the door
+    /// and cancels runs at the broker, in memory), which sets `fenced`
+    /// first. A poisoned mutex is taken back and its port treated as
+    /// fenced, so every later call refuses instead of panicking; the door
+    /// is halted and a sweep the panic cut short is completed (its panic
+    /// was raised already). M2c PR-B: their records come back with the
+    /// guard, to be written once the mutex is released.
+    fn locked(&self) -> (std::sync::MutexGuard<'_, Runs>, Owed) {
+        match self.runs.lock() {
+            Ok(runs) => (runs, Owed::default()),
+            Err(poisoned) => {
+                let mut runs = poisoned.into_inner();
+                runs.fenced = true;
+                let mut owed = Owed::default();
+                if let Ok(batch) = catch_unwind(AssertUnwindSafe(|| {
+                    self.door.halt(HaltReason::JournalFailed)
+                })) {
+                    owed.push(batch);
+                }
+                let _ = self.sweep(&mut runs, &mut owed);
+                (runs, owed)
+            }
+        }
     }
 
-    /// Cancel every run the fence has still to cancel, each on its own: a
-    /// panic while cancelling one is counted as a failed cancellation and
-    /// does not skip the others. Returns the first panic, once all are done.
-    fn sweep(&self, runs: &mut Runs) -> Option<Box<dyn std::any::Any + Send>> {
+    /// M2c PR-B: run `body` under the port's mutex; records its poison
+    /// recovery made are written once the mutex is released.
+    fn with_runs<T>(&self, body: impl FnOnce(&mut Runs) -> T) -> T {
+        let (result, owed) = {
+            let (mut runs, owed) = self.locked();
+            #[cfg(test)]
+            let _held = crate::effect::held::Held::port();
+            (body(&mut runs), owed)
+        };
+        owed.write();
+        result
+    }
+
+    /// Cancel every run the fence has still to cancel, each on its own,
+    /// their records into `owed`: a panic while cancelling one is counted
+    /// as a failed cancellation and does not skip the others. Returns the
+    /// first panic, once all are done.
+    fn sweep(&self, runs: &mut Runs, owed: &mut Owed) -> Option<Box<dyn std::any::Any + Send>> {
         let mut first = None;
         while let Some(run) = runs.unswept.pop() {
             let cancelled = catch_unwind(AssertUnwindSafe(|| {
-                self.cancel_run(run);
+                match self.door.cancel_run(run) {
+                    Ok(batch) => owed.push(batch),
+                    Err(_) => {
+                        self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
                 #[cfg(test)]
                 self.fence_between_cancels.fire();
             }));
@@ -240,14 +276,15 @@ impl GovernedPort {
     }
 
     /// The check before every broker call: refused once fenced. It waits
-    /// only while the fence's critical section runs (the broker writing its
-    /// cancellations), and the fence never waits for it. A call that passed
+    /// only while the fence's critical section runs (M2c: the door's halt
+    /// and the sweep, in memory, with no evidence write), and the fence
+    /// never waits for it. A call that passed
     /// it just before the break goes on unwaited: on a run the fence
     /// cancels (the broker refuses it, or an executing action sees its
     /// run's cancellation token), or on a run it opens afterwards, which
     /// its registration cancels at once (`run_for`).
     fn enter(&self) -> Result<(), EffectRefusal> {
-        if self.lock().fenced {
+        if self.with_runs(|runs| runs.fenced) {
             return Err(refused("port_fenced"));
         }
         Ok(())
@@ -261,20 +298,19 @@ impl GovernedPort {
     /// cancelled).
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
         self.enter()?;
-        {
-            let runs = self.lock();
+        let known = self.with_runs(|runs| {
             if runs.ended.contains(&mission) {
-                return Err(refused("mission_cancelled"));
+                return Some(Err(refused("mission_cancelled")));
             }
-            if let Some(run) = runs.open.get(&mission) {
-                return Ok(*run);
-            }
+            runs.open.get(&mission).map(|run| Ok(*run))
+        });
+        if let Some(known) = known {
+            return known;
         }
         #[cfg(test)]
         self.before_open_run.fire();
         let run = self.door.open_run().map_err(|e| refused(e.class()))?;
-        let refusal = {
-            let mut runs = self.lock();
+        let refusal = self.with_runs(|runs| {
             if runs.fenced {
                 Some("port_fenced")
             } else if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
@@ -283,7 +319,7 @@ impl GovernedPort {
                 runs.open.insert(mission, run);
                 None
             }
-        };
+        });
         if let Some(class) = refusal {
             self.cancel_run(run);
             return Err(refused(class));
@@ -292,19 +328,31 @@ impl GovernedPort {
     }
 
     /// Cancel `run` at the broker (also once fenced: a cancellation only
-    /// ever stops effects).
+    /// ever stops effects); its records are written here, with no lock held.
     fn cancel_run(&self, run: RunId) {
-        if self.door.cancel_run(run).is_err() {
-            self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+        match self.door.cancel_run(run) {
+            Ok(batch) => written(batch),
+            Err(_) => {
+                self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+            }
         }
     }
 
     /// Mark the mission ended; its run, if it opened one.
     fn end(&self, mission: MissionId) -> Option<RunId> {
-        let mut runs = self.lock();
-        runs.ended.insert(mission);
-        runs.open.get(&mission).copied()
+        self.with_runs(|runs| {
+            runs.ended.insert(mission);
+            runs.open.get(&mission).copied()
+        })
     }
+}
+
+/// Write a batch the port's door returned, with no lock held (tests check
+/// it on every write).
+fn written(batch: RecordBatch) {
+    let mut owed = Owed::default();
+    owed.push(batch);
+    owed.write();
 }
 
 fn refused(class: &str) -> EffectRefusal {
@@ -346,7 +394,7 @@ impl EffectPort for GovernedPort {
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
                 let deadline = asked_at.saturating_add(lifetime);
-                self.lock().waiting.insert(mission, (view.id, deadline));
+                self.with_runs(|runs| runs.waiting.insert(mission, (view.id, deadline)));
                 Ok(EffectOutcome::AwaitingApproval)
             }
             Err(e) => Err(refused(e.class())),
@@ -371,12 +419,7 @@ impl EffectPort for GovernedPort {
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
         let entered = self.enter();
         let run = self.end(mission);
-        let handed = self
-            .lock()
-            .handed
-            .get(&mission)
-            .cloned()
-            .unwrap_or_default();
+        let handed = self.with_runs(|runs| runs.handed.get(&mission).cloned().unwrap_or_default());
         // Fenced: the fence cancelled every run this port held (a
         // cancellation it could not make is counted, not retried here).
         if entered.is_err() {
@@ -386,10 +429,11 @@ impl EffectPort for GovernedPort {
             };
         };
         if let Some(run) = run {
-            self.door.cancel_run(run).map_err(|e| {
+            let batch = self.door.cancel_run(run).map_err(|e| {
                 self.cancel_failures.fetch_add(1, Ordering::SeqCst);
                 refused(e.class())
             })?;
+            written(batch);
         }
         for pending in handed {
             if !self.withdrawn(&pending, run) {
@@ -433,21 +477,46 @@ impl EffectPort for GovernedPort {
     /// others: the whole sweep is done, then the panic is resumed (under the
     /// mutex, which it poisons; the port stays fenced). A fence is final: a
     /// coordinator opened again after a break needs a new port.
-    fn fence(&self) {
+    fn fence(&self) -> Owed {
+        let mut owed = Owed::default();
         {
-            let mut runs = self.lock();
+            let (mut runs, recovered) = self.locked();
+            owed.extend(recovered);
+            #[cfg(test)]
+            let _held = crate::effect::held::Held::port();
             runs.fenced = true;
+            // M2c PR-B: the door's halt first. From its first step nothing
+            // of this door is admitted; once it returns none of its
+            // commitments moves to Executing. A panic in it is counted as a
+            // cancel failure and resumed at the end.
+            let halted = catch_unwind(AssertUnwindSafe(|| {
+                self.door.halt(HaltReason::JournalFailed)
+            }));
+            let first = match halted {
+                Ok(batch) => {
+                    owed.push(batch);
+                    None
+                }
+                Err(panic) => {
+                    self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                    Some(panic)
+                }
+            };
             runs.unswept = runs.open.values().rev().copied().collect();
             #[cfg(test)]
             if !runs.unswept.is_empty() {
                 self.first_fence_cancel.fire(runs.fenced);
             }
-            if let Some(panic) = self.sweep(&mut runs) {
+            // A backstop now: the halt cancelled every run of the door's
+            // group; normally these batches are empty.
+            let swept = self.sweep(&mut runs, &mut owed);
+            if let Some(panic) = first.or(swept) {
                 resume_unwind(panic);
             }
         }
         #[cfg(test)]
         self.after_fence.fire();
+        owed
     }
 
     fn emergency_stopped(&self) -> bool {
@@ -489,12 +558,17 @@ impl EffectPort for GovernedPort {
         let unknown = || ApprovalStatus::Lapsed {
             class: "approval_outcome_unknown".into(),
         };
-        let (run, commitment, deadline) = {
-            let runs = self.lock();
-            match (runs.open.get(&mission), runs.waiting.get(&mission)) {
-                (Some(run), Some((commitment, deadline))) => (*run, *commitment, *deadline),
-                _ => return unknown(),
-            }
+        let found =
+            self.with_runs(
+                |runs| match (runs.open.get(&mission), runs.waiting.get(&mission)) {
+                    (Some(run), Some((commitment, deadline))) => {
+                        Some((*run, *commitment, *deadline))
+                    }
+                    _ => None,
+                },
+            );
+        let Some((run, commitment, deadline)) = found else {
+            return unknown();
         };
         // Only a commitment of one of this door's runs is known here.
         let Lookup::Mine(view) = self.door.commitment(commitment) else {
@@ -506,7 +580,7 @@ impl EffectPort for GovernedPort {
         let clock = self.door.clock();
         let status = status_of(&view, clock.wall_ms(), clock.monotonic_ms(), deadline);
         if status != ApprovalStatus::Waiting {
-            self.lock().waiting.remove(&mission);
+            self.with_runs(|runs| runs.waiting.remove(&mission));
         }
         status
     }
@@ -523,13 +597,14 @@ impl EffectPort for GovernedPort {
     }
 
     fn pending(&self, mission: MissionId) -> Option<PendingAction> {
-        let runs = self.lock();
-        let run = runs.open.get(&mission)?;
-        let (commitment, deadline) = runs.waiting.get(&mission)?;
-        Some(PendingAction {
-            run: run.to_string(),
-            commitment: commitment.to_string(),
-            deadline_mono_ms: *deadline,
+        self.with_runs(|runs| {
+            let run = runs.open.get(&mission)?;
+            let (commitment, deadline) = runs.waiting.get(&mission)?;
+            Some(PendingAction {
+                run: run.to_string(),
+                commitment: commitment.to_string(),
+                deadline_mono_ms: *deadline,
+            })
         })
     }
 
@@ -551,11 +626,12 @@ impl EffectPort for GovernedPort {
 impl GovernedPort {
     /// Every journaled action handed back for `mission`, once each.
     fn record_handed(&self, mission: MissionId, pending: &PendingAction) {
-        let mut runs = self.lock();
-        let handed = runs.handed.entry(mission).or_default();
-        if !handed.contains(pending) {
-            handed.push(pending.clone());
-        }
+        self.with_runs(|runs| {
+            let handed = runs.handed.entry(mission).or_default();
+            if !handed.contains(pending) {
+                handed.push(pending.clone());
+            }
+        });
     }
 
     /// Whether the broker no longer holds `pending` open, or holds it on
@@ -627,16 +703,17 @@ impl GovernedPort {
             clock.wall_ms(),
             view.expires_wall_ms,
         );
-        let mut runs = self.lock();
-        if runs.fenced
-            || runs.ended.contains(&mission)
-            || runs.open.contains_key(&mission)
-            || runs.open.values().any(|held| *held == run)
-        {
-            return;
-        }
-        runs.open.insert(mission, run);
-        runs.waiting.insert(mission, (commitment, deadline));
+        self.with_runs(|runs| {
+            if runs.fenced
+                || runs.ended.contains(&mission)
+                || runs.open.contains_key(&mission)
+                || runs.open.values().any(|held| *held == run)
+            {
+                return;
+            }
+            runs.open.insert(mission, run);
+            runs.waiting.insert(mission, (commitment, deadline));
+        });
     }
 }
 

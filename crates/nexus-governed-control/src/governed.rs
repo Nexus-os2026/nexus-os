@@ -39,6 +39,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod door;
+pub use crate::authority::halt::{BatchOutcome, HaltReason, HaltRecords, RecordBatch};
 use door::DoorCore;
 pub use door::{AgentDoor, Lookup};
 
@@ -111,6 +112,10 @@ pub struct ControlStatus {
     pub live_doors: usize,
     /// M2c: agent doors issued in this process (reported, never limited).
     pub doors_issued: u64,
+    /// M2c PR-B: agent doors halted in this process.
+    pub doors_halted: u64,
+    /// M2c PR-B: every door halt's records, accounted for.
+    pub halt_records: HaltRecords,
 }
 
 /// The longest grant the interface may ask for.
@@ -119,6 +124,11 @@ pub const MAX_GRANT: Duration = Duration::from_secs(24 * 3600);
 /// The governed control.
 pub struct GovernedControl {
     control: Arc<Control>,
+    /// M2c PR-B: the credential broker the connectors use, kept so that a
+    /// door halt ends its runs' leases.
+    credentials: Arc<CredentialBroker>,
+    /// M2c PR-B: agent doors halted in this process.
+    doors_halted: AtomicU64,
     egress: Arc<Egress>,
     connectors: Connectors,
     tools: Tools,
@@ -250,7 +260,9 @@ impl GovernedControl {
         let egress = Arc::new(Egress::system());
         let broker = CredentialBroker::new(control.authority(), secrets);
         let governed = Self {
-            connectors: Connectors::production(egress.clone(), broker),
+            connectors: Connectors::production(egress.clone(), broker.clone()),
+            credentials: broker,
+            doors_halted: AtomicU64::new(0),
             tools: Tools::production(root.clone()),
             display: AgentDisplay::new(root.clone()),
             browser: Browser::new(root),
@@ -560,6 +572,8 @@ impl GovernedControl {
             advisory,
         };
         let yes = confirmer.confirm_agent_door(&request);
+        #[cfg(test)]
+        self.hooks().fire(crate::test_hooks::at::ISSUE_ANSWERED);
         if !yes {
             // The decline has taken effect: the reservation dies with `core`.
             authority.record_door(false, &agent, &core.id)?;
@@ -567,9 +581,94 @@ impl GovernedControl {
         }
         authority.door_admissible()?;
         authority.record_door(true, &agent, &core.id)?;
+        #[cfg(test)]
+        self.hooks().fire(crate::test_hooks::at::ISSUE_RECORDED);
         runs.activate_door(core.group)?;
         self.doors_issued.fetch_add(1, Ordering::SeqCst);
         Ok(AgentDoor::new(self.clone(), core, confirmer))
+    }
+
+    /// M2c PR-B: halt a door (§4.3). Every step is in memory: no evidence is
+    /// written, no dialog raised, the store not called. The batch is made
+    /// first, before any state changes, so a panic in any later step drops
+    /// it and its records are counted lost.
+    /// 1. The runs lock (even if poisoned): the group halted, every member
+    ///    snapshotted (C1) and cancelled. From here every admission of the
+    ///    group refuses.
+    /// 2. The commitments lock alone (even if poisoned): the member runs'
+    ///    unconsumed commitments revoked. It waits for any `complete()` in
+    ///    progress, so once the halt returns no member commitment moves to
+    ///    Executing.
+    /// 3. The lease-end slot, then the lease table, each alone (even if
+    ///    poisoned): the member runs' leases ended.
+    /// 4. The pending table alone (even if poisoned): their effects taken
+    ///    out, dropped once it is released.
+    ///
+    /// Every call does every step, whether or not it set the flag; a record
+    /// belongs to the call that made its transition.
+    pub(crate) fn halt_door(&self, core: &DoorCore, reason: HaltReason) -> RecordBatch {
+        let authority = self.authority();
+        let mut batch = authority.batch();
+        let (wall_ms, generation) = (
+            self.authority().clock().wall_ms(),
+            authority.policy_generation(),
+        );
+        let (members, newly) = authority.runs().halt_group(
+            core.group,
+            &core.id,
+            &core.agent,
+            reason,
+            wall_ms,
+            generation,
+            &mut batch,
+        );
+        if newly {
+            self.doors_halted.fetch_add(1, Ordering::SeqCst);
+        }
+        #[cfg(test)]
+        self.hooks().fire(crate::test_hooks::at::HALT_AFTER_RUNS);
+        let leases =
+            authority
+                .commitments()
+                .revoke_runs(&members, &AuthorityError::Halted, &mut batch);
+        #[cfg(test)]
+        self.hooks().fire(crate::test_hooks::at::HALT_AFTER_ENTRIES);
+        authority.commitments().end_leases_even_if_poisoned(&leases);
+        self.credentials.end_runs(&members);
+        #[cfg(test)]
+        self.hooks().fire(crate::test_hooks::at::HALT_AFTER_LEASES);
+        self.control.drop_pending_of(&members);
+        batch
+    }
+
+    /// M2c PR-B: a door's cancellation of one of its runs: the halt's steps
+    /// for that run alone (no `door_halted`), its records in the batch.
+    pub(crate) fn cancel_member(&self, run: RunId) -> RecordBatch {
+        let authority = self.authority();
+        let mut batch = authority.batch();
+        let (wall_ms, generation) = (
+            self.authority().clock().wall_ms(),
+            authority.policy_generation(),
+        );
+        authority
+            .runs()
+            .cancel_into(run, wall_ms, generation, &mut batch);
+        self.display.forget_run(run);
+        let only = std::collections::BTreeSet::from([run]);
+        let leases =
+            authority
+                .commitments()
+                .revoke_runs(&only, &AuthorityError::RunCancelled, &mut batch);
+        authority.commitments().end_leases_even_if_poisoned(&leases);
+        self.credentials.end_runs(&only);
+        self.control.drop_pending_of(&only);
+        batch
+    }
+
+    /// The broker's test hooks (tests).
+    #[cfg(test)]
+    pub(crate) fn hooks(&self) -> &Arc<crate::test_hooks::Hooks> {
+        self.authority().hooks()
     }
 
     /// Ask the owner, natively, to consent to an agent's mission (Mother
@@ -753,6 +852,8 @@ impl GovernedControl {
                 .collect(),
             live_doors: self.authority().runs().live_doors(),
             doors_issued: self.doors_issued.load(Ordering::SeqCst),
+            doors_halted: self.doors_halted.load(Ordering::SeqCst),
+            halt_records: self.authority().halt_records(),
         }
     }
 }
@@ -789,5 +890,7 @@ pub enum AgentOutcome {
 
 #[cfg(test)]
 mod door_tests;
+#[cfg(test)]
+mod halt_tests;
 #[cfg(test)]
 mod tests;

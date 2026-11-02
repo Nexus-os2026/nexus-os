@@ -352,3 +352,5 @@ pub mod tool;
 
 #[cfg(test)]
 mod harness_tests;
+#[cfg(test)]
+pub(crate) mod test_hooks;

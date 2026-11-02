@@ -377,7 +377,7 @@ fn m2c_a2_a_door_refuses_another_agent_s_runs_and_commitments() {
     assert_eq!(f.reached("/a2-mine"), 1);
     let wait = waiting(&f, &door, mine, "/a2-wait");
     assert!(matches!(door.commitment(wait), Lookup::Mine(view) if view.id == wait));
-    door.cancel_run(mine).unwrap();
+    door.cancel_run(mine).unwrap().write();
     assert!(!f.live(mine));
     assert!(matches!(
         door.commitment(wait),
@@ -446,7 +446,7 @@ fn m2c_a3_a_door_acts_only_on_the_runs_of_its_group() {
         d3.commitment(wait),
         Lookup::NotMine { settled: false }
     ));
-    d1.cancel_run(run).unwrap();
+    d1.cancel_run(run).unwrap().write();
     assert!(matches!(
         d3.commitment(wait),
         Lookup::NotMine { settled: true }

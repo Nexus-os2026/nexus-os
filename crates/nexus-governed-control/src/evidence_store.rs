@@ -371,12 +371,15 @@ pub(crate) fn body_of(record: &EvidenceRecord) -> String {
 
 /// A fault the tests plant at COMMIT.
 #[cfg(test)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub(crate) enum Fault {
     /// COMMIT is not issued; it is reported failed.
     FailCommit,
     /// COMMIT is issued and succeeds; it is reported failed.
     CommitThenFail,
+    /// M2c PR-B: the store stalls inside its mutex, before COMMIT, until
+    /// the test opens the gate (a slow disk); then COMMIT goes on.
+    Stall(crate::test_hooks::Gate),
 }
 
 struct Inner {
@@ -1352,6 +1355,7 @@ impl Inner {
                 let _committed = self.conn.execute_batch("COMMIT");
                 return Err(());
             }
+            Some(Fault::Stall(gate)) => gate.hold(),
             None => {}
         }
         self.conn.execute_batch("COMMIT").map_err(|_| ())
@@ -1404,6 +1408,16 @@ impl EvidenceStore {
     /// The bodies of the records owed, in order.
     pub(crate) fn owed_bodies(&self) -> Vec<String> {
         self.inner().owed.iter().map(|o| o.body.clone()).collect()
+    }
+
+    /// The store's file as a dead process leaves it (M2c PR-B, tests): the
+    /// file connection is dropped with nothing more written (no session
+    /// close), which releases its exclusive lock; this store writes nothing
+    /// more (latched).
+    pub(crate) fn simulate_crash(&self) {
+        let mut inner = self.inner();
+        inner.conn = Connection::open_in_memory().expect("an in-memory connection");
+        inner.latched = true;
     }
 
     /// Every insert fails before COMMIT (a full disk) until `false`.

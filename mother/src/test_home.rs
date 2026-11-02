@@ -8,19 +8,27 @@
 use crate::adapter::{create_private, FileJournal};
 use crate::journal::JournalError;
 use nexus_governed_control::authority::clock::SystemClock;
-use nexus_governed_control::authority::evidence::MemoryEvidence;
+use nexus_governed_control::authority::evidence::{
+    EvidenceProjection, EvidenceRecord, MemoryEvidence,
+};
+use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::GovernedControl;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::ThreadId;
+use std::time::Duration;
 
 /// A broker built as the desktop builds it, and Mother's journal file. One
 /// per process: the broker claims the process's emergency-stop controller.
 pub(crate) struct TestHome {
     pub dir: PathBuf,
     pub control: Arc<GovernedControl>,
+    /// M2c-B: a projection of every record the broker writes, inert until
+    /// a test arms it (it then holds the writer of a matching record).
+    pub gate: Arc<GatedProjection>,
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -33,9 +41,10 @@ impl TestHome {
         }
         create_private(dir).map_err(|e| e.to_string())?;
         let broker = dir.join("broker");
+        let gate = Arc::new(GatedProjection::default());
         let evidence = PrimaryEvidence::open(
             &broker.join("p3-evidence").join("evidence.sqlite3"),
-            vec![Arc::new(MemoryEvidence::new(256))],
+            vec![Arc::new(MemoryEvidence::new(256)), gate.clone()],
         )
         .map_err(|e| format!("evidence store: {}", e.as_str()))?;
         let control = GovernedControl::new(
@@ -48,6 +57,7 @@ impl TestHome {
         Ok(Self {
             dir: dir.to_path_buf(),
             control: Arc::new(control),
+            gate,
         })
     }
 
@@ -75,5 +85,135 @@ impl TestHome {
 
     pub fn journal(&self) -> Result<FileJournal, JournalError> {
         FileJournal::open(&self.journal_path())
+    }
+}
+
+/// The longest a gated writer is held (a safety bound: tests release it by
+/// opening the gate, never by this). Longer than the tests' bounded joins,
+/// so that a call waiting on a held writer is seen to wait.
+const HOLD: Duration = Duration::from_secs(30);
+
+/// One record the broker wrote, as the projection saw it: its phase (by
+/// name), its run, and the thread that wrote it.
+#[derive(Clone, Debug)]
+pub(crate) struct Seen {
+    pub phase: String,
+    pub run: Option<String>,
+    pub thread: ThreadId,
+}
+
+type OnHold = Box<dyn FnOnce() + Send>;
+
+struct Armed {
+    phase: &'static str,
+    run: Option<String>,
+    on_hold: Option<OnHold>,
+}
+
+#[derive(Default)]
+struct GateState {
+    seen: Vec<Seen>,
+    armed: Option<Armed>,
+    held: usize,
+    open: bool,
+}
+
+/// M2c-B: a projection that sees every record (after its commit, on the
+/// writer's thread, with no store lock held) and, once armed, holds the
+/// writer of each matching record until the test opens the gate. Mother's
+/// tests cannot use the broker's own test hooks (they are per crate): this
+/// is how they stall a broker write.
+#[derive(Default)]
+pub(crate) struct GatedProjection {
+    state: Mutex<GateState>,
+    changed: Condvar,
+}
+
+impl GatedProjection {
+    /// Hold every writer of a `phase` record (of `run`, if given) until
+    /// [`GatedProjection::open`].
+    pub fn arm(&self, phase: &'static str, run: Option<RunId>) {
+        self.arm_inner(phase, run, None);
+    }
+
+    /// As [`GatedProjection::arm`], and run `on_hold` once, on the writer's
+    /// thread, when the first matching record arrives (before it is held).
+    pub fn arm_with(
+        &self,
+        phase: &'static str,
+        run: Option<RunId>,
+        on_hold: impl FnOnce() + Send + 'static,
+    ) {
+        self.arm_inner(phase, run, Some(Box::new(on_hold)));
+    }
+
+    fn arm_inner(&self, phase: &'static str, run: Option<RunId>, on_hold: Option<OnHold>) {
+        let mut state = self.state.lock().unwrap();
+        state.armed = Some(Armed {
+            phase,
+            run: run.map(|r| r.to_string()),
+            on_hold,
+        });
+        state.open = false;
+        state.held = 0;
+    }
+
+    /// Whether a writer is held at the gate now (waits for one, bounded).
+    pub fn wait_held(&self) -> bool {
+        let state = self.state.lock().unwrap();
+        let (state, _) = self
+            .changed
+            .wait_timeout_while(state, HOLD, |s| s.held == 0)
+            .unwrap();
+        state.held > 0
+    }
+
+    /// Release every held writer and disarm.
+    pub fn open(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.open = true;
+        state.armed = None;
+        self.changed.notify_all();
+    }
+
+    /// Every record seen so far.
+    pub fn seen(&self) -> Vec<Seen> {
+        self.state.lock().unwrap().seen.clone()
+    }
+
+    /// How many records of `phase` were seen.
+    pub fn count(&self, phase: &str) -> usize {
+        self.seen().iter().filter(|s| s.phase == phase).count()
+    }
+}
+
+impl EvidenceProjection for GatedProjection {
+    fn project(&self, record: &EvidenceRecord) {
+        let phase = record.phase.as_str();
+        let mut state = self.state.lock().unwrap();
+        state.seen.push(Seen {
+            phase: phase.to_string(),
+            run: record.run.clone(),
+            thread: std::thread::current().id(),
+        });
+        let matches = state.armed.as_ref().is_some_and(|armed| {
+            armed.phase == phase && (armed.run.is_none() || armed.run == record.run)
+        });
+        if !matches || state.open {
+            return;
+        }
+        let on_hold = state.armed.as_mut().and_then(|armed| armed.on_hold.take());
+        if let Some(on_hold) = on_hold {
+            drop(state);
+            on_hold();
+            state = self.state.lock().unwrap();
+        }
+        state.held += 1;
+        self.changed.notify_all();
+        let (mut state, _) = self
+            .changed
+            .wait_timeout_while(state, HOLD, |s| !s.open)
+            .unwrap();
+        state.held -= 1;
     }
 }

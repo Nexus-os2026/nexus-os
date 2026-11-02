@@ -124,6 +124,11 @@ impl Place<'_> {
     /// Hold the effect of a prepared commitment; one that ended meanwhile
     /// (its run was cancelled while it was prepared) is not held.
     fn fill(mut self, id: CommitmentId, pending: Pending) {
+        #[cfg(test)]
+        self.control
+            .authority
+            .hooks()
+            .fire(crate::test_hooks::at::PLACE_BEFORE_FILL);
         let unheld = {
             let mut table = self.control.pending();
             table.give_back(self.run);
@@ -412,6 +417,44 @@ impl Control {
         self.authority.finish_run(run);
         let dropped = self.pending().take_unless(|_, held| held.run != run);
         drop(dropped);
+    }
+
+    /// M2c PR-B, a door halt's last step: under the pending table alone,
+    /// taken even if poisoned, take out every effect of `runs`; they are
+    /// dropped once the lock is released.
+    pub(crate) fn drop_pending_of(&self, runs: &std::collections::BTreeSet<RunId>) {
+        let dropped = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_unless(|_, held| !runs.contains(&held.run));
+        drop(dropped);
+    }
+
+    /// Places held for proposals being prepared (tests).
+    #[cfg(test)]
+    pub(crate) fn pending_places(&self) -> usize {
+        self.pending().reserved
+    }
+
+    /// Effects held for `run` (tests).
+    #[cfg(test)]
+    pub(crate) fn pending_held(&self, run: RunId) -> usize {
+        self.pending()
+            .held
+            .values()
+            .filter(|held| held.run == run)
+            .count()
+    }
+
+    /// Take the pending table's lock and panic while holding it (tests).
+    #[cfg(test)]
+    pub(crate) fn panic_holding_pending(&self) {
+        let _table = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        panic!("the pending table is poisoned on purpose (test)");
     }
 
     fn drop_if_final(&self, id: CommitmentId) {

@@ -160,3 +160,74 @@ pub(crate) fn take_resume<P: EffectPort>(
 pub(crate) fn unexpected_dialogs() -> usize {
     unexpected()
 }
+
+// ------------------------------------------------- M2c-B oracle helpers
+//
+// Pre-registered with the PR-B oracles, against PR-A's API (dd503cdc),
+// where they answered "none" (no halt, no batch, no counter). Their bodies
+// now go through PR-B's API.
+
+/// A port over `control`, or none if the Owner says no to its door (or the
+/// broker refuses it).
+pub(crate) fn try_port_for(
+    control: &Arc<GovernedControl>,
+    door_answer: bool,
+) -> Option<GovernedPort> {
+    answering(&DoorAnswer(door_answer), || {
+        control.issue_agent_door(mother_agent(), delegating())
+    })
+    .ok()
+    .map(GovernedPort::new)
+}
+
+/// What the port's door answers when asked to open a run (an acting call),
+/// as the broker's stable class name: a halted door says "halted".
+pub(crate) fn door_open_run(port: &GovernedPort) -> Result<(), String> {
+    port.door
+        .open_run()
+        .map(|_| ())
+        .map_err(|e| e.class().to_string())
+}
+
+/// The halt records the broker counted lost.
+pub(crate) fn halt_lost(control: &GovernedControl) -> u64 {
+    control.status().halt_records.lost
+}
+
+/// The halt records the broker counts as still to write.
+pub(crate) fn halt_pending(control: &GovernedControl) -> u64 {
+    control.status().halt_records.pending
+}
+
+/// Where a test may stop a Mother call (the child-process crash points and
+/// the forced schedules of design §7.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CallPoint {
+    /// In a journal failure: after the fence, before the poison marker.
+    FenceToMarker,
+    /// In `with_lock`: the coordinator lock released, before its batches
+    /// are written (also when there are none).
+    BeforeOwedWrite,
+    /// In `with_lock`: after its batches were written.
+    AfterOwedWrite,
+}
+
+/// Run `hook` once at `point` of the next Mother call that reaches it.
+pub(crate) fn arm_call_point<P: EffectPort>(
+    mother: &Coordinator<P>,
+    point: CallPoint,
+    hook: impl FnOnce() + Send + 'static,
+) {
+    let slot = match point {
+        CallPoint::FenceToMarker => &mother.hooks.fence_to_marker,
+        CallPoint::BeforeOwedWrite => &mother.hooks.before_owed_write,
+        CallPoint::AfterOwedWrite => &mother.hooks.after_owed_write,
+    };
+    slot.arm(0, hook);
+}
+
+/// The port's fence, as the coordinator's break calls it (on PR-B its
+/// records are written here, with no lock held).
+pub(crate) fn fence_port(port: &GovernedPort) {
+    port.fence().write();
+}

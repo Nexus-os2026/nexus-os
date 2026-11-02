@@ -586,7 +586,7 @@ fn el1_n2_a_failed_commit_is_uncertain_and_latches() {
                 store.append("run_opened", None, BODY),
                 Append::Committed { seq: 2 }
             );
-            store.plant_fault(fault);
+            store.plant_fault(fault.clone());
             assert_eq!(
                 store.append("started", Some("cmt-u"), BODY),
                 Append::Uncertain

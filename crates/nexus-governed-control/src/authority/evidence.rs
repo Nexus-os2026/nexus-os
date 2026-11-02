@@ -52,6 +52,9 @@ pub enum EvidencePhase {
     /// the summary shown. A yes records the answer; it resumes nothing.
     MissionResumeConfirmed,
     MissionResumeDeclined,
+    /// Mother Nexus M2c PR-B: an agent door was halted (it took effect
+    /// first): the door's opaque id and the reason.
+    DoorHalted,
 }
 
 impl EvidencePhase {
@@ -84,6 +87,7 @@ impl EvidencePhase {
             EvidencePhase::AgentDoorDeclined => "agent_door_declined",
             EvidencePhase::MissionResumeConfirmed => "mission_resume_confirmed",
             EvidencePhase::MissionResumeDeclined => "mission_resume_declined",
+            EvidencePhase::DoorHalted => "door_halted",
         }
     }
 }
