@@ -16,6 +16,10 @@
 //! The EffectPort is sealed: outside this crate only the adapter is one.
 //!
 //! ```compile_fail
+//! use nexus_governed_control::authority::approval::{
+//!     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
+//! };
+//! use nexus_governed_control::authority::AuthorityError;
 //! use nexus_mother::effect::{EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
 //! use nexus_mother::journal::MissionId;
 //! struct Elsewhere;
@@ -24,12 +28,15 @@
 //!     fn cancel(&self, _: MissionId) {}
 //!     fn finish(&self, _: MissionId) {}
 //!     fn emergency_stopped(&self) -> bool { false }
-//!     fn broker(&self) -> &nexus_governed_control::authority::Authority { todo!() }
+//!     fn confirm_mission(&self, _: &MissionConfirmation) -> Result<MissionApproval, AuthorityError> { todo!() }
+//!     fn confirm_held_mission(&self, _: &MissionResumeConfirmation) -> Result<MissionResumeApproval, AuthorityError> { todo!() }
 //!     fn approval(&self, _: MissionId) -> nexus_mother::effect::ApprovalStatus { todo!() }
 //!     fn pending(&self, _: MissionId) -> Option<nexus_mother::effect::PendingAction> { None }
 //!     fn adopt(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
 //!     fn settled(&self, _: &nexus_mother::effect::PendingAction) -> bool { false }
 //!     fn withdraw(&self, _: MissionId) -> Result<(), EffectRefusal> { Ok(()) }
+//!     fn fence(&self) {}
+//!     fn hand(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
 //! }
 //! ```
 //!
