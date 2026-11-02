@@ -43,7 +43,7 @@ Mother turns a human goal into a governed mission:
    every mission in its state; after a crash (M2a-S) every unfinished
    mission comes back held until the Owner resumes or stops it. A Stopped
    mission stays stopped; a tampered journal is refused.
-7. **Walk example**: `cargo run -p nexus-mother --example walk`.
+7. **Walk example**: `cargo run -p nexus-mother-host --example walk` (M2c: the walk lives in the host crate, which alone builds the broker).
 
 ## Invariants and their oracles
 
@@ -70,7 +70,28 @@ the host, tests included).
 | M2a: waiting for approval: approve continues once, deny = zero effect and Denied, expiry = Blocked, Stop withdraws durably, restart never re-sends or approves | `oracles/m2a_waiting.rs`, `adapter/real_broker.rs` |
 | M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
 | M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs`, `oracles/m2as_review.rs`, `oracles/m2as_resume.rs` |
+| M2c: Mother acts only through a broker-issued door, bound to her agent and to the runs it opened or adopted; nothing reachable from the port leads to the front door, the authority, the issuer or an owner API | `lib.rs` (A1 compile_fail), broker `lib.rs` (A1), broker `governed/door_tests.rs` (A2, A3), `adapter/scan.rs` (A8) |
+| M2c: every door asks: the Owner's native yes is needed for every issuance of a door, in a new process or in the same one; no stored state decides it; a no or an unrecorded yes gives no door; live doors and memberships are bounded and reclaimed. (A coordinator reopened on an existing port reuses that port's door; the walk asks for a fresh door at every run and restart.) | broker `governed/door_tests.rs` (A7) |
+| M2c: consent asks through the door's bound confirmer, once, with the exact request | `adapter/m2c_door.rs` (A4), broker `governed/door_tests.rs` (A4) |
+| M2c: resume asks: a held mission resumes only after the Owner's native dialog naming its contract hash, once per request (the table below) | `adapter/m2c_door.rs` (A5, A6), broker `governed/door_tests.rs` (A5, A6-f) |
 | M2a-S: after a break, no effect dispatched after the break executes; an effect already dispatched (journaled and past the fenced check) may still enter the broker and is interrupted where the broker can, the same in-flight limit as an ordinary Stop (fenced at the broker; the fence's sweep is panic-safe); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
+
+M2c: how a held mission resumes. The coordinator reserves a request
+under its lock (replacing any earlier one; the mission's generation
+moves), the broker asks the Owner through the door with no Mother lock
+held and records the answer, and the coordinator takes it under its lock
+only if that request is still current; it is consumed once. A resume
+takes effect only when `Resumed` is journaled; the broker's record of the
+Owner's yes resumes nothing.
+
+| What lands, and when | Outcome |
+|---|---|
+| A second request is reserved while the first is in its dialog | the first one's answer is stale (its request was replaced, the generation moved); only the second can count, once |
+| A Stop of the mission before the take (in the dialog, during the broker's record, or before the journal write) | the Stop clears the request and the hold: the answer is discarded and the call returns `Stopped` |
+| A break (journal failure) before the take | the coordinator is broken: the take refuses |
+| A fence of the port outside a break (the public port fence; in PR-B also poison recovery, which halts the door outside the coordinator lock), after the broker's post-record check and before the take | the take may journal `Resumed`: the Owner's recorded yes exists, and the fenced port (in PR-B, the halted door) refuses every effect of the mission |
+| An emergency stop after the broker's post-record check | the take may journal `Resumed`; every effect of the mission is then refused by the broker. Resuming a held mission permits no effect by itself |
+| Anything after the take | acts on a resumed mission, as on any other |
 
 Coordinator rules the oracles pin:
 
@@ -147,10 +168,10 @@ Coordinator rules the oracles pin:
   critical section as the fence: it comes before the fence's (which
   cancels the run) or after (and cancels the run itself, never giving it
   to the mission). The
-  Owner's consent dialog and the emergency-stop read do not check the
-  fence: they produce no effect, and a consent answered after the break is
-  discarded (a source scan pins that the broker Authority, which does not
-  check the fence, is used for consent only). A fenced port's withdraw does not retry a cancellation
+  Owner's consent and resume dialogs and the emergency-stop read do not
+  check the fence: they produce no effect, and an answer that comes after
+  the break is discarded. Both dialogs go through the port's door (M2c:
+  Mother holds no broker Authority handle). A fenced port's withdraw does not retry a cancellation
   the fence could not make; it reports an error. After every outbound call (a perform, a lane, the
   Owner's consent dialog, an approval query) the result is discarded, and
   nothing is journaled for it, if the coordinator broke or the mission is
@@ -173,11 +194,13 @@ Coordinator rules the oracles pin:
 
 ## Non-claims
 
-- **M2a-S: `resume` is an API call, like `stop`.** It is the Owner's
-  decision, journaled, but not confirmed through a broker dialog: the
-  Mother screen (M2) must bind it to the Owner. Mother never calls it.
-  It is the risky direction (it lets a mission whose Stop may have been
-  lost carry on); Stop is the safe one.
+- **M2c: `resume` asks the Owner through the broker's held-mission
+  dialog** (the confirmer the host bound to the door), naming the
+  mission's contract hash and the request; the broker records the answer.
+  Mother never calls it herself. The desktop has no native
+  `confirm_held_mission` or `confirm_agent_door` dialog yet: until a
+  desktop mission adds them, both answer no (no door, no resume). This
+  fails closed.
 - M2a-S: while a waiting mission is held, its request stays at the broker,
   where only the Owner's own native approval can run it. Mother does not
   ask about it or carry on from it until the Owner resumes the mission.
@@ -324,10 +347,28 @@ Coordinator rules the oracles pin:
 ## Run the walk
 
 ```text
-cargo run -p nexus-mother --example walk
+cargo run -p nexus-mother-host --example walk
 ```
 
-Each time it asks (a stand-in for the broker's mission dialog, showing what
-the broker would show), type the first 8 characters of the contract hash to
-consent. In run 2, answer "no" when the Deny step asks. The walk opens a
-fresh home under the system's temporary directory and prints its path.
+The walk opens a fresh home under the system's temporary directory and
+prints its path. It stands in, at the terminal, for the broker's three
+dialogs, showing what the broker would show; anything but the code is a no:
+
+- **The door** ("Let this agent act?"): the agent, the door id and any
+  advisory lines. Type the first 8 characters of the door id. It is asked
+  every time Mother starts: at the start of each run and at every restart.
+- **A mission's consent** ("Start this mission?"): type the first 8
+  characters of the contract hash. In run 2, answer no when the Deny step
+  asks.
+- **A held mission's resume** ("Resume this held mission?"): the mission,
+  its contract hash, the request, why it is held and its summary. Type the
+  first 8 characters of the contract hash.
+
+Run 3 consents to a mission, advances it once, and exits without shutting
+down. On restart the mission is held; a yes to the resume dialog lets it
+finish, a no leaves it held, and the walk says which.
+
+M2c: Mother's own crate builds no broker. The host crate
+(`mother/host`, `nexus-mother-host`, not published) holds `Home`: the broker,
+the journal, the Owner's confirmer, `door()` (asks every time) and the
+Owner's side, `owner()`, which is never handed to Mother.

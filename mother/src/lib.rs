@@ -16,6 +16,10 @@
 //! The EffectPort is sealed: outside this crate only the adapter is one.
 //!
 //! ```compile_fail
+//! use nexus_governed_control::authority::approval::{
+//!     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
+//! };
+//! use nexus_governed_control::authority::AuthorityError;
 //! use nexus_mother::effect::{EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
 //! use nexus_mother::journal::MissionId;
 //! struct Elsewhere;
@@ -24,12 +28,15 @@
 //!     fn cancel(&self, _: MissionId) {}
 //!     fn finish(&self, _: MissionId) {}
 //!     fn emergency_stopped(&self) -> bool { false }
-//!     fn broker(&self) -> &nexus_governed_control::authority::Authority { todo!() }
+//!     fn confirm_mission(&self, _: &MissionConfirmation) -> Result<MissionApproval, AuthorityError> { todo!() }
+//!     fn confirm_held_mission(&self, _: &MissionResumeConfirmation) -> Result<MissionResumeApproval, AuthorityError> { todo!() }
 //!     fn approval(&self, _: MissionId) -> nexus_mother::effect::ApprovalStatus { todo!() }
 //!     fn pending(&self, _: MissionId) -> Option<nexus_mother::effect::PendingAction> { None }
 //!     fn adopt(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
 //!     fn settled(&self, _: &nexus_mother::effect::PendingAction) -> bool { false }
 //!     fn withdraw(&self, _: MissionId) -> Result<(), EffectRefusal> { Ok(()) }
+//!     fn fence(&self) {}
+//!     fn hand(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
 //! }
 //! ```
 //!
@@ -49,6 +56,108 @@
 //! ```compile_fail
 //! let _ = nexus_mother::consent::Consent::from_broker;
 //! ```
+//!
+//! M2c-A: the port goes over a broker-issued agent door, never over the
+//! front door (A1-c: each block fails with the error its tag names, and
+//! only for the property it names: an absent method is named as a path,
+//! and the constructor's type is checked as a function pointer). The same
+//! forms compile for what the port does have:
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! use nexus_mother::adapter::GovernedPort;
+//! use nexus_mother::effect::EffectPort;
+//! let _: fn(AgentDoor) -> GovernedPort = GovernedPort::new;
+//! let _ = GovernedPort::run_of;
+//! fn reach<P: EffectPort>() {
+//!     let _ = P::confirm_mission;
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! let _ = nexus_mother::adapter::GovernedPort::control; // no front door
+//! ```
+//!
+//! ```compile_fail,E0599
+//! use nexus_mother::effect::EffectPort;
+//! fn reach<P: EffectPort>() {
+//!     let _ = P::broker; // no authority
+//! }
+//! ```
+//!
+//! ```compile_fail,E0308
+//! use nexus_governed_control::governed::GovernedControl;
+//! use nexus_mother::adapter::GovernedPort;
+//! use std::sync::Arc;
+//! let _: fn(Arc<GovernedControl>) -> GovernedPort = GovernedPort::new; // a door, not the front door
+//! ```
+//!
+//! The same absences, as probes that compile only while the method is
+//! absent: a real `GovernedPort::control`, or an `EffectPort::broker`, of
+//! any signature or generics, is chosen before the probe's `&mut self`
+//! method (or is ambiguous with it) and breaks this build:
+//!
+//! ```
+//! use nexus_mother::adapter::GovernedPort;
+//! struct Absent;
+//! trait Probe {
+//!     fn control(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for GovernedPort {}
+//! fn probe(mut port: GovernedPort) {
+//!     let _: Absent = port.control();
+//! }
+//! ```
+//!
+//! ```
+//! use nexus_mother::effect::EffectPort;
+//! struct Absent;
+//! trait Probe {
+//!     fn broker(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl<T: ?Sized> Probe for T {}
+//! fn reach<P: EffectPort>(mut p: P) {
+//!     // The same call, spaced: `adapter/m2as_scan.rs` forbids the literal
+//!     // unspaced call text in this file.
+//!     let _: Absent = p.broker ();
+//! }
+//! ```
+//!
+//! Mother builds no broker: the host does (A1-d).
+//!
+//! ```
+//! use nexus_mother::adapter::{FileJournal, GovernedPort, MOTHER_AGENT};
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_mother::adapter::Home;
+//! ```
+//!
+//! Consent asks through the port's door, whose confirmer the host bound;
+//! the coordinator takes no confirmer (A1-e).
+//!
+//! ```
+//! use nexus_mother::adapter::GovernedPort;
+//! use nexus_mother::coordinator::Coordinator;
+//! use nexus_mother::journal::MissionId;
+//! fn ask(mother: &Coordinator<GovernedPort>, id: MissionId) {
+//!     let _ = mother.request_consent(id);
+//! }
+//! ```
+//!
+//! ```compile_fail,E0061
+//! use nexus_governed_control::authority::approval::ControlConfirmer;
+//! use nexus_mother::adapter::GovernedPort;
+//! use nexus_mother::coordinator::Coordinator;
+//! use nexus_mother::journal::MissionId;
+//! fn ask(mother: &Coordinator<GovernedPort>, id: MissionId, owner: &dyn ControlConfirmer) {
+//!     let _ = mother.request_consent(id, owner);
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 
@@ -63,3 +172,5 @@ pub mod state;
 
 #[cfg(test)]
 mod oracles;
+#[cfg(test)]
+mod test_home;

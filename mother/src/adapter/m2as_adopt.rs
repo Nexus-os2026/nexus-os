@@ -5,7 +5,8 @@
 //! the broker still holds it open). Run from `real_broker.rs`.
 
 use super::m2as_support::{owner_runs, Disk, WorldServer};
-use super::{GovernedPort, Home};
+use super::m2c_support::{consent, port_for, Home};
+use super::GovernedPort;
 use crate::coordinator::{Coordinator, Lanes};
 use crate::effect::EffectPort;
 use crate::journal::{MemoryJournal, MissionId};
@@ -40,7 +41,7 @@ fn waiting(
         .draft(contract_with(&format!("POST-BUILDER:{url}")))
         .unwrap();
     mother.submit(id).unwrap();
-    assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+    assert_eq!(consent(mother, id, &Yes), Ok(MissionState::Approved));
     for _ in 0..3 {
         mother.advance(id).unwrap();
     }
@@ -65,13 +66,13 @@ fn a_failed_session_record_still_withdraws_every_journaled_request(
 ) {
     for (n, poison_fails) in [false, true].into_iter().enumerate() {
         let disk = Disk::over(MemoryJournal::new());
-        let port = Arc::new(GovernedPort::new(control.clone()));
+        let port = Arc::new(port_for(control, true));
         let mother = open(disk.clone(), &port).unwrap();
         let path = format!("/adopt-session-{n}");
         let (_, view) = waiting(control, &mother, &port, &format!("{origin}{path}"));
         mother.close().unwrap();
 
-        let rebuilt = Arc::new(GovernedPort::new(control.clone()));
+        let rebuilt = Arc::new(port_for(control, true));
         disk.fail(true, poison_fails);
         assert!(
             open(disk.clone(), &rebuilt).is_err(),
@@ -102,7 +103,7 @@ fn withdraw_is_an_error_for_a_journaled_action_not_held(
     control: &Arc<GovernedControl>,
     origin: &str,
 ) {
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let mother = open(Disk::over(MemoryJournal::new()), &port).unwrap();
     let (id, _) = waiting(control, &mother, &port, &format!("{origin}/adopt-held"));
     let pending = port.pending(id).expect("the pending action");
@@ -122,7 +123,7 @@ fn withdraw_is_an_error_for_a_journaled_action_not_held(
 
     // Once the request is final at the broker, there is nothing to withdraw.
     assert_eq!(mother.stop(id), Ok(MissionState::Stopped));
-    let rebuilt = GovernedPort::new(control.clone());
+    let rebuilt = port_for(control, true);
     let late = MissionId(9_003);
     rebuilt.adopt(late, &pending);
     assert!(

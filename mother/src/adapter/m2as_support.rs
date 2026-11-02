@@ -12,6 +12,7 @@
 //!   a lane call and inside the Owner's consent dialog.
 //! - [`WorldServer`]: the world, counting every request that reaches it.
 
+use super::m2c_support::port_for;
 use super::{mother_agent, GovernedPort};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::journal::{JournalError, JournalStore, MemoryJournal};
@@ -149,7 +150,7 @@ pub(crate) struct Rig {
 }
 
 pub(crate) fn rig(control: &Arc<GovernedControl>, store: Disk) -> Result<Rig, CoordinatorError> {
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let lane_hook = HookSlot::default();
     let lanes: Vec<Arc<dyn Lane>> = LaneRole::ALL
         .iter()

@@ -4,6 +4,7 @@
 //! gives no consent. The broker records every decision.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 use crate::consent::Consent;
 use crate::journal::Event;
 use nexus_governed_control::authority::evidence::{EvidencePhase, EvidenceRecord};
@@ -75,10 +76,7 @@ fn m2a_consent_comes_from_the_broker_s_yes_and_the_broker_records_it() {
     let c = contract();
     let id = w.submitted(c.clone());
     assert_eq!(decisions(&w).len(), 0);
-    assert_eq!(
-        w.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&w.mother, id, &Yes), Ok(MissionState::Approved));
     assert_eq!(w.mother.consented_hash(id), Some(c.hash()));
     let records = decisions(&w);
     assert_eq!(records.len(), 1);
@@ -98,10 +96,7 @@ fn m2a_the_broker_s_no_is_a_denial_and_the_broker_records_it() {
     let w = world();
     let c = contract();
     let id = w.submitted(c.clone());
-    assert_eq!(
-        w.mother.request_consent(id, &No),
-        Err(CoordinatorError::Denied)
-    );
+    assert_eq!(consent(&w.mother, id, &No), Err(CoordinatorError::Denied));
     assert_eq!(w.mother.state(id), Some(MissionState::Denied));
     assert_eq!(w.mother.consented_hash(id), None);
     let records = decisions(&w);
@@ -119,7 +114,7 @@ fn m2a_a_confirmer_without_a_mission_dialog_gives_no_consent() {
     let w = world();
     let id = w.submitted(contract());
     assert_eq!(
-        w.mother.request_consent(id, &Legacy),
+        consent(&w.mother, id, &Legacy),
         Err(CoordinatorError::Denied)
     );
     assert_eq!(w.mother.state(id), Some(MissionState::Denied));
@@ -134,7 +129,7 @@ fn m2a_a_yes_the_broker_cannot_record_gives_no_consent() {
     let id = w.submitted(contract());
     w.port.evidence.fail_from_now();
     assert_eq!(
-        w.mother.request_consent(id, &Yes),
+        consent(&w.mother, id, &Yes),
         Err(CoordinatorError::Broker("evidence_unavailable".into()))
     );
     // Not a denial: the mission still awaits a consent the broker records.
@@ -166,10 +161,7 @@ fn m2a_a_broker_answer_for_another_contract_hash_is_refused() {
     assert!(w.mother.advance(b).is_err());
     assert_eq!(refused_entries(&w, b), 1);
     // The mission can still be consented, through its own request.
-    assert_eq!(
-        w.mother.request_consent(b, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&w.mother, b, &Yes), Ok(MissionState::Approved));
     assert_eq!(
         w.mother.consented_hash(b),
         Some(contract_with("second").hash())
@@ -272,7 +264,20 @@ fn m2a_live_consent_is_minted_only_from_the_broker_s_approval() {
     let consent = code(CONSENT);
     let squeezed: String = consent.chars().filter(|c| !c.is_whitespace()).collect();
     assert!(squeezed.contains("pub(crate)fnfrom_broker(approval:MissionApproval,"));
-    // Mother's own confirmer trait is gone; the port reaches the broker.
+    // Mother's own confirmer trait is gone; consent is asked of the broker
+    // through the port's door.
     assert!(!consent.contains("pub trait"));
-    assert!(code(EFFECT).contains("fn broker(&self) -> &Authority;"));
+    let effect: String = code(EFFECT)
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let at = effect
+        .find("fnconfirm_mission(")
+        .expect("fn confirm_mission(");
+    let signature = &effect[at..at + effect[at..].find(';').expect("a declaration")];
+    assert!(
+        signature.ends_with("->Result<MissionApproval,AuthorityError>"),
+        "{signature}"
+    );
+    assert!(!effect.contains("fnbroker("));
 }

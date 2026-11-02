@@ -7,7 +7,8 @@
 //! Run from `real_broker.rs` (one broker per process).
 
 use super::m2as_support::{rig, Disk, Rig};
-use super::{Home, MOTHER_AGENT};
+use super::m2c_support::{consent, Home};
+use super::MOTHER_AGENT;
 use crate::journal::{MemoryJournal, MissionId};
 use crate::oracles::{contract_with, Yes};
 use crate::state::MissionState;
@@ -112,10 +113,7 @@ impl HoldingWorld {
 fn approved(r: &Rig, markers: &str) -> MissionId {
     let id = r.mother.draft(contract_with(markers)).unwrap();
     r.mother.submit(id).unwrap();
-    assert_eq!(
-        r.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&r.mother, id, &Yes), Ok(MissionState::Approved));
     id
 }
 

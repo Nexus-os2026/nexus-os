@@ -15,7 +15,8 @@
 //! - MINOR 4: the fence sets `fenced` before its first cancellation.
 
 use super::m2as_support::{executed, rig, Disk, Rig, WorldServer};
-use super::{GovernedPort, Home, MOTHER_AGENT};
+use super::m2c_support::{consent, port_for, Home};
+use super::MOTHER_AGENT;
 use crate::coordinator::{Coordinator, Lanes};
 use crate::effect::{EffectPort, PendingAction};
 use crate::journal::{MemoryJournal, MissionId};
@@ -89,10 +90,7 @@ impl Stall {
 fn approved(r: &Rig, markers: &str) -> MissionId {
     let id = r.mother.draft(contract_with(markers)).unwrap();
     r.mother.submit(id).unwrap();
-    assert_eq!(
-        r.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&r.mother, id, &Yes), Ok(MissionState::Approved));
     id
 }
 
@@ -237,7 +235,7 @@ fn the_fence_never_waits_for_a_stalled_open(
 /// handed back for M, where C2 is Prepared on R2. Cancelling R1 does not
 /// withdraw C2: withdraw(M) is not Ok while C2 can be approved.
 fn withdraw_asks_the_broker_for_a_handed_commitment(control: &Arc<GovernedControl>, origin: &str) {
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let mother = Coordinator::open(
         MemoryJournal::new(),
         port.clone(),
@@ -248,7 +246,7 @@ fn withdraw_asks_the_broker_for_a_handed_commitment(control: &Arc<GovernedContro
     let approve = |markers: &str| {
         let id = mother.draft(contract_with(markers)).unwrap();
         mother.submit(id).unwrap();
-        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        assert_eq!(consent(&mother, id, &Yes), Ok(MissionState::Approved));
         for _ in 0..3 {
             mother.advance(id).unwrap();
         }

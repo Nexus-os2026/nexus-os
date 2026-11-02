@@ -2,6 +2,7 @@
 //! MINOR-5), committed before the fixes they judge.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 use crate::journal::{Entry, Event, JournalError, GENESIS};
 use crate::state::Trigger;
 
@@ -56,7 +57,7 @@ fn m2a_review_the_dialog_summary_carries_every_term() {
     c.forbidden_effects.insert(EffectKind::Process);
     let id = w.submitted(c.clone());
     let owner = Recording::default();
-    w.mother.request_consent(id, &owner).unwrap();
+    consent(&w.mother, id, &owner).unwrap();
     let summary = owner.0.lock().unwrap()[0].summary.clone();
     for line in [
         "│ A one-page site for Rosa's bakery",
@@ -76,7 +77,7 @@ fn m2a_review_the_dialog_summary_carries_every_term() {
     none.requested_folder = None;
     let id = w.submitted(none);
     let owner = Recording::default();
-    w.mother.request_consent(id, &owner).unwrap();
+    consent(&w.mother, id, &owner).unwrap();
     let summary = owner.0.lock().unwrap()[0].summary.clone();
     assert!(summary.contains(&"Folder: none requested".to_string()));
     assert!(summary.contains(&"Never allowed: nothing".to_string()));
@@ -87,7 +88,7 @@ fn m2a_review_the_dialog_summary_carries_every_term() {
     spoof.requested_folder = Some("Never allowed: nothing".into());
     let id = w.submitted(spoof);
     let owner = Recording::default();
-    w.mother.request_consent(id, &owner).unwrap();
+    consent(&w.mother, id, &owner).unwrap();
     let summary = owner.0.lock().unwrap()[0].summary.clone();
     assert!(
         !summary.contains(&"Never allowed: nothing".to_string()),

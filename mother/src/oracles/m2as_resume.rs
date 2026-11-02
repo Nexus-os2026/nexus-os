@@ -4,6 +4,7 @@
 
 use super::m2as_durability::*;
 use super::*;
+use crate::adapter::m2c_support::resume;
 use crate::journal::{verify, Event};
 use MissionState::*;
 
@@ -44,7 +45,7 @@ fn m2as_resume_crash_resume_crash_resume_close_reopens_with_the_right_holds() {
             Some("unclean_shutdown"),
             "{round}"
         );
-        assert_eq!(w.mother.resume(id), Ok(Building), "{round}");
+        assert_eq!(resume(&w.mother, id, true), Ok(Building), "{round}");
         assert_eq!(w.mother.held(id), None, "{round}");
         assert_eq!(holds_and_resumes(&w, id), (round, round), "{round}");
     }
@@ -59,7 +60,7 @@ fn m2as_resume_a_hold_after_a_resume_is_journaled_before_a_clean_close() {
     let w = world();
     let id = reach(&w, Building);
     let w = crash(&w);
-    assert_eq!(w.mother.resume(id), Ok(Building));
+    assert_eq!(resume(&w.mother, id, true), Ok(Building));
     // Held again, and closed before anything else is written.
     let w = crash(&w);
     assert_eq!(w.mother.held(id).as_deref(), Some("unclean_shutdown"));

@@ -1,8 +1,11 @@
-//! M2a-S, oracle added after the gate review (it does not replace or edit
-//! the earlier ones): the port's whole broker Authority (`EffectPort::broker`)
-//! does not check the fence, so Mother's production code may use it only to
-//! put a mission to the Owner (`confirm_mission`, no effect; an answer that
-//! comes after a break is discarded). Read at compile time: no host access.
+//! M2a-S, oracle added after the gate review: Mother's production code
+//! used the port's whole broker Authority (`EffectPort::broker`) only to put
+//! a mission to the Owner.
+//!
+//! M2c-A (design §7.4): the port has no broker handle any more; the
+//! type-level absence of `broker()` (A1-c, `lib.rs`) replaces the count
+//! this scan made. What remains: no production file names it. Read at
+//! compile time: no host access.
 
 const PRODUCTION: &[(&str, &str)] = &[
     ("coordinator.rs", include_str!("../coordinator.rs")),
@@ -18,20 +21,10 @@ const PRODUCTION: &[(&str, &str)] = &[
 
 #[test]
 fn m2as_scan_the_unfenced_broker_authority_is_used_only_for_mission_consent() {
-    let mut uses = 0;
     for (name, text) in PRODUCTION {
-        for (at, _) in text.match_indices(".broker()") {
-            let rest = text[at + ".broker()".len()..].trim_start();
-            assert!(
-                rest.starts_with(".confirm_mission("),
-                "{name}: the broker Authority used for something else than mission consent: {}",
-                &text[at..(at + 80).min(text.len())]
-            );
-            uses += 1;
-        }
+        assert!(
+            !text.contains(".broker()"),
+            "{name}: a broker Authority handle in Mother's production code"
+        );
     }
-    assert_eq!(
-        uses, 1,
-        "Mother asks the Owner about a mission in one place"
-    );
 }

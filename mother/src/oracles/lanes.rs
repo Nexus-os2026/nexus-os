@@ -2,6 +2,7 @@
 //! invocation id and its input and output hashes; budgets bound them.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 use crate::journal::Event;
 use crate::lane::{output_hash, ScriptedLane};
 
@@ -177,7 +178,7 @@ fn lanes_the_time_budget_runs_from_consent_not_from_drafting() {
         contract().budget.max_duration_ms * 2,
     ));
     w.mother.submit(id).unwrap();
-    w.mother.request_consent(id, &Yes).unwrap();
+    consent(&w.mother, id, &Yes).unwrap();
     for _ in 0..5 {
         w.mother.advance(id).unwrap();
     }

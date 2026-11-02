@@ -7,7 +7,9 @@
 //! owner's grants and native approvals authorize, the pipeline executes
 //! once. There is no other entry to any actuator.
 
-use crate::authority::approval::{ControlConfirmer, MissionApproval, MissionConfirmation};
+use crate::authority::approval::{
+    AgentDoorConfirmation, ControlConfirmer, MissionApproval, MissionConfirmation,
+};
 use crate::authority::clock::Clock;
 use crate::authority::commitment::CommitmentView;
 use crate::authority::effect::EffectClass;
@@ -32,9 +34,13 @@ use nexus_kernel::emergency_stop::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+mod door;
+use door::DoorCore;
+pub use door::{AgentDoor, Lookup};
 
 /// Every governed intent, as data.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -101,6 +107,10 @@ pub struct ControlStatus {
     pub display: Option<(u64, u32, u16, u16)>,
     pub tools: Vec<(&'static str, &'static str, &'static str)>,
     pub connector_operations: Vec<(&'static str, &'static str, &'static str, &'static str)>,
+    /// M2c: agent doors issued and still alive.
+    pub live_doors: usize,
+    /// M2c: agent doors issued in this process (reported, never limited).
+    pub doors_issued: u64,
 }
 
 /// The longest grant the interface may ask for.
@@ -119,6 +129,8 @@ pub struct GovernedControl {
     detached: Mutex<HashSet<RunId>>,
     /// Display starts under way, each counted until its end is recorded.
     display_starts: AtomicUsize,
+    /// M2c: agent doors issued in this process.
+    doors_issued: AtomicU64,
     /// The controller of the kernel's emergency-stop authority (M0-FIX F5,
     /// sealed by M0-FIX2 F10): the owner's emergency stop engages it and
     /// the owner's resume lifts it. In production it is the process's
@@ -246,6 +258,7 @@ impl GovernedControl {
             egress,
             detached: Mutex::new(HashSet::new()),
             display_starts: AtomicUsize::new(0),
+            doors_issued: AtomicU64::new(0),
             kernel_stop,
             #[cfg(test)]
             stop_gap: Mutex::new(None),
@@ -501,6 +514,64 @@ impl GovernedControl {
         Ok(())
     }
 
+    /// Issue a door for `agent` (Mother Nexus M2c, S1): the owner is asked
+    /// every time, through `confirmer`, which the door keeps for the
+    /// mission and held-mission dialogs it raises. Nothing stored decides
+    /// whether to ask.
+    ///
+    /// 1. Refused, with no dialog and no record, while the store is
+    ///    latched, while recovery is required, under an emergency stop or
+    ///    while quitting.
+    /// 2. A reservation under the runs lock alone: at `MAX_LIVE_DOORS` live
+    ///    doors it is refused (`Capacity`), with no dialog and no record;
+    ///    the groups of dropped doors are reclaimed first.
+    /// 3. The owner's dialog, with no lock held.
+    /// 4. No: `agent_door_declined` (an end record), and no door.
+    /// 5. Yes: step 1 again (a stop pressed meanwhile wins), then
+    ///    `agent_door_opened` (evidence first: unrecorded, no door).
+    /// 6. The group is registered under the runs lock alone, empty.
+    pub fn issue_agent_door(
+        self: &Arc<Self>,
+        agent: AgentId,
+        confirmer: Arc<dyn ControlConfirmer + Send + Sync>,
+    ) -> Result<AgentDoor, AuthorityError> {
+        let authority = self.authority();
+        authority.door_admissible()?;
+        let runs = authority.runs();
+        let core = Arc::new(DoorCore {
+            id: hex::encode(crate::authority::ids::random16()),
+            agent: agent.clone(),
+            group: runs.next_group(),
+        });
+        let life: Arc<dyn std::any::Any + Send + Sync> = core.clone();
+        runs.reserve_door(core.group, &agent, Arc::downgrade(&life))?;
+        drop(life);
+        let mut advisory = Vec::new();
+        if authority.unclean_sessions() > 0 {
+            advisory.push("An earlier session of the broker did not close cleanly.".to_string());
+        }
+        let others = runs.live_doors();
+        if others > 0 {
+            advisory.push(format!("{others} other door(s) are open in this process."));
+        }
+        let request = AgentDoorConfirmation {
+            agent: agent.to_string(),
+            door: core.id.clone(),
+            advisory,
+        };
+        let yes = confirmer.confirm_agent_door(&request);
+        if !yes {
+            // The decline has taken effect: the reservation dies with `core`.
+            authority.record_door(false, &agent, &core.id)?;
+            return Err(AuthorityError::Declined);
+        }
+        authority.door_admissible()?;
+        authority.record_door(true, &agent, &core.id)?;
+        runs.activate_door(core.group)?;
+        self.doors_issued.fetch_add(1, Ordering::SeqCst);
+        Ok(AgentDoor::new(self.clone(), core, confirmer))
+    }
+
     /// Ask the owner, natively, to consent to an agent's mission (Mother
     /// Nexus M2a): see `Authority::confirm_mission`. It grants nothing.
     pub fn confirm_mission(
@@ -680,6 +751,8 @@ impl GovernedControl {
                 .into_iter()
                 .map(|(connector, op, class, method)| (connector, op, class.as_str(), method))
                 .collect(),
+            live_doors: self.authority().runs().live_doors(),
+            doors_issued: self.doors_issued.load(Ordering::SeqCst),
         }
     }
 }
@@ -714,5 +787,7 @@ pub enum AgentOutcome {
     AwaitingApproval(CommitmentView),
 }
 
+#[cfg(test)]
+mod door_tests;
 #[cfg(test)]
 mod tests;

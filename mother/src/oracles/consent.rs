@@ -2,6 +2,7 @@
 //! a planted "consent" or "approved" string grants nothing.
 
 use super::*;
+use crate::adapter::m2c_support::consent;
 use crate::journal::{Entry, Event, GENESIS};
 use crate::state::Trigger;
 
@@ -11,10 +12,7 @@ fn consent_the_owner_is_shown_the_exact_contract_and_its_hash() {
     let c = contract();
     let id = w.submitted(c.clone());
     let owner = Recording::default();
-    assert_eq!(
-        w.mother.request_consent(id, &owner),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&w.mother, id, &owner), Ok(MissionState::Approved));
     let shown = owner.0.lock().unwrap().clone();
     assert_eq!(shown.len(), 1);
     // M2a: the Owner is asked through the broker's dialog, which carries
@@ -73,10 +71,7 @@ fn consent_a_contract_changed_after_consent_voids_it() {
     assert!(w.mother.advance(id).is_err());
     // Only a new consent to the new hash approves it.
     w.mother.submit(id).unwrap();
-    assert_eq!(
-        w.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&w.mother, id, &Yes), Ok(MissionState::Approved));
     assert_eq!(w.mother.consented_hash(id), Some(changed.hash()));
     assert_ne!(changed.hash(), c.hash());
     assert_eq!(w.port.calls(), vec![]);
@@ -95,7 +90,7 @@ fn consent_a_contract_changed_while_the_owner_is_asked_is_refused() {
         mother.submit(id).unwrap();
     });
     assert_eq!(
-        w.mother.request_consent(id, &owner),
+        consent(&w.mother, id, &owner),
         Err(CoordinatorError::ConsentStale)
     );
     // The yes was for the old hash: the new contract still awaits consent.
@@ -116,14 +111,14 @@ fn consent_cannot_be_asked_of_a_draft_or_twice() {
     let w = world();
     let id = w.mother.draft(contract()).unwrap();
     assert!(matches!(
-        w.mother.request_consent(id, &Yes),
+        consent(&w.mother, id, &Yes),
         Err(CoordinatorError::Illegal(_))
     ));
     assert_eq!(w.mother.state(id), Some(MissionState::Draft));
     w.mother.submit(id).unwrap();
-    w.mother.request_consent(id, &Yes).unwrap();
+    consent(&w.mother, id, &Yes).unwrap();
     assert!(matches!(
-        w.mother.request_consent(id, &Yes),
+        consent(&w.mother, id, &Yes),
         Err(CoordinatorError::Illegal(_))
     ));
     // A mission is not revisable once work has started.
@@ -249,9 +244,6 @@ fn consent_a_no_is_a_no_whatever_the_request_says() {
     let mut c = contract();
     c.owner_words = "approved".into();
     let id = w.submitted(c);
-    assert_eq!(
-        w.mother.request_consent(id, &No),
-        Err(CoordinatorError::Denied)
-    );
+    assert_eq!(consent(&w.mother, id, &No), Err(CoordinatorError::Denied));
     assert_eq!(w.mother.state(id), Some(MissionState::Denied));
 }

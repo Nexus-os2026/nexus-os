@@ -11,7 +11,8 @@
 //!   an action is an error.
 
 use super::m2as_support::{executed, open_requests, rig, Disk, Rig, WorldServer};
-use super::{GovernedPort, Home};
+use super::m2c_support::{consent, port_for, Home};
+use super::GovernedPort;
 use crate::coordinator::{Coordinator, Lanes};
 use crate::effect::EffectPort;
 use crate::journal::{verify, Entry, Event, MemoryJournal, MissionId, GENESIS};
@@ -27,10 +28,7 @@ use std::sync::{Arc, Weak};
 fn approved(r: &Rig, markers: &str) -> MissionId {
     let id = r.mother.draft(contract_with(markers)).unwrap();
     r.mother.submit(id).unwrap();
-    assert_eq!(
-        r.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&r.mother, id, &Yes), Ok(MissionState::Approved));
     id
 }
 
@@ -108,7 +106,7 @@ fn a_doubly_claimed_live_action_fails_the_open_closed(
 ) {
     // Two missions, each waiting on its own live request.
     let journal = MemoryJournal::new();
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let lanes = || Lanes::new(keyed_lanes()).unwrap();
     let clock = || Arc::new(SystemClock::default());
     let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
@@ -120,7 +118,7 @@ fn a_doubly_claimed_live_action_fails_the_open_closed(
             )))
             .unwrap();
         mother.submit(id).unwrap();
-        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        assert_eq!(consent(&mother, id, &Yes), Ok(MissionState::Approved));
         for _ in 0..3 {
             mother.advance(id).unwrap();
         }
@@ -160,14 +158,14 @@ fn a_doubly_claimed_live_action_fails_the_open_closed(
 
     // A rebuilt port over the same live broker: neither mission is given
     // the request back, so it cannot be withdrawn: the open fails closed.
-    let rebuilt = Arc::new(GovernedPort::new(control.clone()));
+    let rebuilt = Arc::new(port_for(control, true));
     assert!(
         Coordinator::open(journal.clone(), rebuilt.clone(), lanes(), clock()).is_err(),
         "an open succeeded with a journaled request it could not withdraw"
     );
 
     // The port's own withdraw of a handed, unheld, live action is an error.
-    let spare = GovernedPort::new(control.clone());
+    let spare = port_for(control, true);
     spare.hand(MissionId(9_101), &first);
     assert!(spare.withdraw(MissionId(9_101)).is_err());
 

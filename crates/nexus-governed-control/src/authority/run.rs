@@ -7,12 +7,19 @@
 //! their own resources when they see it), and ends its unconsumed
 //! commitments with their credential leases. An emergency stop cancels every
 //! run.
+//!
+//! Mother Nexus M2c: the registry also holds the agent doors' groups. A door
+//! is its group: a run joins it when the door opens the run (at insertion)
+//! or adopts it, and leaves it only when the registry drops the run or the
+//! door is gone. Every membership change is made under the runs lock.
 
 use super::ids::{AgentId, RunId};
 use super::AuthorityError;
-use std::collections::HashMap;
+use std::any::Any;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 /// A run's cancellation flag, observed by actuators between bounded steps.
 #[derive(Clone, Debug)]
@@ -58,6 +65,98 @@ struct RunEntry {
     view: RunView,
     class: RunClass,
     cancelled: Arc<AtomicBool>,
+    /// M2c: the door groups the run belongs to (at most
+    /// `MAX_GROUPS_PER_RUN` live ones).
+    groups: Vec<GroupId>,
+}
+
+/// A door's group (Mother Nexus M2c): a monotonic number, never reused.
+pub(crate) type GroupId = u64;
+
+/// What keeps a door's entry alive: the door's own core, held weakly. An
+/// entry whose door is dropped is reclaimed at the next issue or adoption;
+/// no `Drop` takes a lock or does I/O.
+pub(crate) type DoorLife = Weak<dyn Any + Send + Sync>;
+
+/// Most doors alive at once, reserved or issued (N5: a live limit).
+pub(crate) const MAX_LIVE_DOORS: usize = 64;
+/// Most live door groups one run may belong to.
+pub(crate) const MAX_GROUPS_PER_RUN: usize = 8;
+
+/// One door's group: reserved while the owner is asked, active once the
+/// door is issued.
+struct DoorEntry {
+    life: DoorLife,
+    agent: AgentId,
+    active: bool,
+    members: BTreeSet<RunId>,
+}
+
+impl DoorEntry {
+    fn alive(&self) -> bool {
+        self.life.strong_count() > 0
+    }
+}
+
+/// What the runs lock holds: the runs, and the doors' groups.
+#[derive(Default)]
+struct Table {
+    runs: HashMap<RunId, RunEntry>,
+    doors: BTreeMap<GroupId, DoorEntry>,
+}
+
+impl Deref for Table {
+    type Target = HashMap<RunId, RunEntry>;
+    fn deref(&self) -> &Self::Target {
+        &self.runs
+    }
+}
+
+impl DerefMut for Table {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.runs
+    }
+}
+
+impl Table {
+    /// Reclaim the groups of doors that are gone: each entry, and its id in
+    /// its members' lists.
+    fn prune_doors(&mut self) {
+        let gone: Vec<GroupId> = self
+            .doors
+            .iter()
+            .filter(|(_, door)| !door.alive())
+            .map(|(group, _)| *group)
+            .collect();
+        for group in gone {
+            if let Some(door) = self.doors.remove(&group) {
+                for run in door.members {
+                    if let Some(entry) = self.runs.get_mut(&run) {
+                        entry.groups.retain(|g| *g != group);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Drop every cancelled or finished run, and each from its groups.
+    fn prune_ended(&mut self) {
+        let ended: Vec<RunId> = self
+            .runs
+            .iter()
+            .filter(|(_, e)| e.view.cancelled || e.view.finished)
+            .map(|(id, _)| *id)
+            .collect();
+        for run in ended {
+            if let Some(entry) = self.runs.remove(&run) {
+                for group in entry.groups {
+                    if let Some(door) = self.doors.get_mut(&group) {
+                        door.members.remove(&run);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Every run.
@@ -71,7 +170,10 @@ struct RunEntry {
 /// refusal or a status.
 #[derive(Default)]
 pub struct RunRegistry {
-    runs: Mutex<HashMap<RunId, RunEntry>>,
+    runs: Mutex<Table>,
+    /// M2c: the next door group's number. It never wraps in practice and
+    /// is never reused.
+    next_group: AtomicU64,
     stopped: AtomicBool,
     /// Runs cancelled by emergency stops since the last lift (it can span
     /// more than one stop).
@@ -152,12 +254,27 @@ pub(crate) enum Refusal {
 }
 
 impl RunRegistry {
+    /// Open a run in no door's group (tests).
+    #[cfg(test)]
     pub(crate) fn open(
         &self,
         agent: AgentId,
         origin: RunOrigin,
         class: RunClass,
         now_wall_ms: u64,
+    ) -> Result<RunId, AuthorityError> {
+        self.open_in(agent, origin, class, now_wall_ms, None)
+    }
+
+    /// Open a run; with `group` (M2c), it joins that door's group at
+    /// insertion, in the same hold of the lock.
+    pub(crate) fn open_in(
+        &self,
+        agent: AgentId,
+        origin: RunOrigin,
+        class: RunClass,
+        now_wall_ms: u64,
+        group: Option<GroupId>,
     ) -> Result<RunId, AuthorityError> {
         let id = RunId::fresh();
         let entry = RunEntry {
@@ -171,6 +288,7 @@ impl RunRegistry {
             },
             class,
             cancelled: Arc::new(AtomicBool::new(false)),
+            groups: group.into_iter().collect(),
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -181,14 +299,162 @@ impl RunRegistry {
         if self.closed.load(Ordering::SeqCst) {
             return Err(AuthorityError::Closed("the desktop is quitting"));
         }
+        if let Some(group) = group {
+            match runs.doors.get(&group) {
+                Some(door) if door.active && door.alive() => {
+                    if door.agent != entry.view.agent {
+                        return Err(AuthorityError::WrongAgent);
+                    }
+                }
+                _ => return Err(AuthorityError::NotMember),
+            }
+        }
         if runs.len() >= RUN_CAPACITY {
-            runs.retain(|_, e| !e.view.cancelled && !e.view.finished);
+            runs.prune_ended();
             if runs.len() >= RUN_CAPACITY {
                 return Err(AuthorityError::Capacity);
             }
         }
         runs.insert(id, entry);
+        if let Some(door) = group.and_then(|group| runs.doors.get_mut(&group)) {
+            door.members.insert(id);
+        }
         Ok(id)
+    }
+
+    /// M2c: a new door group's number (never reused).
+    pub(crate) fn next_group(&self) -> GroupId {
+        self.next_group.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// M2c, a door issue's reservation: reclaim the groups of doors that are
+    /// gone, refuse at `MAX_LIVE_DOORS` live doors (reserved or issued),
+    /// and otherwise reserve `group` for `agent`, kept while `life` lives.
+    pub(crate) fn reserve_door(
+        &self,
+        group: GroupId,
+        agent: &AgentId,
+        life: DoorLife,
+    ) -> Result<(), AuthorityError> {
+        let mut runs = self.runs.lock().expect("runs");
+        runs.prune_doors();
+        if runs.doors.len() >= MAX_LIVE_DOORS {
+            return Err(AuthorityError::Capacity);
+        }
+        runs.doors.insert(
+            group,
+            DoorEntry {
+                life,
+                agent: agent.clone(),
+                active: false,
+                members: BTreeSet::new(),
+            },
+        );
+        Ok(())
+    }
+
+    /// M2c, a door issue's registration (after the owner's recorded yes):
+    /// the reserved group becomes the issued door's, empty.
+    pub(crate) fn activate_door(&self, group: GroupId) -> Result<(), AuthorityError> {
+        let mut runs = self.runs.lock().expect("runs");
+        match runs.doors.get_mut(&group) {
+            Some(door) if door.alive() => {
+                door.active = true;
+                Ok(())
+            }
+            _ => Err(AuthorityError::Unavailable(
+                "the door's reservation is gone",
+            )),
+        }
+    }
+
+    /// M2c: issued doors still alive.
+    pub(crate) fn live_doors(&self) -> usize {
+        self.runs
+            .lock()
+            .expect("runs")
+            .doors
+            .values()
+            .filter(|door| door.active && door.alive())
+            .count()
+    }
+
+    /// M2c, every door call on a run: the run exists, is `agent`'s and an
+    /// agent's run, and lists `group`. Changes nothing.
+    pub(crate) fn check_member(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+    ) -> Result<(), AuthorityError> {
+        let runs = self.runs.lock().expect("runs");
+        let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        if !entry.groups.contains(&group) {
+            return Err(AuthorityError::NotMember);
+        }
+        Ok(())
+    }
+
+    /// M2c: whether `run` lists `group` (read-only).
+    pub(crate) fn is_member(&self, run: RunId, group: GroupId) -> bool {
+        self.runs
+            .lock()
+            .expect("runs")
+            .get(&run)
+            .is_some_and(|entry| entry.groups.contains(&group))
+    }
+
+    /// M2c, a door's adoption (called holding the commitments lock: the
+    /// existing entries → runs order): reclaim gone groups; the run must be
+    /// in this registry, `agent`'s, an agent's run, neither finished nor
+    /// cancelled, and list fewer than `MAX_GROUPS_PER_RUN` live groups.
+    /// Then it joins `group` (once). Any refusal changes nothing.
+    pub(crate) fn join(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+    ) -> Result<(), AuthorityError> {
+        let mut guard = self.runs.lock().expect("runs");
+        let table = &mut *guard;
+        table.prune_doors();
+        if !table
+            .doors
+            .get(&group)
+            .is_some_and(|door| door.active && door.alive() && &door.agent == agent)
+        {
+            return Err(AuthorityError::NotMember);
+        }
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        if entry.view.finished {
+            return Err(AuthorityError::RunNotActive);
+        }
+        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
+            return Err(AuthorityError::RunCancelled);
+        }
+        if entry.groups.contains(&group) {
+            return Ok(());
+        }
+        if entry.groups.len() >= MAX_GROUPS_PER_RUN {
+            return Err(AuthorityError::Capacity);
+        }
+        entry.groups.push(group);
+        if let Some(door) = table.doors.get_mut(&group) {
+            door.members.insert(run);
+        }
+        Ok(())
     }
 
     /// The run exists, belongs to `agent`, is not cancelled or finished, and

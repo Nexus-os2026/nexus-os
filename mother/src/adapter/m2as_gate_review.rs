@@ -10,7 +10,7 @@
 //!   final does not hide a second one still open.
 
 use super::m2as_support::{rig, Disk, Rig};
-use super::{GovernedPort, Home};
+use super::m2c_support::{consent, port_for, Home};
 use crate::coordinator::{Coordinator, Lanes};
 use crate::effect::{ApprovalStatus, EffectPort};
 use crate::journal::{MemoryJournal, MissionId};
@@ -24,10 +24,7 @@ use std::sync::Arc;
 fn approved(r: &Rig, markers: &str) -> MissionId {
     let id = r.mother.draft(contract_with(markers)).unwrap();
     r.mother.submit(id).unwrap();
-    assert_eq!(
-        r.mother.request_consent(id, &Yes),
-        Ok(MissionState::Approved)
-    );
+    assert_eq!(consent(&r.mother, id, &Yes), Ok(MissionState::Approved));
     id
 }
 
@@ -91,7 +88,7 @@ fn a_poisoned_gate_still_refuses_and_fences(control: &Arc<GovernedControl>, orig
 }
 
 fn every_handed_request_counts(control: &Arc<GovernedControl>, origin: &str) {
-    let port = Arc::new(GovernedPort::new(control.clone()));
+    let port = Arc::new(port_for(control, true));
     let mother = Coordinator::open(
         MemoryJournal::new(),
         port.clone(),
@@ -104,7 +101,7 @@ fn every_handed_request_counts(control: &Arc<GovernedControl>, origin: &str) {
             .draft(contract_with(&format!("POST-BUILDER:{origin}/{path}")))
             .unwrap();
         mother.submit(id).unwrap();
-        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        assert_eq!(consent(&mother, id, &Yes), Ok(MissionState::Approved));
         for _ in 0..3 {
             mother.advance(id).unwrap();
         }
