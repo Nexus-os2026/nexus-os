@@ -348,7 +348,8 @@ fn m2c_a2_a_door_refuses_another_agent_s_runs_and_commitments() {
         assert!(f.live(run), "a refused call changed the run");
     }
     assert_eq!(
-        door.agent_action(theirs, &f.get("/a2-refused")).unwrap_err(),
+        door.agent_action(theirs, &f.get("/a2-refused"))
+            .unwrap_err(),
         AuthorityError::WrongAgent
     );
     assert_eq!(f.reached("/a2-refused"), 0);
@@ -689,7 +690,11 @@ fn m2c_a7_b_an_unrecorded_door_is_no_door() {
             .unwrap_err(),
         AuthorityError::EvidenceUnavailable
     );
-    assert_eq!(owner.doors().len(), 3, "a latched store: refused before the dialog");
+    assert_eq!(
+        owner.doors().len(),
+        3,
+        "a latched store: refused before the dialog"
+    );
 }
 
 /// A7-c: two concurrent issuers are each asked once, and neither waits for
