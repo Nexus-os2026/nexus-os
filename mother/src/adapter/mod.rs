@@ -72,7 +72,11 @@ mod m2as_support;
 #[cfg(test)]
 mod m2as_sweep;
 #[cfg(test)]
+mod m2c_crash;
+#[cfg(test)]
 mod m2c_door;
+#[cfg(test)]
+mod m2c_halt;
 #[cfg(test)]
 pub(crate) mod m2c_support;
 #[cfg(test)]
