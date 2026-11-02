@@ -2100,6 +2100,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-mother-host"
+version = "0.1.0"
+dependencies = [
+ "nexus-governed-control",
+ "nexus-mother",
+]
+
+[[package]]
 name = "nexus-outcome-eval"
 version = "0.1.0"
 dependencies = [

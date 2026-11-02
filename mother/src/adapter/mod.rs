@@ -18,8 +18,9 @@
 //! coordinator.
 //!
 //! [`FileJournal`] keeps the mission journal in a file in Mother's home
-//! (Mother's own state, not an effect on the world). [`Home`] builds both
-//! from a directory the host chooses.
+//! (Mother's own state, not an effect on the world). M2c: Mother builds no
+//! broker; the host does (`nexus-mother-host`'s `Home`), issues the door
+//! with the Owner's yes, and hands the port only that door.
 
 use crate::effect::{
     ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
@@ -28,21 +29,17 @@ use crate::journal::{JournalError, JournalStore, MissionId};
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
-use nexus_governed_control::authority::clock::{Clock, SystemClock};
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
-use nexus_governed_control::authority::evidence::MemoryEvidence;
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
-use nexus_governed_control::broker::Vault;
-use nexus_governed_control::evidence_store::PrimaryEvidence;
-use nexus_governed_control::governed::{AgentDoor, AgentOutcome, GovernedControl, Intent, Lookup};
+use nexus_governed_control::governed::{AgentDoor, AgentOutcome, Intent, Lookup};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 #[cfg(test)]
 mod expiry_tests;
@@ -787,7 +784,7 @@ impl JournalStore for FileJournal {
 
 /// Create `dir` and any missing directory above it private to this user
 /// (0700): the broker refuses a root below a directory others can change.
-/// (The host builds the broker's home with it.)
+/// (The host builds the broker's home with it, and so do Mother's tests.)
 #[cfg(unix)]
 pub fn create_private(dir: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
@@ -800,66 +797,4 @@ pub fn create_private(dir: &Path) -> std::io::Result<()> {
 #[cfg(not(unix))]
 pub fn create_private(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)
-}
-
-/// Mother's home: the broker built as the desktop builds it, and the
-/// journal file. One per process: the broker claims the process's
-/// emergency-stop controller.
-pub struct Home {
-    pub dir: PathBuf,
-    pub control: Arc<GovernedControl>,
-}
-
-/// Why a home cannot be opened.
-#[derive(Debug)]
-pub struct HomeError(pub String);
-
-impl Home {
-    /// Open (or create) the home at `dir`, an absolute path the host
-    /// chose.
-    pub fn open(dir: &Path) -> Result<Self, HomeError> {
-        if !dir.is_absolute() {
-            return Err(HomeError("the home must be an absolute path".into()));
-        }
-        create_private(dir).map_err(|e| HomeError(e.to_string()))?;
-        let broker = dir.join("broker");
-        let evidence = PrimaryEvidence::open(
-            &broker.join("p3-evidence").join("evidence.sqlite3"),
-            vec![Arc::new(MemoryEvidence::new(256))],
-        )
-        .map_err(|e| HomeError(format!("evidence store: {}", e.as_str())))?;
-        let control = GovernedControl::new(
-            &broker,
-            Vault::Disabled,
-            evidence,
-            Arc::new(SystemClock::default()),
-        )
-        .map_err(|e| HomeError(format!("broker: {e:?}")))?;
-        Ok(Self {
-            dir: dir.to_path_buf(),
-            control: Arc::new(control),
-        })
-    }
-
-    /// A new home under the system's temporary directory (examples and
-    /// tests): refused if it already exists.
-    pub fn fresh_temp(label: &str) -> Result<Self, HomeError> {
-        let wall = SystemClock::default().wall_ms();
-        let dir = std::env::temp_dir().join(format!(
-            "nexus-mother-{label}-{}-{wall}",
-            std::process::id()
-        ));
-        if dir.exists() {
-            return Err(HomeError("the home already exists".into()));
-        }
-        Self::open(&dir)
-    }
-
-    pub fn journal_path(&self) -> PathBuf {
-        self.dir.join("mother-journal.jsonl")
-    }
-
-    pub fn journal(&self) -> Result<FileJournal, JournalError> {
-        FileJournal::open(&self.journal_path())
-    }
 }

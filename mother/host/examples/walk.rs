@@ -1,37 +1,48 @@
-//! Mother M1 and M2a, walked through in plain language.
+//! Mother M1, M2a and M2c, walked through in plain language.
 //!
 //! Run 1 walks one sample mission through every state with deterministic
-//! test lanes. Run 2 shows Stop and Deny refusing effects. Mother acts
-//! through the real governed-control broker, in a fresh home under the
-//! system's temporary directory. You consent through the broker's mission
-//! dialog, which this example stands in for at the terminal: you type the
-//! first 8 characters of the contract's hash; anything else is a no. The
-//! broker records your answer in its evidence store, and Mother's consent
-//! is made only from the broker's recorded yes.
+//! test lanes. Run 2 shows Stop and Deny refusing effects. Run 3 shows an
+//! unclean exit: the mission comes back held, and only your yes resumes it.
+//! Mother acts through the real governed-control broker, in a fresh home
+//! under the system's temporary directory, and only through a door the
+//! broker issues after your yes, each time she starts.
+//!
+//! This example stands in for the broker's three dialogs at the terminal:
+//! - the door (may Mother act?): type the first 8 characters of the door id;
+//! - a mission's consent: type the first 8 characters of the contract hash;
+//! - a held mission's resume: type the first 8 characters of its contract
+//!   hash.
+//!
+//! Anything else is a no. The broker records each answer in its evidence
+//! store; Mother acts only on the broker's recorded yes.
 //!
 //! ```text
-//! cargo run -p nexus-mother --example walk
+//! cargo run -p nexus-mother-host --example walk
 //! ```
 
 use nexus_governed_control::authority::approval::{
-    AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
-    MissionConfirmation, ResumeConfirmation,
+    AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ConfirmationText,
+    ControlConfirmer, GrantConfirmation, MissionConfirmation, MissionResumeConfirmation,
+    ResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::GovernedControl;
-use nexus_mother::adapter::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
+use nexus_mother::adapter::{FileJournal, GovernedPort, MOTHER_AGENT};
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use nexus_mother::coordinator::{Advance, Coordinator, CoordinatorError, Lanes};
 use nexus_mother::effect::EffectRequest;
 use nexus_mother::journal::{JournalStore, MissionId};
 use nexus_mother::lane::{Lane, LaneRole, ScriptedLane, Verdict};
+use nexus_mother_host::Home;
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::sync::Arc;
 
 /// A stand-in for the broker's native dialogs, at this terminal (the walk
-/// only): it asks the Owner about a mission and declines everything else.
+/// only): it asks the Owner about a door, a mission and a held mission, and
+/// declines everything else.
 struct OwnerAtTheTerminal;
 
 impl ControlConfirmer for OwnerAtTheTerminal {
@@ -48,26 +59,26 @@ impl ControlConfirmer for OwnerAtTheTerminal {
         false
     }
     fn confirm_mission(&self, request: &MissionConfirmation) -> bool {
-        show_confirmation(request);
-        let short = request.contract_hash.get(..8).unwrap_or_default();
-        print!(
-            "  To consent, type the first 8 characters of the hash ({}…); anything else means no: ",
-            request.contract_hash.get(..4).unwrap_or_default()
-        );
-        let _ = std::io::stdout().flush();
-        let mut line = String::new();
-        if std::io::stdin().read_line(&mut line).is_err() {
-            return false;
-        }
-        short.len() == 8 && line.trim() == short
+        show(request.title(), &request.text());
+        let code = request.contract_hash.get(..8).unwrap_or_default();
+        typed(std::io::stdin(), code, "the contract hash", "consent")
+    }
+    fn confirm_agent_door(&self, request: &AgentDoorConfirmation) -> bool {
+        show(request.title(), &request.text());
+        let code = request.door.get(..8).unwrap_or_default();
+        typed(std::io::stdin(), code, "the door id", "let Mother act")
+    }
+    fn confirm_held_mission(&self, request: &MissionResumeConfirmation) -> bool {
+        show(request.title(), &request.text());
+        let code = request.contract_hash.get(..8).unwrap_or_default();
+        typed(std::io::stdin(), code, "the contract hash", "resume it")
     }
 }
 
-/// The broker's mission dialog, as text.
-fn show_confirmation(r: &MissionConfirmation) {
-    let text = r.text();
+/// One of the broker's dialogs, as text.
+fn show(title: &str, text: &ConfirmationText) {
     println!();
-    println!("  ┌ {} (the broker asks)", r.title());
+    println!("  ┌ {title} (the broker asks)");
     for (label, value) in &text.header {
         println!("  │ {label}: {value}");
     }
@@ -75,6 +86,20 @@ fn show_confirmation(r: &MissionConfirmation) {
         println!("  │   {line}");
     }
     println!("  └");
+}
+
+/// Yes only if the Owner types exactly `code` (8 characters).
+fn typed(input: std::io::Stdin, code: &str, of: &str, to: &str) -> bool {
+    print!(
+        "  To {to}, type the first 8 characters of {of} ({}…); anything else means no: ",
+        code.get(..4).unwrap_or_default()
+    );
+    let _ = std::io::stdout().flush();
+    let mut line = String::new();
+    if input.read_line(&mut line).is_err() {
+        return false;
+    }
+    code.len() == 8 && line.trim() == code
 }
 
 fn lanes(builder_asks: Vec<EffectRequest>) -> Lanes {
@@ -140,6 +165,22 @@ fn contract(restatement: &str) -> MissionContract {
     }
 }
 
+/// A port for Mother: the broker asks the Owner for her door first. A no
+/// gives no port, and Mother cannot act.
+fn door_port(home: &Home) -> Option<Arc<GovernedPort>> {
+    match home.door() {
+        Ok(door) => Some(Arc::new(GovernedPort::new(door))),
+        Err(AuthorityError::Declined) => {
+            println!("  You said no to the door: Mother cannot act, so this part stops here.");
+            None
+        }
+        Err(e) => {
+            println!("  The broker issued no door ({e}).");
+            None
+        }
+    }
+}
+
 fn open(
     journal: &FileJournal,
     port: &Arc<GovernedPort>,
@@ -189,6 +230,7 @@ fn say_advance(a: &Advance) {
     println!("  {} → {}", a.from.as_str(), a.to.as_str());
 }
 
+/// Read on the Owner's side of the broker, never through Mother's port.
 fn mothers_runs(owner: &GovernedControl) -> usize {
     owner
         .authority()
@@ -209,61 +251,62 @@ fn draft_and_ask(mother: &Coordinator<GovernedPort>, c: MissionContract) -> (Mis
     (id, consented)
 }
 
+/// Advance until the mission ends, printing each step and Mother's
+/// explanation.
+fn finish(mother: &Coordinator<GovernedPort>, id: MissionId) {
+    while !mother.state(id).unwrap().is_terminal() {
+        let a = mother.advance(id).expect("the mission moves");
+        say_advance(&a);
+        if let Some(text) = &a.explanation {
+            println!();
+            for line in text.lines() {
+                println!("  Mother: {line}");
+            }
+        }
+    }
+}
+
 fn main() {
-    let home = match Home::fresh_temp("walk") {
+    let home = match Home::fresh_temp("walk", Arc::new(OwnerAtTheTerminal)) {
         Ok(home) => home,
         Err(e) => {
             eprintln!("Could not open Mother's home: {e:?}");
             return;
         }
     };
-    let door = match home
-        .control
-        .issue_agent_door(mother_agent(), Arc::new(OwnerAtTheTerminal))
-    {
-        Ok(door) => door,
-        Err(e) => {
-            eprintln!("No door for Mother: {e:?}");
-            return;
-        }
-    };
-    let port = Arc::new(GovernedPort::new(door));
     let journal = home.journal().expect("journal");
-    println!("Mother's home for this walk: {}", home.dir.display());
+    println!("Mother's home for this walk: {}", home.dir().display());
     println!("No grants are given in this walk, so the broker allows no effect at all.");
+    println!("Every time Mother starts, the broker asks you for her door.");
 
     // ------------------------------------------------------------ run 1
     println!();
     println!("RUN 1 — one mission, every state, test lanes (no model is called)");
-    let mother = open(&journal, &port, lanes(vec![]));
+    let Some(port1) = door_port(&home) else {
+        return;
+    };
+    let mother = open(&journal, &port1, lanes(vec![]));
     let (id, consented) = draft_and_ask(
         &mother,
         contract("A one-page site for Rosa's bakery: name, hours and phone."),
     );
     if consented {
-        while !mother.state(id).unwrap().is_terminal() {
-            let a = mother.advance(id).expect("the mission moves");
-            say_advance(&a);
-            if let Some(text) = &a.explanation {
-                println!();
-                for line in text.lines() {
-                    println!("  Mother: {line}");
-                }
-            }
-        }
+        finish(&mother, id);
     } else {
         println!("  You said no, so nothing ran.");
     }
     shut_down(mother);
+    println!();
+    println!("  Mother restarts from her journal: a new door, so the broker asks again.");
+    let Some(port) = door_port(&home) else {
+        return;
+    };
     let restarted = open(&journal, &port, lanes(vec![]));
-    println!(
-        "  Mother restarted from her journal: {id} is {}.",
-        restarted.state(id).unwrap().as_str()
-    );
+    println!("  {id} is {}.", restarted.state(id).unwrap().as_str());
     println!(
         "  Effects sent to the broker in run 1: {}. Broker runs Mother opened: {}.",
-        port.performed(),
-        mothers_runs(&home.control)
+        port1.performed(),
+        mothers_runs(home.owner())
     );
     shut_down(restarted);
 
@@ -284,9 +327,12 @@ fn main() {
     ];
     // Run 2 has its own journal (its lanes differ), so its missions are
     // numbered from 1 again.
-    let run2 = FileJournal::open(&home.dir.join("run2-journal.jsonl")).expect("journal");
-    let mother = open(&run2, &port, lanes(asks.clone()));
-    let before = (port.performed(), mothers_runs(&home.control));
+    let run2 = FileJournal::open(&home.dir().join("run2-journal.jsonl")).expect("journal");
+    let Some(port2) = door_port(&home) else {
+        return;
+    };
+    let mother = open(&run2, &port2, lanes(asks.clone()));
+    let runs_before = mothers_runs(home.owner());
 
     println!();
     println!("  Stop: consent to this one; Mother stops it before its Builder may fetch a page and write a file.");
@@ -326,22 +372,78 @@ fn main() {
     }
     shut_down(mother);
 
-    let restarted = open(&run2, &port, lanes(asks));
     println!();
+    println!("  Mother restarts: a new door, so the broker asks again.");
+    let Some(port) = door_port(&home) else {
+        return;
+    };
+    let restarted = open(&run2, &port, lanes(asks));
     println!(
-        "  After a restart: {stopped} is {}, {denied} is {}.",
+        "  After the restart: {stopped} is {}, {denied} is {}.",
         restarted.state(stopped).unwrap().as_str(),
         restarted.state(denied).unwrap().as_str()
     );
     println!(
         "  Effects sent to the broker in run 2: {}. Broker runs Mother opened in run 2: {}.",
-        port.performed() - before.0,
-        mothers_runs(&home.control) - before.1
+        port2.performed(),
+        mothers_runs(home.owner()) - runs_before
     );
-    let entries = run2.load().map(|l| l.len()).unwrap_or(0);
+    shut_down(restarted);
+
+    // ------------------------------------------------------------ run 3
+    println!();
+    println!("RUN 3 — an unclean exit, then resume");
+    let run3 = FileJournal::open(&home.dir().join("run3-journal.jsonl")).expect("journal");
+    let Some(port3) = door_port(&home) else {
+        return;
+    };
+    let mother = open(&run3, &port3, lanes(vec![]));
+    let (held, consented) = draft_and_ask(
+        &mother,
+        contract("A one-page site for Rosa's bakery, with the weekly specials."),
+    );
+    if !consented {
+        println!("  You said no, so there is nothing to hold.");
+        return;
+    }
+    say_advance(&mother.advance(held).expect("the mission moves"));
+    println!("  Mother exits without shutting down (as if the power went out).");
+    drop(mother);
+    drop(port3);
+    println!();
+    println!("  Mother restarts: a new door, so the broker asks again.");
+    let Some(port) = door_port(&home) else {
+        return;
+    };
+    let mother = open(&run3, &port, lanes(vec![]));
+    match mother.held(held) {
+        Some(reason) => println!(
+            "  {held} is {} and held ({reason}): it does nothing until you resume or stop it.",
+            mother.state(held).unwrap().as_str()
+        ),
+        None => println!("  Unexpected: {held} is not held."),
+    }
+    match mother.resume(held) {
+        Ok(state) => {
+            println!("  You said yes: {held} resumes from {}.", state.as_str());
+            finish(&mother, held);
+        }
+        Err(CoordinatorError::Declined) => {
+            println!("  You said no: {held} stays held. Nothing of it runs.")
+        }
+        Err(e) => println!("  The resume was refused ({e:?}): {held} stays held."),
+    }
+    shut_down(mother);
+
+    let entries: usize = [&journal, &run2, &run3]
+        .iter()
+        .map(|j| j.load().map(|l| l.len()).unwrap_or(0))
+        .sum();
+    println!();
     println!(
-        "  Journals (hash-chained, verified on every open): {} and {} ({entries} entries).",
+        "  Journals (hash-chained, verified on every open): {}, {} and {} ({entries} entries).",
         journal.path().display(),
-        run2.path().display()
+        run2.path().display(),
+        run3.path().display()
     );
 }

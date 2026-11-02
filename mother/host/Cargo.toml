@@ -1,0 +1,11 @@
+[package]
+name = "nexus-mother-host"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+publish = false
+description = "Mother Nexus M2c: Mother's host shim; it alone builds the governed-control broker and issues Mother's agent door with the Owner's yes"
+
+[dependencies]
+nexus-mother = { path = ".." }
+nexus-governed-control = { path = "../../crates/nexus-governed-control" }

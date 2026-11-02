@@ -13,6 +13,7 @@ members = [
   "crates/nexus-self-improve",
   "crates/nexus-outcome-eval",
   "mother",
+  "mother/host",
 ]
 
 [workspace.package]

@@ -43,7 +43,7 @@ Mother turns a human goal into a governed mission:
    every mission in its state; after a crash (M2a-S) every unfinished
    mission comes back held until the Owner resumes or stops it. A Stopped
    mission stays stopped; a tampered journal is refused.
-7. **Walk example**: `cargo run -p nexus-mother --example walk`.
+7. **Walk example**: `cargo run -p nexus-mother-host --example walk` (M2c: the walk lives in the host crate, which alone builds the broker).
 
 ## Invariants and their oracles
 
@@ -347,10 +347,28 @@ Coordinator rules the oracles pin:
 ## Run the walk
 
 ```text
-cargo run -p nexus-mother --example walk
+cargo run -p nexus-mother-host --example walk
 ```
 
-Each time it asks (a stand-in for the broker's mission dialog, showing what
-the broker would show), type the first 8 characters of the contract hash to
-consent. In run 2, answer "no" when the Deny step asks. The walk opens a
-fresh home under the system's temporary directory and prints its path.
+The walk opens a fresh home under the system's temporary directory and
+prints its path. It stands in, at the terminal, for the broker's three
+dialogs, showing what the broker would show; anything but the code is a no:
+
+- **The door** ("Let this agent act?"): the agent, the door id and any
+  advisory lines. Type the first 8 characters of the door id. It is asked
+  every time Mother starts: at the start of each run and at every restart.
+- **A mission's consent** ("Start this mission?"): type the first 8
+  characters of the contract hash. In run 2, answer no when the Deny step
+  asks.
+- **A held mission's resume** ("Resume this held mission?"): the mission,
+  its contract hash, the request, why it is held and its summary. Type the
+  first 8 characters of the contract hash.
+
+Run 3 consents to a mission, advances it once, and exits without shutting
+down. On restart the mission is held; a yes to the resume dialog lets it
+finish, a no leaves it held, and the walk says which.
+
+M2c: Mother's own crate builds no broker. The host crate
+(`mother/host`, `nexus-mother-host`, not published) holds `Home`: the broker,
+the journal, the Owner's confirmer, `door()` (asks every time) and the
+Owner's side, `owner()`, which is never handed to Mother.
