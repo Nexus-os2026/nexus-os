@@ -544,7 +544,7 @@ fn child_one(point: &str, dir: &Path) -> ! {
 }
 
 /// The crash points, as child 1's receipt names them.
-const CR1: &str = "cr1.p0_executing";
+const CR1: &str = "cr1.p0_start_pending";
 const CR2: &str = "cr2.p1_fence_to_marker";
 const CR3: &str = "cr3.p2_before_owed_write";
 const CR4: &str = "cr4.p2k_run_cancelled_projected";
@@ -803,7 +803,9 @@ fn mission(obs: &Value, n: u64) -> &Value {
     &obs["missions"][format!("msn-{n:06}")]
 }
 
-/// CR1 (P0, §11 C4 corrected): an action Executing at the crash. Recovery
+/// CR1 (P0, §11 C4 corrected): an action whose Started is durable, its
+/// Start reservation still pending (held at the gate before `complete()`
+/// makes it Executing; R6 covers an Executing one), at the crash. Recovery
 /// is required; the door issue is refused until the Owner acknowledges and
 /// lifts the stop; then the door is asked; the interrupted mission is
 /// Blocked (`effect_outcome_unknown`); a separate, unstarted mission comes

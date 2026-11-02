@@ -1,6 +1,6 @@
 //! M2c-B (PR-B) oracles for the broker-owned halt, pre-registered before the
 //! halt exists (design v3 §4, §5, §6, §7.2, §11 C1, C2, C4, C5): B1–B18 and
-//! R1–R5, plus the halted-door cases PR-A left for the halt (A4 and A6-e
+//! R1–R6, plus the halted-door cases PR-A left for the halt (A4 and A6-e
 //! through B17, A7-c, and plant (i) through B7).
 //!
 //! Every race is a forced order: a named broker hook (`test_hooks`) blocks a
@@ -2255,7 +2255,7 @@ fn m2c_a7_c_another_door_s_halt_does_not_touch_an_issue() {
     f.gov.probe_locks();
 }
 
-// ---------------------------------------------------------------- R1-R5
+// ---------------------------------------------------------------- R1-R6
 
 /// The store's file as a dead process leaves it: the old connection is
 /// dropped with nothing more written, and the old control is let go.
