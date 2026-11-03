@@ -14,6 +14,8 @@
 //! content out of the ledger; it does not make a guessable value secret.
 
 use std::collections::BTreeSet;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nexus_persistence::coding_run_ledger::{CodingRunLedger, LedgerRecord, NewLedgerEvent};
@@ -29,7 +31,7 @@ use super::review::ChangeKind;
 use super::scope::{ScopeError, ScopeSet};
 use super::worker::ProposalRejection;
 use super::{
-    CleanupStatus, EditRejection, FailureReason, RecoveryReason, RevocationReason, RunError,
+    CleanupStatus, EditRejection, FailureReason, RecoveryReason, RevocationReason, RunError, RunId,
     SnapshotRejection,
 };
 
@@ -68,6 +70,49 @@ impl LedgerStore for CodingRunLedger {
             LedgerError::Integrity(_) => LedgerFailure::Integrity,
             _ => LedgerFailure::Unavailable,
         })
+    }
+}
+
+/// The file-backed coding-run ledger, opened by the kernel for a backend
+/// consumer that cannot name the persistence crate (M2d-K: the broker's
+/// Files staging and its startup recovery report). It gives out only the
+/// kernel's view: the [`LedgerStore`] a new run records through, and the
+/// ids of the runs with entries. Its errors are [`LedgerFailure`] codes; no
+/// persistence error text crosses.
+#[derive(Debug, Clone)]
+pub struct LedgerFile {
+    ledger: Arc<CodingRunLedger>,
+}
+
+impl LedgerFile {
+    /// Open, creating if needed, the ledger database at an absolute file
+    /// path. Whatever the persistence ledger refuses (a URI, an in-memory
+    /// or relative name, a database that is not a WAL-journaled
+    /// `synchronous=FULL` file) is `Unavailable`; nothing falls back.
+    pub fn open(path: &Path) -> Result<Self, LedgerFailure> {
+        CodingRunLedger::open(path)
+            .map(|ledger| Self {
+                ledger: Arc::new(ledger),
+            })
+            .map_err(|_| LedgerFailure::Unavailable)
+    }
+
+    /// The store a run records through
+    /// (`CodingRun::create_for_project_observing`) and [`analyze_apply`]
+    /// reads.
+    pub fn store(&self) -> Arc<dyn LedgerStore> {
+        Arc::clone(&self.ledger) as Arc<dyn LedgerStore>
+    }
+
+    /// Every run with at least one entry, in ascending order. A stored id
+    /// that is not a canonical UUID is `Integrity`: it is never skipped.
+    pub fn run_ids(&self) -> Result<Vec<RunId>, LedgerFailure> {
+        use nexus_persistence::coding_run_ledger::LedgerError;
+        let ids = self.ledger.run_ids().map_err(|error| match error {
+            LedgerError::Integrity(_) => LedgerFailure::Integrity,
+            _ => LedgerFailure::Unavailable,
+        })?;
+        Ok(ids.into_iter().map(RunId).collect())
     }
 }
 

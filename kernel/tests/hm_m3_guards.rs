@@ -7,6 +7,10 @@
 #[path = "hm_m3_guards/source.rs"]
 mod source;
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
 use source::{close_of, enclosing_fn, mask, production_files, ProdFile};
 use std::collections::BTreeMap;
 
@@ -297,23 +301,28 @@ fn is_hm_module(rel: &str) -> bool {
     rel == "kernel/src/hm.rs" || rel.starts_with("kernel/src/hm/") || rel == "persistence/src/hm.rs"
 }
 
-/// Mother Nexus cleanup (2026-10-31): the old desktop app was removed with
-/// its desktop-specific checks (see `archive/nexus-before-mother`). This
-/// tripwire fails as soon as a desktop source tree returns, so those
-/// checks must be restored and re-pinned before the guard can pass.
-fn assert_desktop_removed(files: &[ProdFile]) {
-    let desktop: Vec<&str> = files
-        .iter()
-        .map(|f| f.rel.as_str())
-        .filter(|rel| rel.starts_with("app/"))
-        .collect();
+/// M2b-A (G1–G8): the desktop's production sources. The registered desktop
+/// is `mother/desktop`; `app/src-tauri` stays named so a returning old
+/// desktop is scanned too (the G0 tripwire refuses it anyway).
+fn is_desktop_source(rel: &str) -> bool {
+    rel.starts_with("mother/desktop/src/") || rel.starts_with("app/src-tauri/src/")
+}
+
+/// M2b-A (G1–G8): the restored checks see the desktop. Its production
+/// sources are in this scan, so the guard's expected lists, all empty,
+/// hold for it.
+fn assert_desktop_scanned(files: &[ProdFile]) {
+    for rel in ["mother/desktop/src/lib.rs", "mother/desktop/src/app.rs"] {
+        assert!(
+            files.iter().any(|f| f.rel == rel),
+            "the desktop source {rel} is not scanned"
+        );
+    }
     assert!(
-        desktop.is_empty(),
-        "desktop source returned; restore and re-pin its checks: {desktop:?}"
-    );
-    assert!(
-        !source::workspace_root().join("app/src-tauri").exists(),
-        "app/src-tauri returned; restore and re-pin its checks"
+        !files
+            .iter()
+            .any(|f| f.rel.starts_with("mother/desktop/tests/")),
+        "the desktop's tests are test code"
     );
 }
 
@@ -323,10 +332,7 @@ fn assert_desktop_removed(files: &[ProdFile]) {
 /// and store handle: `(file, what)`.
 fn desktop_hm_store_refs(files: &[ProdFile]) -> Vec<(String, String)> {
     let mut out = Vec::new();
-    for f in files
-        .iter()
-        .filter(|f| f.rel.starts_with("app/src-tauri/src/"))
-    {
+    for f in files.iter().filter(|f| is_desktop_source(&f.rel)) {
         for t in HM_TABLES {
             if !words(&f.text, t).is_empty() {
                 out.push((f.rel.clone(), t.to_string()));
@@ -387,6 +393,20 @@ fn hm_m3_n5_a_s1_planted_controls() {
             ("app/src-tauri/src/x.rs".to_string(), ".hm()".to_string()),
         ]
     );
+    let desktop = [planted(
+        "mother/desktop/src/x.rs",
+        "fn c(db: &D) { db.hm().immediate(|tx| Ok(())); let q = \"DELETE FROM hm_grant\"; }",
+    )];
+    assert_eq!(
+        desktop_hm_store_refs(&desktop),
+        vec![
+            (
+                "mother/desktop/src/x.rs".to_string(),
+                "hm_grant".to_string()
+            ),
+            ("mother/desktop/src/x.rs".to_string(), ".hm()".to_string()),
+        ]
+    );
     let replace = [planted(
         "persistence/src/x.rs",
         concat!(
@@ -444,7 +464,8 @@ fn hm_m3_n5_a_s1_no_ipc_writes_hm_no_replace_and_foreign_keys_on() {
             "{authority_writer}"
         );
     }
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     // A-G0 (AD-4 disabled): nothing in production inserts a grant row, and
     // the store has no grant-insert method.
     for f in &files {
@@ -700,7 +721,8 @@ fn hm_m3_n5_a_s3_single_issuer_attestation_admission_and_store() {
         call_sites(&files, "build_dispatch_issuer"),
         Vec::<(String, String)>::new()
     );
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     // Transport evidence only from `attest_route` (connectors), besides its
     // definition in `nexus_kernel::hm`.
     for f in files.iter().filter(|f| !is_hm_module(&f.rel)) {
@@ -883,7 +905,8 @@ fn hm_m3_n5_a_s6_separated_subsystems_receive_no_hm_content() {
     }
     assert_eq!(found, Vec::<(String, String, String)>::new());
     // The by-function entries were all desktop functions: now empty.
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     // No actuator or cognitive module hands data to them.
     for f in files.iter().filter(|f| {
         (f.rel.starts_with("kernel/src/actuators/") || f.rel.starts_with("kernel/src/cognitive/"))
@@ -950,7 +973,8 @@ fn hm_m3_n5_r7_no_unlabelled_in_scope_content_write() {
     // `DbStrategyStore::upsert_strategy_score` (the production `MemoryStore`
     // implementations, which refused) were removed with
     // `app/src-tauri/src/lib.rs`.
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     // No raw SQL content write to an in-scope table outside the
     // persistence crate.
     for f in files
@@ -973,10 +997,7 @@ fn hm_m3_n5_i4_no_checkpoint_memory_is_written_back() {
     let files = production_files();
     // The desktop never replays a time-machine checkpoint: no undo or redo
     // call, and its undo/redo commands are closed.
-    for f in files
-        .iter()
-        .filter(|f| f.rel.starts_with("app/src-tauri/src/"))
-    {
+    for f in files.iter().filter(|f| is_desktop_source(&f.rel)) {
         for name in [
             "undo",
             "redo",
@@ -993,7 +1014,8 @@ fn hm_m3_n5_i4_no_checkpoint_memory_is_written_back() {
     // (`record_agent_execution_checkpoint` in
     // `app/src-tauri/src/commands/cognitive.rs`) were removed with the
     // desktop.
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
 }
 
 /// The classified model-call sites (P3-HM-CONTRACT-02 §12.2 and
@@ -1690,7 +1712,8 @@ fn hm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog() {
         trait_impls_of(&files, "RoutePolicyConfirmer"),
         Vec::<(String, String)>::new()
     );
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
 }
 
 // ── A-S6 extended (E-M3-1): XS crates reach no HM content ───────────────────
@@ -1993,7 +2016,8 @@ fn hm_m3_n5_a_s6_xs_crates_reach_no_hm_content() {
     reviewed.sort();
     assert_eq!(computed, reviewed, "XS handoff functions");
     // The reviewed handoffs were desktop and CLI functions: now empty.
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     let mut found = Vec::new();
     for (rel, function, _) in &computed {
         let f = file(&files, rel);
@@ -2013,7 +2037,8 @@ fn hm_m3_n5_a_s6_xs_crates_reach_no_hm_content() {
 /// in until a desktop returns.
 #[test]
 fn hm_m3_n5_a3_2_the_desktop_store_fixture_module_is_test_only() {
-    assert_desktop_removed(&production_files());
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&production_files());
 }
 
 /// Mission P3-C11-HM-M4 N4 (AD-6): the capture seam is test code only. No

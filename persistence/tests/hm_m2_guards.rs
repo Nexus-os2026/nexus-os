@@ -7,6 +7,23 @@
 
 use std::path::{Path, PathBuf};
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "../../kernel/tests/desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
+/// M2b-A (G1–G8): the restored checks see the desktop. Its production
+/// sources are in this scan, so the guard's expected lists, all empty,
+/// hold for it.
+fn assert_desktop_scanned(files: &[PathBuf]) {
+    let scanned: Vec<String> = files.iter().map(|f| relative(f)).collect();
+    for rel in ["mother/desktop/src/lib.rs", "mother/desktop/src/app.rs"] {
+        assert!(
+            scanned.iter().any(|s| s == rel),
+            "the desktop source {rel} is not scanned"
+        );
+    }
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -91,26 +108,6 @@ fn is_test_path(rel: &str) -> bool {
         || rel.ends_with("_tests.rs")
         || rel.ends_with("/tests.rs")
         || rel.starts_with("tests/")
-}
-
-/// Mother Nexus cleanup (2026-10-31): the old desktop app was removed with
-/// its desktop-specific checks (see `archive/nexus-before-mother`). This
-/// tripwire fails as soon as a desktop source tree returns, so those
-/// checks must be restored and re-pinned before the guard can pass.
-fn assert_desktop_removed(files: &[PathBuf]) {
-    let desktop: Vec<String> = files
-        .iter()
-        .map(|f| relative(f))
-        .filter(|rel| rel.starts_with("app/"))
-        .collect();
-    assert!(
-        desktop.is_empty(),
-        "desktop source returned; restore and re-pin its checks: {desktop:?}"
-    );
-    assert!(
-        !workspace_root().join("app/src-tauri").exists(),
-        "app/src-tauri returned; restore and re-pin its checks"
-    );
 }
 
 // ── Guard 1: no REPLACE write to any hm_* table (§5.1) ──────────────────────
@@ -296,7 +293,8 @@ fn hm_m2_n7_hm_store_is_called_only_from_the_hm_modules() {
     assert!(hm_store_user_allowed("kernel/src/hm/write.rs"));
 
     let files = source_files(&["rs"]);
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     let mut hits = Vec::new();
     for f in files {
         let rel = relative(&f);
@@ -460,7 +458,8 @@ fn hm_m2_n7_every_identity_home_connection_enables_foreign_keys() {
     let files = source_files(&["rs"]);
     // The desktop's identity-home callers and state-database openers were
     // pinned below; they were removed with the desktop.
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     for f in files {
         let rel = relative(&f);
         if is_test_path(&rel) {

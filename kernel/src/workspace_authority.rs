@@ -42,6 +42,20 @@ pub struct WorkspaceBinding {
     pub run_id: Uuid,
 }
 
+impl WorkspaceBinding {
+    /// A binding from the raw bytes of its two identities, for a backend
+    /// issuer that holds them as bytes (M2d-K: the broker's Files staging,
+    /// which names no identifier type of its own). Like the struct literal,
+    /// it is only a name: issuance still refuses a nil identity, and a
+    /// grant still resolves only for the exact binding it was issued to.
+    pub const fn from_bytes(agent: [u8; 16], run: [u8; 16]) -> Self {
+        Self {
+            agent_id: Uuid::from_bytes(agent),
+            run_id: Uuid::from_bytes(run),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspaceAuthoritySource {
     BackendAllocated,
