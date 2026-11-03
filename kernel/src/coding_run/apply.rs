@@ -749,8 +749,12 @@ fn write_candidate(dir: &DirHandle, content: &[u8]) -> Option<Anonymous> {
 enum Unpublish {
     /// Removed, and the removal established.
     Removed,
-    /// Not the file Nexus created: renamed back, nothing else done.
+    /// Not the file Nexus created: renamed back, durably (the directory
+    /// synced), nothing else done.
     NotOurs,
+    /// Renamed back, but the return is not durable (the directory sync
+    /// failed): recovery stays required.
+    NotOursUnsynced,
     /// Not ours, and it could not be renamed back: it is at the temp name.
     Stuck,
     /// It could not be moved: nothing was done.
@@ -771,10 +775,13 @@ fn unpublish(file: &AppliedFile, temp: &str) -> Unpublish {
         if *identity == file.installed && ManifestEntry::of(content) == file.candidate);
     if !ours {
         // Someone else's file: put it back (compensating, never cancelled).
-        return if file.dir.rename_noreplace(temp, &file.name).is_ok() {
+        if file.dir.rename_noreplace(temp, &file.name).is_err() {
+            return Unpublish::Stuck;
+        }
+        return if !seam(Seam::Sync) && file.dir.sync().is_ok() {
             Unpublish::NotOurs
         } else {
-            Unpublish::Stuck
+            Unpublish::NotOursUnsynced
         };
     }
     let mut owned = OwnedTemp {
@@ -1432,7 +1439,9 @@ impl CodingRun {
                     Some(store),
                 );
             }
-            Unpublish::NotOurs | Unpublish::NotMoved => (vec![path], Vec::new()),
+            Unpublish::NotOurs | Unpublish::NotOursUnsynced | Unpublish::NotMoved => {
+                (vec![path], Vec::new())
+            }
             Unpublish::Stuck => (Vec::new(), vec![(path, temp)]),
         };
         let Store { parent, name, dir } = store;
@@ -1934,7 +1943,9 @@ impl CodingRun {
                         self.applied = Some(applied);
                         return Err(refused(Refusal::Stale(path)));
                     }
-                    Unpublish::NotOurs | Unpublish::NotMoved => unrestored.push(path),
+                    Unpublish::NotOurs | Unpublish::NotOursUnsynced | Unpublish::NotMoved => {
+                        unrestored.push(path)
+                    }
                     Unpublish::Stuck => hidden.push((path, temp)),
                 },
                 ChangeKind::Replace => {

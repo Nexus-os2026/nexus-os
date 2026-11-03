@@ -324,7 +324,12 @@ pub fn analyze_apply(
             }
             "apply.recovery_required" => {
                 apply = None;
-                restore = None;
+                // A prepared undo stays reported unless this record accounts
+                // for its moved file (an owed temp id): a failed or undurable
+                // return leaves its outcome uncertain.
+                if payload.get("temp_id").is_some() {
+                    restore = None;
+                }
                 let failed = text("failed")
                     .and_then(|code| APPLY_STEPS.iter().copied().find(|step| *step == code))
                     .ok_or(LedgerFailure::Integrity)?;
