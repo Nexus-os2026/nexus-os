@@ -29,7 +29,7 @@ mod desktop_tripwire;
 mod process_leader;
 
 use desktop_tripwire::findings;
-use process_leader::{checked_pgid, send_group_kill, signal_outcome, Leader, Signalled};
+use process_leader::{checked_pgid, signal_outcome, Leader, Signalled};
 use std::io::Read;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -468,17 +468,9 @@ fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
     // The one final cleanup of the held role's group.
     let cleaned = role.finish(REAP_WITHIN).is_ok();
     let text = reader.join().unwrap_or_default();
+    // Nothing else is signalled: the plant is the role's to end, and a
+    // missing marker proves nothing about it.
     let reaped = text.lines().any(|l| l.contains("G0-CLEANUP reaped"));
-    // (Oracle commit of decision 4: the old inference fallback, which
-    // signals the planted group because a marker is missing.)
-    if !reaped {
-        if let Some(pid) = std::fs::read_to_string(&pidfile)
-            .ok()
-            .and_then(|pid| pid.trim().parse::<i32>().ok())
-        {
-            let _ = send_group_kill(pid, false);
-        }
-    }
     RoleRun {
         finished,
         reaped,

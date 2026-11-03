@@ -141,10 +141,14 @@ impl Leader {
         let pgid = match checked_pgid(child.id()) {
             Ok(pgid) => pgid,
             Err(e) => {
-                // Not a group this test may signal: end the child alone.
+                // Not a group this test may signal: end the child alone,
+                // through its own handle, within a bound.
                 let mut child = child;
                 let _ = child.kill();
-                let _ = child.wait();
+                let until = Instant::now() + REAP;
+                while matches!(child.try_wait(), Ok(None)) && Instant::now() < until {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
                 return Err(e);
             }
         };
@@ -167,13 +171,19 @@ impl Leader {
         self.child.stderr.take()
     }
 
-    /// Whether the leader has exited. (Oracle commit of decision 4: the old
-    /// way, `try_wait`, which reaps the leader.)
+    /// Whether the leader has exited, observed without reaping it
+    /// (`waitid` with `WNOWAIT`): an exited leader stays a zombie that holds
+    /// its process group until the final cleanup.
     pub fn exited(&mut self) -> Result<bool, String> {
-        self.child
-            .try_wait()
-            .map(|status| status.is_some())
-            .map_err(|e| format!("observing leader {}: {e}", self.pgid))
+        use nix::sys::wait::{waitid, Id, WaitPidFlag, WaitStatus};
+        match waitid(
+            Id::Pid(nix::unistd::Pid::from_raw(self.pgid)),
+            WaitPidFlag::WEXITED | WaitPidFlag::WNOHANG | WaitPidFlag::WNOWAIT,
+        ) {
+            Ok(WaitStatus::StillAlive) => Ok(false),
+            Ok(_) => Ok(true),
+            Err(e) => Err(format!("observing leader {}: {e}", self.pgid)),
+        }
     }
 
     /// The final cleanup: SIGKILL to the held leader's group (only success
