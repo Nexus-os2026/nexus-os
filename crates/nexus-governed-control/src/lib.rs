@@ -329,6 +329,50 @@
 //! ```compile_fail,E0624
 //! let _ = nexus_governed_control::authority::approval::MissionApproval::confirmed;
 //! ```
+//!
+//! M2d-B1 (D-O23): the Owner registers the one workspace of the process and
+//! grants Files from the front door; a door only admits its own runs to a
+//! consent it holds. Its compiling twin:
+//!
+//! ```
+//! use nexus_governed_control::governed::{AgentDoor, GovernedControl};
+//! let _ = GovernedControl::register_workspace;
+//! let _ = GovernedControl::workspace;
+//! let _ = AgentDoor::admit_files;
+//! ```
+//!
+//! ```compile_fail,E0599
+//! let _ = nexus_governed_control::governed::AgentDoor::register_workspace; // no door route
+//! ```
+//!
+//! The same, as a probe that compiles only while each method is absent from
+//! the door (as A1's above):
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! struct Absent;
+//! trait Probe {
+//!     fn register_workspace(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn workspace(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn grant_scope(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn files(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for AgentDoor {}
+//! fn probe(mut door: AgentDoor) {
+//!     let _: Absent = door.register_workspace();
+//!     let _: Absent = door.workspace();
+//!     let _: Absent = door.grant_scope();
+//!     let _: Absent = door.files();
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 
