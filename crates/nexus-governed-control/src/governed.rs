@@ -26,7 +26,8 @@ use crate::display::{AgentDisplay, DisplayStatus, InputIntent, PerceptionIntent}
 use crate::egress::{Egress, EgressIntent};
 use crate::evidence_store::PrimaryEvidence;
 use crate::files::{
-    CleanupRetry, Exclusions, FileCreate, Files, RecoveryEntry, WorkingDetail, WorkspaceInfo,
+    CleanupRetry, Exclusions, FileCreate, Files, RecoveryEntry, UndoReport, WorkingDetail,
+    WorkspaceInfo,
 };
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
@@ -817,8 +818,12 @@ impl GovernedControl {
     /// Owner's only: no door route. Refused while a stop is in force, when
     /// there is nothing to undo (a restart offers nothing), and when the
     /// file is no longer exactly the one created (nothing is touched). An
-    /// interrupted or refused undo stays offered.
-    pub fn files_undo(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+    /// interrupted or refused undo stays offered. A completed undo reports
+    /// a kernel write grant that lapsed after its final check (U1).
+    pub fn files_undo(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<UndoReport, AuthorityError> {
         self.files
             .undo(self.authority(), self.kernel_stop.authority(), confirmer)
     }

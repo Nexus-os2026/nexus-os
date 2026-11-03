@@ -149,6 +149,8 @@ const INTERRUPTIONS: &[&str] = &[
     "revoked",
     "expired",
     "commitment_expired",
+    "write_grant_revoked",
+    "write_grant_expired",
 ];
 /// Why Mother holds a mission (its `HeldReason`).
 const HELD_REASONS: &[&str] = &["unclean_shutdown"];

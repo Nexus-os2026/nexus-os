@@ -387,6 +387,14 @@ pub enum RecoveryFinding {
     WriteGrantNotClosed,
 }
 
+/// What a completed undo came to (§6.6, M4′): `interrupted` names the
+/// kernel write grant's lapse after U1 (`write_grant_revoked` or
+/// `write_grant_expired`), if it lapsed; the file was removed either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UndoReport {
+    pub interrupted: Option<&'static str>,
+}
+
 /// What one Owner retry of owed Files cleanup came to (§6.6, Codex review
 /// 1 of PR #64, M1): each owed run got one bounded attempt.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -509,6 +517,9 @@ fn open_backend(runtime_root: &Path) -> Result<Backend, AuthorityError> {
 #[cfg(target_os = "linux")]
 struct Applied {
     run: CodingRun,
+    /// The broker run that created it (closed for Files if its undo's
+    /// write grant lapsed after U1).
+    broker_run: RunId,
     workspace: Arc<Workspace>,
     binding: WorkspaceBinding,
     name: String,
@@ -811,6 +822,19 @@ fn publication(error: &ApplyError) -> Publication {
     }
 }
 
+/// The kernel write grant's lapse that M2d-K2 found when the kernel closed
+/// it at the end of `run`'s last attempt, as an interruption code. K2 also
+/// reports a refused attempt's grant, so it is read only together with a
+/// publication or a completed undo, whose final check (U1) required the
+/// grant to resolve: then a lapse came after that check.
+#[cfg(target_os = "linux")]
+fn write_grant_lapse(run: &CodingRun) -> Option<&'static str> {
+    match run.write_grant_at_close()? {
+        InterruptCause::Expired => Some("write_grant_expired"),
+        _ => Some("write_grant_revoked"),
+    }
+}
+
 /// A cause's code in a success's controlled interruption status (H3).
 #[cfg(target_os = "linux")]
 fn interruption(cause: InterruptCause) -> &'static str {
@@ -974,8 +998,16 @@ impl PendingEffect for FilesEffect {
         };
         // H3 (M4′): a cause that arrived after the handoff is reported
         // beside the truthful success, and Files ends for this run.
-        let interrupted = observer.cause().map(interruption);
-        if interrupted.is_some() {
+        // M4′ (HIGH 3 of Codex re-check 2): the kernel write grant's lapse
+        // after the final check, as the kernel found it at its close; read
+        // only here, together with the publication.
+        let interrupted: Vec<&'static str> = observer
+            .cause()
+            .map(interruption)
+            .into_iter()
+            .chain(write_grant_lapse(&run))
+            .collect();
+        if !interrupted.is_empty() {
             shared
                 .closed
                 .lock()
@@ -984,6 +1016,7 @@ impl PendingEffect for FilesEffect {
         }
         shared.applied(Applied {
             run,
+            broker_run: self.broker_run,
             workspace: Arc::clone(&self.workspace),
             binding,
             name: self.name.clone(),
@@ -999,7 +1032,7 @@ impl PendingEffect for FilesEffect {
         if recovery {
             meta.push(("reason".to_string(), "recovery_required".to_string()));
         }
-        if let Some(code) = interrupted {
+        for code in interrupted {
             meta.push(("interrupted".to_string(), code.to_string()));
         }
         Ok(EffectOutput {
@@ -1883,7 +1916,7 @@ impl Files {
         authority: &Authority,
         stop: &Arc<StopAuthority>,
         confirmer: &dyn ControlConfirmer,
-    ) -> Result<(), AuthorityError> {
+    ) -> Result<UndoReport, AuthorityError> {
         let lifetime = UndoLifetime::take(authority, stop)?;
         self.drain();
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
@@ -1896,9 +1929,7 @@ impl Files {
         let result = lifetime
             .check(authority)
             .and_then(|()| self.undo_one(&mut applied, confirmer, &lifetime, authority));
-        if result.is_ok() {
-            let _kept = self.shared.retire(applied.run);
-        } else {
+        if let Err(error) = result {
             let mut slot = self.shared.slot.lock().expect("files slot");
             if slot.is_none() {
                 *slot = Some(applied);
@@ -1906,8 +1937,20 @@ impl Files {
                 drop(slot);
                 let _kept = self.shared.retire(applied.run);
             }
+            return Err(error);
         }
-        result
+        // M4′ for an undo: its write grant's lapse after U1, read only now
+        // that the restore completed; it ends Files for the creating run.
+        let interrupted = write_grant_lapse(&applied.run);
+        if interrupted.is_some() {
+            self.shared
+                .closed
+                .lock()
+                .expect("files closed")
+                .insert(applied.broker_run);
+        }
+        let _kept = self.shared.retire(applied.run);
+        Ok(UndoReport { interrupted })
     }
 
     /// The kernel's restore of `applied`: the request (its watches taken
@@ -1976,7 +2019,7 @@ impl Files {
         _authority: &Authority,
         _stop: &Arc<StopAuthority>,
         _confirmer: &dyn ControlConfirmer,
-    ) -> Result<(), AuthorityError> {
+    ) -> Result<UndoReport, AuthorityError> {
         Err(AuthorityError::Unavailable(
             "Files are available on Linux only",
         ))
