@@ -18,6 +18,10 @@ pub(crate) mod at {
     pub(crate) const OPEN_INSERTED: &str = "open.inserted";
     pub(crate) const OPEN_CHECKED: &str = "open.checked";
     pub(crate) const PREPARE_BEFORE_INSERT: &str = "prepare.before_insert";
+    /// M2d-C round 5 (D5): at the run's check before a commitment's
+    /// insertion, under the commitments lock (a hook here takes only the
+    /// runs lock).
+    pub(crate) const PREPARE_RUN_CHECKED: &str = "prepare.run_checked";
     pub(crate) const AUTHORIZE_RECORDED: &str = "authorize.recorded";
     pub(crate) const PLACE_BEFORE_FILL: &str = "place.before_fill";
     pub(crate) const LEASE_RECORDED: &str = "lease.recorded";

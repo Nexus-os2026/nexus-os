@@ -147,3 +147,30 @@ fn m2d_c_r4_a_repeated_ack_after_the_run_is_pruned_is_a_no_op() {
     f.door.open_run().expect("the released run was pruned");
     f.door.ack_commitment(view.id).expect("still a no-op");
 }
+
+/// D5 (Codex review 4, MEDIUM 6): the run's check and its retention are
+/// one hold of the runs lock. A hook at the check cancels the run and an
+/// opening at capacity prunes it: the admission is refused and nothing is
+/// inserted, never a File admitted unpinned.
+#[test]
+fn m2d_c_r5_a_file_is_never_admitted_unpinned() {
+    let f = Fx::new();
+    let (gov, run) = (f.gov.clone(), f.run);
+    f.gov.hooks().arm(at::PREPARE_RUN_CHECKED, move || {
+        let authority = gov.authority();
+        authority.runs().cancel(run);
+        let runs = authority.runs();
+        runs.set_capacity_for_test(runs.len_for_test());
+        let _ = authority.open_run(
+            AgentId::new("pruner").unwrap(),
+            crate::authority::run::RunOrigin::AgentGoal,
+        );
+    });
+    let before = f.gov.authority().commitments().len_for_test();
+    assert!(f.propose(NAME, CONTENT).is_err(), "refused");
+    assert_eq!(
+        f.gov.authority().commitments().len_for_test(),
+        before,
+        "nothing inserted"
+    );
+}

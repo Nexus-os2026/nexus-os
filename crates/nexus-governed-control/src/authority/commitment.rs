@@ -940,6 +940,8 @@ impl CommitmentRegistry {
                     Some(error)
                 }
                 None => {
+                    #[cfg(test)]
+                    self.fire(crate::test_hooks::at::PREPARE_RUN_CHECKED);
                     // Rule 2: pinned as it becomes visible, its run retained
                     // in the same hold (the run was just checked under it).
                     let mut entry = entry;
