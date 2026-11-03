@@ -2166,6 +2166,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-typed-decision"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "nexus-verifier-sandbox"
 version = "0.1.0"
 dependencies = [
