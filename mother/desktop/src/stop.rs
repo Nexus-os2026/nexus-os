@@ -28,9 +28,11 @@ pub const MAX_STOP_WORKERS: usize = 4;
 const JOIN_POLL: Duration = Duration::from_millis(5);
 
 /// Whether `worker`'s thread has returned: `done` published and its
-/// handle finished.
+/// handle registered and finished. A worker whose handle is not yet
+/// registered is still running for the join: it is never drained, so its
+/// handle is never dropped unjoined.
 fn returned(worker: &Worker) -> bool {
-    worker.done && worker.handle.as_ref().is_none_or(|h| h.is_finished())
+    worker.done && worker.handle.as_ref().is_some_and(|h| h.is_finished())
 }
 
 /// One worker the route started.
@@ -242,6 +244,7 @@ impl StopRoute {
                 if let Some(entry) = state.workers.iter_mut().find(|w| w.id == worker) {
                     entry.handle = Some(handle);
                 }
+                self.desk.changed.notify_all();
                 Press::Dispatched { epoch, worker }
             }
             Err(_) => {
