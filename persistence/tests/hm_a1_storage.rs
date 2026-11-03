@@ -1319,6 +1319,19 @@ use std::path::{Path, PathBuf};
 #[path = "../../kernel/tests/desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
 
+/// M2b-A (G1–G8): the restored checks see the desktop. Its production
+/// sources are in this scan, so the guard's expected lists, all empty,
+/// hold for it.
+fn assert_desktop_scanned(files: &[PathBuf]) {
+    let scanned: Vec<String> = files.iter().map(|f| relative(f)).collect();
+    for rel in ["mother/desktop/src/lib.rs", "mother/desktop/src/app.rs"] {
+        assert!(
+            scanned.iter().any(|s| s == rel),
+            "the desktop source {rel} is not scanned"
+        );
+    }
+}
+
 const IN_SCOPE_TABLES: [&str; 5] = [
     "agent_memory",
     "task_history",
@@ -1547,6 +1560,7 @@ fn hm_n5_hm_tables_are_named_only_in_the_hm_modules() {
     // with the desktop.
     let files = source_files(&["rs", "sql", "ts", "tsx", "js", "py", "json", "toml"]);
     desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     let mut hits = Vec::new();
     for f in &files {
         let rel = relative(f);

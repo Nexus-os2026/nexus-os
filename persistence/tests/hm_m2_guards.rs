@@ -11,6 +11,19 @@ use std::path::{Path, PathBuf};
 #[path = "../../kernel/tests/desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
 
+/// M2b-A (G1–G8): the restored checks see the desktop. Its production
+/// sources are in this scan, so the guard's expected lists, all empty,
+/// hold for it.
+fn assert_desktop_scanned(files: &[PathBuf]) {
+    let scanned: Vec<String> = files.iter().map(|f| relative(f)).collect();
+    for rel in ["mother/desktop/src/lib.rs", "mother/desktop/src/app.rs"] {
+        assert!(
+            scanned.iter().any(|s| s == rel),
+            "the desktop source {rel} is not scanned"
+        );
+    }
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -281,6 +294,7 @@ fn hm_m2_n7_hm_store_is_called_only_from_the_hm_modules() {
 
     let files = source_files(&["rs"]);
     desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     let mut hits = Vec::new();
     for f in files {
         let rel = relative(&f);
@@ -445,6 +459,7 @@ fn hm_m2_n7_every_identity_home_connection_enables_foreign_keys() {
     // The desktop's identity-home callers and state-database openers were
     // pinned below; they were removed with the desktop.
     desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     for f in files {
         let rel = relative(&f);
         if is_test_path(&rel) {
