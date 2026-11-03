@@ -1812,12 +1812,21 @@ fn m2d_b1_d_o18_h_only_real_hardware_backs_a_location() {
 
 /// The evaluator's own walk of the real `/sys`, independent of the
 /// production one (recursive): device `major:minor` resolves, and neither
-/// it nor anything under it (a partition's disk, a disk's slaves, to depth
-/// 16) is a loop, nbd, zram, ublk or ram device or unresolvable.
+/// it nor anything under it (a partition's disk, a disk's slaves) is a
+/// loop, nbd, zram, ublk or ram device or unresolvable, within the same
+/// budget as the production walk: at most 16 levels and 256 visits, every
+/// node visited counted, revisits included (Codex review 1 of PR #76).
 fn real_hardware(device: &str) -> bool {
-    fn walk(node: &Path, depth: usize) -> bool {
+    real_hardware_in(Path::new("/sys"), device)
+}
+
+/// [`real_hardware`] over the sysfs at `sys` (a fake tree in a seam case).
+fn real_hardware_in(sys: &Path, device: &str) -> bool {
+    fn walk(node: &Path, depth: usize, visits: &mut usize) -> bool {
+        *visits += 1;
         let name = node.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if depth > 16
+            || *visits > 256
             || name.is_empty()
             || ["loop", "nbd", "zram", "ublkb", "ublkc", "ram"]
                 .iter()
@@ -1830,20 +1839,54 @@ fn real_hardware(device: &str) -> bool {
             _ => return false,
         }
         if node.join("partition").is_file() {
-            return node.parent().is_some_and(|disk| walk(disk, depth + 1));
+            return node
+                .parent()
+                .is_some_and(|disk| walk(disk, depth + 1, visits));
         }
         match std::fs::read_dir(node.join("slaves")) {
             Ok(slaves) => slaves.into_iter().all(|slave| {
                 slave
                     .ok()
                     .and_then(|slave| std::fs::canonicalize(slave.path()).ok())
-                    .is_some_and(|target| walk(&target, depth + 1))
+                    .is_some_and(|target| walk(&target, depth + 1, visits))
             }),
             Err(_) => false,
         }
     }
-    std::fs::canonicalize(Path::new("/sys/dev/block").join(device))
-        .is_ok_and(|start| walk(&start, 0))
+    let mut visits = 0;
+    std::fs::canonicalize(sys.join("dev/block").join(device))
+        .is_ok_and(|start| walk(&start, 0, &mut visits))
+}
+
+/// Codex review 1 of PR #76: the evaluator keeps the production walk's
+/// budget. Over a fake sysfs, a dm device over 300 real disks (301 visits,
+/// all real hardware) is refused by both walks; over 255 real disks (256
+/// visits, exactly the budget) it is accepted by both.
+#[test]
+fn m2d_b1_d_o18_i_the_evaluator_keeps_the_walk_budget() {
+    use crate::files::{hardware_backed, sysfs_for_test};
+    let dirs = Dirs::new();
+    let tree = |name: &str, disks: usize| {
+        let fake = FakeSys::new(dirs.path(name));
+        let mut slaves = Vec::new();
+        for i in 0..disks {
+            let rel = format!("sd{i}");
+            fake.disk(&rel, &format!("8:{i}"), &[]);
+            slaves.push(rel);
+        }
+        let slaves: Vec<&str> = slaves.iter().map(String::as_str).collect();
+        fake.disk("virtual/block/dm-0", "253:0", &slaves)
+            .link("253:0", "virtual/block/dm-0");
+        fake.0.clone()
+    };
+    let both = |sys: PathBuf| {
+        sysfs_for_test(Some(sys.clone()));
+        let production = hardware_backed(253, 0);
+        sysfs_for_test(None);
+        (production, real_hardware_in(&sys, "253:0"))
+    };
+    assert_eq!(both(tree("over", 300)), (false, false), "301 visits");
+    assert_eq!(both(tree("within", 255)), (true, true), "256 visits");
 }
 
 /// Seam-free, on this host's real `/sys` and mount table: for the
