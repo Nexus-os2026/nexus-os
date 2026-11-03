@@ -500,6 +500,8 @@ fn m2d_c_r4_8_the_ordinary_path_dispositions() {
     let w = world();
     let id = waiting(&w);
     w.port.approval_reply(ApprovalStatus::Denied);
+    w.port
+        .set_publication(Some(Publication::ConfirmedNotPublished));
     assert_eq!(w.mother.advance(id).unwrap().to, MissionState::Denied);
     assert_eq!(w.port.acked(), vec![action(1)]);
 
