@@ -47,6 +47,7 @@ use nexus_governed_control::authority::commitment::{
     CommitmentState, CommitmentView, PublicationClass,
 };
 use nexus_governed_control::authority::effect::CapabilityKind;
+use nexus_governed_control::authority::halt_cell::{HaltCell, HaltCells};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::governed::{
@@ -106,6 +107,8 @@ mod m2d_files_r1;
 mod m2d_files_r2;
 #[cfg(test)]
 mod m2d_files_r4;
+#[cfg(test)]
+mod m2d_files_r5;
 mod private_file;
 pub use private_file::FilePrivate;
 
@@ -161,6 +164,9 @@ struct Runs {
     /// acknowledgement failed (tried again with the next one).
     files: BTreeSet<CommitmentId>,
     unacked: BTreeSet<CommitmentId>,
+    /// M2d-C round 5 (H2): each mission's halt cell, bound by the
+    /// coordinator before the mission is exposed.
+    cells: BTreeMap<MissionId, HaltCell>,
 }
 
 /// The EffectPort over the governed-control broker, through one agent door.
@@ -175,10 +181,6 @@ pub struct GovernedPort {
     workspace: Option<String>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
-    /// M2d-C round 4 (addendum 1): File actions that may be live here (from
-    /// just before the broker is asked until their acknowledgement; an
-    /// uncertain one never leaves). Read without any lock.
-    files_live: AtomicUsize,
     /// Tests: how many acknowledgements were asked of the broker.
     #[cfg(test)]
     acks_tried: AtomicUsize,
@@ -232,7 +234,6 @@ impl GovernedPort {
             workspace: None,
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
-            files_live: AtomicUsize::new(0),
             #[cfg(test)]
             acks_tried: AtomicUsize::new(0),
             #[cfg(test)]
@@ -281,10 +282,10 @@ impl GovernedPort {
         self.with_runs(|runs| runs.open.get(&mission).copied())
     }
 
-    /// Tests: File actions counted live here.
+    /// Tests: File actions this port holds and has not acknowledged.
     #[cfg(test)]
     pub(crate) fn files_live(&self) -> usize {
-        self.files_live.load(Ordering::SeqCst)
+        self.with_runs(|runs| runs.files.len())
     }
 
     /// Tests: acknowledgements asked of the broker, and those it refused.
@@ -403,7 +404,14 @@ impl GovernedPort {
         }
         #[cfg(test)]
         self.before_open_run.fire();
-        let run = self.door.open_run().map_err(|e| refused_by(e.class()))?;
+        // Round 5 (H1, H2): the mission's cell, kept by the run from its
+        // opening (a mission no coordinator bound opens as before).
+        let cell = self.with_runs(|runs| runs.cells.get(&mission).cloned());
+        let run = match &cell {
+            Some(cell) => self.door.open_run_with_halt(cell),
+            None => self.door.open_run(),
+        }
+        .map_err(|e| refused_by(e.class()))?;
         let refusal = self.with_runs(|runs| {
             if runs.fenced {
                 Some(BrokerClass::PortFenced)
@@ -499,16 +507,8 @@ impl EffectPort for GovernedPort {
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
         let asked_at = self.door.clock().monotonic_ms();
-        // Addendum 1: counted live before the broker is asked.
         let file = matches!(effect, EffectRequest::File(_));
-        if file {
-            self.files_live.fetch_add(1, Ordering::SeqCst);
-        }
-        let answer = self.door.agent_action(run, &intent);
-        if file && !matches!(answer, Ok(AgentOutcome::AwaitingApproval(_))) {
-            self.files_live.fetch_sub(1, Ordering::SeqCst);
-        }
-        match answer {
+        match self.door.agent_action(run, &intent) {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
@@ -603,15 +603,17 @@ impl EffectPort for GovernedPort {
         self.ack_one(id)
     }
 
-    /// Rule 3 / addendum 1: the door's memory stop, first, when a File may
-    /// be live here (lock-free count): the door is shared by every mission
-    /// of this port, so all of them are stopped with it.
-    fn halt_all(&self) -> bool {
-        if self.files_live.load(Ordering::SeqCst) == 0 {
-            return false;
-        }
+    fn halt_cells(&self) -> HaltCells {
+        self.door.halt_cells()
+    }
+
+    fn bind_halt(&self, mission: MissionId, cell: HaltCell) {
+        self.with_runs(|runs| runs.cells.insert(mission, cell));
+    }
+
+    /// C4: the door's memory stop (lock-free).
+    fn emergency_halt(&self) {
         self.door.stop_now();
-        true
     }
 
     fn cancel(&self, mission: MissionId) {
@@ -929,7 +931,15 @@ impl GovernedPort {
         ) else {
             return;
         };
-        let Ok(view) = self.door.adopt(run, commitment) else {
+        // Round 5 (C1): the adopting mission's cell is attached to the run
+        // in the adoption's hold (D4(a) refuses a run that admits only an
+        // acknowledgement).
+        let cell = self.with_runs(|runs| runs.cells.get(&mission).cloned());
+        let adopted = match &cell {
+            Some(cell) => self.door.adopt_with_halt(run, commitment, cell),
+            None => self.door.adopt(run, commitment),
+        };
+        let Ok(view) = adopted else {
             return;
         };
         let clock = self.door.clock();
@@ -949,9 +959,8 @@ impl GovernedPort {
             }
             runs.open.insert(mission, run);
             runs.waiting.insert(mission, (commitment, deadline));
-            // Round 4: an adopted File is live here until acknowledged.
-            if view.kind == CapabilityKind::Files && runs.files.insert(commitment) {
-                self.files_live.fetch_add(1, Ordering::SeqCst);
+            if view.kind == CapabilityKind::Files {
+                runs.files.insert(commitment);
             }
         });
     }
@@ -963,14 +972,11 @@ impl GovernedPort {
         self.acks_tried.fetch_add(1, Ordering::SeqCst);
         match self.door.ack_commitment(id) {
             Ok(()) => {
-                let counted = self.with_runs(|runs| {
+                self.with_runs(|runs| {
                     runs.unacked.remove(&id);
                     runs.waiting.retain(|_, (c, _)| *c != id);
-                    runs.files.remove(&id)
+                    runs.files.remove(&id);
                 });
-                if counted {
-                    self.files_live.fetch_sub(1, Ordering::SeqCst);
-                }
                 Ok(())
             }
             Err(e) => {
@@ -1125,6 +1131,19 @@ impl FileJournal {
 }
 
 impl JournalStore for FileJournal {
+    /// Round 5 (C1): the digest of its path (stable across reopening it,
+    /// distinct between journals at different paths).
+    fn identity(&self) -> Option<String> {
+        let path = self.path.to_string_lossy();
+        Some(format!(
+            "file:{}",
+            hex::encode(crate::contract::sha256(
+                b"nexus-mother-journal-identity\n",
+                &[path.as_bytes()]
+            ))
+        ))
+    }
+
     fn load(&self) -> Result<Vec<String>, JournalError> {
         match std::fs::symlink_metadata(self.marker()) {
             Ok(_) => return Err(JournalError::Poisoned),

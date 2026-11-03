@@ -83,11 +83,12 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
+use nexus_governed_control::authority::halt_cell::HaltCells;
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// The most missions one coordinator keeps.
 pub const MAX_MISSIONS: usize = 1024;
@@ -137,6 +138,9 @@ pub enum LaneConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoordinatorError {
     UnknownMission,
+    /// M2d-C round 5 (D1): the coordinator's lock is poisoned (a Stop path
+    /// says so, after its halt cells are engaged, instead of panicking).
+    Poisoned,
     Contract(ContractError),
     Journal(JournalError),
     Illegal(IllegalTransition),
@@ -510,6 +514,64 @@ impl Mission {
     }
 }
 
+/// M2d-C round 5 (D1): what a mission's time budget is measured from, kept
+/// outside the coordinator lock so a Stop path can check it first.
+#[derive(Clone, Copy)]
+struct BudgetRef {
+    approved_wall_ms: u64,
+    mono_ref: u64,
+    spent_at_ref: u64,
+    max_ms: u64,
+}
+
+impl BudgetRef {
+    fn spent(&self, clock: &dyn Clock) -> bool {
+        let wall = clock.wall_ms().saturating_sub(self.approved_wall_ms);
+        let mono = self
+            .spent_at_ref
+            .saturating_add(clock.monotonic_ms().saturating_sub(self.mono_ref));
+        wall.max(mono) >= self.max_ms
+    }
+}
+
+/// D1's budget table: a dedicated mutex taken even if poisoned (it maps ids
+/// to copies), held only to insert or read, never across anything else.
+#[derive(Default)]
+struct Budgets(Mutex<HashMap<MissionId, BudgetRef>>);
+
+impl Budgets {
+    fn lock(&self) -> MutexGuard<'_, HashMap<MissionId, BudgetRef>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// M2d-C round 5 (H2, C1): the coordinator's halt cells: the broker's
+/// table for its agent and this journal's identity. Outside the
+/// coordinator mutex; the table's own lock is dedicated (C3).
+#[derive(Clone)]
+struct Cells {
+    table: HaltCells,
+    journal: String,
+}
+
+impl Cells {
+    fn engage(&self, id: MissionId) {
+        if let Some(cell) = self.table.get(&self.journal, id.0) {
+            cell.engage();
+        }
+    }
+
+    /// C2: one snapshot of this journal's cells, engaged after the table's
+    /// lock is released; the cohort's missions, in order.
+    fn engage_cohort(&self) -> Vec<MissionId> {
+        let cohort = self.table.cohort(&self.journal);
+        for (_, cell) in &cohort {
+            cell.engage();
+        }
+        cohort.into_iter().map(|(m, _)| MissionId(m)).collect()
+    }
+}
+
 struct Inner {
     store: Box<dyn JournalStore>,
     head: String,
@@ -543,6 +605,9 @@ struct Inner {
     /// [`MAX_DETAILS`], the oldest dropped first), cleared by the mission's
     /// next call. Memory only.
     details: VecDeque<(MissionId, WorkingDetail)>,
+    /// Round 5: the cells (shared with the coordinator) and the budgets.
+    cells: Cells,
+    budgets: Arc<Budgets>,
 }
 
 impl Inner {
@@ -707,7 +772,40 @@ impl Inner {
             },
         )?;
         self.mission(id)?.apply(&trigger, to, mono_now);
+        self.after_transition(id, &trigger, to);
         Ok(to)
+    }
+
+    /// Round 5: after a transition taken (journaled or in memory): a
+    /// terminal mission's cell is retired (engaged, then dropped: C1); a
+    /// consent starts the budget D1's precheck reads.
+    fn after_transition(&mut self, id: MissionId, trigger: &Trigger, to: MissionState) {
+        // A Done mission's cell is retired once its run is finished (the
+        // finish is refused on an engaged cell).
+        if to.is_terminal() && to != MissionState::Done {
+            self.cells.table.retire(&self.cells.journal, id.0);
+            self.budgets.lock().remove(&id);
+        } else if let Trigger::Consent { .. } = trigger {
+            self.note_budget(id);
+        }
+    }
+
+    /// D1: the mission's budget reference, outside the lock (none without
+    /// its contract or consent: the in-lock check alone then decides).
+    fn note_budget(&mut self, id: MissionId) {
+        let Some(mission) = self.missions.get(&id) else {
+            return;
+        };
+        let (Some(at), Some(budget)) = (mission.approved_wall_ms, mission.budget()) else {
+            return;
+        };
+        let reference = BudgetRef {
+            approved_wall_ms: at,
+            mono_ref: mission.mono_ref,
+            spent_at_ref: mission.spent_at_ref,
+            max_ms: budget.max_duration_ms,
+        };
+        self.budgets.lock().insert(id, reference);
     }
 }
 
@@ -829,6 +927,10 @@ pub struct Coordinator<P: EffectPort> {
     /// coordinator lock held.
     private: Arc<dyn PrivateStore>,
     inner: Mutex<Inner>,
+    /// M2d-C round 5 (H2, C1): the halt cells and budget references, held
+    /// outside `inner`: every Stop path engages them first.
+    cells: Cells,
+    budgets: Arc<Budgets>,
     /// M2c PR-B (tests): the call points of the crash and schedule oracles.
     #[cfg(test)]
     pub(crate) hooks: CoordinatorHooks,
@@ -843,6 +945,12 @@ pub(crate) struct CoordinatorHooks {
     pub(crate) before_owed_write: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) after_owed_write: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) fence_to_marker: crate::oracles::m2as_hooks::HookSlot,
+    /// Round 5 (tests): a Stop path's halt cells are engaged, before any
+    /// coordinator lock.
+    pub(crate) after_halt: crate::oracles::m2as_hooks::HookSlot,
+    /// Round 5 (tests): `advance`'s budget precheck is done, before its
+    /// first lock.
+    pub(crate) after_precheck: crate::oracles::m2as_hooks::HookSlot,
 }
 
 /// What a step under the coordinator lock leaves to do once it is released.
@@ -983,6 +1091,14 @@ impl<P: EffectPort> Coordinator<P> {
             }
         }
         let fencer = port.clone();
+        // Round 5 (C1): this journal's identity and the agent's halt table.
+        let cells = Cells {
+            table: port.halt_cells(),
+            journal: store
+                .identity()
+                .unwrap_or_else(|| crate::journal::fresh_identity("anonymous")),
+        };
+        let budgets = Arc::new(Budgets::default());
         #[cfg(test)]
         let hooks = CoordinatorHooks::default();
         let coordinator = Self {
@@ -1007,10 +1123,39 @@ impl<P: EffectPort> Coordinator<P> {
                 next_mission,
                 next_request: 1,
                 details: VecDeque::new(),
+                cells: cells.clone(),
+                budgets: budgets.clone(),
             }),
+            cells,
+            budgets,
             #[cfg(test)]
             hooks,
         };
+        // Round 5 (C1): every replayed unfinished mission's cell, before
+        // anything of it is exposed (recovery included); a cell that cannot
+        // be had fails closed: the port's fence (its door's memory stop),
+        // then a typed error.
+        let unfinished: Vec<MissionId> = coordinator.peek(|inner| {
+            inner
+                .missions
+                .iter()
+                .filter(|(_, m)| !m.state.is_terminal())
+                .map(|(id, _)| *id)
+                .collect()
+        });
+        for id in unfinished {
+            match coordinator
+                .cells
+                .table
+                .cell(&coordinator.cells.journal, id.0)
+            {
+                Ok(cell) => coordinator.port.bind_halt(id, cell),
+                Err(_) => {
+                    coordinator.port.fence().write();
+                    return Err(CoordinatorError::Capacity);
+                }
+            }
+        }
         // If opening fails from here on (the journal is then poisoned and
         // never reopens, or, if poisoning failed too, reopens with every
         // unfinished mission held), every journaled open action is
@@ -1019,6 +1164,14 @@ impl<P: EffectPort> Coordinator<P> {
             coordinator.withdraw_open_actions();
             return Err(e);
         }
+        // D1: the budgets of the missions recovery kept (their contracts are
+        // loaded now).
+        coordinator.with_lock(|inner| {
+            let ids: Vec<MissionId> = inner.missions.keys().copied().collect();
+            for id in ids {
+                inner.note_budget(id);
+            }
+        });
         Ok(coordinator)
     }
 
@@ -1026,6 +1179,27 @@ impl<P: EffectPort> Coordinator<P> {
     /// left (a break's fence) is taken out still under the lock and written
     /// once the lock is released, by this call, on every way out (a `?` in
     /// `body` returns from `body` only). No call can see another's batch.
+    /// Round 5 (D1): [`Self::with_lock`] for the Stop paths: a poisoned
+    /// coordinator lock is `Poisoned`, never a panic.
+    fn try_with_lock<T>(
+        &self,
+        body: impl FnOnce(&mut Inner) -> Result<T, CoordinatorError>,
+    ) -> Result<T, CoordinatorError> {
+        let (result, owed) = {
+            let mut inner = self.inner.lock().map_err(|_| CoordinatorError::Poisoned)?;
+            #[cfg(test)]
+            let _held = crate::effect::held::Held::coordinator();
+            let result = body(&mut inner);
+            (result, std::mem::take(&mut inner.owed))
+        };
+        #[cfg(test)]
+        self.hooks.before_owed_write.fire();
+        owed.write();
+        #[cfg(test)]
+        self.hooks.after_owed_write.fire();
+        result
+    }
+
     fn with_lock<T>(&self, body: impl FnOnce(&mut Inner) -> T) -> T {
         let (result, owed) = {
             let mut inner = self.inner.lock().expect("mother coordinator");
@@ -1150,6 +1324,12 @@ impl<P: EffectPort> Coordinator<P> {
                 return Err(CoordinatorError::Capacity);
             }
             let id = MissionId(inner.next_mission);
+            // Round 5 (C1): its cell first, before it is journaled or exposed.
+            let cell = inner
+                .cells
+                .table
+                .cell(&inner.cells.journal, id.0)
+                .map_err(|_| CoordinatorError::Capacity)?;
             inner.append(
                 id,
                 Event::Drafted {
@@ -1160,6 +1340,7 @@ impl<P: EffectPort> Coordinator<P> {
             inner
                 .missions
                 .insert(id, Mission::new(reference, Some(contract)));
+            self.port.bind_halt(id, cell);
             Ok(id)
         })
     }
@@ -1372,7 +1553,22 @@ impl<P: EffectPort> Coordinator<P> {
     /// what became of the action, and goes on only once it ran.
     pub fn advance(&self, id: MissionId) -> Result<Advance, CoordinatorError> {
         let emergency = self.port.emergency_stopped();
-        let start = self.with_lock(|inner| -> Result<Start, CoordinatorError> {
+        // D1 / H3: before any lock: the emergency's cells and door stop, or
+        // the mission's cell when its budget is spent by the precheck.
+        if emergency {
+            self.cells.engage_cohort();
+            self.port.emergency_halt();
+            #[cfg(test)]
+            self.hooks.after_halt.fire();
+        } else if self.budget_spent(id) {
+            self.cells.engage(id);
+            #[cfg(test)]
+            self.hooks.after_halt.fire();
+        }
+        #[cfg(test)]
+        self.hooks.after_precheck.fire();
+        // A poisoned lock is a typed error here (the cells are engaged).
+        let start = self.try_with_lock(|inner| -> Result<Start, CoordinatorError> {
             // A broken coordinator starts nothing and asks the broker nothing.
             inner.usable()?;
             inner.clear_detail(id);
@@ -1407,6 +1603,8 @@ impl<P: EffectPort> Coordinator<P> {
                 return Ok(Start::Emergency(report));
             }
             if mission.out_of_time(&*self.clock) {
+                // D1: found inside the lock: engaged before any write.
+                self.cells.engage(id);
                 return Ok(Start::OutOfTime(report));
             }
             let mono = self.clock.monotonic_ms();
@@ -1431,7 +1629,7 @@ impl<P: EffectPort> Coordinator<P> {
             Start::Emergency(mut report) => {
                 // A File that ran is reconciled first (HIGH 1): the mission
                 // then ends Blocked, reported; otherwise it is stopped.
-                let state = self.stop_for(id, StopReason::EmergencyStop)?;
+                let state = self.emergency(id)?;
                 if state == MissionState::Stopped {
                     return Err(CoordinatorError::Stopped);
                 }
@@ -1443,7 +1641,7 @@ impl<P: EffectPort> Coordinator<P> {
                 // Rule 4: through the barrier (a File settles; any other
                 // mission is blocked `budget_time`, as before).
                 report.to = self
-                    .barrier(vec![(id, SettleCause::TimeBudget)], true)
+                    .barrier(vec![(id, SettleCause::TimeBudget)])
                     .into_iter()
                     .find(|(mission, _)| *mission == id)
                     .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)?;
@@ -1453,6 +1651,9 @@ impl<P: EffectPort> Coordinator<P> {
             Start::Done(report) => return Ok(report),
             Start::Finish(report) => {
                 self.port.finish(id);
+                // Round 5 (C1): retired once its run is finished.
+                self.cells.table.retire(&self.cells.journal, id.0);
+                self.budgets.lock().remove(&id);
                 return Ok(report);
             }
             Start::Run(report, from, roles, generation) => (report, from, roles, generation),
@@ -1677,7 +1878,7 @@ impl<P: EffectPort> Coordinator<P> {
             let lane = self.lanes.get(*role);
             let identity = lane.identity();
             if self.port.emergency_stopped() {
-                self.stop_for(id, StopReason::EmergencyStop)?;
+                self.emergency(id)?;
                 return Err(CoordinatorError::Stopped);
             }
             // Reserve the call.
@@ -1693,6 +1894,8 @@ impl<P: EffectPort> Coordinator<P> {
                 } else if mission.model_calls >= contract.budget.max_model_calls {
                     Some(BlockReason::BudgetModelCalls)
                 } else if mission.out_of_time(&*self.clock) {
+                    // D1: found inside the lock: engaged before any write.
+                    self.cells.engage(id);
                     Some(BlockReason::BudgetTime)
                 } else {
                     None
@@ -1860,7 +2063,7 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<Ended, CoordinatorError> {
         for (index, effect) in effects.iter().enumerate() {
             if self.port.emergency_stopped() {
-                self.stop_for(id, StopReason::EmergencyStop)?;
+                self.emergency(id)?;
                 return Err(CoordinatorError::Stopped);
             }
             if effect.kind() == EffectKind::File {
@@ -1874,6 +2077,8 @@ impl<P: EffectPort> Coordinator<P> {
                     return Err(CoordinatorError::Stopped);
                 }
                 if mission.out_of_time(&*self.clock) {
+                    // D1: found inside the lock: engaged before any write.
+                    self.cells.engage(id);
                     return Ok(Then::End(BlockReason::BudgetTime));
                 }
                 let (number, lifetime) = (mission.next_effect, mission.lifetime);
@@ -1959,7 +2164,7 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 Err(refusal) => {
                     if self.port.emergency_stopped() {
-                        self.stop_for(id, StopReason::EmergencyStop)?;
+                        self.emergency(id)?;
                         return Err(CoordinatorError::Stopped);
                     }
                     let reason = BlockReason::BrokerRefused(refusal.class);
@@ -2166,7 +2371,7 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         cause: SettleCause,
     ) -> Result<MissionState, CoordinatorError> {
-        self.barrier(vec![(id, cause)], false)
+        self.barrier(vec![(id, cause)])
             .into_iter()
             .find(|(mission, _)| *mission == id)
             .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)
@@ -2540,54 +2745,70 @@ impl<P: EffectPort> Coordinator<P> {
         self.stop_for(id, StopReason::Owner)
     }
 
+    /// Round 5 (tests): this journal's identity (its cells' key).
+    #[cfg(test)]
+    pub(crate) fn journal_identity(&self) -> &str {
+        &self.cells.journal
+    }
+
+    /// D1's precheck: whether the mission's budget is spent, read outside
+    /// the coordinator lock (no reference: not known here, and the in-lock
+    /// check decides).
+    fn budget_spent(&self, id: MissionId) -> bool {
+        let reference = self.budgets.lock().get(&id).copied();
+        reference.is_some_and(|r| r.spent(&*self.clock))
+    }
+
+    /// Tests: poison the coordinator's lock (a panic while it was held).
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(&self) {
+        std::thread::scope(|scope| {
+            let _ = scope
+                .spawn(|| {
+                    let _held = self.inner.lock();
+                    panic!("poisoning the coordinator (a test)");
+                })
+                .join();
+        });
+    }
+
     fn stop_for(
         &self,
         id: MissionId,
         reason: StopReason,
     ) -> Result<MissionState, CoordinatorError> {
-        self.barrier(vec![(id, SettleCause::Stop(reason))], true)
+        // D1 / H3: the mission's cell first, before any lock or write.
+        self.cells.engage(id);
+        #[cfg(test)]
+        self.hooks.after_halt.fire();
+        self.barrier(vec![(id, SettleCause::Stop(reason))])
             .into_iter()
             .find(|(mission, _)| *mission == id)
             .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)
     }
 
-    /// M2d-C round 4 (settlement design v2, rules 4-5; addendum 1): every
-    /// Stop path (the Owner's Stop of one mission or of all, the emergency
-    /// Stop, the time budget), and with `halt` false every other end of a
-    /// mission whose File is unresolved, in this order:
-    /// 1. with no lock held, the port's memory-only stop, first, if a File
-    ///    may be live there (`halt_all`): its scope is the port's shared
-    ///    door, so every unfinished mission is then stopped with these
-    ///    (`door_halted`), none left looking runnable;
-    /// 2. each mission's first step under the lock: terminal already, or
+    /// M2d-C round 5 (settlement design v2, rules 4-5; D1, H3, C2): the
+    /// stopping of `targets`, whose halt cells their callers engaged first
+    /// (before any lock or write; engaged again here, idempotently):
+    /// 1. each mission's first step under the lock: terminal already, or
     ///    its settlement already begun (the first cause stands), it is left
     ///    as it is; one with an unresolved File journals `SettlementStarted`
     ///    (the journal's own failure machinery: a failed append still leaves
     ///    it settling, in memory) and is never runnable again; any other is
     ///    stopped (or, for the time budget, blocked) as before;
-    /// 3. only then, every settling mission is withdrawn, and then read
+    /// 2. only then, every settling mission is withdrawn, and then read
     ///    once and ended (`reconcile`). Nothing waits.
+    ///
+    /// Only `targets` are stopped (C4): other missions stay runnable. A
+    /// poisoned coordinator lock is a typed error for each, never a panic.
     fn barrier(
         &self,
         targets: Vec<(MissionId, SettleCause)>,
-        halt: bool,
     ) -> Vec<(MissionId, Result<MissionState, CoordinatorError>)> {
-        let mut all = targets;
-        if halt && self.port.halt_all() {
-            let others: Vec<MissionId> = self.peek(|inner| {
-                inner
-                    .missions
-                    .iter()
-                    .filter(|(id, m)| !m.state.is_terminal() && !all.iter().any(|(t, _)| t == *id))
-                    .map(|(id, _)| *id)
-                    .collect()
-            });
-            all.extend(
-                others
-                    .into_iter()
-                    .map(|id| (id, SettleCause::Stop(StopReason::DoorHalted))),
-            );
+        for (id, _) in &targets {
+            self.cells.engage(*id);
         }
+        let all = targets;
         let mut results = Vec::with_capacity(all.len());
         let mut settling = Vec::new();
         for (id, cause) in all {
@@ -2622,7 +2843,7 @@ impl<P: EffectPort> Coordinator<P> {
 
     /// Step 2 of [`Self::barrier`], in one hold of the lock.
     fn stop_step(&self, id: MissionId, cause: SettleCause) -> Result<Stepped, CoordinatorError> {
-        self.with_lock(|inner| {
+        self.try_with_lock(|inner| {
             inner.clear_detail(id);
             let mission = inner.mission(id)?;
             if mission.state.is_terminal() {
@@ -2656,6 +2877,7 @@ impl<P: EffectPort> Coordinator<P> {
                 let mission = inner.mission(id)?;
                 mission.state = MissionState::Stopped;
                 mission.generation += 1;
+                inner.after_transition(id, &Trigger::Stop { reason }, MissionState::Stopped);
             }
             Ok(Stepped::Stopped(journaled, may_have_dispatched))
         })
@@ -2780,18 +3002,55 @@ impl<P: EffectPort> Coordinator<P> {
     /// Stop every mission that has not ended, through one barrier. Returns
     /// how many it stopped or (a File's settlement) blocked.
     pub fn stop_all(&self) -> usize {
-        let live: Vec<(MissionId, SettleCause)> = self.peek(|inner| {
-            inner
-                .missions
-                .iter()
-                .filter(|(_, m)| !m.state.is_terminal())
-                .map(|(id, _)| (*id, SettleCause::Stop(StopReason::Owner)))
-                .collect()
-        });
-        self.barrier(live, true)
+        self.stop_everything().unwrap_or(0)
+    }
+
+    /// Round 5 (C2, D1): [`Self::stop_all`] with its typed error. ONE
+    /// snapshot of this journal's cells (the cohort) is taken under the halt
+    /// table's lock, engaged once it is released, and exactly that cohort
+    /// is then stopped: a mission registered after the snapshot is ordered
+    /// after this call and is not stopped. A poisoned coordinator lock is
+    /// `Poisoned` once the cells are engaged, never a panic.
+    pub fn stop_everything(&self) -> Result<usize, CoordinatorError> {
+        let cohort = self.cells.engage_cohort();
+        #[cfg(test)]
+        self.hooks.after_halt.fire();
+        let targets = cohort
+            .into_iter()
+            .map(|id| (id, SettleCause::Stop(StopReason::Owner)))
+            .collect();
+        let results = self.barrier(targets);
+        if results
+            .iter()
+            .any(|(_, r)| matches!(r, Err(CoordinatorError::Poisoned)))
+        {
+            return Err(CoordinatorError::Poisoned);
+        }
+        Ok(results
             .into_iter()
             .filter(|(_, state)| matches!(state, Ok(MissionState::Stopped | MissionState::Blocked)))
-            .count()
+            .count())
+    }
+
+    /// Round 5 (C2, C4): the Owner's emergency stop, found by `id`'s call:
+    /// this journal's cohort's cells and the door's memory stop first, then
+    /// exactly that cohort is stopped; `id`'s result.
+    fn emergency(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        let cohort = self.cells.engage_cohort();
+        self.port.emergency_halt();
+        #[cfg(test)]
+        self.hooks.after_halt.fire();
+        let mut targets: Vec<(MissionId, SettleCause)> = cohort
+            .into_iter()
+            .map(|m| (m, SettleCause::Stop(StopReason::EmergencyStop)))
+            .collect();
+        if !targets.iter().any(|(m, _)| *m == id) {
+            targets.push((id, SettleCause::Stop(StopReason::EmergencyStop)));
+        }
+        self.barrier(targets)
+            .into_iter()
+            .find(|(mission, _)| *mission == id)
+            .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)
     }
 
     /// M2d-C round 4 (addendum 5): what the Owner is told of a mission whose

@@ -21,6 +21,7 @@ use crate::journal::MissionId;
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
+use nexus_governed_control::authority::halt_cell::{HaltCell, HaltCells};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
@@ -287,11 +288,16 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// its pin. Idempotent; one that fails is kept and tried again with
     /// the next acknowledgement (and on every reopen, from the journal).
     fn ack(&self, mission: MissionId, pending: &PendingAction) -> Result<(), EffectRefusal>;
-    /// M2d-C round 4 (rule 3, addendum 1): engage the port's memory-only
-    /// stop first, before any lock, if a File may be live at it. Returns
-    /// whether it did: then every mission of this port is stopped with it
-    /// (its scope is the port's shared door).
-    fn halt_all(&self) -> bool;
+    /// M2d-C round 5 (C1): the agent's partition of the broker's halt
+    /// table (taken once, when the coordinator opens; not on a Stop path).
+    fn halt_cells(&self) -> HaltCells;
+    /// M2d-C round 5 (H2, C1): the mission's halt cell, bound before the
+    /// mission is exposed: its run is opened with it, and an adoption for
+    /// it attaches it.
+    fn bind_halt(&self, mission: MissionId, cell: HaltCell);
+    /// M2d-C round 5 (C2, C4): the emergency's door-wide memory stop
+    /// (lock-free, no I/O, no panic), with its cohort's cells.
+    fn emergency_halt(&self);
     /// The identity of the action `mission` waits on, if the port knows it.
     fn pending(&self, mission: MissionId) -> Option<PendingAction>;
     /// A reopened coordinator hands back the journaled action of a mission

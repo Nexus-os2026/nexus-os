@@ -150,9 +150,14 @@ Coordinator rules the oracles pin:
   "A file may exist in your folder. A write already handed off may still
   finish. Mother will not retry or continue this mission."
   Every Stop path (the Owner's, Stop everything, the emergency Stop, the
-  time budget) first engages the port's memory-only stop when a File may
-  be live there (the shared door's halt: every mission of the port is then
-  stopped, `door_halted`), before any lock or journal write; then each
+  time budget) first engages the mission's halt cell (round 5: a deny-only
+  flag in the broker's table, found by the journal's identity and the
+  mission, the same cell across a rebuilt coordinator or port; its run
+  carries it from its opening or adoption, and its token reads it at the
+  final check), before any coordinator, port or registry lock and before
+  any journal or evidence write. A mission Stop ends only that mission;
+  Stop everything and the emergency Stop end one snapshot cohort (the
+  emergency also halts the door); then each
   mission's first step journals `SettlementStarted` for an unresolved File
   (never runnable again, its first cause kept, on replay too); only then
   are they withdrawn and each read once. Pending, uncertain, unknown or

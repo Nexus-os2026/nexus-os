@@ -349,17 +349,46 @@ pub trait JournalStore: Send {
     /// Mark the journal unreliable, durably: every later load is refused
     /// with [`JournalError::Poisoned`].
     fn poison(&mut self) -> Result<(), JournalError>;
+    /// M2d-C round 5 (C1): an identity of this journal, stable across
+    /// reopening it and distinct from every other journal's, naming its
+    /// missions' halt cells at the broker. `None`: the coordinator takes one
+    /// of its own (good for one coordinator's lifetime only).
+    fn identity(&self) -> Option<String> {
+        None
+    }
+}
+
+/// M2d-C round 5: identities for journals that have none of their own.
+static NEXT_IDENTITY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// A process-unique identity (`label:n`).
+pub(crate) fn fresh_identity(label: &str) -> String {
+    let n = NEXT_IDENTITY.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    format!("{label}:{n}")
 }
 
 /// A journal kept in memory. Clones share the same lines, so a test can
 /// rebuild a coordinator from what an earlier one wrote (a restart) or
 /// edit a line (tampering).
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct MemoryJournal {
     lines: Arc<Mutex<Vec<String>>>,
     poisoned: Arc<Mutex<bool>>,
     /// Tests: appends fail once this many more have succeeded.
     fail_after: Arc<Mutex<Option<usize>>>,
+    /// Round 5: this journal's identity, shared by its clones.
+    identity: Arc<String>,
+}
+
+impl Default for MemoryJournal {
+    fn default() -> Self {
+        Self {
+            lines: Arc::default(),
+            poisoned: Arc::default(),
+            fail_after: Arc::default(),
+            identity: Arc::new(fresh_identity("memory")),
+        }
+    }
 }
 
 impl MemoryJournal {
@@ -387,6 +416,10 @@ impl MemoryJournal {
 }
 
 impl JournalStore for MemoryJournal {
+    fn identity(&self) -> Option<String> {
+        Some(self.identity.to_string())
+    }
+
     fn load(&self) -> Result<Vec<String>, JournalError> {
         if self.is_poisoned() {
             return Err(JournalError::Poisoned);

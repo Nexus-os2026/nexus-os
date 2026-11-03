@@ -50,6 +50,7 @@ use nexus_governed_control::authority::approval::{
 };
 use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::authority::evidence::MemoryEvidence;
+use nexus_governed_control::authority::halt_cell::{HaltCell, HaltCells};
 use nexus_governed_control::authority::{Authority, AuthorityError};
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
@@ -130,8 +131,6 @@ struct PortState {
     /// and how often it was engaged.
     acked: Vec<PendingAction>,
     ack_fails: bool,
-    halt_scope: bool,
-    halts: usize,
 }
 
 /// M2d-C round 4: the identity a recording port's File snapshot carries
@@ -151,6 +150,8 @@ fn recorded_action() -> PendingAction {
 /// confirmer, so a consent is only ever made from the broker's own answer.
 pub struct RecordingPort {
     state: Mutex<PortState>,
+    /// M2d-C round 5: a halt table of its own (no broker owns it).
+    cells: HaltCells,
     changed: Condvar,
     pub broker: Authority,
     pub evidence: Arc<MemoryEvidence>,
@@ -161,6 +162,7 @@ impl Default for RecordingPort {
         let evidence = Arc::new(MemoryEvidence::new(4096));
         Self {
             state: Mutex::new(PortState::default()),
+            cells: HaltCells::detached(crate::adapter::mother_agent()),
             changed: Condvar::new(),
             broker: Authority::new(evidence.clone(), Arc::new(ManualClock::default())),
             evidence,
@@ -321,16 +323,6 @@ impl RecordingPort {
         self.lock().ack_fails = fail;
     }
 
-    /// M2d-C round 4: `halt_all` reports (and engages) a port-wide stop.
-    pub fn set_halt_scope(&self, port_wide: bool) {
-        self.lock().halt_scope = port_wide;
-    }
-
-    /// How often `halt_all` was called.
-    pub fn halts(&self) -> usize {
-        self.lock().halts
-    }
-
     /// M2d-C (review 2): the broker read fails.
     pub fn fail_publication(&self) {
         self.lock().publication_fails = true;
@@ -466,11 +458,15 @@ impl EffectPort for RecordingPort {
         Ok(())
     }
 
-    fn halt_all(&self) -> bool {
-        let mut state = self.lock();
-        state.halts += 1;
-        state.halt_scope
+    fn halt_cells(&self) -> HaltCells {
+        self.cells.clone()
     }
+
+    /// Opens no run: nothing to bind.
+    fn bind_halt(&self, _: MissionId, _: HaltCell) {}
+
+    /// Has no door.
+    fn emergency_halt(&self) {}
 
     fn workspace(&self) -> Option<String> {
         match &self.lock().workspace {
