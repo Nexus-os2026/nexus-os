@@ -432,6 +432,30 @@
 //!     let _ = detail.clone();
 //! }
 //! ```
+//!
+//! Codex review 1 of PR #64 (M1, §6.6): the Owner's bounded retry of owed
+//! Files cleanup is the front door's only. Its compiling twin:
+//!
+//! ```
+//! use nexus_governed_control::governed::GovernedControl;
+//! let _ = GovernedControl::files_retry_cleanup;
+//! ```
+//!
+//! The probe, compiling only while it is absent from the door:
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! struct Absent;
+//! trait Probe {
+//!     fn files_retry_cleanup(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for AgentDoor {}
+//! fn probe(mut door: AgentDoor) {
+//!     let _: Absent = door.files_retry_cleanup();
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 
