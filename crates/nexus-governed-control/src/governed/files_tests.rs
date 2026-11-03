@@ -1254,6 +1254,55 @@ fn m2d_b1_d_o18_d_subtree_bind_mounts_are_refused() {
     assert_eq!(outcomes, expected);
 }
 
+/// A mountinfo path field (root or mount point) as the kernel escapes it,
+/// decoded for the independent evaluator, separately from the production
+/// parser's decoder: exactly the four escapes the kernel writes (`\040`
+/// space, `\011` tab, `\012` newline, `\134` backslash), in one pass, so
+/// a decoded backslash never starts another escape (Codex review 6).
+fn decoded(field: &str) -> PathBuf {
+    let mut out = String::new();
+    let mut rest = field;
+    while let Some(at) = rest.find('\\') {
+        out.push_str(&rest[..at]);
+        let escape = rest.get(at + 1..at + 4);
+        let replacement = match escape {
+            Some("040") => Some(' '),
+            Some("011") => Some('\t'),
+            Some("012") => Some('\n'),
+            Some("134") => Some('\\'),
+            _ => None,
+        };
+        match replacement {
+            Some(c) => {
+                out.push(c);
+                rest = &rest[at + 4..];
+            }
+            None => {
+                out.push('\\');
+                rest = &rest[at + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    PathBuf::from(out)
+}
+
+/// Codex review 6: the evaluator's decoder, seam-free: a mount point with a
+/// space (`/mnt/ci\040tmp`) is `/mnt/ci tmp`, and a path below it is
+/// below it component-wise; tab, newline and backslash decode; a decoded
+/// backslash does not start another escape.
+#[test]
+fn m2d_b1_d_o18_e_the_evaluator_decodes_kernel_escapes() {
+    let point = decoded("/mnt/ci\\040tmp");
+    assert_eq!(point, PathBuf::from("/mnt/ci tmp"));
+    assert!(Path::new("/mnt/ci tmp/nexus/ws").starts_with(&point));
+    assert!(!Path::new("/mnt/ci/tmp").starts_with(&point));
+    assert_eq!(decoded("/a\\011b\\012c"), PathBuf::from("/a\tb\nc"));
+    assert_eq!(decoded("/a\\134b"), PathBuf::from("/a\\b"));
+    assert_eq!(decoded("/a\\134040"), PathBuf::from("/a\\040"));
+    assert_eq!(decoded("/"), PathBuf::from("/"));
+}
+
 /// The parser on real data (no seam), whatever this host's topology (Codex
 /// review 5, LOW 2): `/proc/self/mountinfo` is read and every line of it
 /// parsed; and the decision for the workspace and for `/` agrees with the
@@ -1285,16 +1334,16 @@ fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
         let listed: Vec<&Vec<&str>> = lines.iter().filter(|f| f[2] == device).collect();
         let supported = match listed.as_slice() {
             [only] => {
-                let point = Path::new(only[4]);
+                let point = decoded(only[4]);
                 let between = lines.iter().any(|other| {
-                    let at = Path::new(other[4]);
+                    let at = decoded(other[4]);
                     other[0] != only[0]
                         && (at == path
-                            || (at != point && at.starts_with(point) && path.starts_with(at)))
+                            || (at != point && at.starts_with(&point) && path.starts_with(&at)))
                 });
-                only[3] == "/"
+                decoded(only[3]) == Path::new("/")
                     && ["ext4", "xfs", "tmpfs"].contains(&fstype(only).as_str())
-                    && path.starts_with(point)
+                    && path.starts_with(&point)
                     && !between
             }
             _ => false,
@@ -1307,7 +1356,7 @@ fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
         match crate::files::mount_of(&path) {
             Ok(mount) => {
                 assert!(supported, "accepted although the rule refuses: {mount:?}");
-                assert_eq!(mount.mount_point, PathBuf::from(listed[0][4]));
+                assert_eq!(mount.mount_point, decoded(listed[0][4]));
                 assert!(path.starts_with(&mount.mount_point), "{mount:?}");
                 assert_eq!(format!("{}:{}", mount.major, mount.minor), device);
                 assert_eq!(mount.root, std::ffi::OsString::from("/"), "{mount:?}");
