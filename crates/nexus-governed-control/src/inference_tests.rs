@@ -13,7 +13,7 @@
 //! the `Dispatch` notification and M3-O44/O45. Until it lands, E-O23b
 //! requires the send time to be absent from every record, never 0.
 
-use super::ModelIdentityView;
+use super::{ModelCallOutcome, ModelIdentityView};
 use crate::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ControlConfirmer,
     GrantConfirmation, MissionConfirmation, MissionResumeConfirmation, ResumeConfirmation,
@@ -535,6 +535,7 @@ impl Fx {
     fn call(&self, run: RunId, meter: &Meter) -> Result<ModelReply, AuthorityError> {
         self.door
             .model_call(run, &request("Rosa's bakery."), meter, &Deadline::default())
+            .and_then(ModelCallOutcome::into_result)
     }
 
     /// One call of `door`'s `run` on another thread.
@@ -545,7 +546,10 @@ impl Fx {
         meter: &Arc<Meter>,
     ) -> Receiver<Result<ModelReply, AuthorityError>> {
         let (door, meter) = (door.clone(), meter.clone());
-        in_thread(move || door.model_call(run, &request("x"), &*meter, &Deadline::default()))
+        in_thread(move || {
+            door.model_call(run, &request("x"), &*meter, &Deadline::default())
+                .and_then(ModelCallOutcome::into_result)
+        })
     }
 
     fn records(&self, phase: EvidencePhase) -> Vec<EvidenceRecord> {
@@ -687,7 +691,11 @@ fn e_o20_each_refusal_reaches_nothing_and_has_a_positive_control() {
     let _ = halted.halt(HaltReason::JournalFailed).write();
     let fresh = f.door.open_run().unwrap();
     assert_eq!(
-        class(halted.model_call(halted_run, &request("x"), &*meter, &Deadline::default())),
+        class(
+            halted
+                .model_call(halted_run, &request("x"), &*meter, &Deadline::default())
+                .and_then(ModelCallOutcome::into_result)
+        ),
         "halted"
     );
     assert_eq!(
@@ -714,6 +722,7 @@ fn e_o20_each_refusal_reaches_nothing_and_has_a_positive_control() {
     assert_eq!(f.call(run, &meter).unwrap().content(), FINISH);
     other
         .model_call(theirs, &request("x"), &*meter, &Deadline::default())
+        .and_then(ModelCallOutcome::into_result)
         .unwrap();
     assert_eq!(meter.charged(), 2);
     assert_eq!(f.fake.count("/api/chat"), 2);
@@ -867,7 +876,10 @@ fn e_o22_the_mission_deadline_ends_a_held_chat() {
     let deadline = Arc::new(Deadline::default());
     let rx = {
         let (door, deadline) = (f.door.clone(), deadline.clone());
-        in_thread(move || door.model_call(run, &request("x"), &*Meter::new(), &*deadline))
+        in_thread(move || {
+            door.model_call(run, &request("x"), &*Meter::new(), &*deadline)
+                .and_then(ModelCallOutcome::into_result)
+        })
     };
     f.fake.wait_for(Event::Request("/api/chat".into()));
     deadline.0.store(true, Ordering::SeqCst);
@@ -1003,6 +1015,7 @@ fn e_o23_one_restricted_record_per_attempt_and_no_canary_anywhere() {
     let call = |f: &Fx| {
         f.door
             .model_call(run, &request(&prompt), &*meter, &Deadline::default())
+            .and_then(ModelCallOutcome::into_result)
     };
     let mut errors = Vec::new();
 
@@ -1297,7 +1310,10 @@ fn e_o24_no_broker_lock_is_held_across_the_meter_the_exchange_or_the_record() {
     }
     let rx = {
         let (door, meter) = (f.door.clone(), meter.clone());
-        in_thread(move || door.model_call(run, &request("x"), &*meter, &Deadline::default()))
+        in_thread(move || {
+            door.model_call(run, &request("x"), &*meter, &Deadline::default())
+                .and_then(ModelCallOutcome::into_result)
+        })
     };
     assert_eq!(class(within(&rx, PATIENCE, "the probed call")), "ok");
     assert_eq!(*in_charge.lock().unwrap(), [true], "in charge");
