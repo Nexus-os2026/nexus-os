@@ -263,25 +263,57 @@ pub fn kill_and_reap(child: &mut Child) -> Option<std::process::ExitStatus> {
     }
 }
 
-/// Kill a child's whole process group (the child's own group), then reap
-/// the child within `REAP`; its exit status, if it was reaped.
-fn kill_group(child: &mut Child) -> Option<std::process::ExitStatus> {
-    let group = child.id().to_string();
-    let _ = Command::new(tool("kill"))
-        .args(["-KILL", "--", &format!("-{group}")])
+/// The process group a cleanup may signal, from the pid of a child the
+/// harness spawned in its own group. (Oracle commit of decision 3:
+/// unchecked, as before.)
+pub fn checked_pgid(pid: u32) -> Result<i32, String> {
+    Ok(pid as i32)
+}
+
+/// What a group signal's result means. (Oracle commit: discarded, as
+/// before.)
+pub fn signal_outcome(result: Result<(), nix::errno::Errno>, pgid: i32) -> Result<(), String> {
+    let _ = (result, pgid);
+    Ok(())
+}
+
+/// SIGKILL to the owned process group of the child `pid`. (Oracle commit:
+/// still the external `kill` command, found on PATH, its result
+/// discarded.)
+pub fn signal_group(pid: u32) -> Result<(), String> {
+    let pgid = checked_pgid(pid)?;
+    let _ = Command::new("kill")
+        .args(["-KILL", "--", &format!("-{pgid}")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+    Ok(())
+}
+
+/// Kill a child's whole process group (the child's own group), then reap
+/// the child; the cleanup is bounded by `within`.
+pub fn kill_group_within(
+    child: &mut Child,
+    within: Duration,
+) -> Result<std::process::ExitStatus, String> {
+    signal_group(child.id())?;
     let _ = child.kill();
-    let deadline = Instant::now() + REAP;
+    let deadline = Instant::now() + within;
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return Some(status),
+            Ok(Some(status)) => return Ok(status),
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            _ => return None,
+            Ok(None) => return Err(format!("the killed child was not reaped within {within:?}")),
+            Err(e) => return Err(format!("reaping the killed child: {e}")),
         }
     }
+}
+
+/// Kill a child's whole process group (the child's own group), then reap
+/// the child within `REAP`; its exit status, if it was reaped.
+fn kill_group(child: &mut Child) -> Option<std::process::ExitStatus> {
+    kill_group_within(child, REAP).ok()
 }
 
 /// What supervising one owned child gave: its stdout and stderr lines, its

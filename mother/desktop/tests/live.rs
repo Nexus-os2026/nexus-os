@@ -629,3 +629,138 @@ fn h6_a_child_that_closes_its_streams_but_lives_is_killed_and_reaped() {
     );
     assert!(status.is_some(), "the killed child was not reaped");
 }
+
+// ── Decision 3, item 1: the harness's cleanup is checked and bounded ──────
+//
+// No oracle here signals a process it did not plant: a failed signal and a
+// gone group are judged on the pure decision functions, and the refusal
+// of pgid 0 or 1 (which would signal every process this user owns) is
+// checked without sending anything.
+
+#[test]
+fn h7_a_failed_group_signal_fails_and_only_a_gone_group_is_gone() {
+    use nix::errno::Errno;
+    for refused in [0, 1, u32::MAX] {
+        assert!(
+            harness::checked_pgid(refused).is_err(),
+            "process group {refused} must never be signalled"
+        );
+    }
+    let own = nix::unistd::getpgrp().as_raw() as u32;
+    assert!(
+        harness::checked_pgid(own).is_err(),
+        "never the harness's own group"
+    );
+    assert_eq!(harness::checked_pgid(424242), Ok(424242));
+    assert_eq!(harness::signal_outcome(Ok(()), 4242), Ok(()));
+    assert_eq!(
+        harness::signal_outcome(Err(Errno::ESRCH), 4242),
+        Ok(()),
+        "a gone group is gone"
+    );
+    for error in [Errno::EPERM, Errno::EINVAL] {
+        assert!(
+            harness::signal_outcome(Err(error), 4242).is_err(),
+            "a refused signal ({error}) was discarded as success"
+        );
+    }
+}
+
+const H8_ROLE: &str = "NEXUS_DESKTOP_CLEANUP_ROLE";
+
+/// The cleanup role: a no-op unless h8 re-runs this binary for it. It
+/// kills and reaps a child it planted within 2 s and says how that went.
+#[test]
+fn h8_cleanup_role() {
+    use std::os::unix::process::CommandExt;
+    let Some(pidfile) = std::env::var_os(H8_ROLE) else {
+        return;
+    };
+    let mut planted = std::process::Command::new("sleep")
+        .arg("600")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    std::fs::write(&pidfile, planted.id().to_string()).unwrap();
+    match harness::kill_group_within(&mut planted, Duration::from_secs(2)) {
+        Ok(_) => println!("H8-CLEANUP reaped"),
+        Err(e) => println!("H8-CLEANUP failed: {e}"),
+    }
+}
+
+#[test]
+fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
+    use std::io::Read;
+    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::process::CommandExt;
+    // A fake `kill` that hangs, first on the role's PATH: an external
+    // command can hold the cleanup forever; native signalling cannot.
+    let temp = harness::fresh_dir("fake-kill");
+    let fake = temp.join("bin");
+    std::fs::create_dir_all(&fake).unwrap();
+    std::fs::write(fake.join("kill"), "#!/bin/sh\nexec sleep 600\n").unwrap();
+    std::fs::set_permissions(fake.join("kill"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let pidfile = temp.join("planted.pid");
+    let path = format!(
+        "{}:{}",
+        fake.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let mut role = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "h8_cleanup_role",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(H8_ROLE, &pidfile)
+        .env("PATH", path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let mut stdout = role.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stdout.read_to_string(&mut text);
+        text
+    });
+    let until = std::time::Instant::now() + Duration::from_secs(20);
+    let finished = loop {
+        if role.try_wait().unwrap().is_some() {
+            break true;
+        }
+        if std::time::Instant::now() > until {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    // The role's group (and a hung fake kill in it) never outlives the test.
+    let _ = harness::kill_group_within(&mut role, Duration::from_secs(10));
+    let text = reader.join().unwrap_or_default();
+    let reaped = text.lines().any(|l| l.contains("H8-CLEANUP reaped"));
+    // The planted child is signalled here only if the role did not reap it
+    // (it is then still alive, so its group is still the one planted).
+    if !reaped {
+        if let Some(pid) = std::fs::read_to_string(&pidfile)
+            .ok()
+            .and_then(|pid| pid.trim().parse::<u32>().ok())
+        {
+            let _ = harness::signal_group(pid);
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp);
+    assert!(
+        finished,
+        "the cleanup waited on a hung kill command past its deadline"
+    );
+    assert!(
+        reaped,
+        "the planted child was not killed and reaped: {text}"
+    );
+}
