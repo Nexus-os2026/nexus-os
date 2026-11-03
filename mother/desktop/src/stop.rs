@@ -16,31 +16,71 @@
 //! as such, never as a clean shutdown, and Quit then exits non-zero.
 
 use nexus_governed_control::governed::GovernedControl;
-use std::sync::Arc;
-use std::time::Duration;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 /// Live Stop workers allowed at once (A1).
 pub const MAX_STOP_WORKERS: usize = 4;
 
+/// One worker the route started.
+struct Worker {
+    id: u64,
+    handle: Option<JoinHandle<()>>,
+    done: bool,
+}
+
+#[derive(Default)]
+struct DeskState {
+    epoch: u64,
+    receipts: Receipts,
+    next_worker: u64,
+    workers: Vec<Worker>,
+}
+
 /// The confirmation desk's Stop half. M2b-A has no confirmations, so the
-/// desk holds only the epoch; M2b-B's desk plugs in here.
+/// desk holds only the epoch and the Stop route's receipts; M2b-B's desk
+/// plugs in here. Its mutex is never held across I/O, a broker call, a GTK
+/// call or a thread spawn.
 pub struct Desk {
-    _private: (),
+    state: Mutex<DeskState>,
+    changed: Condvar,
 }
 
 impl Desk {
     pub fn new() -> Arc<Self> {
-        unimplemented!("M2b-A PR-2 code")
+        Arc::new(Self {
+            state: Mutex::new(DeskState::default()),
+            changed: Condvar::new(),
+        })
+    }
+
+    /// The state, even after a panic elsewhere poisoned the mutex: its
+    /// fields are plain counters, valid at every point.
+    fn lock(&self) -> MutexGuard<'_, DeskState> {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// The current Stop epoch.
     pub fn epoch(&self) -> u64 {
-        unimplemented!("M2b-A PR-2 code")
+        self.lock().epoch
     }
 
     /// Stop's step 0: memory only. Returns the new epoch.
     pub fn cancel_all(&self) -> u64 {
-        unimplemented!("M2b-A PR-2 code")
+        let mut state = self.lock();
+        Self::cancel_all_in(&mut state)
+    }
+
+    /// Step 0 under an already held desk mutex. M2b-A: no request exists
+    /// to cancel; the epoch moves.
+    fn cancel_all_in(state: &mut DeskState) -> u64 {
+        state.epoch += 1;
+        state.receipts.epoch = state.epoch;
+        state.epoch
     }
 }
 
@@ -89,32 +129,119 @@ pub enum Joined {
 
 /// The Stop route: every Stop button and shortcut goes through it.
 pub struct StopRoute {
-    _private: (),
+    desk: Arc<Desk>,
+    owner: Arc<GovernedControl>,
 }
 
 impl StopRoute {
     pub fn new(desk: Arc<Desk>, owner: Arc<GovernedControl>) -> Arc<Self> {
-        let _ = (desk, owner);
-        unimplemented!("M2b-A PR-2 code")
+        Arc::new(Self { desk, owner })
     }
 
     pub fn desk(&self) -> &Arc<Desk> {
-        unimplemented!("M2b-A PR-2 code")
+        &self.desk
     }
 
     /// One press: the ingress, then a worker (or the coalescing receipt).
     pub fn press(&self) -> Press {
-        unimplemented!("M2b-A PR-2 code")
+        // The ingress: memory only, under the desk mutex alone.
+        let (epoch, worker) = {
+            let mut state = self.desk.lock();
+            let epoch = Desk::cancel_all_in(&mut state);
+            state.receipts.presses += 1;
+            if state.receipts.live >= MAX_STOP_WORKERS {
+                state.receipts.coalesced += 1;
+                return Press::Coalesced { epoch };
+            }
+            state.receipts.live += 1;
+            state.receipts.dispatched += 1;
+            state.next_worker += 1;
+            let id = state.next_worker;
+            state.workers.push(Worker {
+                id,
+                handle: None,
+                done: false,
+            });
+            (epoch, id)
+        };
+        // The blocking part, on its own new thread, after the unlock.
+        let desk = self.desk.clone();
+        let owner = self.owner.clone();
+        let spawned = std::thread::Builder::new()
+            .name(format!("nexus-stop-{worker}"))
+            .spawn(move || {
+                let panicked = catch_unwind(AssertUnwindSafe(|| {
+                    owner.emergency_stop();
+                }))
+                .is_err();
+                let mut state = desk.lock();
+                if let Some(entry) = state.workers.iter_mut().find(|w| w.id == worker) {
+                    entry.done = true;
+                }
+                state.receipts.live -= 1;
+                state.receipts.finished += 1;
+                if panicked {
+                    state.receipts.panicked += 1;
+                }
+                desk.changed.notify_all();
+            });
+        let mut state = self.desk.lock();
+        match spawned {
+            Ok(handle) => {
+                if let Some(entry) = state.workers.iter_mut().find(|w| w.id == worker) {
+                    entry.handle = Some(handle);
+                }
+                Press::Dispatched { epoch, worker }
+            }
+            Err(_) => {
+                state.workers.retain(|w| w.id != worker);
+                state.receipts.live -= 1;
+                state.receipts.dispatched -= 1;
+                state.receipts.spawn_failures += 1;
+                Press::SpawnFailed { epoch }
+            }
+        }
     }
 
     pub fn receipts(&self) -> Receipts {
-        unimplemented!("M2b-A PR-2 code")
+        self.desk.lock().receipts.clone()
     }
 
-    /// Join every worker started so far, within `within`.
+    /// Join every worker started so far, within `within`. A worker still
+    /// running at the bound is reported, never joined by waiting longer.
     pub fn join_within(&self, within: Duration) -> Joined {
-        let _ = within;
-        unimplemented!("M2b-A PR-2 code")
+        let deadline = Instant::now() + within;
+        let mut state = self.desk.lock();
+        loop {
+            let running = state.workers.iter().filter(|w| !w.done).count();
+            if running == 0 {
+                break;
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Joined::TimedOut {
+                    still_running: running,
+                };
+            }
+            state = self
+                .desk
+                .changed
+                .wait_timeout(state, left)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+        let handles: Vec<JoinHandle<()>> = state
+            .workers
+            .drain(..)
+            .filter_map(|mut w| w.handle.take())
+            .collect();
+        drop(state);
+        // Every one of these has marked itself done: it only returns now.
+        let joined = handles.len();
+        for handle in handles {
+            let _ = handle.join();
+        }
+        Joined::All { joined }
     }
 }
 
@@ -135,23 +262,83 @@ pub enum QuitOutcome {
 
 impl QuitOutcome {
     pub fn is_clean(&self) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        matches!(self, QuitOutcome::Clean { .. })
     }
 
     /// 0 only for a clean Quit.
     pub fn exit_code(&self) -> i32 {
-        unimplemented!("M2b-A PR-2 code")
+        if self.is_clean() {
+            0
+        } else {
+            3
+        }
     }
 
     /// What the app says on Quit.
     pub fn report(&self) -> String {
-        unimplemented!("M2b-A PR-2 code")
+        match self {
+            QuitOutcome::Clean {
+                joined,
+                runs_cancelled,
+            } => format!(
+                "Mother quit: {joined} Stop worker(s) joined; the broker shut down \
+                 ({runs_cancelled} open run(s) cancelled)."
+            ),
+            QuitOutcome::Unclean {
+                stop_workers_running: 0,
+                shut_down: false,
+            } => "Mother quit before the broker's shutdown finished: it is still running \
+                  (its evidence store did not answer in time)."
+                .to_string(),
+            QuitOutcome::Unclean {
+                stop_workers_running,
+                shut_down,
+            } => format!(
+                "Mother quit with {stop_workers_running} Stop worker(s) still running \
+                 (their evidence writes did not finish in time); the broker was {}shut down. \
+                 The Stop itself is in force: its memory step happened before its records.",
+                if *shut_down { "" } else { "not " }
+            ),
+        }
     }
 }
 
 /// Quit (design §6.6, A3): join the Stop workers, then shut the broker
-/// down, everything within `within`.
+/// down, everything within `within`. A wait that times out is reported as
+/// such; nothing after it is attempted that could block on the store.
 pub fn quit(route: &StopRoute, owner: &Arc<GovernedControl>, within: Duration) -> QuitOutcome {
-    let _ = (route, owner, within);
-    unimplemented!("M2b-A PR-2 code")
+    let deadline = Instant::now() + within;
+    let joined = match route.join_within(within) {
+        Joined::All { joined } => joined,
+        Joined::TimedOut { still_running } => {
+            return QuitOutcome::Unclean {
+                stop_workers_running: still_running,
+                shut_down: false,
+            }
+        }
+    };
+    // The shutdown writes records too: on its own thread, within the bound.
+    let (tx, rx) = mpsc::channel();
+    let broker = owner.clone();
+    let spawned = std::thread::Builder::new()
+        .name("nexus-quit".into())
+        .spawn(move || {
+            let _ = tx.send(broker.shut_down());
+        });
+    if spawned.is_err() {
+        return QuitOutcome::Unclean {
+            stop_workers_running: 0,
+            shut_down: false,
+        };
+    }
+    match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        Ok(runs_cancelled) => QuitOutcome::Clean {
+            joined,
+            runs_cancelled,
+        },
+        Err(_) => QuitOutcome::Unclean {
+            stop_workers_running: 0,
+            shut_down: false,
+        },
+    }
 }

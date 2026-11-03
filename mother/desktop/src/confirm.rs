@@ -12,24 +12,24 @@ pub struct NoDialogs;
 
 impl ControlConfirmer for NoDialogs {
     fn confirm_action(&self, _: &ActionConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
     fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
     fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
     fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
     fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
     fn confirm_held_mission(&self, _: &MissionResumeConfirmation) -> bool {
-        unimplemented!("M2b-A PR-2 code")
+        false
     }
 }

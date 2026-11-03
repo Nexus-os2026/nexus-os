@@ -4,9 +4,18 @@
 
 use std::ffi::OsStr;
 
-/// Whether `GTK_DEBUG` (its raw value, if set) asks for the inspector. A
-/// value that is not valid text counts as asking (fail closed).
+/// Whether `GTK_DEBUG` (its raw value, if set) asks for the inspector:
+/// one of its flags is `interactive` or `all` (GTK splits the value at
+/// commas, colons, semicolons and spaces). A value that is not valid text
+/// counts as asking (fail closed).
 pub fn inspector_requested(gtk_debug: Option<&OsStr>) -> bool {
-    let _ = gtk_debug;
-    unimplemented!("M2b-A PR-2 code")
+    let Some(value) = gtk_debug else {
+        return false;
+    };
+    let Some(text) = value.to_str() else {
+        return true;
+    };
+    text.split([',', ':', ';', ' ', '\t'])
+        .map(str::trim)
+        .any(|flag| flag.eq_ignore_ascii_case("interactive") || flag.eq_ignore_ascii_case("all"))
 }
