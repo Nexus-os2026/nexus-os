@@ -1538,3 +1538,44 @@ fn every_model_class_is_its_kernel_code_and_a_registered_reason() {
         assert!(crate::authority::REASONS.contains(&extra), "{extra}");
     }
 }
+
+// ---------------------------------------------------------------- PR #75 review 1
+
+/// Codex review 1 of PR #75, MEDIUM 1 (a): a known evidence failure
+/// permits no new inference. Once the evidence store has latched, a
+/// registration and a call of an already admitted run are each refused
+/// with `evidence_unavailable` before any request reaches the runtime and
+/// before any charge. Control: the same run called while the store was
+/// healthy.
+#[test]
+fn pr75_r1_m1_a_a_failed_store_refuses_registration_and_calls_before_any_request() {
+    use crate::evidence_store::Fault;
+    let scratch = Scratch::new();
+    let history = Arc::new(MemoryEvidence::new(10_000));
+    let primary = PrimaryEvidence::open(&scratch.store(), vec![history.clone()]).unwrap();
+    let f = Fx::over(primary.clone(), history);
+    f.register().unwrap();
+    let run = f.admitted(&f.door, 1);
+    assert_eq!(class(f.call(run, &Meter::new())), "ok", "control");
+
+    // The next record's commit fails: the store latches.
+    primary.store().plant_fault(Fault::FailCommit);
+    assert_eq!(class(f.door.open_run()), "evidence_unavailable");
+    assert!(primary.health().latched);
+    let (requests, meter) = (f.fake.total(), Meter::new());
+    assert_eq!(class(f.call(run, &meter)), "evidence_unavailable");
+    assert_eq!(f.fake.total(), requests, "no request reached the runtime");
+    assert_eq!(meter.charged(), 0, "nothing was charged");
+
+    // A registration against a latched store sends nothing either.
+    let scratch = Scratch::new();
+    let history = Arc::new(MemoryEvidence::new(10_000));
+    let primary = PrimaryEvidence::open(&scratch.store(), vec![history.clone()]).unwrap();
+    let g = Fx::over(primary.clone(), history);
+    primary.store().plant_fault(Fault::FailCommit);
+    assert_eq!(class(g.door.open_run()), "evidence_unavailable");
+    assert!(primary.health().latched);
+    assert_eq!(class(g.register()), "evidence_unavailable");
+    assert_eq!(g.fake.total(), 0, "no request reached the runtime");
+    assert_eq!(g.door.model_identity(), None);
+}
