@@ -154,6 +154,17 @@ impl AgentDoor {
             .open_run_in_with(self.core.agent.clone(), self.core.group, cell)
     }
 
+    /// M2d-C round 6 (X2): whether this agent's `run` carries `cell` (a
+    /// replayed reference to surviving work is checked against its original
+    /// cell); `None` when the broker holds no such run. Shows nothing else;
+    /// never panics.
+    pub fn run_carries(&self, run: RunId, cell: &HaltCell) -> Result<Option<bool>, AuthorityError> {
+        self.control
+            .authority()
+            .runs()
+            .run_carries(run, &self.core.agent, cell)
+    }
+
     /// Tests: this door's group.
     #[cfg(test)]
     pub(crate) fn group_for_test(&self) -> GroupId {

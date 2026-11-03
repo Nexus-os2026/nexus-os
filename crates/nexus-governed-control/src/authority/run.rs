@@ -745,6 +745,43 @@ impl RunRegistry {
         }
     }
 
+    /// M2d-C round 6 (X2): run `f` in one hold of the runs lock, given
+    /// whether an agent has a live (neither cancelled nor finished) agent
+    /// run. An unreadable registry is an error.
+    pub(crate) fn while_held<T>(
+        &self,
+        f: impl FnOnce(&dyn Fn(&AgentId) -> bool) -> T,
+    ) -> Result<T, AuthorityError> {
+        let runs = self.runs.lock().map_err(|_| unreadable())?;
+        let live = |agent: &AgentId| {
+            runs.values().any(|e| {
+                &e.view.agent == agent
+                    && e.class == RunClass::Agent
+                    && !e.view.cancelled
+                    && !e.view.finished
+            })
+        };
+        Ok(f(&live))
+    }
+
+    /// M2d-C round 6 (X2): whether `agent`'s run carries `cell`; `None` for
+    /// a run this registry does not hold. Never panics.
+    pub(crate) fn run_carries(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        cell: &HaltCell,
+    ) -> Result<Option<bool>, AuthorityError> {
+        let runs = self.runs.lock().map_err(|_| unreadable())?;
+        let Some(entry) = runs.get(&run) else {
+            return Ok(None);
+        };
+        if &entry.view.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        Ok(Some(entry.halts.iter().any(|h| h.same(cell))))
+    }
+
     /// Tests: poison the registry's lock (a panic while it was held).
     #[cfg(test)]
     pub(crate) fn poison_for_test(&self) {

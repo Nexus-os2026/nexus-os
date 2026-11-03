@@ -45,6 +45,8 @@ mod halt;
 mod pin;
 #[path = "files_exec_publication_tests.rs"]
 mod publication;
+#[path = "files_exec_r6_tests.rs"]
+mod r6;
 #[path = "files_exec_review1_tests.rs"]
 mod review1;
 #[path = "files_exec_review2_tests.rs"]

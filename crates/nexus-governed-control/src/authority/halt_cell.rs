@@ -14,7 +14,9 @@
 //! cell before exposing the mission or opening its run.
 
 use super::ids::AgentId;
+use super::run::RunRegistry;
 use super::AuthorityError;
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -88,14 +90,25 @@ impl HaltCell {
     pub fn cause(&self) -> Option<HaltCause> {
         HaltCause::of(self.0.load(Ordering::SeqCst))
     }
+
+    pub(crate) fn same(&self, other: &HaltCell) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 type Key = (AgentId, String, u64);
 
 /// The broker's table of halt cells (one per `Authority`).
+/// X2: what keeps a journal's identity from being reused while its cells
+/// live (an opaque handle of the caller's, such as its open file).
+type Anchor = Box<dyn Any + Send + Sync>;
+
 #[derive(Default)]
 pub(crate) struct HaltTable {
     cells: Mutex<HashMap<Key, HaltCell>>,
+    /// X2: one anchor per (agent, journal), dropped with its last cell. A
+    /// separate mutex, never taken while `cells` is held.
+    anchors: Mutex<HashMap<(AgentId, String), Anchor>>,
 }
 
 impl HaltTable {
@@ -119,17 +132,48 @@ impl HaltTable {
 pub struct HaltCells {
     table: Arc<HaltTable>,
     agent: AgentId,
+    /// X2: the runs registry the partition's emptiness reads.
+    runs: Arc<RunRegistry>,
 }
 
 impl HaltCells {
-    pub(crate) fn of(table: Arc<HaltTable>, agent: AgentId) -> Self {
-        Self { table, agent }
+    pub(crate) fn of(table: Arc<HaltTable>, agent: AgentId, runs: Arc<RunRegistry>) -> Self {
+        Self { table, agent, runs }
     }
 
     /// A table of its own, owned by no broker (a caller's tests): its cells
     /// only ever add refusals.
     pub fn detached(agent: AgentId) -> Self {
-        Self::of(Arc::default(), agent)
+        Self::of(Arc::default(), agent, Arc::default())
+    }
+
+    /// X2: keep `anchor` while any cell of `journal` lives (the first one
+    /// given stays; it is dropped with the journal's last cell).
+    pub fn anchor(&self, journal: &str, anchor: Anchor) {
+        let held = self
+            .table
+            .lock()
+            .keys()
+            .any(|(a, j, _)| *a == self.agent && j == journal);
+        if held {
+            self.table
+                .anchors
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry((self.agent.clone(), journal.to_string()))
+                .or_insert(anchor);
+        }
+    }
+
+    /// X2: whether the agent's whole partition is empty: no cell and no live
+    /// agent run of the agent, decided in one hold of the runs lock (the
+    /// table read inside it). An unreadable registry is an error.
+    pub fn partition_empty(&self) -> Result<bool, AuthorityError> {
+        self.runs.while_held(|live_run_of| {
+            let runs = live_run_of(&self.agent);
+            let cells = self.table.lock().keys().any(|(a, _, _)| *a == self.agent);
+            !runs && !cells
+        })
     }
 
     fn key(&self, journal: &str, mission: u64) -> Key {
@@ -180,7 +224,22 @@ impl HaltCells {
         if let Some(cell) = self.get(journal, mission) {
             cell.engage();
         }
-        self.table.lock().remove(&key);
+        let left = {
+            let mut cells = self.table.lock();
+            cells.remove(&key);
+            cells
+                .keys()
+                .any(|(a, j, _)| *a == self.agent && j == journal)
+        };
+        if !left {
+            let anchor = self
+                .table
+                .anchors
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&(self.agent.clone(), journal.to_string()));
+            drop(anchor);
+        }
     }
 
     /// Tests: poison the table's lock.
