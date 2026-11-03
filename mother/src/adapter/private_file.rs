@@ -123,6 +123,8 @@ fn durable_dir(dir: &Path) -> Result<(), PrivateError> {
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(io(e)),
         }
+        #[cfg(test)]
+        seam::created(level);
         unlinked().insert(level.clone());
         sync_dir(level).map_err(io)?;
         link(level)?;
@@ -317,6 +319,63 @@ pub(crate) mod seam {
     /// Every later sync of `dir` on this thread fails, until cleared.
     pub(crate) fn fail_sync_of(dir: Option<PathBuf>) {
         FAIL.with(|f| *f.borrow_mut() = dir);
+    }
+
+    /// A process-wide pause point: the thread that creates the armed
+    /// directory stops just after creating it, until released (bounded).
+    struct Pause {
+        armed: Option<PathBuf>,
+        paused: bool,
+        released: bool,
+    }
+
+    static PAUSE: std::sync::Mutex<Pause> = std::sync::Mutex::new(Pause {
+        armed: None,
+        paused: false,
+        released: false,
+    });
+    static CHANGED: std::sync::Condvar = std::sync::Condvar::new();
+    const BOUND: std::time::Duration = std::time::Duration::from_secs(10);
+
+    fn pause() -> std::sync::MutexGuard<'static, Pause> {
+        PAUSE.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// The next thread to create `dir` pauses just after creating it.
+    pub(crate) fn pause_after_creating(dir: Option<PathBuf>) {
+        let mut p = pause();
+        p.armed = dir;
+        p.paused = false;
+        p.released = false;
+    }
+
+    /// Whether a thread is paused there (waits for one, bounded).
+    pub(crate) fn wait_paused() -> bool {
+        let p = pause();
+        let (p, _) = CHANGED
+            .wait_timeout_while(p, BOUND, |p| !p.paused)
+            .unwrap_or_else(|e| e.into_inner());
+        p.paused
+    }
+
+    /// Let the paused thread go on, and disarm.
+    pub(crate) fn release() {
+        let mut p = pause();
+        p.released = true;
+        p.armed = None;
+        CHANGED.notify_all();
+    }
+
+    pub(super) fn created(level: &Path) {
+        let mut p = pause();
+        if p.armed.as_deref() != Some(level) {
+            return;
+        }
+        p.paused = true;
+        CHANGED.notify_all();
+        let _ = CHANGED
+            .wait_timeout_while(p, BOUND, |p| !p.released)
+            .unwrap_or_else(|e| e.into_inner());
     }
 
     pub(super) fn sync(dir: &Path) -> std::io::Result<()> {
