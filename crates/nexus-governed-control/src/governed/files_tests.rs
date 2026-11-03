@@ -1123,3 +1123,147 @@ fn m2d_b1_d_o18_c_aliases_are_decided_by_directory_identity() {
     ];
     assert_eq!(outcomes, expected);
 }
+
+// ---------------------------------------------------------------- Codex review 3 of PR #57
+
+/// `dev` as `major:minor` (the glibc encoding of `st_dev`).
+fn major_minor(dev: u64) -> String {
+    let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & !0xfff);
+    let minor = (dev & 0xff) | ((dev >> 12) & !0xff);
+    format!("{major}:{minor}")
+}
+
+fn dev_of(path: &Path) -> String {
+    use std::os::unix::fs::MetadataExt;
+    major_minor(std::fs::metadata(path).unwrap().dev())
+}
+
+/// Codex review 3 (MEDIUM): a location reached through a subtree bind mount
+/// (a mount whose root, field 4 of `/proc/self/mountinfo`, is not `/`) has
+/// ancestors no `..` walk visits, so the selection is refused
+/// (`unsupported_mount_topology`), as it is when the mount topology cannot
+/// be read, parsed or matched. A pure mountinfo seam feeds each topology;
+/// the directories, and their devices, are real.
+#[test]
+fn m2d_b1_d_o18_d_subtree_bind_mounts_are_refused() {
+    use crate::files::mountinfo_for_test;
+    let root = temp_root("m2d-b1-ws-mounts");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    for sub in ["data/reserved", "mnt/ws", "mnt/res", "plain/ws"] {
+        std::fs::create_dir_all(dirs.path(sub)).unwrap();
+    }
+    let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let ordinary = format!(
+        "1 0 {} / / rw,relatime shared:1 - ext4 /dev/root rw\n\
+         2 1 {} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
+        dev_of(Path::new("/")),
+        dev_of(&tmp),
+        tmp.display()
+    );
+    let bind = |id: u32, source: &str, point: &str| {
+        format!(
+            "{id} 2 {} {source} {} rw,relatime shared:3 - tmpfs tmpfs rw\n",
+            dev_of(&dirs.path(point)),
+            dirs.path(point).display()
+        )
+    };
+    let with = |reserved: Vec<PathBuf>| Exclusions {
+        home: dirs.path("home"),
+        identity_home: dirs.path("ident"),
+        reserved,
+        uid: crate::launcher::effective_uid(),
+    };
+    let select = |mountinfo: Option<Result<String, ()>>, path: &Path, reserved: Vec<PathBuf>| {
+        mountinfo_for_test(mountinfo);
+        let gov = control(&root, &evidence);
+        let result = gov
+            .register_workspace_in(path, &with(reserved))
+            .map(|_| ())
+            .map_err(|error| error.class());
+        mountinfo_for_test(None);
+        result
+    };
+    let refused = Err("unsupported_mount_topology");
+
+    let outcomes = vec![
+        (
+            "Codex's topology: the workspace is a bind of a reserved tree's subdirectory",
+            select(
+                Some(Ok(format!(
+                    "{ordinary}{}",
+                    bind(50, "/reserved/ws", "mnt/ws")
+                ))),
+                &dirs.path("mnt/ws"),
+                vec![dirs.path("data/reserved")],
+            ),
+        ),
+        (
+            "the reverse: a reserved location under a subtree bind",
+            select(
+                Some(Ok(format!(
+                    "{ordinary}{}",
+                    bind(51, "/reserved/x", "mnt/res")
+                ))),
+                &dirs.path("plain/ws"),
+                vec![dirs.path("mnt/res/future")],
+            ),
+        ),
+        (
+            "mountinfo cannot be read",
+            select(Some(Err(())), &dirs.path("plain/ws"), vec![]),
+        ),
+        (
+            "mountinfo is malformed",
+            select(
+                Some(Ok("33 2 259:6 / / rw shared:1 ext4\n".to_string())),
+                &dirs.path("plain/ws"),
+                vec![],
+            ),
+        ),
+        (
+            "no mount matches the workspace's device",
+            select(
+                Some(Ok(
+                    "1 0 4095:1048575 / / rw shared:1 - ext4 /dev/x rw\n".to_string()
+                )),
+                &dirs.path("plain/ws"),
+                vec![],
+            ),
+        ),
+        (
+            "control: ordinary mounts, root /",
+            select(Some(Ok(ordinary.clone())), &dirs.path("plain/ws"), vec![]),
+        ),
+    ];
+    let expected = vec![
+        (outcomes[0].0, refused),
+        (outcomes[1].0, refused),
+        (outcomes[2].0, refused),
+        (outcomes[3].0, refused),
+        (outcomes[4].0, refused),
+        (outcomes[5].0, Ok(())),
+    ];
+    assert_eq!(outcomes, expected);
+}
+
+/// The parser on real data (no seam): `/proc/self/mountinfo` of this host
+/// is read and parsed, and the mount found for the workspace, and for `/`,
+/// is the one whose mount point is the longest prefix of the path with the
+/// path's device; an ordinary host's are whole-filesystem mounts (root /).
+#[test]
+fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
+    use std::os::unix::fs::MetadataExt;
+    let dirs = Dirs::new();
+    for path in [dirs.ws(), PathBuf::from("/")] {
+        let mount = crate::files::mount_of(&path).expect("the path's mount is found");
+        assert!(path.starts_with(&mount.mount_point), "{mount:?}");
+        assert_eq!(
+            format!("{}:{}", mount.major, mount.minor),
+            major_minor(std::fs::metadata(&path).unwrap().dev())
+        );
+        assert_eq!(mount.root, std::ffi::OsString::from("/"), "{mount:?}");
+    }
+    let root_mount = crate::files::mount_of(Path::new("/")).unwrap();
+    assert_eq!(root_mount.mount_point, PathBuf::from("/"));
+}

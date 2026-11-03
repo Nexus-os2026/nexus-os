@@ -308,6 +308,41 @@ pub(crate) fn mount_alias_for_test(link: PathBuf) {
     MOUNTED.with(|mounted| mounted.borrow_mut().push(link));
 }
 
+/// One mount, as `/proc/self/mountinfo` describes it: its device
+/// (`major:minor`), its root within that filesystem (field 4) and its mount
+/// point (field 5), both unescaped.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Mount {
+    pub(crate) major: u64,
+    pub(crate) minor: u64,
+    pub(crate) root: std::ffi::OsString,
+    pub(crate) mount_point: PathBuf,
+}
+
+/// The mount that contains the directory at `path` (Codex review 3 of PR
+/// #57). Not read in this build.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn mount_of(_path: &Path) -> Result<Mount, AuthorityError> {
+    Err(AuthorityError::Unavailable(
+        "the mount topology is not read in this build",
+    ))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests only: the text this thread reads in place of
+    /// `/proc/self/mountinfo` (`Err`: unreadable), when set.
+    static MOUNTINFO: std::cell::RefCell<Option<Result<String, ()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Tests only: read `text` in place of `/proc/self/mountinfo` on this
+/// thread (`Some(Err(()))`: it cannot be read; `None`: the real one).
+#[cfg(test)]
+pub(crate) fn mountinfo_for_test(text: Option<Result<String, ()>>) {
+    MOUNTINFO.with(|mountinfo| *mountinfo.borrow_mut() = text);
+}
+
 /// Where a protected or reserved location is: its longest existing
 /// ancestor, canonical (`existing`), the location itself (`real`: `existing`
 /// with the missing components appended), and whether it exists completely
