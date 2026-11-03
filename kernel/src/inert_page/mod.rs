@@ -14,27 +14,70 @@
 //! - S3, a strict parse into the typed tree ([`Page`]);
 //! - S4, canonical byte equality: `serialize(parse(input)) == input`.
 //!
+//! [`PageVerdict`] binds the outcome to the candidate's SHA-256, the policy
+//! hash and the approved facts ([`ApprovedFacts`], checked by
+//! [`check_facts`], FC-1 to FC-4). A missing fact never changes the pass
+//! label; a facts pass adds a separate facts line. [`facts_report`] gives
+//! every facts check's result (M3's Verifier); `check_facts` is its first
+//! error.
+//!
 //! The module does no I/O and takes no clock or lock. Its time is linear in
-//! the input, which is capped at `POLICY_V1.max_page_bytes`.
+//! the input, which is capped at `POLICY_V1.max_page_bytes` (S-O15 counts
+//! the work).
 //!
 //! Not claimed here: anything about how a browser lays the page out (the
-//! 375 px and 1366 px views stay open), the truth of the prose, or the
-//! approved facts (S1a-B).
+//! 375 px and 1366 px views stay open), or the truth of the prose beyond the
+//! approved facts.
 
 #![forbid(unsafe_code)]
 
+mod facts;
 mod parse;
 mod policy;
 mod scan;
 mod tree;
+mod verdict;
 
 #[cfg(test)]
 mod tests;
 
+pub use facts::{check_facts, facts_report, ApprovedFacts, FactCode, FactsReport};
 pub use policy::{policy_hash, PolicyParams, LABEL_PASSED, MOTHER_CSS, POLICY_V1};
 pub use tree::{
     Attrs, Block, Class, Inline, Leaf, List, Main, MainItem, Page, Region, Section, Tag,
 };
+pub use verdict::{FactsMarker, PageOutcome, PageVerdict};
+
+/// S-O15's deterministic work counter. In test builds every bounded step of
+/// the check adds to a per-thread count; in other builds [`work::add`] is
+/// empty and compiles away. It is a count, not a clock or a lock.
+///
+/// A step is one iteration of a loop over the input (a byte, a character, a
+/// node), whose body is bounded by the fixed policy tables alone; scanning
+/// or copying a run of the input, and comparing two input texts, count one
+/// step per byte.
+mod work {
+    #[cfg(test)]
+    thread_local! {
+        static STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Counts `n` steps.
+    #[inline(always)]
+    pub(super) fn add(n: usize) {
+        #[cfg(test)]
+        STEPS.with(|s| s.set(s.get().saturating_add(n as u64)));
+        #[cfg(not(test))]
+        let _ = n;
+    }
+
+    /// The steps counted on this thread since the last call, which resets
+    /// the count.
+    #[cfg(test)]
+    pub(super) fn take() -> u64 {
+        STEPS.with(|s| s.replace(0))
+    }
+}
 
 macro_rules! refusal_codes {
     ($($variant:ident => $name:literal,)*) => {
@@ -136,6 +179,7 @@ impl Refusal {
     /// The refusal `code` at byte `offset` of `input`.
     pub(crate) fn at(code: RefusalCode, input: &[u8], offset: usize) -> Refusal {
         let before = &input[..offset.min(input.len())];
+        work::add(3 * before.len());
         let line_start = before
             .iter()
             .rposition(|&b| b == b'\n')
@@ -248,11 +292,13 @@ pub fn check(candidate: &[u8]) -> Result<Page, Refusal> {
         return Err(Refusal::at(code, candidate, offset as usize));
     }
     // S1 passed, so the input is UTF-8.
+    work::add(candidate.len());
     let text = std::str::from_utf8(candidate)
         .map_err(|e| Refusal::at(RefusalCode::NotUtf8, candidate, e.valid_up_to()))?;
     let page =
         parse::parse_document(text).map_err(|(code, at)| Refusal::at(code, candidate, at))?;
     let canonical = serialize(&page);
+    work::add(candidate.len());
     if canonical != candidate {
         let same = canonical
             .iter()

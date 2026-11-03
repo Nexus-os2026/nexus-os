@@ -247,6 +247,7 @@ pub mod journal;
 pub mod lane;
 pub mod private;
 pub mod state;
+pub mod verifier;
 
 #[cfg(test)]
 mod oracles;
