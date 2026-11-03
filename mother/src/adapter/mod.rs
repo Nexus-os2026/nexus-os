@@ -94,6 +94,8 @@ mod p0_api;
 #[cfg(test)]
 mod p0_chain;
 #[cfg(test)]
+mod p0_chain_io;
+#[cfg(test)]
 mod p0_dirsync;
 #[cfg(test)]
 mod p0_privacy;

@@ -67,6 +67,14 @@ fn sync_dir(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A directory's metadata (no link followed). Tests can make the read of
+/// one directory fail ([`seam`]).
+fn metadata(dir: &Path) -> std::io::Result<std::fs::Metadata> {
+    #[cfg(test)]
+    seam::metadata(dir)?;
+    std::fs::symlink_metadata(dir)
+}
+
 /// A directory's parent (`.` for a single relative component).
 fn parent_of(dir: &Path) -> &Path {
     match dir.parent() {
@@ -117,7 +125,7 @@ fn create_levels(dir: &Path) -> Result<(), PrivateError> {
 /// `dir` is a directory, not a link, and (Unix) no one but its owner may
 /// enter it, and its owner is `owner` (if given). Its owner.
 fn private_dir(dir: &Path, owner: Option<u32>) -> Result<u32, PrivateError> {
-    let meta = std::fs::symlink_metadata(dir).map_err(io)?;
+    let meta = metadata(dir).map_err(io)?;
     if !meta.is_dir() {
         return Err(PrivateError::NotPrivate);
     }
@@ -271,6 +279,20 @@ pub(crate) mod seam {
     thread_local! {
         static SYNCED: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
         static FAIL: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+        static FAIL_METADATA: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    }
+
+    /// Every later metadata read of `dir` on this thread fails, until
+    /// cleared.
+    pub(crate) fn fail_metadata_of(dir: Option<PathBuf>) {
+        FAIL_METADATA.with(|f| *f.borrow_mut() = dir);
+    }
+
+    pub(super) fn metadata(dir: &Path) -> std::io::Result<()> {
+        if FAIL_METADATA.with(|f| f.borrow().as_deref() == Some(dir)) {
+            return Err(std::io::Error::other("injected metadata failure"));
+        }
+        Ok(())
     }
 
     /// Every directory sync this thread attempted since the last take, in
