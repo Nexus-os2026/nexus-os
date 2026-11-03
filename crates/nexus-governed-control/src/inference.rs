@@ -310,6 +310,10 @@ pub(crate) fn call(
                 cancel: &cancel,
                 deadline: &deadline,
                 stop: &watch,
+                // M2e-A1b seam: the broker's dispatch observer (the send
+                // time, the `Dispatch` notification) is M2e-B's deferred
+                // half; until it is added, no observer is given.
+                observer: None,
             };
             model.transport.call(request, &ctx)
         }
