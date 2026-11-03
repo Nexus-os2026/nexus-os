@@ -1,9 +1,11 @@
 //! Preflight (§5.3 steps 1–6) and the exact byte budget (§4.4, §4.5).
 
+use std::fmt;
+
 use crate::ident::QuestionId;
-use crate::projection::{Inventory, Projection};
+use crate::projection::{frame, in_profile, Inventory, Projection};
 use crate::registry::{QuestionSet, Reading};
-use crate::render::DecodeCode;
+use crate::render::{correction_sentence, render_schema, render_system, DecodeCode};
 
 /// A1's bound on `system.len() + user.len()`.
 pub const MAX_CONTENT_BYTES: usize = 3_936;
@@ -44,8 +46,8 @@ impl Coverage {
     }
 }
 
-/// A request that passed preflight: both attempts fit the bound.
-#[derive(Debug)] // STUB (oracle commit): not yet redacted.
+/// A request that passed preflight: both attempts fit the bound. `Debug`
+/// shows sizes only.
 pub struct Prepared {
     set: &'static QuestionSet,
     system: String,
@@ -64,9 +66,7 @@ impl Prepared {
     }
     /// The attempt-2 system text for a decoder code.
     pub fn correction_system(&self, code: DecodeCode) -> String {
-        // STUB (oracle commit).
-        let _ = code;
-        String::new()
+        attempt2(&self.system, code)
     }
     /// The user message, identical for both attempts.
     pub fn user(&self) -> &str {
@@ -86,6 +86,22 @@ impl Prepared {
     pub fn attempt2_max_bytes(&self) -> usize {
         self.coverage.needed_bytes
     }
+}
+
+impl fmt::Debug for Prepared {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Prepared")
+            .field("set", &self.set.id().as_str())
+            .field("system_bytes", &self.system.len())
+            .field("user_bytes", &self.user.len())
+            .field("schema_bytes", &self.schema.len())
+            .field("coverage", &self.coverage)
+            .finish()
+    }
+}
+
+fn attempt2(system: &str, code: DecodeCode) -> String {
+    format!("{system}\n\n{}", correction_sentence(code))
 }
 
 /// A typed preflight refusal: nothing is built, so nothing can be sent
@@ -132,12 +148,82 @@ impl Refusal {
 
 /// Preflight for one set and projection, with no charge and no
 /// connection.
+///
+/// §5.3, in order: (1) the `td-chars-v1` profile on every admitted string;
+/// (2) the inventory on every admitted string, before encoding; (3) the
+/// `td-escape-v1` encoding; (4) the `td-frame-v1` frame; (5) the inventory
+/// on the complete system texts of both attempts and the user bytes; (6)
+/// the bound, for attempt 2 with the longest correction (§4.5): if the
+/// complete projection does not fit, every question reads Unsettled.
 pub fn prepare(
     set: &'static QuestionSet,
     projection: &Projection,
     inventory: &Inventory,
 ) -> Result<Prepared, Refusal> {
-    // STUB (oracle commit).
-    let _ = (set, projection, inventory);
-    Err(Refusal::Unrenderable)
+    if set.projection() != projection.id() {
+        return Err(Refusal::ProjectionMismatch);
+    }
+    let system = render_system(set).map_err(|_| Refusal::Unrenderable)?;
+    let corrections: Vec<String> = DecodeCode::ALL
+        .iter()
+        .map(|code| attempt2(&system, *code))
+        .collect();
+    let strings = projection.strings();
+    let line_breaks = projection.allows_line_breaks();
+    if !strings
+        .iter()
+        .all(|s| s.chars().all(|c| in_profile(c, line_breaks)))
+    {
+        return Err(Refusal::CharNotAllowed);
+    }
+    if strings.iter().any(|s| inventory.occurs_in(s)) {
+        return Err(Refusal::UnsafeDelimiter);
+    }
+    let user = frame(&projection.encode());
+    if inventory.occurs_in(&user)
+        || inventory.occurs_in(&system)
+        || corrections.iter().any(|c| inventory.occurs_in(c))
+    {
+        return Err(Refusal::UnsafeDelimiter);
+    }
+    // Attempt 2 with the longest correction; fail closed if none exists.
+    let longest = corrections
+        .iter()
+        .map(String::len)
+        .max()
+        .unwrap_or(usize::MAX);
+    let source = projection.source_text_bytes();
+    let needed = longest.saturating_add(user.len());
+    if needed > MAX_CONTENT_BYTES {
+        let coverage = Coverage {
+            source_text_bytes: source,
+            sent_text_bytes: 0,
+            omitted_text_bytes: source,
+            user_bytes: user.len(),
+            needed_bytes: needed,
+            complete: false,
+        };
+        let readings = set.keys().map(|id| (id, Reading::Unsettled)).collect();
+        return Err(Refusal::CoverageInsufficient { coverage, readings });
+    }
+    // The second guard (§4.5): unreachable once coverage is checked.
+    let fits = |system: &str| system.len() + user.len() <= MAX_CONTENT_BYTES;
+    if !fits(&system) || !corrections.iter().all(|c| fits(c)) {
+        return Err(Refusal::RequestTooLarge);
+    }
+    let coverage = Coverage {
+        source_text_bytes: source,
+        sent_text_bytes: source,
+        omitted_text_bytes: 0,
+        user_bytes: user.len(),
+        needed_bytes: needed,
+        complete: true,
+    };
+    Ok(Prepared {
+        set,
+        system,
+        user,
+        schema: render_schema(set),
+        coverage,
+    })
 }
