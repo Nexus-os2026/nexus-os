@@ -131,3 +131,19 @@ fn m2d_c_r4_a_replacement_door_has_ack_only_ownership() {
     assert!(f.door.ack_commitment(view.id).is_err(), "uncertain");
     assert!(pinned(&f, view.id));
 }
+
+/// A repeated ack after the release is a no-op whatever became of the run
+/// since (pruned once it was cancelled and released): the startup re-ack
+/// of an obligation already acknowledged succeeds.
+#[test]
+fn m2d_c_r4_a_repeated_ack_after_the_run_is_pruned_is_a_no_op() {
+    let f = Fx::new();
+    let view = f.ready(NAME, CONTENT);
+    f.execute(&view).expect("published");
+    let _ = f.door.cancel_run(f.run).unwrap().write();
+    f.door.ack_commitment(view.id).unwrap();
+    let runs = f.gov.authority().runs();
+    runs.set_capacity_for_test(runs.len_for_test());
+    f.door.open_run().expect("the released run was pruned");
+    f.door.ack_commitment(view.id).expect("still a no-op");
+}
