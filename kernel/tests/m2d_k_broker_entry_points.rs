@@ -263,9 +263,12 @@ mod linux {
         let mut wal = b.ledger_path.clone().into_os_string();
         wal.push("-wal");
         assert!(!Path::new(&wal).exists(), "the log was checkpointed");
-        let upper = id.to_ascii_uppercase();
-        assert_ne!(upper, id, "the id has a hex letter");
-        assert!(tamper(&b.ledger_path, &id, &upper) > 0, "the id is stored");
+        // The same length, and never canonical: `g` is not a hex digit.
+        let malformed = format!("g{}", &id[1..]);
+        assert!(
+            tamper(&b.ledger_path, &id, &malformed) > 0,
+            "the id is stored"
+        );
         assert_eq!(
             LedgerFile::open(&b.ledger_path)
                 .unwrap()
