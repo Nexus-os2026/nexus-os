@@ -574,6 +574,7 @@ fn mission(hash: &str, request: &str) -> MissionConfirmation {
         contract_hash: hash.into(),
         request: request.into(),
         summary: vec!["A one-page site for Rosa's bakery".into()],
+        page_facts: None,
     }
 }
 
