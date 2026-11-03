@@ -36,6 +36,30 @@ pub(crate) mod at {
     pub(crate) const ISSUE_RECORDED: &str = "issue.recorded";
     pub(crate) const CONSENT_BEFORE_FILL: &str = "door.consent_before_fill";
     pub(crate) const ADMIT_BEFORE_BIND: &str = "door.admit_before_bind";
+    /// M2d-B2: an observed Files apply is at its final check (the
+    /// candidate written and synced; the guard is asked next).
+    pub(crate) const FILE_BEFORE_FINAL: &str = "files.before_final";
+    /// M2d-B2: the final check passed; the one publication is next.
+    pub(crate) const FILE_AFTER_FINAL: &str = "files.after_final";
+    /// M2d-B2: an undo is confirmed and its write grant issued; the
+    /// kernel's restore (its U1 check) is next.
+    pub(crate) const FILE_UNDO_APPROVED: &str = "files.undo_approved";
+    /// Codex review 1 of PR #64: a Files cleanup of a handed-over run is
+    /// next (H4's held cleanup).
+    pub(crate) const FILE_CLEANUP: &str = "files.cleanup";
+    /// H1 decision (row 3): the observer refuses the publication's handoff
+    /// (its final check found a cause; nothing is published).
+    pub(crate) const FILE_HANDOFF_REFUSED: &str = "files.handoff_refused";
+    /// H1 decision (rows 4-5): an actual staging removal is about to be
+    /// attempted.
+    pub(crate) const FILE_DISCARD: &str = "files.discard";
+    /// Codex re-check 2 of PR #64 (HIGH 1): a Files execution has passed
+    /// its revalidation and start, and takes the one Files slot next.
+    pub(crate) const FILE_EXECUTE_START: &str = "files.execute_start";
+    /// Codex re-check 3 of PR #64: an undo's write grant is issued, its
+    /// lifetime checked, and its guard armed; the kernel's restore, in the
+    /// same scope, is next.
+    pub(crate) const FILE_UNDO_RESTORE: &str = "files.undo_restore";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

@@ -348,9 +348,13 @@ impl Control {
             }
             Err((class, detail)) => {
                 let cancelled = guard.is_cancelled();
+                // M2d (Codex review 1 of PR #64, H2): an effect that may have
+                // happened is never reported as cancelled or as a plain
+                // failure: it is uncertain, recovery required.
+                let uncertain = class == FailureClass::Uncertain;
                 // A cancelled effect keeps what its actuator said: how far
                 // it got.
-                let end = guard.finish(if cancelled {
+                let end = guard.finish(if cancelled && !uncertain {
                     Outcome::Cancelled {
                         detail: Some(detail),
                     }
@@ -358,7 +362,9 @@ impl Control {
                     Outcome::Failed { class, detail }
                 });
                 Err(AuthorityError::Ended {
-                    cause: Box::new(if cancelled {
+                    cause: Box::new(if uncertain {
+                        AuthorityError::RecoveryRequired
+                    } else if cancelled {
                         AuthorityError::RunCancelled
                     } else {
                         AuthorityError::Unavailable("the effect failed")
