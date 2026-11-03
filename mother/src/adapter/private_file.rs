@@ -1,14 +1,27 @@
 //! P0: the private store in Mother's home (design §3 I2, §5.2): one file
 //! per blob, `<dir>/<kind>/<hex>`, directories 0700 and files 0600, each
 //! written to a temporary file, synced, renamed into place, and its
-//! directory synced. Every directory the store needs is durably linked
-//! before a blob is written in it: each missing level is created on its
-//! own and synced together with its parent, and an existing one's link is
-//! synced again on its first use by each store (a sync that failed earlier
-//! is retried). Any failure fails the call, so no reference to the content
-//! is journaled. A read is bounded and returned only if its content id
-//! verifies. The store refuses a directory that is a link or that other
-//! users can enter.
+//! directory synced.
+//!
+//! Durability: every directory the store needs is durably linked before a
+//! blob is written in it. Each missing level is created on its own and
+//! synced together with its parent. A directory this process created stays
+//! owed its link (in memory) until its parent's sync succeeds, and every
+//! open and put first discharges what is owed at or above its directory:
+//! durability is never inferred from a directory existing. A directory
+//! that exists and is owed nothing still has it and its parent synced at
+//! open and on each kind's first use by each store. Any failure fails the
+//! call, so no reference to the content is journaled.
+//!
+//! Privacy: every put checks the store's directory and the kind directory
+//! (a directory, not a link, no access for group or others, the store's
+//! owner), whatever the store remembers about their durability: that
+//! memory may only skip syncs, never a check. A read is bounded and
+//! returned only if its content id verifies.
+//!
+//! Non-claim: the checks and the write go by path, so someone with write
+//! access to Mother's home who swaps a directory between the check and the
+//! write is not stopped (design §4: out of scope).
 
 use crate::journal::IoKind;
 use crate::private::{ContentId, ContentKind, PrivateError, PrivateStore, MAX_CONTENT_BYTES};
@@ -17,12 +30,16 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 /// Mother's private store on disk.
 pub struct FilePrivate {
     dir: PathBuf,
-    /// The kind directories whose link this store has made durable.
+    /// The owner of the store's directory (Unix), which every directory
+    /// the store writes in must have.
+    owner: u32,
+    /// The kind directories this store has synced (durability only: every
+    /// put checks them all the same).
     linked: Mutex<BTreeSet<ContentKind>>,
 }
 
@@ -48,11 +65,32 @@ fn parent_of(dir: &Path) -> &Path {
     }
 }
 
-/// `dir` exists and is durably linked, is a directory and not a link, and
-/// (on Unix) only this user may enter it. Each missing level is created on
-/// its own (0700), then it and its parent are synced; if none was missing,
-/// `dir` and its parent are synced. Every failure is returned.
-fn private_dir(dir: &Path) -> Result<(), PrivateError> {
+/// The directories this process created whose link (their parent's sync)
+/// has not succeeded yet. Held only to read or change the set, never
+/// across a sync.
+static UNLINKED: Mutex<BTreeSet<PathBuf>> = Mutex::new(BTreeSet::new());
+
+fn unlinked() -> MutexGuard<'static, BTreeSet<PathBuf>> {
+    UNLINKED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Make `level`'s link durable (sync its parent); only then is it no
+/// longer owed.
+fn link(level: &Path) -> Result<(), PrivateError> {
+    sync_dir(parent_of(level)).map_err(io)?;
+    unlinked().remove(level);
+    Ok(())
+}
+
+/// `dir` exists and is durably linked. First every link this process owes
+/// at or above `dir` is made (the highest first); then each missing level
+/// is created on its own (0700), owed its link, synced, and linked; if
+/// none was missing, `dir` and its parent are synced. Every failure is
+/// returned, and an owed link stays owed.
+fn durable_dir(dir: &Path) -> Result<(), PrivateError> {
+    durable_owed(dir)?;
     let mut missing = Vec::new();
     let mut at = dir;
     loop {
@@ -81,25 +119,53 @@ fn private_dir(dir: &Path) -> Result<(), PrivateError> {
         }
         match builder.create(level) {
             Ok(()) => {}
-            // Made meanwhile by another opener: its link is synced here too.
+            // Made meanwhile by another opener: its link is made here too.
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(io(e)),
         }
+        unlinked().insert(level.clone());
         sync_dir(level).map_err(io)?;
-        sync_dir(parent_of(level)).map_err(io)?;
+        link(level)?;
     }
+    Ok(())
+}
+
+/// Every link this process owes at or above `dir`, made now.
+fn durable_owed(dir: &Path) -> Result<(), PrivateError> {
+    let mut owed: Vec<PathBuf> = unlinked()
+        .iter()
+        .filter(|level| dir.starts_with(level))
+        .cloned()
+        .collect();
+    owed.sort_by_key(|level| level.components().count());
+    for level in &owed {
+        link(level)?;
+    }
+    Ok(())
+}
+
+/// `dir` is a directory, not a link, and (Unix) no one but its owner may
+/// enter it, and its owner is `owner` (if given). Its owner.
+fn private_dir(dir: &Path, owner: Option<u32>) -> Result<u32, PrivateError> {
     let meta = std::fs::symlink_metadata(dir).map_err(io)?;
     if !meta.is_dir() {
         return Err(PrivateError::NotPrivate);
     }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
         if meta.permissions().mode() & 0o077 != 0 {
             return Err(PrivateError::NotPrivate);
         }
+        if owner.is_some_and(|owner| owner != meta.uid()) {
+            return Err(PrivateError::NotPrivate);
+        }
+        Ok(meta.uid())
     }
-    Ok(())
+    #[cfg(not(unix))]
+    {
+        Ok(owner.unwrap_or(0))
+    }
 }
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
@@ -107,29 +173,51 @@ static TEMP: AtomicU64 = AtomicU64::new(0);
 impl FilePrivate {
     /// The store at `dir` (created private if absent, and durably linked).
     pub fn open(dir: &Path) -> Result<Self, PrivateError> {
-        private_dir(dir)?;
+        durable_dir(dir)?;
+        let owner = private_dir(dir, None)?;
         Ok(Self {
             dir: dir.to_path_buf(),
+            owner,
             linked: Mutex::new(BTreeSet::new()),
         })
     }
 
-    /// The kind's directory, durably linked (once per store; a failure is
-    /// retried by the next call). No lock is held while it is linked; a
-    /// poisoned record only means linking again.
-    fn kind_dir(&self, kind: ContentKind) -> Result<PathBuf, PrivateError> {
-        let dir = self.dir.join(kind.as_str());
-        let known = self
-            .linked
+    fn known(&self, kind: ContentKind) -> bool {
+        self.linked
             .lock()
             .map(|linked| linked.contains(&kind))
-            .unwrap_or(false);
-        if !known {
-            private_dir(&dir)?;
-            match self.linked.lock() {
-                Ok(mut linked) => linked.insert(kind),
-                Err(poisoned) => poisoned.into_inner().insert(kind),
-            };
+            .unwrap_or(false)
+    }
+
+    fn record(&self, kind: ContentKind, linked: bool) {
+        let mut set = self
+            .linked
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if linked {
+            set.insert(kind);
+        } else {
+            set.remove(&kind);
+        }
+    }
+
+    /// The kind's directory, checked on every call (with the store's
+    /// directory) and durably linked: synced on its first use by this store
+    /// (a failure is retried by the next call), and every link owed at or
+    /// above it made on every call. No lock is held across a sync.
+    fn kind_dir(&self, kind: ContentKind) -> Result<PathBuf, PrivateError> {
+        private_dir(&self.dir, Some(self.owner))?;
+        let dir = self.dir.join(kind.as_str());
+        if self.known(kind) {
+            durable_owed(&dir)?;
+        } else {
+            durable_dir(&dir)?;
+            self.record(kind, true);
+        }
+        if let Err(e) = private_dir(&dir, Some(self.owner)) {
+            // Checked again, and linked again, on the next call.
+            self.record(kind, false);
+            return Err(e);
         }
         Ok(dir)
     }

@@ -50,7 +50,11 @@ Mother turns a human goal into a governed mission:
    in `<home>/private/<kind>/<hex>` (directories 0700, files 0600). Every
    directory is durably linked (it and its parent synced) and every blob
    synced and renamed into place before the journal names it by
-   reference; a failed sync fails the call. Nothing in it is authority.
+   reference; a failed sync fails the call, and a directory created but
+   not yet linked stays owed its link (in memory) until its parent's sync
+   succeeds. Every put checks the store's and the kind's directories
+   (a directory, not a link, no access for others, the store's owner).
+   Nothing in it is authority.
 8. **Closed codes** (`evidence.rs`, P0): every reason, outcome and class
    Mother records or returns is a code of a closed registry; the detail
    behind one is the Owner's `WorkingDetail`, in memory only.
@@ -88,7 +92,7 @@ the host, tests included).
 | M2a-S: after a break, no effect dispatched after the break executes; a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
 | P0: records keep only evidence (the policy below): contract fields, a paused rest, lane reasons, port classes, question ids and broker ids with a canary appear in no journal byte, broker record or returned error (scanned raw, in every encoded form and in fragments); the private store holds them | `adapter/p0_privacy.rs` (P0-O1–O4, O9, O19, O22), `adapter/p0_api.rs` (O9, O19, O23, I2, I3), `lib.rs` (closed error forms, compile_fail) |
 | P0: private content that is missing or does not verify (content id, size, contract hash) withdraws the mission's journaled requests first, then stops it; content grants nothing; a v1 journal is refused byte for byte | `adapter/p0_privacy.rs` (P0-O5–O8), `adapter/p0_api.rs` (O8) |
-| P0: the private store's directories are durable before a reference to its content is journaled (every new directory and its parent synced; a failed sync fails `put`, and nothing is journaled) | `adapter/p0_dirsync.rs` |
+| P0: the private store's directories are durable before a reference to its content is journaled (every new directory and its parent synced; a failed sync fails `put`, and nothing is journaled; a link owed after a failed sync is made by the retry); every put checks the store's and the kind's directories | `adapter/p0_dirsync.rs`, `adapter/p0_privdir.rs` |
 | M2c: a break halts the port's door at the broker (invariant (b) below): an effect already past the port's fenced check meets the halt at every admission step; the halt is in memory, under one broker lock at a time, each taken even if poisoned; its records are written by the call that made them, after it released the coordinator and port locks, or counted (`halt_records`) | broker `governed/halt_tests.rs` (B1–B18, R1–R6; R6 is CR8's property, an Executing member that a fully written halt leaves unsettled), `adapter/m2c_halt.rs` (M1–M8, A6-g), `adapter/m2c_crash.rs` (MC1–MC4, CR1–CR7) |
 
 M2c: how a held mission resumes. The coordinator reserves a request
