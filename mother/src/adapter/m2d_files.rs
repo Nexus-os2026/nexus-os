@@ -273,6 +273,7 @@ impl<'a> Fx<'a> {
                     contract_hash: hash.clone(),
                     request: request.into(),
                     summary: vec!["M2d-C at the port".into()],
+                    page_facts: None,
                 })
             })
             .unwrap();
