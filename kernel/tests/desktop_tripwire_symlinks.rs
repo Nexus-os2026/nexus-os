@@ -10,15 +10,23 @@
 //! fails instead of stalling the suite. The fixture's own `webkit6`
 //! finding is always present there, so each oracle asserts its own
 //! finding.
+//!
+//! Decision 2: these oracles plant Unix symlinks and permissions, so they
+//! are Unix-only (L3); the helper runs in an owned child process, killed
+//! and reaped with everything it started if it overruns (L2).
+
+#![cfg(unix)]
 
 #[path = "desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
 
 use desktop_tripwire::findings;
+use std::io::Read;
 use std::os::unix::fs::{symlink, PermissionsExt};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 /// Longer than two `cargo metadata` runs of the fixture and a tree walk.
 const DEADLINE: Duration = Duration::from_secs(120);
@@ -79,16 +87,120 @@ fn fixture_copy(label: &str) -> Temp {
     temp
 }
 
-/// The helper's findings for `root`, or a failure if it does not return
-/// within the deadline.
-fn findings_within_deadline(root: &Path) -> Vec<String> {
-    let (tx, rx) = mpsc::channel();
-    let root = root.to_path_buf();
-    std::thread::spawn(move || {
-        let _ = tx.send(findings(&root));
+/// The helper role's variables: the root to check, and (the L2 plant) a
+/// file to write a long-running grandchild's process id to before hanging.
+const HELPER_ROOT: &str = "NEXUS_G0_HELPER_ROOT";
+const HELPER_HANG: &str = "NEXUS_G0_HELPER_HANG";
+
+/// How long a killed helper's group may take to be reaped.
+const REAP_WITHIN: Duration = Duration::from_secs(10);
+
+/// The helper role. A no-op unless `findings_within` re-runs this test
+/// binary for it, in its own process group: then it prints the helper's
+/// findings, one per line.
+#[test]
+fn g0_helper_role() {
+    let Some(root) = std::env::var_os(HELPER_ROOT) else {
+        return;
+    };
+    if let Some(pidfile) = std::env::var_os(HELPER_HANG) {
+        let mut sleeper = Command::new("sleep").arg("600").spawn().unwrap();
+        std::fs::write(&pidfile, sleeper.id().to_string()).unwrap();
+        let _ = sleeper.wait();
+    }
+    for finding in findings(Path::new(&root)) {
+        println!("G0-FINDING {}", finding.replace('\n', " "));
+    }
+    println!("G0-HELPER-DONE");
+}
+
+/// Kill the owned child's whole process group, then reap the child, within
+/// `REAP_WITHIN`.
+fn kill_and_reap(child: &mut Child) {
+    let _ = Command::new("kill")
+        .args(["-KILL", "--", &format!("-{}", child.id())])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let deadline = Instant::now() + REAP_WITHIN;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            _ => panic!("the killed helper was not reaped within {REAP_WITHIN:?}"),
+        }
+    }
+}
+
+/// The helper's findings for `root`, run in an owned child process (the
+/// test binary's helper role, in its own process group) under `deadline`.
+/// On overrun the group, the helper's cargo child included, is killed and
+/// reaped: nothing stays detached.
+fn findings_within(
+    root: &Path,
+    deadline: Duration,
+    hang: Option<&Path>,
+) -> Result<Vec<String>, String> {
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "g0_helper_role",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(HELPER_ROOT, root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .process_group(0);
+    if let Some(pidfile) = hang {
+        command.env(HELPER_HANG, pidfile);
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("the helper did not start: {e}"))?;
+    let mut stdout = child.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stdout.read_to_string(&mut text);
+        text
     });
-    rx.recv_timeout(DEADLINE)
-        .unwrap_or_else(|_| panic!("the tripwire did not return within {DEADLINE:?}"))
+    let until = Instant::now() + deadline;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                kill_and_reap(&mut child);
+                return Err(format!("the tripwire did not return within {deadline:?}"));
+            }
+            Err(e) => {
+                kill_and_reap(&mut child);
+                return Err(format!("waiting for the helper: {e}"));
+            }
+        }
+    };
+    // The child exited; its pipe closes with its group.
+    kill_and_reap(&mut child);
+    let text = reader.join().unwrap_or_default();
+    // libtest prints `test g0_helper_role ... ` with no newline before the
+    // role's own output, so the markers are found anywhere in a line.
+    if !status.success() || !text.lines().any(|l| l.contains("G0-HELPER-DONE")) {
+        return Err(format!("the helper failed ({status}):\n{text}"));
+    }
+    Ok(text
+        .lines()
+        .filter_map(|l| l.split_once("G0-FINDING ").map(|(_, finding)| finding))
+        .map(str::to_string)
+        .collect())
+}
+
+fn findings_within_deadline(root: &Path) -> Vec<String> {
+    findings_within(root, DEADLINE, None).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// A directory outside the fixture, holding a tree.
@@ -181,4 +293,69 @@ fn g0_s5_an_unreadable_directory_is_red_with_a_clear_error() {
             .any(|f| f.contains("tools/sealed") && f.contains("cannot read")),
         "an unreadable directory was skipped: {found:?}"
     );
+}
+
+// ── Decision 2, L1: an unrelated dangling link is allowed ──────────────────
+
+#[test]
+fn g0_s6_an_unrelated_dangling_symlink_is_allowed_a_forbidden_one_is_not() {
+    let root = fixture_copy("dangling");
+    assert!(
+        !Path::new("/opt/missing").exists(),
+        "this control needs /opt/missing to be absent"
+    );
+    std::fs::create_dir_all(root.0.join("tools/view")).unwrap();
+    // Green control: an optional tool not installed here.
+    symlink("/opt/missing", root.0.join("tools/optional-sdk")).unwrap();
+    // Still red: a forbidden name, dangling and looping.
+    symlink("/opt/missing", root.0.join("tools/src-tauri")).unwrap();
+    symlink(
+        root.0.join("tools/view/src-tauri"),
+        root.0.join("tools/view/src-tauri"),
+    )
+    .unwrap();
+    let found = findings_within_deadline(&root.0);
+    assert!(
+        !found.iter().any(|f| f.contains("optional-sdk")),
+        "an unrelated dangling symlink is a false red: {found:?}"
+    );
+    for forbidden in ["tools/src-tauri", "tools/view/src-tauri"] {
+        assert!(
+            found
+                .iter()
+                .any(|f| f.contains(forbidden) && f.contains("src-tauri tree")),
+            "{forbidden} escaped the scan: {found:?}"
+        );
+    }
+}
+
+// ── Decision 2, L2: an overrunning helper is killed with its children ──────
+
+#[test]
+fn g0_s7_a_helper_past_its_deadline_is_killed_and_reaped_with_its_children() {
+    let root = fixture_copy("hang");
+    let pidfile = root.0.join("sleeper.pid");
+    let started = Instant::now();
+    let outcome = findings_within(&root.0, Duration::from_secs(3), Some(&pidfile));
+    assert!(outcome.is_err(), "a hung helper returned: {outcome:?}");
+    assert!(started.elapsed() < Duration::from_secs(3) + REAP_WITHIN);
+    let pid = std::fs::read_to_string(&pidfile).expect("the helper started its grandchild");
+    // The grandchild was in the helper's group: it is gone too.
+    let deadline = Instant::now() + REAP_WITHIN;
+    loop {
+        let alive = Command::new("kill")
+            .args(["-0", pid.trim()])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success();
+        if !alive {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the helper's grandchild {pid} survived"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
