@@ -10,7 +10,7 @@ const SET_DOMAIN: &[u8] = b"nexus.typed_decision.set.v1";
 const REGISTRY_DOMAIN: &[u8] = b"nexus.typed_decision.registry.v1";
 
 /// One length-prefixed field.
-fn put(h: &mut Sha256, bytes: &[u8]) {
+pub(crate) fn put(h: &mut Sha256, bytes: &[u8]) {
     h.update((bytes.len() as u64).to_be_bytes());
     h.update(bytes);
 }
