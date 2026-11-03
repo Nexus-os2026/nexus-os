@@ -115,7 +115,8 @@ fn m2d_b2_r1_h1_b_a_failing_store_is_surfaced_and_recorded_on_recovery() {
     assert!(status.stop_records.owed >= 1, "owed while storage fails");
     assert_eq!(status.stop_records.state(), "stop_record_pending");
     primary.store().refuse_inserts(false);
-    gov.resume(&*Owner::new()).expect("the resume pays what is owed first");
+    gov.resume(&*Owner::new())
+        .expect("the resume pays what is owed first");
     assert!(recent
         .records()
         .iter()
@@ -194,7 +195,11 @@ fn m2d_b2_r1_h3_an_interruption_after_the_handoff_is_reported_and_ends_files_for
         cause.arm(&f, at::FILE_AFTER_FINAL);
         let output = f.execute(&view).expect("the one publication completes");
         let interrupted = ("interrupted".to_string(), code.to_string());
-        assert!(output.meta.contains(&interrupted), "{cause:?}: {:?}", output.meta);
+        assert!(
+            output.meta.contains(&interrupted),
+            "{cause:?}: {:?}",
+            output.meta
+        );
         assert!(
             f.finished(view.id).detail.contains(&interrupted),
             "{cause:?}: in the evidence"
@@ -268,17 +273,22 @@ fn m2d_b2_r1_m1_a_failed_staging_cleanup_stays_owned_reported_and_retried() {
     assert_eq!(f.staged().len(), 1, "not removed");
     assert_eq!(f.gov.files().kept_for_test(), 1, "still owned");
     let listed = |gov: &GovernedControl| {
-        gov.files_recovery_report()
-            .unwrap()
-            .iter()
-            .any(|entry| entry.findings.contains(&RecoveryFinding::StagingNotDiscarded))
+        gov.files_recovery_report().unwrap().iter().any(|entry| {
+            entry
+                .findings
+                .contains(&RecoveryFinding::StagingNotDiscarded)
+        })
     };
     assert!(listed(&f.gov), "reported");
     let retry = f.gov.files_retry_cleanup().unwrap();
     assert_eq!((retry.settled, retry.still_owed), (0, 1), "the fault lasts");
     std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
     let retry = f.gov.files_retry_cleanup().unwrap();
-    assert_eq!((retry.settled, retry.still_owed), (1, 0), "the fault cleared");
+    assert_eq!(
+        (retry.settled, retry.still_owed),
+        (1, 0),
+        "the fault cleared"
+    );
     assert!(f.staged().is_empty());
     assert_eq!(f.gov.files().kept_for_test(), 0);
     assert!(!listed(&f.gov));
