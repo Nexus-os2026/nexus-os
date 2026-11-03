@@ -147,36 +147,50 @@ fn aligned_base64(engine: &base64::engine::GeneralPurpose, bytes: &[u8], shift: 
     encoded[front..encoded.len() - back].to_string()
 }
 
-/// What the scanner looks for, one secret at a time.
+/// What the scanner looks for, one secret at a time: every spelling, four
+/// overlapping fragments of every spelling (encoded ones included), and each
+/// of those as a serialized JSON string holds it (`\` and `"` escaped, so a
+/// literal `\u` spelling is found after serialization doubles its
+/// backslashes).
 fn needles(secret: &str) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (form, text) in [
-        ("raw", secret.to_string()),
-        ("upper", secret.to_ascii_uppercase()),
-        ("lower", secret.to_ascii_lowercase()),
-    ] {
-        for (index, fragment) in fragments(&text).into_iter().enumerate() {
-            out.push((format!("{form} fragment {index}"), fragment.to_string()));
-        }
-        out.push((form.to_string(), text));
-    }
-    out.push(("hex".to_string(), hex::encode(secret)));
-    out.push(("HEX".to_string(), hex::encode_upper(secret)));
+    let mut spellings: Vec<(String, String)> = vec![
+        ("raw".to_string(), secret.to_string()),
+        ("upper".to_string(), secret.to_ascii_uppercase()),
+        ("lower".to_string(), secret.to_ascii_lowercase()),
+        ("hex".to_string(), hex::encode(secret)),
+        ("HEX".to_string(), hex::encode_upper(secret)),
+    ];
     for (form, engine) in [
         ("base64", &STANDARD_NO_PAD),
         ("base64url", &URL_SAFE_NO_PAD),
     ] {
         for shift in 0..3 {
-            out.push((
+            spellings.push((
                 format!("{form}@{shift}"),
                 aligned_base64(engine, secret.as_bytes(), shift),
             ));
         }
     }
-    out.push(("percent".to_string(), percent(secret, false)));
-    out.push(("percent-lower".to_string(), percent(secret, true)));
-    out.push(("json-u".to_string(), json_escaped(secret, false)));
-    out.push(("json-U".to_string(), json_escaped(secret, true)));
+    spellings.push(("percent".to_string(), percent(secret, false)));
+    spellings.push(("percent-lower".to_string(), percent(secret, true)));
+    spellings.push(("json-u".to_string(), json_escaped(secret, false)));
+    spellings.push(("json-U".to_string(), json_escaped(secret, true)));
+    let mut out = Vec::new();
+    for (form, text) in spellings {
+        for (index, fragment) in fragments(&text).into_iter().enumerate() {
+            out.push((format!("{form} fragment {index}"), fragment.to_string()));
+        }
+        out.push((form, text));
+    }
+    let serialized: Vec<(String, String)> = out
+        .iter()
+        .filter_map(|(form, text)| {
+            let json = serde_json::to_string(text).unwrap();
+            let inner = &json[1..json.len() - 1];
+            (inner != text).then(|| (format!("{form} (json)"), inner.to_string()))
+        })
+        .collect();
+    out.extend(serialized);
     out
 }
 
@@ -195,28 +209,79 @@ impl std::fmt::Display for Leak {
 }
 
 /// The ledger's files: the main database, its WAL and its shared memory.
+/// The main database must be readable; a sidecar may be absent, but any
+/// other failure to read it fails the scan (nothing is reported clean
+/// unread).
 fn file_targets(db: &Path) -> Vec<(String, Vec<u8>)> {
-    let mut out = Vec::new();
-    for suffix in ["", "-wal", "-shm"] {
+    let main = std::fs::read(db).unwrap_or_else(|error| {
+        panic!(
+            "the ledger database {} must be readable: {error}",
+            db.display()
+        )
+    });
+    let mut out = vec![("ledger.db".to_string(), main)];
+    for suffix in ["-wal", "-shm"] {
         let path = PathBuf::from(format!("{}{suffix}", db.display()));
-        if let Ok(bytes) = std::fs::read(&path) {
-            out.push((format!("ledger.db{suffix}"), bytes));
+        match std::fs::read(&path) {
+            Ok(bytes) => out.push((format!("ledger.db{suffix}"), bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => panic!("{} could not be read: {error}", path.display()),
         }
     }
     out
 }
 
-/// Verified logical records, as text.
+/// Verified logical records: each as stored (its serialized text) and as
+/// decoded (every key and string of its payload after JSON unescaping; a
+/// string that is itself JSON is decoded too). A payload that is not JSON
+/// fails the scan.
 fn record_targets(records: &[LedgerRecord]) -> Vec<(String, Vec<u8>)> {
-    records
-        .iter()
-        .map(|r| {
-            (
-                format!("record {} #{}", r.event_kind, r.seq),
-                format!("{}\n{}\n{}", r.actor_kind, r.event_kind, r.payload).into_bytes(),
-            )
-        })
-        .collect()
+    let mut out = Vec::new();
+    for r in records {
+        out.push((
+            format!("record {} #{}", r.event_kind, r.seq),
+            format!("{}\n{}\n{}", r.actor_kind, r.event_kind, r.payload).into_bytes(),
+        ));
+        let payload: Value = serde_json::from_str(&r.payload).unwrap_or_else(|error| {
+            panic!("record {} #{} is not JSON: {error}", r.event_kind, r.seq)
+        });
+        let mut strings = Vec::new();
+        decoded_strings(&payload, 0, &mut strings);
+        out.push((
+            format!("record {} #{} decoded", r.event_kind, r.seq),
+            strings.join("\n").into_bytes(),
+        ));
+    }
+    out
+}
+
+/// Every key and string in `value`, decoded; strings that parse as JSON are
+/// walked as well (a few levels deep).
+fn decoded_strings(value: &Value, depth: usize, out: &mut Vec<String>) {
+    match value {
+        Value::String(text) => {
+            out.push(text.clone());
+            if depth < 4 {
+                if let Ok(inner) = serde_json::from_str::<Value>(text) {
+                    if inner.is_object() || inner.is_array() || inner.is_string() {
+                        decoded_strings(&inner, depth + 1, out);
+                    }
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                decoded_strings(item, depth, out);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map {
+                out.push(key.clone());
+                decoded_strings(item, depth, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub(super) fn leaks(canary: &Canary, targets: &[(String, Vec<u8>)]) -> Vec<Leak> {
@@ -1694,6 +1759,207 @@ fn p0b_o22_the_scanner_detects_a_wal_only_canary_and_a_canary_split_across_two_f
             );
         }
     }
+}
+
+// ── P0-O22 amendment (Codex review 1 of PR #55): stricter scanner controls ──
+
+/// A spelling of `secret` with every fourth character JSON-escaped: no ten
+/// consecutive characters of any needle survive in the serialized text, but
+/// decoding gives the secret back.
+fn mixed_escaped(secret: &str) -> String {
+    secret
+        .chars()
+        .enumerate()
+        .map(|(index, c)| {
+            if index % 4 == 3 {
+                format!("\\u{:04x}", c as u32)
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
+/// Leaks found in the given targets only (labels as `file_targets` and
+/// `record_targets` give them).
+fn leaks_in(
+    canary: &Canary,
+    targets: &[(String, Vec<u8>)],
+    keep: impl Fn(&str) -> bool,
+) -> Vec<Leak> {
+    let kept: Vec<(String, Vec<u8>)> = targets
+        .iter()
+        .filter(|(label, _)| keep(label))
+        .cloned()
+        .collect();
+    leaks(canary, &kept)
+}
+
+/// A ledger file of its own, so one scanner control never sees another's
+/// data (every `Cl` shares the `nxsecret_` prefix, and so do the fragments
+/// that fall inside it).
+struct ScratchLedger {
+    _tmp: tempfile::TempDir,
+    db: PathBuf,
+    ledger: CodingRunLedger,
+}
+
+impl ScratchLedger {
+    fn new() -> Self {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("ledger.db");
+        let ledger = CodingRunLedger::open(&db).unwrap();
+        Self {
+            _tmp: tmp,
+            db,
+            ledger,
+        }
+    }
+
+    fn append(&self, run: Uuid, payload: &str) {
+        self.ledger
+            .append(NewLedgerEvent {
+                run_id: run,
+                timestamp_unix_nanos: 1,
+                actor_kind: "backend",
+                event_kind: "run.cancelled",
+                payload,
+            })
+            .unwrap();
+    }
+
+    /// Its files and the run's verified records.
+    fn targets(&self, run: Uuid) -> Vec<(String, Vec<u8>)> {
+        let mut targets = file_targets(&self.db);
+        targets.extend(record_targets(&self.ledger.verify_run(run).unwrap()));
+        targets
+    }
+}
+
+fn is_file(label: &str) -> bool {
+    label.starts_with("ledger.db")
+}
+
+fn is_decoded(label: &str) -> bool {
+    label.ends_with(" decoded")
+}
+
+#[test]
+fn p0b_o22_amend_the_scanner_sees_json_escaped_decoded_and_split_encoded_canaries() {
+    // (A) A literal `\u` spelling serialized into JSON (its backslashes
+    // doubled) is found in the database files themselves.
+    let scratch = ScratchLedger::new();
+    let escaped = Canary::new();
+    let run = Uuid::new_v4();
+    let payload =
+        json!({ "a": json_escaped(&escaped.c, false), "b": json_escaped(&escaped.cl, true) });
+    scratch.append(run, &payload.to_string());
+    assert!(
+        payload.to_string().contains("\\\\u"),
+        "precondition: serialization doubled the backslashes"
+    );
+    let found = leaks_in(&escaped, &file_targets(&scratch.db), is_file);
+    for (secret, form) in [("C", "json-u (json)"), ("Cl", "json-U (json)")] {
+        assert!(
+            found
+                .iter()
+                .any(|l| l.secret == secret && l.form == form && l.target == "ledger.db-wal"),
+            "the scanner missed a serialized \\u spelling of {secret}: {found:?}"
+        );
+    }
+
+    // (B) A spelling only decoding reveals: every fourth character escaped.
+    let scratch = ScratchLedger::new();
+    let mixed = Canary::new();
+    let run = Uuid::new_v4();
+    scratch.append(
+        run,
+        &format!(
+            "{{\"note\":\"{}\",\"other\":\"{}\"}}",
+            mixed_escaped(&mixed.c),
+            mixed_escaped(&mixed.cl)
+        ),
+    );
+    let targets = scratch.targets(run);
+    let physical = leaks_in(&mixed, &targets, |label| !is_decoded(label));
+    assert!(
+        physical.is_empty(),
+        "precondition: no needle matches the escaped text itself: {physical:?}"
+    );
+    let decoded = leaks_in(&mixed, &targets, is_decoded);
+    for secret in ["C", "Cl"] {
+        assert!(
+            decoded
+                .iter()
+                .any(|l| l.secret == secret && l.form == "raw"),
+            "the scanner missed {secret} in a decoded record: {decoded:?}"
+        );
+    }
+
+    // (C) Encoded spellings split across two fields: each half is found by
+    // a fragment of that encoding, in the files and in the records.
+    type Encode = Box<dyn Fn(&str) -> String>;
+    let encodings: [(&str, Encode); 4] = [
+        ("hex", Box::new(|s: &str| hex::encode(s))),
+        (
+            "base64@0",
+            Box::new(|s: &str| aligned_base64(&STANDARD_NO_PAD, s.as_bytes(), 0)),
+        ),
+        ("percent", Box::new(|s: &str| percent(s, false))),
+        ("json-u", Box::new(|s: &str| json_escaped(s, false))),
+    ];
+    for (form, encode) in encodings {
+        let scratch = ScratchLedger::new();
+        let split = Canary::new();
+        let run = Uuid::new_v4();
+        let (c, cl) = (encode(&split.c), encode(&split.cl));
+        let (c1, c2) = c.split_at(c.len() / 2);
+        let (l1, l2) = cl.split_at(cl.len() / 2);
+        scratch.append(
+            run,
+            &json!({"a": c1, "b": c2, "x": l1, "y": l2}).to_string(),
+        );
+        let found = leaks(&split, &scratch.targets(run));
+        assert!(
+            !found
+                .iter()
+                .any(|l| l.form == form || l.form == format!("{form} (json)")),
+            "precondition: no whole {form} spelling was written: {found:?}"
+        );
+        for secret in ["C", "Cl"] {
+            for half in [0, 3] {
+                let fragment = format!("{form} fragment {half}");
+                assert!(
+                    found.iter().any(|l| l.secret == secret
+                        && (l.form == fragment || l.form == format!("{fragment} (json)"))
+                        && is_file(&l.target)),
+                    "the scanner missed {secret} {fragment} in the files: {found:?}"
+                );
+                assert!(
+                    found
+                        .iter()
+                        .any(|l| l.secret == secret && l.form == fragment && is_decoded(&l.target)),
+                    "the scanner missed {secret} {fragment} in a decoded record: {found:?}"
+                );
+            }
+        }
+    }
+
+    // (D) Nothing is reported clean unread: a missing database, or a
+    // sidecar that exists but cannot be read, fails the scan.
+    let tmp = tempfile::tempdir().unwrap();
+    let missing = tmp.path().join("missing.db");
+    assert!(
+        std::panic::catch_unwind(|| file_targets(&missing)).is_err(),
+        "a missing ledger database was scanned as clean"
+    );
+    let other = tmp.path().join("other.db");
+    std::fs::write(&other, b"not a database").unwrap();
+    std::fs::create_dir(tmp.path().join("other.db-wal")).unwrap();
+    assert!(
+        std::panic::catch_unwind(|| file_targets(&other)).is_err(),
+        "an unreadable WAL was skipped as if absent"
+    );
 }
 
 // ── P0-O24: inventory ───────────────────────────────────────────────────────
