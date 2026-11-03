@@ -147,7 +147,11 @@ impl ModelTransport for VerifiedOllama {
             }
             return Err(ModelError::Late);
         }
-        read_chat(&self.identity, reply, latency_ms)
+        let reply = read_chat(&self.identity, reply, latency_ms)?;
+        Ok(match request.rendered() {
+            Some(rendered) => reply.answering(rendered.answered),
+            None => reply,
+        })
     }
 }
 
@@ -274,24 +278,34 @@ fn metadata(
 }
 
 /// The frozen chat body, built from the identity; the caller supplies only
-/// the two messages and the schema.
+/// the messages and the schema.
 fn chat_body(identity: &ModelIdentity, request: &ModelRequest) -> Vec<u8> {
     let config = identity.config();
     let think = match config.think {
         Think::Off => "false",
     };
+    let messages: Vec<String> = request
+        .messages()
+        .iter()
+        .map(|(role, content)| {
+            format!(
+                "{{\"role\":\"{}\",\"content\":{}}}",
+                role.as_str(),
+                json_string(content)
+            )
+        })
+        .collect();
     format!(
         "{{\"model\":{},\"stream\":false,\"think\":{think},\"truncate\":{},\"format\":{},\
          \"options\":{{\"temperature\":{},\"num_ctx\":{},\"seed\":{}}},\
-         \"messages\":[{{\"role\":\"system\",\"content\":{}}},{{\"role\":\"user\",\"content\":{}}}]}}",
+         \"messages\":[{}]}}",
         json_string(identity.name()),
         config.truncate,
         request.format().as_json(),
         temperature(config.temperature_milli),
         config.num_ctx,
         config.seed,
-        json_string(request.system()),
-        json_string(request.user()),
+        messages.join(","),
     )
     .into_bytes()
 }
