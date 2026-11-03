@@ -222,16 +222,20 @@ fn executing_at_a_stop(home: &Home) {
     );
 }
 
-/// Addendum 1's schedules: the first mission's Stop held at its owed
-/// write, then (another scenario) at its first journal append; meanwhile
-/// another mission's authorized File is executed: refused, nothing written.
+/// Addendum 1's schedules, scoped by C4 (round-5 amendment): a mission
+/// Stop affects only that mission; Stop everything affects its cohort.
+/// (i) Stop everything with A's first append, then (another scenario) its
+/// owed write, held: B's authorized File is refused, nothing written, B
+/// stopped. (ii) Stop B while an unrelated append holds the coordinator: B's
+/// File is refused, B stopped. (iii) Stop A while B's File is live: B's
+/// File publishes normally and B goes on.
 fn the_memory_stop_precedes_the_journal(home: &Home) {
     for (journal, held_at) in [
         ("m2d-c-r4-owed.jsonl", "owed"),
         ("m2d-c-r4-append.jsonl", "append"),
     ] {
         let s = Scenario::new(home, journal);
-        let a = s.waiting(&format!("r4-{held_at}-a"));
+        let _a = s.waiting(&format!("r4-{held_at}-a"));
         let b = s.waiting(&format!("r4-{held_at}-b"));
         let poised = s.approve(b);
         let (entered, release) = if held_at == "owed" {
@@ -246,7 +250,7 @@ fn the_memory_stop_precedes_the_journal(home: &Home) {
             s.hold_next_append()
         };
         std::thread::scope(|scope| {
-            let stopping = scope.spawn(|| s.mother.stop(a));
+            let stopping = scope.spawn(|| s.mother.stop_all());
             entered.recv_timeout(BOUND).expect("the Stop held");
             assert!(!s.execute(poised), "{held_at}: the poised File is refused");
             release.send(()).unwrap();
@@ -256,6 +260,48 @@ fn the_memory_stop_precedes_the_journal(home: &Home) {
         assert!(!name.exists(), "{held_at}: nothing published");
         assert_eq!(s.mother.state(b), Some(MissionState::Stopped), "{held_at}");
     }
+
+    // (ii) The target is B; an unrelated append holds the coordinator. B's
+    // Stop engages its cell (the hook after the halt), then waits for the
+    // coordinator: B's File is refused meanwhile.
+    let s = Scenario::new(home, "m2d-c-r4-target.jsonl");
+    let b = s.waiting("r4-target-b");
+    let poised = s.approve(b);
+    let (entered, release) = s.hold_next_append();
+    let (halted_tx, halted) = mpsc::channel();
+    s.mother
+        .hooks
+        .after_halt
+        .arm(0, move || halted_tx.send(()).unwrap());
+    std::thread::scope(|scope| {
+        let drafting = scope.spawn(|| s.mother.draft(contract_with("")));
+        entered
+            .recv_timeout(BOUND)
+            .expect("the unrelated append held");
+        let stopping = scope.spawn(|| s.mother.stop(b));
+        halted.recv_timeout(BOUND).expect("B's cell engaged");
+        assert!(!s.execute(poised), "(ii): the target's File is refused");
+        release.send(()).unwrap();
+        let _ = drafting.join().unwrap();
+        let _ = stopping.join().unwrap();
+    });
+    assert!(
+        !s.ws.join("r4-target-b-a.txt").exists(),
+        "(ii): nothing published"
+    );
+    assert_eq!(s.mother.state(b), Some(MissionState::Stopped), "(ii)");
+
+    // (iii) Stop A; B's live File publishes normally and B goes on.
+    let s = Scenario::new(home, "m2d-c-r4-scope.jsonl");
+    let a = s.waiting("r4-scope-a");
+    let b = s.waiting("r4-scope-b");
+    let live = s.approve(b);
+    assert!(s.mother.stop(a).is_ok());
+    assert!(s.execute(live), "(iii): B's File publishes");
+    assert!(s.ws.join("r4-scope-b-a.txt").exists());
+    let step = s.mother.advance(b).unwrap();
+    assert_ne!(step.to, MissionState::Blocked, "(iii): B goes on");
+    assert_ne!(s.mother.state(b), Some(MissionState::Stopped));
 }
 
 /// Addendum 4: the terminal line is written, then the coordinator crashes
