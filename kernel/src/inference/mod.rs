@@ -33,6 +33,9 @@ mod identity;
 pub mod ollama;
 mod request;
 
+#[cfg(test)]
+mod tests;
+
 use thiserror::Error;
 
 use crate::emergency_stop::StopWatch;

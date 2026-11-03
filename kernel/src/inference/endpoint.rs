@@ -9,6 +9,28 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use super::ModelError;
 
 /// The address of the local model runtime.
+///
+/// There is no other way to make one than parsing: not a literal,
+///
+/// ```compile_fail,E0451
+/// use nexus_kernel::inference::LoopbackEndpoint;
+/// let endpoint = LoopbackEndpoint { addr: "192.0.2.1:9".parse().unwrap() };
+/// ```
+///
+/// not a conversion from a URL,
+///
+/// ```compile_fail,E0277
+/// use nexus_kernel::inference::LoopbackEndpoint;
+/// let url = url::Url::parse("http://192.0.2.1:9/").unwrap();
+/// let endpoint = LoopbackEndpoint::from(url);
+/// ```
+///
+/// and not deserialization:
+///
+/// ```compile_fail,E0277
+/// use nexus_kernel::inference::LoopbackEndpoint;
+/// let endpoint: LoopbackEndpoint = serde_json::from_str("\"192.0.2.1:9\"").unwrap();
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoopbackEndpoint {
     addr: SocketAddr,
