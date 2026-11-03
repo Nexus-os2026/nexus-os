@@ -1154,13 +1154,20 @@ fn m2d_b1_d_o18_d_subtree_bind_mounts_are_refused() {
         std::fs::create_dir_all(dirs.path(sub)).unwrap();
     }
     let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
-    let ordinary = format!(
-        "1 0 {} / / rw,relatime shared:1 - ext4 /dev/root rw\n\
-         2 1 {} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
-        dev_of(Path::new("/")),
-        dev_of(&tmp),
-        tmp.display()
+    // Each device once: the temporary directory's own entry only when it is
+    // a filesystem of its own (on a host whose /tmp is on the root
+    // filesystem, a second entry would list the root device twice).
+    let mut ordinary = format!(
+        "1 0 {} / / rw,relatime shared:1 - ext4 /dev/root rw\n",
+        dev_of(Path::new("/"))
     );
+    if dev_of(&tmp) != dev_of(Path::new("/")) {
+        ordinary.push_str(&format!(
+            "2 1 {} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
+            dev_of(&tmp),
+            tmp.display()
+        ));
+    }
     let bind = |id: u32, source: &str, point: &str| {
         format!(
             "{id} 2 {} {source} {} rw,relatime shared:3 - tmpfs tmpfs rw\n",
