@@ -10,9 +10,10 @@
 //! - files are opened with `O_NOFOLLOW` (and `O_NONBLOCK`, so a FIFO swapped
 //!   in cannot block), then re-checked with `fstat` on the open descriptor;
 //! - new files are created with `O_CREAT | O_EXCL | O_NOFOLLOW`;
-//! - replacement is a `rename` inside one directory handle; an apply's
-//!   creation publishes with `renameat2(RENAME_NOREPLACE)`, which never
-//!   replaces (M2d), staging creation with `link`.
+//! - replacement is a `rename` inside one directory handle; an observed
+//!   apply publishes an anonymous `O_TMPFILE` file with `linkat`, and the
+//!   inherited apply's creation with `renameat2(RENAME_NOREPLACE)`, neither
+//!   ever replacing (M2d); staging creation uses `link`.
 //!
 //! Each handle checks, when opened, that its `/proc/self/fd` entry resolves to
 //! the same device and inode as the descriptor, so a missing or substituted
@@ -409,6 +410,36 @@ impl DirHandle {
                 Err(error)
             }
         }
+    }
+
+    /// Open an anonymous file in this directory (`O_TMPFILE`, M2d): it has
+    /// no name, so no pathname can be substituted for it, and it is freed
+    /// when its last descriptor closes unless it is linked. A filesystem
+    /// without anonymous files fails here; nothing falls back to a name.
+    pub(crate) fn create_anonymous(&self) -> io::Result<File> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .mode(0o600)
+            .custom_flags(libc::O_TMPFILE | libc::O_CLOEXEC)
+            .open(self.anchor())
+    }
+
+    /// Link an anonymous file of this directory under `name` (`linkat` of
+    /// `/proc/self/fd/<fd>` with `AT_SYMLINK_FOLLOW`): exactly the inode the
+    /// descriptor holds is published, and an existing entry of any kind is
+    /// never replaced (`EEXIST`).
+    pub(crate) fn link_anonymous(&self, file: &File, name: &str) -> io::Result<()> {
+        self.child(name)?;
+        let source = format!("/proc/self/fd/{}", file.as_raw_fd());
+        nix::unistd::linkat(
+            None,
+            source.as_str(),
+            Some(self.file.as_raw_fd()),
+            name,
+            nix::fcntl::AtFlags::AT_SYMLINK_FOLLOW,
+        )
+        .map_err(io::Error::from)
     }
 
     /// Metadata of a project-name entry or one of this handle's temporary

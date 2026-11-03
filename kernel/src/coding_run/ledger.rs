@@ -462,6 +462,7 @@ pub(crate) const APPLY_STEPS: &[&str] = &[
     "apply.op",
     "dir_sync",
     "cleanup",
+    "verify",
 ];
 /// The operations whose completion record can fail after their work.
 pub(crate) const COMPLETIONS: &[&str] = &["rollback", "restore"];

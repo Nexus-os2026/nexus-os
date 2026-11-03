@@ -508,6 +508,7 @@ enum Seam {
     Remove,
     Rename,
     Sync,
+    Tmpfile,
 }
 
 /// Whether a test seam injects this failure (never in production).
@@ -518,6 +519,7 @@ fn seam(_seam: Seam) -> bool {
             Seam::Remove => &REMOVE_TEMP_FAILS,
             Seam::Rename => &RENAME_FAILS,
             Seam::Sync => &SYNC_FAILS,
+            Seam::Tmpfile => &TMPFILE_UNSUPPORTED,
         };
         return cell.try_with(std::cell::Cell::get).unwrap_or(false);
     }
@@ -692,41 +694,54 @@ fn temp_id(name: &str) -> &str {
     name.strip_prefix(TEMP_PREFIX).unwrap_or(name)
 }
 
-enum TempWrite {
-    /// Nothing was created.
-    NotCreated,
-    /// Created (and owned) but not completely written and synced.
-    Incomplete(OwnedTemp),
+/// The candidate as an anonymous file of the workspace directory, held by
+/// this descriptor alone until it is published. Dropped unpublished, it is
+/// freed by the kernel: nothing is left behind and nothing is owed.
+struct Anonymous {
+    file: std::fs::File,
+    identity: NodeIdentity,
 }
 
-/// Create the planned temporary file, write and sync it: owned from the
-/// moment it exists. Returns it with its identity.
-fn write_owned(
-    dir: &DirHandle,
-    name: &str,
-    content: &[u8],
-) -> Result<(OwnedTemp, NodeIdentity), TempWrite> {
+impl Anonymous {
+    /// Whether it is still the unlinked file created, holding exactly the
+    /// approved bytes.
+    fn holds(&self, approved: &ManifestEntry) -> bool {
+        use std::os::unix::fs::{FileExt as _, MetadataExt as _};
+        let Ok(found) = self.file.metadata() else {
+            return false;
+        };
+        if NodeIdentity::of(&found) != self.identity
+            || found.nlink() != 0
+            || found.len() != approved.size
+            || approved.size > MAX_FILE
+        {
+            return false;
+        }
+        let mut bytes = vec![0; approved.size as usize];
+        self.file.read_exact_at(&mut bytes, 0).is_ok() && ManifestEntry::of(&bytes) == *approved
+    }
+}
+
+/// Create the candidate as an anonymous file of `dir`, write and sync it.
+/// `None` if the filesystem cannot hold anonymous files or a step fails:
+/// Files is then refused, fail closed, never done through a named file.
+fn write_candidate(dir: &DirHandle, content: &[u8]) -> Option<Anonymous> {
     use std::io::Write as _;
-    use std::os::unix::fs::PermissionsExt as _;
-    let handle = dir.try_clone().map_err(|_| TempWrite::NotCreated)?;
-    let mut file = dir
-        .create_temp_named(name)
-        .map_err(|_| TempWrite::NotCreated)?;
-    let identity = file.metadata().ok().map(|found| NodeIdentity::of(&found));
-    let owned = OwnedTemp {
-        dir: handle,
-        name: name.to_string(),
-        identity,
-        released: false,
-    };
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+    if seam(Seam::Tmpfile) {
+        return None;
+    }
+    let mut file = dir.create_anonymous().ok()?;
+    let found = file.metadata().ok()?;
+    if found.dev() != dir.identity().dev || found.nlink() != 0 {
+        return None;
+    }
+    let identity = NodeIdentity::of(&found);
     let permissions = std::fs::Permissions::from_mode(CREATED_FILE_MODE);
     let written = file.write_all(content).is_ok()
         && file.set_permissions(permissions).is_ok()
         && file.sync_all().is_ok();
-    match identity {
-        Some(identity) if written => Ok((owned, identity)),
-        _ => Err(TempWrite::Incomplete(owned)),
-    }
+    written.then_some(Anonymous { file, identity })
 }
 
 /// What moving a created file aside, to its recorded temporary name, and
@@ -885,10 +900,13 @@ impl CodingRun {
 
     /// Apply a candidate that is exactly one new root-level file, through
     /// one publication right after a final check of every authority (M2d
-    /// §6.3, Codex D2): the temporary file is written and synced first; then
-    /// `guard`, the kernel stop on both authorities and the write grant are
-    /// checked; then one `rename_noreplace` publishes it, never replacing an
-    /// existing entry (D1). An interruption before that check publishes
+    /// §6.3, Codex D2): the candidate is written and synced first, as an
+    /// anonymous `O_TMPFILE` file of the workspace (no pathname exists to
+    /// substitute), and checked to hold the approved bytes; then `guard`,
+    /// the kernel stop on both authorities and the write grant are checked;
+    /// then one `linkat` publishes exactly that inode, never replacing an
+    /// existing entry (D1), and the name is verified to hold it. A
+    /// filesystem without anonymous files refuses (fail closed). An interruption before that check publishes
     /// nothing; one after it lets only this rename complete, with no retry,
     /// no other destination and no second file. Nothing waits for it.
     pub fn apply_observed(
@@ -1233,8 +1251,9 @@ impl CodingRun {
             return Err(refused(Refusal::Unrecorded));
         }
 
-        // The temporary file, owned from the moment it exists, complete and
-        // synced before the handoff.
+        // The candidate, as an anonymous file of the workspace directory: no
+        // pathname exists to substitute; it is complete and synced before the
+        // handoff, and freed unless it is published.
         let Planned {
             dir,
             name,
@@ -1244,50 +1263,53 @@ impl CodingRun {
             ..
         } = planned;
         let written = if hook("write", &path) {
-            Err(TempWrite::NotCreated)
+            None
         } else {
-            write_owned(&dir, &temp, &content)
+            write_candidate(&dir, &content)
         };
-        let (owned, installed) = match written {
-            Ok(written) => written,
-            Err(TempWrite::NotCreated) => {
-                return Err(self.unpublished(&path, None, CleanupCause::TempWriteFailed, store))
-            }
-            Err(TempWrite::Incomplete(owned)) => {
-                return Err(self.unpublished(
-                    &path,
-                    Some(owned),
-                    CleanupCause::TempWriteFailed,
-                    store,
-                ))
-            }
+        let Some(anonymous) = written else {
+            return Err(self.unpublished(CleanupCause::TempWriteFailed, store));
         };
+        hook("final", &path);
+        // It must still hold exactly the approved bytes.
+        if !anonymous.holds(&candidate) {
+            return Err(self.unpublished(CleanupCause::TempWriteFailed, store));
+        }
 
         // FINAL CHECK, then the handoff into the one publication.
-        hook("final", &path);
         if let Some(cause) = final_check(grant, Some(guard), &self.stop, self.observed.as_ref()) {
-            return Err(self.unpublished(
-                &path,
-                Some(owned),
-                CleanupCause::Interrupted(cause),
-                store,
-            ));
+            return Err(self.unpublished(CleanupCause::Interrupted(cause), store));
         }
         guard.passed_final_check();
         hook("handoff", &path);
 
-        // PUBLICATION: one rename that never replaces an existing entry.
-        if seam(Seam::Rename) || owned.dir.rename_noreplace(&owned.name, &name).is_err() {
-            return Err(self.unpublished(
-                &path,
-                Some(owned),
-                CleanupCause::PublicationFailed,
-                store,
-            ));
+        // PUBLICATION: link exactly the inode the descriptor holds; an
+        // existing entry is never replaced.
+        if seam(Seam::Rename) || dir.link_anonymous(&anonymous.file, &name).is_err() {
+            return Err(self.unpublished(CleanupCause::PublicationFailed, store));
         }
-        let mut consumed = owned;
-        consumed.released = true; // the rename consumed the temporary name
-        drop(consumed);
+        let installed = anonymous.identity;
+        drop(anonymous);
+        // The name must now hold that inode with the approved bytes;
+        // otherwise this is never Applied.
+        let published = dir.read_with_identity(&name, MAX_FILE);
+        let verified = matches!(&published, Ok((bytes, identity, _))
+            if *identity == installed && ManifestEntry::of(bytes) == candidate);
+        if !verified {
+            self.apply_state = ApplyState::RecoveryRequired;
+            let mut facts = ledger::path_facts(&path.as_string());
+            facts["failed"] = json!("verify");
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::ApplyRecoveryRequired,
+                &facts,
+            );
+            return Err(ApplyError::RecoveryRequired {
+                failed: "verify".to_string(),
+                unrestored: vec![path.as_string()],
+            });
+        }
         let file = AppliedFile {
             path: path.clone(),
             kind: ChangeKind::Create,
@@ -1361,16 +1383,10 @@ impl CodingRun {
         })
     }
 
-    /// Nothing was published: establish the temporary file's removal, then
-    /// record the outcome. `RolledBack` (`Interrupted` for an interruption)
-    /// only once the removal is established; otherwise the run owes it.
-    fn unpublished(
-        &mut self,
-        path: &RelPath,
-        owned: Option<OwnedTemp>,
-        cause: CleanupCause,
-        store: Store,
-    ) -> ApplyError {
+    /// Nothing was published (the anonymous candidate, if any, is freed
+    /// with its descriptor): record the outcome, `RolledBack`, or
+    /// `Interrupted` for an interruption.
+    fn unpublished(&mut self, cause: CleanupCause, store: Store) -> ApplyError {
         let (code, interrupted) = match cause {
             CleanupCause::Interrupted(cause) => ("interrupted", Some(cause)),
             CleanupCause::TempWriteFailed => ("temp", None),
@@ -1379,17 +1395,6 @@ impl CodingRun {
         let mut facts = json!({ "failed": code });
         if let Some(cause) = interrupted {
             facts["interrupted"] = json!(cause.code());
-        }
-        if let Some(mut owned) = owned {
-            if let Err(removal) = owned.release() {
-                return self.owe(
-                    vec![(owned, removal, path.as_string())],
-                    cause,
-                    &facts,
-                    Settled::RolledBack,
-                    Some(store),
-                );
-            }
         }
         if record(
             self.ledger.as_ref(),
