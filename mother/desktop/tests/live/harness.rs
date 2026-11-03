@@ -261,6 +261,74 @@ fn kill_group(child: &mut Child) {
     let _ = child.wait();
 }
 
+/// What supervising one owned child gave: its stdout and stderr lines, its
+/// exit status once reaped, and why it was killed, if it was.
+pub struct Supervised {
+    pub out: Vec<String>,
+    pub err: Vec<String>,
+    pub status: Option<std::process::ExitStatus>,
+    pub overrun: Option<String>,
+}
+
+/// Supervise the owned `child` (stdout and stderr piped, in its own
+/// process group): read both streams line by line, any line counting as
+/// progress; kill its group if no line comes within `step` or the whole
+/// run passes `whole`.
+pub fn supervise(child: &mut Child, step: Duration, whole: Duration) -> Supervised {
+    let (tx, rx) = mpsc::channel::<(bool, String)>();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    for (is_out, stream) in [
+        (true, Box::new(stdout) as Box<dyn Read + Send>),
+        (false, Box::new(stderr) as Box<dyn Read + Send>),
+    ] {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stream).lines() {
+                let Ok(line) = line else { break };
+                if tx.send((is_out, line)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    drop(tx);
+    let started = Instant::now();
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut last = Instant::now();
+    let overrun = loop {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok((is_out, line)) => {
+                last = Instant::now();
+                if is_out {
+                    out.push(line);
+                } else {
+                    err.push(line);
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break None,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        if last.elapsed() > step {
+            break Some(format!("no progress within {step:?}"));
+        }
+        if started.elapsed() > whole {
+            break Some(format!("overran {whole:?}"));
+        }
+    };
+    if overrun.is_some() {
+        kill_group(child);
+    }
+    let status = child.wait().ok();
+    Supervised {
+        out,
+        err,
+        status,
+        overrun,
+    }
+}
+
 /// Run the child for `name` and read its report strictly.
 fn parent(name: &str, opts: &Opts) {
     let xvfb = opts.display.then(|| Xvfb::start(false));
@@ -287,54 +355,9 @@ fn parent(name: &str, opts: &Opts) {
         .process_group(0)
         .spawn()
         .expect("the live child starts");
-    // Both streams, line by line: any line is progress for the watchdog;
-    // stdout is the report, read strictly below.
-    let (tx, rx) = mpsc::channel::<(bool, String)>();
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-    for (is_out, stream) in [
-        (true, Box::new(stdout) as Box<dyn Read + Send>),
-        (false, Box::new(stderr) as Box<dyn Read + Send>),
-    ] {
-        let tx = tx.clone();
-        std::thread::spawn(move || {
-            for line in BufReader::new(stream).lines() {
-                let Ok(line) = line else { break };
-                if tx.send((is_out, line)).is_err() {
-                    break;
-                }
-            }
-        });
-    }
-    drop(tx);
-    let started = Instant::now();
-    let mut out = Vec::new();
-    let mut err_lines = Vec::new();
-    let mut last = Instant::now();
-    let overrun = loop {
-        match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok((is_out, line)) => {
-                last = Instant::now();
-                if is_out {
-                    out.push(line);
-                } else {
-                    err_lines.push(line);
-                }
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => break None,
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-        }
-        if last.elapsed() > STEP {
-            break Some(format!("no progress within {STEP:?}"));
-        }
-        if started.elapsed() > WHOLE {
-            break Some(format!("overran {WHOLE:?}"));
-        }
-    };
-    if overrun.is_some() {
-        kill_group(&mut child);
-    }
-    let status = child.wait().expect("the live child's status");
+    let supervised = supervise(&mut child, STEP, WHOLE);
+    let (out, err_lines, overrun) = (supervised.out, supervised.err, supervised.overrun);
+    let status = supervised.status.expect("the live child's status");
     let err = err_lines.join("\n");
     let report = out.join("\n");
     let context = format!("--- stdout ---\n{report}\n--- stderr ---\n{err}");

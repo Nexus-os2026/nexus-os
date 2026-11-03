@@ -592,3 +592,40 @@ fn r1_a_clean_quit_closes_the_evidence_session_and_a_relaunch_finds_it_closed() 
         assert!(!health.recovery_required);
     });
 }
+
+// ── Decision 2, finding 6: the harness supervises the process, not only
+//    its streams ───────────────────────────────────────────────────────────
+
+/// A child that closes its stdout and stderr but stays alive is still
+/// supervised under the deadline: killed and reaped, never waited on
+/// without a bound.
+#[test]
+fn h6_a_child_that_closes_its_streams_but_lives_is_killed_and_reaped() {
+    use std::os::unix::process::CommandExt;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "exec >/dev/null 2>/dev/null; exec sleep 600"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let pid = child.id().to_string();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let supervised =
+            harness::supervise(&mut child, Duration::from_secs(10), Duration::from_secs(2));
+        let _ = tx.send((supervised.status, supervised.overrun));
+    });
+    let outcome = rx.recv_timeout(Duration::from_secs(20));
+    // Whatever happened, the planted child does not outlive the test.
+    let _ = std::process::Command::new("kill")
+        .args(["-KILL", &pid])
+        .status();
+    let (status, overrun) = outcome.expect("the harness waited on the child without a bound");
+    assert!(
+        overrun.is_some(),
+        "the living child was not reported as overrunning"
+    );
+    assert!(status.is_some(), "the killed child was not reaped");
+}
