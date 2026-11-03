@@ -594,6 +594,9 @@ impl SecretSource for FixedVault {
     }
 }
 
+/// How a fixture effect ends: its metadata, or its failure.
+type Ending = Result<Vec<(String, String)>, (FailureClass, String)>;
+
 /// What a fixture effect does: wait at `hold` (past any cancellation, on
 /// purpose: it completes after it), release a lease, then end with
 /// `result`.
@@ -601,7 +604,7 @@ impl SecretSource for FixedVault {
 struct Script {
     hold: Option<Gate>,
     release: Option<(Arc<CredentialBroker>, LeaseId, Destination)>,
-    result: Option<Result<Vec<(String, String)>, (FailureClass, String)>>,
+    result: Option<Ending>,
 }
 
 impl Script {
