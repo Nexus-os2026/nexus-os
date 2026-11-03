@@ -115,6 +115,12 @@ impl Review {
     pub fn count(&self, kind: ChangeKind) -> usize {
         self.changes.iter().filter(|c| c.kind == kind).count()
     }
+
+    /// The review's only change, if it is exactly one new file shown
+    /// completely (M2d). Interface stub: never.
+    pub fn single_complete(&self) -> Option<&FileChange> {
+        None
+    }
 }
 
 /// Text made safe to display: control characters (other than line breaks

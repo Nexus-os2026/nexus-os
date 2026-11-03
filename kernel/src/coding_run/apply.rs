@@ -84,6 +84,60 @@ pub struct ConfirmationRequest {
     pub base_short: String,
     pub paths: Vec<String>,
     pub more_paths: usize,
+    /// The full [`ReviewBinding::hash`] the request is about (M2d).
+    pub review_hash: [u8; 32],
+    /// The exact byte count of the one file the request is about, if it
+    /// is about exactly one file.
+    pub bytes: Option<u64>,
+    /// The full SHA-256 (64 hex) of that one file's content.
+    pub sha256_full: Option<String>,
+    /// For a restore of one created file: the identity of the file that
+    /// will be removed.
+    pub identity: Option<FileIdentity>,
+}
+
+/// A file's device and inode, shown to the owner. It is a fact, never
+/// authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileIdentity {
+    pub dev: u64,
+    pub ino: u64,
+}
+
+/// What can interrupt an observed apply before its publication (M2d, I8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptCause {
+    EmergencyStop,
+    Cancelled,
+    Revoked,
+    Expired,
+    CommitmentExpired,
+}
+
+/// The caller's view of the authority an observed apply runs under (M2d,
+/// I8). The broker implements it over its execution guard.
+pub trait ApplyInterrupt {
+    /// Asked once, at the final check before publication: `Some` refuses
+    /// the publication.
+    fn interrupted(&self) -> Option<InterruptCause>;
+    /// Called once the final check has passed, just before publication. A
+    /// no-op in production; a test seam.
+    fn passed_final_check(&self) {}
+}
+
+/// Why owned temporary files had to be removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CleanupCause {
+    /// The final check refused the publication.
+    Interrupted(InterruptCause),
+    /// The temporary file could not be written completely.
+    TempWriteFailed,
+    /// The publishing rename failed.
+    PublicationFailed,
+    /// The publication could not be recorded, so it was undone.
+    Unrecorded,
+    /// The owner's undo moved the created file aside.
+    Undo,
 }
 
 impl ConfirmationRequest {
@@ -143,6 +197,10 @@ impl ConfirmationRequest {
             base_short: binding.base_manifest_hash.to_hex()[..12].to_string(),
             paths: Vec::new(),
             more_paths: 0,
+            review_hash: [0; 32],
+            bytes: None,
+            sha256_full: None,
+            identity: None,
         }
     }
 
@@ -224,6 +282,9 @@ pub enum Refusal {
     VerificationCleanupFailed,
     /// The owner's emergency stop ended the run or is in force (M0-FIX F5).
     EmergencyStopped,
+    /// An interruption reached the operation before it touched anything
+    /// (M2d: an undo's final check U1).
+    Interrupted(InterruptCause),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -252,6 +313,18 @@ pub enum ApplyError {
     #[error("the temporary write grant could not be confirmed closed; recovery required")]
     AuthorityNotClosed {
         after: Box<Result<ApplyReport, ApplyError>>,
+    },
+    /// The final check refused the publication: nothing was published and
+    /// the temporary file's removal was established (M2d).
+    #[error("interrupted before publication: {cause:?}; nothing was published")]
+    Interrupted { cause: InterruptCause },
+    /// Temporary files the run created could not be confirmed removed; the
+    /// run keeps owning them (backend-random temp ids) until
+    /// [`CodingRun::retry_cleanup`] establishes their removal (M2d).
+    #[error("cleanup owed after {cause:?}; recovery required")]
+    CleanupOwed {
+        cause: CleanupCause,
+        temps: Vec<String>,
     },
 }
 
@@ -324,6 +397,25 @@ pub(crate) enum HookPoint {
     BeforeWrite,
     /// After the replacement is written, before the exchange.
     BeforeExchange,
+    /// M2d: the temporary file is written and synced; the final check is
+    /// next.
+    BeforeFinalCheck,
+    /// M2d: the final check passed; the publishing rename is next.
+    AfterFinalCheck,
+    /// M2d: an undo is prepared and recorded; its final check U1 is next.
+    BeforeUnpublish,
+}
+
+// M2d test seams: the removal of an owned temporary file, the publishing
+// rename, and directory syncs of the publication protocol fail.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static REMOVE_TEMP_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    pub(crate) static RENAME_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    pub(crate) static SYNC_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
@@ -489,6 +581,26 @@ impl CodingRun {
             );
         }
         result
+    }
+
+    /// Apply a candidate that is exactly one new root-level file through
+    /// one publication after a final check of every authority (M2d).
+    /// Interface stub: the inherited apply.
+    pub fn apply_observed(
+        &mut self,
+        approval: OwnerApproval,
+        grant: ProjectGrant,
+        storage: &StagingParent,
+        observer: &dyn ApplyInterrupt,
+    ) -> Result<ApplyReport, ApplyError> {
+        let _ = observer;
+        self.apply(approval, grant, storage)
+    }
+
+    /// One bounded attempt to establish the removal of owed temporary
+    /// files (M2d). Interface stub: nothing is ever owed.
+    pub fn retry_cleanup(&mut self) -> Result<(), ApplyError> {
+        Err(ApplyError::InvalidState)
     }
 
     /// The write grant stayed live after an attempt: the run requires

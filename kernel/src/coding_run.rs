@@ -158,10 +158,13 @@ use crate::workspace_authority::{
 use fsops::{DirHandle, EntryKind, NodeIdentity};
 
 pub use apply::{
-    ApplyError, ApplyReport, ApplyState, ConfirmationKind, ConfirmationRequest, OwnerApproval,
-    OwnerConfirmer, Refusal,
+    ApplyError, ApplyInterrupt, ApplyReport, ApplyState, CleanupCause, ConfirmationKind,
+    ConfirmationRequest, FileIdentity, InterruptCause, OwnerApproval, OwnerConfirmer, Refusal,
 };
-pub use ledger::{analyze as analyze_ledger, LedgerFailure, LedgerRecovery, LedgerStore};
+pub use ledger::{
+    analyze as analyze_ledger, analyze_apply, ApplyFinding, LedgerFailure, LedgerRecovery,
+    LedgerStore, PreparedFile, TempLeft,
+};
 pub use local_model::{
     loopback_endpoint, LocalEndpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin,
     ModelRole, LOCAL_PROVIDER,
@@ -437,24 +440,47 @@ impl StagingParent {
     /// through it. Finally the pathname used for grant issuance must name the
     /// retained `coding-runs` directory.
     fn derive(home: &Path) -> Result<Self, RunError> {
+        Self::retained(home, &[".nexus", "coding-runs"])
+    }
+
+    /// `<dir>/coding-runs`, under a backend-owned directory `dir` (M2d: the
+    /// broker's own state), derived like [`Self::from_identity_home`]: `dir`
+    /// must be absolute and already its exact canonical spelling, and
+    /// `coding-runs` is opened, or created owner-only, as a direct child of
+    /// the retained handle. Opening it never removes anything already there.
+    pub fn within(dir: &Path) -> Result<Self, RunError> {
+        if !dir.is_absolute() {
+            return Err(RunError::StagingUnavailable);
+        }
+        Self::retained(dir, &["coding-runs"])
+    }
+
+    /// The pathname of the staging parent (to reserve it, never to reach
+    /// it: staging is reached only through the retained handle).
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Open `base` (its exact canonical spelling) and then each of `chain`
+    /// as a direct child, opened or created owner-only; the pathname must
+    /// finally name the retained directory.
+    fn retained(base: &Path, chain: &[&str]) -> Result<Self, RunError> {
         let unavailable = |_| RunError::StagingUnavailable;
-        let canonical = std::fs::canonicalize(home).map_err(unavailable)?;
-        if canonical != home {
+        let canonical = std::fs::canonicalize(base).map_err(unavailable)?;
+        if canonical != base {
             return Err(RunError::StagingUnavailable);
         }
-        let home_handle = DirHandle::open_absolute(home).map_err(unavailable)?;
-        let nexus = home_handle
-            .open_or_create_subdir(".nexus")
-            .map_err(unavailable)?;
-        let runs = nexus
-            .open_or_create_subdir("coding-runs")
-            .map_err(unavailable)?;
-        let path = home.join(".nexus").join("coding-runs");
+        let mut handle = DirHandle::open_absolute(base).map_err(unavailable)?;
+        let mut path = base.to_path_buf();
+        for name in chain {
+            handle = handle.open_or_create_subdir(name).map_err(unavailable)?;
+            path.push(name);
+        }
         let named = DirHandle::open_absolute(&path).map_err(unavailable)?;
-        if named.identity() != runs.identity() {
+        if named.identity() != handle.identity() {
             return Err(RunError::StagingUnavailable);
         }
-        Ok(Self { handle: runs, path })
+        Ok(Self { handle, path })
     }
 
     #[cfg(test)]
@@ -777,6 +803,20 @@ impl CodingRun {
             Some((project, identity)),
             Some(lease),
         )
+    }
+
+    /// Create a run over an owner-selected project that also observes
+    /// `stop` (the broker's kernel stop authority, M2d): it is refused, and
+    /// halted, if either authority is engaged. Interface stub: `stop` is not
+    /// observed yet.
+    pub fn create_for_project_observing(
+        ledger: Arc<dyn LedgerStore>,
+        project: ProjectGrant,
+        scopes: RunScopes,
+        stop: &Arc<crate::emergency_stop::StopAuthority>,
+    ) -> Result<Self, RunError> {
+        let _ = stop;
+        Self::create_for_project(ledger, project, scopes)
     }
 
     fn create_inner(

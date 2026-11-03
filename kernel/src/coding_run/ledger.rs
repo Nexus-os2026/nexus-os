@@ -22,7 +22,7 @@ use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::apply::{ApplyError, Refusal};
+use super::apply::{ApplyError, InterruptCause, Refusal};
 use super::local_model::{ModelPin, LOCAL_PROVIDER};
 use super::manifest::put_bytes;
 use super::review::ChangeKind;
@@ -236,6 +236,48 @@ pub fn analyze(store: &dyn LedgerStore, run: Uuid) -> Result<LedgerRecovery, Led
     Ok(LedgerRecovery {
         unmatched_prepared: open.into_iter().collect(),
     })
+}
+
+/// What a run's ledger says is uncertain or owed about its project
+/// writes (M2d startup recovery report). Reporting only: nothing is swept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApplyFinding {
+    /// An apply was prepared and has no recorded outcome: publication and
+    /// temporary-file status are unknown. The planned temp ids are listed.
+    PreparedWithoutOutcome { files: Vec<PreparedFile> },
+    /// An undo was prepared and has no recorded outcome.
+    RestorePreparedWithoutOutcome { files: Vec<PreparedFile> },
+    /// Temporary files the kernel observed it could not remove.
+    CleanupOwed { temps: Vec<TempLeft> },
+    /// Recovery is required for another recorded reason (a code).
+    RecoveryRequired { failed: &'static str },
+    /// A verified candidate was awaiting approval; its staging may remain.
+    StagingAwaitingApproval,
+}
+
+/// One file of a prepared operation: its path digest and the backend-random
+/// id of the temporary name planned for it (recorded before creation).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedFile {
+    pub path_sha256: String,
+    pub temp_id: Option<String>,
+}
+
+/// A temporary file left behind, by its backend-random id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TempLeft {
+    pub temp_id: String,
+    pub path_sha256: Option<String>,
+}
+
+/// Read one run's verified ledger and report what its project writes left
+/// uncertain or owed. Interface stub: reports nothing.
+pub fn analyze_apply(
+    store: &dyn LedgerStore,
+    run: Uuid,
+) -> Result<Vec<ApplyFinding>, LedgerFailure> {
+    store.verified_records(run)?;
+    Ok(Vec::new())
 }
 
 // ── The schema (P0-B, I5) ───────────────────────────────────────────────────
@@ -1041,6 +1083,7 @@ impl Refusal {
             Self::VerificationInProgress => "VerificationInProgress",
             Self::VerificationCleanupFailed => "VerificationCleanupFailed",
             Self::EmergencyStopped => "EmergencyStopped",
+            Self::Interrupted(_) => "Interrupted",
         }
     }
 
@@ -1061,6 +1104,7 @@ impl Refusal {
         "VerificationInProgress",
         "VerificationCleanupFailed",
         "EmergencyStopped",
+        "Interrupted",
     ];
 
     /// The project-relative path the refusal names, if any.
@@ -1084,6 +1128,8 @@ impl ApplyError {
             Self::RecoveryRequired { .. } => "RecoveryRequired",
             Self::CompletionUnrecorded { .. } => "CompletionUnrecorded",
             Self::AuthorityNotClosed { .. } => "AuthorityNotClosed",
+            Self::Interrupted { .. } => "Interrupted",
+            Self::CleanupOwed { .. } => "CleanupOwed",
         }
     }
 
@@ -1102,6 +1148,28 @@ impl ApplyError {
         "RecoveryRequired",
         "CompletionUnrecorded",
         "AuthorityNotClosed",
+        "Interrupted",
+        "CleanupOwed",
+    ];
+}
+
+impl InterruptCause {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::EmergencyStop => "EmergencyStop",
+            Self::Cancelled => "Cancelled",
+            Self::Revoked => "Revoked",
+            Self::Expired => "Expired",
+            Self::CommitmentExpired => "CommitmentExpired",
+        }
+    }
+
+    pub const CODES: &'static [&'static str] = &[
+        "EmergencyStop",
+        "Cancelled",
+        "Revoked",
+        "Expired",
+        "CommitmentExpired",
     ];
 }
 
