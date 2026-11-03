@@ -2,7 +2,7 @@
 //! (S4's reference).
 
 use super::policy::POLICY_V1;
-use super::{check, Refusal, RefusalCode};
+use super::{check, work, Refusal, RefusalCode};
 
 /// The 16 body tags.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -241,6 +241,7 @@ struct Writer {
 
 impl Writer {
     fn raw(&mut self, s: &str) {
+        work::add(s.len());
         if self.out.len() <= self.limit {
             self.out.extend_from_slice(s.as_bytes());
         }
@@ -250,6 +251,7 @@ impl Writer {
     fn text(&mut self, s: &str) {
         let mut buf = [0u8; 4];
         for c in s.chars() {
+            work::add(1);
             if self.out.len() > self.limit {
                 return;
             }
@@ -331,6 +333,7 @@ impl Writer {
         let mut stack: Vec<(std::slice::Iter<'_, Inline>, Option<Tag>)> =
             vec![(inlines.iter(), None)];
         while let Some(top) = stack.last_mut() {
+            work::add(1);
             let Some(item) = top.0.next() else {
                 if let Some((_, Some(tag))) = stack.pop() {
                     self.close(tag);

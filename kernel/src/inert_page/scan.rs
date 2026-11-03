@@ -7,7 +7,7 @@
 //! reads its parameters from `POLICY_V1`.
 
 use super::policy::POLICY_V1;
-use super::{LexicalFindings, RefusalCode as C};
+use super::{work, LexicalFindings, RefusalCode as C};
 
 pub(super) fn scan(input: &[u8]) -> LexicalFindings {
     let mut f = LexicalFindings::default();
@@ -20,6 +20,8 @@ pub(super) fn scan(input: &[u8]) -> LexicalFindings {
         f.note(C::NoFinalNewline, input.len());
     }
     tags(input, &mut f);
+    // Each offset compares against the fixed policy tables only.
+    work::add(input.len());
     for at in 0..input.len() {
         anywhere(input, at, &mut f);
     }
@@ -38,6 +40,7 @@ fn characters(input: &[u8], f: &mut LexicalFindings) {
     let mut base = 0;
     for chunk in input.utf8_chunks() {
         for (k, c) in chunk.valid().char_indices() {
+            work::add(1);
             let at = base + k;
             let code = match c {
                 '\n' => continue,
@@ -52,6 +55,7 @@ fn characters(input: &[u8], f: &mut LexicalFindings) {
         }
         base += chunk.valid().len();
         if !chunk.invalid().is_empty() {
+            work::add(chunk.invalid().len());
             f.note(C::NotUtf8, base);
             base += chunk.invalid().len();
         }
@@ -78,6 +82,7 @@ fn tags(s: &[u8], f: &mut LexicalFindings) {
     let mut styles = 0usize;
     let mut i = 0;
     while i < s.len() {
+        work::add(1);
         if s[i] != b'<' {
             i += 1;
             continue;
@@ -95,6 +100,8 @@ fn tags(s: &[u8], f: &mut LexicalFindings) {
             j += 1;
         }
         let raw = &s[name_at..j];
+        // The name is scanned, then lowercased.
+        work::add(2 * raw.len());
         let lower = raw.to_ascii_lowercase();
         if lower == p.script_tag.as_bytes() {
             f.note(C::ScriptElement, i);
@@ -111,7 +118,11 @@ fn tags(s: &[u8], f: &mut LexicalFindings) {
                 f.note(C::TagCase, i);
             }
         }
-        i = attributes(s, j, f);
+        let end = attributes(s, j, f);
+        // Each byte of the attributes is visited once (names twice, see
+        // `attribute_name`).
+        work::add(end - j);
+        i = end;
     }
 }
 
@@ -166,6 +177,7 @@ fn attributes(s: &[u8], mut j: usize, f: &mut LexicalFindings) -> usize {
 
 fn attribute_name(raw: &[u8], at: usize, f: &mut LexicalFindings) {
     let p = &POLICY_V1;
+    work::add(raw.len());
     let lower = raw.to_ascii_lowercase();
     if lower.starts_with(p.event_prefix.as_bytes()) {
         f.note(C::EventHandler, at);
