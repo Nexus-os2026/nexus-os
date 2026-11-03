@@ -12,8 +12,8 @@
 //! thread, every group signal sent from that thread is recorded, with
 //! whether it went through a held leader and whether the group's leader
 //! process was present at that moment; a signal not sent through a held
-//! leader is recorded and **suppressed**, so a planted mistake can never
-//! reach a reused group.
+//! leader, or to a group whose leader is gone, is recorded and
+//! **suppressed**, so a planted mistake can never reach a reused group.
 
 #![allow(dead_code)]
 
@@ -37,8 +37,9 @@ pub struct Signalled {
 
 thread_local! {
     static RECORDING: RefCell<Option<Vec<Signalled>>> = const { RefCell::new(None) };
-    /// Under recording only: every held signal fails, unsent (to prove that
-    /// a failed final signal fails its cleanup).
+    /// Under recording only: every held signal is sent, then reported as
+    /// failed (to prove that a failed final signal fails its cleanup, without
+    /// leaving the process running).
     static FAIL_SIGNALS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
@@ -55,7 +56,8 @@ pub fn recording<R>(f: impl FnOnce() -> R) -> (R, Vec<Signalled>) {
     (result, signalled)
 }
 
-/// As `recording`, with every held signal failing (unsent).
+/// As `recording`, with every held signal reported as failed after it was
+/// sent.
 pub fn recording_with_failed_signals<R>(f: impl FnOnce() -> R) -> (R, Vec<Signalled>) {
     FAIL_SIGNALS.with(|fail| fail.set(true));
     let outcome = recording(f);
@@ -122,19 +124,20 @@ pub fn send_group_kill(pgid: i32, held: bool) -> Result<(), String> {
             })
         })
     });
-    if recorded.is_some() && !held {
+    if recorded.is_some() && (!held || !present) {
         return Ok(());
     }
-    if recorded.is_some() && FAIL_SIGNALS.with(|fail| fail.get()) {
-        return Err(format!("signalling process group {pgid} failed: injected"));
-    }
-    signal_outcome(
+    let outcome = signal_outcome(
         nix::sys::signal::killpg(
             nix::unistd::Pid::from_raw(pgid),
             nix::sys::signal::Signal::SIGKILL,
         ),
         pgid,
-    )
+    );
+    if recorded.is_some() && FAIL_SIGNALS.with(|fail| fail.get()) {
+        return Err(format!("signalling process group {pgid} failed: injected"));
+    }
+    outcome
 }
 
 /// A process-group leader the test owns: the only thing it may signal.

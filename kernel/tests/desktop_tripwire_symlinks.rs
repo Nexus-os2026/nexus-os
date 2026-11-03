@@ -559,8 +559,8 @@ fn g0_s11_nothing_is_signalled_on_inference() {
 
 #[test]
 fn g0_s12_a_failed_final_signal_fails_the_cleanup() {
-    // A leader that has already exited, so that leaving it unsignalled is
-    // harmless; its final signal is made to fail.
+    // A leader that has already exited; its final signal is reported as
+    // failed.
     let (ended, signalled) = process_leader::recording_with_failed_signals(|| {
         let mut leader = Leader::spawn(
             Command::new("true")
