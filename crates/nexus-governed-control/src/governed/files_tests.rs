@@ -1154,13 +1154,20 @@ fn m2d_b1_d_o18_d_subtree_bind_mounts_are_refused() {
         std::fs::create_dir_all(dirs.path(sub)).unwrap();
     }
     let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
-    let ordinary = format!(
-        "1 0 {} / / rw,relatime shared:1 - ext4 /dev/root rw\n\
-         2 1 {} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
-        dev_of(Path::new("/")),
-        dev_of(&tmp),
-        tmp.display()
+    // Each device once: the temporary directory's own entry only when it is
+    // a filesystem of its own (on a host whose /tmp is on the root
+    // filesystem, a second entry would list the root device twice).
+    let mut ordinary = format!(
+        "1 0 {} / / rw,relatime shared:1 - ext4 /dev/root rw\n",
+        dev_of(Path::new("/"))
     );
+    if dev_of(&tmp) != dev_of(Path::new("/")) {
+        ordinary.push_str(&format!(
+            "2 1 {} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
+            dev_of(&tmp),
+            tmp.display()
+        ));
+    }
     let bind = |id: u32, source: &str, point: &str| {
         format!(
             "{id} 2 {} {source} {} rw,relatime shared:3 - tmpfs tmpfs rw\n",
@@ -1266,4 +1273,150 @@ fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
     }
     let root_mount = crate::files::mount_of(Path::new("/")).unwrap();
     assert_eq!(root_mount.mount_point, PathBuf::from("/"));
+}
+
+// ---------------------------------------------------------------- Codex review 4 of PR #57
+
+/// Codex review 4 (MEDIUM ×2, LOW): only the supported topology is
+/// accepted, a plain local filesystem (ext4, xfs or tmpfs) mounted once,
+/// whole: the location's device is listed exactly once in
+/// `/proc/self/mountinfo`, with root `/`, an allowed type, a mount point
+/// that is the location's ancestor or itself, and no other mount point
+/// between them or at the location. Everything else is refused
+/// (`unsupported_mount_topology`): Codex's hidden mount (the device listed
+/// at `/`, at a hidden deeper mount with root `/`, and under the covering
+/// subtree bind); an overlay (root `/`); a btrfs subvolume; a device listed
+/// twice with root `/`; a truncated record; a mount point strictly between.
+/// Controls: a single ext4 and a single tmpfs are accepted. A pure
+/// mountinfo seam over real directories; each table lists every real
+/// device the selection meets exactly once unless the case says otherwise.
+#[test]
+fn m2d_b1_d_o18_f_only_a_whole_local_filesystem_mounted_once_is_supported() {
+    use crate::files::mountinfo_for_test;
+    let root = temp_root("m2d-b1-ws-allowlist");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    for sub in [
+        "data/reserved",
+        "mnt/ws/deep",
+        "plain/ws",
+        "mid/ws",
+        "other",
+    ] {
+        std::fs::create_dir_all(dirs.path(sub)).unwrap();
+    }
+    let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let rootfs = dev_of(Path::new("/"));
+    let tmpfs = dev_of(&tmp);
+    // The ordinary table: `/` (ext4), and the temporary directory's own
+    // filesystem if it has one, of type `fstype` (when the temporary
+    // directory is on the root filesystem, `/` itself takes `fstype`);
+    // `truncated` drops that entry's superblock options.
+    let table = |fstype: &str, truncated: bool| {
+        let end = if truncated { "" } else { " rw" };
+        if tmpfs == rootfs {
+            format!("1 0 {rootfs} / / rw,relatime shared:1 - {fstype} /dev/root{end}\n")
+        } else {
+            format!(
+                "1 0 {rootfs} / / rw,relatime shared:1 - ext4 /dev/root rw\n\
+                 2 1 {tmpfs} / {} rw,relatime shared:2 - {fstype} {fstype}{end}\n",
+                tmp.display()
+            )
+        }
+    };
+    let entry = |id: u32, dev: &str, source: &str, point: &str, fstype: &str| {
+        format!(
+            "{id} 2 {dev} {source} {} rw,relatime shared:9 - {fstype} {fstype} rw\n",
+            dirs.path(point).display()
+        )
+    };
+    let with = |reserved: Vec<PathBuf>| Exclusions {
+        home: dirs.path("home"),
+        identity_home: dirs.path("ident"),
+        reserved,
+        uid: crate::launcher::effective_uid(),
+    };
+    let select = |mountinfo: String, path: &Path, reserved: Vec<PathBuf>| {
+        mountinfo_for_test(Some(Ok(mountinfo)));
+        let gov = control(&root, &evidence);
+        let result = gov
+            .register_workspace_in(path, &with(reserved))
+            .map(|_| ())
+            .map_err(|error| error.class());
+        mountinfo_for_test(None);
+        result
+    };
+    let plain = dirs.path("plain/ws");
+    let refused = Err("unsupported_mount_topology");
+
+    let outcomes = vec![
+        (
+            "Codex's hidden mount: the device at /, hidden at deep (root /), under a subtree bind",
+            select(
+                format!(
+                    "{}{}{}",
+                    table("tmpfs", false),
+                    entry(40, &tmpfs, "/", "mnt/ws/deep", "tmpfs"),
+                    entry(41, &tmpfs, "/data/reserved/ws", "mnt/ws", "tmpfs"),
+                ),
+                &dirs.path("mnt/ws/deep"),
+                vec![dirs.path("data/reserved")],
+            ),
+        ),
+        (
+            "an overlay, root /",
+            select(table("overlay", false), &plain, vec![]),
+        ),
+        (
+            "a btrfs subvolume",
+            select(table("btrfs", false), &plain, vec![]),
+        ),
+        (
+            "the device listed twice, root / both times",
+            select(
+                format!(
+                    "{}{}",
+                    table("tmpfs", false),
+                    entry(42, &tmpfs, "/", "other", "tmpfs")
+                ),
+                &plain,
+                vec![],
+            ),
+        ),
+        (
+            "a truncated record (no superblock options)",
+            select(table("tmpfs", true), &plain, vec![]),
+        ),
+        (
+            "a mount point strictly between the mount and the workspace",
+            select(
+                format!(
+                    "{}{}",
+                    table("tmpfs", false),
+                    entry(43, "4095:1048575", "/", "mid", "tmpfs")
+                ),
+                &dirs.path("mid/ws"),
+                vec![],
+            ),
+        ),
+        (
+            "control: a single ext4",
+            select(table("ext4", false), &plain, vec![]),
+        ),
+        (
+            "control: a single tmpfs",
+            select(table("tmpfs", false), &plain, vec![]),
+        ),
+    ];
+    let expected = vec![
+        (outcomes[0].0, refused),
+        (outcomes[1].0, refused),
+        (outcomes[2].0, refused),
+        (outcomes[3].0, refused),
+        (outcomes[4].0, refused),
+        (outcomes[5].0, refused),
+        (outcomes[6].0, Ok(())),
+        (outcomes[7].0, Ok(())),
+    ];
+    assert_eq!(outcomes, expected);
 }
