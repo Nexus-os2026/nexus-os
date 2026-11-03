@@ -27,6 +27,8 @@ pub mod governed_http;
 pub mod governed_path;
 pub mod hm;
 pub mod identity_home;
+/// The local model transport (M2e-A1): one verified local model on loopback.
+pub mod inference;
 pub mod kill_gates;
 pub mod lifecycle;
 pub mod manifest;
