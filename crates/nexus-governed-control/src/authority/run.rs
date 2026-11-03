@@ -13,7 +13,7 @@
 //! or adopts it, and leaves it only when the registry drops the run or the
 //! door is gone. Every membership change is made under the runs lock.
 
-use super::evidence::{EvidencePhase, EvidenceRecord};
+use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, RunId};
 use super::AuthorityError;
@@ -52,6 +52,17 @@ pub enum RunClass {
     Agent,
 }
 
+impl RunClass {
+    /// The privacy class of a run of this class (P0, I6): `Owner` only for
+    /// an owner run; every other run's evidence is Restricted.
+    pub(crate) fn privacy(self) -> Privacy {
+        match self {
+            RunClass::Owner => Privacy::Owner,
+            RunClass::Agent => Privacy::Restricted,
+        }
+    }
+}
+
 /// A run, for display.
 #[derive(Clone, Debug)]
 pub struct RunView {
@@ -66,6 +77,9 @@ pub struct RunView {
 struct RunEntry {
     view: RunView,
     class: RunClass,
+    /// P0: its privacy class, fixed from `class` at insertion and never
+    /// changed (door membership, which can be reclaimed, plays no part).
+    privacy: Privacy,
     cancelled: Arc<AtomicBool>,
     /// M2c: the door groups the run belongs to (at most
     /// `MAX_GROUPS_PER_RUN` live ones).
@@ -299,6 +313,7 @@ impl RunRegistry {
                 finished: false,
             },
             class,
+            privacy: class.privacy(),
             cancelled: Arc::new(AtomicBool::new(false)),
             groups: group.into_iter().collect(),
         };
@@ -457,7 +472,13 @@ impl RunRegistry {
         let newly = !entry.halted;
         if newly {
             entry.halted = true;
-            let mut record = EvidenceRecord::new(EvidencePhase::DoorHalted, wall_ms, generation);
+            // A door's record: its agent, its opaque id and a reason code.
+            let mut record = EvidenceRecord::new(
+                EvidencePhase::DoorHalted,
+                wall_ms,
+                generation,
+                Privacy::Restricted,
+            );
             record.agent = Some(agent.to_string());
             record.cancelled = true;
             record.detail.push(("door".into(), door.to_string()));
@@ -761,6 +782,17 @@ impl RunRegistry {
         panic!("the runs lock is poisoned on purpose (test)");
     }
 
+    /// P0: the privacy class `run` was given at insertion. A run this
+    /// registry does not know (never opened, or pruned), or a poisoned
+    /// lock, is Restricted: missing state never selects the Owner class.
+    pub(crate) fn privacy(&self, run: RunId) -> Privacy {
+        self.runs
+            .lock()
+            .ok()
+            .and_then(|runs| runs.get(&run).map(|entry| entry.privacy))
+            .unwrap_or(Privacy::Restricted)
+    }
+
     /// Whose run it is (`None`: no such run).
     pub fn class(&self, run: RunId) -> Option<RunClass> {
         self.runs.lock().expect("runs").get(&run).map(|e| e.class)
@@ -795,7 +827,12 @@ fn cancel_one(entry: &mut RunEntry, wall_ms: u64, generation: u64, batch: &mut R
     entry.view.cancelled = true;
     entry.cancelled.store(true, Ordering::SeqCst);
     if was_active {
-        let mut record = EvidenceRecord::new(EvidencePhase::RunCancelled, wall_ms, generation);
+        let mut record = EvidenceRecord::new(
+            EvidencePhase::RunCancelled,
+            wall_ms,
+            generation,
+            entry.privacy,
+        );
         record.run = Some(entry.view.id.to_string());
         record.agent = Some(entry.view.agent.to_string());
         record.cancelled = true;

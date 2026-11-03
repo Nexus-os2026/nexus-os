@@ -31,11 +31,11 @@
 
 use crate::authority::clock::Clock;
 use crate::authority::commitment::{CommitmentRegistry, CommitmentView, ExecutionGuard, LeaseEnd};
-use crate::authority::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
+use crate::authority::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink, Privacy};
 use crate::authority::ids::{AgentId, LeaseId, RunId};
 use crate::authority::policy::PolicyGeneration;
 use crate::authority::run::{CancelToken, RunRegistry};
-use crate::authority::{Authority, AuthorityError};
+use crate::authority::{write_record, Authority, AuthorityError};
 use crate::egress::destination::Destination;
 use crate::egress::transport::SecretHeader;
 use crate::egress::ReleaseCredential;
@@ -151,6 +151,9 @@ enum LeaseState {
 struct Lease {
     agent: AgentId,
     run: RunId,
+    /// P0: its run's privacy class, copied when it is issued; its issue and
+    /// its release are recorded with it.
+    privacy: Privacy,
     spec: CredentialSpec,
     origin: String,
     deadline_ms: u64,
@@ -257,8 +260,7 @@ impl CredentialBroker {
 
     /// Write one record. Never called with the lease table's lock held.
     fn record(&self, record: EvidenceRecord) -> Result<(), AuthorityError> {
-        self.evidence
-            .record(&record)
+        write_record(&*self.evidence, &record)
             .map(|_| ())
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
@@ -273,6 +275,9 @@ impl CredentialBroker {
         ttl: Duration,
     ) -> Result<LeaseId, AuthorityError> {
         let token = self.runs.check(run, agent)?;
+        // Fixed now, from the class the run was admitted with (a run gone
+        // meanwhile is Restricted), and kept for the lease's life.
+        let privacy = self.runs.privacy(run);
         let id = LeaseId::fresh();
         let now = self.clock.monotonic_ms();
         let ttl_ms = u64::try_from(ttl.min(MAX_LEASE_TTL).as_millis()).unwrap_or(u64::MAX);
@@ -280,6 +285,7 @@ impl CredentialBroker {
             EvidencePhase::LeaseIssued,
             self.clock.wall_ms(),
             self.generation.current(),
+            privacy,
         );
         record.agent = Some(agent.to_string());
         record.run = Some(run.to_string());
@@ -314,6 +320,7 @@ impl CredentialBroker {
             Lease {
                 agent: agent.clone(),
                 run,
+                privacy,
                 spec,
                 origin: origin.origin_text(),
                 deadline_ms: now.saturating_add(ttl_ms),
@@ -464,7 +471,7 @@ impl ReleaseCredential for CredentialBroker {
             .view(guard.commitment())
             .ok_or(AuthorityError::UnknownCommitment)?;
         let now = self.clock.monotonic_ms();
-        let spec = {
+        let (spec, privacy) = {
             let mut leases = self.table.leases.lock().expect("leases");
             let lease = leases
                 .map
@@ -488,12 +495,15 @@ impl ReleaseCredential for CredentialBroker {
             }
             // One-shot: consumed before the vault is read, whatever follows.
             lease.state = LeaseState::Released;
-            lease.spec
+            (lease.spec, lease.privacy)
         };
+        // The lease's own class, never the run's current state (the run
+        // may be gone by now).
         let mut record = EvidenceRecord::new(
             EvidencePhase::CredentialReleased,
             self.clock.wall_ms(),
             self.generation.current(),
+            privacy,
         );
         record.commitment = Some(guard.commitment().to_string());
         record.agent = Some(view.agent.to_string());

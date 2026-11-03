@@ -621,10 +621,10 @@ fn m2c_b3_a_start_held_in_the_store_is_refused() {
     assert_eq!(f.state(id), CommitmentState::Revoked);
     let _ = batch.write();
     let revoked = f.records(EvidencePhase::Revoked);
-    assert!(revoked.iter().any(|r| r
-        .detail
+    assert!(revoked
         .iter()
-        .any(|(k, v)| k == "interrupted" && v == "start")));
+        .any(|r| r.detail.iter().any(|(k, v)| k == "interrupted_sha256"
+            && *v == crate::authority::evidence::text_digest("start"))));
     f.gov.probe_locks();
 }
 

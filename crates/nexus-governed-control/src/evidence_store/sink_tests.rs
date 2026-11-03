@@ -426,7 +426,8 @@ fn el1_n3_projections_are_written_only_after_the_store_commits() {
     failing.fail_from_now();
     let evidence =
         PrimaryEvidence::open(&scratch.store(), vec![copy.clone(), failing.clone()]).unwrap();
-    let record = |phase| EvidenceRecord::new(phase, 1, 1);
+    let record =
+        |phase| EvidenceRecord::new(phase, 1, 1, crate::authority::evidence::Privacy::Owner);
     evidence.store().refuse_inserts(true);
     assert!(evidence.record(&record(EvidencePhase::RunOpened)).is_err());
     assert_eq!(
@@ -459,7 +460,12 @@ fn el1_n3_the_owed_list_is_bounded_and_its_overflow_latches() {
     let scratch = Scratch::new();
     let evidence = PrimaryEvidence::open(&scratch.store(), vec![]).unwrap();
     evidence.store().refuse_inserts(true);
-    let record = EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1);
+    let record = EvidenceRecord::new(
+        EvidencePhase::RunCancelled,
+        1,
+        1,
+        crate::authority::evidence::Privacy::Owner,
+    );
     for _ in 0..OWED_CAPACITY {
         assert_eq!(evidence.record_end(&record), EndStatus::Owed);
     }
@@ -596,7 +602,10 @@ fn el1_m6_c1_a_stop_after_a_recorded_start_ends_the_commitment_and_nothing_is_un
     let revoked = rows_of(&rows, "revoked", &id);
     assert_eq!(revoked.len(), 1);
     let body: serde_json::Value = serde_json::from_str(&revoked[0].body).unwrap();
-    assert_eq!(body["detail"]["interrupted"], "start");
+    assert_eq!(
+        body["detail"]["interrupted_sha256"],
+        crate::authority::evidence::text_digest("start")
+    );
     assert!(rows_of(&rows, "finished", &id).is_empty());
     // A new session over the same file.
     let Fixture {
@@ -1023,7 +1032,10 @@ fn el1_m7_d1_a_deny_after_a_recorded_start_ends_the_commitment_and_nothing_is_un
     assert_eq!(denied.len(), 1);
     assert!(started[0].seq < denied[0].seq);
     let body: serde_json::Value = serde_json::from_str(&denied[0].body).unwrap();
-    assert_eq!(body["detail"]["interrupted"], "start");
+    assert_eq!(
+        body["detail"]["interrupted_sha256"],
+        crate::authority::evidence::text_digest("start")
+    );
     assert!(rows_of(&rows, "finished", &id).is_empty());
     reopened_settled(f);
 }
@@ -1067,7 +1079,10 @@ fn el1_m7_y1_an_expiry_after_a_recorded_start_ends_the_commitment_and_nothing_is
     let expired = rows_of(&rows, "expired", &id);
     assert_eq!(expired.len(), 1);
     let body: serde_json::Value = serde_json::from_str(&expired[0].body).unwrap();
-    assert_eq!(body["detail"]["interrupted"], "start");
+    assert_eq!(
+        body["detail"]["interrupted_sha256"],
+        crate::authority::evidence::text_digest("start")
+    );
     assert!(rows_of(&rows, "finished", &id).is_empty());
     reopened_settled(f);
 }

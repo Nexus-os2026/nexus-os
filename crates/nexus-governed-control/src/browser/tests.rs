@@ -689,14 +689,28 @@ fn a_stop_ends_the_session_between_its_steps() {
     let records = h.evidence.records();
     let finished = records.iter().rev().find(|r| r.outcome.is_some()).unwrap();
     assert_eq!(finished.outcome, Some("cancelled"));
+    // P0-C: an agent run's failure text is kept as its digest (I6): one
+    // of the texts a cancelled step gives.
     let detail = &finished
         .detail
         .iter()
-        .find(|(k, _)| k == "detail")
+        .find(|(k, _)| k == "detail_sha256")
         .unwrap()
         .1;
+    let texts: Vec<String> = (1..=20)
+        .flat_map(|step| {
+            [
+                "cancelled",
+                "the browser did not answer in time",
+                "the browser ended",
+            ]
+            .map(|why| format!("{why} (at step {step} of 20)"))
+        })
+        .collect();
     assert!(
-        detail.contains(" (at step ") && detail.ends_with(" of 20)"),
+        texts
+            .iter()
+            .any(|text| crate::authority::evidence::text_digest(text) == *detail),
         "{detail}"
     );
     assert_eq!(
@@ -811,15 +825,17 @@ fn a_revoked_grant_ends_the_session_before_its_next_step() {
     let records = h.evidence.records();
     let finished = records.iter().rev().find(|r| r.outcome.is_some()).unwrap();
     assert_eq!(finished.failure, Some("refused"));
+    // P0-C: an agent run's failure text is kept as its digest (I6).
     let detail = &finished
         .detail
         .iter()
-        .find(|(k, _)| k == "detail")
+        .find(|(k, _)| k == "detail_sha256")
         .unwrap()
         .1;
     assert!(
-        detail.starts_with("its grant was revoked or expired (at step ")
-            && detail.ends_with(" of 20)"),
+        (1..=20).any(|step| crate::authority::evidence::text_digest(&format!(
+            "its grant was revoked or expired (at step {step} of 20)"
+        )) == *detail),
         "{detail}"
     );
 }
@@ -1398,10 +1414,16 @@ fn a_direct_mode_policy_refuses_the_session_before_any_connection() {
         .find(|r| r.commitment.as_deref() == Some(&view.id.to_string()) && r.outcome.is_some())
         .unwrap();
     assert_eq!(finished.failure, Some("refused"));
-    assert!(
-        format!("{:?}", finished.detail).contains("the browser was not started"),
-        "{:?}",
-        finished.detail
+    // P0-C: an agent run's failure text is kept as its digest (I6).
+    assert_eq!(
+        finished.detail,
+        vec![(
+            "detail_sha256".to_string(),
+            crate::authority::evidence::text_digest(&format!(
+                "{}: the browser was not started",
+                super::POLICY_CONFIGURED
+            ))
+        )]
     );
     std::thread::sleep(Duration::from_millis(200));
     assert!(server.received().is_empty(), "nothing was reached");
@@ -1444,8 +1466,16 @@ fn a_browser_that_goes_around_its_proxy_is_refused() {
         .unwrap();
     assert_eq!(finished.outcome, Some("failed"));
     assert_eq!(finished.failure, Some("refused"));
-    assert!(
-        format!("{:?}", finished.detail).contains("did not go through the session's proxy"),
+    // P0-C: an agent run's failure text is kept as its digest (I6).
+    assert_eq!(
+        finished.detail,
+        vec![(
+            "detail_sha256".to_string(),
+            crate::authority::evidence::text_digest(
+                "the browser did not go through the session's proxy \
+                 (at the start page, before step 1 of 1)"
+            )
+        )],
         "{:?}",
         finished.detail
     );

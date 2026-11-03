@@ -5,7 +5,7 @@
 //! uncertain, as the store says), or, if the batch is dropped first, lost.
 //! Dropping a batch does no I/O, takes no lock and cannot panic.
 
-use super::evidence::{EndStatus, EvidenceRecord, EvidenceSink};
+use super::evidence::{write_end, EndStatus, EvidenceRecord, EvidenceSink};
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -130,7 +130,7 @@ impl RecordBatch {
         let mut outcome = BatchOutcome::default();
         while let Some(record) = self.records.front() {
             self.in_flight = true;
-            let status = self.sink.record_end(record);
+            let status = write_end(&*self.sink, record);
             let to = match status {
                 EndStatus::Recorded { .. } => {
                     outcome.recorded += 1;

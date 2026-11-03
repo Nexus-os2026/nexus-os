@@ -27,13 +27,51 @@ use self::approval::{
 };
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
-use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
+use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy};
+pub(crate) use self::evidence::{write_end, write_record};
 use self::halt::{HaltCounters, RecordBatch};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
 use self::run::{GroupId, Lift, Refusal, RunClass, RunOrigin, RunRegistry};
 use std::fmt;
 use std::sync::Arc;
+
+/// The I6 registry of `reason` codes: every name [`AuthorityError::class`]
+/// gives, a door halt's reasons ([`halt::HaltReason`]) and the stop's
+/// `recovery_required` (a test keeps them in step).
+pub(crate) const REASONS: &[&str] = &[
+    "unknown_commitment",
+    "unknown_run",
+    "unknown_grant",
+    "unknown_lease",
+    "wrong_agent",
+    "wrong_run",
+    "not_pending",
+    "not_authorized",
+    "expired",
+    "stale_policy_generation",
+    "grant_not_live",
+    "no_covering_grant",
+    "run_cancelled",
+    "run_not_active",
+    "emergency_stopped",
+    "resume_superseded",
+    "approval_required",
+    "approval_not_applicable",
+    "approval_mismatch",
+    "declined",
+    "target_changed",
+    "parameters_changed",
+    "evidence_unavailable",
+    "capacity",
+    "not_member",
+    "halted",
+    "closed",
+    "invalid_action",
+    "unavailable",
+    "journal_failed",
+    "recovery_required",
+];
 
 /// Why the authority refused. The message is bounded and names no input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -238,15 +276,14 @@ impl Authority {
 
     /// A gating record: what it permits happens only once it is written.
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
-        self.evidence
-            .record(record)
+        write_record(&*self.evidence, record)
             .map(|_| ())
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 
     /// An end record: what it records has already taken effect (EL-1 §6).
     fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
-        self.evidence.record_end(record)
+        write_end(&*self.evidence, record)
     }
 
     /// Record that the agent display is starting (it is a process Phase
@@ -284,6 +321,7 @@ impl Authority {
             EvidencePhase::KernelHalt,
             self.clock.wall_ms(),
             self.generation.current(),
+            Privacy::Owner,
         );
         record.outcome = Some(outcome);
         record.detail.push(("area".into(), area.into()));
@@ -364,8 +402,12 @@ impl Authority {
         } else {
             EvidencePhase::MissionDeclined
         };
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Owner,
+        );
         record
             .detail
             .push(("contract_hash".into(), request.contract_hash.clone()));
@@ -383,9 +425,7 @@ impl Authority {
         // A stop pressed, or quitting begun, while the owner was asked wins.
         self.mission_admissible()?;
         // Evidence first: an unrecorded consent is no consent.
-        let seq = self
-            .evidence
-            .record(&record)
+        let seq = write_record(&*self.evidence, &record)
             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
         Ok(MissionApproval::confirmed(
             request.contract_hash.clone(),
@@ -433,8 +473,12 @@ impl Authority {
         } else {
             EvidencePhase::MissionResumeDeclined
         };
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Owner,
+        );
         record
             .detail
             .push(("mission".into(), request.mission.clone()));
@@ -458,9 +502,7 @@ impl Authority {
         // A stop pressed, or quitting begun, while the owner was asked wins.
         self.mission_admissible()?;
         // Evidence first: an unrecorded yes is no yes.
-        let seq = self
-            .evidence
-            .record(&record)
+        let seq = write_record(&*self.evidence, &record)
             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
         // After the record (M2c §2.6 step 6): the record says the owner said
         // yes; no approval exists if a stop or quitting came meanwhile.
@@ -502,8 +544,12 @@ impl Authority {
         } else {
             EvidencePhase::AgentDoorDeclined
         };
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Restricted,
+        );
         record.agent = Some(agent.to_string());
         record.detail.push(("door".into(), door.to_string()));
         if yes {
@@ -538,8 +584,12 @@ impl Authority {
         phase: EvidencePhase,
         detail: Vec<(String, String)>,
     ) -> EvidenceRecord {
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Owner,
+        );
         record.detail = detail;
         record
     }
@@ -596,6 +646,7 @@ impl Authority {
             EvidencePhase::RunOpened,
             self.clock.wall_ms(),
             self.generation.current(),
+            class.privacy(),
         );
         record.agent = Some(agent.to_string());
         if class == RunClass::Owner {
@@ -632,6 +683,7 @@ impl Authority {
             EvidencePhase::RunCancelled,
             self.clock.wall_ms(),
             self.generation.current(),
+            self.runs.privacy(run),
         );
         record.run = Some(run.to_string());
         record.agent = Some(view.agent.to_string());
@@ -678,6 +730,7 @@ impl Authority {
             EvidencePhase::EmergencyStop,
             self.clock.wall_ms(),
             self.generation.current(),
+            Privacy::Owner,
         );
         record.cancelled = true;
         record
@@ -749,6 +802,7 @@ impl Authority {
             EvidencePhase::Resumed,
             self.clock.wall_ms(),
             self.generation.current(),
+            Privacy::Owner,
         );
         record
             .detail
