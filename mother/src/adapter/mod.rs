@@ -100,6 +100,8 @@ mod m2c_halt;
 #[cfg(test)]
 pub(crate) mod m2c_support;
 #[cfg(test)]
+mod m2d_crash;
+#[cfg(test)]
 mod m2d_files;
 #[cfg(test)]
 mod m2d_files_r1;
@@ -111,8 +113,6 @@ mod m2d_files_r4;
 mod m2d_files_r5;
 #[cfg(test)]
 mod m2d_files_r5b;
-#[cfg(test)]
-mod m2d_crash;
 mod private_file;
 pub use private_file::FilePrivate;
 
