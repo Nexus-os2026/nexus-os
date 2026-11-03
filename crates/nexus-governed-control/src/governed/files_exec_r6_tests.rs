@@ -121,3 +121,54 @@ fn m2d_c_r6_the_anchor_lives_with_the_cells_and_runs_name_theirs() {
     let unknown = RunId::parse("run-00000000000000000000000000000042").unwrap();
     assert_eq!(f.door.run_carries(unknown, &first), Ok(None));
 }
+
+/// The body of `fn name` in `source` (to its closing brace at the
+/// item's indentation).
+fn body<'s>(source: &'s str, name: &str) -> &'s str {
+    let start = source
+        .find(&format!("fn {name}("))
+        .or_else(|| source.find(&format!("fn {name}<")))
+        .unwrap_or_else(|| panic!("no fn {name}"));
+    let rest = &source[start..];
+    let indent = source[..start]
+        .rsplit('\n')
+        .next()
+        .map_or(0, |line| line.len() - line.trim_start().len());
+    let close = format!("\n{}}}", " ".repeat(indent));
+    &rest[..rest.find(&close).unwrap_or(rest.len())]
+}
+
+/// R6-1's source guard: every run admission goes through the one shared
+/// check, directly or through `live_member` / `checked`.
+#[test]
+fn m2d_c_r6_no_run_admission_bypasses_the_shared_check() {
+    let source = include_str!("../authority/run.rs");
+    for name in ["checked", "live_member", "join_with"] {
+        assert!(
+            body(source, name).contains("run_admissible("),
+            "{name} bypasses the shared check"
+        );
+    }
+    for name in ["admissible", "admit_model_call"] {
+        assert!(
+            body(source, name).contains("live_member("),
+            "{name} bypasses the shared check"
+        );
+    }
+    for name in ["admit_files", "admit_inference"] {
+        assert!(
+            body(source, name).contains("self.admissible("),
+            "{name} bypasses the shared check"
+        );
+    }
+    for name in ["check", "check_retaining"] {
+        assert!(
+            body(source, name).contains("Self::checked("),
+            "{name} bypasses the shared check"
+        );
+    }
+    assert!(
+        body(source, "open_in_with").contains("is_engaged"),
+        "an opening with an engaged cell"
+    );
+}
