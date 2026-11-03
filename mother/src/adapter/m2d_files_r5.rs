@@ -33,6 +33,9 @@ const PAST_BUDGET: Duration = Duration::from_millis(3_600_001);
 
 type Hold = Arc<Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>>;
 
+/// A lane's one hook, set once a scenario is built.
+type Tick = Arc<OnceLock<Mutex<Option<Box<dyn FnOnce() + Send>>>>>;
+
 /// A journal whose next append, once armed, waits for its release.
 struct Gated {
     inner: FileJournal,
@@ -63,7 +66,7 @@ impl JournalStore for Gated {
 /// check: the next lane's reservation).
 struct Ticking {
     inner: Arc<dyn Lane>,
-    hook: Arc<OnceLock<Mutex<Option<Box<dyn FnOnce() + Send>>>>>,
+    hook: Tick,
 }
 
 impl Lane for Ticking {
@@ -89,7 +92,7 @@ pub(super) struct Scenario<'a> {
     pub(super) clock: Arc<ManualClock>,
     pub(super) owner: FilesOwner,
     hold: Hold,
-    pub(super) tick: Arc<OnceLock<Mutex<Option<Box<dyn FnOnce() + Send>>>>>,
+    pub(super) tick: Tick,
 }
 
 impl<'a> Scenario<'a> {
@@ -111,7 +114,7 @@ impl<'a> Scenario<'a> {
             .unwrap()
             .join(&folder);
         let hold: Hold = Arc::default();
-        let tick: Arc<OnceLock<Mutex<Option<Box<dyn FnOnce() + Send>>>>> = Arc::default();
+        let tick: Tick = Arc::default();
         // The Sentinel ticks: every lane call after it is a reservation.
         let lanes: Vec<Arc<dyn Lane>> = files_lanes()
             .into_iter()
