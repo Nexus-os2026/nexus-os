@@ -96,6 +96,8 @@ mod p0_dirsync;
 #[cfg(test)]
 mod p0_privacy;
 #[cfg(test)]
+mod p0_privdir;
+#[cfg(test)]
 pub(crate) mod p0_support;
 #[cfg(test)]
 mod real_broker;
