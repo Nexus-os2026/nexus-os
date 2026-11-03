@@ -627,3 +627,21 @@ fn m2d_c_r4_9_controls() {
     assert_eq!(w.mother.reason(id).as_deref(), Some("budget_time"));
     assert_eq!(started(&events(&w, id)), vec![SettleCause::TimeBudget]);
 }
+
+/// Addendum 5: the Owner's notice of an uncertain File, exactly.
+#[test]
+fn m2d_c_r4_10_the_owner_is_told_exactly() {
+    let w = world();
+    let id = waiting(&w);
+    w.port.set_publication(Some(Publication::Uncertain));
+    assert_eq!(w.mother.stop(id), Ok(MissionState::Blocked));
+    assert_eq!(
+        w.mother.notice(id),
+        Some(
+            "A file may exist in your folder. A write already handed off may still finish. \
+             Mother will not retry or continue this mission."
+        )
+    );
+    let other = w.approved(contract_with(""));
+    assert_eq!(w.mother.notice(other), None);
+}
