@@ -959,6 +959,47 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     }
 }
 
+#[test]
+fn m2d_k_p1a_nc_30_has_exactly_one_authorized_consumer() {
+    // M2d-K (Architect-authorized): the broker's Files module is the one
+    // production source outside the primitive that may name it, so that it
+    // can stage a Files run (design v2 §6.1 step 4). The exception is one
+    // exact path, pinned here: a second entry, a prefix or another broker
+    // source is a reviewed change to this test.
+    assert_eq!(
+        P1A_NC_30_AUTHORIZED,
+        ["crates/nexus-governed-control/src/files/mod.rs"]
+    );
+    assert!(p1a_nc_30_exempt(
+        "crates/nexus-governed-control/src/files/mod.rs"
+    ));
+    for scanned in [
+        "crates/nexus-governed-control/src/lib.rs",
+        "crates/nexus-governed-control/src/governed.rs",
+        "crates/nexus-governed-control/src/files.rs",
+        "crates/nexus-governed-control/src/files/execute.rs",
+        "crates/nexus-governed-control/src/files/mod.rs/inner.rs",
+        "crates/nexus-governed-control/src/files/mod.rs.rs",
+        "vendor/crates/nexus-governed-control/src/files/mod.rs",
+        "mother/src/files/mod.rs",
+        "mother/host/src/files/mod.rs",
+    ] {
+        assert!(!p1a_nc_30_exempt(scanned), "{scanned} must stay scanned");
+    }
+    // The existing exemptions are unchanged.
+    for kept in [
+        "kernel/src/coding_run/apply.rs",
+        "kernel/src/coding_run.rs",
+        "kernel/src/lib.rs",
+        "persistence/src/lib.rs",
+        "persistence/src/coding_run_ledger.rs",
+        "app/src-tauri/src/coding_flow.rs",
+        "app/src-tauri/src/coding_flow/verification.rs",
+    ] {
+        assert!(p1a_nc_30_exempt(kept), "{kept} stays exempt");
+    }
+}
+
 // ── P1A-002-R1: staging authority lifecycle ─────────────────────────────────
 
 const ALLOCATION_OUTCOME: usize = 2;
