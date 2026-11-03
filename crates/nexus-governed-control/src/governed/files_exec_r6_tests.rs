@@ -114,12 +114,14 @@ fn m2d_c_r6_the_anchor_lives_with_the_cells_and_runs_name_theirs() {
     assert_eq!(Arc::strong_count(&anchor), 2, "one cell remains");
     cells.retire("anchored", 2);
     assert_eq!(Arc::strong_count(&anchor), 1, "dropped with the last");
-    let run = f.door.open_run_with_halt(&first).unwrap();
-    let elsewhere = cells.cell("anchored", 9).unwrap();
-    assert_eq!(f.door.run_carries(run, &first), Ok(Some(true)));
+    assert!(first.is_engaged(), "retired engaged");
+    let carried = cells.cell("carried", 1).unwrap();
+    let run = f.door.open_run_with_halt(&carried).unwrap();
+    let elsewhere = cells.cell("carried", 9).unwrap();
+    assert_eq!(f.door.run_carries(run, &carried), Ok(Some(true)));
     assert_eq!(f.door.run_carries(run, &elsewhere), Ok(Some(false)));
     let unknown = RunId::parse("run-00000000000000000000000000000042").unwrap();
-    assert_eq!(f.door.run_carries(unknown, &first), Ok(None));
+    assert_eq!(f.door.run_carries(unknown, &carried), Ok(None));
 }
 
 /// The body of `fn name` in `source` (to its closing brace at the
