@@ -1420,3 +1420,73 @@ fn m2d_b1_d_o18_f_only_a_whole_local_filesystem_mounted_once_is_supported() {
     ];
     assert_eq!(outcomes, expected);
 }
+
+// ---------------------------------------------------------------- Codex review 5 of PR #57
+
+/// Codex review 5 (LOW 1): a record is well formed only when every
+/// required field is present and non-empty. Codex's exact record, ending
+/// `- ext4 /dev/root ` (the superblock options an empty final field once
+/// the line is split on spaces), and one with an empty source, each refuse
+/// the whole table (`unsupported_mount_topology`), although the record is
+/// another device's; the control, the same record with its options,
+/// is accepted. Through the mountinfo seam over real directories.
+#[test]
+fn m2d_b1_d_o18_g_empty_required_fields_refuse_the_table() {
+    use crate::files::mountinfo_for_test;
+    let root = temp_root("m2d-b1-ws-fields");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    std::fs::create_dir_all(dirs.path("plain/ws")).unwrap();
+    let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let rootfs = dev_of(Path::new("/"));
+    let tmpfs = dev_of(&tmp);
+    // Each device the selection meets, listed once and well formed.
+    let mut ordinary = format!("1 0 {rootfs} / / rw,relatime shared:1 - ext4 /dev/root rw\n");
+    if tmpfs != rootfs {
+        ordinary.push_str(&format!(
+            "2 1 {tmpfs} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
+            tmp.display()
+        ));
+    }
+    // Another device's record, at a mount point the selection never meets.
+    let other = |tail: &str| {
+        format!(
+            "{ordinary}9 1 4095:1048575 / /nexus-m2d-b1-elsewhere rw,relatime shared:9 - {tail}\n"
+        )
+    };
+    let select = |mountinfo: String| {
+        mountinfo_for_test(Some(Ok(mountinfo)));
+        let gov = control(&root, &evidence);
+        let result = gov
+            .register_workspace_in(
+                &dirs.path("plain/ws"),
+                &Exclusions {
+                    home: dirs.path("home"),
+                    identity_home: dirs.path("ident"),
+                    reserved: vec![],
+                    uid: crate::launcher::effective_uid(),
+                },
+            )
+            .map(|_| ())
+            .map_err(|error| error.class());
+        mountinfo_for_test(None);
+        result
+    };
+    let outcomes = vec![
+        (
+            "Codex's record: empty superblock options",
+            select(other("ext4 /dev/root ")),
+        ),
+        ("an empty source", select(other("ext4  rw"))),
+        (
+            "control: the same record, well formed",
+            select(other("ext4 /dev/root rw")),
+        ),
+    ];
+    let expected = vec![
+        (outcomes[0].0, Err("unsupported_mount_topology")),
+        (outcomes[1].0, Err("unsupported_mount_topology")),
+        (outcomes[2].0, Ok(())),
+    ];
+    assert_eq!(outcomes, expected);
+}
