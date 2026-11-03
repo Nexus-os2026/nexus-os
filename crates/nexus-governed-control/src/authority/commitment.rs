@@ -131,6 +131,11 @@ pub enum FailureClass {
     /// or its start could not be recorded), or to let it take its next step
     /// (its grant was revoked or expired).
     Refused,
+    /// M2d (Codex review 1 of PR #64, H2): the effect may have happened and
+    /// whether it did is not established: recovery is required. Recorded
+    /// as the outcome `uncertain`, never as a plain failure or a
+    /// cancellation.
+    Uncertain,
 }
 
 impl FailureClass {
@@ -144,6 +149,7 @@ impl FailureClass {
             FailureClass::Unavailable => "unavailable",
             FailureClass::Abandoned => "abandoned",
             FailureClass::Refused => "refused",
+            FailureClass::Uncertain => "uncertain",
         }
     }
 }
@@ -1189,6 +1195,14 @@ impl CommitmentRegistry {
             // cancellation beside it, never hidden as "cancelled".
             let (state, outcome_str, failure) = match &outcome {
                 Outcome::Succeeded { .. } => (CommitmentState::Succeeded, "succeeded", None),
+                Outcome::Failed {
+                    class: FailureClass::Uncertain,
+                    ..
+                } => (
+                    CommitmentState::Failed,
+                    "uncertain",
+                    Some(FailureClass::Uncertain.as_str()),
+                ),
                 Outcome::Failed { class, .. } => {
                     (CommitmentState::Failed, "failed", Some(class.as_str()))
                 }

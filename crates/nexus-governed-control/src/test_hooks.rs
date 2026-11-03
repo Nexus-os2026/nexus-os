@@ -44,6 +44,9 @@ pub(crate) mod at {
     /// M2d-B2: an undo is confirmed and its write grant issued; the
     /// kernel's restore (its U1 check) is next.
     pub(crate) const FILE_UNDO_APPROVED: &str = "files.undo_approved";
+    /// Codex review 1 of PR #64: a Files cleanup of a handed-over run is
+    /// next (H4's held cleanup).
+    pub(crate) const FILE_CLEANUP: &str = "files.cleanup";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

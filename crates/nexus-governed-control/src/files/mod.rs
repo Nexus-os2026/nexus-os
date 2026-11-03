@@ -84,9 +84,10 @@ use nexus_kernel::coding_run::ProjectGrant;
 #[cfg(target_os = "linux")]
 use nexus_kernel::coding_run::{
     analyze_apply, ApplyError, ApplyFinding, ApplyInterrupt, ApplyState, CandidateEdit, ChangeKind,
-    CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InterruptCause, LedgerFailure,
-    LedgerFile, OwnerConfirmer, PreparedFile, ProjectError, ProjectInfo, ProjectRegistry, Refusal,
-    RelPath, RevocationReason, RunError, RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft,
+    CleanupStatus, CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InterruptCause,
+    LedgerFailure, LedgerFile, OwnerConfirmer, PreparedFile, ProjectError, ProjectInfo,
+    ProjectRegistry, Refusal, RelPath, RevocationReason, RunError, RunScopes, ScopeEntry, ScopeSet,
+    StagingParent, TempLeft,
 };
 use nexus_kernel::emergency_stop::StopAuthority;
 #[cfg(target_os = "linux")]
@@ -376,6 +377,21 @@ pub enum RecoveryFinding {
     RecoveryRequired { failed: &'static str },
     /// A verified file awaited approval; its staging may remain.
     StagingAwaitingApproval,
+    /// In this process: the run's staging could not be removed; Files
+    /// keeps owning it until the Owner's retry removes it (Codex review 1
+    /// of PR #64, M1).
+    StagingNotDiscarded,
+}
+
+/// What one Owner retry of owed Files cleanup came to (§6.6, Codex review
+/// 1 of PR #64, M1): each owed run got one bounded attempt.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CleanupRetry {
+    /// Runs whose cleanup is now established (no longer owned).
+    pub settled: usize,
+    /// Runs still owed (their cleanup still fails, or recovery is required
+    /// for another reason): still owned and reported.
+    pub still_owed: usize,
 }
 
 /// A file of a finding: its path digest and the backend-random id of its
@@ -512,10 +528,15 @@ struct Shared {
     /// The undo slot.
     #[cfg(target_os = "linux")]
     slot: Mutex<Option<Applied>>,
-    /// Runs that owe cleanup or require recovery: kept, never dropped, for
-    /// the life of the process.
+    /// Runs that owe cleanup (temps, or their staging) or require recovery:
+    /// kept, never dropped, until the Owner's retry establishes their
+    /// cleanup.
     #[cfg(target_os = "linux")]
     kept: Mutex<Vec<CodingRun>>,
+    /// Broker runs a cause interrupted after a publication's final check:
+    /// no further Files request of theirs is accepted (Codex review 1 of PR
+    /// #64, H3; M4′).
+    closed: Mutex<std::collections::HashSet<RunId>>,
     /// Runs of effects dropped elsewhere (a Stop, a cancellation, a sweep):
     /// owned here until the next Files call discards their staging.
     #[cfg(target_os = "linux")]
@@ -571,17 +592,29 @@ impl Shared {
 
     /// A run Files no longer needs: one that owes cleanup or requires
     /// recovery is kept; any other has its staging discarded now (recorded)
-    /// and is dropped.
+    /// and is dropped only once that removal is established; otherwise it
+    /// is kept too (A6, Codex review 1 of PR #64, M1). Returns whether it
+    /// was kept.
     #[cfg(target_os = "linux")]
-    fn retire(&self, mut run: CodingRun) {
-        if !run.cleanup_owed().is_empty() || run.apply_state() == ApplyState::RecoveryRequired {
-            self.kept.lock().expect("files kept").push(run);
-            return;
+    fn retire(&self, mut run: CodingRun) -> bool {
+        if owes(&run) {
+            self.keep(run);
+            return true;
         }
-        if !run.state().is_terminal() {
-            let _ = run.cancel();
+        if !discard(&mut run) {
+            self.keep(run);
+            return true;
         }
-        let _ = run.discard_staging();
+        false
+    }
+
+    #[cfg(target_os = "linux")]
+    fn keep(&self, run: CodingRun) {
+        self.kept.lock().expect("files kept").push(run);
+    }
+
+    fn is_closed(&self, run: RunId) -> bool {
+        self.closed.lock().expect("files closed").contains(&run)
     }
 
     /// Put `applied` in the undo slot; the one it replaces is retired.
@@ -589,7 +622,7 @@ impl Shared {
     fn applied(&self, applied: Applied) {
         let replaced = self.slot.lock().expect("files slot").replace(applied);
         if let Some(old) = replaced {
-            self.retire(old.run);
+            let _kept = self.retire(old.run);
         }
     }
 
@@ -657,30 +690,123 @@ impl FilesEffect {
         code: String,
         detail: String,
     ) -> (FailureClass, String) {
-        self.shared.detail(
-            guard.commitment(),
-            vec![
-                ("File", self.name.clone()),
-                ("Outcome", code.clone()),
-                ("Detail", detail),
-            ],
-        );
+        self.failed_with(guard, (class, code), detail, false)
+    }
+
+    /// [`Self::failed`], saying whether the run's cleanup is owed (M1).
+    fn failed_with(
+        &self,
+        guard: &ExecutionGuard,
+        (class, code): (FailureClass, String),
+        detail: String,
+        owed: bool,
+    ) -> (FailureClass, String) {
+        let mut lines = vec![
+            ("File", self.name.clone()),
+            ("Outcome", code.clone()),
+            ("Detail", detail),
+        ];
+        if owed {
+            lines.push((
+                "Cleanup",
+                "owed: Files keeps this run until the Owner's retry establishes it".to_string(),
+            ));
+        }
+        self.shared.detail(guard.commitment(), lines);
         (class, code)
+    }
+
+    /// Nothing was published: the run is retired (kept if its cleanup is
+    /// owed) and the failure is a class and a code.
+    fn not_published(
+        &self,
+        guard: &ExecutionGuard,
+        run: CodingRun,
+        error: &ApplyError,
+    ) -> (FailureClass, String) {
+        let kept = self.shared.retire(run);
+        self.failed_with(guard, apply_failure(error), error.to_string(), kept)
     }
 }
 
-/// Whether the kernel published the file although the attempt ended in an
-/// error (the directory sync, or the write grant's closure, failed after
-/// the publication): it happened, and recovery is required.
+/// Whether a run still owes cleanup of temps or requires recovery.
 #[cfg(target_os = "linux")]
-fn published(error: &ApplyError) -> bool {
+fn owes(run: &CodingRun) -> bool {
+    !run.cleanup_owed().is_empty() || run.apply_state() == ApplyState::RecoveryRequired
+}
+
+/// Discard a run's staging (cancelling it first if it is still live);
+/// whether its removal is established.
+#[cfg(target_os = "linux")]
+fn discard(run: &mut CodingRun) -> bool {
+    if run.cleanup_status() == CleanupStatus::Discarded {
+        return true;
+    }
+    if !run.state().is_terminal() {
+        let _ = run.cancel();
+    }
+    matches!(run.discard_staging(), Ok(CleanupStatus::Discarded))
+}
+
+/// What a publication attempt came to for the file at the name (Codex
+/// review 1 of PR #64, H2), decided from every kernel outcome with no
+/// catch-all: a new kernel outcome must be classified here.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Publication {
+    /// The file is at the name; `recovery`: its durability, or the write
+    /// grant's closure, is not established.
+    Published { recovery: bool },
+    /// Nothing was published, or the file was removed again, established.
+    NotPublished,
+    /// The file may be present: recovery is required. Never reported as a
+    /// plain failure.
+    Uncertain,
+}
+
+/// The outcome of an attempt that ended in `error` (a successful one is
+/// a publication).
+#[cfg(target_os = "linux")]
+fn publication(error: &ApplyError) -> Publication {
     match error {
-        ApplyError::RecoveryRequired { failed, .. } => failed == "dir_sync",
+        // Refused, or rolled back with the removal established, before any
+        // file stayed at the name.
+        ApplyError::InvalidState => Publication::NotPublished,
+        ApplyError::Refused(_) => Publication::NotPublished,
+        ApplyError::RolledBack { .. } => Publication::NotPublished,
+        ApplyError::Interrupted { .. } => Publication::NotPublished,
+        // Published, and only its directory sync failed: the file is in
+        // place (and undoable).
+        ApplyError::RecoveryRequired { failed, .. } if failed == "dir_sync" => {
+            Publication::Published { recovery: true }
+        }
+        // A failed verification, or a compensating unpublication that did
+        // not complete: the file may be at the name.
+        ApplyError::RecoveryRequired { .. } => Publication::Uncertain,
+        // The filesystem work is done but not recorded: not established.
+        ApplyError::CompletionUnrecorded { .. } => Publication::Uncertain,
+        // Moved aside by a compensation whose removal is not established.
+        ApplyError::CleanupOwed { .. } => Publication::Uncertain,
         ApplyError::AuthorityNotClosed { after } => match after.as_ref() {
-            Ok(_) => true,
-            Err(inner) => published(inner),
+            Ok(_) => Publication::Published { recovery: true },
+            Err(inner) => match publication(inner) {
+                Publication::Published { .. } => Publication::Published { recovery: true },
+                Publication::NotPublished => Publication::NotPublished,
+                Publication::Uncertain => Publication::Uncertain,
+            },
         },
-        _ => false,
+    }
+}
+
+/// A cause's code in a success's controlled interruption status (H3).
+#[cfg(target_os = "linux")]
+fn interruption(cause: InterruptCause) -> &'static str {
+    match cause {
+        InterruptCause::EmergencyStop => "emergency_stop",
+        InterruptCause::Cancelled => "cancelled",
+        InterruptCause::Revoked => "revoked",
+        InterruptCause::Expired => "expired",
+        InterruptCause::CommitmentExpired => "commitment_expired",
     }
 }
 
@@ -712,6 +838,9 @@ impl PendingEffect for FilesEffect {
     /// absent, and the staged candidate still reviews to exactly the
     /// committed review hash (§6.1 step 6).
     fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        if self.shared.is_closed(self.broker_run) {
+            return Err(AuthorityError::RunNotActive);
+        }
         if identity_of(&self.workspace.root)? != self.admission.workspace.identity {
             return Err(AuthorityError::TargetChanged);
         }
@@ -769,48 +898,61 @@ impl PendingEffect for FilesEffect {
         // The bridge's one construction site (§6.4).
         let hash = self.review_hash;
         let approved = BrokerApproved { review_hash: hash };
-        let result = run
-            .request_approval(&kernel.project.name, &approved)
-            .map_err(Some)
-            .and_then(|approval| {
-                let write = kernel
-                    .projects
-                    .grant_for_apply(kernel.project.id, binding)
-                    .map_err(|_| None)?;
-                #[cfg(test)]
-                shared.note_write_grant(&kernel.authority, &write);
-                let observer = Observer::new(guard, &self.stop, shared.hold(), &shared);
-                run.apply_observed(approval, write, &self.backend.staging, &observer)
-                    .map_err(Some)
-            });
+        let approval = match run.request_approval(&kernel.project.name, &approved) {
+            Ok(approval) => approval,
+            Err(error) => return Err(self.not_published(guard, run, &error)),
+        };
+        let Ok(write) = kernel.projects.grant_for_apply(kernel.project.id, binding) else {
+            let kept = shared.retire(run);
+            return Err(self.failed_with(
+                guard,
+                (FailureClass::Unavailable, "write_grant".into()),
+                "the kernel issued no write grant".into(),
+                kept,
+            ));
+        };
+        #[cfg(test)]
+        shared.note_write_grant(&kernel.authority, &write);
+        let observer = Observer::new(guard, &self.stop, shared.hold(), &shared);
+        let result = run.apply_observed(approval, write, &self.backend.staging, &observer);
         let recovery = match result {
             Ok(_) => false,
-            Err(Some(error)) if published(&error) => {
-                self.failed(
-                    guard,
-                    FailureClass::Actuator,
-                    "recovery_required".into(),
-                    error.to_string(),
-                );
-                true
-            }
-            Err(error) => {
-                let failure = match &error {
-                    Some(error) => {
-                        let (class, code) = apply_failure(error);
-                        self.failed(guard, class, code, error.to_string())
-                    }
-                    None => self.failed(
+            Err(error) => match publication(&error) {
+                Publication::Published { recovery } => {
+                    self.failed(
                         guard,
-                        FailureClass::Unavailable,
-                        "write_grant".into(),
-                        "the kernel issued no write grant".into(),
-                    ),
-                };
-                shared.retire(run);
-                return Err(failure);
-            }
+                        FailureClass::Actuator,
+                        "recovery_required".into(),
+                        error.to_string(),
+                    );
+                    recovery
+                }
+                Publication::NotPublished => {
+                    return Err(self.not_published(guard, run, &error));
+                }
+                Publication::Uncertain => {
+                    // The file may be present: never a plain failure, and
+                    // the run is kept (never retired or discarded).
+                    shared.keep(run);
+                    return Err(self.failed(
+                        guard,
+                        FailureClass::Uncertain,
+                        "uncertain".into(),
+                        format!("the file may be present: recovery required ({error})"),
+                    ));
+                }
+            },
         };
+        // H3 (M4′): a cause that arrived after the handoff is reported
+        // beside the truthful success, and Files ends for this run.
+        let interrupted = observer.cause().map(interruption);
+        if interrupted.is_some() {
+            shared
+                .closed
+                .lock()
+                .expect("files closed")
+                .insert(self.broker_run);
+        }
         shared.applied(Applied {
             run,
             workspace: Arc::clone(&self.workspace),
@@ -827,6 +969,9 @@ impl PendingEffect for FilesEffect {
         ];
         if recovery {
             meta.push(("reason".to_string(), "recovery_required".to_string()));
+        }
+        if let Some(code) = interrupted {
+            meta.push(("interrupted".to_string(), code.to_string()));
         }
         Ok(EffectOutput {
             meta,
@@ -944,6 +1089,43 @@ impl ApplyInterrupt for Observer<'_> {
     }
 }
 
+/// An undo's lifetime, taken when it starts, before any cleanup or dialog
+/// (Codex review 1 of PR #64, H4; H2′): the broker's kernel stop, watched
+/// from then, and the policy generation then. It ends at any Stop since
+/// (even one already resumed) or any policy change; checks are memory only.
+#[cfg(target_os = "linux")]
+struct UndoLifetime {
+    watch: StopWatch,
+    generation: u64,
+}
+
+#[cfg(target_os = "linux")]
+impl UndoLifetime {
+    fn take(authority: &Authority, stop: &Arc<StopAuthority>) -> Result<Self, AuthorityError> {
+        let watch = stop.admit().map_err(|_| AuthorityError::EmergencyStopped)?;
+        if authority.runs().is_stopped() {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        Ok(Self {
+            watch,
+            generation: authority.policy_generation(),
+        })
+    }
+
+    fn check(&self, authority: &Authority) -> Result<(), AuthorityError> {
+        if self.watch.halted()
+            || self.watch.authority().is_stopped()
+            || authority.runs().is_stopped()
+        {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if authority.policy_generation() != self.generation {
+            return Err(AuthorityError::Stale);
+        }
+        Ok(())
+    }
+}
+
 /// The undo's confirmation (§6.5, §6.6): the kernel's restore request,
 /// checked against the broker's own record of the file, shown to the Owner
 /// with every fact.
@@ -955,6 +1137,9 @@ struct UndoBridge<'a> {
     bytes: u64,
     sha256: &'a str,
     review_hash: [u8; 32],
+    /// Whether the undo's lifetime still holds: checked before the Owner
+    /// is asked (H4).
+    live: &'a dyn Fn() -> bool,
 }
 
 #[cfg(target_os = "linux")]
@@ -963,7 +1148,8 @@ impl OwnerConfirmer for UndoBridge<'_> {
         let Some(identity) = request.identity else {
             return false;
         };
-        if request.kind != ConfirmationKind::Restore
+        if !(self.live)()
+            || request.kind != ConfirmationKind::Restore
             || request.review_hash != self.review_hash
             || request.bytes != Some(self.bytes)
             || request.sha256_full.as_deref() != Some(self.sha256)
@@ -1580,18 +1766,31 @@ impl Files {
         {
             let runs = std::mem::take(&mut *self.shared.deferred.lock().expect("files deferred"));
             for run in runs {
-                self.shared.retire(run);
+                #[cfg(test)]
+                self.shared.fire(crate::test_hooks::at::FILE_CLEANUP);
+                let _kept = self.shared.retire(run);
             }
         }
     }
 
     /// §6.6 and H2′: undo the last create of this process, once, with the
     /// Owner's dialog and fresh authority (see
-    /// `GovernedControl::files_undo`). The slot is taken for the attempt
-    /// and put back unless the undo completed; nothing is held across the
-    /// dialog or the filesystem.
+    /// `GovernedControl::files_undo`). Its lifetime (the broker's kernel
+    /// stop watch and the policy generation) is taken first, before any
+    /// cleanup this call does (Codex review 1 of PR #64, H4), and checked
+    /// after that cleanup, around the Owner's dialog and right before the
+    /// kernel's U1: a Stop, even resumed, or a policy change in between
+    /// refuses this undo, and a new request is needed. The slot is taken
+    /// for the attempt and put back unless the undo completed; nothing is
+    /// held across the dialog or the filesystem.
     #[cfg(target_os = "linux")]
-    pub(crate) fn undo(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+    pub(crate) fn undo(
+        &self,
+        authority: &Authority,
+        stop: &Arc<StopAuthority>,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<(), AuthorityError> {
+        let lifetime = UndoLifetime::take(authority, stop)?;
         self.drain();
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
             "another Files operation is under way",
@@ -1600,16 +1799,18 @@ impl Files {
         let mut applied = taken.ok_or(AuthorityError::Unavailable(
             "there is no file to undo in this session",
         ))?;
-        let result = self.undo_one(&mut applied, confirmer);
+        let result = lifetime
+            .check(authority)
+            .and_then(|()| self.undo_one(&mut applied, confirmer, &lifetime, authority));
         if result.is_ok() {
-            self.shared.retire(applied.run);
+            let _kept = self.shared.retire(applied.run);
         } else {
             let mut slot = self.shared.slot.lock().expect("files slot");
             if slot.is_none() {
                 *slot = Some(applied);
             } else {
                 drop(slot);
-                self.shared.retire(applied.run);
+                let _kept = self.shared.retire(applied.run);
             }
         }
         result
@@ -1623,8 +1824,11 @@ impl Files {
         &self,
         applied: &mut Applied,
         confirmer: &dyn ControlConfirmer,
+        lifetime: &UndoLifetime,
+        authority: &Authority,
     ) -> Result<(), AuthorityError> {
         let kernel = &applied.workspace.kernel;
+        let live = || lifetime.check(authority).is_ok();
         let bridge = UndoBridge {
             confirmer,
             workspace: &applied.workspace.info.name,
@@ -1632,11 +1836,12 @@ impl Files {
             bytes: applied.bytes,
             sha256: &applied.sha256,
             review_hash: applied.review_hash,
+            live: &live,
         };
-        let approval = applied
-            .run
-            .request_restore(&kernel.project.name, &bridge)
-            .map_err(undo_error)?;
+        let requested = applied.run.request_restore(&kernel.project.name, &bridge);
+        // A dialog refused because the lifetime ended is that, not a no.
+        lifetime.check(authority)?;
+        let approval = requested.map_err(undo_error)?;
         let write = kernel
             .projects
             .grant_for_apply(kernel.project.id, applied.binding)
@@ -1646,6 +1851,7 @@ impl Files {
             self.shared.note_write_grant(&kernel.authority, &write);
             self.shared.fire(crate::test_hooks::at::FILE_UNDO_APPROVED);
         }
+        lifetime.check(authority)?;
         applied
             .run
             .restore(approval, write)
@@ -1654,18 +1860,24 @@ impl Files {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn undo(&self, _confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+    pub(crate) fn undo(
+        &self,
+        _authority: &Authority,
+        _stop: &Arc<StopAuthority>,
+        _confirmer: &dyn ControlConfirmer,
+    ) -> Result<(), AuthorityError> {
         Err(AuthorityError::Unavailable(
             "Files are available on Linux only",
         ))
     }
 
-    /// §6.7: every Files run's findings, from the ledger only. Nothing on
-    /// disk is opened, swept or called disposable; a ledger that cannot be
-    /// read or verified is an error.
+    /// §6.7: every Files run's findings, from the ledger, and in this
+    /// process the runs whose staging Files still owns because its removal
+    /// failed. It performs no cleanup (Codex review 1 of PR #64, M2):
+    /// nothing on disk is removed, swept or called disposable; a ledger
+    /// that cannot be read or verified is an error.
     #[cfg(target_os = "linux")]
     pub(crate) fn recovery_report(&self) -> Result<Vec<RecoveryEntry>, AuthorityError> {
-        self.drain();
         let backend = self.backend()?;
         let store = backend.ledger.store();
         let mut entries = Vec::new();
@@ -1678,7 +1890,60 @@ impl Files {
                 });
             }
         }
+        let undiscarded: Vec<String> = self
+            .shared
+            .kept
+            .lock()
+            .expect("files kept")
+            .iter()
+            .filter(|run| run.cleanup_status() != CleanupStatus::Discarded)
+            .map(|run| run.id().to_string())
+            .collect();
+        for run in undiscarded {
+            match entries.iter_mut().find(|entry| entry.run == run) {
+                Some(entry) => entry.findings.push(RecoveryFinding::StagingNotDiscarded),
+                None => entries.push(RecoveryEntry {
+                    run,
+                    findings: vec![RecoveryFinding::StagingNotDiscarded],
+                }),
+            }
+        }
         Ok(entries)
+    }
+
+    /// §6.6 (Codex review 1 of PR #64, M1): the Owner's bounded retry of
+    /// owed Files cleanup: one attempt per owed run (the kernel's
+    /// `retry_cleanup` for owed temps, then the staging's removal). A run
+    /// whose cleanup is then established is released; any other stays
+    /// owned and reported. One Files operation at a time.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
+        let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
+            "another Files operation is under way",
+        ))?;
+        let runs = std::mem::take(&mut *self.shared.kept.lock().expect("files kept"));
+        let mut retry = CleanupRetry::default();
+        let mut still = Vec::new();
+        for mut run in runs {
+            if !run.cleanup_owed().is_empty() {
+                let _ = run.retry_cleanup();
+            }
+            if !owes(&run) && discard(&mut run) {
+                retry.settled += 1;
+            } else {
+                retry.still_owed += 1;
+                still.push(run);
+            }
+        }
+        self.shared.kept.lock().expect("files kept").extend(still);
+        Ok(retry)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
+        Err(AuthorityError::Unavailable(
+            "Files are available on Linux only",
+        ))
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -1715,6 +1980,13 @@ impl Files {
     #[cfg(test)]
     pub(crate) fn hooks(&self) -> &Arc<crate::test_hooks::Hooks> {
         &self.shared.hooks
+    }
+
+    /// How many runs Files keeps owning for owed cleanup or recovery
+    /// (tests).
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn kept_for_test(&self) -> usize {
+        self.shared.kept.lock().unwrap().len()
     }
 
     /// Where the Files ledger and staging parent are (tests).
@@ -1827,6 +2099,11 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
+        // H3 (M4′): a run whose publication a cause interrupted after its
+        // final check asks for nothing more.
+        if self.shared.is_closed(run) {
+            return Err(AuthorityError::RunNotActive);
+        }
         let admission = authority
             .runs()
             .files_admission(run)

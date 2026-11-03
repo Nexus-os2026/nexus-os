@@ -25,7 +25,9 @@ use crate::control::{Control, EffectOutput, Preparation};
 use crate::display::{AgentDisplay, DisplayStatus, InputIntent, PerceptionIntent};
 use crate::egress::{Egress, EgressIntent};
 use crate::evidence_store::PrimaryEvidence;
-use crate::files::{Exclusions, FileCreate, Files, RecoveryEntry, WorkingDetail, WorkspaceInfo};
+use crate::files::{
+    CleanupRetry, Exclusions, FileCreate, Files, RecoveryEntry, WorkingDetail, WorkspaceInfo,
+};
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
@@ -40,9 +42,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod door;
+mod stop_records;
 pub use crate::authority::halt::{BatchOutcome, HaltReason, HaltRecords, RecordBatch};
 use door::DoorCore;
 pub use door::{AgentDoor, Lookup};
+pub use stop_records::StopRecordStatus;
+use stop_records::{StopBatch, StopRecorder};
 
 /// Every governed intent, as data.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -124,6 +129,8 @@ pub struct ControlStatus {
     pub doors_halted: u64,
     /// M2c PR-B: every door halt's records, accounted for.
     pub halt_records: HaltRecords,
+    /// Codex review 1 of PR #64 (H1): what became of the Stop records.
+    pub stop_records: StopRecordStatus,
 }
 
 /// The longest grant the interface may ask for.
@@ -151,6 +158,9 @@ pub struct GovernedControl {
     display_starts: AtomicUsize,
     /// M2c: agent doors issued in this process.
     doors_issued: AtomicU64,
+    /// Codex review 1 of PR #64 (H1): the writer of the Owner's Stop
+    /// records, off the Stop path.
+    stop_records: StopRecorder,
     /// The controller of the kernel's emergency-stop authority (M0-FIX F5,
     /// sealed by M0-FIX2 F10): the owner's emergency stop engages it and
     /// the owner's resume lifts it. In production it is the process's
@@ -269,6 +279,7 @@ impl GovernedControl {
                 AuthorityError::Unavailable("the kernel stop's halt audit is already attached")
             })?;
         let egress = Arc::new(Egress::system());
+        let stop_records = StopRecorder::start(control.clone());
         let broker = CredentialBroker::new(control.authority(), secrets);
         let governed = Self {
             connectors: Connectors::production(egress.clone(), broker.clone()),
@@ -283,6 +294,7 @@ impl GovernedControl {
             detached: Mutex::new(HashSet::new()),
             display_starts: AtomicUsize::new(0),
             doors_issued: AtomicU64::new(0),
+            stop_records,
             kernel_stop,
             #[cfg(test)]
             stop_gap: Mutex::new(None),
@@ -514,8 +526,12 @@ impl GovernedControl {
     }
 
     /// An emergency stop: every effect first, unconditionally (the display
-    /// stopped too), then the records, which may only become owed (EL-1
-    /// §6).
+    /// stopped too), in memory; then the records, which may only become
+    /// owed (EL-1 §6). Codex review 1 of PR #64 (H1, D2 condition 5): the
+    /// records are handed to the Stop records' writer and the Stop returns;
+    /// it waits for them at most `ACKNOWLEDGE_WITHIN`, so its
+    /// acknowledgement never depends on storage. What became of them is
+    /// `status().stop_records`.
     fn stop_for(&self, reason: Option<&'static str>) -> usize {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
@@ -531,9 +547,13 @@ impl GovernedControl {
         self.kernel_stop.engage();
         let cancelled = stopped.cancelled;
         let display = self.display.stop();
-        self.authority().write_stop_records(stopped);
-        // Recorded, as every display stop is.
-        self.record_display_stop(display);
+        // Recorded, as every display stop is, by the writer.
+        let place = self.stop_records.submit(StopBatch {
+            stopped,
+            display: display.map(|status| status.number),
+        });
+        self.stop_records
+            .acknowledge(place, stop_records::ACKNOWLEDGE_WITHIN);
         cancelled
     }
 
@@ -800,7 +820,8 @@ impl GovernedControl {
     /// file is no longer exactly the one created (nothing is touched). An
     /// interrupted or refused undo stays offered.
     pub fn files_undo(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
-        self.files.undo(confirmer)
+        self.files
+            .undo(self.authority(), self.kernel_stop.authority(), confirmer)
     }
 
     /// M2d (§6.7): the startup recovery report: what the Files ledger says
@@ -825,6 +846,21 @@ impl GovernedControl {
     /// still decides. It approves nothing.
     pub fn hold_files_before_publish(&self, hold: Duration) -> Result<(), AuthorityError> {
         self.files.set_hold(hold)
+    }
+
+    /// M2d (§6.6; Codex review 1 of PR #64, M1): the Owner's bounded retry
+    /// of owed Files cleanup (temporary files the kernel could not remove,
+    /// staging whose removal failed): one attempt per owed run; what is
+    /// established is released, the rest stays owned and in the recovery
+    /// report. The Owner's only: no door route.
+    pub fn files_retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
+        self.files.retry_cleanup()
+    }
+
+    /// Wait at most `bound` until no Stop record is queued (tests).
+    #[cfg(test)]
+    pub(crate) fn stop_records_idle_for_test(&self, bound: Duration) -> bool {
+        self.stop_records.idle(bound)
     }
 
     /// Ask the owner, natively, for a grant (a synthetic one lasts at most
@@ -974,6 +1010,7 @@ impl GovernedControl {
             doors_issued: self.doors_issued.load(Ordering::SeqCst),
             doors_halted: self.doors_halted.load(Ordering::SeqCst),
             halt_records: self.authority().halt_records(),
+            stop_records: self.stop_records.status(),
         }
     }
 }
