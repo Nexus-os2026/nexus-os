@@ -338,7 +338,7 @@ fn crash(point: &str) -> Value {
     assert!(status.success(), "{point}: child 2: {status:?}");
     let line = out
         .lines()
-        .find_map(|l| l.strip_prefix("M2D-OBS "))
+        .find_map(|l| l.find("M2D-OBS ").map(|at| &l[at + "M2D-OBS ".len()..]))
         .unwrap_or_else(|| panic!("{point}: no observation: {out}"));
     let _ = std::fs::remove_dir_all(&dir);
     serde_json::from_str(line).unwrap()
