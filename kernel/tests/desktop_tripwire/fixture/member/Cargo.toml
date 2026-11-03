@@ -1,0 +1,11 @@
+[package]
+name = "fixture-member"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fixture-wrapper = { path = "../wrapper", optional = true }
+
+[features]
+screen = ["dep:fixture-wrapper"]
