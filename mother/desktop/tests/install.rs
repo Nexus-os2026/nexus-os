@@ -35,13 +35,23 @@ fn end_script(
     reap: Duration,
     drain: Duration,
 ) -> Result<(ExitStatus, String), String> {
-    // 4cb3fbeb's order, unchanged: the reader is joined, without a bound,
-    // before the cleanup's result is checked.
-    let _ = drain;
-    let ended = leader.finish(reap);
-    let stderr = reader.join().unwrap_or_default();
-    let ended = ended.map_err(|e| format!("cleaning up the install script failed: {e}"))?;
-    Ok((ended, stderr))
+    // The cleanup's own result first: a failed signal or reap fails at
+    // once, whatever still holds the script's stderr open.
+    let ended = leader
+        .finish(reap)
+        .map_err(|e| format!("cleaning up the install script failed: {e}"))?;
+    // Then the reader, within its bound: a stderr still open past it is a
+    // failure, never a wait forever.
+    let until = Instant::now() + drain;
+    while !reader.is_finished() {
+        if Instant::now() >= until {
+            return Err(format!(
+                "the install script's stderr was still open {drain:?} after its cleanup"
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok((ended, reader.join().unwrap_or_default()))
 }
 
 fn fresh(label: &str) -> PathBuf {
