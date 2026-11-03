@@ -883,6 +883,31 @@ fn p1a_nc_29_no_project_owner_bytes_change() {
     assert_eq!(digest(&f.project), before);
 }
 
+/// The production sources outside the primitive that P1A-NC-30 admits, each
+/// authorized by the Architect. M2d-K: the broker's Files module, which
+/// stages a Files run (design v2 §6.1 step 4). Pinned by
+/// `m2d_k_p1a_nc_30_has_exactly_one_authorized_consumer`.
+const P1A_NC_30_AUTHORIZED: [&str; 1] = ["crates/nexus-governed-control/src/files/mod.rs"];
+
+/// Whether P1A-NC-30 skips the workspace source `rel`: the primitive's own
+/// module, its ledger, the two crate roots that declare them, the desktop's
+/// governed flow, and the authorized consumers, each by exact path.
+fn p1a_nc_30_exempt(rel: &str) -> bool {
+    const GOVERNED_FLOW: &str = "app/src-tauri/src/coding_flow.rs";
+    const GOVERNED_VERIFICATION: &str = "app/src-tauri/src/coding_flow/verification.rs";
+    const DECLARATIONS: [&str; 4] = [
+        "kernel/src/lib.rs",
+        "persistence/src/lib.rs",
+        "persistence/src/coding_run_ledger.rs",
+        "kernel/src/coding_run.rs",
+    ];
+    rel.starts_with("kernel/src/coding_run/")
+        || DECLARATIONS.contains(&rel)
+        || rel == GOVERNED_FLOW
+        || rel == GOVERNED_VERIFICATION
+        || P1A_NC_30_AUTHORIZED.contains(&rel)
+}
+
 #[test]
 fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     // Phase One P1-08: the governed coding flow (`coding_flow.rs`) is the one
@@ -897,14 +922,10 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     // the two crate roots that declare them may name it; a desktop source
     // tree, when one returns, is scanned with the same rule and the same two
     // governed-flow exceptions.
-    const GOVERNED_FLOW: &str = "app/src-tauri/src/coding_flow.rs";
-    const GOVERNED_VERIFICATION: &str = "app/src-tauri/src/coding_flow/verification.rs";
-    const DECLARATIONS: [&str; 4] = [
-        "kernel/src/lib.rs",
-        "persistence/src/lib.rs",
-        "persistence/src/coding_run_ledger.rs",
-        "kernel/src/coding_run.rs",
-    ];
+    //
+    // M2d-K: the one authorized consumer, the broker's Files module
+    // (`P1A_NC_30_AUTHORIZED`, exact path); every other broker source is
+    // still scanned.
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .canonicalize()
@@ -945,11 +966,7 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     }
     for path in sources {
         let rel = rel(&path);
-        if rel.starts_with("kernel/src/coding_run/")
-            || DECLARATIONS.contains(&rel.as_str())
-            || rel == GOVERNED_FLOW
-            || rel == GOVERNED_VERIFICATION
-        {
+        if p1a_nc_30_exempt(&rel) {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();

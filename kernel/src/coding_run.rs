@@ -162,8 +162,8 @@ pub use apply::{
     ConfirmationRequest, FileIdentity, InterruptCause, OwnerApproval, OwnerConfirmer, Refusal,
 };
 pub use ledger::{
-    analyze as analyze_ledger, analyze_apply, ApplyFinding, LedgerFailure, LedgerRecovery,
-    LedgerStore, PreparedFile, TempLeft,
+    analyze as analyze_ledger, analyze_apply, ApplyFinding, LedgerFailure, LedgerFile,
+    LedgerRecovery, LedgerStore, PreparedFile, TempLeft,
 };
 pub use local_model::{
     loopback_endpoint, LocalEndpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin,
