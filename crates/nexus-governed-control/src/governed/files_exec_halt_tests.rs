@@ -78,3 +78,13 @@ fn m2d_c_r4_the_stop_paths_never_panic_under_poison() {
         no_panic("emergency_stopped", || f.door.emergency_stopped());
     }
 }
+
+/// A door stopped in memory takes back nothing either: its adoption (a
+/// run joining its group) is refused `halted`.
+#[test]
+fn m2d_c_r4_a_door_stopped_in_memory_adopts_nothing() {
+    let f = Fx::new();
+    let waiting = f.propose(NAME, CONTENT).unwrap();
+    f.door.stop_now();
+    assert_eq!(class(f.door.adopt(f.run, waiting.id)), "halted");
+}
