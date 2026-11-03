@@ -556,3 +556,30 @@ fn g0_s11_nothing_is_signalled_on_inference() {
         "only the held role's group: {signalled:?}"
     );
 }
+
+#[test]
+fn g0_s12_a_failed_final_signal_fails_the_cleanup() {
+    // A leader that has already exited, so that leaving it unsignalled is
+    // harmless; its final signal is made to fail.
+    let (ended, signalled) = process_leader::recording_with_failed_signals(|| {
+        let mut leader = Leader::spawn(
+            Command::new("true")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+        )?;
+        let until = Instant::now() + REAP_WITHIN;
+        while !leader.exited()? {
+            if Instant::now() > until {
+                return Err("the leader never exited".to_string());
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        leader.finish(REAP_WITHIN).map(|_| ())
+    });
+    assert!(
+        ended.is_err(),
+        "a failed final signal was discarded as a clean cleanup"
+    );
+    assert_eq!(signalled.len(), 1, "{signalled:?}");
+}

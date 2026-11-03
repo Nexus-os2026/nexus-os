@@ -37,6 +37,9 @@ pub struct Signalled {
 
 thread_local! {
     static RECORDING: RefCell<Option<Vec<Signalled>>> = const { RefCell::new(None) };
+    /// Under recording only: every held signal fails, unsent (to prove that
+    /// a failed final signal fails its cleanup).
+    static FAIL_SIGNALS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Failures of `Drop` backstops, for the tests to check at their end.
@@ -50,6 +53,14 @@ pub fn recording<R>(f: impl FnOnce() -> R) -> (R, Vec<Signalled>) {
         .with(|r| r.borrow_mut().take())
         .unwrap_or_default();
     (result, signalled)
+}
+
+/// As `recording`, with every held signal failing (unsent).
+pub fn recording_with_failed_signals<R>(f: impl FnOnce() -> R) -> (R, Vec<Signalled>) {
+    FAIL_SIGNALS.with(|fail| fail.set(true));
+    let outcome = recording(f);
+    FAIL_SIGNALS.with(|fail| fail.set(false));
+    outcome
 }
 
 /// Take the failures `Drop` backstops recorded so far.
@@ -113,6 +124,9 @@ pub fn send_group_kill(pgid: i32, held: bool) -> Result<(), String> {
     });
     if recorded.is_some() && !held {
         return Ok(());
+    }
+    if recorded.is_some() && FAIL_SIGNALS.with(|fail| fail.get()) {
+        return Err(format!("signalling process group {pgid} failed: injected"));
     }
     signal_outcome(
         nix::sys::signal::killpg(
