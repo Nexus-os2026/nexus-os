@@ -197,6 +197,10 @@ pub struct CommitmentView {
     /// its effect reported beside the success (its Finished record's
     /// `interrupted` detail), in the registry's order; empty otherwise.
     pub interrupted: Vec<&'static str>,
+    /// M2d-C (Codex review 1 of PR #78, HIGH 2): a Succeeded commitment
+    /// whose effect reported `reason=recovery_required` beside the success
+    /// (its Finished record's detail, first 16 entries); false otherwise.
+    pub recovery_required: bool,
 }
 
 struct Entry {
@@ -224,6 +228,8 @@ struct Entry {
     reserved: Option<Reservation>,
     /// M2d-C: what a success reported as interrupting it (its view's).
     interrupted: Vec<&'static str>,
+    /// M2d-C: a success reported recovery required (its view's).
+    recovery_required: bool,
 }
 
 impl Entry {
@@ -243,6 +249,7 @@ impl Entry {
             expires_wall_ms: self.expires_wall_ms,
             binding_short: self.binding.short(),
             interrupted: self.interrupted.clone(),
+            recovery_required: self.recovery_required,
         }
     }
 
@@ -746,6 +753,7 @@ impl CommitmentRegistry {
             approval: None,
             reserved: None,
             interrupted: Vec::new(),
+            recovery_required: false,
         };
         // Evidence first: an unrecorded commitment is never created. It is
         // not in the registry yet, so nothing can act on it meanwhile.
@@ -1221,6 +1229,10 @@ impl CommitmentRegistry {
             // entries), of the registry only, in its order.
             if let Outcome::Succeeded { meta } = &outcome {
                 let meta = &meta[..meta.len().min(16)];
+                // M2d-C (HIGH 2 of Codex review 1 of PR #78).
+                entry.recovery_required = meta
+                    .iter()
+                    .any(|(k, v)| k == "reason" && v == "recovery_required");
                 entry.interrupted = INTERRUPTIONS
                     .iter()
                     .copied()

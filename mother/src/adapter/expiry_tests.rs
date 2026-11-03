@@ -29,6 +29,7 @@ fn view(state: CommitmentState) -> CommitmentView {
         expires_wall_ms: EXPIRES,
         binding_short: "0000".into(),
         interrupted: vec![],
+        recovery_required: false,
     }
 }
 

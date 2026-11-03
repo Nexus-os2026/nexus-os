@@ -453,3 +453,5 @@ fn an_emergency_stop_drops_every_pending_effect() {
     assert!(f.control.execute(id, &f.agent, f.run).is_err());
     assert_eq!(f.world.ran.load(Ordering::SeqCst), 0);
 }
+#[path = "recovery_view_tests.rs"]
+mod recovery_view;
