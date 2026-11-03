@@ -3,6 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "../../../kernel/tests/desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
 fn crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -535,4 +539,12 @@ fn scan_m2c_the_port_acts_through_its_door() {
     for needle in ["door.agent_action(", "door.cancel_run(", "door.open_run("] {
         assert!(adapter.contains(needle), "adapter: {needle}");
     }
+}
+
+/// G0 (M2b-A PR-1): Mother's tree reaches no desktop or webview package
+/// except through the registered `nexus-mother-desktop`, in the resolved
+/// graph, with every feature configuration.
+#[test]
+fn scan_m2b_no_desktop_outside_the_registered_package() {
+    desktop_tripwire::assert_no_desktop();
 }

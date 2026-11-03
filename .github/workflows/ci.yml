@@ -172,6 +172,13 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      # M2b-A G0: the desktop tripwire reads the resolved graph with
+      # `cargo metadata --locked --offline` over every target. A Linux build
+      # downloads only the packages Linux needs, so fetch every locked
+      # package first; a missing one would fail the guard (it fails closed).
+      - name: Fetch every locked package (the G0 tripwire reads them offline)
+        run: cargo fetch --locked
+
       - name: Run tests
         run: cargo test --workspace --locked
 

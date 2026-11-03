@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "../../tests/desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
 struct Fixture {
     _tmp: tempfile::TempDir,
     project: PathBuf,
@@ -885,6 +889,8 @@ fn p1a_nc_29_no_project_owner_bytes_change() {
 
 #[test]
 fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
+    // G0 (M2b-A): no desktop or webview outside the registered desktop.
+    desktop_tripwire::assert_no_desktop();
     // Phase One P1-08: the governed coding flow (`coding_flow.rs`) is the one
     // desktop module that reaches the primitive; every other desktop source,
     // including the command registry in lib.rs, must not. Phase Two: its
