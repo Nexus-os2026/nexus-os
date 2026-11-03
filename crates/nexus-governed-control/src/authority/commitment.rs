@@ -1721,12 +1721,16 @@ impl CommitmentRegistry {
         result
     }
 
-    /// M2d-C round 4 (rule 3): [`Self::holding_view`] that never panics: a
-    /// poisoned registry is `Unavailable`.
-    pub(crate) fn try_holding_view<T>(
+    /// M2d-C round 5 (D4(a)): run `f` on the view of `id`, and on whether
+    /// `run` may gain a member (no commitment of it authorized or executing,
+    /// no Files obligation of it unacknowledged), while the commitments lock
+    /// is held: atomic against authorization and execution, which move
+    /// under it. Never panics: a poisoned registry is `Unavailable`.
+    pub(crate) fn try_adopt_hold<T>(
         &self,
         id: CommitmentId,
-        f: impl FnOnce(Option<CommitmentView>) -> Result<T, AuthorityError>,
+        run: RunId,
+        f: impl FnOnce(Option<CommitmentView>, bool) -> Result<T, AuthorityError>,
     ) -> Result<T, AuthorityError> {
         let entries = self
             .0
@@ -1734,7 +1738,15 @@ impl CommitmentRegistry {
             .lock()
             .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
         let view = entries.get(&id).map(|e| e.view(id));
-        let result = f(view);
+        let blocked = entries.values().any(|e| {
+            e.run == run
+                && (e.pinned
+                    || matches!(
+                        e.state,
+                        CommitmentState::Authorized | CommitmentState::Executing
+                    ))
+        });
+        let result = f(view, blocked);
         drop(entries);
         result
     }

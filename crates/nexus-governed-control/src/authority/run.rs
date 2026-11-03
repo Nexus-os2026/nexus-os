@@ -849,11 +849,15 @@ impl RunRegistry {
     /// in this registry, `agent`'s, an agent's run, neither finished nor
     /// cancelled, and list fewer than `MAX_GROUPS_PER_RUN` live groups.
     /// Then it joins `group` (once). Any refusal changes nothing.
-    pub(crate) fn join(
+    /// M2d-C round 5 (C1): attaching `cell` (the adopting mission's halt
+    /// cell), when given, in the same hold; a run whose cell is engaged
+    /// joins nothing.
+    pub(crate) fn join_with(
         &self,
         run: RunId,
         agent: &AgentId,
         group: GroupId,
+        cell: Option<&HaltCell>,
     ) -> Result<(), AuthorityError> {
         let mut guard = self.runs.lock().map_err(|_| unreadable())?;
         let table = &mut *guard;
@@ -876,12 +880,22 @@ impl RunRegistry {
         if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
             return Err(AuthorityError::RunCancelled);
         }
+        if entry.halted() {
+            return Err(AuthorityError::Halted);
+        }
+        let attach = |entry: &mut RunEntry| {
+            if let Some(cell) = cell {
+                entry.halts.push(cell.clone());
+            }
+        };
         if entry.groups.contains(&group) {
+            attach(entry);
             return Ok(());
         }
         if entry.groups.len() >= MAX_GROUPS_PER_RUN {
             return Err(AuthorityError::Capacity);
         }
+        attach(entry);
         entry.groups.push(group);
         if let Some(door) = table.doors.get_mut(&group) {
             door.members.insert(run);

@@ -837,3 +837,6 @@ fn m2c_a7_e_there_is_no_path_that_issues_without_asking() {
     assert!(f.records(EvidencePhase::AgentDoorOpened).is_empty());
     assert_eq!(f.control.status().live_doors, 0);
 }
+
+#[path = "door_adopt_tests.rs"]
+mod adopt;

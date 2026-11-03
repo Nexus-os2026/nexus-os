@@ -236,11 +236,40 @@ impl AgentDoor {
         run: RunId,
         commitment: CommitmentId,
     ) -> Result<CommitmentView, AuthorityError> {
+        self.adopt_inner(run, commitment, None)
+    }
+
+    /// M2d-C round 5 (D4(a), C1): [`Self::adopt`] for a mission, attaching
+    /// its halt cell to the run in the same hold as the join and the check
+    /// below, so every later execution token of the run carries it. Refused,
+    /// changing nothing, while any commitment of the run is authorized or
+    /// executing, or any Files obligation of it is unacknowledged (such a
+    /// run is reachable only through ack-only ownership:
+    /// [`Self::ack_commitment`], [`Self::cancel_orphan`]).
+    pub fn adopt_with_halt(
+        &self,
+        run: RunId,
+        commitment: CommitmentId,
+        cell: &HaltCell,
+    ) -> Result<CommitmentView, AuthorityError> {
+        self.adopt_inner(run, commitment, Some(cell))
+    }
+
+    fn adopt_inner(
+        &self,
+        run: RunId,
+        commitment: CommitmentId,
+        cell: Option<&HaltCell>,
+    ) -> Result<CommitmentView, AuthorityError> {
+        // A halted door says so first (the join checks it again).
+        if self.core.halt.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(AuthorityError::Halted);
+        }
         let authority = self.control.authority();
         // Round 4 (rule 3): on the recovery path, never a panic.
         authority
             .commitments()
-            .try_holding_view(commitment, |view| {
+            .try_adopt_hold(commitment, run, |view, blocked| {
                 let view = view.ok_or(AuthorityError::UnknownCommitment)?;
                 if view.agent != self.core.agent {
                     return Err(AuthorityError::WrongAgent);
@@ -248,11 +277,31 @@ impl AgentDoor {
                 if view.run != run {
                     return Err(AuthorityError::WrongRun);
                 }
+                // D4(a): the run's membership is closed (it admits only
+                // acknowledgement); refused as a halt is, changing nothing
+                // (the M2c B7 oracle: an adoption is taken, or refused
+                // Halted).
+                if blocked {
+                    return Err(AuthorityError::Halted);
+                }
                 authority
                     .runs()
-                    .join(run, &self.core.agent, self.core.group)?;
+                    .join_with(run, &self.core.agent, self.core.group, cell)?;
                 Ok(view)
             })
+    }
+
+    /// M2d-C round 5 (D4(a)): ack-only ownership's cancellation: a run of
+    /// this door's, or (once the door that held it is gone) an agent run of
+    /// this door's agent that no live door lists, is cancelled (its
+    /// unconsumed commitments revoked). It only narrows: no consent, no
+    /// execution, no view. Never panics.
+    pub fn cancel_orphan(&self, run: RunId) -> Result<RecordBatch, AuthorityError> {
+        self.control
+            .authority()
+            .runs()
+            .ack_owner(run, &self.core.agent, self.core.group)?;
+        Ok(self.control.cancel_member(run))
     }
 
     /// M2d-C (Codex review 2 of PR #78, HIGH 3): [`AgentDoor::commitment`]
