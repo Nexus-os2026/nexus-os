@@ -259,6 +259,46 @@ fn refused(why: &'static str) -> AuthorityError {
     AuthorityError::InvalidAction(why)
 }
 
+/// `path`'s canonical spelling (`std::fs::canonicalize`). Tests can make a
+/// directory reachable under a second canonical spelling, as a bind mount
+/// or a case-insensitive name makes it ([`mount_alias_for_test`]).
+fn canonical(path: &Path) -> std::io::Result<PathBuf> {
+    #[cfg(test)]
+    if let Some(alias) = MOUNTED.with(|mounted| {
+        mounted
+            .borrow()
+            .iter()
+            .find(|alias| path.starts_with(alias))
+            .cloned()
+    }) {
+        let target = std::fs::canonicalize(&alias)?;
+        let below = path.strip_prefix(&alias).unwrap_or(Path::new(""));
+        let real = std::fs::canonicalize(target.join(below))?;
+        return Ok(match real.strip_prefix(&target) {
+            Ok(rest) if rest.as_os_str().is_empty() => alias,
+            Ok(rest) => alias.join(rest),
+            Err(_) => real,
+        });
+    }
+    std::fs::canonicalize(path)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests only: symlinks this thread treats as a second canonical
+    /// spelling of the directory they name (an unprivileged stand-in for a
+    /// bind mount or a casefolded name): the link's own spelling is kept by
+    /// [`canonical`], while opening it reaches the same directory.
+    static MOUNTED: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Tests only: treat the symlink at `link` (an absolute, canonical-parent
+/// path) as a second canonical spelling of its directory, on this thread.
+#[cfg(test)]
+pub(crate) fn mount_alias_for_test(link: PathBuf) {
+    MOUNTED.with(|mounted| mounted.borrow_mut().push(link));
+}
+
 /// Where `path` really is (Codex review 1 of PR #57): its longest existing
 /// ancestor resolved canonically (links included), with the components
 /// below it appended, none of which exists yet. `None` when that cannot be
@@ -273,7 +313,7 @@ fn established(path: &Path) -> Option<PathBuf> {
     let mut missing = Vec::new();
     let mut existing = path;
     loop {
-        if let Ok(canonical) = std::fs::canonicalize(existing) {
+        if let Ok(canonical) = canonical(existing) {
             if let Some(first) = missing.last() {
                 match std::fs::symlink_metadata(canonical.join(first)) {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -300,7 +340,7 @@ fn established(path: &Path) -> Option<PathBuf> {
 fn identity_of(root: &Path) -> Result<Digest, AuthorityError> {
     use std::os::unix::fs::MetadataExt;
     let meta = std::fs::symlink_metadata(root).map_err(|_| AuthorityError::TargetChanged)?;
-    if !meta.is_dir() || std::fs::canonicalize(root).ok().as_deref() != Some(root) {
+    if !meta.is_dir() || canonical(root).ok().as_deref() != Some(root) {
         return Err(AuthorityError::TargetChanged);
     }
     Ok(Digest::of(
@@ -332,8 +372,8 @@ fn selectable(
     if !path.is_absolute() {
         return Err(refused("the workspace is not an absolute path"));
     }
-    let canonical = std::fs::canonicalize(path)
-        .map_err(|_| refused("the workspace folder cannot be opened"))?;
+    let canonical =
+        canonical(path).map_err(|_| refused("the workspace folder cannot be opened"))?;
     if canonical != path {
         return Err(refused(
             "the workspace is reached through a link; choose the real folder",

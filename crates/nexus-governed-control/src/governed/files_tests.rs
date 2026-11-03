@@ -1019,3 +1019,107 @@ fn m2d_b1_h1_h_the_cached_consent_keeps_its_record_s_time() {
         recorded(EvidencePhase::MissionResumeConfirmed)
     );
 }
+
+// ---------------------------------------------------------------- Codex review 2 of PR #57
+
+/// Codex review 2 (MEDIUM): overlap is decided by directory identity, not by
+/// path strings. A bind mount or a casefolded name gives one directory a
+/// second canonical spelling that no string check relates; an unprivileged
+/// test makes one with the seam `mount_alias_for_test` (a symlink whose own
+/// spelling is kept as canonical, while opening it reaches the directory).
+/// Each alias is refused: the workspace inside a reserved tree through a
+/// bind alias; a reserved tree named in a casefold-equivalent spelling
+/// above the workspace; a reserved location below the workspace through a
+/// bind alias; `$HOME` reached through a bind alias. Controls: distinct
+/// directories with confusable names are accepted.
+#[test]
+fn m2d_b1_d_o18_c_aliases_are_decided_by_directory_identity() {
+    use crate::files::mount_alias_for_test;
+    let root = temp_root("m2d-b1-ws-identity");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    let with = |home: PathBuf, reserved: Vec<PathBuf>| Exclusions {
+        home,
+        identity_home: dirs.path("ident"),
+        reserved,
+        uid: crate::launcher::effective_uid(),
+    };
+    let select = |path: &Path, ex: Exclusions| {
+        let gov = control(&root, &evidence);
+        let result = gov.register_workspace_in(path, &ex);
+        (result.is_ok(), gov.workspace().is_some())
+    };
+    for sub in [
+        "real/reserved/ws",
+        "home/wsf",
+        "home/wsg",
+        "conf/Reserved",
+        "conf/reserved/ws",
+        "conf/res",
+        "conf/res-ws",
+    ] {
+        std::fs::create_dir_all(dirs.path(sub)).unwrap();
+    }
+    let home = || dirs.path("home");
+
+    // Each alias: one directory under two canonical spellings.
+    std::os::unix::fs::symlink(dirs.path("real/reserved"), dirs.path("bind")).unwrap();
+    mount_alias_for_test(dirs.path("bind"));
+    std::os::unix::fs::symlink(dirs.path("real/reserved"), dirs.path("real/Reserved")).unwrap();
+    mount_alias_for_test(dirs.path("real/Reserved"));
+    std::os::unix::fs::symlink(dirs.path("home/wsf"), dirs.path("bind2")).unwrap();
+    mount_alias_for_test(dirs.path("bind2"));
+    std::os::unix::fs::symlink(dirs.path("home/wsg"), dirs.path("homebind")).unwrap();
+    mount_alias_for_test(dirs.path("homebind"));
+
+    let outcomes = vec![
+        (
+            "the workspace inside a reserved tree, spelled through a bind alias",
+            select(
+                &dirs.path("bind/ws"),
+                with(home(), vec![dirs.path("real/reserved")]),
+            ),
+        ),
+        (
+            "a reserved tree above the workspace, in a casefold-equivalent spelling",
+            select(
+                &dirs.path("real/reserved/ws"),
+                with(home(), vec![dirs.path("real/Reserved")]),
+            ),
+        ),
+        (
+            "a reserved location below the workspace, through a bind alias of it",
+            select(
+                &dirs.path("home/wsf"),
+                with(home(), vec![dirs.path("bind2/future")]),
+            ),
+        ),
+        (
+            "$HOME itself, reached through a bind alias",
+            select(&dirs.path("home/wsg"), with(dirs.path("homebind"), vec![])),
+        ),
+        (
+            "control: a distinct directory differing only in case",
+            select(
+                &dirs.path("conf/reserved/ws"),
+                with(home(), vec![dirs.path("conf/Reserved")]),
+            ),
+        ),
+        (
+            "control: a sibling whose name begins with the reserved name",
+            select(
+                &dirs.path("conf/res-ws"),
+                with(home(), vec![dirs.path("conf/res")]),
+            ),
+        ),
+    ];
+    let expected = vec![
+        (outcomes[0].0, (false, false)),
+        (outcomes[1].0, (false, false)),
+        (outcomes[2].0, (false, false)),
+        (outcomes[3].0, (false, false)),
+        (outcomes[4].0, (true, true)),
+        (outcomes[5].0, (true, true)),
+    ];
+    assert_eq!(outcomes, expected);
+}
