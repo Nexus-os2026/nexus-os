@@ -1705,3 +1705,269 @@ fn m2d_a_d_o21_name_and_content_canaries_stay_out_of_the_ledger_and_the_report()
         found[0]
     );
 }
+
+// ── Added after Codex review 1 of PR #58 (HIGH, MEDIUM 1, MEDIUM 2) ────────
+
+/// This process's own descriptors that hold an anonymous file (`O_TMPFILE`,
+/// no name) of the directory `root`, identified exactly: the file has no
+/// link, and the descriptor's target reads `<root>/#<its inode> (deleted)`.
+fn anonymous_files(root: &Path) -> Vec<i32> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir("/proc/self/fd").unwrap().flatten() {
+        let Ok(fd) = entry.file_name().to_string_lossy().parse::<i32>() else {
+            continue;
+        };
+        let link = PathBuf::from(format!("/proc/self/fd/{fd}"));
+        let (Ok(target), Ok(meta)) = (std::fs::read_link(&link), std::fs::metadata(&link)) else {
+            continue;
+        };
+        let expected = format!("{}/#{} (deleted)", root.display(), meta.ino());
+        if meta.file_type().is_file()
+            && meta.nlink() == 0
+            && target.as_os_str() == expected.as_str()
+        {
+            found.push(fd);
+        }
+    }
+    found
+}
+
+/// How the candidate is replaced or altered before the final check.
+#[derive(Debug, Clone, Copy)]
+enum Substitute {
+    /// Another file, with other bytes, under the candidate's name.
+    OtherFile,
+    /// A symlink, to a file outside the workspace, under that name.
+    Symlink,
+    /// Other bytes written into the candidate itself (named or anonymous).
+    Tamper,
+}
+
+fn overwrite(path: &Path) {
+    use std::io::Write as _;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .unwrap();
+    file.write_all(b"unapproved\n").unwrap();
+    file.sync_all().unwrap();
+}
+
+fn substitute(root: &Path, outside: &Path, how: Substitute) {
+    for name in entries(root) {
+        let path = root.join(&name);
+        match how {
+            Substitute::OtherFile => {
+                std::fs::remove_file(&path).unwrap();
+                std::fs::write(&path, "unapproved\n").unwrap();
+            }
+            Substitute::Symlink => {
+                std::fs::remove_file(&path).unwrap();
+                std::os::unix::fs::symlink(outside, &path).unwrap();
+            }
+            Substitute::Tamper => overwrite(&path),
+        }
+    }
+    if let Substitute::Tamper = how {
+        for fd in anonymous_files(root) {
+            overwrite(&PathBuf::from(format!("/proc/self/fd/{fd}")));
+        }
+    }
+}
+
+/// Added after registration (Codex review 1 of PR #58, HIGH): whatever
+/// replaces or alters the candidate before the final check (another file,
+/// a symlink, other bytes in the candidate itself) is never published as
+/// approved: the result is not Applied with it, and nothing unapproved
+/// appears under the name.
+#[test]
+fn m2d_a_a_substituted_candidate_is_never_published_as_approved() {
+    for how in [
+        Substitute::OtherFile,
+        Substitute::Symlink,
+        Substitute::Tamper,
+    ] {
+        let ws = new_ws();
+        let (mut run, binding) = verified_file(&ws);
+        let approval = run.request_approval(&ws.info.name, &Answer::yes()).unwrap();
+        let outside = ws.state.join("outside.txt");
+        std::fs::write(&outside, "unapproved\n").unwrap();
+        let (root, target) = (ws.root.clone(), outside.clone());
+        let result = with_hooks(
+            move |point, _| {
+                if point == HookPoint::BeforeFinalCheck {
+                    substitute(&root, &target, how);
+                }
+                false
+            },
+            || {
+                run.apply_observed(
+                    approval,
+                    ws.write_grant(binding),
+                    &ws.staging(),
+                    &Guard::default(),
+                )
+            },
+        );
+        let path = ws.root.join(NAME);
+        match std::fs::symlink_metadata(&path) {
+            Ok(meta) => {
+                assert!(
+                    meta.file_type().is_file(),
+                    "{how:?}: a non-file was published"
+                );
+                assert_eq!(
+                    std::fs::read(&path).unwrap(),
+                    CONTENT.as_bytes(),
+                    "{how:?}: unapproved bytes were published ({result:?})"
+                );
+            }
+            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::NotFound),
+        }
+        if result.is_ok() {
+            assert_eq!(run.apply_state(), ApplyState::Applied);
+        } else {
+            assert_ne!(run.apply_state(), ApplyState::Applied, "{how:?}");
+        }
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "unapproved\n");
+    }
+}
+
+/// Added after registration (Architect condition 4 on the Codex HIGH fix):
+/// when the workspace cannot hold an anonymous file, Files is refused,
+/// fail closed: nothing is published and no named temporary file is used
+/// instead.
+#[test]
+fn m2d_a_a_without_anonymous_files_the_publication_is_refused() {
+    use crate::coding_run::apply::TMPFILE_UNSUPPORTED;
+    let ws = new_ws();
+    let (mut run, binding) = verified_file(&ws);
+    let approval = run.request_approval(&ws.info.name, &Answer::yes()).unwrap();
+    let root = ws.root.clone();
+    let named = Rc::new(RefCell::new(Vec::new()));
+    let saw = Rc::clone(&named);
+    seam(&TMPFILE_UNSUPPORTED, true);
+    let result = with_hooks(
+        move |_, _| {
+            saw.borrow_mut().extend(entries(&root));
+            false
+        },
+        || {
+            run.apply_observed(
+                approval,
+                ws.write_grant(binding),
+                &ws.staging(),
+                &Guard::default(),
+            )
+        },
+    );
+    seam(&TMPFILE_UNSUPPORTED, false);
+    assert!(
+        matches!(result, Err(ApplyError::RolledBack { .. })),
+        "{result:?}"
+    );
+    assert!(entries(&ws.root).is_empty(), "something was published");
+    assert!(named.borrow().is_empty(), "a named temporary file was used");
+    assert_eq!(run.apply_state(), ApplyState::RolledBack);
+}
+
+/// Added after registration (Codex review 1 of PR #58, MEDIUM 1): an Owner
+/// file found under the name is put back, but the undo is `Stale` only once
+/// that return is durable (the directory synced); otherwise recovery stays
+/// required and the prepared undo, with its planned temp id, stays reported.
+#[test]
+fn m2d_a_d_o19_a_put_back_owner_file_is_stale_only_once_its_return_is_synced() {
+    let ws = new_ws();
+    let (mut run, binding) = published(&ws);
+    let path = ws.root.join(NAME);
+    let side = ws.root.join("owner-save.tmp");
+    let (moved_path, moved_side) = (path.clone(), side.clone());
+    let result = undo_with_u1(&ws, &mut run, ws.write_grant(binding), move || {
+        std::fs::write(&moved_side, CONTENT).unwrap();
+        std::fs::rename(&moved_side, &moved_path).unwrap();
+        seam(&SYNC_FAILS, true);
+    });
+    seam(&SYNC_FAILS, false);
+    assert!(
+        matches!(result, Err(ApplyError::RecoveryRequired { .. })),
+        "{result:?}"
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), CONTENT);
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+    let records = ws.records(&run);
+    let prepared = last_of(&records, "restore.prepared").expect("restore.prepared");
+    let planned = prepared["planned"][0]["temp_id"]
+        .as_str()
+        .expect("planned temp")
+        .to_string();
+    let findings = analyze_apply(ws.ledger.as_ref(), run.id().ledger_key()).unwrap();
+    assert!(
+        findings.contains(&ApplyFinding::RestorePreparedWithoutOutcome {
+            files: vec![prepared_file(&planned)]
+        }),
+        "the prepared undo was cleared: {findings:?}"
+    );
+}
+
+/// Added after registration (Codex review 1 of PR #58, MEDIUM 2): an Owner
+/// version kept under a temporary name is reported at startup with its
+/// temp id and path digest, and never as disposable cleanup.
+#[test]
+fn m2d_a_d_o11_a_kept_owner_version_is_reported_never_as_cleanup() {
+    use crate::coding_run::apply::AFTER_EXCHANGE;
+    let ws = new_ws();
+    std::fs::write(ws.root.join("existing.txt"), "old\n").unwrap();
+    let (mut run, binding) = verified_with(
+        &ws,
+        ws.store(),
+        vec![replace("existing.txt", "new\n")],
+        files_scopes(&["existing.txt"]),
+    );
+    let approval = run.request_approval(&ws.info.name, &Answer::yes()).unwrap();
+    AFTER_EXCHANGE.with(|h| {
+        *h.borrow_mut() = Some(Box::new(|dir: &Path, temp: &str, name: &str| {
+            // The Owner saves a version in place, and the name disappears:
+            // the exchange cannot be undone, the Owner's version stays aside.
+            std::fs::write(dir.join(temp), "the owner's version\n").unwrap();
+            std::fs::remove_file(dir.join(name)).unwrap();
+        }))
+    });
+    let result = run.apply(approval, ws.write_grant(binding), &ws.staging());
+    AFTER_EXCHANGE.with(|h| *h.borrow_mut() = None);
+    assert!(
+        matches!(result, Err(ApplyError::RecoveryRequired { .. })),
+        "{result:?}"
+    );
+    let records = ws.records(&run);
+    let failed = last_of(&records, "apply.recovery_required").expect("recorded");
+    let temp_id = failed["unrestored"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|u| u["owner_version_temp"].as_str())
+        .expect("the owner version's temp id is recorded")
+        .to_string();
+    let kept = ws.root.join(format!("{TEMP_PREFIX}{temp_id}"));
+    assert_eq!(
+        std::fs::read_to_string(&kept).unwrap(),
+        "the owner's version\n"
+    );
+    let findings = report_after_restart(&ws, run.id().ledger_key());
+    let shown = format!("{findings:?}");
+    assert!(
+        shown.contains(&temp_id) && shown.contains(&path_sha256("existing.txt")),
+        "the kept owner version is not reported: {shown}"
+    );
+    assert!(
+        !findings
+            .iter()
+            .any(|f| matches!(f, ApplyFinding::CleanupOwed { temps }
+            if temps.iter().any(|t| t.temp_id == temp_id))),
+        "the owner's version is reported as disposable cleanup"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&kept).unwrap(),
+        "the owner's version\n"
+    );
+}

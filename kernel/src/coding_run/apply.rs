@@ -431,6 +431,9 @@ thread_local! {
         const { std::cell::Cell::new(false) };
     pub(crate) static SYNC_FAILS: std::cell::Cell<bool> =
         const { std::cell::Cell::new(false) };
+    /// The workspace cannot hold an anonymous (`O_TMPFILE`) file.
+    pub(crate) static TMPFILE_UNSUPPORTED: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
