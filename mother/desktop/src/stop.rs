@@ -24,6 +24,15 @@ use std::time::{Duration, Instant};
 /// Live Stop workers allowed at once (A1).
 pub const MAX_STOP_WORKERS: usize = 4;
 
+/// How often a bounded join looks again for threads that returned.
+const JOIN_POLL: Duration = Duration::from_millis(5);
+
+/// Whether `worker`'s thread has returned: `done` published and its
+/// handle finished.
+fn returned(worker: &Worker) -> bool {
+    worker.done && worker.handle.as_ref().is_none_or(|h| h.is_finished())
+}
+
 /// One worker the route started.
 struct Worker {
     id: u64,
@@ -249,13 +258,15 @@ impl StopRoute {
         self.desk.lock().receipts.clone()
     }
 
-    /// Join every worker started so far, within `within`. A worker still
-    /// running at the bound is reported, never joined by waiting longer.
+    /// Join every worker started so far, within `within`. A worker counts
+    /// as finished only when its thread has returned (its handle says so),
+    /// not when it published `done`; one still running at the bound is
+    /// reported, never joined by waiting longer.
     pub fn join_within(&self, within: Duration) -> Joined {
         let deadline = Instant::now() + within;
         let mut state = self.desk.lock();
         loop {
-            let running = state.workers.iter().filter(|w| !w.done).count();
+            let running = state.workers.iter().filter(|w| !returned(w)).count();
             if running == 0 {
                 break;
             }
@@ -265,10 +276,11 @@ impl StopRoute {
                     still_running: running,
                 };
             }
+            // A thread's return is not signalled: look again shortly.
             state = self
                 .desk
                 .changed
-                .wait_timeout(state, left)
+                .wait_timeout(state, left.min(JOIN_POLL))
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .0;
         }
@@ -278,7 +290,7 @@ impl StopRoute {
             .filter_map(|mut w| w.handle.take())
             .collect();
         drop(state);
-        // Every one of these has marked itself done: it only returns now.
+        // Every one of these has returned: joining it does not wait.
         let joined = handles.len();
         for handle in handles {
             let _ = handle.join();
