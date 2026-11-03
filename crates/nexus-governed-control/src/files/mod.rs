@@ -59,6 +59,8 @@
 
 #[cfg(all(test, target_os = "linux"))]
 mod b2_tests;
+#[cfg(all(test, target_os = "linux"))]
+mod dumpable_tests;
 #[cfg(test)]
 mod tests;
 
@@ -107,6 +109,19 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 #[cfg(target_os = "linux")]
 use std::time::Instant;
+
+/// M2d (the host's startup step for Files): make this process non-dumpable
+/// (`PR_SET_DUMPABLE` 0), as the kernel's observed apply requires before any
+/// publication: other processes of the same user can then neither open its
+/// descriptors through `/proc/<pid>/fd` nor attach to it. A thin wrapper of
+/// the kernel's `coding_run::make_non_dumpable`, for a host that names only
+/// the broker. It only restricts the process; it grants nothing.
+/// Process-wide and never undone. True when the process is now
+/// non-dumpable. Linux only (absent elsewhere, as Files is).
+#[cfg(target_os = "linux")]
+pub fn make_non_dumpable() -> bool {
+    nexus_kernel::coding_run::make_non_dumpable()
+}
 
 /// The largest file Files creates.
 pub const MAX_FILE_BYTES: usize = 8 * 1024;
