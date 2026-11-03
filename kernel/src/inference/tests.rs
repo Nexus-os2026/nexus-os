@@ -1817,3 +1817,82 @@ fn a1_the_grammar_is_the_qualified_one() {
         );
     }
 }
+
+// ── oracle-add after Codex review 1 of PR #60 ───────────────────────────────
+
+/// The provisional scaffold floor (design §10.4 `SCAFFOLD_FLOOR`; the
+/// Architect's provisional value until Q-R3 records the qualified one).
+const PROVISIONAL_FLOOR: u64 = 256;
+
+/// E-O8b: a reply whose prompt count is below the scaffold floor, 0
+/// included, cannot have processed the fixed qualified texts: refused,
+/// charged once and settled, never retried. At or above the floor a valid
+/// reply is accepted.
+#[test]
+fn e_o8b_a_prompt_count_below_the_scaffold_floor_is_refused() {
+    let fake = Fake::healthy();
+    let ctx = Ctx::new();
+    let transport = verified(&fake, &ctx);
+    let reply = |count: u64| {
+        let mut value = chat_value();
+        value["prompt_eval_count"] = json!(count);
+        fake.set_route(chat(value));
+        call(&transport, &ctx)
+    };
+    for (what, count) in [
+        ("zero", 0),
+        ("one", 1),
+        ("one below the floor", PROVISIONAL_FLOOR - 1),
+    ] {
+        assert_eq!(reply(count).code(), Err(ModelError::Truncated), "{what}");
+    }
+    for (what, count) in [
+        ("at the floor", PROVISIONAL_FLOOR),
+        ("the qualification's 587", 587),
+    ] {
+        let content = reply(count).result.map(ModelReply::into_content);
+        assert_eq!(content, Ok(FINISH.to_string()), "{what}");
+    }
+    assert_eq!(fake.count("/api/chat"), 5, "one chat per call");
+    assert_eq!(ctx.charges(), 5);
+    assert_eq!(
+        ctx.meter
+            .events()
+            .iter()
+            .filter(|e| matches!(e, Metered::Settle(_)))
+            .count(),
+        5
+    );
+}
+
+/// E-O1b: a port is still required, and an explicitly written default port
+/// (`:80`) is a written port.
+#[test]
+fn e_o1b_an_explicitly_written_default_port_is_accepted() {
+    for (raw, addr) in [
+        ("http://127.0.0.1:80", "127.0.0.1:80"),
+        ("http://127.0.0.1:80/", "127.0.0.1:80"),
+        ("http://localhost:80", "127.0.0.1:80"),
+        ("http://[::1]:80", "[::1]:80"),
+    ] {
+        assert_eq!(
+            LoopbackEndpoint::parse(raw).map(|endpoint| endpoint.addr()),
+            Ok(addr.parse::<SocketAddr>().unwrap()),
+            "{raw}"
+        );
+    }
+    for raw in [
+        "http://127.0.0.1",
+        "http://127.0.0.1/",
+        "http://127.0.0.1:",
+        "http://[::1]",
+        "http://localhost",
+        "http://@127.0.0.1:80",
+    ] {
+        assert_eq!(
+            LoopbackEndpoint::parse(raw).err(),
+            Some(ModelError::InvalidAddress),
+            "{raw}"
+        );
+    }
+}
