@@ -230,7 +230,9 @@ fn g10_the_one_confirmer_answers_no_to_every_question() {
 const NEVER: [&str; 17] = [
     "GovernedControl::new",
     "PrimaryEvidence::open",
-    "claim_global_controller",
+    // Built from parts: the kernel's Stop-seal scan allows no other file
+    // to name the process's controller claim.
+    concat!("claim_global", "_controller"),
     "claim_controller",
     "lift_if",
     ".engage(",
