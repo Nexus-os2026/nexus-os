@@ -3,7 +3,7 @@
 //! Stop body here is a stand-in (one broker per process; the live tests
 //! drive the real `emergency_stop()`); the join is what is judged.
 
-use super::{Desk, Joined, Seams, StopRoute};
+use super::{Desk, Joined, QuitOutcome, Seams, StopRoute};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -125,4 +125,39 @@ fn f2_a_worker_whose_handle_is_not_yet_registered_is_reported_then_joined() {
         Some(Joined::All { joined: 1 }),
         "every worker started is joined"
     );
+}
+
+/// Decision 3, item 3: a close that timed out may still record
+/// session_closed later, before the process exits; Quit says only what it
+/// knows.
+#[test]
+fn d3_a_close_timeout_is_reported_as_unconfirmed_never_as_a_known_state() {
+    let timed_out = QuitOutcome::SessionNotClosed {
+        joined: 1,
+        runs_cancelled: 0,
+        close: "no answer in time",
+    }
+    .report();
+    assert!(
+        timed_out
+            .contains("closing the evidence session could not be confirmed within the deadline"),
+        "{timed_out}"
+    );
+    for answer in ["no answer in time", "owed", "uncertain"] {
+        let report = QuitOutcome::SessionNotClosed {
+            joined: 1,
+            runs_cancelled: 0,
+            close: answer,
+        }
+        .report();
+        assert!(
+            !report.contains("unfinished"),
+            "a restart outcome is claimed: {report}"
+        );
+        assert!(
+            !report.contains("next start"),
+            "a restart outcome is claimed: {report}"
+        );
+        assert!(!report.to_lowercase().contains("clean"), "{report}");
+    }
 }
