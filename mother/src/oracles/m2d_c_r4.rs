@@ -21,12 +21,9 @@ use crate::effect::{ApprovalStatus, EffectOutcome, PendingAction, Publication};
 use crate::evidence::{
     BlockReason, SettleCause, SettlementEnd, SettlementOutcome, StopReason, FILE_UNCERTAIN_NOTICE,
 };
-use crate::journal::{
-    Entry, Event, JournalError, JournalStore, MemoryJournal, MissionId, ReplayViolation,
-};
+use crate::journal::{Entry, Event, JournalError, MemoryJournal, MissionId, ReplayViolation};
 use crate::state::{MissionState, Trigger};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// A mission whose Builder asked for two Files; the first waits.
@@ -242,105 +239,28 @@ fn m2d_c_r4_4_every_mission_is_stopped_before_any_snapshot() {
     );
 }
 
-/// A journal that notes how often the port's memory stop was engaged at
-/// each append.
-struct Noting {
-    inner: MemoryJournal,
-    port: Arc<RecordingPort>,
-    seen: Arc<Mutex<Vec<usize>>>,
-}
-
-impl JournalStore for Noting {
-    fn load(&self) -> Result<Vec<String>, JournalError> {
-        self.inner.load()
-    }
-    fn append(&mut self, line: &str) -> Result<(), JournalError> {
-        self.seen.lock().unwrap().push(self.port.halts());
-        self.inner.append(line)
-    }
-    fn poison(&mut self) -> Result<(), JournalError> {
-        self.inner.poison()
-    }
-}
-
-/// Addendum 1: the memory stop is engaged before the Stop's first journal
-/// append and before its owed-evidence write; a recording error does not
-/// prevent it; and its scope is the port: another mission is stopped with
-/// it (`door_halted`), never left runnable. Control: without a File live,
-/// the scope is the mission's own.
+/// Addendum 1, scoped by C4 (round-5 amendment): a mission Stop ends only
+/// that mission; another mission of the port stays runnable; a recording
+/// error does not keep the Stop from ending it. (The halt's order before
+/// the journal and the owed write is observable at the real broker:
+/// `adapter/m2d_files_r4.rs` (i)-(iii) and `adapter/m2d_files_r5.rs`.)
 #[test]
-fn m2d_c_r4_5_the_memory_stop_comes_first_and_its_scope_is_the_port() {
+fn m2d_c_r4_5_a_mission_stop_ends_only_that_mission() {
     let w = world();
-    let port = Arc::new(RecordingPort::default());
-    let seen: Arc<Mutex<Vec<usize>>> = Arc::default();
-    let journal = MemoryJournal::new();
-    let mother = Arc::new(
-        Coordinator::open(
-            Noting {
-                inner: journal.clone(),
-                port: port.clone(),
-                seen: seen.clone(),
-            },
-            port.clone(),
-            Lanes::new(w.lanes.clone()).unwrap(),
-            w.clock.clone(),
-            test_private(),
-        )
-        .unwrap(),
-    );
-    let w = World {
-        port: port.clone(),
-        journal,
-        clock: w.clock.clone(),
-        lanes: w.lanes.clone(),
-        keyed: w.keyed.clone(),
-        mother,
-    };
     let id = waiting(&w);
     let other = w.approved(contract_with(""));
     w.mother.advance(other).unwrap();
-    port.set_publication(Some(published()));
-    port.set_halt_scope(true);
-    let at_owed = Arc::new(AtomicUsize::new(usize::MAX));
-    let noted = at_owed.clone();
-    let probe = port.clone();
-    w.mother
-        .hooks
-        .before_owed_write
-        .arm(0, move || noted.store(probe.halts(), Ordering::SeqCst));
-    let appended_before = seen.lock().unwrap().len();
+    w.port.set_publication(Some(published()));
     assert_eq!(w.mother.stop(id), Ok(MissionState::Blocked));
-    let at_appends = seen.lock().unwrap()[appended_before..].to_vec();
-    assert!(
-        !at_appends.is_empty() && at_appends.iter().all(|h| *h == 1),
-        "{at_appends:?}"
-    );
-    assert_eq!(at_owed.load(Ordering::SeqCst), 1, "before the owed write");
-    assert_eq!(w.mother.state(other), Some(MissionState::Stopped));
-    assert!(events(&w, other).contains(&Event::Transition {
-        trigger: Trigger::Stop {
-            reason: StopReason::DoorHalted
-        }
-    }));
-    assert!(w.mother.advance(other).is_err());
+    assert_eq!(w.mother.state(other), Some(MissionState::Investigating));
+    assert!(w.mother.advance(other).is_ok(), "another mission goes on");
 
-    // A recording error does not prevent it.
+    // A recording error does not prevent the end.
     let w = world();
     let id = waiting(&w);
-    w.port.set_halt_scope(true);
     w.journal.fail_after(0);
     let _ = w.mother.stop(id);
-    assert_eq!(w.port.halts(), 1);
     assert_ne!(w.mother.state(id), Some(MissionState::AwaitingApproval));
-
-    // Control: no File live at the port, the other mission goes on.
-    let w = world();
-    let id = waiting(&w);
-    let other = w.approved(contract_with(""));
-    w.port
-        .set_publication(Some(Publication::ConfirmedNotPublished));
-    assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
-    assert_eq!(w.mother.state(other), Some(MissionState::Approved));
 }
 
 /// (5) Rule 6 / addendum 2: a crash at every durable boundary. After the
