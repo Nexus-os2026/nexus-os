@@ -21,11 +21,7 @@
 //! ```
 
 use crate::contract::ContractHash;
-use crate::effect::PendingAction;
-use crate::evidence::{
-    BlockReason, FailReason, LapseReason, SettlementEnd, SettlementOutcome, StopReason,
-    VerifyFailReason,
-};
+use crate::evidence::{BlockReason, FailReason, LapseReason, StopReason, VerifyFailReason};
 use crate::journal::{ContractRef, RestRef};
 use crate::lane::LaneRole;
 use serde::{Deserialize, Serialize};
@@ -180,18 +176,6 @@ pub enum Trigger {
         effect: u64,
         reason: LapseReason,
     },
-    /// M2d-C round 4 (settlement design v2, rules 5-6; addendum 2): the
-    /// settlement of File `effect` ends the mission, in one journal line:
-    /// what it came to (with the broker's identity of the action, if
-    /// known) and the mission's end, together. Settlement only: taken from
-    /// the phase that dispatched the File or from its wait, never into a
-    /// working state.
-    Settled {
-        effect: u64,
-        action: Option<PendingAction>,
-        outcome: SettlementOutcome,
-        end: SettlementEnd,
-    },
 }
 
 /// A trigger that the state does not accept.
@@ -219,7 +203,6 @@ impl Trigger {
             Trigger::ActionApproved { .. } => "action_approved",
             Trigger::ActionDenied { .. } => "action_denied",
             Trigger::ApprovalLapsed { .. } => "approval_lapsed",
-            Trigger::Settled { .. } => "settled",
         }
     }
 }
@@ -251,12 +234,6 @@ pub fn transition(
         }
         (Trigger::ActionDenied { .. }, AwaitingApproval) => Some(Denied),
         (Trigger::ApprovalLapsed { .. }, AwaitingApproval) => Some(Blocked),
-        (Trigger::Settled { end, .. }, s) if s == AwaitingApproval || s.may_wait() => {
-            Some(match end {
-                SettlementEnd::Block(_) => Blocked,
-                SettlementEnd::Stop(_) => Stopped,
-            })
-        }
         _ => None,
     };
     to.ok_or(IllegalTransition {

@@ -89,25 +89,6 @@ pub enum ApprovalStatus {
     /// requires recovery (the file is published; its directory sync, or
     /// its write grant's closure, failed).
     RecoveryRequired,
-    /// M2d-C round 4 (addendum 3): a File whose outcome the broker cannot
-    /// confirm either way (uncertain, unreadable or unknown): a file may
-    /// exist. Never "not published".
-    Uncertain,
-}
-
-/// M2d-C round 4 (settlement design v2, rule 1): what the broker's pinned
-/// record says of a File's publication, as the port read it once.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Publication {
-    Published {
-        recovery_required: bool,
-        interrupted: Vec<&'static str>,
-    },
-    /// Only this says nothing was written.
-    ConfirmedNotPublished,
-    /// Not final (not answered, or executing).
-    Pending,
-    Uncertain,
 }
 
 /// M2d (I7): what binds a mission's broker run to the Owner's consent, once
@@ -273,25 +254,17 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// What became of the action `mission` waits on (an effect that came
     /// back [`EffectOutcome::AwaitingApproval`]). Never approves it.
     fn approval(&self, mission: MissionId) -> ApprovalStatus;
-    /// M2d-C round 4 (settlement design v2, rules 1 and 5): one snapshot
-    /// of the File action `mission` dispatched last at this port: its
-    /// identity and what the broker's pinned record says of it. `None`:
-    /// the port holds no such action. An error: the broker could not be
-    /// read. No effect, no wait, never a panic.
-    fn publication(
-        &self,
-        mission: MissionId,
-    ) -> Result<Option<(PendingAction, Publication)>, EffectRefusal>;
-    /// M2d-C round 4 (rule 2, addendum 4): the coordinator journaled a
-    /// conclusive outcome of File action `pending`: the broker may release
-    /// its pin. Idempotent; one that fails is kept and tried again with
-    /// the next acknowledgement (and on every reopen, from the journal).
-    fn ack(&self, mission: MissionId, pending: &PendingAction) -> Result<(), EffectRefusal>;
-    /// M2d-C round 4 (rule 3, addendum 1): engage the port's memory-only
-    /// stop first, before any lock, if a File may be live at it. Returns
-    /// whether it did: then every mission of this port is stopped with it
-    /// (its scope is the port's shared door).
-    fn halt_all(&self) -> bool;
+    /// M2d (Codex review 1 of PR #78, HIGH 1): if the action `mission`
+    /// waits on is a File create that ran at the broker, what it came to
+    /// (Approved, Overtaken or RecoveryRequired); otherwise none. Read
+    /// before a Stop or the time budget ends the mission. No effect. An
+    /// error: the broker could not be read (Codex review 2 of PR #78,
+    /// decision C); the port never panics for it.
+    fn publication(&self, mission: MissionId) -> Result<Option<ApprovalStatus>, EffectRefusal>;
+    /// M2d (decision B): the coordinator journaled what became of the
+    /// action `mission` waited on; the port may drop it. Until then the
+    /// port keeps it, whatever it answered.
+    fn ack_publication(&self, mission: MissionId);
     /// The identity of the action `mission` waits on, if the port knows it.
     fn pending(&self, mission: MissionId) -> Option<PendingAction>;
     /// A reopened coordinator hands back the journaled action of a mission

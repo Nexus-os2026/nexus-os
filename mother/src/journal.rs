@@ -24,9 +24,7 @@
 
 use crate::contract::{sha256, ContractHash, EffectKind};
 use crate::effect::PendingAction;
-use crate::evidence::{
-    ConsentRefusedReason, HeldReason, MotherRefusal, SettleCause, SettledOutcome,
-};
+use crate::evidence::{ConsentRefusedReason, HeldReason, MotherRefusal, SettledOutcome};
 use crate::lane::{InvocationId, LaneRole};
 use crate::private::ContentId;
 use crate::state::Trigger;
@@ -135,11 +133,6 @@ pub enum Event {
     Held { reason: HeldReason },
     /// M2a-S: the Owner resumed a held mission.
     Resumed,
-    /// M2d-C round 4 (settlement design v2, rule 4): a Stop, the time
-    /// budget or another end began settling the mission's File `effect`:
-    /// from this record on the mission is never runnable again, and `cause`
-    /// is its first cause. Only the settlement's terminal line follows.
-    SettlementStarted { effect: u64, cause: SettleCause },
 }
 
 /// One journal entry.
@@ -244,12 +237,6 @@ pub enum ReplayViolation {
     ClosureOfNoAction,
     HoldOutOfPlace,
     ResumeNotHeld,
-    /// M2d-C round 4: a settlement record of no File the mission waits on.
-    SettlementOutOfPlace,
-    /// M2d-C round 4: a second start, a terminal line of another File, an
-    /// end its first cause does not give, an action other than the
-    /// journaled one, or a transition other than the settlement's own.
-    SettlementConflict,
 }
 
 /// Why a journal cannot be read or written: closed codes and line numbers

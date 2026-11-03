@@ -299,9 +299,6 @@ codes! {
         EmergencyStop => "emergency_stop",
         /// P0: its private content is missing or does not verify.
         PrivateContentUnavailable => "private_content_unavailable",
-        /// M2d-C round 4 (addendum 1, shutdown scope): another mission's
-        /// Stop halted the broker door this mission shares.
-        DoorHalted => "door_halted",
     }
 }
 
@@ -463,12 +460,9 @@ pub enum BlockReason {
     /// budget ended a mission waiting on a File the broker could not say
     /// anything of: a file may exist.
     FilePublicationUncertain,
-    /// M2d-C round 4 (addendum 1): a File was published, and another
-    /// mission's Stop then halted the door this mission shares.
-    FilePublicationDoorHalted,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 17] = [
+const BLOCK_CODES: [(BlockReason, &str); 16] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -503,151 +497,7 @@ const BLOCK_CODES: [(BlockReason, &str); 17] = [
         BlockReason::FilePublicationUncertain,
         "file_publication_uncertain",
     ),
-    (
-        BlockReason::FilePublicationDoorHalted,
-        "file_publication_interrupted:door_halted",
-    ),
 ];
-
-/// M2d-C round 4 (addendum 5): what the Owner is told of a mission ended
-/// `file_publication_uncertain`, exactly.
-pub const FILE_UNCERTAIN_NOTICE: &str = "A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.";
-
-/// M2d-C round 4 (settlement design v2, rule 4): why a File's settlement
-/// began, kept as its first cause: a Stop, the time budget, or another end
-/// of the mission (a block's reason).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum SettleCause {
-    Stop(StopReason),
-    TimeBudget,
-    Ended(BlockReason),
-}
-
-impl SettleCause {
-    pub fn as_str(&self) -> String {
-        match self {
-            SettleCause::Stop(reason) => format!("stop:{}", reason.code()),
-            SettleCause::TimeBudget => "time_budget".into(),
-            SettleCause::Ended(reason) => format!("ended:{}", reason.as_str()),
-        }
-    }
-
-    pub fn parse(text: &str) -> Option<Self> {
-        if text == "time_budget" {
-            return Some(SettleCause::TimeBudget);
-        }
-        if let Some(reason) = text.strip_prefix("stop:") {
-            return StopReason::parse(reason).map(SettleCause::Stop);
-        }
-        BlockReason::parse(text.strip_prefix("ended:")?).map(SettleCause::Ended)
-    }
-
-    pub fn every() -> Vec<Self> {
-        let mut every: Vec<Self> = StopReason::every()
-            .into_iter()
-            .map(SettleCause::Stop)
-            .collect();
-        every.push(SettleCause::TimeBudget);
-        every.extend(BlockReason::every().into_iter().map(SettleCause::Ended));
-        every
-    }
-
-    /// How a settlement with this first cause ends, given its outcome (rule
-    /// 5): a published File blocks with the cause's interruption code (or
-    /// recovery required); one confirmed not published ends as the cause
-    /// would have; an uncertain one blocks `file_publication_uncertain`.
-    pub fn end(&self, outcome: &SettlementOutcome) -> SettlementEnd {
-        match outcome {
-            SettlementOutcome::Uncertain => {
-                SettlementEnd::Block(BlockReason::FilePublicationUncertain)
-            }
-            SettlementOutcome::Published {
-                recovery_required: true,
-                ..
-            } => SettlementEnd::Block(BlockReason::FilePublicationRecoveryRequired),
-            SettlementOutcome::Published { .. } => SettlementEnd::Block(match self {
-                SettleCause::Stop(StopReason::Owner) => BlockReason::FilePublicationOwnerStop,
-                SettleCause::Stop(StopReason::EmergencyStop) => {
-                    BlockReason::FilePublicationInterrupted(PublicationCause::EmergencyStop)
-                }
-                SettleCause::Stop(StopReason::DoorHalted) => BlockReason::FilePublicationDoorHalted,
-                SettleCause::Stop(StopReason::PrivateContentUnavailable) => {
-                    BlockReason::FilePublicationInterrupted(PublicationCause::Unknown)
-                }
-                SettleCause::TimeBudget => BlockReason::FilePublicationTimeBudget,
-                SettleCause::Ended(reason) => *reason,
-            }),
-            SettlementOutcome::NotPublished => match self {
-                SettleCause::Stop(reason) => SettlementEnd::Stop(*reason),
-                SettleCause::TimeBudget => SettlementEnd::Block(BlockReason::BudgetTime),
-                SettleCause::Ended(reason) => SettlementEnd::Block(*reason),
-            },
-        }
-    }
-}
-
-by_code!(SettleCause);
-
-/// M2d-C round 4 (rule 5): what a File's settlement found, journaled in the
-/// same line as the mission's end. `Published` is the truthful success
-/// record (it never makes the mission runnable).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
-pub enum SettlementOutcome {
-    Published {
-        recovery_required: bool,
-        interrupted: Vec<PublicationCause>,
-    },
-    NotPublished,
-    Uncertain,
-}
-
-impl SettlementOutcome {
-    /// Published, or confirmed not published: the broker may drop it.
-    pub fn conclusive(&self) -> bool {
-        !matches!(self, SettlementOutcome::Uncertain)
-    }
-
-    /// On the ordinary path (no Stop: the broker's own answer), how a File
-    /// that may not simply continue ends: recovery required, its first
-    /// interruption, or uncertain. `None`: a clean publication (the
-    /// ordinary approval) or one not published (the ordinary denial or
-    /// lapse) take no settlement.
-    pub fn ordinary_end(&self) -> Option<SettlementEnd> {
-        match self {
-            SettlementOutcome::Uncertain => Some(SettlementEnd::Block(
-                BlockReason::FilePublicationUncertain,
-            )),
-            SettlementOutcome::Published {
-                recovery_required: true,
-                ..
-            } => Some(SettlementEnd::Block(
-                BlockReason::FilePublicationRecoveryRequired,
-            )),
-            SettlementOutcome::Published { interrupted, .. } => interrupted
-                .first()
-                .map(|cause| SettlementEnd::Block(BlockReason::FilePublicationInterrupted(*cause))),
-            SettlementOutcome::NotPublished => None,
-        }
-    }
-}
-
-/// M2d-C round 4: the mission's end in a settlement's terminal line.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub enum SettlementEnd {
-    Block(BlockReason),
-    Stop(StopReason),
-}
-
-impl SettlementEnd {
-    pub fn as_str(&self) -> String {
-        match self {
-            SettlementEnd::Block(reason) => reason.as_str(),
-            SettlementEnd::Stop(reason) => reason.as_str(),
-        }
-    }
-}
 
 impl BlockReason {
     pub fn as_str(&self) -> String {
@@ -896,10 +746,6 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
             | Trigger::ActionApproved { .. }
             | Trigger::ActionDenied { .. }
             | Trigger::ApprovalLapsed { .. } => true,
-            Trigger::Settled { action, .. } => action.as_ref().is_none_or(|pending| {
-                RunId::parse(&pending.run).is_some()
-                    && CommitmentId::parse(&pending.commitment).is_some()
-            }),
         },
         Event::LaneInvoked {
             identity_sha256,
@@ -920,8 +766,7 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
         | Event::SessionOpened
         | Event::SessionClosed
         | Event::Held { .. }
-        | Event::Resumed
-        | Event::SettlementStarted { .. } => true,
+        | Event::Resumed => true,
     };
     if ok {
         Ok(())
