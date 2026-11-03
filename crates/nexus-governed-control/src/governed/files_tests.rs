@@ -871,3 +871,151 @@ fn m2d_b1_d_o21_names_and_content_leave_no_trace() {
         }
     }
 }
+
+// ---------------------------------------------------------------- Codex review 1 of PR #57
+
+/// Codex MEDIUM (D-O18): a reserved location is compared by where it
+/// really is. A reserved path that does not exist yet is resolved through
+/// its longest existing ancestor, links included, and its missing
+/// components appended; when that cannot be established, the selection is
+/// refused (fail closed). Each case on a fresh broker, against an empty,
+/// owned, canonical workspace that no other rule refuses; the controls show
+/// the same workspaces allowed when the reserved path lies elsewhere.
+#[test]
+fn m2d_b1_d_o18_b_reserved_paths_resolve_through_links() {
+    let root = temp_root("m2d-b1-ws-links");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    let with_reserved = |reserved: PathBuf| Exclusions {
+        home: dirs.path("home"),
+        identity_home: dirs.path("ident"),
+        reserved: vec![reserved],
+        uid: crate::launcher::effective_uid(),
+    };
+    let select = |path: &Path, reserved: PathBuf| {
+        let gov = control(&root, &evidence);
+        let result = gov.register_workspace_in(path, &with_reserved(reserved));
+        (result.is_ok(), gov.workspace().is_some())
+    };
+    for sub in ["home/wsa", "home/wsb", "home/wsc", "home/wsd", "home/wse"] {
+        std::fs::create_dir(dirs.path(sub)).unwrap();
+    }
+
+    // Codex's case: `alias -> wsa`, reserved `alias/future` (absent).
+    std::os::unix::fs::symlink(dirs.path("home/wsa"), dirs.path("alias")).unwrap();
+    assert_eq!(
+        select(&dirs.path("home/wsa"), dirs.path("alias/future")),
+        (false, false),
+        "the workspace contains the reserved location, through a link"
+    );
+
+    // An existing ancestor that is a link, with missing components below.
+    std::os::unix::fs::symlink(dirs.path("home"), dirs.path("lnk")).unwrap();
+    assert_eq!(
+        select(&dirs.path("home/wsb"), dirs.path("lnk/wsb/staging/inner")),
+        (false, false),
+        "resolved through an ancestor link"
+    );
+
+    // Not established: a dangling link on the way, or `..` after a missing
+    // component, refuses the selection.
+    std::os::unix::fs::symlink(dirs.path("home/wsc/later"), dirs.path("dangle")).unwrap();
+    assert_eq!(
+        select(&dirs.path("home/wsc"), dirs.path("dangle/x")),
+        (false, false),
+        "a dangling link: containment cannot be established"
+    );
+    assert_eq!(
+        select(&dirs.path("home/wsd"), dirs.path("home/absent/../wsd")),
+        (false, false),
+        "`..` after a missing component: containment cannot be established"
+    );
+
+    // Controls: a missing reserved path elsewhere, plain or through a link
+    // to elsewhere, refuses nothing.
+    assert_eq!(
+        select(&dirs.path("home/wse"), dirs.path("reserved/absent/deep")),
+        (true, true)
+    );
+    std::os::unix::fs::symlink(dirs.path("reserved"), dirs.path("elsewhere")).unwrap();
+    assert_eq!(
+        select(&dirs.path("home/wse"), dirs.path("elsewhere/future")),
+        (true, true)
+    );
+    assert_eq!(dirs.entries(&dirs.path("home/wse")), Vec::<String>::new());
+}
+
+/// Codex LOW: the cached consent keeps its record's own time. The store
+/// takes a while (here the clock jumps an hour while the consent or resume
+/// record is written): the admission, and so the Owner's display, still
+/// says when the recorded yes was given.
+#[test]
+fn m2d_b1_h1_h_the_cached_consent_keeps_its_record_s_time() {
+    use crate::authority::clock::ManualClock;
+    use crate::authority::evidence::{EvidenceRecord, EvidenceSink, EvidenceUnavailable};
+
+    struct Slow {
+        memory: Arc<MemoryEvidence>,
+        clock: Arc<ManualClock>,
+    }
+    impl EvidenceSink for Slow {
+        fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
+            let seq = self.memory.record(record)?;
+            if matches!(
+                record.phase,
+                EvidencePhase::MissionConsented | EvidencePhase::MissionResumeConfirmed
+            ) {
+                self.clock.advance(Duration::from_secs(3600));
+            }
+            Ok(seq)
+        }
+    }
+
+    let root = temp_root("m2d-b1-time");
+    let memory = Arc::new(MemoryEvidence::new(1_000));
+    let clock = Arc::new(ManualClock::default());
+    let gov = Arc::new(
+        GovernedControl::with_secrets(
+            root.0.path(),
+            Vault::Disabled.source(),
+            Arc::new(Slow {
+                memory: memory.clone(),
+                clock: clock.clone(),
+            }),
+            clock.clone(),
+        )
+        .unwrap(),
+    );
+    let dirs = Dirs::new();
+    gov.register_workspace_in(&dirs.ws(), &dirs.exclusions())
+        .unwrap();
+    let owner = Owner::new();
+    let door = gov.issue_agent_door(mother(), owner.clone()).unwrap();
+    let recorded = |phase: EvidencePhase| {
+        memory
+            .records()
+            .iter()
+            .rev()
+            .find(|r| r.phase == phase)
+            .map(|r| r.at_wall_ms)
+            .expect("the yes is recorded")
+    };
+
+    door.confirm_mission(&mission(HASH, &label(1))).unwrap();
+    let run = door.open_run().unwrap();
+    door.admit_files(run, HASH, &label(1)).unwrap();
+    let admission = gov.authority().runs().files_admission(run).unwrap();
+    assert_eq!(
+        admission.consented_wall_ms,
+        recorded(EvidencePhase::MissionConsented)
+    );
+
+    door.confirm_held_mission(&held(&label(2))).unwrap();
+    let resumed = door.open_run().unwrap();
+    door.admit_files(resumed, HASH, &label(2)).unwrap();
+    let admission = gov.authority().runs().files_admission(resumed).unwrap();
+    assert_eq!(
+        admission.consented_wall_ms,
+        recorded(EvidencePhase::MissionResumeConfirmed)
+    );
+}
