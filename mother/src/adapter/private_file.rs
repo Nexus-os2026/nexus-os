@@ -1,20 +1,29 @@
 //! P0: the private store in Mother's home (design §3 I2, §5.2): one file
 //! per blob, `<dir>/<kind>/<hex>`, directories 0700 and files 0600, each
 //! written to a temporary file, synced, renamed into place, and its
-//! directory synced. A read is bounded and returned only if its content id
+//! directory synced. Every directory the store needs is durably linked
+//! before a blob is written in it: each missing level is created on its
+//! own and synced together with its parent, and an existing one's link is
+//! synced again on its first use by each store (a sync that failed earlier
+//! is retried). Any failure fails the call, so no reference to the content
+//! is journaled. A read is bounded and returned only if its content id
 //! verifies. The store refuses a directory that is a link or that other
 //! users can enter.
 
 use crate::journal::IoKind;
 use crate::private::{ContentId, ContentKind, PrivateError, PrivateStore, MAX_CONTENT_BYTES};
+use std::collections::BTreeSet;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 /// Mother's private store on disk.
 pub struct FilePrivate {
     dir: PathBuf,
+    /// The kind directories whose link this store has made durable.
+    linked: Mutex<BTreeSet<ContentKind>>,
 }
 
 fn io(e: std::io::Error) -> PrivateError {
@@ -64,15 +73,53 @@ pub(crate) mod seam {
     }
 }
 
-/// `dir` exists (created 0700 if absent), is a directory and not a link,
-/// and (on Unix) only this user may enter it.
+/// A directory's parent (`.` for a single relative component).
+fn parent_of(dir: &Path) -> &Path {
+    match dir.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
+
+/// `dir` exists and is durably linked, is a directory and not a link, and
+/// (on Unix) only this user may enter it. Each missing level is created on
+/// its own (0700), then it and its parent are synced; if none was missing,
+/// `dir` and its parent are synced. Every failure is returned.
 fn private_dir(dir: &Path) -> Result<(), PrivateError> {
-    match std::fs::symlink_metadata(dir) {
-        Ok(_) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            super::create_private(dir).map_err(io)?;
+    let mut missing = Vec::new();
+    let mut at = dir;
+    loop {
+        match std::fs::symlink_metadata(at) {
+            Ok(_) => break,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(at.to_path_buf());
+                match at.parent() {
+                    Some(parent) if !parent.as_os_str().is_empty() => at = parent,
+                    _ => break,
+                }
+            }
+            Err(e) => return Err(io(e)),
         }
-        Err(e) => return Err(io(e)),
+    }
+    if missing.is_empty() {
+        sync_dir(dir).map_err(io)?;
+        sync_dir(parent_of(dir)).map_err(io)?;
+    }
+    for level in missing.iter().rev() {
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(level) {
+            Ok(()) => {}
+            // Made meanwhile by another opener: its link is synced here too.
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(io(e)),
+        }
+        sync_dir(level).map_err(io)?;
+        sync_dir(parent_of(level)).map_err(io)?;
     }
     let meta = std::fs::symlink_metadata(dir).map_err(io)?;
     if !meta.is_dir() {
@@ -91,12 +138,33 @@ fn private_dir(dir: &Path) -> Result<(), PrivateError> {
 static TEMP: AtomicU64 = AtomicU64::new(0);
 
 impl FilePrivate {
-    /// The store at `dir` (created private if absent).
+    /// The store at `dir` (created private if absent, and durably linked).
     pub fn open(dir: &Path) -> Result<Self, PrivateError> {
         private_dir(dir)?;
         Ok(Self {
             dir: dir.to_path_buf(),
+            linked: Mutex::new(BTreeSet::new()),
         })
+    }
+
+    /// The kind's directory, durably linked (once per store; a failure is
+    /// retried by the next call). No lock is held while it is linked; a
+    /// poisoned record only means linking again.
+    fn kind_dir(&self, kind: ContentKind) -> Result<PathBuf, PrivateError> {
+        let dir = self.dir.join(kind.as_str());
+        let known = self
+            .linked
+            .lock()
+            .map(|linked| linked.contains(&kind))
+            .unwrap_or(false);
+        if !known {
+            private_dir(&dir)?;
+            match self.linked.lock() {
+                Ok(mut linked) => linked.insert(kind),
+                Err(poisoned) => poisoned.into_inner().insert(kind),
+            };
+        }
+        Ok(dir)
     }
 
     pub fn dir(&self) -> &Path {
@@ -127,8 +195,7 @@ impl PrivateStore for FilePrivate {
             return Err(PrivateError::TooLarge);
         }
         let id = ContentId::of(kind, bytes);
-        let dir = self.dir.join(kind.as_str());
-        private_dir(&dir)?;
+        let dir = self.kind_dir(kind)?;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos());
