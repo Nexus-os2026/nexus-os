@@ -1299,6 +1299,61 @@ fn m2d_a_h2_a_second_stop_after_restore_admission_needs_a_new_undo() {
     assert!(entries(&ws.root).is_empty());
 }
 
+/// Added after registration (H2′, "Stop → resume during the preflight"):
+/// a stop engaged and lifted after the undo was admitted and before its
+/// U1 still ends that undo: U1 checks the watches the undo took at its
+/// start and never takes fresh ones. A new undo then works.
+#[test]
+fn m2d_a_h2_stop_and_resume_both_before_u1_still_end_the_undo() {
+    for broker in [false, true] {
+        let ws = new_ws();
+        let other = StopAuthority::new();
+        let other_ctl = other.claim_controller().unwrap();
+        // `other` is the run's own (kernel) or observed (broker) authority,
+        // so its controller can act inside the hook.
+        let (own, observed) = if broker {
+            (ws.stop.clone(), other.clone())
+        } else {
+            (other.clone(), ws.broker.clone())
+        };
+        let binding = WorkspaceBinding {
+            agent_id: Uuid::new_v4(),
+            run_id: Uuid::new_v4(),
+        };
+        let grant = ws.projects.grant_for_run(ws.info.id, binding).unwrap();
+        let mut run = with_test_stop_authority(own, || {
+            CodingRun::create_for_project_observing(
+                ws.store(),
+                grant,
+                files_scopes(&[NAME]),
+                &observed,
+            )
+        })
+        .unwrap();
+        run.grant(&ws.staging()).unwrap();
+        run.snapshot().unwrap();
+        run.edit(create(NAME, CONTENT)).unwrap();
+        assert!(run.verify_structural().unwrap().passed());
+        ws.observed(&mut run, binding, &Guard::default()).unwrap();
+        let ino = std::fs::metadata(ws.root.join(NAME)).unwrap().ino();
+        let result = undo_with_u1(&ws, &mut run, ws.write_grant(binding), move || {
+            other.engage();
+            assert!(other_ctl.lift_if(other.stop_number()));
+        });
+        assert_eq!(
+            result,
+            Err(ApplyError::Refused(Refusal::Interrupted(
+                InterruptCause::EmergencyStop
+            ))),
+            "broker={broker}"
+        );
+        untouched(&ws, ino);
+        assert_eq!(run.apply_state(), ApplyState::Applied);
+        undo(&ws, &mut run, binding).unwrap();
+        assert!(entries(&ws.root).is_empty());
+    }
+}
+
 #[test]
 fn m2d_a_h2_the_restore_grant_revoked_or_expired_at_u1_touches_nothing() {
     for expire in [false, true] {
