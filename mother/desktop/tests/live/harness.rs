@@ -20,9 +20,9 @@
 
 #![allow(dead_code)]
 
+use crate::process_leader::{Leader, REAP as LEADER_REAP};
 use std::io::{BufRead, BufReader, Read};
 use std::os::unix::net::UnixListener;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
@@ -116,9 +116,8 @@ fn tool(name: &str) -> PathBuf {
 /// An Xvfb of our own: its display number, its child, its log.
 pub struct Xvfb {
     pub display: String,
-    child: Child,
+    leader: Leader,
     log: PathBuf,
-    shut: bool,
 }
 
 impl Xvfb {
@@ -139,15 +138,15 @@ impl Xvfb {
         if audit {
             command.args(["-audit", "4"]);
         }
-        let mut child = command
-            .env_clear()
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(std::fs::File::create(&log).unwrap())
-            .process_group(0)
-            .spawn()
-            .expect("Xvfb starts");
-        let stdout = child.stdout.take().unwrap();
+        let mut leader = Leader::spawn(
+            command
+                .env_clear()
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(std::fs::File::create(&log).unwrap()),
+        )
+        .expect("Xvfb starts");
+        let stdout = leader.take_stdout().unwrap();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let mut line = String::new();
@@ -157,15 +156,14 @@ impl Xvfb {
         let display = match rx.recv_timeout(STEP) {
             Ok(line) if !line.trim().is_empty() => format!(":{}", line.trim()),
             _ => {
-                kill_group(&mut child);
-                panic!("Xvfb printed no display within {STEP:?}");
+                let ended = leader.finish(LEADER_REAP);
+                panic!("Xvfb printed no display within {STEP:?} (its cleanup: {ended:?})");
             }
         };
         Self {
             display,
-            child,
+            leader,
             log,
-            shut: false,
         }
     }
 
@@ -181,20 +179,11 @@ impl Xvfb {
 }
 
 impl Xvfb {
-    /// End it; the test asserts the result. (Oracle commit of decision 4:
-    /// the old cleanup, its result discarded.)
-    pub fn shutdown(mut self) -> Result<(), String> {
-        self.shut = true;
-        kill_group(&mut self.child);
-        Ok(())
-    }
-}
-
-impl Drop for Xvfb {
-    fn drop(&mut self) {
-        if !self.shut {
-            kill_group(&mut self.child);
-        }
+    /// End it: the held leader's one final cleanup. The test asserts the
+    /// result; dropping it unshut leaves the cleanup to the leader's
+    /// backstop, which records any failure.
+    pub fn shutdown(self) -> Result<(), String> {
+        self.leader.finish(LEADER_REAP).map(|_| ())
     }
 }
 
@@ -203,23 +192,22 @@ impl Drop for Xvfb {
 /// everything it activated when the test ends.
 pub struct PrivateBus {
     pub address: String,
-    daemon: Child,
-    shut: bool,
+    leader: Leader,
 }
 
 impl PrivateBus {
     pub fn start() -> Self {
-        let mut daemon = Command::new(tool("dbus-daemon"))
-            .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
-            .env_clear()
-            .env("PATH", "/usr/local/bin:/usr/bin:/bin")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .process_group(0)
-            .spawn()
-            .expect("dbus-daemon starts");
-        let stdout = daemon.stdout.take().unwrap();
+        let mut leader = Leader::spawn(
+            Command::new(tool("dbus-daemon"))
+                .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
+                .env_clear()
+                .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null()),
+        )
+        .expect("dbus-daemon starts");
+        let stdout = leader.take_stdout().unwrap();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let mut lines = BufReader::new(stdout).lines();
@@ -232,32 +220,21 @@ impl PrivateBus {
         match rx.recv_timeout(STEP) {
             Ok(address) if !address.trim().is_empty() => Self {
                 address: address.trim().to_string(),
-                daemon,
-                shut: false,
+                leader,
             },
             _ => {
-                kill_group(&mut daemon);
-                panic!("dbus-daemon printed no address within {STEP:?}");
+                let ended = leader.finish(LEADER_REAP);
+                panic!("dbus-daemon printed no address within {STEP:?} (its cleanup: {ended:?})");
             }
         }
     }
 }
 
 impl PrivateBus {
-    /// End it; the test asserts the result. (Oracle commit of decision 4:
-    /// the old cleanup, its result discarded.)
-    pub fn shutdown(mut self) -> Result<(), String> {
-        self.shut = true;
-        kill_group(&mut self.daemon);
-        Ok(())
-    }
-}
-
-impl Drop for PrivateBus {
-    fn drop(&mut self) {
-        if !self.shut {
-            kill_group(&mut self.daemon);
-        }
+    /// End it, with everything it activated: the held leader's one final
+    /// cleanup. The test asserts the result.
+    pub fn shutdown(self) -> Result<(), String> {
+        self.leader.finish(LEADER_REAP).map(|_| ())
     }
 }
 
@@ -309,37 +286,6 @@ pub fn kill_and_reap(child: &mut Child) -> Option<std::process::ExitStatus> {
 #[allow(unused_imports)]
 pub use crate::process_leader::{checked_pgid, signal_outcome};
 
-/// SIGKILL to the process group of the child `pid`, with no held leader:
-/// recorded as unheld by the recording seam. (Oracle commit of decision 4.)
-pub fn signal_group(pid: u32) -> Result<(), String> {
-    crate::process_leader::send_group_kill(checked_pgid(pid)?, false)
-}
-
-/// Kill a child's whole process group (the child's own group, the child
-/// included), then reap the child; the whole cleanup, signal included, is
-/// bounded by one deadline, `within`.
-pub fn kill_group_within(
-    child: &mut Child,
-    within: Duration,
-) -> Result<std::process::ExitStatus, String> {
-    let deadline = Instant::now() + within;
-    crate::process_leader::send_group_kill(checked_pgid(child.id())?, true)?;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status),
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            Ok(None) => return Err(format!("the killed child was not reaped within {within:?}")),
-            Err(e) => return Err(format!("reaping the killed child: {e}")),
-        }
-    }
-}
-
-/// Kill a child's whole process group (the child's own group), then reap
-/// the child within `REAP`; its exit status, if it was reaped.
-fn kill_group(child: &mut Child) -> Option<std::process::ExitStatus> {
-    kill_group_within(child, REAP).ok()
-}
-
 /// What supervising one owned child gave: its stdout and stderr lines, its
 /// exit status once reaped, and why it was killed, if it was.
 pub struct Supervised {
@@ -347,16 +293,19 @@ pub struct Supervised {
     pub err: Vec<String>,
     pub status: Option<std::process::ExitStatus>,
     pub overrun: Option<String>,
+    /// The held leader's final cleanup: its signal and reap.
+    pub cleanup: Result<(), String>,
 }
 
-/// Supervise the owned `child` (stdout and stderr piped, in its own
-/// process group): read both streams line by line, any line counting as
-/// progress; kill its group if no line comes within `step` or the whole
-/// run passes `whole`.
-pub fn supervise(child: &mut Child, step: Duration, whole: Duration) -> Supervised {
+/// Supervise the held `leader` (stdout and stderr piped): read both
+/// streams line by line, any line counting as progress, until it exits
+/// (observed without reaping) or no line comes within `step` or the whole
+/// run passes `whole`; then end it with its one final cleanup, its group's
+/// signal and its reap.
+pub fn supervise(mut leader: Leader, step: Duration, whole: Duration) -> Supervised {
     let (tx, rx) = mpsc::channel::<(bool, String)>();
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
+    let stdout = leader.take_stdout().unwrap();
+    let stderr = leader.take_stderr().unwrap();
     for (is_out, stream) in [
         (true, Box::new(stdout) as Box<dyn Read + Send>),
         (false, Box::new(stderr) as Box<dyn Read + Send>),
@@ -397,52 +346,46 @@ pub fn supervise(child: &mut Child, step: Duration, whole: Duration) -> Supervis
         }
     };
     // The streams closed (or a reader failed): the process itself is still
-    // supervised, under the same deadline, never waited on without a bound.
+    // supervised, under the same deadline, observed without reaping it.
     let mut overrun = overrun;
     if overrun.is_none() {
         loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    return Supervised {
-                        out,
-                        err,
-                        status: Some(status),
-                        overrun: None,
-                    };
-                }
-                Ok(None) if started.elapsed() <= whole => {
+            match leader.exited() {
+                Ok(true) => break,
+                Ok(false) if started.elapsed() <= whole => {
                     std::thread::sleep(Duration::from_millis(20));
                 }
-                Ok(None) => {
+                Ok(false) => {
                     overrun = Some(format!("its output closed, but it ran past {whole:?}"));
                     break;
                 }
                 Err(e) => {
-                    overrun = Some(format!("waiting for it failed: {e}"));
+                    overrun = Some(format!("observing it failed: {e}"));
                     break;
                 }
             }
         }
     }
-    let status = kill_group(child);
+    // The one final cleanup, always.
+    let (status, cleanup) = match leader.finish(LEADER_REAP) {
+        Ok(status) => (Some(status), Ok(())),
+        Err(e) => (None, Err(e)),
+    };
     Supervised {
         out,
         err,
         status,
         overrun,
+        cleanup,
     }
 }
 
 /// Spawn `command` (stdout and stderr piped) in its own process group and
 /// supervise it as `supervise` does.
 pub fn supervise_command(command: &mut Command, step: Duration, whole: Duration) -> Supervised {
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .spawn()
+    let leader = Leader::spawn(command.stdout(Stdio::piped()).stderr(Stdio::piped()))
         .expect("the supervised child starts");
-    supervise(&mut child, step, whole)
+    supervise(leader, step, whole)
 }
 
 /// Run the child for `name` and read its report strictly.
@@ -464,14 +407,17 @@ fn parent(name: &str, opts: &Opts) {
         command.env(key, value);
     }
     command.env(CHILD, name);
-    let mut child = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .spawn()
-        .expect("the live child starts");
-    let supervised = supervise(&mut child, STEP, WHOLE);
+    let leader = Leader::spawn(
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .expect("the live child starts");
+    let supervised = supervise(leader, STEP, WHOLE);
+    if let Err(e) = &supervised.cleanup {
+        panic!("live child {name}: its cleanup failed: {e}");
+    }
     let (out, err_lines, overrun) = (supervised.out, supervised.err, supervised.overrun);
     let status = supervised.status.expect("the live child's status");
     let err = err_lines.join("\n");
@@ -494,8 +440,17 @@ fn parent(name: &str, opts: &Opts) {
                 .any(|l| l.starts_with("test result: ok. 1 passed;")),
         "live child {name} did not report exactly one ok test ({status})\n{context}"
     );
-    drop(bus);
-    drop(xvfb);
+    if let Some(bus) = bus {
+        bus.shutdown().expect("the private bus shuts down");
+    }
+    if let Some(xvfb) = xvfb {
+        xvfb.shutdown().expect("Xvfb shuts down");
+    }
+    assert_eq!(
+        crate::process_leader::backstop_failures(),
+        Vec::<String>::new(),
+        "a cleanup backstop failed"
+    );
 }
 
 /// H1: run the normal parent for `name` with hostile display variables
@@ -507,24 +462,24 @@ fn hostile_parent(name: &str, opts: Opts) {
     let wayland = UnixListener::bind(runtime.join("wayland-0")).unwrap();
     wayland.set_nonblocking(true).unwrap();
     let exe = std::env::current_exe().unwrap();
-    let mut middle = Command::new(&exe)
-        .args([name, "--exact", "--nocapture", "--test-threads=1"])
-        .env(HOSTILE, name)
-        .env("WAYLAND_DISPLAY", "wayland-0")
-        .env("XDG_RUNTIME_DIR", &runtime)
-        .env("DISPLAY", &decoy.display)
-        .env("GDK_BACKEND", "wayland")
-        .env("XDG_SESSION_TYPE", "wayland")
-        .env("GTK_DEBUG", "interactive")
-        .env_remove(CHILD)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .spawn()
-        .expect("the hostile parent starts");
-    let mut middle_out = middle.stdout.take().unwrap();
-    let mut middle_err = middle.stderr.take().unwrap();
+    let mut middle = Leader::spawn(
+        Command::new(&exe)
+            .args([name, "--exact", "--nocapture", "--test-threads=1"])
+            .env(HOSTILE, name)
+            .env("WAYLAND_DISPLAY", "wayland-0")
+            .env("XDG_RUNTIME_DIR", &runtime)
+            .env("DISPLAY", &decoy.display)
+            .env("GDK_BACKEND", "wayland")
+            .env("XDG_SESSION_TYPE", "wayland")
+            .env("GTK_DEBUG", "interactive")
+            .env_remove(CHILD)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .expect("the hostile parent starts");
+    let mut middle_out = middle.take_stdout().unwrap();
+    let mut middle_err = middle.take_stderr().unwrap();
     let out = std::thread::spawn(move || {
         let mut text = String::new();
         let _ = middle_out.read_to_string(&mut text);
@@ -536,16 +491,20 @@ fn hostile_parent(name: &str, opts: Opts) {
         text
     });
     let deadline = Instant::now() + WHOLE + STEP;
-    let status = loop {
-        if let Some(status) = middle.try_wait().unwrap() {
-            break status;
+    let overran = loop {
+        if middle.exited().expect("observing the hostile parent") {
+            break false;
         }
         if Instant::now() > deadline {
-            kill_group(&mut middle);
-            panic!("the hostile parent overran");
+            break true;
         }
         std::thread::sleep(Duration::from_millis(50));
     };
+    // The one final cleanup of the held middle's group.
+    let status = middle
+        .finish(LEADER_REAP)
+        .expect("the hostile parent's cleanup");
+    assert!(!overran, "the hostile parent overran");
     let out = out.join().unwrap_or_default();
     let err = err.join().unwrap_or_default();
     let ok_line = format!("test {name} ... ok");
@@ -560,5 +519,11 @@ fn hostile_parent(name: &str, opts: Opts) {
     );
     let reached = wayland.accept().is_ok();
     assert!(!reached, "a client reached the inherited Wayland socket");
+    decoy.shutdown().expect("the decoy Xvfb shuts down");
+    assert_eq!(
+        crate::process_leader::backstop_failures(),
+        Vec::<String>::new(),
+        "a cleanup backstop failed"
+    );
     let _ = opts;
 }

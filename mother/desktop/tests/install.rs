@@ -14,7 +14,6 @@ mod harness;
 mod process_leader;
 
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -49,35 +48,41 @@ fn i1_a_relative_cargo_target_dir_from_elsewhere_installs_nothing_stale() {
     let cargo_home = std::env::var("CARGO_HOME").unwrap_or_else(|_| format!("{real_home}/.cargo"));
     let rustup_home =
         std::env::var("RUSTUP_HOME").unwrap_or_else(|_| format!("{real_home}/.rustup"));
-    let mut child = Command::new("bash")
-        .arg(&script)
-        .current_dir(&elsewhere)
-        .env("HOME", &home)
-        .env("CARGO_HOME", cargo_home)
-        .env("RUSTUP_HOME", rustup_home)
-        .env("CARGO_TARGET_DIR", "target")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .spawn()
-        .expect("bash runs the install script");
+    let mut leader = process_leader::Leader::spawn(
+        Command::new("bash")
+            .arg(&script)
+            .current_dir(&elsewhere)
+            .env("HOME", &home)
+            .env("CARGO_HOME", cargo_home)
+            .env("RUSTUP_HOME", rustup_home)
+            .env("CARGO_TARGET_DIR", "target")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped()),
+    )
+    .expect("bash runs the install script");
+    let mut stderr_pipe = leader.take_stderr().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = std::io::Read::read_to_string(&mut stderr_pipe, &mut text);
+        text
+    });
+    // Observed without reaping; then the held leader's one final cleanup,
+    // its group's signal and its reap, within one deadline.
     let until = Instant::now() + DEADLINE;
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
+    let finished = loop {
+        if leader.exited().expect("observing the install script") {
+            break true;
         }
         if Instant::now() > until {
-            // The whole cleanup, signal and reap, within one deadline.
-            if let Err(e) = harness::kill_group_within(&mut child, Duration::from_secs(10)) {
-                panic!("cleaning up the install script failed: {e}");
-            }
-            break None;
+            break false;
         }
         std::thread::sleep(Duration::from_millis(50));
     };
-    let output = child.wait_with_output().unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let ended = leader.finish(Duration::from_secs(10));
+    let stderr = reader.join().unwrap_or_default();
+    let ended = ended.unwrap_or_else(|e| panic!("cleaning up the install script failed: {e}"));
+    let status = finished.then_some(ended);
     let installed = home.join(".local/bin/nexus-mother");
     let what = std::fs::read(&installed).ok();
     let _ = std::fs::remove_dir_all(&elsewhere);

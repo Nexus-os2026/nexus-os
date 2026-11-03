@@ -603,28 +603,20 @@ fn r1_a_clean_quit_closes_the_evidence_session_and_a_relaunch_finds_it_closed() 
 /// without a bound.
 #[test]
 fn h6_a_child_that_closes_its_streams_but_lives_is_killed_and_reaped() {
-    use std::os::unix::process::CommandExt;
-    let mut child = std::process::Command::new("sh")
-        .args(["-c", "exec >/dev/null 2>/dev/null; exec sleep 600"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .process_group(0)
-        .spawn()
-        .unwrap();
-    let pid = child.id().to_string();
+    // The plant is a leader the supervising thread holds; if supervision
+    // never returns, the test fails and signals nothing on inference.
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let supervised =
-            harness::supervise(&mut child, Duration::from_secs(10), Duration::from_secs(2));
+        let supervised = harness::supervise_command(
+            std::process::Command::new("sh")
+                .args(["-c", "exec >/dev/null 2>/dev/null; exec sleep 600"])
+                .stdin(std::process::Stdio::null()),
+            Duration::from_secs(10),
+            Duration::from_secs(2),
+        );
         let _ = tx.send((supervised.status, supervised.overrun));
     });
     let outcome = rx.recv_timeout(Duration::from_secs(20));
-    // Whatever happened, the planted child does not outlive the test. It is
-    // signalled only if it was not reaped (a reaped pid may be reused).
-    if !matches!(&outcome, Ok((Some(_), _))) {
-        let _ = harness::signal_group(pid.parse().expect("the planted pid"));
-    }
     let (status, overrun) = outcome.expect("the harness waited on the child without a bound");
     assert!(
         overrun.is_some(),
@@ -678,20 +670,19 @@ const H8_MODE: &str = "NEXUS_DESKTOP_CLEANUP_MODE";
 /// for it. It plants a group of its own and ends it within 2 s.
 #[test]
 fn h8_cleanup_role() {
-    use std::os::unix::process::CommandExt;
     let Some(pidfile) = std::env::var_os(H8_ROLE) else {
         return;
     };
-    let mut planted = std::process::Command::new("sleep")
-        .arg("600")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .process_group(0)
-        .spawn()
-        .unwrap();
+    let planted = process_leader::Leader::spawn(
+        std::process::Command::new("sleep")
+            .arg("600")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null()),
+    )
+    .unwrap();
     std::fs::write(&pidfile, planted.id().to_string()).unwrap();
-    let ended = harness::kill_group_within(&mut planted, Duration::from_secs(2));
+    let ended = planted.finish(Duration::from_secs(2));
     if std::env::var(H8_MODE).as_deref() == Ok("silent") {
         return;
     }
@@ -705,6 +696,8 @@ fn h8_cleanup_role() {
 struct RoleRun {
     finished: bool,
     reaped: bool,
+    /// The parent's final cleanup of the held role's group succeeded.
+    cleaned: bool,
     text: String,
 }
 
@@ -714,7 +707,6 @@ struct RoleRun {
 fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
     use std::io::Read;
     use std::os::unix::fs::PermissionsExt;
-    use std::os::unix::process::CommandExt;
     let temp = harness::fresh_dir("cleanup-role");
     let fake = temp.join("bin");
     std::fs::create_dir_all(&fake).unwrap();
@@ -726,24 +718,24 @@ fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
         path = format!("{}:{path}", fake.display());
     }
     let pidfile = temp.join("planted.pid");
-    let mut role = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "h8_cleanup_role",
-            "--exact",
-            "--nocapture",
-            "--test-threads=1",
-        ])
-        .env(H8_ROLE, &pidfile)
-        .env(H8_MODE, mode)
-        .env("PATH", path)
-        .env(harness::TOOL_DIR, &fake)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .process_group(0)
-        .spawn()
-        .unwrap();
-    let mut stdout = role.stdout.take().unwrap();
+    let mut role = process_leader::Leader::spawn(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "h8_cleanup_role",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(H8_ROLE, &pidfile)
+            .env(H8_MODE, mode)
+            .env("PATH", path)
+            .env(harness::TOOL_DIR, &fake)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null()),
+    )
+    .unwrap();
+    let mut stdout = role.take_stdout().unwrap();
     let reader = std::thread::spawn(move || {
         let mut text = String::new();
         let _ = stdout.read_to_string(&mut text);
@@ -751,7 +743,7 @@ fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
     });
     let until = std::time::Instant::now() + Duration::from_secs(20);
     let finished = loop {
-        if role.try_wait().unwrap().is_some() {
+        if role.exited().unwrap_or(true) {
             break true;
         }
         if std::time::Instant::now() > until {
@@ -759,22 +751,17 @@ fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
         }
         std::thread::sleep(Duration::from_millis(20));
     };
-    let _ = harness::kill_group_within(&mut role, Duration::from_secs(10));
+    // The one final cleanup of the held role's group. Nothing else is
+    // signalled: the plant is the role's to end, and a missing marker
+    // proves nothing about it.
+    let cleaned = role.finish(Duration::from_secs(10)).is_ok();
     let text = reader.join().unwrap_or_default();
     let reaped = text.lines().any(|l| l.contains("H8-CLEANUP reaped"));
-    // (Oracle commit of decision 4: the old inference fallback.)
-    if !reaped {
-        if let Some(pid) = std::fs::read_to_string(&pidfile)
-            .ok()
-            .and_then(|pid| pid.trim().parse::<u32>().ok())
-        {
-            let _ = harness::signal_group(pid);
-        }
-    }
     let _ = std::fs::remove_dir_all(&temp);
     RoleRun {
         finished,
         reaped,
+        cleaned,
         text,
     }
 }
@@ -793,6 +780,7 @@ fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
         "the planted child was not killed and reaped: {}",
         run.text
     );
+    assert!(run.cleaned, "the role's final cleanup failed");
 }
 
 // ── Decision 4: the leader-held rule in the harness ──────────────────────
@@ -819,7 +807,7 @@ fn h9_supervision_s_final_signal_reaches_only_its_held_leader() {
 #[test]
 fn h10_nothing_is_signalled_on_inference() {
     let (run, signalled) = process_leader::recording(|| run_cleanup_role("silent", false));
-    assert!(run.finished);
+    assert!(run.finished && run.cleaned);
     let unheld: Vec<_> = signalled.iter().filter(|s| !s.held).collect();
     assert!(
         unheld.is_empty(),
