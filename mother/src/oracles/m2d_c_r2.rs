@@ -18,10 +18,29 @@
 use super::{contract_with, world, World};
 use crate::adapter::p0_support::action;
 use crate::coordinator::CoordinatorError;
+use crate::effect::Publication;
 use crate::effect::{ApprovalStatus, EffectOutcome};
 use crate::journal::{Event, MissionId};
 use crate::state::{MissionState, Trigger};
 use std::sync::Arc;
+/// Round 4 (compile only): the old status of a File that ran, as the
+/// snapshot's read.
+fn read(status: ApprovalStatus) -> Publication {
+    match status {
+        ApprovalStatus::RecoveryRequired => Publication::Published {
+            recovery_required: true,
+            interrupted: vec![],
+        },
+        ApprovalStatus::Overtaken { causes } => Publication::Published {
+            recovery_required: false,
+            interrupted: causes,
+        },
+        _ => Publication::Published {
+            recovery_required: false,
+            interrupted: vec![],
+        },
+    }
+}
 
 /// A mission whose Builder asked for two Files; the first waits.
 fn waiting(w: &World) -> MissionId {
@@ -94,7 +113,7 @@ fn m2d_c_r2_an_advance_during_settlement_runs_nothing() {
     let w = world();
     let id = waiting(&w);
     let calls = w.keyed_calls();
-    w.port.set_publication(Some(ApprovalStatus::Approved));
+    w.port.set_publication(Some(read(ApprovalStatus::Approved)));
     w.port.hold_publication();
     let mother = Arc::clone(&w.mother);
     let stopping = std::thread::spawn(move || mother.stop(id));
@@ -116,7 +135,7 @@ fn m2d_c_r2_a_second_stop_keeps_the_first_cause() {
     let w = world();
     let id = waiting(&w);
     let calls = w.keyed_calls();
-    w.port.set_publication(Some(ApprovalStatus::Approved));
+    w.port.set_publication(Some(read(ApprovalStatus::Approved)));
     w.port.hold_publication();
     w.port.set_emergency(true);
     let mother = Arc::clone(&w.mother);
@@ -140,7 +159,7 @@ fn m2d_c_r2_a_stop_between_the_answer_and_its_journal_sees_the_file() {
     let id = waiting(&w);
     let calls = w.keyed_calls();
     w.port.approval_reply(ApprovalStatus::Approved);
-    w.port.set_publication(Some(ApprovalStatus::Approved));
+    w.port.set_publication(Some(read(ApprovalStatus::Approved)));
     w.port.hold_approval();
     let mother = Arc::clone(&w.mother);
     let advancing = std::thread::spawn(move || mother.advance(id).map(|a| a.to));

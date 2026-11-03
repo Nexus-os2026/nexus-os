@@ -15,6 +15,7 @@
 use super::{contract_with, world, World};
 use crate::adapter::p0_support::action;
 use crate::adapter::status_of;
+use crate::effect::Publication;
 use crate::effect::{ApprovalStatus, EffectOutcome};
 use crate::evidence::BlockReason;
 use crate::journal::{Event, MissionId};
@@ -25,6 +26,24 @@ use nexus_governed_control::authority::commitment::{
 use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use std::time::Duration;
+/// Round 4 (compile only): the old status of a File that ran, as the
+/// snapshot's read.
+fn read(status: ApprovalStatus) -> Publication {
+    match status {
+        ApprovalStatus::RecoveryRequired => Publication::Published {
+            recovery_required: true,
+            interrupted: vec![],
+        },
+        ApprovalStatus::Overtaken { causes } => Publication::Published {
+            recovery_required: false,
+            interrupted: causes,
+        },
+        _ => Publication::Published {
+            recovery_required: false,
+            interrupted: vec![],
+        },
+    }
+}
 
 /// A mission whose Builder asked for two Files; the first waits.
 fn waiting(w: &World) -> MissionId {
@@ -101,7 +120,7 @@ fn m2d_c_r1_an_emergency_stop_reconciles_a_publication_that_ran() {
         let w = world();
         let id = waiting(&w);
         let calls = w.keyed_calls();
-        w.port.set_publication(Some(status));
+        w.port.set_publication(Some(read(status)));
         w.port.set_emergency(true);
         let step = w.mother.advance(id).unwrap();
         assert_eq!(step.to, MissionState::Blocked);
@@ -123,7 +142,7 @@ fn m2d_c_r1_the_time_budget_reconciles_a_publication_that_ran() {
     let w = world();
     let id = waiting(&w);
     let calls = w.keyed_calls();
-    w.port.set_publication(Some(ApprovalStatus::Approved));
+    w.port.set_publication(Some(read(ApprovalStatus::Approved)));
     w.clock.advance(Duration::from_millis(3_600_001));
     assert_eq!(w.mother.advance(id).unwrap().to, MissionState::Blocked);
     truthful_then_ended(&w, id, "file_publication_interrupted:time_budget", calls);
@@ -156,7 +175,7 @@ fn m2d_c_r1_the_owner_s_stop_reconciles_a_publication_that_ran() {
         let w = world();
         let id = waiting(&w);
         let calls = w.keyed_calls();
-        w.port.set_publication(Some(status));
+        w.port.set_publication(Some(read(status)));
         assert_eq!(w.mother.stop(id), Ok(MissionState::Blocked));
         truthful_then_ended(&w, id, code, calls);
     }
@@ -183,7 +202,7 @@ fn m2d_c_r1_a_recovery_required_publication_ends_the_mission() {
     let id = waiting(&w);
     let calls = w.keyed_calls();
     w.port
-        .set_publication(Some(ApprovalStatus::RecoveryRequired));
+        .set_publication(Some(read(ApprovalStatus::RecoveryRequired)));
     assert_eq!(w.mother.stop(id), Ok(MissionState::Blocked));
     truthful_then_ended(&w, id, "file_publication_recovery_required", calls);
 }

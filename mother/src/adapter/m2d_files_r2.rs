@@ -10,6 +10,7 @@
 use super::m2c_support::{consent, port_for, Home};
 use super::{mother_agent, FileJournal};
 use crate::coordinator::{Coordinator, Lanes};
+use crate::effect::Publication;
 use crate::effect::{ApprovalStatus, EffectPort};
 use crate::oracles::m2d_c::{files_lanes, FilesOwner};
 use crate::oracles::{contract_with, Yes};
@@ -52,9 +53,13 @@ pub(super) fn on_the_real_broker(home: &Home) {
         .expect("published");
 
     assert_eq!(port.approval(id), ApprovalStatus::Approved);
+    let published = Publication::Published {
+        recovery_required: false,
+        interrupted: vec![],
+    };
     assert_eq!(
-        port.publication(id),
-        Ok(Some(ApprovalStatus::Approved)),
+        port.publication(id).map(|read| read.map(|(_, p)| p)),
+        Ok(Some(published)),
         "kept after the answer"
     );
     assert_eq!(
@@ -62,7 +67,7 @@ pub(super) fn on_the_real_broker(home: &Home) {
         ApprovalStatus::Approved,
         "and asked again"
     );
-    port.ack_publication(id);
+    port.ack(id, &pending).unwrap();
     assert_eq!(port.publication(id), Ok(None), "dropped once acknowledged");
     mother.stop(id).unwrap();
 }
