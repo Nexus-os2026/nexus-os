@@ -92,8 +92,18 @@ pub fn fresh_dir(label: &str) -> PathBuf {
     dir
 }
 
+/// A directory searched before the usual places (decision 4, LOW 3): the
+/// live tests' own seam, so a plant can sit exactly where `tool` resolves.
+pub const TOOL_DIR: &str = "NEXUS_DESKTOP_TOOL_DIR";
+
 /// The tool at its usual place; a missing tool fails the test.
 fn tool(name: &str) -> PathBuf {
+    if let Some(dir) = std::env::var_os(TOOL_DIR) {
+        let path = Path::new(&dir).join(name);
+        if path.is_file() {
+            return path;
+        }
+    }
     for dir in ["/usr/bin", "/bin", "/usr/local/bin"] {
         let path = Path::new(dir).join(name);
         if path.is_file() {
@@ -108,6 +118,7 @@ pub struct Xvfb {
     pub display: String,
     child: Child,
     log: PathBuf,
+    shut: bool,
 }
 
 impl Xvfb {
@@ -154,6 +165,7 @@ impl Xvfb {
             display,
             child,
             log,
+            shut: false,
         }
     }
 
@@ -168,9 +180,21 @@ impl Xvfb {
     }
 }
 
+impl Xvfb {
+    /// End it; the test asserts the result. (Oracle commit of decision 4:
+    /// the old cleanup, its result discarded.)
+    pub fn shutdown(mut self) -> Result<(), String> {
+        self.shut = true;
+        kill_group(&mut self.child);
+        Ok(())
+    }
+}
+
 impl Drop for Xvfb {
     fn drop(&mut self) {
-        kill_group(&mut self.child);
+        if !self.shut {
+            kill_group(&mut self.child);
+        }
     }
 }
 
@@ -180,6 +204,7 @@ impl Drop for Xvfb {
 pub struct PrivateBus {
     pub address: String,
     daemon: Child,
+    shut: bool,
 }
 
 impl PrivateBus {
@@ -208,6 +233,7 @@ impl PrivateBus {
             Ok(address) if !address.trim().is_empty() => Self {
                 address: address.trim().to_string(),
                 daemon,
+                shut: false,
             },
             _ => {
                 kill_group(&mut daemon);
@@ -217,9 +243,21 @@ impl PrivateBus {
     }
 }
 
+impl PrivateBus {
+    /// End it; the test asserts the result. (Oracle commit of decision 4:
+    /// the old cleanup, its result discarded.)
+    pub fn shutdown(mut self) -> Result<(), String> {
+        self.shut = true;
+        kill_group(&mut self.daemon);
+        Ok(())
+    }
+}
+
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        kill_group(&mut self.daemon);
+        if !self.shut {
+            kill_group(&mut self.daemon);
+        }
     }
 }
 
@@ -268,44 +306,13 @@ pub fn kill_and_reap(child: &mut Child) -> Option<std::process::ExitStatus> {
     }
 }
 
-/// The process group a cleanup may signal, from the pid of a child the
-/// harness spawned in its own group. Never 0 or 1 (which would signal every
-/// process this user owns), never out of range, never the harness's own
-/// group.
-pub fn checked_pgid(pid: u32) -> Result<i32, String> {
-    let pgid =
-        i32::try_from(pid).map_err(|_| format!("refusing process group {pid}: out of range"))?;
-    if pgid <= 1 {
-        return Err(format!(
-            "refusing process group {pgid}: never a broadcast or init's group"
-        ));
-    }
-    if pgid == nix::unistd::getpgrp().as_raw() {
-        return Err(format!(
-            "refusing process group {pgid}: it is the harness's own"
-        ));
-    }
-    Ok(pgid)
-}
+#[allow(unused_imports)]
+pub use crate::process_leader::{checked_pgid, signal_outcome};
 
-/// What a group signal's result means: delivered, or the group no longer
-/// exists (ESRCH: gone). Any other error is a failure.
-pub fn signal_outcome(result: Result<(), nix::errno::Errno>, pgid: i32) -> Result<(), String> {
-    match result {
-        Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
-        Err(error) => Err(format!("signalling process group {pgid} failed: {error}")),
-    }
-}
-
-/// SIGKILL to the owned process group of the child `pid`, natively
-/// (`killpg`), its result checked.
+/// SIGKILL to the process group of the child `pid`, with no held leader:
+/// recorded as unheld by the recording seam. (Oracle commit of decision 4.)
 pub fn signal_group(pid: u32) -> Result<(), String> {
-    let pgid = checked_pgid(pid)?;
-    let result = nix::sys::signal::killpg(
-        nix::unistd::Pid::from_raw(pgid),
-        nix::sys::signal::Signal::SIGKILL,
-    );
-    signal_outcome(result, pgid)
+    crate::process_leader::send_group_kill(checked_pgid(pid)?, false)
 }
 
 /// Kill a child's whole process group (the child's own group, the child
@@ -316,7 +323,7 @@ pub fn kill_group_within(
     within: Duration,
 ) -> Result<std::process::ExitStatus, String> {
     let deadline = Instant::now() + within;
-    signal_group(child.id())?;
+    crate::process_leader::send_group_kill(checked_pgid(child.id())?, true)?;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
@@ -424,6 +431,18 @@ pub fn supervise(child: &mut Child, step: Duration, whole: Duration) -> Supervis
         status,
         overrun,
     }
+}
+
+/// Spawn `command` (stdout and stderr piped) in its own process group and
+/// supervise it as `supervise` does.
+pub fn supervise_command(command: &mut Command, step: Duration, whole: Duration) -> Supervised {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0)
+        .spawn()
+        .expect("the supervised child starts");
+    supervise(&mut child, step, whole)
 }
 
 /// Run the child for `name` and read its report strictly.

@@ -10,6 +10,8 @@
 
 #[path = "live/harness.rs"]
 mod harness;
+#[path = "../../../kernel/tests/process_leader/mod.rs"]
+mod process_leader;
 
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;

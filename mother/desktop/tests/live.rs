@@ -6,6 +6,8 @@
 
 #[path = "live/harness.rs"]
 mod harness;
+#[path = "../../../kernel/tests/process_leader/mod.rs"]
+mod process_leader;
 #[path = "live/support.rs"]
 mod support;
 
@@ -668,9 +670,12 @@ fn h7_a_failed_group_signal_fails_and_only_a_gone_group_is_gone() {
 }
 
 const H8_ROLE: &str = "NEXUS_DESKTOP_CLEANUP_ROLE";
+/// `plant` (kill and reap the plant, then say so) or `silent` (end it,
+/// write its pid, say nothing).
+const H8_MODE: &str = "NEXUS_DESKTOP_CLEANUP_MODE";
 
-/// The cleanup role: a no-op unless h8 re-runs this binary for it. It
-/// kills and reaps a child it planted within 2 s and says how that went.
+/// The cleanup role: a no-op unless `run_cleanup_role` re-runs this binary
+/// for it. It plants a group of its own and ends it within 2 s.
 #[test]
 fn h8_cleanup_role() {
     use std::os::unix::process::CommandExt;
@@ -686,30 +691,41 @@ fn h8_cleanup_role() {
         .spawn()
         .unwrap();
     std::fs::write(&pidfile, planted.id().to_string()).unwrap();
-    match harness::kill_group_within(&mut planted, Duration::from_secs(2)) {
+    let ended = harness::kill_group_within(&mut planted, Duration::from_secs(2));
+    if std::env::var(H8_MODE).as_deref() == Ok("silent") {
+        return;
+    }
+    match ended {
         Ok(_) => println!("H8-CLEANUP reaped"),
         Err(e) => println!("H8-CLEANUP failed: {e}"),
     }
 }
 
-#[test]
-fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
+/// What one run of the cleanup role gave.
+struct RoleRun {
+    finished: bool,
+    reaped: bool,
+    text: String,
+}
+
+/// Run the cleanup role in `mode`, optionally with a fake `kill` that
+/// hangs, planted both first on its PATH and in the harness's tool
+/// directory (where `tool("kill")` resolves).
+fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
     use std::io::Read;
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::CommandExt;
-    // A fake `kill` that hangs, first on the role's PATH: an external
-    // command can hold the cleanup forever; native signalling cannot.
-    let temp = harness::fresh_dir("fake-kill");
+    let temp = harness::fresh_dir("cleanup-role");
     let fake = temp.join("bin");
     std::fs::create_dir_all(&fake).unwrap();
-    std::fs::write(fake.join("kill"), "#!/bin/sh\nexec sleep 600\n").unwrap();
-    std::fs::set_permissions(fake.join("kill"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut path = std::env::var("PATH").unwrap_or_default();
+    if fake_kill {
+        std::fs::write(fake.join("kill"), "#!/bin/sh\nexec sleep 600\n").unwrap();
+        std::fs::set_permissions(fake.join("kill"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        path = format!("{}:{path}", fake.display());
+    }
     let pidfile = temp.join("planted.pid");
-    let path = format!(
-        "{}:{}",
-        fake.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
     let mut role = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "h8_cleanup_role",
@@ -718,7 +734,9 @@ fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
             "--test-threads=1",
         ])
         .env(H8_ROLE, &pidfile)
+        .env(H8_MODE, mode)
         .env("PATH", path)
+        .env(harness::TOOL_DIR, &fake)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -741,12 +759,10 @@ fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
         }
         std::thread::sleep(Duration::from_millis(20));
     };
-    // The role's group (and a hung fake kill in it) never outlives the test.
     let _ = harness::kill_group_within(&mut role, Duration::from_secs(10));
     let text = reader.join().unwrap_or_default();
     let reaped = text.lines().any(|l| l.contains("H8-CLEANUP reaped"));
-    // The planted child is signalled here only if the role did not reap it
-    // (it is then still alive, so its group is still the one planted).
+    // (Oracle commit of decision 4: the old inference fallback.)
     if !reaped {
         if let Some(pid) = std::fs::read_to_string(&pidfile)
             .ok()
@@ -756,12 +772,67 @@ fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
         }
     }
     let _ = std::fs::remove_dir_all(&temp);
-    assert!(
+    RoleRun {
         finished,
+        reaped,
+        text,
+    }
+}
+
+#[test]
+fn h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
+    // A fake `kill` that hangs where `tool("kill")` resolves and first on
+    // PATH: an external command could hold the cleanup forever.
+    let run = run_cleanup_role("plant", true);
+    assert!(
+        run.finished,
         "the cleanup waited on a hung kill command past its deadline"
     );
     assert!(
-        reaped,
-        "the planted child was not killed and reaped: {text}"
+        run.reaped,
+        "the planted child was not killed and reaped: {}",
+        run.text
     );
+}
+
+// ── Decision 4: the leader-held rule in the harness ──────────────────────
+
+#[test]
+fn h9_supervision_s_final_signal_reaches_only_its_held_leader() {
+    // A child that exits at once: supervision observes its exit, and its
+    // one final signal must still find it holding its group.
+    let (supervised, signalled) = process_leader::recording(|| {
+        harness::supervise_command(
+            std::process::Command::new("true").stdin(std::process::Stdio::null()),
+            Duration::from_secs(10),
+            Duration::from_secs(10),
+        )
+    });
+    assert!(supervised.status.is_some(), "the child was not reaped");
+    assert_eq!(signalled.len(), 1, "{signalled:?}");
+    assert!(
+        signalled.iter().all(|s| s.held && s.leader_present),
+        "a signal reached a group no held leader holds: {signalled:?}"
+    );
+}
+
+#[test]
+fn h10_nothing_is_signalled_on_inference() {
+    let (run, signalled) = process_leader::recording(|| run_cleanup_role("silent", false));
+    assert!(run.finished);
+    let unheld: Vec<_> = signalled.iter().filter(|s| !s.held).collect();
+    assert!(
+        unheld.is_empty(),
+        "a group was signalled on inference: {unheld:?}"
+    );
+}
+
+#[test]
+fn h11_a_failed_shutdown_of_xvfb_or_the_bus_fails_the_test() {
+    let (xvfb, _) =
+        process_leader::recording_with_failed_signals(|| harness::Xvfb::start(false).shutdown());
+    assert!(xvfb.is_err(), "a failed Xvfb shutdown was discarded");
+    let (bus, _) =
+        process_leader::recording_with_failed_signals(|| harness::PrivateBus::start().shutdown());
+    assert!(bus.is_err(), "a failed bus shutdown was discarded");
 }
