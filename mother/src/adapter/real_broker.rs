@@ -608,14 +608,18 @@ fn real_broker_m1_oracles() {
     assert!(runs.view(refused_run).unwrap().cancelled);
     assert!(matches!(other.accept(), Err(e) if e.kind() == ErrorKind::WouldBlock));
 
-    // The broker has no file route: a file effect is refused at the port.
+    // M2d-C (amended: design F16 and §6.9 supersede "the broker has no
+    // file route"): with no workspace given to this port, a file effect is
+    // refused by Mother before the port is asked.
     let file = w.approved("ASK-BUILDER-FILE");
     w.advance_to(file, 2);
+    let performed = w.port.performed();
     assert_eq!(w.mother.advance(file).unwrap().to, MissionState::Blocked);
     assert_eq!(
         w.mother.reason(file).as_deref(),
-        Some("broker_refused:no_broker_route")
+        Some("file_folder_not_workspace")
     );
+    assert_eq!(w.port.performed(), performed);
 
     // Stop after an effect: the run is cancelled, nothing more reaches the
     // world, and a restarted Mother keeps it stopped.
