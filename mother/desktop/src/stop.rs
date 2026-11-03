@@ -303,6 +303,10 @@ impl StopRoute {
     }
 }
 
+/// What `SessionNotClosed` carries when the close gave no answer within
+/// Quit's deadline.
+pub const CLOSE_TIMED_OUT: &str = "no answer in time";
+
 /// How Quit ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QuitOutcome {
@@ -354,15 +358,25 @@ impl QuitOutcome {
                  ({runs_cancelled} open run(s) cancelled); the evidence session closed \
                  (record {session_closed})."
             ),
+            // The close may still complete after the deadline, before the
+            // process exits: only what is known is said.
+            QuitOutcome::SessionNotClosed {
+                joined,
+                runs_cancelled,
+                close: CLOSE_TIMED_OUT,
+            } => format!(
+                "Mother quit, but closing the evidence session could not be confirmed within \
+                 the deadline: {joined} Stop worker(s) joined and the broker shut down \
+                 ({runs_cancelled} open run(s) cancelled)."
+            ),
             QuitOutcome::SessionNotClosed {
                 joined,
                 runs_cancelled,
                 close,
             } => format!(
-                "Mother quit, but the evidence session was not closed (the store answered: \
-                 {close}): {joined} Stop worker(s) joined, the broker shut down \
-                 ({runs_cancelled} open run(s) cancelled), and the next start will record \
-                 this session as unfinished."
+                "Mother quit, but the evidence store did not record the session's close (it \
+                 answered: {close}): {joined} Stop worker(s) joined and the broker shut down \
+                 ({runs_cancelled} open run(s) cancelled)."
             ),
             QuitOutcome::Unclean {
                 stop_workers_running: 0,
@@ -455,7 +469,7 @@ pub fn quit(
         None => QuitOutcome::SessionNotClosed {
             joined,
             runs_cancelled,
-            close: "no answer in time",
+            close: CLOSE_TIMED_OUT,
         },
     }
 }
