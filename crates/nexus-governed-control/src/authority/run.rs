@@ -1127,7 +1127,9 @@ impl RunRegistry {
             .and_then(|entry| entry.files_admission.clone())
     }
 
-    /// M2e-B: `run`'s inference admission, if it has one.
+    /// M2e-B: `run`'s inference admission, if it has one (tests: a call
+    /// reads it under the lock it admits in).
+    #[cfg(test)]
     pub(crate) fn inference_admission(&self, run: RunId) -> Option<InferenceAdmission> {
         self.runs
             .lock()
