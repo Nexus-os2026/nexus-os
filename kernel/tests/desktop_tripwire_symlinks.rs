@@ -17,17 +17,23 @@
 //! the group is signalled natively through the kernel's `nix`, which the
 //! kernel has on Linux and macOS only, so the oracles are gated to those.
 
-#![cfg(any(target_os = "linux", target_os = "macos"))]
+//! Decision 4: every process group these oracles own is held by its
+//! leader until one final cleanup (`process_leader`); that rule needs
+//! Linux's `/proc` and `waitid`, so the oracles are Linux-only.
+
+#![cfg(target_os = "linux")]
 
 #[path = "desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
+#[path = "process_leader/mod.rs"]
+mod process_leader;
 
 use desktop_tripwire::findings;
+use process_leader::{checked_pgid, signal_outcome, Leader, Signalled};
 use std::io::Read;
 use std::os::unix::fs::{symlink, PermissionsExt};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// Longer than two `cargo metadata` runs of the fixture and a tree walk.
@@ -116,69 +122,6 @@ fn g0_helper_role() {
     println!("G0-HELPER-DONE");
 }
 
-/// The process group a cleanup may signal, from the pid of a child this
-/// test spawned in its own group. Never 0 or 1 (which would signal every
-/// process this user owns), never out of range, never this test's own
-/// group.
-fn checked_pgid(pid: u32) -> Result<i32, String> {
-    let pgid =
-        i32::try_from(pid).map_err(|_| format!("refusing process group {pid}: out of range"))?;
-    if pgid <= 1 {
-        return Err(format!(
-            "refusing process group {pgid}: never a broadcast or init's group"
-        ));
-    }
-    if pgid == nix::unistd::getpgrp().as_raw() {
-        return Err(format!(
-            "refusing process group {pgid}: it is this test's own"
-        ));
-    }
-    Ok(pgid)
-}
-
-/// What a group signal's result means: delivered, or the group no longer
-/// exists (ESRCH: gone). Any other error is a failure.
-fn signal_outcome(result: Result<(), nix::errno::Errno>, pgid: i32) -> Result<(), String> {
-    match result {
-        Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
-        Err(error) => Err(format!("signalling process group {pgid} failed: {error}")),
-    }
-}
-
-/// SIGKILL to the owned process group of the child `pid`, natively, its
-/// result checked.
-fn signal_group(pid: u32) -> Result<(), String> {
-    let pgid = checked_pgid(pid)?;
-    let result = nix::sys::signal::killpg(
-        nix::unistd::Pid::from_raw(pgid),
-        nix::sys::signal::Signal::SIGKILL,
-    );
-    signal_outcome(result, pgid)
-}
-
-/// Kill the owned child's whole process group, then reap the child; the
-/// whole cleanup, signal included, is bounded by one deadline, `within`.
-fn kill_and_reap_within(child: &mut Child, within: Duration) -> Result<(), String> {
-    let deadline = Instant::now() + within;
-    signal_group(child.id())?;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => return Ok(()),
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            Ok(None) => return Err(format!("the killed child was not reaped within {within:?}")),
-            Err(e) => return Err(format!("reaping the killed child: {e}")),
-        }
-    }
-}
-
-/// Kill the owned child's whole process group, then reap the child, within
-/// `REAP_WITHIN`.
-fn kill_and_reap(child: &mut Child) {
-    kill_and_reap_within(child, REAP_WITHIN).unwrap_or_else(|e| panic!("{e}"));
-}
-
 /// The helper's findings for `root`, run in an owned child process (the
 /// test binary's helper role, in its own process group) under `deadline`.
 /// On overrun the group, the helper's cargo child included, is killed and
@@ -199,37 +142,32 @@ fn findings_within(
         .env(HELPER_ROOT, root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0);
+        .stderr(Stdio::null());
     if let Some(pidfile) = hang {
         command.env(HELPER_HANG, pidfile);
     }
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("the helper did not start: {e}"))?;
-    let mut stdout = child.stdout.take().unwrap();
+    let mut leader = Leader::spawn(&mut command)?;
+    let mut stdout = leader.take_stdout().unwrap();
     let reader = std::thread::spawn(move || {
         let mut text = String::new();
         let _ = stdout.read_to_string(&mut text);
         text
     });
     let until = Instant::now() + deadline;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
-            Ok(None) => {
-                kill_and_reap(&mut child);
-                return Err(format!("the tripwire did not return within {deadline:?}"));
-            }
-            Err(e) => {
-                kill_and_reap(&mut child);
-                return Err(format!("waiting for the helper: {e}"));
-            }
+    let overran = loop {
+        if leader.exited()? {
+            break false;
         }
+        if Instant::now() >= until {
+            break true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
     };
-    // The child exited; its pipe closes with its group.
-    kill_and_reap(&mut child);
+    // The one final cleanup of the held leader's group, then its reap.
+    let status = leader.finish(REAP_WITHIN)?;
+    if overran {
+        return Err(format!("the tripwire did not return within {deadline:?}"));
+    }
     let text = reader.join().unwrap_or_default();
     // libtest prints `test g0_helper_role ... ` with no newline before the
     // role's own output, so the markers are found anywhere in a line.
@@ -439,60 +377,79 @@ fn g0_s8_a_failed_group_signal_fails_and_only_a_gone_group_is_gone() {
 
 const CLEANUP_ROLE: &str = "NEXUS_G0_CLEANUP_ROLE";
 
-/// The cleanup role: a no-op unless s9 re-runs this binary for it. It
-/// kills and reaps a child it planted within 2 s and says how that went.
+/// The cleanup role's plant mode: `plant` (kill and reap the plant, then
+/// say so) or `silent` (end the plant, write its pid, say nothing).
+const CLEANUP_MODE: &str = "NEXUS_G0_CLEANUP_MODE";
+
+/// The cleanup role: a no-op unless `run_cleanup_role` re-runs this binary
+/// for it. It plants a leader of its own and ends it within 2 s.
 #[test]
 fn g0_cleanup_role() {
     let Some(pidfile) = std::env::var_os(CLEANUP_ROLE) else {
         return;
     };
     // Its own stdio: it must not hold the role's report pipe open.
-    let mut planted = Command::new("sleep")
-        .arg("600")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .unwrap();
+    let planted = Leader::spawn(
+        Command::new("sleep")
+            .arg("600")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null()),
+    )
+    .unwrap();
     std::fs::write(&pidfile, planted.id().to_string()).unwrap();
-    match kill_and_reap_within(&mut planted, Duration::from_secs(2)) {
-        Ok(()) => println!("G0-CLEANUP reaped"),
+    let ended = planted.finish(Duration::from_secs(2));
+    if std::env::var(CLEANUP_MODE).as_deref() == Ok("silent") {
+        return;
+    }
+    match ended {
+        Ok(_) => println!("G0-CLEANUP reaped"),
         Err(e) => println!("G0-CLEANUP failed: {e}"),
     }
 }
 
-#[test]
-fn g0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
-    // A fake `kill` that hangs, first on the role's PATH: an external
-    // command can hold the cleanup forever; native signalling cannot.
-    let temp = Temp::new("fake-kill");
-    let fake = temp.0.join("bin");
-    std::fs::create_dir_all(&fake).unwrap();
-    std::fs::write(fake.join("kill"), "#!/bin/sh\nexec sleep 600\n").unwrap();
-    std::fs::set_permissions(fake.join("kill"), std::fs::Permissions::from_mode(0o755)).unwrap();
+/// What one run of the cleanup role gave.
+struct RoleRun {
+    /// The role ended within 20 s.
+    finished: bool,
+    /// The role said it reaped its plant.
+    reaped: bool,
+    /// The parent's final cleanup of the role's group succeeded.
+    cleaned: bool,
+    text: String,
+}
+
+/// Run the cleanup role as a held leader, in `mode`, optionally with a fake
+/// `kill` that hangs first on its PATH.
+fn run_cleanup_role(mode: &str, fake_kill: bool) -> RoleRun {
+    let temp = Temp::new("cleanup-role");
     let pidfile = temp.0.join("planted.pid");
-    let path = format!(
-        "{}:{}",
-        fake.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
-    let mut role = Command::new(std::env::current_exe().unwrap())
-        .args([
-            "g0_cleanup_role",
-            "--exact",
-            "--nocapture",
-            "--test-threads=1",
-        ])
-        .env(CLEANUP_ROLE, &pidfile)
-        .env("PATH", path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .unwrap();
-    let mut stdout = role.stdout.take().unwrap();
+    let mut path = std::env::var("PATH").unwrap_or_default();
+    if fake_kill {
+        let fake = temp.0.join("bin");
+        std::fs::create_dir_all(&fake).unwrap();
+        std::fs::write(fake.join("kill"), "#!/bin/sh\nexec sleep 600\n").unwrap();
+        std::fs::set_permissions(fake.join("kill"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        path = format!("{}:{path}", fake.display());
+    }
+    let mut role = Leader::spawn(
+        Command::new(std::env::current_exe().unwrap())
+            .args([
+                "g0_cleanup_role",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CLEANUP_ROLE, &pidfile)
+            .env(CLEANUP_MODE, mode)
+            .env("PATH", path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null()),
+    )
+    .unwrap();
+    let mut stdout = role.take_stdout().unwrap();
     let reader = std::thread::spawn(move || {
         let mut text = String::new();
         let _ = stdout.read_to_string(&mut text);
@@ -500,7 +457,7 @@ fn g0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
     });
     let until = Instant::now() + Duration::from_secs(20);
     let finished = loop {
-        if role.try_wait().unwrap().is_some() {
+        if role.exited().unwrap_or(true) {
             break true;
         }
         if Instant::now() > until {
@@ -508,26 +465,121 @@ fn g0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
         }
         std::thread::sleep(Duration::from_millis(20));
     };
-    // The role's group (and a hung fake kill in it) never outlives the test.
-    let _ = kill_and_reap_within(&mut role, REAP_WITHIN);
+    // The one final cleanup of the held role's group.
+    let cleaned = role.finish(REAP_WITHIN).is_ok();
     let text = reader.join().unwrap_or_default();
+    // Nothing else is signalled: the plant is the role's to end, and a
+    // missing marker proves nothing about it.
     let reaped = text.lines().any(|l| l.contains("G0-CLEANUP reaped"));
-    // The planted child is signalled here only if the role did not reap it
-    // (it is then still alive, so its group is still the one planted).
-    if !reaped {
-        if let Some(pid) = std::fs::read_to_string(&pidfile)
-            .ok()
-            .and_then(|pid| pid.trim().parse::<u32>().ok())
-        {
-            let _ = signal_group(pid);
-        }
-    }
-    assert!(
+    RoleRun {
         finished,
+        reaped,
+        cleaned,
+        text,
+    }
+}
+
+#[test]
+fn g0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
+    // A fake `kill` that hangs, first on the role's PATH: an external
+    // command could hold the cleanup forever; native signalling cannot.
+    let run = run_cleanup_role("plant", true);
+    assert!(
+        run.finished,
         "the cleanup waited on a hung kill command past its deadline"
     );
     assert!(
-        reaped,
-        "the planted child was not killed and reaped: {text}"
+        run.reaped,
+        "the planted child was not killed and reaped: {}",
+        run.text
     );
+    assert!(run.cleaned, "the role's final cleanup failed");
+}
+
+// ── Decision 4: the leader-held rule ─────────────────────────────────────
+
+#[test]
+fn g0_s10_a_leader_that_exited_is_still_held_when_its_group_is_signalled() {
+    let (outcome, signalled) = process_leader::recording(|| -> Result<(i32, bool), String> {
+        let mut leader = Leader::spawn(
+            Command::new("true")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+        )?;
+        let pgid = leader.id() as i32;
+        let until = Instant::now() + REAP_WITHIN;
+        while !leader.exited()? {
+            if Instant::now() > until {
+                return Err("the leader never exited".into());
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // It exited: under the rule it is not reaped, so it still holds its
+        // process group (as a zombie) until the final cleanup.
+        let held = process_leader::leader_present(pgid);
+        leader.finish(REAP_WITHIN)?;
+        Ok((pgid, held))
+    });
+    let (pgid, held) = outcome.expect("the leader's run");
+    assert!(
+        held,
+        "the exited leader was reaped before its group's final signal"
+    );
+    assert_eq!(
+        signalled,
+        vec![Signalled {
+            pgid,
+            held: true,
+            leader_present: true,
+        }],
+        "a signal reached a group no held leader holds"
+    );
+}
+
+#[test]
+fn g0_s11_nothing_is_signalled_on_inference() {
+    // A role that ends its plant and says nothing: the missing marker
+    // proves nothing about the plant, so nothing but the held role may be
+    // signalled.
+    let (run, signalled) = process_leader::recording(|| run_cleanup_role("silent", false));
+    assert!(run.finished && run.cleaned);
+    let unheld: Vec<&Signalled> = signalled.iter().filter(|s| !s.held).collect();
+    assert_eq!(
+        unheld,
+        Vec::<&Signalled>::new(),
+        "a group was signalled on inference"
+    );
+    assert_eq!(
+        signalled.len(),
+        1,
+        "only the held role's group: {signalled:?}"
+    );
+}
+
+#[test]
+fn g0_s12_a_failed_final_signal_fails_the_cleanup() {
+    // A leader that has already exited; its final signal is reported as
+    // failed.
+    let (ended, signalled) = process_leader::recording_with_failed_signals(|| {
+        let mut leader = Leader::spawn(
+            Command::new("true")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+        )?;
+        let until = Instant::now() + REAP_WITHIN;
+        while !leader.exited()? {
+            if Instant::now() > until {
+                return Err("the leader never exited".to_string());
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        leader.finish(REAP_WITHIN).map(|_| ())
+    });
+    assert!(
+        ended.is_err(),
+        "a failed final signal was discarded as a clean cleanup"
+    );
+    assert_eq!(signalled.len(), 1, "{signalled:?}");
 }
