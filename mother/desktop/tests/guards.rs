@@ -188,9 +188,9 @@ fn g9_the_desktop_depends_only_on_its_allow_list() {
     assert_eq!(section(&manifest, "[dev-dependencies]"), ["nix"]);
     assert!(
         manifest.contains(
-            "nix = { version = \"0.29\", default-features = false, features = [\"process\", \"signal\"] }"
+            "nix = { version = \"=0.29.0\", default-features = false, features = [\"process\", \"signal\"] }"
         ),
-        "nix is pinned to the kernel's 0.29 with process and signal only"
+        "nix is pinned exactly to the kernel's 0.29.0 with process and signal only"
     );
     assert_eq!(
         section(&manifest, "[build-dependencies]"),
