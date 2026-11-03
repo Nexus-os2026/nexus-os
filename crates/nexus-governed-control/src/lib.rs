@@ -350,6 +350,10 @@ pub mod runtime_root;
 pub mod synthetic;
 pub mod tool;
 
+/// S1a's pure inert page check, for Mother's page Verifier (M3-A): Mother
+/// has no kernel dependency of its own.
+pub use nexus_kernel::inert_page;
+
 #[cfg(test)]
 mod harness_tests;
 #[cfg(test)]
