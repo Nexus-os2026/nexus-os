@@ -15,6 +15,7 @@ members = [
   "crates/nexus-typed-decision",
   "mother",
   "mother/host",
+  "mother/desktop",
 ]
 
 [workspace.package]

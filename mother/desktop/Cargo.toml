@@ -1,0 +1,26 @@
+[package]
+name = "nexus-mother-desktop"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+publish = false
+description = "Mother Nexus M2b-A: Mother's native GTK4 status window and Stop; no webview, no dialogs"
+
+[[bin]]
+name = "nexus-mother"
+path = "src/main.rs"
+
+[dependencies]
+gtk4 = "=0.11.5"
+nexus-governed-control = { path = "../../crates/nexus-governed-control" }
+nexus-kernel = { path = "../../kernel" }
+nexus-mother-host = { path = "../host" }
+
+# Test-only (M2b-A decision 3): native process-group signalling for the
+# live harness's bounded cleanup. The kernel's own nix 0.29, already in
+# Cargo.lock; no new lock entry, nothing linked into the binary.
+[dev-dependencies]
+nix = { version = "=0.29.0", default-features = false, features = ["process", "signal"] }
+
+[lints]
+workspace = true

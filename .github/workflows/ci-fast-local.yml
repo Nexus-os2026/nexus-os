@@ -94,12 +94,19 @@ jobs:
           cargo --version
           cargo clippy --version
           cargo fmt --version
-          for lib in webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 gtk+-3.0 glib-2.0; do
+          for lib in webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 gtk+-3.0 glib-2.0 gtk4; do
             if ! pkg-config --exists "$lib"; then
               echo "::error::system library $lib is missing on this runner"
               exit 1
             fi
             echo "$lib $(pkg-config --modversion "$lib")"
+          done
+          # M2b-A: the desktop's live tests need these, and fail without them.
+          for tool in Xvfb xdotool dbus-daemon gdbus dbus-send; do
+            if ! command -v "$tool" > /dev/null; then
+              echo "::error::$tool is missing on this runner"
+              exit 1
+            fi
           done
 
       - name: Use the persistent Cargo target cache (outside the checkout)
