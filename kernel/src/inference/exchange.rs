@@ -239,7 +239,13 @@ async fn poll(guard: &Guard<'_>, hard: &AbsoluteDeadline) -> ModelError {
 /// chat request only, is told the host's CLOCK_MONOTONIC immediately before
 /// the request is handed to the HTTP client. The select polls this future
 /// only after the stop watch and the cancel and deadline poll, so a call
-/// already stopped, cancelled or expired is never notified.
+/// already refused by a guard (stopped, cancelled or expired when the
+/// select starts) is never notified. A Stop, cancel or expiry that arrives
+/// during the synchronous client construction below may be followed by the
+/// notice and then end the call `Stopped`, `Cancelled` or `Timeout`: that is
+/// an attempted hand-off, as M3 design §8.5 defines it. A panicking
+/// observer cannot prevent the hand-off: its unwinding is caught here and
+/// the request is sent as if it had returned.
 async fn request(
     local: IpAddr,
     url: String,
@@ -265,7 +271,12 @@ async fn request(
     if let Some(observer) = dispatch {
         // Never estimated: no clock reading, no notice.
         if let Some(sent_mono_ms) = host_monotonic_ms() {
-            observer.dispatched(sent_mono_ms);
+            // A notice claims an attempted send, so the observer's unwinding
+            // must not stop the send. Nothing of the transport's is touched
+            // by the observer or after its panic but the send itself.
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                observer.dispatched(sent_mono_ms);
+            }));
         }
     }
     let mut response = request.send().await.map_err(request_error)?;
