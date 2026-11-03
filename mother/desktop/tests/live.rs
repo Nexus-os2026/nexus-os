@@ -394,7 +394,10 @@ fn g13_the_desktop_owns_no_bus_name_and_exports_nothing() {
             let started = production("g13");
             drive(&started, |_| {
                 let me = std::process::id().to_string();
-                let bus = |method: &str, arg: Option<&str>| {
+                // A name may disappear between the listing and the query (the
+                // query tools' own connections do): the live desktop's own
+                // connection cannot, so a vanished name is not the desktop's.
+                let bus = |method: &str, arg: Option<&str>| -> Option<String> {
                     let mut args = vec![
                         "--session".to_string(),
                         "--print-reply".to_string(),
@@ -406,9 +409,10 @@ fn g13_the_desktop_owns_no_bus_name_and_exports_nothing() {
                         args.push(format!("string:{arg}"));
                     }
                     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-                    support::run_tool("dbus-send", &args)
+                    support::try_tool("dbus-send", &args)
                 };
                 let names: Vec<String> = bus("ListNames", None)
+                    .expect("the bus lists its names")
                     .lines()
                     .filter_map(|l| l.trim().strip_prefix("string \""))
                     .map(|l| l.trim_end_matches('"').to_string())
@@ -418,7 +422,9 @@ fn g13_the_desktop_owns_no_bus_name_and_exports_nothing() {
                     if name == "org.freedesktop.DBus" {
                         continue;
                     }
-                    let pid = bus("GetConnectionUnixProcessID", Some(name));
+                    let Some(pid) = bus("GetConnectionUnixProcessID", Some(name)) else {
+                        continue;
+                    };
                     if pid.lines().any(|l| l.trim() == format!("uint32 {me}")) {
                         mine.push(name.clone());
                     }

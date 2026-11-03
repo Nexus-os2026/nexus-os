@@ -32,9 +32,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-/// The longest any one wait of a live test may take (the watchdog fails a
-/// silent step first).
-pub const WAIT: Duration = Duration::from_secs(10);
+/// The longest any one wait of a live test may take: shorter than the
+/// harness's watchdog step, so a failed wait reports its own assertion.
+pub const WAIT: Duration = Duration::from_secs(8);
 
 #[derive(Default)]
 struct GateState {
@@ -77,6 +77,7 @@ impl StopGate {
 
     /// Wait until `n` writers are held at the gate.
     pub fn wait_entered(&self, n: usize) {
+        progress(&format!("{n} Stop writer(s) held in the store"));
         let deadline = Instant::now() + WAIT;
         let mut state = self.state.lock().unwrap();
         while state.entered < n {
@@ -180,6 +181,32 @@ pub fn launch_isolated(
     let started = launch(&home(label), None, open).expect("the desktop starts");
     assert_isolated_display();
     started
+}
+
+/// Run a bounded tool; its output, or `None` if it exited unsuccessfully.
+pub fn try_tool(program: &str, args: &[&str]) -> Option<String> {
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{program} is required: {e}"));
+    let deadline = Instant::now() + WAIT;
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            let output = child.wait_with_output().unwrap();
+            return status
+                .success()
+                .then(|| String::from_utf8_lossy(&output.stdout).into_owned());
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("{program} {args:?} overran {WAIT:?}");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 /// Run a bounded tool; its output.
