@@ -383,7 +383,7 @@ fn unescape(field: &[u8]) -> Option<std::ffi::OsString> {
 /// all three required). `None` if any line is malformed or none is listed:
 /// callers refuse the whole table (fail closed).
 #[cfg(target_os = "linux")]
-fn parse_mountinfo(text: &[u8]) -> Option<Vec<Mount>> {
+pub(crate) fn parse_mountinfo(text: &[u8]) -> Option<Vec<Mount>> {
     let number = |field: &[u8]| std::str::from_utf8(field).ok()?.parse::<u64>().ok();
     let mut mounts = Vec::new();
     for line in text.split(|b| *b == b'\n').filter(|line| !line.is_empty()) {
