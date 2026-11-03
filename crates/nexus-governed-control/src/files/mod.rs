@@ -41,18 +41,25 @@
 //! name gives a directory a second canonical spelling, never a second
 //! identity. The spelling checks stay as defense in depth.
 //!
-//! Supported topology, and only it (Codex reviews 3 and 4 of PR #57): the
-//! workspace and every protected and reserved location are each on a plain
-//! local ext4, xfs or tmpfs filesystem mounted once, whole (its device
-//! listed exactly once in `/proc/self/mountinfo`, with root `/`, and no
-//! other mount between it and the location). Everything else is refused
-//! (`unsupported_mount_topology`): bind mounts of every kind, stacked or
-//! hidden mounts, overlay, btrfs, fuse, network and image filesystems, and
-//! a mount table that cannot be read or parsed in full. The mount table is
-//! read at selection. Not claimed: a
-//! mount, link, rename or casefold change made after the selection (by the
-//! Owner, root or any other process), or an inode number reused after its
-//! directory is deleted.
+//! Supported topology, and only it (Codex reviews 3 to 5 of PR #57, the
+//! Owner's Option 1): the workspace and every protected and reserved
+//! location are each on a plain local ext4, xfs or tmpfs filesystem,
+//! mounted once, whole, on real hardware, including dm-crypt, LVM and md
+//! (its device listed exactly once in `/proc/self/mountinfo`, with root
+//! `/`, no other mount between it and the location, and, for ext4 or xfs,
+//! its block device and everything under it in sysfs real disks or
+//! partitions, never a loop, nbd, zram, ublk or ram device). Everything else
+//! is refused (`unsupported_mount_topology`): bind mounts of every kind,
+//! stacked or hidden mounts, overlay, btrfs, fuse, network and image
+//! filesystems, virtual block devices, and a mount table or sysfs node that
+//! cannot be read or resolved. Both are read at selection.
+//!
+//! Not claimed, finally: any other storage arrangement made by root or the
+//! Owner is not protected (a mount, link, rename or casefold change after
+//! the selection, a device's storage rearranged underneath it, an inode
+//! number reused after its directory is deleted, and whatever else the
+//! rules above do not name). No further topology rules will be added (the
+//! Owner's decision, Option 1).
 //!
 //! Path validation is not an OS sandbox: these checks bound what the broker
 //! asks the kernel for; they are not confinement.
@@ -1887,6 +1894,11 @@ pub(crate) fn mount_of(path: &Path) -> Result<Mount, AuthorityError> {
     if between {
         return Err(unsupported());
     }
+    // The Owner's Option 1: an ext4 or xfs mount's device on real hardware
+    // (tmpfs has no block device).
+    if mount.fstype != std::ffi::OsStr::new("tmpfs") && !hardware_backed(mount.major, mount.minor) {
+        return Err(unsupported());
+    }
     Ok(mount.clone())
 }
 
@@ -1914,6 +1926,107 @@ thread_local! {
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) fn mountinfo_for_test(text: Option<Result<String, ()>>) {
     MOUNTINFO.with(|mountinfo| *mountinfo.borrow_mut() = text);
+}
+
+/// The deepest level, and the most devices, a backing walk visits.
+#[cfg(target_os = "linux")]
+const MAX_BACKING_DEPTH: usize = 16;
+#[cfg(target_os = "linux")]
+const MAX_BACKING_NODES: usize = 256;
+/// Block devices that are not real hardware, by name: loop, network block,
+/// compressed RAM, userspace block and RAM disks.
+#[cfg(target_os = "linux")]
+const VIRTUAL_BLOCK_DEVICES: &[&str] = &["loop", "nbd", "zram", "ublkb", "ublkc", "ram"];
+/// The loop driver's major number.
+#[cfg(target_os = "linux")]
+const LOOP_MAJOR: u64 = 7;
+
+/// The sysfs this process reads.
+#[cfg(target_os = "linux")]
+fn sysfs_root() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = SYSFS.with(|sysfs| sysfs.borrow().clone()) {
+        return root;
+    }
+    PathBuf::from("/sys")
+}
+
+/// Whether block device `major:minor` is backed only by real hardware (the
+/// Owner's decision, Option 1): `/sys/dev/block/<major:minor>` resolves,
+/// and neither it nor anything it rests on (a partition's disk, a disk's
+/// `slaves/`, followed only through those sysfs links, at most
+/// `MAX_BACKING_DEPTH` levels and `MAX_BACKING_NODES` devices) is a loop
+/// device (by name or major 7), nbd, zram, ublk or ram, and every node's
+/// `dev` and `slaves/` can be read and resolved. Anything else is false
+/// (fail closed). Whole disks, their partitions, dm-crypt and LVM (`dm-*`
+/// over real disks) and md RAID are real hardware.
+#[cfg(target_os = "linux")]
+pub(crate) fn hardware_backed(major: u64, minor: u64) -> bool {
+    let start = sysfs_root()
+        .join("dev/block")
+        .join(format!("{major}:{minor}"));
+    let Ok(start) = std::fs::canonicalize(start) else {
+        return false;
+    };
+    let mut pending = vec![(start, 0usize)];
+    let mut visited = 0usize;
+    while let Some((node, depth)) = pending.pop() {
+        visited += 1;
+        if depth > MAX_BACKING_DEPTH || visited > MAX_BACKING_NODES {
+            return false;
+        }
+        let Some(name) = node.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        if VIRTUAL_BLOCK_DEVICES
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        {
+            return false;
+        }
+        let Ok(dev) = std::fs::read_to_string(node.join("dev")) else {
+            return false;
+        };
+        let Some((node_major, node_minor)) = dev.trim().split_once(':') else {
+            return false;
+        };
+        let (Ok(node_major), Ok(_)) = (node_major.parse::<u64>(), node_minor.parse::<u64>()) else {
+            return false;
+        };
+        if node_major == LOOP_MAJOR {
+            return false;
+        }
+        if node.join("partition").is_file() {
+            let Some(disk) = node.parent() else {
+                return false;
+            };
+            pending.push((disk.to_path_buf(), depth + 1));
+            continue;
+        }
+        let Ok(slaves) = std::fs::read_dir(node.join("slaves")) else {
+            return false;
+        };
+        for slave in slaves {
+            let Ok(target) = slave.and_then(|slave| std::fs::canonicalize(slave.path())) else {
+                return false;
+            };
+            pending.push((target, depth + 1));
+        }
+    }
+    true
+}
+
+#[cfg(all(test, target_os = "linux"))]
+thread_local! {
+    /// Tests only: the directory this thread reads in place of `/sys`.
+    static SYSFS: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Tests only: read `root` in place of `/sys` on this thread (`None`: the
+/// real one).
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn sysfs_for_test(root: Option<PathBuf>) {
+    SYSFS.with(|sysfs| *sysfs.borrow_mut() = root);
 }
 
 /// Where a protected or reserved location is: its longest existing
