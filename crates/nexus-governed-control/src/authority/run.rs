@@ -526,6 +526,7 @@ impl RunRegistry {
     /// M2c, a door issue's reservation: reclaim the groups of doors that are
     /// gone, refuse at `MAX_LIVE_DOORS` live doors (reserved or issued),
     /// and otherwise reserve `group` for `agent`, kept while `life` lives.
+    #[cfg(test)]
     pub(crate) fn reserve_door(
         &self,
         group: GroupId,

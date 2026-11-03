@@ -1706,6 +1706,9 @@ impl CommitmentRegistry {
     /// M2c: run `f` on the view of `id` while the commitments lock is held
     /// (a door's adoption joins its group inside: entries → runs, the
     /// existing order).
+    /// (Tests since round 4: the door's adoption reads through
+    /// [`Self::try_holding_view`].)
+    #[cfg(test)]
     pub(crate) fn holding_view<T>(
         &self,
         id: CommitmentId,
