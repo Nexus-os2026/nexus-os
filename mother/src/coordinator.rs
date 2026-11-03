@@ -1697,7 +1697,7 @@ impl<P: EffectPort> Coordinator<P> {
                 return Err(CoordinatorError::Stopped);
             }
             if effect.kind() == EffectKind::File {
-                if let Ended::Ended(state) = self.admit(id, generation)? {
+                if let Ended::Ended(state) = self.admit_files(id, generation)? {
                     return Ok(Ended::Ended(state));
                 }
             }
@@ -1801,7 +1801,7 @@ impl<P: EffectPort> Coordinator<P> {
     /// reservation and the lifetime still hold: a late answer revives
     /// nothing. Once admitted, later File effects of the lifetime (after a
     /// wait, in a later phase) are not admitted again.
-    fn admit(&self, id: MissionId, generation: u64) -> Result<Ended, CoordinatorError> {
+    fn admit_files(&self, id: MissionId, generation: u64) -> Result<Ended, CoordinatorError> {
         let step = self.with_lock(|inner| {
             let mission = inner.mission(id)?;
             if mission.generation != generation {
@@ -1824,7 +1824,7 @@ impl<P: EffectPort> Coordinator<P> {
             Ok(None) => return Ok(Ended::Through),
             Err(state) => return Ok(Ended::Ended(state)),
         };
-        let admitted = self.port.admit(id, &admission);
+        let admitted = self.port.admit_files(id, &admission);
         let step = self.with_lock(|inner| {
             inner.kept(id)?;
             let mission = inner.mission(id)?;

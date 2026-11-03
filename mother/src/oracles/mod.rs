@@ -331,7 +331,7 @@ impl EffectPort for RecordingPort {
             .unwrap_or(Ok(EffectOutcome::Done { text: None }))
     }
 
-    fn admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
+    fn admit_files(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
         let mut state = self.lock();
         state.admissions.push((mission, admission.clone()));
         match &state.admission_refused {

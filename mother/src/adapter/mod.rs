@@ -474,7 +474,7 @@ impl EffectPort for GovernedPort {
     /// yes, the run and the workspace), then keep the generation, only if
     /// the mission did not end and the port was not fenced meanwhile (the
     /// same critical section as theirs).
-    fn admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
+    fn admit_files(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
         let run = self.run_for(mission)?;
         self.door
             .admit_files(run, &admission.contract_hash, &admission.consent_request)

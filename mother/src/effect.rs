@@ -217,9 +217,11 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
         generation: u64,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal>;
-    /// M2d (I7): bind the mission's run to the Owner's consent before its
-    /// first File effect. No effect.
-    fn admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal>;
+    /// M2d (I7's `admit`): bind the mission's run to the Owner's consent
+    /// before its first File effect. No effect. (Named `admit_files`: the
+    /// kernel's workspace guard `hm_m3_guards` reserves two-argument `admit`
+    /// calls for its dispatch issuer.)
+    fn admit_files(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal>;
     /// M2d: the display name of the workspace the host gave the port, if
     /// any (data, never authority: the broker binds the workspace).
     fn workspace(&self) -> Option<String>;
