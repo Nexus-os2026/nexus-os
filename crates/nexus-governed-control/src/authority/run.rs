@@ -48,14 +48,14 @@ pub struct CancelToken {
     doors: Vec<Arc<AtomicBool>>,
     /// M2d-C round 5 (H1, C6): the run's mission halt cells, ORed with the
     /// flags above; never reset or replaced.
-    halts: Vec<Arc<AtomicBool>>,
+    halts: Vec<HaltCell>,
 }
 
 impl CancelToken {
     pub fn is_cancelled(&self) -> bool {
         self.run.load(Ordering::SeqCst)
             || self.doors.iter().any(|d| d.load(Ordering::SeqCst))
-            || self.halts.iter().any(|h| h.load(Ordering::SeqCst))
+            || self.halts.iter().any(HaltCell::is_engaged)
     }
 }
 
@@ -315,7 +315,7 @@ impl Table {
                 .iter()
                 .filter_map(|group| self.doors.get(group).map(|door| door.halt_flag.clone()))
                 .collect(),
-            halts: entry.halts.iter().map(HaltCell::flag).collect(),
+            halts: entry.halts.clone(),
         }
     }
 

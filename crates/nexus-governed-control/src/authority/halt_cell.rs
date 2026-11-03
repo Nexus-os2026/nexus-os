@@ -16,34 +16,77 @@
 use super::ids::AgentId;
 use super::AuthorityError;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// Most cells one agent's partition holds at once.
 pub(crate) const MAX_HALT_CELLS: usize = 4096;
 
-/// A mission's halt: engaged once, never cleared.
+/// M2d-C round 6 (R6-3): why a cell was engaged, its first cause.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HaltCause {
+    /// The Owner's Stop of the mission (or Stop everything).
+    Stop,
+    /// The Owner's emergency stop (the broker's ingress).
+    Emergency,
+    /// The mission's time budget.
+    TimeBudget,
+    /// A failure fence, or a mismatch that stops surviving work.
+    Fence,
+}
+
+impl HaltCause {
+    fn code(self) -> u8 {
+        match self {
+            HaltCause::Stop => 1,
+            HaltCause::Emergency => 2,
+            HaltCause::TimeBudget => 3,
+            HaltCause::Fence => 4,
+        }
+    }
+
+    fn of(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(HaltCause::Stop),
+            2 => Some(HaltCause::Emergency),
+            3 => Some(HaltCause::TimeBudget),
+            4 => Some(HaltCause::Fence),
+            _ => None,
+        }
+    }
+}
+
+/// A mission's halt: engaged once, with its first cause, never cleared or
+/// replaced.
 #[derive(Clone, Debug)]
-pub struct HaltCell(Arc<AtomicBool>);
+pub struct HaltCell(Arc<AtomicU8>);
 
 impl HaltCell {
     fn new() -> Self {
-        Self(Arc::new(AtomicBool::new(false)))
+        Self(Arc::new(AtomicU8::new(0)))
     }
 
-    /// Engage it, for good: no lock, no I/O, no panic.
+    /// Engage it as the Owner's Stop (see [`Self::engage_with`]).
     pub fn engage(&self) {
-        self.0.store(true, Ordering::SeqCst);
+        self.engage_with(HaltCause::Stop);
+    }
+
+    /// Engage it, for good, keeping the first cause: no lock, no I/O, no
+    /// panic.
+    pub fn engage_with(&self, cause: HaltCause) {
+        let _ = self
+            .0
+            .compare_exchange(0, cause.code(), Ordering::SeqCst, Ordering::SeqCst);
     }
 
     /// Whether it is engaged (a read: it grants nothing).
     pub fn is_engaged(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.0.load(Ordering::SeqCst) != 0
     }
 
-    /// The flag a run's cancellation token reads.
-    pub(crate) fn flag(&self) -> Arc<AtomicBool> {
-        self.0.clone()
+    /// Its first cause, once engaged (a read).
+    pub fn cause(&self) -> Option<HaltCause> {
+        HaltCause::of(self.0.load(Ordering::SeqCst))
     }
 }
 
@@ -58,6 +101,16 @@ pub(crate) struct HaltTable {
 impl HaltTable {
     fn lock(&self) -> MutexGuard<'_, HashMap<Key, HaltCell>> {
         self.cells.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// R6-3 / X1: the emergency ingress: every cell, cloned out under one
+    /// hold, engaged once it is released, with `cause` (a cell engaged
+    /// before keeps its first cause).
+    pub(crate) fn engage_all(&self, cause: HaltCause) {
+        let cells: Vec<HaltCell> = self.lock().values().cloned().collect();
+        for cell in cells {
+            cell.engage_with(cause);
+        }
     }
 }
 

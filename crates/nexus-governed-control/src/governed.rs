@@ -543,6 +543,10 @@ impl GovernedControl {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
         self.kernel_stop.engage();
+        // M2d-C round 6 (R6-3, X1): then every mission's halt cell, before
+        // anything is recorded, with the emergency as its first cause; the
+        // cells outlive the lift (a mission with no run included).
+        self.authority().engage_every_cell();
         #[cfg(test)]
         if let Some(gap) = self.stop_gap.lock().expect("stop gap").take() {
             gap(self);

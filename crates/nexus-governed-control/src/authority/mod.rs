@@ -318,6 +318,11 @@ impl Authority {
         }
     }
 
+    /// M2d-C round 6 (X1): the emergency ingress engages every cell.
+    pub(crate) fn engage_every_cell(&self) {
+        self.halt_table.engage_all(halt_cell::HaltCause::Emergency);
+    }
+
     /// M2d-C round 5 (C1): `agent`'s partition of the halt table.
     pub(crate) fn halt_cells(&self, agent: &AgentId) -> halt_cell::HaltCells {
         halt_cell::HaltCells::of(self.halt_table.clone(), agent.clone())
