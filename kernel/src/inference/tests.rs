@@ -2154,3 +2154,124 @@ mod dispatch {
         }
     }
 }
+
+// ── M2e-A1b oracle-add after Codex review 1 of PR #69: a panicking observer
+// cannot prevent (or fake) the send ──────────────────────────────────────────
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod dispatch_panic {
+    use super::*;
+
+    /// Records the notice, then panics.
+    #[derive(Default)]
+    struct RecordThenPanic {
+        notices: Mutex<Vec<u64>>,
+    }
+
+    impl CallObserver for RecordThenPanic {
+        fn dispatched(&self, sent_mono_ms: u64) {
+            self.notices.lock().unwrap().push(sent_mono_ms);
+            panic!("M2e-A1b planted observer panic (expected in this test)");
+        }
+    }
+
+    /// A notice is a claim that the send was attempted: an observer that
+    /// records it and then panics must not stop the request from being
+    /// handed to the client. The runtime receives exactly one chat and the
+    /// call ends with the runtime's own result.
+    #[test]
+    fn m2e_a1b_an_observer_that_panics_after_recording_cannot_prevent_the_send() {
+        let fake = Fake::healthy();
+        let ctx = Ctx::new();
+        let transport = verified(&fake, &ctx);
+        let observer = Arc::new(RecordThenPanic::default());
+        let rx = {
+            let (transport, ctx, observer) = (transport.clone(), ctx.clone(), observer.clone());
+            in_thread(
+                move || {
+                    let call = CallContext {
+                        meter: &ctx.meter,
+                        cancel: &ctx.cancel,
+                        deadline: &ctx.deadline,
+                        stop: &ctx.watch,
+                        observer: Some(observer.as_ref()),
+                    };
+                    transport.call(&small(), &call)
+                },
+                None,
+            )
+        };
+        let outcome = done(&rx);
+        assert_eq!(observer.notices.lock().unwrap().len(), 1, "one notice");
+        assert_eq!(fake.count("/api/chat"), 1, "the notified chat was sent");
+        let content = outcome.result.map(ModelReply::into_content);
+        assert_eq!(content, Ok(FINISH.to_string()), "the runtime's own result");
+        assert_eq!(outcome.live, 0, "the exchange thread was joined");
+        assert_eq!(ctx.meter.events(), [Metered::Charge(1), Metered::Settle(1)]);
+    }
+}
+
+// ── M2e-A1b oracle-add after Codex re-check 2 of A1b: a panic payload whose
+// destructor panics cannot prevent the send ──────────────────────────────────
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod dispatch_panic_payload {
+    use super::*;
+
+    /// A panic payload whose destructor panics.
+    struct PanicsOnDrop;
+
+    impl Drop for PanicsOnDrop {
+        fn drop(&mut self) {
+            panic!("M2e-A1b planted payload destructor panic (expected in this test)");
+        }
+    }
+
+    /// Records the notice, then panics with a [`PanicsOnDrop`] payload.
+    #[derive(Default)]
+    struct RecordThenPanicAny {
+        notices: Mutex<Vec<u64>>,
+    }
+
+    impl CallObserver for RecordThenPanicAny {
+        fn dispatched(&self, sent_mono_ms: u64) {
+            self.notices.lock().unwrap().push(sent_mono_ms);
+            std::panic::panic_any(PanicsOnDrop);
+        }
+    }
+
+    /// The caught payload's destructor is the observer's code: it must not
+    /// run before the hand-off, or its own panic would stop the notified
+    /// send. Exactly one chat reaches the runtime and the call ends with
+    /// the runtime's own result.
+    #[test]
+    fn m2e_a1b_a_panic_payload_whose_drop_panics_cannot_prevent_the_send() {
+        let fake = Fake::healthy();
+        let ctx = Ctx::new();
+        let transport = verified(&fake, &ctx);
+        let observer = Arc::new(RecordThenPanicAny::default());
+        let rx = {
+            let (transport, ctx, observer) = (transport.clone(), ctx.clone(), observer.clone());
+            in_thread(
+                move || {
+                    let call = CallContext {
+                        meter: &ctx.meter,
+                        cancel: &ctx.cancel,
+                        deadline: &ctx.deadline,
+                        stop: &ctx.watch,
+                        observer: Some(observer.as_ref()),
+                    };
+                    transport.call(&small(), &call)
+                },
+                None,
+            )
+        };
+        let outcome = done(&rx);
+        assert_eq!(observer.notices.lock().unwrap().len(), 1, "one notice");
+        assert_eq!(fake.count("/api/chat"), 1, "the notified chat was sent");
+        let content = outcome.result.map(ModelReply::into_content);
+        assert_eq!(content, Ok(FINISH.to_string()), "the runtime's own result");
+        assert_eq!(outcome.live, 0, "the exchange thread was joined");
+        assert_eq!(ctx.meter.events(), [Metered::Charge(1), Metered::Settle(1)]);
+    }
+}

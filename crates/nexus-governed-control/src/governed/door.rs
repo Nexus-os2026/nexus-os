@@ -31,11 +31,14 @@ use crate::authority::approval::{
     MissionResumeConfirmation,
 };
 use crate::authority::clock::Clock;
-use crate::authority::commitment::CommitmentView;
+use crate::authority::commitment::{CommitmentState, CommitmentView};
+use crate::authority::effect::CapabilityKind;
 use crate::authority::evidence::Privacy;
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
+use crate::files::FileReceipt;
+use crate::inert_page::ApprovedFacts;
 use crate::inference::{
     Admitted, CallDeadline, CallMeter, ModelCallOutcome, ModelIdentityView, ModelRequest,
 };
@@ -246,7 +249,9 @@ impl AgentDoor {
         // The door's holder supplies the labels: only controlled ones, and
         // the record is Restricted (P0-C). M2d-B1: a slot in this door's
         // consent table is reserved just before the Owner is asked.
-        let (approval, recorded_ms, slot) =
+        // S1a-D+B: the page facts, built before the dialog, come back as the
+        // dialog showed them.
+        let (approval, recorded_ms, slot, facts) =
             authority.confirm_mission_as(request, &*self.confirmer, Privacy::Restricted, || {
                 runs.consent_slot(self.core.group, &self.core.agent)
             })?;
@@ -263,27 +268,36 @@ impl AgentDoor {
             approval.contract_hash(),
             approval.request(),
             (approval.evidence_seq(), recorded_ms),
-            ConsentKind::Mission,
+            (ConsentKind::Mission, facts),
         )?;
         Ok(approval)
     }
 
     /// M2d-B1 (H1′): cache the Owner's recorded yes in this door's table,
     /// with its record's sequence number and own time, only if the lifetime
-    /// it was asked in still holds; otherwise no approval exists.
+    /// it was asked in still holds; otherwise no approval exists. S1a-D+B:
+    /// with the page facts its dialog showed (none for a held resume, whose
+    /// dialog shows none).
     fn cache(
         &self,
         slot: crate::authority::run::ConsentSlot<'_>,
         contract_hash: &str,
         request: &str,
         (evidence_seq, at_wall_ms): (u64, u64),
-        kind: ConsentKind,
+        (kind, page_facts): (ConsentKind, Option<ApprovedFacts>),
     ) -> Result<(), AuthorityError> {
         #[cfg(test)]
         self.control
             .hooks()
             .fire(crate::test_hooks::at::CONSENT_BEFORE_FILL);
-        slot.fill(contract_hash, request, evidence_seq, kind, at_wall_ms)
+        slot.fill(
+            contract_hash,
+            request,
+            evidence_seq,
+            kind,
+            at_wall_ms,
+            page_facts,
+        )
     }
 
     /// M2d-B1 (A3, H1′): bind one of this door's runs, once, to the Owner's
@@ -414,6 +428,23 @@ impl AgentDoor {
         ))
     }
 
+    /// S1a-D+B (M3 §6.2): the broker's receipt for a Files create of one of
+    /// this door's runs that succeeded (published, possibly overtaken after
+    /// its final check); `None` for any other commitment, another door's,
+    /// one not yet executed, or one that was denied, expired, lapsed or
+    /// failed. Digests and a size only.
+    pub fn file_receipt(&self, id: CommitmentId) -> Option<FileReceipt> {
+        match self.commitment(id) {
+            Lookup::Mine(view)
+                if view.kind == CapabilityKind::Files
+                    && view.state == CommitmentState::Succeeded =>
+            {
+                self.control.files().receipt(id)
+            }
+            Lookup::Mine(_) | Lookup::NotMine { .. } | Lookup::Unknown => None,
+        }
+    }
+
     /// The yeses cached at this door (tests).
     #[cfg(test)]
     pub(crate) fn consents_cached(&self) -> usize {
@@ -450,7 +481,7 @@ impl AgentDoor {
             approval.contract_hash(),
             approval.request(),
             (approval.evidence_seq(), recorded_ms),
-            ConsentKind::Resume,
+            (ConsentKind::Resume, None),
         )?;
         Ok(approval)
     }

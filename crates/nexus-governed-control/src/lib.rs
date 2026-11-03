@@ -579,6 +579,48 @@
 //! ```compile_fail,E0603
 //! use nexus_governed_control::inference::RegisteredModel; // the registered model
 //! ```
+//!
+//! S1a-D+B (M3-O10, MP-M3-4): no admission or effect API takes facts from a
+//! caller. A page's facts reach a run's Files admission only from the
+//! broker's own mission dialog (`MissionConfirmation::page_facts`, built,
+//! shown and cached with the Owner's yes). The routes' signatures are
+//! pinned, and `FileCreate` has exactly its two fields:
+//!
+//! ```
+//! use nexus_governed_control::authority::commitment::CommitmentView;
+//! use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
+//! use nexus_governed_control::authority::AuthorityError;
+//! use nexus_governed_control::control::EffectOutput;
+//! use nexus_governed_control::files::FileCreate;
+//! use nexus_governed_control::governed::{AgentDoor, AgentOutcome, GovernedControl, Intent};
+//! let _: fn(&AgentDoor, RunId, &str, &str) -> Result<(), AuthorityError> = AgentDoor::admit_files;
+//! let _: fn(&AgentDoor, RunId, &Intent) -> Result<AgentOutcome, AuthorityError> =
+//!     AgentDoor::agent_action;
+//! let _: fn(&GovernedControl, &AgentId, RunId, &Intent) -> Result<CommitmentView, AuthorityError> =
+//!     GovernedControl::propose;
+//! let _: fn(&GovernedControl, CommitmentId, &AgentId, RunId) -> Result<EffectOutput, AuthorityError> =
+//!     GovernedControl::execute;
+//! fn fields(create: FileCreate) -> (String, String) {
+//!     let FileCreate { name, content } = create;
+//!     (name, content)
+//! }
+//! ```
+//!
+//! ```compile_fail,E0061
+//! use nexus_governed_control::authority::ids::RunId;
+//! use nexus_governed_control::governed::AgentDoor;
+//! fn admit(door: &AgentDoor, run: RunId) {
+//!     let _ = door.admit_files(run, "hash", "request", None::<()>);
+//! }
+//! ```
+//!
+//! ```compile_fail,E0560
+//! let _ = nexus_governed_control::files::FileCreate {
+//!     name: String::new(),
+//!     content: String::new(),
+//!     page_facts: None::<()>,
+//! };
+//! ```
 
 #![deny(unsafe_code)]
 
@@ -601,6 +643,10 @@ pub mod planned;
 pub mod runtime_root;
 pub mod synthetic;
 pub mod tool;
+
+/// S1a's pure inert page check, for Mother's page Verifier (M3-A): Mother
+/// has no kernel dependency of its own.
+pub use nexus_kernel::inert_page;
 
 #[cfg(test)]
 mod harness_tests;

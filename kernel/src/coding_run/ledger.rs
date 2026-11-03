@@ -29,6 +29,7 @@ use super::local_model::{ModelPin, LOCAL_PROVIDER};
 use super::manifest::put_bytes;
 use super::review::ChangeKind;
 use super::scope::{ScopeError, ScopeSet};
+use super::verifier::{INERT_CHECK_OUTCOMES, INERT_RECHECK_OUTCOMES};
 use super::worker::ProposalRejection;
 use super::{
     CleanupStatus, EditRejection, FailureReason, RecoveryReason, RevocationReason, RunError, RunId,
@@ -171,6 +172,8 @@ pub enum EventKind {
     VerificationLaunched,
     VerificationFinished,
     VerificationCleanup,
+    PageInertCheck,
+    PageInertRecheck,
 }
 
 impl EventKind {
@@ -214,6 +217,8 @@ impl EventKind {
             Self::VerificationLaunched => "verify.launch",
             Self::VerificationFinished => "verify.result",
             Self::VerificationCleanup => "verify.cleanup",
+            Self::PageInertCheck => "page.inert_check",
+            Self::PageInertRecheck => "page.inert_recheck",
         }
     }
 }
@@ -643,6 +648,7 @@ const REVIEW_COMPUTED: Schema = &[
     ("base_manifest", DIGEST),
     ("candidate_manifest", DIGEST),
     ("verification", DIGEST),
+    ("inert_page", DIGEST),
     ("create", COUNT),
     ("replace", COUNT),
     ("delete", COUNT),
@@ -727,6 +733,24 @@ const VERIFY_CLEANUP: Schema = &[
     ("generation", COUNT),
     ("cleanup", Class::Code(&["confirmed"])),
 ];
+/// S1a-C (design v2 §6.1): codes, digests and counts only.
+const PAGE_INERT_CHECK: Schema = &[
+    ("result", DIGEST),
+    ("candidate_manifest", DIGEST),
+    ("page_sha256", DIGEST),
+    ("path_sha256", DIGEST),
+    ("page_bytes", COUNT),
+    ("path_bytes", COUNT),
+    ("offset", COUNT),
+    ("fact_index", COUNT),
+    ("policy", DIGEST),
+    ("facts", DIGEST),
+    ("outcome", Class::Code(INERT_CHECK_OUTCOMES)),
+];
+const PAGE_INERT_RECHECK: Schema = &[
+    ("result", DIGEST),
+    ("outcome", Class::Code(INERT_RECHECK_OUTCOMES)),
+];
 
 /// The schema of every event kind.
 pub(crate) fn schema(kind: EventKind) -> Schema {
@@ -764,6 +788,8 @@ pub(crate) fn schema(kind: EventKind) -> Schema {
         K::VerificationLaunched => VERIFY_LAUNCH,
         K::VerificationFinished => VERIFY_RESULT,
         K::VerificationCleanup => VERIFY_CLEANUP,
+        K::PageInertCheck => PAGE_INERT_CHECK,
+        K::PageInertRecheck => PAGE_INERT_RECHECK,
     }
 }
 

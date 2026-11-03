@@ -27,8 +27,10 @@
 //! ```
 
 use super::effect::{CapabilityKind, EffectClass};
-use super::evidence::DIALOG_COLUMNS;
+use super::evidence::{quoted, DIALOG_COLUMNS};
 use super::ids::{CommitmentId, Digest};
+use crate::inert_page::{ApprovedFacts, FactCode};
+use std::fmt;
 
 /// The lines of a confirmation's details, each at most `DIALOG_COLUMNS`
 /// characters: a longer one continues on `↳ ` lines. The lines are already
@@ -421,6 +423,57 @@ pub struct MissionConfirmation {
     /// The agent's label for this request (an opaque correlation name).
     pub request: String,
     pub summary: Vec<String>,
+    /// S1a-D+B (M3 §6.1, OD-3): the facts a page of this mission must show,
+    /// as the asking agent proposes them. The broker builds S1a's
+    /// `ApprovedFacts` from them before the dialog (refused there, with no
+    /// dialog, if S1a's construction refuses them), shows them in its own
+    /// fixed block with their hash, and caches them with the Owner's yes:
+    /// they are the only facts a Files admission of this yes can hold.
+    pub page_facts: Option<FactsView>,
+}
+
+/// The title of the mission dialog's facts block (M3 §6.1).
+pub const FACTS_BLOCK_TITLE: &str =
+    "Facts the page must show exactly (checked before and after writing)";
+
+/// S1a-D+B: a page's facts (name, opening hours, phone) as an agent proposes
+/// them for the Owner's mission dialog. Data only: the broker builds and
+/// checks [`ApprovedFacts`] from it. Its `Debug` shows only sizes.
+#[derive(Clone, PartialEq, Eq)]
+pub struct FactsView {
+    pub name: String,
+    pub hours: Vec<String>,
+    pub phone: String,
+}
+
+impl FactsView {
+    /// S1a's approved facts of this view, by S1a's own construction rules.
+    pub fn approved(&self) -> Result<ApprovedFacts, FactCode> {
+        let hours: Vec<&str> = self.hours.iter().map(String::as_str).collect();
+        ApprovedFacts::new(&self.name, &hours, &self.phone)
+    }
+}
+
+/// The mission dialog's facts block: [`FACTS_BLOCK_TITLE`], then the name,
+/// each hours line and the phone of the facts the broker built, each one
+/// escaped and marked `│ ` as data ([`quoted`]).
+fn facts_block(facts: &ApprovedFacts) -> Vec<String> {
+    let mut text = format!("name: {}", facts.name());
+    for line in facts.hours() {
+        text.push_str(&format!("\nhours: {line}"));
+    }
+    text.push_str(&format!("\nphone: {}", facts.phone()));
+    quoted(FACTS_BLOCK_TITLE, &text)
+}
+
+impl fmt::Debug for FactsView {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FactsView")
+            .field("name_chars", &self.name.chars().count())
+            .field("hours_lines", &self.hours.len())
+            .field("phone_chars", &self.phone.chars().count())
+            .finish()
+    }
 }
 
 impl MissionConfirmation {
@@ -429,15 +482,28 @@ impl MissionConfirmation {
     }
 
     /// The contract hash, whole, and the request in the header; the summary
-    /// in the details.
+    /// in the details. S1a-D+B: with page facts, their hash is a header row
+    /// and the details begin with the broker's own facts block: its fixed
+    /// title, then each fact escaped and marked as data, never cut.
     pub fn text(&self) -> ConfirmationText {
-        ConfirmationText {
-            header: vec![
-                ("Contract", self.contract_hash.clone()),
-                ("Request", self.request.clone()),
-            ],
-            details: fitted_lines(&self.summary),
+        let mut header = vec![
+            ("Contract", self.contract_hash.clone()),
+            ("Request", self.request.clone()),
+        ];
+        let mut details = Vec::new();
+        if let Some(view) = &self.page_facts {
+            match view.approved() {
+                Ok(facts) => {
+                    header.push(("Facts hash", hex::encode(facts.hash())));
+                    details.extend(facts_block(&facts));
+                }
+                // Never shown: the broker refuses such a request before
+                // its dialog.
+                Err(code) => details.push(format!("{FACTS_BLOCK_TITLE}: refused ({code})")),
+            }
         }
+        details.extend(fitted_lines(&self.summary));
+        ConfirmationText { header, details }
     }
 
     pub fn message(&self) -> String {

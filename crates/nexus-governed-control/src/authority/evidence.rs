@@ -210,6 +210,8 @@ fn registered(key: &str) -> Option<Kept> {
         // The Owner's answers at a door's mission and held-mission dialogs
         // (P0-C, Codex review 1): the controlled values only.
         "contract_hash" | "summary_digest" => Kept::Sha256,
+        // S1a-D+B: the page facts a mission dialog showed, by their hash.
+        "facts_hash" => Kept::Sha256,
         "mission" => Kept::Mission,
         "request" => Kept::Request,
         "held_reason" => Kept::Code(HELD_REASONS),

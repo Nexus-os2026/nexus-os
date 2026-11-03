@@ -28,6 +28,7 @@ use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
+use crate::inert_page::ApprovedFacts;
 use crate::inference::MAX_MODEL_ATTEMPTS;
 use nexus_kernel::inference::ModelError;
 use std::any::Any;
@@ -142,6 +143,9 @@ struct Consent {
     kind: ConsentKind,
     at_wall_ms: u64,
     life: Life,
+    /// S1a-D+B (M3 §6.1): the page facts the broker's own dialog showed
+    /// with this yes; part of its identity, so they live and end with it.
+    page_facts: Option<ApprovedFacts>,
 }
 
 /// The workspace a run is admitted to: its id, and its directory's identity
@@ -164,6 +168,11 @@ pub(crate) struct FilesAdmission {
     pub(crate) kind: ConsentKind,
     pub(crate) consented_wall_ms: u64,
     pub(crate) workspace: AdmittedWorkspace,
+    /// S1a-D+B (S1a O8): the page facts the Owner's yes was given with,
+    /// exactly as the broker's own dialog showed them; `None` for a yes
+    /// given without facts. In memory only; part of the admission's
+    /// identity.
+    pub(crate) page_facts: Option<ApprovedFacts>,
 }
 
 /// M2e-B (design v2 §8): a run's inference admission: the Owner's yes it
@@ -957,6 +966,12 @@ impl RunRegistry {
     /// nor cancelled; a yes to exactly `contract_hash` and `request` cached
     /// at this door in the current lifetime, which is returned. Changes
     /// nothing.
+    ///
+    /// S1a-D+B (S1a O8, M3 §6.1): yeses to the same hash and request that
+    /// disagree on the page facts admit nothing (`no_consent`): which facts
+    /// the Owner meant is not established. The rule holds for every
+    /// admission, Files and inference (fail closed); only a Files admission
+    /// keeps the facts.
     #[allow(clippy::too_many_arguments)]
     fn admissible(
         &self,
@@ -979,14 +994,17 @@ impl RunRegistry {
             closed: false,
         };
         let door = live_door(&mut table.doors, group, agent)?;
-        let consent = door
+        let mut matching = door
             .consents
             .iter()
-            .find(|c| c.life == now && c.contract_hash == contract_hash && c.request == request)
-            .cloned();
+            .filter(|c| c.life == now && c.contract_hash == contract_hash && c.request == request);
+        let consent = matching.next().cloned();
+        let agreed = consent
+            .as_ref()
+            .is_some_and(|first| matching.all(|c| c.page_facts == first.page_facts));
         let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         live_member(table, entry, agent, group)?;
-        consent.ok_or(AuthorityError::NoConsent)
+        consent.filter(|_| agreed).ok_or(AuthorityError::NoConsent)
     }
 
     /// M2d-B1 (A3, H1′), a door's admission of `run` for Files, in one hold
@@ -1013,13 +1031,15 @@ impl RunRegistry {
             kind: consent.kind,
             consented_wall_ms: consent.at_wall_ms,
             workspace,
+            page_facts: consent.page_facts,
         };
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         match &entry.files_admission {
             Some(bound)
                 if bound.contract_hash == admission.contract_hash
                     && bound.request == admission.request
-                    && bound.workspace == admission.workspace =>
+                    && bound.workspace == admission.workspace
+                    && bound.page_facts == admission.page_facts =>
             {
                 Ok(bound.clone())
             }
@@ -1243,7 +1263,9 @@ impl ConsentSlot<'_> {
     /// Cache the Owner's recorded yes, in one hold of the runs lock: the
     /// slot is given back first; then a Stop, a stop since the question was
     /// asked (even one already lifted), quitting, or a door that is gone,
-    /// halted or not issued refuses it, and nothing is cached.
+    /// halted or not issued refuses it, and nothing is cached. S1a-D+B:
+    /// `page_facts` are the facts the broker's dialog showed with this yes,
+    /// cached with it.
     pub(crate) fn fill(
         mut self,
         contract_hash: &str,
@@ -1251,6 +1273,7 @@ impl ConsentSlot<'_> {
         evidence_seq: u64,
         kind: ConsentKind,
         at_wall_ms: u64,
+        page_facts: Option<ApprovedFacts>,
     ) -> Result<(), AuthorityError> {
         let registry = self.registry;
         let mut runs = registry.runs.lock().expect("runs");
@@ -1283,6 +1306,7 @@ impl ConsentSlot<'_> {
             kind,
             at_wall_ms,
             life: self.life,
+            page_facts,
         });
         Ok(())
     }

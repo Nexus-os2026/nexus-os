@@ -231,6 +231,7 @@ impl Fx {
             contract_hash: hash.into(),
             request: request.into(),
             summary: vec!["A one-page site for Rosa's bakery".into()],
+            page_facts: None,
         })
         .expect("the Owner consents")
         .evidence_seq()
@@ -269,6 +270,7 @@ fn mission(hash: &str, request: &str) -> MissionConfirmation {
         contract_hash: hash.into(),
         request: request.into(),
         summary: vec!["A one-page site for Rosa's bakery".into()],
+        page_facts: None,
     }
 }
 
@@ -1341,10 +1343,18 @@ fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
                         && (at == path
                             || (at != point && at.starts_with(&point) && path.starts_with(&at)))
                 });
+                // The Owner's Option 1: ext4 and xfs on real hardware
+                // (the walk itself is checked against the evaluator's own
+                // in m2d_b1_d_o18_i).
+                let hardware = fstype(only) == "tmpfs" || {
+                    let (major, minor) = device.split_once(':').unwrap();
+                    crate::files::hardware_backed(major.parse().unwrap(), minor.parse().unwrap())
+                };
                 decoded(only[3]) == Path::new("/")
                     && ["ext4", "xfs", "tmpfs"].contains(&fstype(only).as_str())
                     && path.starts_with(&point)
                     && !between
+                    && hardware
             }
             _ => false,
         };
@@ -1433,14 +1443,27 @@ fn m2d_b1_d_o18_f_only_a_whole_local_filesystem_mounted_once_is_supported() {
         reserved,
         uid: crate::launcher::effective_uid(),
     };
+    // The Owner's Option 1: the devices these tables call ext4 or xfs are on
+    // real hardware (NVMe partitions in a fake /sys).
+    let hardware = FakeSys::new(dirs.path("sys"));
+    hardware
+        .disk("nvme0n1", "259:0", &[])
+        .partition("nvme0n1", "nvme0n1p1", "259:1")
+        .partition("nvme0n1", "nvme0n1p2", "259:2")
+        .link(&rootfs, "nvme0n1/nvme0n1p1");
+    if tmpfs != rootfs {
+        hardware.link(&tmpfs, "nvme0n1/nvme0n1p2");
+    }
     let select = |mountinfo: String, path: &Path, reserved: Vec<PathBuf>| {
         mountinfo_for_test(Some(Ok(mountinfo)));
+        crate::files::sysfs_for_test(Some(hardware.0.clone()));
         let gov = control(&root, &evidence);
         let result = gov
             .register_workspace_in(path, &with(reserved))
             .map(|_| ())
             .map_err(|error| error.class());
         mountinfo_for_test(None);
+        crate::files::sysfs_for_test(None);
         result
     };
     let plain = dirs.path("plain/ws");
@@ -1586,4 +1609,275 @@ fn m2d_b1_d_o18_g_empty_required_fields_refuse_the_table() {
         (outcomes[2].0, Ok(())),
     ];
     assert_eq!(outcomes, expected);
+}
+
+// ---------------------------------------------------------------- Owner decision: real hardware (Option 1)
+
+/// A fake `/sys` for the sysfs seam: `devices/<rel>` holds a block device
+/// (its `dev`, a `partition` file for a partition, its `slaves/` links for a
+/// whole disk), and `dev/block/<major:minor>` links to it, as in sysfs.
+struct FakeSys(PathBuf);
+
+impl FakeSys {
+    fn new(root: PathBuf) -> Self {
+        std::fs::create_dir_all(root.join("dev/block")).unwrap();
+        std::fs::create_dir_all(root.join("devices")).unwrap();
+        Self(root)
+    }
+
+    /// A whole disk at `devices/<rel>` with number `devnum` and these
+    /// slaves (each a link to `devices/<slave rel>`).
+    fn disk(&self, rel: &str, devnum: &str, slaves: &[&str]) -> &Self {
+        let dir = self.0.join("devices").join(rel);
+        std::fs::create_dir_all(dir.join("slaves")).unwrap();
+        std::fs::write(dir.join("dev"), format!("{devnum}\n")).unwrap();
+        for slave in slaves {
+            let name = Path::new(slave).file_name().unwrap();
+            std::os::unix::fs::symlink(
+                self.0.join("devices").join(slave),
+                dir.join("slaves").join(name),
+            )
+            .unwrap();
+        }
+        self
+    }
+
+    /// A partition at `devices/<disk rel>/<name>`.
+    fn partition(&self, disk: &str, name: &str, devnum: &str) -> &Self {
+        let dir = self.0.join("devices").join(disk).join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("dev"), format!("{devnum}\n")).unwrap();
+        std::fs::write(dir.join("partition"), "1\n").unwrap();
+        self
+    }
+
+    /// `dev/block/<devnum>` -> `devices/<rel>`.
+    fn link(&self, devnum: &str, rel: &str) -> &Self {
+        std::os::unix::fs::symlink(
+            self.0.join("devices").join(rel),
+            self.0.join("dev/block").join(devnum),
+        )
+        .unwrap();
+        self
+    }
+}
+
+/// The Owner's decision (Option 1, Codex review 5's MEDIUM): a location's
+/// mount must be on real hardware. An ext4 or xfs mount's device, walked in
+/// sysfs through partitions to their disks and through `slaves/`, may not
+/// be or rest on a loop, nbd, zram, ublk or ram device, and every node must
+/// resolve; tmpfs has no block device and stays accepted. Through the
+/// mountinfo and sysfs seams over real directories: Codex's loop-mounted
+/// image, dm over loop, nbd, zram and an unreadable `slaves/` are refused
+/// (`unsupported_mount_topology`); an NVMe partition, dm (LUKS or LVM) over
+/// an NVMe partition, and tmpfs are accepted.
+#[test]
+fn m2d_b1_d_o18_h_only_real_hardware_backs_a_location() {
+    use crate::files::{mountinfo_for_test, sysfs_for_test};
+    let root = temp_root("m2d-b1-ws-hardware");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    std::fs::create_dir_all(dirs.path("plain/ws")).unwrap();
+    let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let rootfs = dev_of(Path::new("/"));
+    let tmpfs = dev_of(&tmp);
+    // `/` on ext4; the temporary directory's own filesystem (if it has one)
+    // of type `fstype`; each device once.
+    let table = |fstype: &str| {
+        if tmpfs == rootfs {
+            format!("1 0 {rootfs} / / rw,relatime shared:1 - {fstype} /dev/root rw\n")
+        } else {
+            format!(
+                "1 0 {rootfs} / / rw,relatime shared:1 - ext4 /dev/root rw\n\
+                 2 1 {tmpfs} / {} rw,relatime shared:2 - {fstype} {fstype} rw\n",
+                tmp.display()
+            )
+        }
+    };
+    let mut count = 0;
+    // A fresh fake /sys: `/`'s device on an NVMe partition, and the
+    // workspace's device made by `build` (linked from its number).
+    let mut sys = |build: &dyn Fn(&FakeSys) -> &'static str| {
+        count += 1;
+        let fake = FakeSys::new(dirs.path(&format!("sys{count}")));
+        fake.disk("nvme0n1", "259:0", &[])
+            .partition("nvme0n1", "nvme0n1p1", "259:1");
+        let workspace = build(&fake);
+        if tmpfs != rootfs {
+            fake.link(&rootfs, "nvme0n1/nvme0n1p1");
+        }
+        fake.link(&tmpfs, workspace);
+        fake.0.clone()
+    };
+    let select = |fstype: &str, sysfs: PathBuf| {
+        mountinfo_for_test(Some(Ok(table(fstype))));
+        sysfs_for_test(Some(sysfs));
+        let gov = control(&root, &evidence);
+        let result = gov
+            .register_workspace_in(
+                &dirs.path("plain/ws"),
+                &Exclusions {
+                    home: dirs.path("home"),
+                    identity_home: dirs.path("ident"),
+                    reserved: vec![],
+                    uid: crate::launcher::effective_uid(),
+                },
+            )
+            .map(|_| ())
+            .map_err(|error| error.class());
+        mountinfo_for_test(None);
+        sysfs_for_test(None);
+        result
+    };
+
+    let loop0 = sys(&|f| {
+        f.disk("virtual/block/loop0", "7:0", &[]);
+        std::fs::write(
+            f.0.join("devices/virtual/block/loop0/backing_file"),
+            "/data/reserved/fs.img\n",
+        )
+        .unwrap();
+        "virtual/block/loop0"
+    });
+    let dm_over_loop = sys(&|f| {
+        f.disk("virtual/block/loop1", "7:1", &[]).disk(
+            "virtual/block/dm-0",
+            "253:0",
+            &["virtual/block/loop1"],
+        );
+        "virtual/block/dm-0"
+    });
+    let nbd = sys(&|f| {
+        f.disk("virtual/block/nbd0", "43:0", &[]);
+        "virtual/block/nbd0"
+    });
+    let zram = sys(&|f| {
+        f.disk("virtual/block/zram0", "251:0", &[]);
+        "virtual/block/zram0"
+    });
+    let unreadable = sys(&|f| {
+        let dir = f.0.join("devices/virtual/block/dm-1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("dev"), "253:1\n").unwrap();
+        std::os::unix::fs::symlink(f.0.join("missing"), dir.join("slaves")).unwrap();
+        "virtual/block/dm-1"
+    });
+    let nvme = sys(&|f| {
+        f.partition("nvme0n1", "nvme0n1p2", "259:2");
+        "nvme0n1/nvme0n1p2"
+    });
+    let crypt = sys(&|f| {
+        f.partition("nvme0n1", "nvme0n1p3", "259:3").disk(
+            "virtual/block/dm-0",
+            "253:0",
+            &["nvme0n1/nvme0n1p3"],
+        );
+        "virtual/block/dm-0"
+    });
+    let no_device = sys(&|f| {
+        f.partition("nvme0n1", "nvme0n1p4", "259:4");
+        "nvme0n1/nvme0n1p4"
+    });
+
+    let refused = Err("unsupported_mount_topology");
+    let outcomes = vec![
+        (
+            "Codex's case: ext4 on loop0, backed by a file",
+            select("ext4", loop0),
+        ),
+        ("dm-0 over loop1", select("ext4", dm_over_loop)),
+        ("nbd0", select("ext4", nbd)),
+        ("zram0", select("ext4", zram)),
+        ("an unreadable slaves/", select("ext4", unreadable)),
+        ("control: an NVMe partition", select("ext4", nvme)),
+        (
+            "control: dm-0 (LUKS or LVM) over an NVMe partition",
+            select("xfs", crypt),
+        ),
+        (
+            "control: tmpfs (no block device)",
+            select("tmpfs", no_device),
+        ),
+    ];
+    let expected = vec![
+        (outcomes[0].0, refused),
+        (outcomes[1].0, refused),
+        (outcomes[2].0, refused),
+        (outcomes[3].0, refused),
+        (outcomes[4].0, refused),
+        (outcomes[5].0, Ok(())),
+        (outcomes[6].0, Ok(())),
+        (outcomes[7].0, Ok(())),
+    ];
+    assert_eq!(outcomes, expected);
+}
+
+/// The evaluator's own walk of the real `/sys`, independent of the
+/// production one (recursive): device `major:minor` resolves, and neither
+/// it nor anything under it (a partition's disk, a disk's slaves, to depth
+/// 16) is a loop, nbd, zram, ublk or ram device or unresolvable.
+fn real_hardware(device: &str) -> bool {
+    fn walk(node: &Path, depth: usize) -> bool {
+        let name = node.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if depth > 16
+            || name.is_empty()
+            || ["loop", "nbd", "zram", "ublkb", "ublkc", "ram"]
+                .iter()
+                .any(|prefix| name.starts_with(prefix))
+        {
+            return false;
+        }
+        match std::fs::read_to_string(node.join("dev")) {
+            Ok(dev) if !dev.trim().starts_with("7:") => {}
+            _ => return false,
+        }
+        if node.join("partition").is_file() {
+            return node.parent().is_some_and(|disk| walk(disk, depth + 1));
+        }
+        match std::fs::read_dir(node.join("slaves")) {
+            Ok(slaves) => slaves.into_iter().all(|slave| {
+                slave
+                    .ok()
+                    .and_then(|slave| std::fs::canonicalize(slave.path()).ok())
+                    .is_some_and(|target| walk(&target, depth + 1))
+            }),
+            Err(_) => false,
+        }
+    }
+    std::fs::canonicalize(Path::new("/sys/dev/block").join(device))
+        .is_ok_and(|start| walk(&start, 0))
+}
+
+/// Seam-free, on this host's real `/sys` and mount table: for the
+/// workspace's and `/`'s devices, the production walk agrees with the
+/// evaluator's own; and a location accepted on ext4 or xfs is on real
+/// hardware (never an unconditional accept).
+#[test]
+fn m2d_b1_d_o18_i_the_real_sysfs_walk_is_consistent() {
+    use std::os::unix::fs::MetadataExt;
+    let dirs = Dirs::new();
+    for path in [dirs.ws(), PathBuf::from("/")] {
+        let device = major_minor(std::fs::metadata(&path).unwrap().dev());
+        let (major, minor) = device.split_once(':').unwrap();
+        let (major, minor): (u64, u64) = (major.parse().unwrap(), minor.parse().unwrap());
+        let independent = real_hardware(&device);
+        eprintln!(
+            "{}: device {device}, real hardware {independent}",
+            path.display()
+        );
+        assert_eq!(
+            crate::files::hardware_backed(major, minor),
+            independent,
+            "{}: the production walk disagrees",
+            path.display()
+        );
+        if let Ok(mount) = crate::files::mount_of(&path) {
+            if mount.fstype != "tmpfs" {
+                assert!(
+                    independent,
+                    "accepted although not on real hardware: {mount:?}"
+                );
+            }
+        }
+    }
 }
