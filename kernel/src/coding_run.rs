@@ -158,10 +158,13 @@ use crate::workspace_authority::{
 use fsops::{DirHandle, EntryKind, NodeIdentity};
 
 pub use apply::{
-    ApplyError, ApplyReport, ApplyState, ConfirmationKind, ConfirmationRequest, OwnerApproval,
-    OwnerConfirmer, Refusal,
+    ApplyError, ApplyInterrupt, ApplyReport, ApplyState, CleanupCause, ConfirmationKind,
+    ConfirmationRequest, FileIdentity, InterruptCause, OwnerApproval, OwnerConfirmer, Refusal,
 };
-pub use ledger::{analyze as analyze_ledger, LedgerFailure, LedgerRecovery, LedgerStore};
+pub use ledger::{
+    analyze as analyze_ledger, analyze_apply, ApplyFinding, LedgerFailure, LedgerFile,
+    LedgerRecovery, LedgerStore, PreparedFile, TempLeft,
+};
 pub use local_model::{
     loopback_endpoint, LocalEndpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin,
     ModelRole, LOCAL_PROVIDER,
@@ -192,6 +195,22 @@ pub use worker::{
 
 use ledger::{record, EventKind};
 use scope::is_git_metadata;
+
+/// Make this process non-dumpable (`PR_SET_DUMPABLE` 0), as the host must
+/// at startup before any Files publication (M2d, Codex review 2 of PR #58).
+/// Other processes of the same user can then neither open its descriptors
+/// through `/proc/<pid>/fd` nor attach to it. Process-wide, never undone
+/// here, and never called by the library itself. Returns whether the
+/// process is now non-dumpable.
+pub fn make_non_dumpable() -> bool {
+    nix::sys::prctl::set_dumpable(false).is_ok() && process_non_dumpable()
+}
+
+/// Whether this process is non-dumpable (any other answer, or an error,
+/// counts as dumpable: fail closed).
+pub(crate) fn process_non_dumpable() -> bool {
+    matches!(nix::sys::prctl::get_dumpable(), Ok(false))
+}
 
 /// Opaque run name. It authorizes nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -437,24 +456,47 @@ impl StagingParent {
     /// through it. Finally the pathname used for grant issuance must name the
     /// retained `coding-runs` directory.
     fn derive(home: &Path) -> Result<Self, RunError> {
+        Self::retained(home, &[".nexus", "coding-runs"])
+    }
+
+    /// `<dir>/coding-runs`, under a backend-owned directory `dir` (M2d: the
+    /// broker's own state), derived like [`Self::from_identity_home`]: `dir`
+    /// must be absolute and already its exact canonical spelling, and
+    /// `coding-runs` is opened, or created owner-only, as a direct child of
+    /// the retained handle. Opening it never removes anything already there.
+    pub fn within(dir: &Path) -> Result<Self, RunError> {
+        if !dir.is_absolute() {
+            return Err(RunError::StagingUnavailable);
+        }
+        Self::retained(dir, &["coding-runs"])
+    }
+
+    /// The pathname of the staging parent (to reserve it, never to reach
+    /// it: staging is reached only through the retained handle).
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Open `base` (its exact canonical spelling) and then each of `chain`
+    /// as a direct child, opened or created owner-only; the pathname must
+    /// finally name the retained directory.
+    fn retained(base: &Path, chain: &[&str]) -> Result<Self, RunError> {
         let unavailable = |_| RunError::StagingUnavailable;
-        let canonical = std::fs::canonicalize(home).map_err(unavailable)?;
-        if canonical != home {
+        let canonical = std::fs::canonicalize(base).map_err(unavailable)?;
+        if canonical != base {
             return Err(RunError::StagingUnavailable);
         }
-        let home_handle = DirHandle::open_absolute(home).map_err(unavailable)?;
-        let nexus = home_handle
-            .open_or_create_subdir(".nexus")
-            .map_err(unavailable)?;
-        let runs = nexus
-            .open_or_create_subdir("coding-runs")
-            .map_err(unavailable)?;
-        let path = home.join(".nexus").join("coding-runs");
+        let mut handle = DirHandle::open_absolute(base).map_err(unavailable)?;
+        let mut path = base.to_path_buf();
+        for name in chain {
+            handle = handle.open_or_create_subdir(name).map_err(unavailable)?;
+            path.push(name);
+        }
         let named = DirHandle::open_absolute(&path).map_err(unavailable)?;
-        if named.identity() != runs.identity() {
+        if named.identity() != handle.identity() {
             return Err(RunError::StagingUnavailable);
         }
-        Ok(Self { handle: runs, path })
+        Ok(Self { handle, path })
     }
 
     #[cfg(test)]
@@ -719,6 +761,12 @@ pub struct CodingRun {
     verifier: verifier::VerifierState,
     /// The emergency-stop watch the run was admitted under (M0-FIX F5).
     stop: crate::emergency_stop::StopWatch,
+    /// M2d: the watch on the broker's kernel stop the run also observes.
+    observed: Option<crate::emergency_stop::StopWatch>,
+    /// M2d (H2′): the watches an approved undo took when it started.
+    undo_watches: Option<apply::UndoWatches>,
+    /// M2d: temporary files whose removal is not established.
+    owed: Option<apply::Owed>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -742,7 +790,16 @@ impl CodingRun {
         binding: WorkspaceBinding,
         scopes: RunScopes,
     ) -> Result<Self, RunError> {
-        Self::create_inner(ledger, registry, project_grant, binding, scopes, None, None)
+        Self::create_inner(
+            ledger,
+            registry,
+            project_grant,
+            binding,
+            scopes,
+            None,
+            None,
+            None,
+        )
     }
 
     /// Create a run over an owner-selected project. The run's grant is the
@@ -754,6 +811,28 @@ impl CodingRun {
         ledger: Arc<dyn LedgerStore>,
         project: ProjectGrant,
         scopes: RunScopes,
+    ) -> Result<Self, RunError> {
+        Self::selected(ledger, project, scopes, None)
+    }
+
+    /// Create a run over an owner-selected project that also observes
+    /// `stop` (the broker's kernel stop authority, M2d): it is refused if
+    /// either authority's stop is in force, and halted by either one's stop,
+    /// exactly as by its own.
+    pub fn create_for_project_observing(
+        ledger: Arc<dyn LedgerStore>,
+        project: ProjectGrant,
+        scopes: RunScopes,
+        stop: &Arc<crate::emergency_stop::StopAuthority>,
+    ) -> Result<Self, RunError> {
+        Self::selected(ledger, project, scopes, Some(stop))
+    }
+
+    fn selected(
+        ledger: Arc<dyn LedgerStore>,
+        project: ProjectGrant,
+        scopes: RunScopes,
+        observed: Option<&Arc<crate::emergency_stop::StopAuthority>>,
     ) -> Result<Self, RunError> {
         let ProjectGrant {
             project,
@@ -776,9 +855,11 @@ impl CodingRun {
             scopes,
             Some((project, identity)),
             Some(lease),
+            observed,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_inner(
         ledger: Arc<dyn LedgerStore>,
         registry: Arc<WorkspaceAuthorityRegistry>,
@@ -787,10 +868,18 @@ impl CodingRun {
         scopes: RunScopes,
         selected: Option<(ProjectId, NodeIdentity)>,
         project_lease: Option<ProjectReadLease>,
+        observed: Option<&Arc<crate::emergency_stop::StopAuthority>>,
     ) -> Result<Self, RunError> {
-        // M0-FIX F5: no run while the owner's emergency stop is in force.
-        let stop = match stop_authority().admit() {
-            Ok(stop) => stop,
+        // M0-FIX F5: no run while the owner's emergency stop is in force
+        // (M2d: on either authority the run observes).
+        let admitted = stop_authority().admit().and_then(|stop| {
+            observed
+                .map(|authority| authority.admit())
+                .transpose()
+                .map(|observed| (stop, observed))
+        });
+        let (stop, observed) = match admitted {
+            Ok(watches) => watches,
             Err(_) => {
                 // The refused run's own read grant closes now.
                 if let Some(mut lease) = project_lease {
@@ -828,6 +917,9 @@ impl CodingRun {
             restore_approved: None,
             verifier: verifier::VerifierState::default(),
             stop,
+            observed,
+            undo_watches: None,
+            owed: None,
         };
         let mut facts = json!({
             "project_grant": project_grant,
@@ -1092,10 +1184,37 @@ impl CodingRun {
     /// stop is in force (an applied run's restore works again after the
     /// resume).
     fn stop_refusal(&self) -> Result<(), RunError> {
-        if (self.stop_ends() && self.stop.halted()) || self.stop.authority().is_stopped() {
+        let watches = || std::iter::once(&self.stop).chain(self.observed.as_ref());
+        let halted = watches().any(crate::emergency_stop::StopWatch::halted);
+        let in_force = watches().any(|watch| watch.authority().is_stopped());
+        if (self.stop_ends() && halted) || in_force {
             return Err(RunError::Revoked(RevocationReason::EmergencyStop));
         }
         Ok(())
+    }
+
+    /// Record a halt in the halt log of the stop that ended the run.
+    fn record_stop_halt(&self) {
+        let watch = match &self.observed {
+            Some(observed) if observed.halted() && !self.stop.halted() => observed,
+            _ => &self.stop,
+        };
+        watch.record_halt(
+            crate::emergency_stop::HaltArea::Coding,
+            crate::emergency_stop::HaltOutcome::Ended,
+        );
+    }
+
+    /// M2d (H2′): fresh watches on both authorities for an undo that starts
+    /// now; `None` while either stop is in force. The run's own admission
+    /// watches are never rearmed.
+    fn undo_watches(&self) -> Option<apply::UndoWatches> {
+        let run = self.stop.authority().admit().ok()?;
+        let observed = match &self.observed {
+            Some(watch) => Some(watch.authority().admit().ok()?),
+            None => None,
+        };
+        Some(apply::UndoWatches::new(run, observed))
     }
 
     /// M0-FIX F5: end a run the owner's emergency stop halted (its candidate
@@ -1105,10 +1224,7 @@ impl CodingRun {
     pub(crate) fn halt_if_stopped(&mut self) -> Result<(), RunError> {
         let refusal = self.stop_refusal();
         if refusal.is_err() && self.stop_ends() {
-            self.stop.record_halt(
-                crate::emergency_stop::HaltArea::Coding,
-                crate::emergency_stop::HaltOutcome::Ended,
-            );
+            self.record_stop_halt();
             self.verification = None;
             self.approved = None;
             self.enter_terminal(RunState::Revoked(RevocationReason::EmergencyStop));
@@ -1133,10 +1249,7 @@ impl CodingRun {
         if let Some(state) = terminal {
             if !self.state.is_terminal() {
                 if state == RunState::Revoked(RevocationReason::EmergencyStop) {
-                    self.stop.record_halt(
-                        crate::emergency_stop::HaltArea::Coding,
-                        crate::emergency_stop::HaltOutcome::Ended,
-                    );
+                    self.record_stop_halt();
                 }
                 self.enter_terminal(state);
             }

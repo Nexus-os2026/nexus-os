@@ -10,8 +10,10 @@
 //! - files are opened with `O_NOFOLLOW` (and `O_NONBLOCK`, so a FIFO swapped
 //!   in cannot block), then re-checked with `fstat` on the open descriptor;
 //! - new files are created with `O_CREAT | O_EXCL | O_NOFOLLOW`;
-//! - replacement is a `rename` inside one directory handle; creation publishes
-//!   with `link` (which never replaces) and then removes the temporary name.
+//! - replacement is a `rename` inside one directory handle; an observed
+//!   apply publishes an anonymous `O_TMPFILE` file with `linkat`, and the
+//!   inherited apply's creation with `renameat2(RENAME_NOREPLACE)`, neither
+//!   ever replacing (M2d); staging creation uses `link`.
 //!
 //! Each handle checks, when opened, that its `/proc/self/fd` entry resolves to
 //! the same device and inode as the descriptor, so a missing or substituted
@@ -19,6 +21,13 @@
 //! inside a project) and regular files with more than one hard link are
 //! refused. This is containment against same-user filesystem races on the
 //! Linux support profile; it is not a mount-namespace or hostile-root claim.
+//!
+//! An anonymous file ([`DirHandle::create_anonymous`]) has no name to race
+//! on, but it stays writable through any descriptor that reaches it. Other
+//! same-user processes reach it only through `/proc/<pid>/fd`, and only
+//! while the process is dumpable. The observed apply therefore requires a
+//! non-dumpable process (M2d). Root and `CAP_SYS_PTRACE` holders are not
+//! excluded.
 
 use std::fs::{File, Metadata, OpenOptions};
 use std::io::{self, Read, Write};
@@ -38,7 +47,7 @@ pub(crate) struct NodeIdentity {
 }
 
 impl NodeIdentity {
-    fn of(metadata: &Metadata) -> Self {
+    pub(crate) fn of(metadata: &Metadata) -> Self {
         Self {
             dev: metadata.dev(),
             ino: metadata.ino(),
@@ -366,13 +375,34 @@ impl DirHandle {
         content: &[u8],
         mode: u32,
     ) -> io::Result<(String, NodeIdentity)> {
-        let name = format!("{}{}", super::scope::TEMP_PREFIX, uuid::Uuid::new_v4());
-        let mut file = OpenOptions::new()
+        let name = plan_temp_name();
+        let identity = self.write_temp_named_with_mode(&name, content, mode)?;
+        Ok((name, identity))
+    }
+
+    /// Create a new exclusive file at one of this handle's temporary names,
+    /// planned (and recorded) by the caller before this call (M2d). Nothing
+    /// is followed or replaced; the caller owns what this created.
+    pub(crate) fn create_temp_named(&self, name: &str) -> io::Result<File> {
+        if !name.starts_with(super::scope::TEMP_PREFIX) || name.contains('/') {
+            return Err(invalid("not a temporary name"));
+        }
+        OpenOptions::new()
             .write(true)
             .create_new(true)
             .mode(0o600)
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(self.temp_child(&name))?;
+            .open(self.temp_child(name))
+    }
+
+    /// Like [`Self::write_temp_with_mode`] at a planned temporary name.
+    pub(crate) fn write_temp_named_with_mode(
+        &self,
+        name: &str,
+        content: &[u8],
+        mode: u32,
+    ) -> io::Result<NodeIdentity> {
+        let mut file = self.create_temp_named(name)?;
         let result = file
             .write_all(content)
             .and_then(|()| {
@@ -381,11 +411,51 @@ impl DirHandle {
             .and_then(|()| file.sync_all())
             .and_then(|()| file.metadata());
         match result {
-            Ok(metadata) => Ok((name, NodeIdentity::of(&metadata))),
+            Ok(metadata) => Ok(NodeIdentity::of(&metadata)),
             Err(error) => {
-                let _ = std::fs::remove_file(self.temp_child(&name));
+                let _ = std::fs::remove_file(self.temp_child(name));
                 Err(error)
             }
+        }
+    }
+
+    /// Open an anonymous file in this directory (`O_TMPFILE`, M2d): it has
+    /// no name, so no pathname can be substituted for it, and it is freed
+    /// when its last descriptor closes unless it is linked. A filesystem
+    /// without anonymous files fails here; nothing falls back to a name.
+    pub(crate) fn create_anonymous(&self) -> io::Result<File> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .mode(0o600)
+            .custom_flags(libc::O_TMPFILE | libc::O_CLOEXEC)
+            .open(self.anchor())
+    }
+
+    /// Link an anonymous file of this directory under `name` (`linkat` of
+    /// `/proc/self/fd/<fd>` with `AT_SYMLINK_FOLLOW`): exactly the inode the
+    /// descriptor holds is published, and an existing entry of any kind is
+    /// never replaced (`EEXIST`).
+    pub(crate) fn link_anonymous(&self, file: &File, name: &str) -> io::Result<()> {
+        self.child(name)?;
+        let source = format!("/proc/self/fd/{}", file.as_raw_fd());
+        nix::unistd::linkat(
+            None,
+            source.as_str(),
+            Some(self.file.as_raw_fd()),
+            name,
+            nix::fcntl::AtFlags::AT_SYMLINK_FOLLOW,
+        )
+        .map_err(io::Error::from)
+    }
+
+    /// Metadata of a project-name entry or one of this handle's temporary
+    /// names, without following it; `None` if it is absent.
+    pub(crate) fn entry_metadata(&self, name: &str) -> io::Result<Option<Metadata>> {
+        match std::fs::symlink_metadata(self.any_child(name)?) {
+            Ok(metadata) => Ok(Some(metadata)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error),
         }
     }
 
@@ -454,11 +524,6 @@ impl DirHandle {
         .map_err(io::Error::from)
     }
 
-    /// Publish a temporary file under a new name; never replaces anything.
-    pub(crate) fn link_temp(&self, temp: &str, name: &str) -> io::Result<()> {
-        std::fs::hard_link(self.temp_child(temp), self.child(name)?)
-    }
-
     /// Remove one of this handle's temporary names.
     pub(crate) fn remove_temp(&self, temp: &str) -> io::Result<()> {
         if !temp.starts_with(super::scope::TEMP_PREFIX) || temp.contains('/') {
@@ -480,6 +545,11 @@ impl DirHandle {
     pub(crate) fn sync(&self) -> io::Result<()> {
         self.file.sync_all()
     }
+}
+
+/// A fresh backend-random temporary name (the prefix and a v4 UUID, its id).
+pub(crate) fn plan_temp_name() -> String {
+    format!("{}{}", super::scope::TEMP_PREFIX, uuid::Uuid::new_v4())
 }
 
 pub(crate) fn classify(metadata: &Metadata) -> EntryKind {

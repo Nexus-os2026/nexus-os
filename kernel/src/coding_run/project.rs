@@ -300,6 +300,18 @@ impl ProjectRegistry {
         )
     }
 
+    /// A write grant like [`Self::grant_for_apply`] that lives `lifetime`
+    /// (tests of expiry at a final check).
+    #[cfg(test)]
+    pub(crate) fn grant_for_apply_lasting(
+        &self,
+        id: ProjectId,
+        binding: WorkspaceBinding,
+        lifetime: Duration,
+    ) -> Result<ProjectGrant, ProjectError> {
+        self.issue(id, binding, FsPermissionLevel::ReadWrite, lifetime)
+    }
+
     fn issue(
         &self,
         id: ProjectId,
