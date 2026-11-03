@@ -36,7 +36,8 @@ impl HaltCell {
         self.0.store(true, Ordering::SeqCst);
     }
 
-    pub(crate) fn is_engaged(&self) -> bool {
+    /// Whether it is engaged (a read: it grants nothing).
+    pub fn is_engaged(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
 
