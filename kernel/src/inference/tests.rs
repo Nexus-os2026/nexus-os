@@ -420,6 +420,7 @@ impl Ctx {
             cancel: &self.cancel,
             deadline: &self.deadline,
             stop: watch,
+            observer: None,
         }
     }
 
