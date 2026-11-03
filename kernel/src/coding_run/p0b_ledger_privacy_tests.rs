@@ -2006,6 +2006,8 @@ fn all_kinds() -> Vec<EventKind> {
         VerificationLaunched,
         VerificationFinished,
         VerificationCleanup,
+        PageInertCheck,
+        PageInertRecheck,
     ];
     // Exhaustive: a new kind does not compile here until it is listed.
     let position = |kind: EventKind| match kind {
@@ -2047,11 +2049,13 @@ fn all_kinds() -> Vec<EventKind> {
         VerificationLaunched => 35,
         VerificationFinished => 36,
         VerificationCleanup => 37,
+        PageInertCheck => 38,
+        PageInertRecheck => 39,
     };
     for (index, kind) in all.iter().enumerate() {
         assert_eq!(position(*kind), index);
     }
-    assert_eq!(all.len(), 38);
+    assert_eq!(all.len(), 40);
     all
 }
 
