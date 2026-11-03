@@ -196,6 +196,22 @@ pub use worker::{
 use ledger::{record, EventKind};
 use scope::is_git_metadata;
 
+/// Make this process non-dumpable (`PR_SET_DUMPABLE` 0), as the host must
+/// at startup before any Files publication (M2d, Codex review 2 of PR #58).
+/// Other processes of the same user can then neither open its descriptors
+/// through `/proc/<pid>/fd` nor attach to it. Process-wide, never undone
+/// here, and never called by the library itself. Returns whether the
+/// process is now non-dumpable.
+pub fn make_non_dumpable() -> bool {
+    nix::sys::prctl::set_dumpable(false).is_ok() && process_non_dumpable()
+}
+
+/// Whether this process is non-dumpable (any other answer, or an error,
+/// counts as dumpable: fail closed).
+pub(crate) fn process_non_dumpable() -> bool {
+    matches!(nix::sys::prctl::get_dumpable(), Ok(false))
+}
+
 /// Opaque run name. It authorizes nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RunId(Uuid);

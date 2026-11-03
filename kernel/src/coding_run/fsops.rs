@@ -21,6 +21,13 @@
 //! inside a project) and regular files with more than one hard link are
 //! refused. This is containment against same-user filesystem races on the
 //! Linux support profile; it is not a mount-namespace or hostile-root claim.
+//!
+//! An anonymous file ([`DirHandle::create_anonymous`]) has no name to race
+//! on, but it stays writable through any descriptor that reaches it. Other
+//! same-user processes reach it only through `/proc/<pid>/fd`, and only
+//! while the process is dumpable. The observed apply therefore requires a
+//! non-dumpable process (M2d). Root and `CAP_SYS_PTRACE` holders are not
+//! excluded.
 
 use std::fs::{File, Metadata, OpenOptions};
 use std::io::{self, Read, Write};

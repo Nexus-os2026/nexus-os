@@ -322,6 +322,7 @@ fn p0b_schema_code_registries_are_closed_and_keep_their_spellings() {
         Refusal::VerificationCleanupFailed,
         Refusal::EmergencyStopped,
         Refusal::Interrupted(InterruptCause::Cancelled),
+        Refusal::ProcessDumpable,
     ];
 
     // Unit variants keep the spelling the ledger used before P0-B.

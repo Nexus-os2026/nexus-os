@@ -1231,6 +1231,7 @@ impl Refusal {
             Self::VerificationCleanupFailed => "VerificationCleanupFailed",
             Self::EmergencyStopped => "EmergencyStopped",
             Self::Interrupted(_) => "Interrupted",
+            Self::ProcessDumpable => "ProcessDumpable",
         }
     }
 
@@ -1252,6 +1253,7 @@ impl Refusal {
         "VerificationCleanupFailed",
         "EmergencyStopped",
         "Interrupted",
+        "ProcessDumpable",
     ];
 
     /// The project-relative path the refusal names, if any.

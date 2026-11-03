@@ -21,12 +21,26 @@
 //! descriptors: a replacement is written to an exclusive temporary file,
 //! fsynced, and atomically exchanged with the target (`RENAME_EXCHANGE`); the
 //! displaced file must be the very file checked in preflight, otherwise the
-//! exchange is undone. A creation is published with one
-//! `renameat2(RENAME_NOREPLACE)`, which never replaces (M2d). If any step
+//! exchange is undone. The inherited apply publishes a creation with one
+//! `renameat2(RENAME_NOREPLACE)`, which never replaces. If any step
 //! fails, already-applied files are restored in reverse order and the
 //! outcome is reported as rolled back or as requiring recovery, never as
 //! applied. Multi-file apply is not atomic; the ledger
 //! and the filesystem are separate transactional domains.
+//!
+//! M2d's observed apply ([`CodingRun::apply_observed`]) publishes exactly one
+//! new root-level file. The candidate is an anonymous `O_TMPFILE` file of the
+//! workspace directory, so there is no pathname to substitute. It is checked
+//! to hold the approved bytes, then linked with `linkat` (create-only), and
+//! the name is checked to hold it. Between that check and the link the inode
+//! is still writable through a descriptor, so publication requires the
+//! process to be **non-dumpable** (`PR_SET_DUMPABLE` 0, set by the host at
+//! startup): other processes of the same user can then neither open its
+//! `/proc/<pid>/fd` entries nor attach to it, while the process itself still
+//! links through `/proc/self/fd`. A dumpable process is refused
+//! ([`Refusal::ProcessDumpable`]). Not claimed: root or a `CAP_SYS_PTRACE`
+//! holder can still reach the descriptor; the `ptrace_scope` setting is
+//! irrelevant, as non-dumpable is the stronger restriction.
 //!
 //! Restore ("Restore this coding run") undoes exactly one successful apply
 //! of this run, after its own native confirmation and over a fresh write
@@ -292,6 +306,12 @@ pub enum Refusal {
     /// An interruption reached the operation before it touched anything
     /// (M2d: an undo's final check U1).
     Interrupted(InterruptCause),
+    /// M2d: the process is dumpable, so other processes of the same user
+    /// could open its descriptors through `/proc/<pid>/fd` (or attach to it)
+    /// and write the candidate between its verification and its link. Files
+    /// is refused before anything is prepared; the host makes the process
+    /// non-dumpable at startup ([`super::make_non_dumpable`]).
+    ProcessDumpable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -926,6 +946,10 @@ impl CodingRun {
         let result = if self.halt_if_stopped().is_err() {
             self.approved = None;
             Err(refused(Refusal::EmergencyStopped))
+        } else if !super::process_non_dumpable() {
+            // Fail closed before any candidate exists (Codex review 2).
+            self.approved = None;
+            Err(refused(Refusal::ProcessDumpable))
         } else if approval.kind == ConfirmationKind::Apply {
             self.publish_one(approval.binding, &grant, storage, guard)
         } else {
