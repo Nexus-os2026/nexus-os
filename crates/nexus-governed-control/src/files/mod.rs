@@ -15,12 +15,14 @@
 //!   grant on it, the name and content rules, the name absent, and the
 //!   complete escaped display, refused whole if it cannot be shown.
 //!
-//! The kernel coding run that stages the file (§6.1 step 4's
+//! The kernel staging of the file (§6.1 step 4's
 //! `create_for_project_observing` → `review` → `single_complete`) is not in
 //! this build: the broker can reach neither a coding-run ledger nor a
-//! workspace binding identity without the kernel's change (M2d-A), so a
-//! request that passes every check above is refused, fail closed, before
-//! any commitment exists.
+//! workspace binding identity without the kernel's change (M2d-A), and the
+//! kernel's guard P1A-NC-30 admits no production source outside the
+//! primitive's own module. So the broker makes every §6.2 check itself and
+//! registers nothing with the kernel yet, and a request that passes every
+//! check above is refused, fail closed, before any commitment exists.
 //!
 //! Path validation is not an OS sandbox: these checks bound what the broker
 //! asks the kernel for; they are not confinement.
@@ -30,14 +32,12 @@ mod tests;
 
 use crate::authority::commitment::MAX_SUMMARY_LINES;
 use crate::authority::effect::CapabilityKind;
-use crate::authority::evidence::{is_plain, quoted, wrapped};
-use crate::authority::ids::{Digest, GrantId, RunId};
+use crate::authority::evidence::{hint, is_plain, quoted, wrapped};
+use crate::authority::ids::{random16, Digest, GrantId, RunId};
 use crate::authority::policy::GrantScope;
 use crate::authority::run::{AdmittedWorkspace, FilesAdmission};
 use crate::authority::{Authority, AuthorityError};
 use crate::control::Preparation;
-use nexus_kernel::coding_run::{FolderPicker, ProjectError, ProjectId, ProjectRegistry};
-use nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -205,7 +205,7 @@ pub(crate) fn display(
 pub(crate) struct Components<'a> {
     pub(crate) admission: &'a FilesAdmission,
     pub(crate) broker_run: RunId,
-    pub(crate) coding_run: [u8; 16],
+    pub(crate) kernel_run: [u8; 16],
     pub(crate) grant: GrantId,
     pub(crate) binding_agent: [u8; 16],
     pub(crate) binding_run: [u8; 16],
@@ -230,7 +230,7 @@ pub(crate) fn parameters_digest(components: &Components<'_>) -> Digest {
             admission.workspace.id.as_bytes(),
             admission.workspace.identity.as_bytes(),
             components.broker_run.as_bytes(),
-            &components.coding_run,
+            &components.kernel_run,
             components.grant.as_bytes(),
             &components.binding_agent,
             &components.binding_run,
@@ -245,11 +245,6 @@ struct Workspace {
     info: WorkspaceInfo,
     root: PathBuf,
     identity: Digest,
-    /// The kernel's registration, which M2d-B2's staging grants from.
-    #[allow(dead_code)]
-    project: ProjectId,
-    #[allow(dead_code)]
-    projects: ProjectRegistry,
 }
 
 /// The Files domain's state: at most one workspace per process.
@@ -258,15 +253,6 @@ pub(crate) struct Files {
     /// Serializes registrations (nothing else takes it).
     registering: Mutex<()>,
     workspace: Mutex<Option<Arc<Workspace>>>,
-}
-
-/// The Owner's selection, as the kernel's picker gives it.
-struct Given(PathBuf);
-
-impl FolderPicker for Given {
-    fn pick_folder(&self) -> Option<PathBuf> {
-        Some(self.0.clone())
-    }
 }
 
 fn refused(why: &'static str) -> AuthorityError {
@@ -304,15 +290,17 @@ fn identity_of(_root: &Path) -> Result<Digest, AuthorityError> {
     ))
 }
 
-/// §6.2: the broker's own checks of the Owner's selection, before the
-/// kernel registers it (which checks canonical spelling and reserved
-/// overlap again).
+/// §6.2: the broker's checks of the Owner's selection, in order: absolute,
+/// its own canonical path (no link), a directory, not exactly `/`, `$HOME`
+/// or the identity home (in either spelling), no overlap in either
+/// direction with a reserved tree (in either spelling), the current user's,
+/// empty. Returns the identity of the directory it checked.
 #[cfg(target_os = "linux")]
 fn selectable(
     path: &Path,
     exclusions: &Exclusions,
     runtime_root: &Path,
-) -> Result<(), AuthorityError> {
+) -> Result<Digest, AuthorityError> {
     use std::os::unix::fs::MetadataExt;
     if !path.is_absolute() {
         return Err(refused("the workspace is not an absolute path"));
@@ -360,24 +348,17 @@ fn selectable(
     if entries.next().is_some() {
         return Err(refused("the workspace folder is not empty"));
     }
-    Ok(())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn selectable(_: &Path, _: &Exclusions, _: &Path) -> Result<(), AuthorityError> {
-    Err(AuthorityError::Unavailable(
-        "Files are available on Linux only",
+    Ok(Digest::of(
+        IDENTITY_DOMAIN,
+        &[&meta.dev().to_be_bytes(), &meta.ino().to_be_bytes()],
     ))
 }
 
-fn project_refusal(error: ProjectError) -> AuthorityError {
-    match error {
-        ProjectError::IdentityChanged => AuthorityError::TargetChanged,
-        ProjectError::Unavailable | ProjectError::Authority => {
-            AuthorityError::Unavailable("the workspace cannot be registered")
-        }
-        _ => refused("this folder cannot be the workspace"),
-    }
+#[cfg(not(target_os = "linux"))]
+fn selectable(_: &Path, _: &Exclusions, _: &Path) -> Result<Digest, AuthorityError> {
+    Err(AuthorityError::Unavailable(
+        "Files are available on Linux only",
+    ))
 }
 
 impl Files {
@@ -399,9 +380,10 @@ impl Files {
     }
 
     /// §6.2: register the Owner's selection as this process's one
-    /// workspace. Refused when one is registered, by the broker's checks,
-    /// or by the kernel's registry (its picker given exactly this path); the
-    /// directory must keep its identity throughout.
+    /// workspace: refused when one is registered or by any check of
+    /// [`selectable`]; the directory must keep the identity it was checked
+    /// with. Its id is backend-random (`wsp-` and 32 hex); its name is the
+    /// folder's own, escaped and at most 64 characters.
     pub(crate) fn register(
         &self,
         path: &Path,
@@ -411,28 +393,23 @@ impl Files {
         if self.current().is_some() {
             return Err(refused("a workspace is already registered in this process"));
         }
-        selectable(path, exclusions, &self.runtime_root)?;
-        let identity = identity_of(path)?;
-        let mut reserved: Vec<&Path> = exclusions.reserved.iter().map(PathBuf::as_path).collect();
-        reserved.push(&self.runtime_root);
-        let projects =
-            ProjectRegistry::reserving(Arc::new(WorkspaceAuthorityRegistry::new()), &reserved);
-        let project = projects
-            .select(&Given(path.to_path_buf()))
-            .map_err(project_refusal)?;
+        let identity = selectable(path, exclusions, &self.runtime_root)?;
         if identity_of(path)? != identity {
             return Err(AuthorityError::TargetChanged);
         }
+        let name = path
+            .file_name()
+            .map(|name| hint(&name.to_string_lossy()))
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "workspace".to_string());
         let info = WorkspaceInfo {
-            id: project.id.to_string(),
-            name: project.name,
+            id: format!("wsp-{}", hex::encode(random16())),
+            name,
         };
         *self.workspace.lock().expect("files") = Some(Arc::new(Workspace {
             info: info.clone(),
             root: path.to_path_buf(),
             identity,
-            project: project.id,
-            projects,
         }));
         Ok(info)
     }
