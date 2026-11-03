@@ -139,8 +139,8 @@ const SERVICES: &[&str] = &["Gmail", "Outlook", "Slack", "Discord"];
 const AREAS: &[&str] = &["cognitive_loop", "coding", "model_call"];
 /// The `class` a run-opened record names.
 const RUN_CLASSES: &[&str] = &["owner"];
-/// Operations named in detail: none yet (M2d appends).
-const OPERATIONS: &[&str] = &[];
+/// Operations named in detail (M2d: a Files create).
+const OPERATIONS: &[&str] = &["create"];
 /// Why Mother holds a mission (its `HeldReason`).
 const HELD_REASONS: &[&str] = &["unclean_shutdown"];
 

@@ -129,6 +129,10 @@ pub enum AuthorityError {
     /// reached through a mount that is not a whole filesystem (a subtree
     /// bind mount), or the mount topology cannot be read or matched.
     UnsupportedMountTopology,
+    /// M2d-B2: a Files operation reached the Owner's workspace and its
+    /// outcome is not established (a sync, a record or a cleanup failed):
+    /// recovery is required, and nothing is called done.
+    RecoveryRequired,
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
@@ -176,6 +180,7 @@ impl AuthorityError {
             AuthorityError::FileExists => "file_exists",
             AuthorityError::ChangeTooLargeToShow => "change_too_large_to_show",
             AuthorityError::UnsupportedMountTopology => "unsupported_mount_topology",
+            AuthorityError::RecoveryRequired => "recovery_required",
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",

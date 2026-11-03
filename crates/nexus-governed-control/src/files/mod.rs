@@ -15,14 +15,25 @@
 //!   grant on it, the name and content rules, the name absent, and the
 //!   complete escaped display, refused whole if it cannot be shown.
 //!
-//! The kernel staging of the file (§6.1 step 4's
-//! `create_for_project_observing` → `review` → `single_complete`) is not in
-//! this build: the broker can reach neither a coding-run ledger nor a
-//! workspace binding identity without the kernel's change (M2d-A), and the
-//! kernel's guard P1A-NC-30 admits no production source outside the
-//! primitive's own module. So the broker makes every §6.2 check itself and
-//! registers nothing with the kernel yet, and a request that passes every
-//! check above is refused, fail closed, before any commitment exists.
+//! M2d-B2 (§6.1 steps 4-6, §6.3-§6.7): this module is the one broker source
+//! that names the kernel's coding-run primitive (P1A-NC-30's exact-path
+//! exception, M2d-K).
+//! - Registration also registers the folder with a kernel project registry
+//!   that reserves the broker's state.
+//! - Preparation stages the file in a kernel run (`FilesEffect`), whose
+//!   ledger and staging parent are in the broker's own runtime root.
+//! - Execution (one at a time) carries the Owner's approval of the
+//!   commitment into the kernel through `BrokerApproved`. It publishes
+//!   with the kernel's observed apply, whose final check asks the
+//!   `Observer`: the broker's kernel stop, the run's cancellation, the
+//!   commitment's deadline on both clocks and its coverage. A cause landing
+//!   before that check publishes nothing; one after it lets only that one
+//!   publication complete, recorded as it happened, and nothing waits for
+//!   it.
+//! - The last file is kept for the Owner's undo (once, this process only,
+//!   fresh authority).
+//! - The startup report reads the ledger and sweeps nothing.
+//! - Nothing that a Stop path drops does filesystem or ledger work.
 //!
 //! Overlap with a protected or reserved location is decided by directory
 //! identity (`st_dev`, `st_ino`) along each directory's ancestor chain, not
@@ -46,21 +57,55 @@
 //! Path validation is not an OS sandbox: these checks bound what the broker
 //! asks the kernel for; they are not confinement.
 
+#[cfg(all(test, target_os = "linux"))]
+mod b2_tests;
 #[cfg(test)]
 mod tests;
 
+use crate::authority::approval::ControlConfirmer;
+#[cfg(target_os = "linux")]
+use crate::authority::approval::UndoConfirmation;
 use crate::authority::commitment::MAX_SUMMARY_LINES;
+#[cfg(target_os = "linux")]
+use crate::authority::commitment::{ExecutionGuard, FailureClass, PreparedAction, TargetIdentity};
 use crate::authority::effect::CapabilityKind;
+#[cfg(target_os = "linux")]
+use crate::authority::effect::EffectClass;
 use crate::authority::evidence::{hint, is_plain, quoted, wrapped};
-use crate::authority::ids::{random16, Digest, GrantId, RunId};
+use crate::authority::ids::{random16, CommitmentId, Digest, GrantId, RunId};
 use crate::authority::policy::GrantScope;
 use crate::authority::run::{AdmittedWorkspace, FilesAdmission};
 use crate::authority::{Authority, AuthorityError};
 use crate::control::Preparation;
+#[cfg(target_os = "linux")]
+use crate::control::{EffectOutput, PendingEffect};
+#[cfg(all(test, target_os = "linux"))]
+use nexus_kernel::coding_run::ProjectGrant;
+#[cfg(target_os = "linux")]
+use nexus_kernel::coding_run::{
+    analyze_apply, ApplyError, ApplyFinding, ApplyInterrupt, ApplyState, CandidateEdit, ChangeKind,
+    CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InterruptCause, LedgerFailure,
+    LedgerFile, OwnerConfirmer, PreparedFile, ProjectError, ProjectInfo, ProjectRegistry, Refusal,
+    RelPath, RevocationReason, RunError, RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft,
+};
+use nexus_kernel::emergency_stop::StopAuthority;
+#[cfg(target_os = "linux")]
+use nexus_kernel::emergency_stop::StopWatch;
+#[cfg(all(test, target_os = "linux"))]
+use nexus_kernel::workspace_authority::WorkspaceGrantId;
+#[cfg(target_os = "linux")]
+use nexus_kernel::workspace_authority::{WorkspaceAuthorityRegistry, WorkspaceBinding};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(target_os = "linux")]
+use std::sync::PoisonError;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+#[cfg(target_os = "linux")]
+use std::time::Instant;
 
 /// The largest file Files creates.
 pub const MAX_FILE_BYTES: usize = 8 * 1024;
@@ -233,9 +278,9 @@ pub(crate) struct Components<'a> {
 }
 
 /// The parameters digest of a Files commitment: a pure function of its
-/// components, each length-prefixed under `PARAMETERS_DOMAIN`. (Its
-/// consumer, the staged effect, is M2d-B2's.)
-#[cfg_attr(not(test), allow(dead_code))]
+/// components, each length-prefixed under `PARAMETERS_DOMAIN`; what the
+/// staged effect digests (M2d-B2).
+#[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
 pub(crate) fn parameters_digest(components: &Components<'_>) -> Digest {
     let admission = components.admission;
     Digest::of(
@@ -259,11 +304,808 @@ pub(crate) fn parameters_digest(components: &Components<'_>) -> Digest {
     )
 }
 
+// ---------------------------------------------------------------- M2d-B2
+
+/// The agent half of the kernel workspace binding of every Files run: the
+/// Files consumer is Mother, named by these fixed 16 bytes (the ASCII of
+/// `MotherNexusFiles`). The run half is the broker run's own 16 bytes, so
+/// a kernel grant resolves only for the broker run it was issued to.
+pub(crate) const KERNEL_AGENT: [u8; 16] = *b"MotherNexusFiles";
+/// How long a Files commitment may wait to start. Its deadline also bounds
+/// the publication (§6.3): it is checked again at the final check.
+pub(crate) const FILE_TTL: Duration = Duration::from_secs(10 * 60);
+/// The longest startup hold before a publication (R3).
+pub const MAX_HOLD: Duration = Duration::from_secs(30);
+/// The slice a hold waits in before it looks again.
+#[cfg(target_os = "linux")]
+const HOLD_SLICE: Duration = Duration::from_millis(50);
+/// Most working details kept; the oldest goes first.
+const MAX_DETAILS: usize = 64;
+/// The broker's Files state under its runtime root (reserved from every
+/// workspace): the coding-run ledger and the staging parent.
+const STATE_DIR: &str = "files";
+#[cfg(target_os = "linux")]
+const LEDGER_FILE: &str = "ledger.db";
+/// The digest domain of a Files commitment's target (the workspace and the
+/// name).
+#[cfg(target_os = "linux")]
+const TARGET_DOMAIN: &str = "nexus.files.target.v1";
+
+/// The approval bridge (§6.4): the Owner's R2 approval of a Files
+/// commitment, carried into the kernel's confirmation. It says yes only to
+/// an apply of exactly the committed review (all 32 bytes of its hash).
+/// It is built at one site, inside [`FilesEffect`]'s `execute`, which runs
+/// only under the commitment's execution guard: `begin` refuses a
+/// commitment that is not authorized, so a record of an approval alone
+/// gives nothing. It cannot be copied or duplicated.
+#[cfg(target_os = "linux")]
+pub(crate) struct BrokerApproved {
+    review_hash: [u8; 32],
+}
+
+#[cfg(target_os = "linux")]
+impl OwnerConfirmer for BrokerApproved {
+    fn confirm(&self, request: &ConfirmationRequest) -> bool {
+        request.kind == ConfirmationKind::Apply && request.review_hash == self.review_hash
+    }
+}
+
+/// One run's findings in the startup recovery report (§6.7): ids and
+/// digests only.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoveryEntry {
+    /// The kernel coding run's id.
+    pub run: String,
+    pub findings: Vec<RecoveryFinding>,
+}
+
+/// What the Files ledger says is uncertain or owed about one run. Reporting
+/// only: nothing is swept, and nothing is called disposable.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecoveryFinding {
+    /// A publication was prepared and has no recorded outcome: whether the
+    /// file was published, and where its temporary file is, is unknown.
+    PreparedWithoutOutcome { files: Vec<TempRef> },
+    /// An undo was prepared and has no recorded outcome.
+    RestorePreparedWithoutOutcome { files: Vec<TempRef> },
+    /// Temporary files whose removal was not established.
+    CleanupOwed { temps: Vec<TempRef> },
+    /// The Owner's own versions kept under temporary names: never cleanup.
+    OwnerVersionKept { versions: Vec<TempRef> },
+    /// Recovery is required for another recorded reason (a code).
+    RecoveryRequired { failed: &'static str },
+    /// A verified file awaited approval; its staging may remain.
+    StagingAwaitingApproval,
+}
+
+/// A file of a finding: its path digest and the backend-random id of its
+/// temporary name, as recorded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TempRef {
+    pub path_sha256: Option<String>,
+    pub temp_id: Option<String>,
+}
+
+/// Where the Owner reads a working detail (the host's screen).
+pub trait OwnerView {
+    fn line(&mut self, label: &str, value: &str);
+}
+
+/// The Owner-only detail behind a Files failure code (I4): held in memory,
+/// taken once, shown only through an [`OwnerView`]. It has no `Debug`,
+/// `Display`, `Clone` or `Serialize`, and nothing persists it.
+pub struct WorkingDetail {
+    lines: Lines,
+}
+
+impl WorkingDetail {
+    pub fn show(self, owner: &mut dyn OwnerView) {
+        for (label, value) in self.lines {
+            owner.line(label, &value);
+        }
+    }
+}
+
+/// The workspace as the kernel registered it: its own project registry
+/// (with the broker's state reserved) and the one project in it.
+#[cfg(target_os = "linux")]
+struct Kernel {
+    projects: ProjectRegistry,
+    /// The registry the project's grants come from (tests revoke one).
+    #[cfg(test)]
+    authority: Arc<WorkspaceAuthorityRegistry>,
+    project: ProjectInfo,
+}
+
+#[cfg(target_os = "linux")]
+struct Picked(PathBuf);
+
+#[cfg(target_os = "linux")]
+impl FolderPicker for Picked {
+    fn pick_folder(&self) -> Option<PathBuf> {
+        Some(self.0.clone())
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Kernel {
+    /// Register `root` with a fresh kernel registry that reserves the
+    /// broker's runtime root (its Files state included) and `reserved`.
+    fn register(
+        root: &Path,
+        runtime_root: &Path,
+        reserved: &[PathBuf],
+    ) -> Result<Self, AuthorityError> {
+        let authority = Arc::new(WorkspaceAuthorityRegistry::new());
+        let mut trees: Vec<&Path> = reserved.iter().map(PathBuf::as_path).collect();
+        trees.push(runtime_root);
+        let projects = ProjectRegistry::reserving(Arc::clone(&authority), &trees);
+        let project = projects
+            .select(&Picked(root.to_path_buf()))
+            .map_err(|_| refused("the kernel refused the workspace"))?;
+        Ok(Self {
+            projects,
+            #[cfg(test)]
+            authority,
+            project,
+        })
+    }
+}
+
+/// The broker's Files ledger and staging parent, opened once.
+#[cfg(target_os = "linux")]
+struct Backend {
+    ledger: LedgerFile,
+    staging: StagingParent,
+}
+
+/// Open (creating owner-only) `<runtime root>/files`, its ledger and its
+/// staging parent; anything that is not a real private directory of ours
+/// refuses.
+#[cfg(target_os = "linux")]
+fn open_backend(runtime_root: &Path) -> Result<Backend, AuthorityError> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    let unavailable =
+        || AuthorityError::Unavailable("the Files ledger or staging cannot be opened");
+    let dir = runtime_root.join(STATE_DIR);
+    match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(_) => return Err(unavailable()),
+    }
+    let meta = std::fs::symlink_metadata(&dir).map_err(|_| unavailable())?;
+    if !meta.is_dir()
+        || meta.uid() != crate::launcher::effective_uid()
+        || meta.permissions().mode() & 0o077 != 0
+    {
+        return Err(unavailable());
+    }
+    Ok(Backend {
+        ledger: LedgerFile::open(&dir.join(LEDGER_FILE)).map_err(|_| unavailable())?,
+        staging: StagingParent::within(&dir).map_err(|_| unavailable())?,
+    })
+}
+
+/// The last file created in this process, the undo slot (§6.6).
+#[cfg(target_os = "linux")]
+struct Applied {
+    run: CodingRun,
+    workspace: Arc<Workspace>,
+    binding: WorkspaceBinding,
+    name: String,
+    bytes: u64,
+    sha256: String,
+    review_hash: [u8; 32],
+}
+
+/// A working detail's labelled lines.
+type Lines = Vec<(&'static str, String)>;
+
+/// What Files executions, the undo and the report share. Every lock here
+/// is held only to move a value in or out: never across the ledger, the
+/// filesystem, a dialog or evidence.
+#[derive(Default)]
+struct Shared {
+    /// The ledger and staging parent, opened at first use.
+    #[cfg(target_os = "linux")]
+    backend: Mutex<Option<Arc<Backend>>>,
+    /// The undo slot.
+    #[cfg(target_os = "linux")]
+    slot: Mutex<Option<Applied>>,
+    /// Runs that owe cleanup or require recovery: kept, never dropped, for
+    /// the life of the process.
+    #[cfg(target_os = "linux")]
+    kept: Mutex<Vec<CodingRun>>,
+    /// Runs of effects dropped elsewhere (a Stop, a cancellation, a sweep):
+    /// owned here until the next Files call discards their staging.
+    #[cfg(target_os = "linux")]
+    deferred: Mutex<Vec<CodingRun>>,
+    /// The Owner-only details of failed executions.
+    details: Mutex<VecDeque<(CommitmentId, Lines)>>,
+    /// One Files execution or undo at a time (Codex D2 condition 3).
+    busy: AtomicBool,
+    /// The startup hold before each publication, in milliseconds.
+    hold_ms: AtomicU64,
+    #[cfg(test)]
+    hooks: Arc<crate::test_hooks::Hooks>,
+    /// Tests: the last write grant issued, to revoke at a hook.
+    #[cfg(all(test, target_os = "linux"))]
+    write_grant: Mutex<
+        Option<(
+            Arc<WorkspaceAuthorityRegistry>,
+            WorkspaceGrantId,
+            WorkspaceBinding,
+        )>,
+    >,
+}
+
+/// The one Files operation under way; another is refused, never queued.
+struct Busy<'a>(&'a AtomicBool);
+
+impl<'a> Busy<'a> {
+    fn take(flag: &'a AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| Self(flag))
+    }
+}
+
+impl Drop for Busy<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+impl Shared {
+    fn hold(&self) -> Duration {
+        Duration::from_millis(self.hold_ms.load(Ordering::SeqCst))
+    }
+
+    fn detail(&self, id: CommitmentId, lines: Lines) {
+        let mut details = self.details.lock().expect("files details");
+        details.push_back((id, lines));
+        while details.len() > MAX_DETAILS {
+            details.pop_front();
+        }
+    }
+
+    /// A run Files no longer needs: one that owes cleanup or requires
+    /// recovery is kept; any other has its staging discarded now (recorded)
+    /// and is dropped.
+    #[cfg(target_os = "linux")]
+    fn retire(&self, mut run: CodingRun) {
+        if !run.cleanup_owed().is_empty() || run.apply_state() == ApplyState::RecoveryRequired {
+            self.kept.lock().expect("files kept").push(run);
+            return;
+        }
+        if !run.state().is_terminal() {
+            let _ = run.cancel();
+        }
+        let _ = run.discard_staging();
+    }
+
+    /// Put `applied` in the undo slot; the one it replaces is retired.
+    #[cfg(target_os = "linux")]
+    fn applied(&self, applied: Applied) {
+        let replaced = self.slot.lock().expect("files slot").replace(applied);
+        if let Some(old) = replaced {
+            self.retire(old.run);
+        }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    fn note_write_grant(&self, authority: &Arc<WorkspaceAuthorityRegistry>, grant: &ProjectGrant) {
+        *self.write_grant.lock().unwrap() =
+            Some((Arc::clone(authority), grant.grant_id(), grant.binding()));
+    }
+
+    #[cfg(test)]
+    fn fire(&self, at: &'static str) {
+        self.hooks.fire(at);
+    }
+}
+
+/// A staged Files create (§6.1 steps 4-6), held as a pending effect until
+/// the Owner's approved commitment executes it once.
+#[cfg(target_os = "linux")]
+struct FilesEffect {
+    /// The staged kernel run; taken by `execute`, or handed to the deferred
+    /// list when the effect is dropped (never cleaned on the dropping path,
+    /// which may be a Stop).
+    run: Mutex<Option<CodingRun>>,
+    workspace: Arc<Workspace>,
+    backend: Arc<Backend>,
+    shared: Arc<Shared>,
+    stop: Arc<StopAuthority>,
+    admission: FilesAdmission,
+    broker_run: RunId,
+    kernel_run: [u8; 16],
+    grant: GrantId,
+    review_hash: [u8; 32],
+    name: String,
+    bytes: u64,
+    lines: usize,
+    sha256: String,
+    target: Digest,
+}
+
+#[cfg(target_os = "linux")]
+impl FilesEffect {
+    fn components(&self) -> Components<'_> {
+        Components {
+            admission: &self.admission,
+            broker_run: self.broker_run,
+            kernel_run: self.kernel_run,
+            grant: self.grant,
+            binding_agent: KERNEL_AGENT,
+            binding_run: *self.broker_run.as_bytes(),
+            review_hash: self.review_hash,
+            name: &self.name,
+        }
+    }
+
+    fn binding(&self) -> WorkspaceBinding {
+        WorkspaceBinding::from_bytes(KERNEL_AGENT, *self.broker_run.as_bytes())
+    }
+
+    /// A failed execution: the Owner's detail is kept; the caller gets the
+    /// class and a code.
+    fn failed(
+        &self,
+        guard: &ExecutionGuard,
+        class: FailureClass,
+        code: String,
+        detail: String,
+    ) -> (FailureClass, String) {
+        self.shared.detail(
+            guard.commitment(),
+            vec![
+                ("File", self.name.clone()),
+                ("Outcome", code.clone()),
+                ("Detail", detail),
+            ],
+        );
+        (class, code)
+    }
+}
+
+/// Whether the kernel published the file although the attempt ended in an
+/// error (the directory sync, or the write grant's closure, failed after
+/// the publication): it happened, and recovery is required.
+#[cfg(target_os = "linux")]
+fn published(error: &ApplyError) -> bool {
+    match error {
+        ApplyError::RecoveryRequired { failed, .. } => failed == "dir_sync",
+        ApplyError::AuthorityNotClosed { after } => match after.as_ref() {
+            Ok(_) => true,
+            Err(inner) => published(inner),
+        },
+        _ => false,
+    }
+}
+
+/// An apply's failure as a class and a code (never a name or a path).
+#[cfg(target_os = "linux")]
+fn apply_failure(error: &ApplyError) -> (FailureClass, String) {
+    match error {
+        ApplyError::Interrupted { cause } => (
+            FailureClass::Refused,
+            format!("interrupted:{}", cause.code()),
+        ),
+        ApplyError::Refused(
+            refusal @ (Refusal::EmergencyStopped
+            | Refusal::Interrupted(_)
+            | Refusal::AuthorityDenied
+            | Refusal::ProcessDumpable),
+        ) => (FailureClass::Refused, format!("refused:{}", refusal.code())),
+        ApplyError::Refused(refusal) => (
+            FailureClass::TargetChanged,
+            format!("refused:{}", refusal.code()),
+        ),
+        other => (FailureClass::Actuator, other.code().to_string()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl PendingEffect for FilesEffect {
+    /// The workspace is still the admitted directory, the name still
+    /// absent, and the staged candidate still reviews to exactly the
+    /// committed review hash (§6.1 step 6).
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        if identity_of(&self.workspace.root)? != self.admission.workspace.identity {
+            return Err(AuthorityError::TargetChanged);
+        }
+        match std::fs::symlink_metadata(self.workspace.root.join(&self.name)) {
+            Ok(_) => return Err(AuthorityError::FileExists),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(AuthorityError::Unavailable("the workspace cannot be read")),
+        }
+        let mut run = self.run.lock().unwrap_or_else(PoisonError::into_inner);
+        let run = run
+            .as_mut()
+            .ok_or(AuthorityError::Unavailable("the staged file is gone"))?;
+        let review = run.review().map_err(|_| AuthorityError::TargetChanged)?;
+        if review.binding.hash() != self.review_hash || review.single_complete().is_none() {
+            return Err(AuthorityError::TargetChanged);
+        }
+        Ok(self.target)
+    }
+
+    fn parameters(&self) -> Digest {
+        parameters_digest(&self.components())
+    }
+
+    /// §6.1 step 6: one at a time; the bridge (`request_approval` with
+    /// [`BrokerApproved`]); a fresh kernel write grant; then the kernel's
+    /// observed apply with this execution's [`Observer`] at its final check.
+    fn execute(
+        mut self: Box<Self>,
+        guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        let shared = Arc::clone(&self.shared);
+        let Some(_busy) = Busy::take(&shared.busy) else {
+            return Err(self.failed(
+                guard,
+                FailureClass::Refused,
+                "busy".into(),
+                "another Files operation is under way".into(),
+            ));
+        };
+        let taken = self
+            .run
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        let Some(mut run) = taken else {
+            return Err(self.failed(
+                guard,
+                FailureClass::Abandoned,
+                "staging_gone".into(),
+                "the staged file is gone".into(),
+            ));
+        };
+        let kernel = &self.workspace.kernel;
+        let binding = self.binding();
+        // The bridge's one construction site (§6.4).
+        let hash = self.review_hash;
+        let approved = BrokerApproved { review_hash: hash };
+        let result = run
+            .request_approval(&kernel.project.name, &approved)
+            .map_err(Some)
+            .and_then(|approval| {
+                let write = kernel
+                    .projects
+                    .grant_for_apply(kernel.project.id, binding)
+                    .map_err(|_| None)?;
+                #[cfg(test)]
+                shared.note_write_grant(&kernel.authority, &write);
+                let observer = Observer::new(guard, &self.stop, shared.hold(), &shared);
+                run.apply_observed(approval, write, &self.backend.staging, &observer)
+                    .map_err(Some)
+            });
+        let recovery = match result {
+            Ok(_) => false,
+            Err(Some(error)) if published(&error) => {
+                self.failed(
+                    guard,
+                    FailureClass::Actuator,
+                    "recovery_required".into(),
+                    error.to_string(),
+                );
+                true
+            }
+            Err(error) => {
+                let failure = match &error {
+                    Some(error) => {
+                        let (class, code) = apply_failure(error);
+                        self.failed(guard, class, code, error.to_string())
+                    }
+                    None => self.failed(
+                        guard,
+                        FailureClass::Unavailable,
+                        "write_grant".into(),
+                        "the kernel issued no write grant".into(),
+                    ),
+                };
+                shared.retire(run);
+                return Err(failure);
+            }
+        };
+        shared.applied(Applied {
+            run,
+            workspace: Arc::clone(&self.workspace),
+            binding,
+            name: self.name.clone(),
+            bytes: self.bytes,
+            sha256: self.sha256.clone(),
+            review_hash: self.review_hash,
+        });
+        let mut meta = vec![
+            ("op".to_string(), "create".to_string()),
+            ("bytes".to_string(), self.bytes.to_string()),
+            ("lines".to_string(), self.lines.to_string()),
+        ];
+        if recovery {
+            meta.push(("reason".to_string(), "recovery_required".to_string()));
+        }
+        Ok(EffectOutput {
+            meta,
+            ..EffectOutput::default()
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for FilesEffect {
+    /// Hand an unexecuted run over, in memory only: whoever drops the
+    /// effect (a Stop, a cancellation, a door halt, a sweep) does no
+    /// filesystem or ledger work; the next Files call discards the staging.
+    fn drop(&mut self) {
+        let taken = self
+            .run
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(run) = taken {
+            self.shared
+                .deferred
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(run);
+        }
+    }
+}
+
+/// The execution guard's view for the kernel's final check (I8): asked
+/// once, after the candidate is written and synced and after the Owner's
+/// startup hold, if any. Memory only: no lock is held, nothing is written.
+#[cfg(target_os = "linux")]
+struct Observer<'a> {
+    guard: &'a ExecutionGuard,
+    /// The broker's kernel stop, watched from this execution's start
+    /// (`None`: it was in force then).
+    watch: Option<StopWatch>,
+    hold: Duration,
+    #[cfg_attr(not(test), allow(dead_code))]
+    shared: &'a Shared,
+}
+
+#[cfg(target_os = "linux")]
+impl<'a> Observer<'a> {
+    fn new(
+        guard: &'a ExecutionGuard,
+        stop: &Arc<StopAuthority>,
+        hold: Duration,
+        shared: &'a Shared,
+    ) -> Self {
+        Self {
+            guard,
+            watch: stop.admit().ok(),
+            hold,
+            shared,
+        }
+    }
+
+    /// What interrupts the publication, in order: the broker's kernel stop
+    /// (engaged since this execution started, or in force), the run's
+    /// cancellation, the commitment's deadline on either clock, then its
+    /// coverage (a grant expired, or revoked, or the policy generation
+    /// moved).
+    fn cause(&self) -> Option<InterruptCause> {
+        match &self.watch {
+            Some(watch) if !watch.halted() && !watch.authority().is_stopped() => {}
+            _ => return Some(InterruptCause::EmergencyStop),
+        }
+        if self.guard.is_cancelled() {
+            return Some(InterruptCause::Cancelled);
+        }
+        if self.guard.expired() {
+            return Some(InterruptCause::CommitmentExpired);
+        }
+        if !self.guard.still_authorized() {
+            return Some(if self.guard.grant_expired() {
+                InterruptCause::Expired
+            } else {
+                InterruptCause::Revoked
+            });
+        }
+        None
+    }
+
+    /// R3: wait out the startup hold in bounded slices, ending at once when
+    /// any cause appears (a stop wakes it immediately).
+    fn hold(&self) {
+        if self.hold.is_zero() {
+            return;
+        }
+        let until = Instant::now() + self.hold;
+        while self.cause().is_none() {
+            let now = Instant::now();
+            let Some(watch) = self.watch.as_ref().filter(|_| now < until) else {
+                return;
+            };
+            watch.wait_halted_timeout((until - now).min(HOLD_SLICE));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl ApplyInterrupt for Observer<'_> {
+    fn interrupted(&self) -> Option<InterruptCause> {
+        #[cfg(test)]
+        self.shared.fire(crate::test_hooks::at::FILE_BEFORE_FINAL);
+        self.hold();
+        self.cause()
+    }
+
+    fn passed_final_check(&self) {
+        #[cfg(test)]
+        self.shared.fire(crate::test_hooks::at::FILE_AFTER_FINAL);
+    }
+}
+
+/// The undo's confirmation (§6.5, §6.6): the kernel's restore request,
+/// checked against the broker's own record of the file, shown to the Owner
+/// with every fact.
+#[cfg(target_os = "linux")]
+struct UndoBridge<'a> {
+    confirmer: &'a dyn ControlConfirmer,
+    workspace: &'a str,
+    name: &'a str,
+    bytes: u64,
+    sha256: &'a str,
+    review_hash: [u8; 32],
+}
+
+#[cfg(target_os = "linux")]
+impl OwnerConfirmer for UndoBridge<'_> {
+    fn confirm(&self, request: &ConfirmationRequest) -> bool {
+        let Some(identity) = request.identity else {
+            return false;
+        };
+        if request.kind != ConfirmationKind::Restore
+            || request.review_hash != self.review_hash
+            || request.bytes != Some(self.bytes)
+            || request.sha256_full.as_deref() != Some(self.sha256)
+        {
+            return false;
+        }
+        self.confirmer.confirm_undo(&UndoConfirmation {
+            workspace: self.workspace.to_string(),
+            file: self.name.to_string(),
+            bytes: self.bytes,
+            sha256: self.sha256.to_string(),
+            device: identity.dev,
+            inode: identity.ino,
+        })
+    }
+}
+
+/// An undo's refusal or failure, as a broker class.
+#[cfg(target_os = "linux")]
+fn undo_error(error: ApplyError) -> AuthorityError {
+    match error {
+        ApplyError::Refused(Refusal::Declined) => AuthorityError::Declined,
+        ApplyError::Refused(
+            Refusal::EmergencyStopped | Refusal::Interrupted(InterruptCause::EmergencyStop),
+        ) => AuthorityError::EmergencyStopped,
+        ApplyError::Refused(Refusal::Interrupted(_) | Refusal::AuthorityDenied) => {
+            AuthorityError::GrantNotLive
+        }
+        ApplyError::Refused(
+            Refusal::Stale(_) | Refusal::Redirect(_) | Refusal::IdentityChanged,
+        ) => AuthorityError::TargetChanged,
+        ApplyError::Refused(Refusal::Unrecorded) => {
+            AuthorityError::Unavailable("the Files ledger refused the record")
+        }
+        ApplyError::InvalidState => {
+            AuthorityError::Unavailable("there is no file to undo in this session")
+        }
+        ApplyError::Refused(_) => AuthorityError::Unavailable("the undo was refused"),
+        _ => AuthorityError::RecoveryRequired,
+    }
+}
+
+/// A kernel run's failure while staging, as a broker class.
+#[cfg(target_os = "linux")]
+fn run_error(error: RunError) -> AuthorityError {
+    match error {
+        RunError::Revoked(RevocationReason::EmergencyStop) => AuthorityError::EmergencyStopped,
+        _ => AuthorityError::Unavailable("the file cannot be staged"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn project_error(error: ProjectError) -> AuthorityError {
+    match error {
+        ProjectError::IdentityChanged => AuthorityError::TargetChanged,
+        _ => AuthorityError::Unavailable("the kernel issued no workspace grant"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn ledger_error(error: LedgerFailure) -> AuthorityError {
+    match error {
+        LedgerFailure::Integrity => AuthorityError::RecoveryRequired,
+        _ => AuthorityError::Unavailable("the Files ledger cannot be read"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn finding(finding: ApplyFinding) -> RecoveryFinding {
+    let prepared = |files: Vec<PreparedFile>| {
+        files
+            .into_iter()
+            .map(|file| TempRef {
+                path_sha256: Some(file.path_sha256),
+                temp_id: file.temp_id,
+            })
+            .collect()
+    };
+    let left = |temps: Vec<TempLeft>| {
+        temps
+            .into_iter()
+            .map(|temp| TempRef {
+                path_sha256: temp.path_sha256,
+                temp_id: Some(temp.temp_id),
+            })
+            .collect()
+    };
+    match finding {
+        ApplyFinding::PreparedWithoutOutcome { files } => RecoveryFinding::PreparedWithoutOutcome {
+            files: prepared(files),
+        },
+        ApplyFinding::RestorePreparedWithoutOutcome { files } => {
+            RecoveryFinding::RestorePreparedWithoutOutcome {
+                files: prepared(files),
+            }
+        }
+        ApplyFinding::CleanupOwed { temps } => RecoveryFinding::CleanupOwed { temps: left(temps) },
+        ApplyFinding::OwnerVersionKept { versions } => RecoveryFinding::OwnerVersionKept {
+            versions: left(versions),
+        },
+        ApplyFinding::RecoveryRequired { failed } => RecoveryFinding::RecoveryRequired { failed },
+        ApplyFinding::StagingAwaitingApproval => RecoveryFinding::StagingAwaitingApproval,
+    }
+}
+
+/// §6.1 step 4's kernel half: grant, snapshot, the one created file,
+/// structural verification, and a review that shows exactly that file whole.
+/// Returns the review's full hash.
+#[cfg(target_os = "linux")]
+fn stage_one(
+    run: &mut CodingRun,
+    staging: &StagingParent,
+    path: &RelPath,
+    content: &[u8],
+) -> Result<[u8; 32], AuthorityError> {
+    run.grant(staging).map_err(run_error)?;
+    run.snapshot().map_err(run_error)?;
+    run.edit(CandidateEdit::Create {
+        path: path.clone(),
+        content: content.to_vec(),
+    })
+    .map_err(run_error)?;
+    if !run.verify_structural().map_err(run_error)?.passed() {
+        return Err(refused("the file is not plain new text"));
+    }
+    let review = run.review().map_err(run_error)?;
+    match review.single_complete() {
+        Some(only) if &only.path == path && only.kind == ChangeKind::Create => {
+            Ok(review.binding.hash())
+        }
+        _ => Err(AuthorityError::ChangeTooLargeToShow),
+    }
+}
+
 /// The registered workspace.
 struct Workspace {
     info: WorkspaceInfo,
     root: PathBuf,
     identity: Digest,
+    /// M2d-B2: the same directory, registered with the kernel.
+    #[cfg(target_os = "linux")]
+    kernel: Kernel,
 }
 
 /// The Files domain's state: at most one workspace per process.
@@ -272,6 +1114,8 @@ pub(crate) struct Files {
     /// Serializes registrations (nothing else takes it).
     registering: Mutex<()>,
     workspace: Mutex<Option<Arc<Workspace>>>,
+    /// M2d-B2: what executions, the undo and the report share.
+    shared: Arc<Shared>,
 }
 
 fn refused(why: &'static str) -> AuthorityError {
@@ -707,7 +1551,178 @@ impl Files {
             runtime_root,
             registering: Mutex::new(()),
             workspace: Mutex::new(None),
+            shared: Arc::default(),
         }
+    }
+
+    /// The Files ledger and staging parent, opened at first use (with no
+    /// lock held while they are opened).
+    #[cfg(target_os = "linux")]
+    fn backend(&self) -> Result<Arc<Backend>, AuthorityError> {
+        if let Some(backend) = self.shared.backend.lock().expect("files backend").clone() {
+            return Ok(backend);
+        }
+        let opened = Arc::new(open_backend(&self.runtime_root)?);
+        let mut slot = self.shared.backend.lock().expect("files backend");
+        Ok(Arc::clone(slot.get_or_insert(opened)))
+    }
+
+    /// Discard the staging of every run handed over by a dropped effect
+    /// (Codex D2 condition 5: never on the path that dropped it). Called
+    /// at the start of each Files call and when the front door settles.
+    pub(crate) fn drain(&self) {
+        #[cfg(target_os = "linux")]
+        {
+            let runs = std::mem::take(&mut *self.shared.deferred.lock().expect("files deferred"));
+            for run in runs {
+                self.shared.retire(run);
+            }
+        }
+    }
+
+    /// §6.6 and H2′: undo the last create of this process, once, with the
+    /// Owner's dialog and fresh authority (see
+    /// `GovernedControl::files_undo`). The slot is taken for the attempt
+    /// and put back unless the undo completed; nothing is held across the
+    /// dialog or the filesystem.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn undo(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        self.drain();
+        let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
+            "another Files operation is under way",
+        ))?;
+        let taken = self.shared.slot.lock().expect("files slot").take();
+        let mut applied = taken.ok_or(AuthorityError::Unavailable(
+            "there is no file to undo in this session",
+        ))?;
+        let result = self.undo_one(&mut applied, confirmer);
+        if result.is_ok() {
+            self.shared.retire(applied.run);
+        } else {
+            let mut slot = self.shared.slot.lock().expect("files slot");
+            if slot.is_none() {
+                *slot = Some(applied);
+            } else {
+                drop(slot);
+                self.shared.retire(applied.run);
+            }
+        }
+        result
+    }
+
+    /// The kernel's restore of `applied`: the request (its watches taken
+    /// now, before the dialog), the Owner's dialog through [`UndoBridge`],
+    /// a fresh write grant, then the restore and its final check U1.
+    #[cfg(target_os = "linux")]
+    fn undo_one(
+        &self,
+        applied: &mut Applied,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<(), AuthorityError> {
+        let kernel = &applied.workspace.kernel;
+        let bridge = UndoBridge {
+            confirmer,
+            workspace: &applied.workspace.info.name,
+            name: &applied.name,
+            bytes: applied.bytes,
+            sha256: &applied.sha256,
+            review_hash: applied.review_hash,
+        };
+        let approval = applied
+            .run
+            .request_restore(&kernel.project.name, &bridge)
+            .map_err(undo_error)?;
+        let write = kernel
+            .projects
+            .grant_for_apply(kernel.project.id, applied.binding)
+            .map_err(project_error)?;
+        #[cfg(test)]
+        {
+            self.shared.note_write_grant(&kernel.authority, &write);
+            self.shared.fire(crate::test_hooks::at::FILE_UNDO_APPROVED);
+        }
+        applied
+            .run
+            .restore(approval, write)
+            .map(|_| ())
+            .map_err(undo_error)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn undo(&self, _confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        Err(AuthorityError::Unavailable(
+            "Files are available on Linux only",
+        ))
+    }
+
+    /// §6.7: every Files run's findings, from the ledger only. Nothing on
+    /// disk is opened, swept or called disposable; a ledger that cannot be
+    /// read or verified is an error.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn recovery_report(&self) -> Result<Vec<RecoveryEntry>, AuthorityError> {
+        self.drain();
+        let backend = self.backend()?;
+        let store = backend.ledger.store();
+        let mut entries = Vec::new();
+        for run in backend.ledger.run_ids().map_err(ledger_error)? {
+            let findings = analyze_apply(store.as_ref(), run.ledger_key()).map_err(ledger_error)?;
+            if !findings.is_empty() {
+                entries.push(RecoveryEntry {
+                    run: run.to_string(),
+                    findings: findings.into_iter().map(finding).collect(),
+                });
+            }
+        }
+        Ok(entries)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn recovery_report(&self) -> Result<Vec<RecoveryEntry>, AuthorityError> {
+        Err(AuthorityError::Unavailable(
+            "Files are available on Linux only",
+        ))
+    }
+
+    /// The Owner-only detail of execution `id`'s failure, taken once.
+    pub(crate) fn working_detail(&self, id: CommitmentId) -> Option<WorkingDetail> {
+        let mut details = self.shared.details.lock().expect("files details");
+        let at = details.iter().position(|(of, _)| *of == id)?;
+        details.remove(at).map(|(_, lines)| WorkingDetail { lines })
+    }
+
+    /// R3: the Owner's startup hold, at most [`MAX_HOLD`], set before the
+    /// workspace is registered.
+    pub(crate) fn set_hold(&self, hold: Duration) -> Result<(), AuthorityError> {
+        if hold > MAX_HOLD {
+            return Err(refused("the hold before publication is at most 30 seconds"));
+        }
+        if self.current().is_some() {
+            return Err(refused(
+                "the hold before publication is set at startup, before the workspace",
+            ));
+        }
+        let ms = u64::try_from(hold.as_millis()).unwrap_or(u64::MAX);
+        self.shared.hold_ms.store(ms, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// The broker's test hooks for Files (tests).
+    #[cfg(test)]
+    pub(crate) fn hooks(&self) -> &Arc<crate::test_hooks::Hooks> {
+        &self.shared.hooks
+    }
+
+    /// Where the Files ledger and staging parent are (tests).
+    #[cfg(test)]
+    pub(crate) fn state_dir_for_test(&self) -> PathBuf {
+        self.runtime_root.join(STATE_DIR)
+    }
+
+    /// Revoke the last kernel write grant Files issued (tests).
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn revoke_write_grant_for_test(&self) -> bool {
+        let noted = self.shared.write_grant.lock().unwrap().take();
+        noted.is_some_and(|(authority, grant, binding)| authority.revoke(grant, binding).is_ok())
     }
 
     fn current(&self) -> Option<Arc<Workspace>> {
@@ -734,6 +1749,11 @@ impl Files {
             return Err(refused("a workspace is already registered in this process"));
         }
         let identity = selectable(path, exclusions, &self.runtime_root)?;
+        // M2d-B2: the same directory, registered with the kernel (its own
+        // canonical and overlap checks, the broker's state reserved), and
+        // still the directory checked.
+        #[cfg(target_os = "linux")]
+        let kernel = Kernel::register(path, &self.runtime_root, &exclusions.reserved)?;
         if identity_of(path)? != identity {
             return Err(AuthorityError::TargetChanged);
         }
@@ -750,6 +1770,8 @@ impl Files {
             info: info.clone(),
             root: path.to_path_buf(),
             identity,
+            #[cfg(target_os = "linux")]
+            kernel,
         }));
         Ok(info)
     }
@@ -788,16 +1810,17 @@ impl Files {
         })
     }
 
-    /// §6.1 step 4, the broker's half of a create's preparation, in order:
-    /// the run's admission (never the intent's), the admitted workspace
-    /// still the registered one and the same directory, a live Files grant
-    /// on it, the name, the content, the name absent, and the complete
-    /// display. No lock is held across filesystem work; nothing is written.
+    /// §6.1 step 4, in order: the run's admission (never the intent's), the
+    /// admitted workspace still the registered one and the same directory, a
+    /// live Files grant on it, the name, the content, the name absent, and
+    /// the complete display; then the kernel staging ([`Self::stage`]). No
+    /// lock is held across filesystem work.
     pub(crate) fn prepare(
         &self,
         authority: &Authority,
         run: RunId,
         create: &FileCreate,
+        stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
         let admission = authority
             .runs()
@@ -812,7 +1835,7 @@ impl Files {
         {
             return Err(AuthorityError::TargetChanged);
         }
-        let _grant = covering_grant(authority, &admission.workspace)?;
+        let grant = covering_grant(authority, &admission.workspace)?;
         if !name_ok(&create.name) {
             return Err(refused("the file name is not allowed"));
         }
@@ -822,11 +1845,110 @@ impl Files {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => return Err(AuthorityError::Unavailable("the workspace cannot be read")),
         }
-        let _shown = display(&admission, &workspace.info, &create.name, &create.content)?;
-        // The kernel staging (§6.1 step 4) needs M2d-A's change: fail closed.
-        Err(AuthorityError::Unavailable(
-            "file staging is not available in this build",
-        ))
+        let summary = display(&admission, &workspace.info, &create.name, &create.content)?;
+        #[cfg(target_os = "linux")]
+        return self.stage(run, create, admission, workspace, grant, summary, stop);
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (run, grant, summary, stop);
+            Err(AuthorityError::Unavailable(
+                "Files are available on Linux only",
+            ))
+        }
+    }
+
+    /// §6.1 step 4's kernel half (M2d-K's entry points): a kernel run over a
+    /// fresh read grant bound to (Mother, this broker run), observing the
+    /// broker's kernel stop, reading the workspace and writing only the
+    /// name; staged, verified and reviewed as exactly one new file shown
+    /// whole. A refused staging is discarded before anything is committed.
+    #[cfg(target_os = "linux")]
+    #[allow(clippy::too_many_arguments)]
+    fn stage(
+        &self,
+        run: RunId,
+        create: &FileCreate,
+        admission: FilesAdmission,
+        workspace: Arc<Workspace>,
+        grant: GrantId,
+        summary: Vec<String>,
+        stop: &Arc<StopAuthority>,
+    ) -> Result<Preparation, AuthorityError> {
+        self.drain();
+        let backend = self.backend()?;
+        let kernel = &workspace.kernel;
+        let binding = WorkspaceBinding::from_bytes(KERNEL_AGENT, *run.as_bytes());
+        let path =
+            RelPath::parse(&create.name).map_err(|_| refused("the file name is not allowed"))?;
+        let scopes = RunScopes::new(
+            ScopeSet::new([ScopeEntry::WholeProject]),
+            ScopeSet::new([ScopeEntry::File(path.clone())]),
+            ScopeSet::default(),
+        )
+        .map_err(|_| refused("the file name is not allowed"))?;
+        let project = kernel
+            .projects
+            .grant_for_run(kernel.project.id, binding)
+            .map_err(project_error)?;
+        let mut staged =
+            CodingRun::create_for_project_observing(backend.ledger.store(), project, scopes, stop)
+                .map_err(run_error)?;
+        let review_hash = match stage_one(
+            &mut staged,
+            &backend.staging,
+            &path,
+            create.content.as_bytes(),
+        ) {
+            Ok(hash) => hash,
+            Err(error) => {
+                self.shared.retire(staged);
+                return Err(error);
+            }
+        };
+        let target = Digest::of(
+            TARGET_DOMAIN,
+            &[
+                admission.workspace.id.as_bytes(),
+                admission.workspace.identity.as_bytes(),
+                create.name.as_bytes(),
+            ],
+        );
+        let display = format!("{} in workspace {}", create.name, workspace.info.id);
+        let effect = FilesEffect {
+            kernel_run: staged.id().ledger_key().into_bytes(),
+            run: Mutex::new(Some(staged)),
+            workspace,
+            backend,
+            shared: Arc::clone(&self.shared),
+            stop: Arc::clone(stop),
+            admission,
+            broker_run: run,
+            grant,
+            review_hash,
+            name: create.name.clone(),
+            bytes: create.content.len() as u64,
+            lines: line_count(&create.content),
+            sha256: sha256_hex(create.content.as_bytes()),
+            target,
+        };
+        let action = PreparedAction {
+            kind: CapabilityKind::Files,
+            class: EffectClass::R2,
+            operation: "create",
+            target: TargetIdentity {
+                display,
+                digest: target,
+            },
+            parameters: effect.parameters(),
+            grants: vec![grant],
+            leases: Vec::new(),
+            summary,
+        };
+        Ok(Preparation {
+            action,
+            effect: Box::new(effect),
+            ttl: FILE_TTL,
+        })
     }
 }
 

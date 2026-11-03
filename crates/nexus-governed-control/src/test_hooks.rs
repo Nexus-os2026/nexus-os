@@ -36,6 +36,14 @@ pub(crate) mod at {
     pub(crate) const ISSUE_RECORDED: &str = "issue.recorded";
     pub(crate) const CONSENT_BEFORE_FILL: &str = "door.consent_before_fill";
     pub(crate) const ADMIT_BEFORE_BIND: &str = "door.admit_before_bind";
+    /// M2d-B2: an observed Files apply is at its final check (the
+    /// candidate written and synced; the guard is asked next).
+    pub(crate) const FILE_BEFORE_FINAL: &str = "files.before_final";
+    /// M2d-B2: the final check passed; the one publication is next.
+    pub(crate) const FILE_AFTER_FINAL: &str = "files.after_final";
+    /// M2d-B2: an undo is confirmed and its write grant issued; the
+    /// kernel's restore (its U1 check) is next.
+    pub(crate) const FILE_UNDO_APPROVED: &str = "files.undo_approved";
 }
 
 type Once = Box<dyn FnOnce() + Send>;
