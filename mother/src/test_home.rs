@@ -123,11 +123,6 @@ impl TestClock {
         *self.due.lock().unwrap() = Some((Box::new(when), Box::new(then)));
     }
 
-    /// Whether the armed action is still waiting (it has not run).
-    pub fn armed(&self) -> bool {
-        self.due.lock().unwrap().is_some()
-    }
-
     /// Disarm, and say whether the action had still to run.
     pub fn disarm(&self) -> bool {
         self.due.lock().unwrap().take().is_some()
