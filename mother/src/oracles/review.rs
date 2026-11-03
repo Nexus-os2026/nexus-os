@@ -129,12 +129,7 @@ fn review_replay_refuses_records_out_of_their_live_order() {
     let id = MissionId(1);
     let t = |trigger| (id, Event::Transition { trigger });
     let start = vec![
-        (
-            id,
-            Event::Drafted {
-                contract: c.clone(),
-            },
-        ),
+        (id, crate::oracles::drafted(&c)),
         t(Trigger::Submit { hash: c.hash() }),
         t(Trigger::Consent {
             hash: c.hash(),
@@ -174,7 +169,8 @@ fn review_replay_refuses_records_out_of_their_live_order() {
                     id,
                     Event::LaneInvoked {
                         invocation: inv(7),
-                        identity: identity.clone(),
+                        role: identity.role,
+                        identity_sha256: crate::evidence::lane_identity_digest(&identity),
                         input_hash: "0".repeat(64),
                     },
                 ),
@@ -196,12 +192,7 @@ fn review_replay_refuses_records_out_of_their_live_order() {
         ),
         (
             "a skipped mission id",
-            vec![(
-                MissionId(5),
-                Event::Drafted {
-                    contract: c.clone(),
-                },
-            )],
+            vec![(MissionId(5), crate::oracles::drafted(&c))],
         ),
     ];
     for (what, events) in cases {
@@ -270,12 +261,7 @@ fn review_a_wall_clock_set_back_before_consent_spends_the_time_budget() {
     let future = nexus_governed_control::authority::clock::Clock::wall_ms(&*w.clock) + 3_600_000;
     let t = |trigger| (id, Event::Transition { trigger });
     w.journal.set_lines(chained(vec![
-        (
-            id,
-            Event::Drafted {
-                contract: c.clone(),
-            },
-        ),
+        (id, crate::oracles::drafted(&c)),
         t(Trigger::Submit { hash: c.hash() }),
         t(Trigger::Consent {
             hash: c.hash(),

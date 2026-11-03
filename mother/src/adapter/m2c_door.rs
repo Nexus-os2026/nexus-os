@@ -251,7 +251,7 @@ fn m2c_a6_f_no_resume_under_an_emergency_stop(control: &Arc<GovernedControl>, or
     control.emergency_stop();
     let owner = HeldOwner::new(true);
     let answer = resume_with(&r.mother, id, &owner);
-    assert_eq!(format!("{answer:?}"), "Err(Broker(\"emergency_stopped\"))");
+    assert_eq!(format!("{answer:?}"), "Err(Broker(EmergencyStopped))");
     assert!(owner.shown().is_empty(), "refused before the dialog");
     assert!(r.mother.held(id).is_some());
     assert_eq!(resumed(&disk, id), 0);

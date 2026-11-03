@@ -12,7 +12,7 @@ fn triggers() -> Vec<Trigger> {
     let hash = ContractHash::from_hex(&"ab".repeat(32)).unwrap();
     vec![
         Trigger::Revise {
-            contract: contract(),
+            contract: contract_ref_in(&test_private(), &contract()),
         },
         Trigger::Submit { hash },
         Trigger::Consent {
@@ -23,10 +23,18 @@ fn triggers() -> Vec<Trigger> {
         Trigger::Start,
         Trigger::PhaseDone,
         Trigger::VerifyPass,
-        Trigger::VerifyFail { reason: "r".into() },
-        Trigger::Block { reason: "r".into() },
-        Trigger::Fail { reason: "r".into() },
-        Trigger::Stop { reason: "r".into() },
+        Trigger::VerifyFail {
+            reason: crate::evidence::VerifyFailReason::VerifierFailed,
+        },
+        Trigger::Block {
+            reason: crate::evidence::BlockReason::BudgetTime,
+        },
+        Trigger::Fail {
+            reason: crate::evidence::FailReason::LaneFail(LaneRole::Builder),
+        },
+        Trigger::Stop {
+            reason: crate::evidence::StopReason::Owner,
+        },
     ]
 }
 

@@ -21,11 +21,16 @@
 //! (Mother's own state, not an effect on the world). M2c: Mother builds no
 //! broker; the host does (`nexus-mother-host`'s `Home`), issues the door
 //! with the Owner's yes, and hands the port only that door.
+//!
+//! P0: [`FilePrivate`] keeps Mother's private store in her home. Every class
+//! the port returns is one of the closed registry
+//! ([`crate::evidence::BrokerClass`]).
 
 use crate::effect::{
     ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed, PendingAction,
 };
-use crate::journal::{JournalError, JournalStore, MissionId};
+use crate::evidence::BrokerClass;
+use crate::journal::{IoKind, JournalError, JournalStore, MissionId, StoreFailure};
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
@@ -81,6 +86,23 @@ mod m2c_door;
 mod m2c_halt;
 #[cfg(test)]
 pub(crate) mod m2c_support;
+mod private_file;
+pub use private_file::FilePrivate;
+
+#[cfg(test)]
+mod p0_api;
+#[cfg(test)]
+mod p0_chain;
+#[cfg(test)]
+mod p0_chain_io;
+#[cfg(test)]
+mod p0_dirsync;
+#[cfg(test)]
+mod p0_privacy;
+#[cfg(test)]
+mod p0_privdir;
+#[cfg(test)]
+pub(crate) mod p0_support;
 #[cfg(test)]
 mod real_broker;
 #[cfg(test)]
@@ -285,7 +307,7 @@ impl GovernedPort {
     /// its registration cancels at once (`run_for`).
     fn enter(&self) -> Result<(), EffectRefusal> {
         if self.with_runs(|runs| runs.fenced) {
-            return Err(refused("port_fenced"));
+            return Err(refused(BrokerClass::PortFenced));
         }
         Ok(())
     }
@@ -300,7 +322,7 @@ impl GovernedPort {
         self.enter()?;
         let known = self.with_runs(|runs| {
             if runs.ended.contains(&mission) {
-                return Some(Err(refused("mission_cancelled")));
+                return Some(Err(refused(BrokerClass::MissionCancelled)));
             }
             runs.open.get(&mission).map(|run| Ok(*run))
         });
@@ -309,12 +331,12 @@ impl GovernedPort {
         }
         #[cfg(test)]
         self.before_open_run.fire();
-        let run = self.door.open_run().map_err(|e| refused(e.class()))?;
+        let run = self.door.open_run().map_err(|e| refused_by(e.class()))?;
         let refusal = self.with_runs(|runs| {
             if runs.fenced {
-                Some("port_fenced")
+                Some(BrokerClass::PortFenced)
             } else if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
-                Some("mission_cancelled")
+                Some(BrokerClass::MissionCancelled)
             } else {
                 runs.open.insert(mission, run);
                 None
@@ -355,10 +377,13 @@ fn written(batch: RecordBatch) {
     owed.write();
 }
 
-fn refused(class: &str) -> EffectRefusal {
-    EffectRefusal {
-        class: class.into(),
-    }
+fn refused(class: BrokerClass) -> EffectRefusal {
+    EffectRefusal { class }
+}
+
+/// The broker's class, in the closed registry (anything else is `unknown`).
+fn refused_by(class: &str) -> EffectRefusal {
+    refused(BrokerClass::of(class))
 }
 
 impl EffectPort for GovernedPort {
@@ -376,7 +401,7 @@ impl EffectPort for GovernedPort {
             EffectRequest::ModelTool(intent) => Intent::Connector(intent.clone()),
             // The broker has no file or spend route.
             EffectRequest::File { .. } | EffectRequest::Spend { .. } => {
-                return Err(refused("no_broker_route"))
+                return Err(refused(BrokerClass::NoBrokerRoute))
             }
         };
         let run = self.run_for(mission)?;
@@ -397,7 +422,7 @@ impl EffectPort for GovernedPort {
                 self.with_runs(|runs| runs.waiting.insert(mission, (view.id, deadline)));
                 Ok(EffectOutcome::AwaitingApproval)
             }
-            Err(e) => Err(refused(e.class())),
+            Err(e) => Err(refused_by(e.class())),
         }
     }
 
@@ -425,19 +450,19 @@ impl EffectPort for GovernedPort {
         if entered.is_err() {
             return match (run, handed.is_empty()) {
                 (None, true) => Ok(()),
-                _ => Err(refused("port_fenced")),
+                _ => Err(refused(BrokerClass::PortFenced)),
             };
         };
         if let Some(run) = run {
             let batch = self.door.cancel_run(run).map_err(|e| {
                 self.cancel_failures.fetch_add(1, Ordering::SeqCst);
-                refused(e.class())
+                refused_by(e.class())
             })?;
             written(batch);
         }
         for pending in handed {
             if !self.withdrawn(&pending, run) {
-                return Err(refused("action_not_held"));
+                return Err(refused(BrokerClass::ActionNotHeld));
             }
         }
         Ok(())
@@ -768,7 +793,7 @@ pub struct FileJournal {
 }
 
 fn store_error(e: std::io::Error) -> JournalError {
-    JournalError::Store(e.kind().to_string())
+    JournalError::Store(StoreFailure::Io(IoKind::of(e.kind())))
 }
 
 impl FileJournal {
@@ -777,9 +802,7 @@ impl FileJournal {
     pub fn open(path: &Path) -> Result<Self, JournalError> {
         match std::fs::symlink_metadata(path) {
             Ok(meta) if !meta.file_type().is_file() => {
-                return Err(JournalError::Store(
-                    "the journal is not a regular file".into(),
-                ))
+                return Err(JournalError::Store(StoreFailure::NotRegularFile))
             }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -829,7 +852,7 @@ impl JournalStore for FileJournal {
 
     fn append(&mut self, line: &str) -> Result<(), JournalError> {
         if line.contains('\n') {
-            return Err(JournalError::Store("a journal line holds a newline".into()));
+            return Err(JournalError::Store(StoreFailure::LineHasNewline));
         }
         let mut file = OpenOptions::new()
             .append(true)

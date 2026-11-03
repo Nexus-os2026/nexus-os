@@ -66,14 +66,14 @@ impl JournalStore for Faulty {
 
     fn append(&mut self, line: &str) -> Result<(), JournalError> {
         if self.appends_fail.load(Ordering::SeqCst) {
-            return Err(JournalError::Store("injected append failure".into()));
+            return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
         }
         self.inner.append(line)
     }
 
     fn poison(&mut self) -> Result<(), JournalError> {
         if self.poison_fails.load(Ordering::SeqCst) {
-            return Err(JournalError::Store("injected poison failure".into()));
+            return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
         }
         self.inner.poison()
     }
@@ -103,6 +103,7 @@ pub(super) fn open_on(
         port.clone(),
         Lanes::new(lanes.clone()).unwrap(),
         clock.clone(),
+        crate::oracles::test_private(),
     )?;
     Ok(World {
         port,
@@ -697,7 +698,7 @@ pub(super) fn refused(lines: Vec<String>, what: &str) {
 
 pub(super) fn held_event() -> Event {
     Event::Held {
-        reason: "unclean_shutdown".into(),
+        reason: crate::evidence::HeldReason::UncleanShutdown,
     }
 }
 
@@ -713,7 +714,7 @@ fn m2as_replay_refuses_session_and_hold_records_the_coordinator_would_not_write(
     };
     let stop = Event::Transition {
         trigger: Trigger::Stop {
-            reason: "owner".into(),
+            reason: crate::evidence::StopReason::Owner,
         },
     };
 
@@ -781,7 +782,8 @@ fn m2as_replay_refuses_session_and_hold_records_the_coordinator_would_not_write(
                     mission: investigating,
                     seq,
                 },
-                identity: keyed()[0].identity(),
+                role: keyed()[0].identity().role,
+                identity_sha256: crate::evidence::lane_identity_digest(&keyed()[0].identity()),
                 input_hash: "00".repeat(32),
             },
         ),
@@ -828,11 +830,13 @@ fn m2as_a_journal_from_before_sessions_is_an_unclean_shutdown() {
         let event = match entry.event {
             Event::LaneInvoked {
                 invocation,
-                identity,
+                role,
+                identity_sha256,
                 input_hash,
             } => Event::LaneInvoked {
                 invocation: renumbered(invocation, Some(seq)),
-                identity,
+                role,
+                identity_sha256,
                 input_hash,
             },
             Event::LaneReturned {

@@ -16,6 +16,7 @@
 //! authority.
 
 use crate::contract::EffectKind;
+use crate::evidence::BrokerClass;
 use crate::journal::MissionId;
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
@@ -94,10 +95,11 @@ pub struct PendingAction {
     pub deadline_mono_ms: u64,
 }
 
-/// The port or the broker refused: only a stable class name.
+/// The port or the broker refused: only a class of the closed registry
+/// (P0: a class outside it is [`BrokerClass::Unknown`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EffectRefusal {
-    pub class: String,
+    pub class: BrokerClass,
 }
 
 /// M2c PR-B: the broker records a call still owes (a door halt's or a

@@ -132,7 +132,7 @@ fn stop_does_not_wait_for_a_lane_in_flight_and_its_answer_is_dropped() {
     let invoked: Vec<_> = journal
         .iter()
         .filter_map(|e| match &e.event {
-            Event::LaneInvoked { identity, .. } => Some(identity.role),
+            Event::LaneInvoked { role, .. } => Some(*role),
             _ => None,
         })
         .collect();

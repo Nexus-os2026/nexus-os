@@ -167,7 +167,7 @@ fn contract_an_unanswered_question_keeps_the_mission_in_draft() {
     assert_eq!(
         w.mother.submit(id),
         Err(CoordinatorError::Contract(
-            ContractError::UnansweredQuestion { id: "q1".into() }
+            ContractError::UnansweredQuestion { index: 0 }
         ))
     );
     assert_eq!(w.mother.state(id), Some(MissionState::Draft));

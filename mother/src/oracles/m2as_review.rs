@@ -40,7 +40,7 @@ impl JournalStore for Countdown {
     fn append(&mut self, line: &str) -> Result<(), JournalError> {
         let mut left = self.left.lock().unwrap();
         match left.as_mut() {
-            Some(0) => return Err(JournalError::Store("injected failure".into())),
+            Some(0) => return Err(JournalError::Store(crate::journal::StoreFailure::Injected)),
             Some(n) => *n -= 1,
             None => {}
         }
@@ -48,7 +48,7 @@ impl JournalStore for Countdown {
     }
 
     fn poison(&mut self) -> Result<(), JournalError> {
-        Err(JournalError::Store("injected poison failure".into()))
+        Err(JournalError::Store(crate::journal::StoreFailure::Injected))
     }
 }
 
@@ -141,7 +141,7 @@ fn m2as_review_replay_refuses_a_clean_close_that_skips_the_holds() {
         building,
         Event::Transition {
             trigger: Trigger::Stop {
-                reason: "owner".into(),
+                reason: crate::evidence::StopReason::Owner,
             },
         },
     );
@@ -256,6 +256,7 @@ fn m2as_review_a_stop_lost_while_another_mission_s_lane_runs() {
             port.clone(),
             Lanes::new(lanes.clone()).unwrap(),
             clock.clone(),
+            crate::oracles::test_private(),
         )
         .unwrap(),
     );
@@ -290,6 +291,7 @@ fn m2as_review_a_stop_lost_while_another_mission_s_lane_runs() {
         Arc::new(RecordingPort::default()),
         Lanes::new(w.lanes.clone()).unwrap(),
         w.clock.clone(),
+        crate::oracles::test_private(),
     )
     .unwrap();
     for id in [stopped, running] {

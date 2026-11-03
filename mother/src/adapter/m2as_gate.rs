@@ -255,6 +255,7 @@ fn withdraw_is_an_error_while_a_handed_request_of_another_run_is_open(
         port.clone(),
         Lanes::new(keyed_lanes()).unwrap(),
         Arc::new(SystemClock::default()),
+        crate::oracles::test_private(),
     )
     .unwrap();
     let approve = |markers: &str| {

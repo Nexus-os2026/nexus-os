@@ -20,7 +20,9 @@
 //!                    ─approval lapsed─► Blocked
 //! ```
 
-use crate::contract::{ContractHash, MissionContract};
+use crate::contract::ContractHash;
+use crate::evidence::{BlockReason, FailReason, LapseReason, StopReason, VerifyFailReason};
+use crate::journal::{ContractRef, RestRef};
 use crate::lane::LaneRole;
 use serde::{Deserialize, Serialize};
 
@@ -115,12 +117,14 @@ impl MissionState {
 
 /// What moves a mission. Every trigger is journaled before it takes
 /// effect, and replay feeds the same triggers through [`transition`].
+/// P0: a trigger carries references and closed codes only.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "trigger", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Trigger {
-    /// The contract changed; any consent is void.
+    /// The contract changed (by reference; the contract is in the private
+    /// store); any consent is void.
     Revise {
-        contract: MissionContract,
+        contract: ContractRef,
     },
     Submit {
         hash: ContractHash,
@@ -136,23 +140,24 @@ pub enum Trigger {
     PhaseDone,
     VerifyPass,
     VerifyFail {
-        reason: String,
+        reason: VerifyFailReason,
     },
     Block {
-        reason: String,
+        reason: BlockReason,
     },
     Fail {
-        reason: String,
+        reason: FailReason,
     },
     Stop {
-        reason: String,
+        reason: StopReason,
     },
     /// M2a: effect number `effect` waits for the Owner's approval. What the
     /// phase had still to do when it paused: the rest of the asking lane's
-    /// effects (as data) and the lanes still to run.
+    /// effects (P0: by reference, the requests in the private store) and
+    /// the lanes still to run.
     AwaitApproval {
         effect: u64,
-        rest: Vec<serde_json::Value>,
+        rest: RestRef,
         roles_left: Vec<LaneRole>,
     },
     /// The Owner approved the waited effect and it ran at the broker: the
@@ -169,7 +174,7 @@ pub enum Trigger {
     /// revoked or failed, or Mother's own budget ran out.
     ApprovalLapsed {
         effect: u64,
-        reason: String,
+        reason: LapseReason,
     },
 }
 

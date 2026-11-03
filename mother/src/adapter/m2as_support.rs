@@ -108,14 +108,14 @@ impl JournalStore for Disk {
             if let Some(measure) = measure {
                 measure();
             }
-            return Err(JournalError::Store("injected append failure".into()));
+            return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
         }
         self.inner.append(line)
     }
 
     fn poison(&mut self) -> Result<(), JournalError> {
         if self.state.lock().unwrap().poison_fails {
-            return Err(JournalError::Store("injected poison failure".into()));
+            return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
         }
         self.inner.poison()
     }
@@ -166,6 +166,7 @@ pub(crate) fn rig(control: &Arc<GovernedControl>, store: Disk) -> Result<Rig, Co
         port.clone(),
         Lanes::new(lanes).unwrap(),
         Arc::new(SystemClock::default()),
+        crate::oracles::test_private(),
     )?;
     Ok(Rig {
         port,

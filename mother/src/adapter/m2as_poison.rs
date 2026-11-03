@@ -95,7 +95,7 @@ fn a_panic_inside_the_fence_leaves_the_port_refusing(
             let refusal = port
                 .perform(mission, &get(&format!("{origin}/poison-after")))
                 .expect_err("a perform after the fence");
-            assert_eq!(refusal.class, "port_fenced");
+            assert_eq!(refusal.class, crate::evidence::BrokerClass::PortFenced);
         });
     }
     calm("settled", &|| assert!(!port.settled(&held)));
@@ -104,7 +104,10 @@ fn a_panic_inside_the_fence_leaves_the_port_refusing(
         assert_eq!(port.run_of(MissionId(9_402)), None);
     });
     calm("withdraw", &|| {
-        assert_eq!(port.withdraw(waiting).unwrap_err().class, "port_fenced")
+        assert_eq!(
+            port.withdraw(waiting).unwrap_err().class,
+            crate::evidence::BrokerClass::PortFenced
+        )
     });
     calm("pending", &|| {
         let _ = port.pending(waiting);

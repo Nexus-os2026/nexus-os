@@ -337,6 +337,7 @@ impl<'a> Seq<'a> {
             Arc::new(RecordingPort::default()),
             Lanes::new(keyed_lanes()).unwrap(),
             Arc::new(SystemClock::default()),
+            crate::oracles::test_private(),
         )
         .map_err(|e| format!("(e) the journal does not reopen now: {e:?}"))?;
         self.validate(&view, clean, "shadow reopen")

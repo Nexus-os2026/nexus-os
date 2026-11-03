@@ -130,7 +130,9 @@ fn m2a_a_yes_the_broker_cannot_record_gives_no_consent() {
     w.port.evidence.fail_from_now();
     assert_eq!(
         consent(&w.mother, id, &Yes),
-        Err(CoordinatorError::Broker("evidence_unavailable".into()))
+        Err(CoordinatorError::Broker(
+            crate::evidence::BrokerClass::EvidenceUnavailable
+        ))
     );
     // Not a denial: the mission still awaits a consent the broker records.
     assert_eq!(w.mother.state(id), Some(MissionState::AwaitingConsent));
@@ -222,7 +224,9 @@ fn m2a_a_broker_refusal_is_not_a_consent() {
     assert_eq!(
         w.mother
             .take_answer(id, generation, Err(AuthorityError::EmergencyStopped)),
-        Err(CoordinatorError::Broker("emergency_stopped".into()))
+        Err(CoordinatorError::Broker(
+            crate::evidence::BrokerClass::EmergencyStopped
+        ))
     );
     assert_eq!(w.mother.state(id), Some(MissionState::AwaitingConsent));
     assert_eq!(w.mother.consented_hash(id), None);

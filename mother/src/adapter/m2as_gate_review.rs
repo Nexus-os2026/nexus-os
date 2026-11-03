@@ -78,7 +78,7 @@ fn a_poisoned_gate_still_refuses_and_fences(control: &Arc<GovernedControl>, orig
         )
     }));
     assert!(
-        matches!(&perform, Ok(Err(refusal)) if refusal.class == "port_fenced"),
+        matches!(&perform, Ok(Err(refusal)) if refusal.class == crate::evidence::BrokerClass::PortFenced),
         "a poisoned gate: the perform panicked or was not refused"
     );
     assert!(
@@ -94,6 +94,7 @@ fn every_handed_request_counts(control: &Arc<GovernedControl>, origin: &str) {
         port.clone(),
         Lanes::new(keyed_lanes()).unwrap(),
         Arc::new(SystemClock::default()),
+        crate::oracles::test_private(),
     )
     .unwrap();
     let waiting = |path: &str| {

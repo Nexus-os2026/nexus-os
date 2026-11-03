@@ -46,18 +46,37 @@
 //! | A fence of the port outside a break (the public port fence; in PR-B also poison recovery, which halts the door outside the lock), after the broker's post-record check and before the take | the take may journal `Resumed`: the Owner's recorded yes exists, and the fenced port (in PR-B, the halted door) refuses every effect of the mission |
 //! | An emergency stop after the broker's post-record check | the take may journal `Resumed`; every effect of the mission is then refused by the broker. Resuming a held mission permits no effect by itself |
 //! | Anything after the take | acts on a resumed mission, as on any other |
+//!
+//! P0 (privacy closure): the contract and a paused phase's rest are put in
+//! the private store (with no lock held) before the entry naming them is
+//! journaled; the journal keeps references and closed codes only. Replay
+//! builds every mission from its references alone; recovery then loads the
+//! content of each unfinished mission and verifies it (content id, size,
+//! parse, contract hash). Content that does not verify stops its mission:
+//! its journaled requests are withdrawn first, then the Stop
+//! (`private_content_unavailable`) is journaled. A terminal mission's
+//! contract is loaded only when asked for. Every error is a closed code;
+//! the detail behind one (an unanswered question's id, a lane's reason, a
+//! broker's text) is the Owner's [`WorkingDetail`], in memory only.
 
 use crate::consent::{Consent, MissionSummary};
-use crate::contract::{sha256, ContractError, ContractHash, EffectKind, MissionContract};
+use crate::contract::{sha256, Budget, ContractError, ContractHash, EffectKind, MissionContract};
 use crate::effect::{
     ApprovalStatus, EffectOutcome, EffectPort, EffectRequest, Owed, PendingAction,
 };
+use crate::evidence::{
+    check, lane_identity_digest, BlockReason, BrokerClass, ConsentRefusedReason, FailReason,
+    HeldReason, LapseReason, MotherRefusal, SettledOutcome, StopReason, VerifyFailReason,
+    WorkingDetail,
+};
 use crate::journal::{
-    verify, Entry, Event, JournalError, JournalStore, MissionId, GENESIS, SESSION,
+    verify, ContractRef, Entry, Event, JournalError, JournalStore, MissionId, ReplayViolation,
+    RestRef, StoreFailure, GENESIS, SESSION,
 };
 use crate::lane::{
     input_hash, output_hash, InvocationId, Lane, LaneIdentity, LaneInput, LaneRole, Verdict,
 };
+use crate::private::{ContentKind, PrivateError, PrivateStore};
 use crate::state::{transition, IllegalTransition, MissionState, Trigger};
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
@@ -65,17 +84,19 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::clock::Clock;
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 /// The most missions one coordinator keeps.
 pub const MAX_MISSIONS: usize = 1024;
 /// The most effects one lane may ask for in one call.
 pub const MAX_EFFECTS_PER_CALL: usize = 16;
+/// P0: the most missions whose working detail the coordinator keeps (the
+/// oldest is dropped first).
+pub const MAX_DETAILS: usize = 64;
 
 const REQUEST_DOMAIN: &[u8] = b"nexus-mother-effect-request-v1\n";
-/// Why a mission is held after a session that did not close cleanly.
-const UNCLEAN_SHUTDOWN: &str = "unclean_shutdown";
 
 /// One lane per role.
 pub struct Lanes {
@@ -89,17 +110,11 @@ impl Lanes {
         for lane in lanes {
             let role = lane.identity().role;
             if by_role.insert(role, lane).is_some() {
-                return Err(CoordinatorError::Lanes(format!(
-                    "two lanes for {}",
-                    role.as_str()
-                )));
+                return Err(CoordinatorError::Lanes(LaneConfig::Duplicate(role)));
             }
         }
         if let Some(missing) = LaneRole::ALL.iter().find(|r| !by_role.contains_key(r)) {
-            return Err(CoordinatorError::Lanes(format!(
-                "no lane for {}",
-                missing.as_str()
-            )));
+            return Err(CoordinatorError::Lanes(LaneConfig::Missing(*missing)));
         }
         Ok(Self { by_role })
     }
@@ -109,7 +124,15 @@ impl Lanes {
     }
 }
 
-/// Why the coordinator refused.
+/// Why the lanes are not exactly one per role.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaneConfig {
+    Duplicate(LaneRole),
+    Missing(LaneRole),
+}
+
+/// Why the coordinator refused: closed codes only (P0). The detail, where
+/// there is any, is the Owner's [`Coordinator::working_detail`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoordinatorError {
     UnknownMission,
@@ -117,7 +140,7 @@ pub enum CoordinatorError {
     Journal(JournalError),
     Illegal(IllegalTransition),
     /// The lanes are not exactly one per role.
-    Lanes(String),
+    Lanes(LaneConfig),
     Capacity,
     /// Work was asked of a mission without a consent covering its contract.
     NoConsent,
@@ -126,9 +149,12 @@ pub enum CoordinatorError {
     /// The broker's approval was for another contract hash or request.
     ConsentMismatch,
     /// The broker refused to ask, or to record the answer: its class.
-    Broker(String),
+    Broker(BrokerClass),
     /// The port could not withdraw a mission's request: its class.
-    Withdrawal(String),
+    Withdrawal(BrokerClass),
+    /// P0: the private store could not keep or give back a mission's
+    /// content.
+    Private(PrivateError),
     Denied,
     Stopped,
     /// Another call is already working on this mission.
@@ -145,8 +171,9 @@ pub enum CoordinatorError {
     Closed,
 }
 
-/// One lane call, as reported.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One lane call, as reported. Its `Debug` shows no lane text or reason
+/// (P0): only the role, the verdict's kind, the sizes and the hashes.
+#[derive(Clone, PartialEq, Eq)]
 pub struct LaneReport {
     pub invocation: InvocationId,
     pub identity: LaneIdentity,
@@ -164,8 +191,9 @@ pub struct EffectReport {
     pub outcome: String,
 }
 
-/// What one [`Coordinator::advance`] did.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What one [`Coordinator::advance`] did. Its `Debug` shows no lane text,
+/// lane reason or explanation (P0): they are for the Owner's display.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Advance {
     pub from: MissionState,
     pub to: MissionState,
@@ -173,12 +201,55 @@ pub struct Advance {
     pub effects: Vec<EffectReport>,
     /// Set when the mission reaches Done: what Mother tells the Owner.
     pub explanation: Option<String>,
-    /// Set when the mission ends Blocked or Failed.
+    /// Set when the mission ends Blocked or Failed: a closed code.
     pub reason: Option<String>,
 }
 
+fn verdict_kind(verdict: &Verdict) -> &'static str {
+    match verdict {
+        Verdict::Continue => "continue",
+        Verdict::Pass => "pass",
+        Verdict::Fail { .. } => "fail",
+        Verdict::Halt { .. } => "halt",
+    }
+}
+
+impl fmt::Debug for LaneReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LaneReport")
+            .field("invocation", &self.invocation)
+            .field("role", &self.identity.role)
+            .field("text_bytes", &self.text.len())
+            .field("verdict", &verdict_kind(&self.verdict))
+            .field("input_hash", &self.input_hash)
+            .field("output_hash", &self.output_hash)
+            .finish()
+    }
+}
+
+impl fmt::Debug for Advance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Advance")
+            .field("from", &self.from)
+            .field("to", &self.to)
+            .field("lanes", &self.lanes)
+            .field("effects", &self.effects)
+            .field(
+                "explanation_bytes",
+                &self.explanation.as_ref().map(String::len),
+            )
+            .field("reason", &self.reason)
+            .finish()
+    }
+}
+
 struct Mission {
-    contract: MissionContract,
+    /// The journal's reference to the contract (always known).
+    contract_ref: ContractRef,
+    /// The contract itself, from the private store: set live, and by
+    /// recovery for an unfinished mission (a terminal one's is loaded only
+    /// when asked for).
+    contract: Option<MissionContract>,
     state: MissionState,
     consent: Option<Consent>,
     /// Bumped by every transition: a reservation holds while it is equal.
@@ -216,7 +287,7 @@ struct Mission {
     open_action: Option<(u64, PendingAction)>,
     /// M2a-S: why the mission is held (an unclean shutdown), until the
     /// Owner resumes or stops it.
-    held: Option<String>,
+    held: Option<HeldReason>,
     /// The hold is in the journal (otherwise it is written before the
     /// session's next record).
     held_journaled: bool,
@@ -232,13 +303,17 @@ struct Mission {
 struct Waiting {
     phase: MissionState,
     effect: u64,
-    rest: Vec<serde_json::Value>,
+    /// The journal's reference to the rest (always known).
+    rest_ref: RestRef,
+    /// The rest itself, from the private store: set live, and by recovery.
+    rest: Option<Vec<EffectRequest>>,
     roles_left: Vec<LaneRole>,
 }
 
 impl Mission {
-    fn new(contract: MissionContract) -> Self {
+    fn new(contract_ref: ContractRef, contract: Option<MissionContract>) -> Self {
         Self {
+            contract_ref,
             contract,
             state: MissionState::Draft,
             consent: None,
@@ -272,7 +347,10 @@ impl Mission {
         let mut dispatched = false;
         match trigger {
             Trigger::Revise { contract } => {
-                self.contract = contract.clone();
+                // The caller sets the new contract itself (live); replay
+                // has only the reference.
+                self.contract_ref = contract.clone();
+                self.contract = None;
                 self.consent = None;
                 self.approved_wall_ms = None;
             }
@@ -281,11 +359,9 @@ impl Mission {
                 self.mono_ref = mono_now;
                 self.spent_at_ref = 0;
             }
-            Trigger::VerifyFail { reason }
-            | Trigger::Block { reason }
-            | Trigger::Fail { reason } => {
-                self.reason = Some(reason.clone());
-            }
+            Trigger::VerifyFail { reason } => self.reason = Some(reason.to_string()),
+            Trigger::Block { reason } => self.reason = Some(reason.to_string()),
+            Trigger::Fail { reason } => self.reason = Some(reason.to_string()),
             Trigger::AwaitApproval {
                 effect,
                 rest,
@@ -294,7 +370,8 @@ impl Mission {
                 self.waiting = Some(Waiting {
                     phase: self.state,
                     effect: *effect,
-                    rest: rest.clone(),
+                    rest_ref: rest.clone(),
+                    rest: None,
                     roles_left: roles_left.clone(),
                 });
             }
@@ -306,7 +383,7 @@ impl Mission {
             }
             Trigger::ApprovalLapsed { reason, .. } => {
                 self.waiting = None;
-                self.reason = Some(reason.clone());
+                self.reason = Some(reason.to_string());
             }
             Trigger::ActionDenied { .. } => {
                 self.waiting = None;
@@ -337,7 +414,19 @@ impl Mission {
     fn consented(&self) -> bool {
         self.consent
             .as_ref()
-            .is_some_and(|consent| consent.covers(&self.contract))
+            .is_some_and(|consent| consent.hash() == self.contract_ref.contract_hash)
+    }
+
+    /// The contract of a live mission (recovery loaded it, or stopped the
+    /// mission).
+    fn contract(&self) -> Result<&MissionContract, CoordinatorError> {
+        self.contract
+            .as_ref()
+            .ok_or(CoordinatorError::Private(PrivateError::Missing))
+    }
+
+    fn budget(&self) -> Option<&Budget> {
+        self.contract.as_ref().map(|c| &c.budget)
     }
 
     /// Time spent since consent: the larger of the wall and monotonic
@@ -352,8 +441,10 @@ impl Mission {
         wall.max(mono)
     }
 
+    /// Without its contract a mission has no budget left (fail closed).
     fn out_of_time(&self, clock: &dyn Clock) -> bool {
-        self.spent_ms(clock) >= self.contract.budget.max_duration_ms
+        self.budget()
+            .is_none_or(|budget| self.spent_ms(clock) >= budget.max_duration_ms)
     }
 }
 
@@ -386,6 +477,10 @@ struct Inner {
     next_mission: u64,
     /// Numbers the consent requests of this coordinator.
     next_request: u64,
+    /// P0: the Owner's working detail, the last per mission (at most
+    /// [`MAX_DETAILS`], the oldest dropped first), cleared by the mission's
+    /// next call. Memory only.
+    details: VecDeque<(MissionId, WorkingDetail)>,
 }
 
 impl Inner {
@@ -403,11 +498,11 @@ impl Inner {
             self.write(SESSION, Event::SessionOpened)?;
             self.session_journaled = true;
         }
-        let holds: Vec<(MissionId, String)> = self
+        let holds: Vec<(MissionId, HeldReason)> = self
             .missions
             .iter()
             .filter(|(_, m)| !m.held_journaled)
-            .filter_map(|(id, m)| m.held.clone().map(|reason| (*id, reason)))
+            .filter_map(|(id, m)| m.held.map(|reason| (*id, reason)))
             .collect();
         for (id, reason) in holds {
             self.write(id, Event::Held { reason })?;
@@ -435,10 +530,24 @@ impl Inner {
         }
         if self.broken {
             return Err(CoordinatorError::Journal(JournalError::Store(
-                "the journal failed earlier".into(),
+                StoreFailure::FailedEarlier,
             )));
         }
         Ok(())
+    }
+
+    /// P0: the mission's next call clears its working detail.
+    fn clear_detail(&mut self, id: MissionId) {
+        self.details.retain(|(mission, _)| *mission != id);
+    }
+
+    /// P0: keep `detail` as the mission's working detail.
+    fn set_detail(&mut self, id: MissionId, detail: WorkingDetail) {
+        self.clear_detail(id);
+        if self.details.len() >= MAX_DETAILS {
+            self.details.pop_front();
+        }
+        self.details.push_back((id, detail));
     }
 
     fn write(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
@@ -461,6 +570,14 @@ impl Inner {
         poison: bool,
     ) -> Result<u64, CoordinatorError> {
         self.usable()?;
+        // P0: only evidence is journaled. A refused event writes nothing
+        // (the journal is intact): the caller fails closed.
+        if let Err(code) = check(&event) {
+            return Err(CoordinatorError::Journal(JournalError::Inconsistent {
+                line: self.next_seq as usize + 1,
+                code,
+            }));
+        }
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
         if let Err(e) = self.store.append(&entry.to_line()) {
             // Fail closed, durably: a journal that may have lost a
@@ -474,12 +591,11 @@ impl Inner {
             self.owed.extend(owed);
             #[cfg(test)]
             self.fence_to_marker.fire();
-            if poison {
-                if let Err(p) = self.store.poison() {
-                    return Err(CoordinatorError::Journal(JournalError::Store(format!(
-                        "{e:?}; poisoning failed too ({p:?}): the next open holds every unfinished mission"
-                    ))));
-                }
+            if poison && self.store.poison().is_err() {
+                // The next open holds every unfinished mission.
+                return Err(CoordinatorError::Journal(JournalError::Store(
+                    StoreFailure::PoisonFailed,
+                )));
             }
             return Err(CoordinatorError::Journal(e));
         }
@@ -541,21 +657,21 @@ fn relative_request(path: &str) -> bool {
 }
 
 /// Mother's own refusal of a lane's effect, before any port call.
-fn mother_refuses(contract: &MissionContract, effect: &EffectRequest) -> Option<String> {
+fn mother_refuses(contract: &MissionContract, effect: &EffectRequest) -> Option<MotherRefusal> {
     let kind = effect.kind();
     if contract.forbidden_effects.contains(&kind) {
-        return Some(format!("forbidden_effect:{}", kind.as_str()));
+        return Some(MotherRefusal::ForbiddenEffect(kind));
     }
     match effect {
         EffectRequest::Spend { .. } if contract.budget.max_money_minor == 0 => {
-            Some("budget_money_zero".into())
+            Some(MotherRefusal::BudgetMoneyZero)
         }
-        EffectRequest::Spend { .. } => Some("spend_not_supported".into()),
+        EffectRequest::Spend { .. } => Some(MotherRefusal::SpendNotSupported),
         EffectRequest::File { .. } if contract.requested_folder.is_none() => {
-            Some("no_requested_folder".into())
+            Some(MotherRefusal::NoRequestedFolder)
         }
         EffectRequest::File { relative_path, .. } if !relative_request(relative_path) => {
-            Some("file_request_not_relative".into())
+            Some(MotherRefusal::FileRequestNotRelative)
         }
         _ => None,
     }
@@ -581,11 +697,19 @@ fn request_hash(effect: &EffectRequest) -> String {
     hex::encode(sha256(REQUEST_DOMAIN, &[&json]))
 }
 
+/// The canonical bytes of a contract (those its hash covers).
+fn contract_bytes(contract: &MissionContract) -> Vec<u8> {
+    serde_json::to_vec(contract).expect("a contract serialises")
+}
+
 /// The coordinator.
 pub struct Coordinator<P: EffectPort> {
     port: Arc<P>,
     lanes: Lanes,
     clock: Arc<dyn Clock>,
+    /// P0: where the contract and paused rests are kept. Called with no
+    /// coordinator lock held.
+    private: Arc<dyn PrivateStore>,
     inner: Mutex<Inner>,
     /// M2c PR-B (tests): the call points of the crash and schedule oracles.
     #[cfg(test)]
@@ -608,9 +732,9 @@ enum Then<T> {
     /// Go on with the value.
     Go(T),
     /// End the mission (Blocked) for this reason, and report its state.
-    End(&'static str),
+    End(BlockReason),
     /// End the mission for this reason, in memory if need be, then fail.
-    EndFail(&'static str, CoordinatorError),
+    EndFail(BlockReason, CoordinatorError),
 }
 
 /// What `advance`'s first step under the lock decided.
@@ -660,11 +784,15 @@ impl<P: EffectPort> Coordinator<P> {
     /// effect's outcome was not recorded is blocked: it may have happened.
     /// M2a-S: if the journal's last session did not close cleanly, every
     /// unfinished mission is held until the Owner resumes or stops it.
+    ///
+    /// P0: `private` keeps the contracts and paused rests the journal names.
+    /// Every entry is checked as evidence before it is replayed.
     pub fn open(
         store: impl JournalStore + 'static,
         port: Arc<P>,
         lanes: Lanes,
         clock: Arc<dyn Clock>,
+        private: impl PrivateStore + 'static,
     ) -> Result<Self, CoordinatorError>
     where
         P: 'static,
@@ -675,12 +803,14 @@ impl<P: EffectPort> Coordinator<P> {
         let mut next_mission = 1;
         let mut session = Session::Never;
         for (index, entry) in entries.iter().enumerate() {
-            replay(&mut missions, &mut next_mission, &mut session, entry).map_err(|reason| {
-                CoordinatorError::Journal(JournalError::Inconsistent {
-                    line: index + 1,
-                    reason,
-                })
-            })?;
+            check(&entry.event)
+                .and_then(|()| replay(&mut missions, &mut next_mission, &mut session, entry))
+                .map_err(|code| {
+                    CoordinatorError::Journal(JournalError::Inconsistent {
+                        line: index + 1,
+                        code,
+                    })
+                })?;
         }
         // Clean only on positive evidence: the last session's orderly close
         // (an empty journal holds nothing). A journal from before sessions
@@ -707,6 +837,7 @@ impl<P: EffectPort> Coordinator<P> {
             port,
             lanes,
             clock,
+            private: Arc::new(private),
             inner: Mutex::new(Inner {
                 store: Box::new(store),
                 head: entries
@@ -723,6 +854,7 @@ impl<P: EffectPort> Coordinator<P> {
                 missions,
                 next_mission,
                 next_request: 1,
+                details: VecDeque::new(),
             }),
             #[cfg(test)]
             hooks,
@@ -782,9 +914,85 @@ impl<P: EffectPort> Coordinator<P> {
         }
     }
 
-    /// Draft a mission. Nothing reaches the port.
+    /// P0: keep a contract in the private store (no lock held): its
+    /// reference.
+    fn put_contract(&self, contract: &MissionContract) -> Result<ContractRef, CoordinatorError> {
+        let bytes = contract_bytes(contract);
+        let content = self
+            .private
+            .put(ContentKind::Contract, &bytes)
+            .map_err(CoordinatorError::Private)?;
+        Ok(ContractRef {
+            contract_hash: contract.hash(),
+            content,
+            bytes: bytes.len() as u64,
+        })
+    }
+
+    /// P0: a contract from the private store, only if it verifies against
+    /// its reference: the content id (the store checks it), the size, the
+    /// parse, the contract hash and the contract's bounds.
+    fn fetch_contract(&self, reference: &ContractRef) -> Result<MissionContract, PrivateError> {
+        let bytes = self
+            .private
+            .get(ContentKind::Contract, &reference.content)?;
+        if bytes.len() as u64 != reference.bytes {
+            return Err(PrivateError::Mismatch);
+        }
+        let contract: MissionContract =
+            serde_json::from_slice(&bytes).map_err(|_| PrivateError::Mismatch)?;
+        if contract.hash() != reference.contract_hash || contract.validate().is_err() {
+            return Err(PrivateError::Mismatch);
+        }
+        Ok(contract)
+    }
+
+    /// P0: a paused rest from the private store, only if it verifies
+    /// against its reference (content id, size, parse, count).
+    fn fetch_rest(&self, reference: &RestRef) -> Result<Vec<EffectRequest>, PrivateError> {
+        let bytes = self
+            .private
+            .get(ContentKind::PausedPhase, &reference.content)?;
+        if bytes.len() as u64 != reference.bytes {
+            return Err(PrivateError::Mismatch);
+        }
+        let rest: Vec<EffectRequest> =
+            serde_json::from_slice(&bytes).map_err(|_| PrivateError::Mismatch)?;
+        if rest.len() as u64 != reference.count {
+            return Err(PrivateError::Mismatch);
+        }
+        Ok(rest)
+    }
+
+    /// A mission's contract: in memory, or (a terminal mission after a
+    /// reopen) fetched and verified now.
+    fn contract_of(&self, id: MissionId) -> Result<MissionContract, CoordinatorError> {
+        let (loaded, reference) = self.peek(|inner| {
+            inner
+                .missions
+                .get(&id)
+                .map(|m| (m.contract.clone(), m.contract_ref.clone()))
+                .ok_or(CoordinatorError::UnknownMission)
+        })?;
+        match loaded {
+            Some(contract) => Ok(contract),
+            None => self
+                .fetch_contract(&reference)
+                .map_err(CoordinatorError::Private),
+        }
+    }
+
+    /// Draft a mission. Nothing reaches the port. P0: the contract is put
+    /// in the private store first; the journal names it.
     pub fn draft(&self, contract: MissionContract) -> Result<MissionId, CoordinatorError> {
         contract.validate().map_err(CoordinatorError::Contract)?;
+        self.with_lock(|inner| {
+            if inner.missions.len() >= MAX_MISSIONS {
+                return Err(CoordinatorError::Capacity);
+            }
+            inner.usable()
+        })?;
+        let reference = self.put_contract(&contract)?;
         self.with_lock(|inner| {
             if inner.missions.len() >= MAX_MISSIONS {
                 return Err(CoordinatorError::Capacity);
@@ -793,52 +1001,78 @@ impl<P: EffectPort> Coordinator<P> {
             inner.append(
                 id,
                 Event::Drafted {
-                    contract: contract.clone(),
+                    contract: reference.clone(),
                 },
             )?;
             inner.next_mission += 1;
-            inner.missions.insert(id, Mission::new(contract));
+            inner
+                .missions
+                .insert(id, Mission::new(reference, Some(contract)));
             Ok(id)
         })
     }
 
     /// Change a mission's contract before work starts: it returns to Draft
-    /// and any consent is void.
+    /// and any consent is void. P0: the new contract is put in the private
+    /// store first; the journal names it.
     pub fn revise(
         &self,
         id: MissionId,
         contract: MissionContract,
     ) -> Result<MissionState, CoordinatorError> {
-        self.with_lock(|inner| {
+        let may_revise = |inner: &mut Inner| {
             let mission = inner.mission(id)?;
             mission.not_held()?;
             let state = mission.state;
-            transition(
+            if !matches!(
                 state,
-                &Trigger::Revise {
-                    contract: contract.clone(),
-                },
-            )
-            .map_err(|e| refusal(state, e))?;
-            contract.validate().map_err(CoordinatorError::Contract)?;
+                MissionState::Draft | MissionState::AwaitingConsent | MissionState::Approved
+            ) {
+                return Err(illegal(state, "revise"));
+            }
+            Ok(())
+        };
+        self.with_lock(|inner| {
+            inner.clear_detail(id);
+            may_revise(inner)
+        })?;
+        contract.validate().map_err(CoordinatorError::Contract)?;
+        let reference = self.put_contract(&contract)?;
+        self.with_lock(|inner| {
+            may_revise(inner)?;
             let mono = self.clock.monotonic_ms();
-            inner.fire(id, Trigger::Revise { contract }, mono)
+            let state = inner.fire(
+                id,
+                Trigger::Revise {
+                    contract: reference,
+                },
+                mono,
+            )?;
+            inner.mission(id)?.contract = Some(contract);
+            Ok(state)
         })
     }
 
-    /// Put a complete contract (every question answered) to the Owner.
+    /// Put a complete contract (every question answered) to the Owner. P0:
+    /// an unanswered question is named by its index; its id is the Owner's
+    /// working detail.
     pub fn submit(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         self.with_lock(|inner| {
+            inner.clear_detail(id);
             let mission = inner.mission(id)?;
             mission.not_held()?;
             if mission.state != MissionState::Draft {
                 return Err(illegal(mission.state, "submit"));
             }
-            mission
-                .contract
-                .validate_for_consent()
-                .map_err(CoordinatorError::Contract)?;
-            let hash = mission.contract.hash();
+            let contract = mission.contract()?;
+            if let Err(e) = contract.validate_for_consent() {
+                if let ContractError::UnansweredQuestion { index } = e {
+                    let question = contract.questions[index].id.clone();
+                    inner.set_detail(id, WorkingDetail::new("unanswered question", &question));
+                }
+                return Err(CoordinatorError::Contract(e));
+            }
+            let hash = mission.contract_ref.contract_hash;
             let mono = self.clock.monotonic_ms();
             inner.fire(id, Trigger::Submit { hash }, mono)
         })
@@ -846,9 +1080,17 @@ impl<P: EffectPort> Coordinator<P> {
 
     /// What the Owner would be shown.
     pub fn confirmation(&self, id: MissionId) -> Result<MissionSummary, CoordinatorError> {
+        let contract = self.contract_of(id)?;
+        Ok(MissionSummary::of(id, &contract))
+    }
+
+    /// P0: the Owner's working detail for `id` (the last call's: an
+    /// unanswered question's id, a lane's reason, a broker's refusal), if
+    /// any. Taken once; memory only.
+    pub fn working_detail(&self, id: MissionId) -> Option<WorkingDetail> {
         self.with_lock(|inner| {
-            let mission = inner.mission(id)?;
-            Ok(MissionSummary::of(id, &mission.contract))
+            let at = inner.details.iter().position(|(m, _)| *m == id)?;
+            inner.details.remove(at).map(|(_, detail)| detail)
         })
     }
 
@@ -874,6 +1116,7 @@ impl<P: EffectPort> Coordinator<P> {
         self.with_lock(|inner| {
             // A broken coordinator asks the Owner nothing.
             inner.usable()?;
+            inner.clear_detail(id);
             let (seq, number) = (inner.next_seq, inner.next_request);
             inner.next_request += 1;
             let mission = inner.mission(id)?;
@@ -881,7 +1124,7 @@ impl<P: EffectPort> Coordinator<P> {
             if mission.state != MissionState::AwaitingConsent {
                 return Err(illegal(mission.state, "consent"));
             }
-            let request = MissionSummary::of(id, &mission.contract)
+            let request = MissionSummary::of(id, mission.contract()?)
                 .confirmation(format!("{id}/{seq}/{number}"));
             mission.asking = Some(request.clone());
             Ok((request, mission.generation))
@@ -899,7 +1142,7 @@ impl<P: EffectPort> Coordinator<P> {
             // M2a-S: an answer that comes after the break is discarded.
             inner.kept(id)?;
             let mission = inner.mission(id)?;
-            let hash = mission.contract.hash();
+            let hash = mission.contract_ref.contract_hash;
             let asked = match &mission.asking {
                 Some(asked)
                     if mission.generation == generation
@@ -913,7 +1156,7 @@ impl<P: EffectPort> Coordinator<P> {
                     inner.append(
                         id,
                         Event::ConsentRefused {
-                            reason: "the mission changed while the Owner was asked".into(),
+                            reason: ConsentRefusedReason::MissionChanged,
                         },
                     )?;
                     return Err(if stopped {
@@ -930,7 +1173,7 @@ impl<P: EffectPort> Coordinator<P> {
                         inner.append(
                             id,
                             Event::ConsentRefused {
-                                reason: "the broker's answer was for another request".into(),
+                                reason: ConsentRefusedReason::AnotherRequest,
                             },
                         )?;
                         return Err(CoordinatorError::ConsentMismatch);
@@ -952,13 +1195,15 @@ impl<P: EffectPort> Coordinator<P> {
                     Err(CoordinatorError::Denied)
                 }
                 Err(refused) => {
+                    let class = BrokerClass::of(refused.class());
+                    inner.set_detail(id, WorkingDetail::new("broker", &refused.to_string()));
                     inner.append(
                         id,
                         Event::ConsentRefused {
-                            reason: format!("broker_refused:{}", refused.class()),
+                            reason: ConsentRefusedReason::BrokerRefused(class),
                         },
                     )?;
-                    Err(CoordinatorError::Broker(refused.class().into()))
+                    Err(CoordinatorError::Broker(class))
                 }
             }
         })
@@ -973,6 +1218,7 @@ impl<P: EffectPort> Coordinator<P> {
         let start = self.with_lock(|inner| -> Result<Start, CoordinatorError> {
             // A broken coordinator starts nothing and asks the broker nothing.
             inner.usable()?;
+            inner.clear_detail(id);
             let mission = inner.mission(id)?;
             mission.not_held()?;
             if mission.busy {
@@ -1009,7 +1255,7 @@ impl<P: EffectPort> Coordinator<P> {
                     return Ok(Start::Done(report));
                 }
                 MissionState::Explaining => {
-                    let explanation = self.explain(id, inner.mission(id)?);
+                    let explanation = self.explain(id, inner.mission(id)?)?;
                     report.to = inner.fire(id, Trigger::PhaseDone, mono)?;
                     report.explanation = Some(explanation);
                     return Ok(Start::Finish(report));
@@ -1022,12 +1268,12 @@ impl<P: EffectPort> Coordinator<P> {
         })?;
         let (mut report, from, roles, generation) = match start {
             Start::Emergency => {
-                self.stop_for(id, "emergency_stop")?;
+                self.stop_for(id, StopReason::EmergencyStop)?;
                 return Err(CoordinatorError::Stopped);
             }
             Start::OutOfTime(mut report) => {
-                report.to = self.end(id, "budget_time")?;
-                report.reason = Some("budget_time".into());
+                report.to = self.end(id, BlockReason::BudgetTime)?;
+                report.reason = Some(BlockReason::BudgetTime.to_string());
                 return Ok(report);
             }
             Start::Done(report) => return Ok(report),
@@ -1099,9 +1345,9 @@ impl<P: EffectPort> Coordinator<P> {
                 return Err(CoordinatorError::Stopped);
             }
             let Some(waiting) = mission.waiting.clone() else {
-                return Ok(Then::End("wait_unknown"));
+                return Ok(Then::End(BlockReason::WaitUnknown));
             };
-            Ok(Then::Go((waiting, mission.contract.clone())))
+            Ok(Then::Go((waiting, mission.contract()?.clone())))
         })?;
         let (waiting, contract) = match self.then(id, step)? {
             Ok(found) => found,
@@ -1111,7 +1357,7 @@ impl<P: EffectPort> Coordinator<P> {
                 return Ok(report);
             }
         };
-        let lapsed = |reason: String| Trigger::ApprovalLapsed {
+        let lapsed = |reason: LapseReason| Trigger::ApprovalLapsed {
             effect: waiting.effect,
             reason,
         };
@@ -1121,8 +1367,11 @@ impl<P: EffectPort> Coordinator<P> {
             ApprovalStatus::Denied => Some(Trigger::ActionDenied {
                 effect: waiting.effect,
             }),
-            ApprovalStatus::Expired => Some(lapsed("approval_expired".into())),
-            ApprovalStatus::Lapsed { class } => Some(lapsed(format!("approval_lapsed:{class}"))),
+            ApprovalStatus::Expired => Some(lapsed(LapseReason::ApprovalExpired)),
+            // A class outside the registry is `unknown`.
+            ApprovalStatus::Lapsed { class } => {
+                Some(lapsed(LapseReason::ApprovalLapsed(BrokerClass::of(&class))))
+            }
         };
         if let Some(trigger) = end {
             report.to = self.end_with(id, trigger)?;
@@ -1146,17 +1395,13 @@ impl<P: EffectPort> Coordinator<P> {
         // The approved action is final at the broker: its closure is
         // journaled before anything more is sent.
         if !self.close_action(id)? {
-            report.to = self.end(id, "approval_not_closed")?;
+            report.to = self.end(id, BlockReason::ApprovalNotClosed)?;
             report.reason = self.reason(id);
             return Ok(report);
         }
-        let rest: Option<Vec<EffectRequest>> = waiting
-            .rest
-            .iter()
-            .map(|value| serde_json::from_value(value.clone()).ok())
-            .collect();
-        let Some(rest) = rest else {
-            report.to = self.end(id, "waited_rest_unreadable")?;
+        // The rest, from the private store (recovery loaded and verified it).
+        let Some(rest) = waiting.rest.clone() else {
+            report.to = self.end(id, BlockReason::WaitedRestUnreadable)?;
             report.reason = self.reason(id);
             return Ok(report);
         };
@@ -1194,7 +1439,7 @@ impl<P: EffectPort> Coordinator<P> {
             let lane = self.lanes.get(*role);
             let identity = lane.identity();
             if self.port.emergency_stopped() {
-                self.stop_for(id, "emergency_stop")?;
+                self.stop_for(id, StopReason::EmergencyStop)?;
                 return Err(CoordinatorError::Stopped);
             }
             // Reserve the call.
@@ -1204,12 +1449,13 @@ impl<P: EffectPort> Coordinator<P> {
                 if mission.generation != generation {
                     return Err(CoordinatorError::Stopped);
                 }
+                let contract = mission.contract()?;
                 let reason = if identity.role != *role {
-                    Some("lane_identity_changed")
-                } else if mission.model_calls >= mission.contract.budget.max_model_calls {
-                    Some("budget_model_calls")
+                    Some(BlockReason::LaneIdentityChanged)
+                } else if mission.model_calls >= contract.budget.max_model_calls {
+                    Some(BlockReason::BudgetModelCalls)
                 } else if mission.out_of_time(&*self.clock) {
-                    Some("budget_time")
+                    Some(BlockReason::BudgetTime)
                 } else {
                     None
                 };
@@ -1219,17 +1465,18 @@ impl<P: EffectPort> Coordinator<P> {
                 let input = LaneInput {
                     invocation: InvocationId { mission: id, seq },
                     role: *role,
-                    contract_hash: mission.contract.hash(),
-                    owner_words: mission.contract.owner_words.clone(),
-                    restatement: mission.contract.restatement.clone(),
-                    pass_criteria: mission.contract.pass_criteria.clone(),
+                    contract_hash: mission.contract_ref.contract_hash,
+                    owner_words: contract.owner_words.clone(),
+                    restatement: contract.restatement.clone(),
+                    pass_criteria: contract.pass_criteria.clone(),
                     prior_outputs: mission.prior_outputs.clone(),
                 };
                 inner.append(
                     id,
                     Event::LaneInvoked {
                         invocation: input.invocation,
-                        identity: identity.clone(),
+                        role: identity.role,
+                        identity_sha256: lane_identity_digest(&identity),
                         input_hash: input_hash(&input),
                     },
                 )?;
@@ -1265,7 +1512,7 @@ impl<P: EffectPort> Coordinator<P> {
                 )?;
                 let mission = inner.mission(id)?;
                 mission.prior_outputs.push(hash.clone());
-                Ok(mission.contract.clone())
+                Ok(mission.contract()?.clone())
             })?;
             report.lanes.push(LaneReport {
                 invocation: input.invocation,
@@ -1276,29 +1523,47 @@ impl<P: EffectPort> Coordinator<P> {
                 output_hash: hash,
             });
 
-            // The verdict.
+            // The verdict: a code; the lane's own reason is the Owner's
+            // working detail (memory only).
             let verdict_end = match (&output.verdict, *role) {
-                (Verdict::Halt { reason }, role) => Some(Trigger::Block {
-                    reason: format!("{}_halt:{reason}", role.as_str()),
-                }),
-                (Verdict::Fail { reason }, LaneRole::Verifier) => Some(Trigger::VerifyFail {
-                    reason: reason.clone(),
-                }),
-                (Verdict::Fail { reason }, _) => Some(Trigger::Fail {
-                    reason: reason.clone(),
-                }),
-                (Verdict::Continue, LaneRole::Verifier) => Some(Trigger::VerifyFail {
-                    reason: "verifier_gave_no_verdict".into(),
-                }),
+                (Verdict::Halt { reason }, role) => Some((
+                    Trigger::Block {
+                        reason: BlockReason::LaneHalt(role),
+                    },
+                    Some(reason),
+                )),
+                (Verdict::Fail { reason }, LaneRole::Verifier) => Some((
+                    Trigger::VerifyFail {
+                        reason: VerifyFailReason::VerifierFailed,
+                    },
+                    Some(reason),
+                )),
+                (Verdict::Fail { reason }, role) => Some((
+                    Trigger::Fail {
+                        reason: FailReason::LaneFail(role),
+                    },
+                    Some(reason),
+                )),
+                (Verdict::Continue, LaneRole::Verifier) => Some((
+                    Trigger::VerifyFail {
+                        reason: VerifyFailReason::VerifierGaveNoVerdict,
+                    },
+                    None,
+                )),
                 _ => None,
             };
-            if let Some(trigger) = verdict_end {
+            if let Some((trigger, reason)) = verdict_end {
+                if let Some(reason) = reason {
+                    let detail =
+                        WorkingDetail::new("lane", role.as_str()).and("lane reason", reason);
+                    self.with_lock(|inner| inner.set_detail(id, detail));
+                }
                 return Ok(Ended::Ended(self.end_with(id, trigger)?));
             }
 
             // Mother's own checks of every effect, before any is sent.
             if output.effects.len() > MAX_EFFECTS_PER_CALL {
-                return Ok(Ended::Ended(self.end(id, "too_many_effects")?));
+                return Ok(Ended::Ended(self.end(id, BlockReason::TooManyEffects)?));
             }
             if let Ended::Ended(state) = self.checked(id, &contract, &output.effects, report)? {
                 return Ok(Ended::Ended(state));
@@ -1328,16 +1593,16 @@ impl<P: EffectPort> Coordinator<P> {
                         id,
                         Event::EffectRefused {
                             kind: effect.kind(),
-                            reason: reason.clone(),
+                            reason,
                         },
                     )
                 })?;
                 report.effects.push(EffectReport {
                     kind: effect.kind(),
                     dispatched: false,
-                    outcome: reason.clone(),
+                    outcome: reason.to_string(),
                 });
-                return Ok(Ended::Ended(self.end(id, &reason)?));
+                return Ok(Ended::Ended(self.end(id, BlockReason::Refused(reason))?));
             }
         }
         Ok(Ended::Through)
@@ -1356,7 +1621,7 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<Ended, CoordinatorError> {
         for (index, effect) in effects.iter().enumerate() {
             if self.port.emergency_stopped() {
-                self.stop_for(id, "emergency_stop")?;
+                self.stop_for(id, StopReason::EmergencyStop)?;
                 return Err(CoordinatorError::Stopped);
             }
             let step = self.with_lock(|inner| {
@@ -1365,7 +1630,7 @@ impl<P: EffectPort> Coordinator<P> {
                     return Err(CoordinatorError::Stopped);
                 }
                 if mission.out_of_time(&*self.clock) {
-                    return Ok(Then::End("budget_time"));
+                    return Ok(Then::End(BlockReason::BudgetTime));
                 }
                 let number = mission.next_effect;
                 inner.append(
@@ -1390,28 +1655,28 @@ impl<P: EffectPort> Coordinator<P> {
             let outcome = self.port.perform(id, effect);
 
             let settled = match &outcome {
-                Ok(EffectOutcome::Done { .. }) => "done".to_string(),
-                Ok(EffectOutcome::AwaitingApproval) => "awaiting_approval".to_string(),
-                Err(refusal) => format!("refused:{}", refusal.class),
+                Ok(EffectOutcome::Done { .. }) => SettledOutcome::Done,
+                Ok(EffectOutcome::AwaitingApproval) => SettledOutcome::AwaitingApproval,
+                Err(refusal) => SettledOutcome::Refused(refusal.class),
             };
             let step = self.with_lock(|inner| {
                 // M2a-S: after the break the outcome is discarded, not
                 // journaled; the mission ends in memory.
                 if let Err(e) = inner.kept(id) {
-                    return Ok(Then::EndFail("journal_failed", e));
+                    return Ok(Then::EndFail(BlockReason::JournalFailed, e));
                 }
                 let journaled = inner.append(
                     id,
                     Event::EffectSettled {
                         effect: number,
-                        outcome: settled.clone(),
+                        outcome: settled,
                     },
                 );
                 if let Err(e) = journaled {
                     // The journal failed: the mission ends in memory (the
                     // journal is poisoned) and the port is cancelled, which
                     // withdraws an action left waiting for approval.
-                    return Ok(Then::EndFail("journal_failed", e));
+                    return Ok(Then::EndFail(BlockReason::JournalFailed, e));
                 }
                 let mission = inner.mission(id)?;
                 mission.unsettled = None;
@@ -1426,7 +1691,10 @@ impl<P: EffectPort> Coordinator<P> {
             report.effects.push(EffectReport {
                 kind: effect.kind(),
                 dispatched: true,
-                outcome: settled.trim_start_matches("refused:").to_string(),
+                outcome: match settled {
+                    SettledOutcome::Refused(class) => class.to_string(),
+                    other => other.to_string(),
+                },
             });
             match outcome {
                 Ok(EffectOutcome::Done { .. }) => {}
@@ -1438,11 +1706,11 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 Err(refusal) => {
                     if self.port.emergency_stopped() {
-                        self.stop_for(id, "emergency_stop")?;
+                        self.stop_for(id, StopReason::EmergencyStop)?;
                         return Err(CoordinatorError::Stopped);
                     }
-                    let reason = format!("broker_refused:{}", refusal.class);
-                    return Ok(Ended::Ended(self.end(id, &reason)?));
+                    let reason = BlockReason::BrokerRefused(refusal.class);
+                    return Ok(Ended::Ended(self.end(id, reason)?));
                 }
             }
         }
@@ -1453,6 +1721,8 @@ impl<P: EffectPort> Coordinator<P> {
     /// keeping what its phase had still to do. If the journal cannot
     /// record the wait, the mission ends (in memory, the journal poisoned)
     /// and the port is cancelled, which withdraws the pending action.
+    /// P0: the rest is put in the private store first (no lock held); the
+    /// journal names it. If it cannot be kept, the mission ends the same way.
     fn wait(
         &self,
         id: MissionId,
@@ -1461,12 +1731,21 @@ impl<P: EffectPort> Coordinator<P> {
         rest: &[EffectRequest],
         roles_left: &[LaneRole],
     ) -> Result<MissionState, CoordinatorError> {
+        let bytes = serde_json::to_vec(rest).expect("effect requests serialise");
+        let content = match self.private.put(ContentKind::PausedPhase, &bytes) {
+            Ok(content) => content,
+            Err(e) => {
+                let _ = self.end(id, BlockReason::AwaitingOwnerApproval);
+                return Err(CoordinatorError::Private(e));
+            }
+        };
         let trigger = Trigger::AwaitApproval {
             effect,
-            rest: rest
-                .iter()
-                .map(|e| serde_json::to_value(e).expect("an effect request serialises"))
-                .collect(),
+            rest: RestRef {
+                content,
+                count: rest.len() as u64,
+                bytes: bytes.len() as u64,
+            },
             roles_left: roles_left.to_vec(),
         };
         // The action's identity first, so that a rebuilt port can still
@@ -1474,7 +1753,7 @@ impl<P: EffectPort> Coordinator<P> {
         if let Some(pending) = self.port.pending(id) {
             let step = self.with_lock(|inner| {
                 if let Err(e) = inner.kept(id) {
-                    return Ok(Then::EndFail("awaiting_owner_approval", e));
+                    return Ok(Then::EndFail(BlockReason::AwaitingOwnerApproval, e));
                 }
                 if inner.mission(id)?.generation != generation {
                     return Err(CoordinatorError::Stopped);
@@ -1487,7 +1766,7 @@ impl<P: EffectPort> Coordinator<P> {
                     },
                 );
                 if let Err(e) = journaled {
-                    return Ok(Then::EndFail("awaiting_owner_approval", e));
+                    return Ok(Then::EndFail(BlockReason::AwaitingOwnerApproval, e));
                 }
                 inner.mission(id)?.open_action = Some((effect, pending));
                 Ok(Then::Go(()))
@@ -1501,10 +1780,14 @@ impl<P: EffectPort> Coordinator<P> {
             if inner.mission(id)?.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
-            inner.fire(id, trigger, mono)
+            let state = inner.fire(id, trigger, mono)?;
+            if let Some(waiting) = inner.mission(id)?.waiting.as_mut() {
+                waiting.rest = Some(rest.to_vec());
+            }
+            Ok(state)
         });
         if let Err(CoordinatorError::Journal(e)) = waited {
-            let _ = self.end(id, "awaiting_owner_approval");
+            let _ = self.end(id, BlockReason::AwaitingOwnerApproval);
             return Err(CoordinatorError::Journal(e));
         }
         waited
@@ -1513,17 +1796,15 @@ impl<P: EffectPort> Coordinator<P> {
     /// End a mission for `reason` (Blocked) and cancel what it opened at
     /// the port; a waiting mission's wait lapses (which withdraws the
     /// pending action).
-    fn end(&self, id: MissionId, reason: &str) -> Result<MissionState, CoordinatorError> {
+    fn end(&self, id: MissionId, reason: BlockReason) -> Result<MissionState, CoordinatorError> {
         let trigger = self.with_lock(|inner| {
             let mission = inner.mission(id)?;
             Ok::<_, CoordinatorError>(match (&mission.waiting, mission.state) {
                 (Some(waiting), MissionState::AwaitingApproval) => Trigger::ApprovalLapsed {
                     effect: waiting.effect,
-                    reason: reason.into(),
+                    reason: LapseReason::Ended(reason),
                 },
-                _ => Trigger::Block {
-                    reason: reason.into(),
-                },
+                _ => Trigger::Block { reason },
             })
         })?;
         self.end_with(id, trigger)
@@ -1664,15 +1945,89 @@ impl<P: EffectPort> Coordinator<P> {
             self.with_lock(|inner| inner.open_session_at_once())?;
         }
         self.recover_and_settle()?;
+        self.load_content()?;
         if !clean {
             self.hold_unfinished();
         }
         if self.peek(|inner| inner.broken) {
             return Err(CoordinatorError::Journal(JournalError::Store(
-                "the journal failed during recovery".into(),
+                StoreFailure::FailedDuringRecovery,
             )));
         }
         Ok(())
+    }
+
+    /// P0: the content of every mission still unfinished (held ones too):
+    /// its contract (verified: content id, size, parse, hash, bounds, and
+    /// every question answered once submitted) and a waiting mission's rest
+    /// (content id, size, parse, count). Content that does not verify stops
+    /// its mission: its journaled requests are withdrawn first, then the
+    /// Stop is journaled, then its open action is closed if the port
+    /// confirms it. Nothing in the content restores a consent, an approval
+    /// or a resume: those were replayed from the journal.
+    fn load_content(&self) -> Result<(), CoordinatorError> {
+        type Wanted = (MissionId, MissionState, ContractRef, Option<RestRef>);
+        let wanted: Vec<Wanted> = self.peek(|inner| {
+            inner
+                .missions
+                .iter()
+                .filter(|(_, m)| !m.state.is_terminal())
+                .map(|(id, m)| {
+                    (
+                        *id,
+                        m.state,
+                        m.contract_ref.clone(),
+                        m.waiting.as_ref().map(|w| w.rest_ref.clone()),
+                    )
+                })
+                .collect()
+        });
+        let mut first_error = None;
+        for (id, state, contract_ref, rest_ref) in wanted {
+            let loaded = self.fetch_contract(&contract_ref).and_then(|contract| {
+                if state != MissionState::Draft && contract.validate_for_consent().is_err() {
+                    return Err(PrivateError::Mismatch);
+                }
+                let rest = rest_ref.map(|r| self.fetch_rest(&r)).transpose()?;
+                Ok((contract, rest))
+            });
+            match loaded {
+                Ok((contract, rest)) => {
+                    self.with_lock(|inner| {
+                        let mission = inner.mission(id)?;
+                        mission.contract = Some(contract);
+                        if let Some(waiting) = mission.waiting.as_mut() {
+                            waiting.rest = rest;
+                        }
+                        Ok::<_, CoordinatorError>(())
+                    })?;
+                }
+                Err(_) => {
+                    // Withdraw first: if the Stop cannot be journaled, nothing
+                    // of the mission is left approvable at the broker.
+                    if let Err(refusal) = self.port.withdraw(id) {
+                        first_error.get_or_insert(CoordinatorError::Withdrawal(refusal.class));
+                    }
+                    let mono = self.clock.monotonic_ms();
+                    let stopped = self.with_lock(|inner| {
+                        inner.fire(
+                            id,
+                            Trigger::Stop {
+                                reason: StopReason::PrivateContentUnavailable,
+                            },
+                            mono,
+                        )
+                    });
+                    if let Err(e) = stopped {
+                        first_error.get_or_insert(e);
+                    }
+                    if let Err(e) = self.close_action(id) {
+                        first_error.get_or_insert(e);
+                    }
+                }
+            }
+        }
+        first_error.map_or(Ok(()), Err)
     }
 
     /// The rest of opening, after the journal was replayed: recover the
@@ -1696,16 +2051,16 @@ impl<P: EffectPort> Coordinator<P> {
         // A mission interrupted after dispatching an effect in its current
         // phase is blocked: an unsettled effect may have happened, and
         // re-running the phase would repeat a settled one.
-        let interrupted: Vec<(MissionId, &str)> = self.peek(|inner| {
+        let interrupted: Vec<(MissionId, BlockReason)> = self.peek(|inner| {
             inner
                 .missions
                 .iter()
                 .filter(|(_, m)| !m.state.is_terminal())
                 .filter_map(|(id, m)| {
                     if m.unsettled.is_some() {
-                        Some((*id, "effect_outcome_unknown"))
+                        Some((*id, BlockReason::EffectOutcomeUnknown))
                     } else if m.dispatched_in_phase {
-                        Some((*id, "phase_interrupted"))
+                        Some((*id, BlockReason::PhaseInterrupted))
                     } else {
                         None
                     }
@@ -1727,7 +2082,7 @@ impl<P: EffectPort> Coordinator<P> {
                 if !mission.state.is_terminal() && mission.held.is_none() {
                     // A new hold: journaled with the session's opening, even if
                     // an earlier hold (since resumed) was journaled.
-                    mission.held = Some(UNCLEAN_SHUTDOWN.into());
+                    mission.held = Some(HeldReason::UncleanShutdown);
                     mission.held_journaled = false;
                 }
             }
@@ -1755,33 +2110,39 @@ impl<P: EffectPort> Coordinator<P> {
         }
     }
 
-    fn explain(&self, id: MissionId, mission: &Mission) -> String {
+    fn explain(&self, id: MissionId, mission: &Mission) -> Result<String, CoordinatorError> {
+        let contract = mission.contract()?;
         let mut lines = vec![
             format!("Mission {id} is done."),
-            format!("You asked: {}", mission.contract.owner_words.trim()),
-            format!("I understood: {}", mission.contract.restatement),
+            format!("You asked: {}", contract.owner_words.trim()),
+            format!("I understood: {}", contract.restatement),
             "The Verifier checked every pass criterion you set before work began:".into(),
         ];
-        for criterion in &mission.contract.pass_criteria {
+        for criterion in &contract.pass_criteria {
             lines.push(format!("  - {}: holds", criterion.text));
         }
         lines.push(format!(
             "Lane calls: {} of {}. Effects sent to the broker: {}. Money spent: 0.",
-            mission.model_calls, mission.contract.budget.max_model_calls, mission.next_effect
+            mission.model_calls, contract.budget.max_model_calls, mission.next_effect
         ));
-        lines.join("\n")
+        Ok(lines.join("\n"))
     }
 
     /// Stop a mission from whatever state it is in; a terminal mission
     /// stays as it ended. Never waits for a lane or an effect.
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        self.stop_for(id, "owner")
+        self.stop_for(id, StopReason::Owner)
     }
 
-    fn stop_for(&self, id: MissionId, reason: &str) -> Result<MissionState, CoordinatorError> {
+    fn stop_for(
+        &self,
+        id: MissionId,
+        reason: StopReason,
+    ) -> Result<MissionState, CoordinatorError> {
         type Stopping = (Result<MissionState, CoordinatorError>, bool);
         let step = self.with_lock(
             |inner| -> Result<Result<Stopping, MissionState>, CoordinatorError> {
+                inner.clear_detail(id);
                 let mission = inner.mission(id)?;
                 if mission.state.is_terminal() {
                     // M2a-S: on a broken coordinator a terminal state may be in
@@ -1791,13 +2152,7 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 let may_have_dispatched = mission.approved_wall_ms.is_some();
                 let mono = self.clock.monotonic_ms();
-                let journaled = inner.fire(
-                    id,
-                    Trigger::Stop {
-                        reason: reason.into(),
-                    },
-                    mono,
-                );
+                let journaled = inner.fire(id, Trigger::Stop { reason }, mono);
                 if journaled.is_err() {
                     // The journal failed: the mission stops in memory all the same.
                     let mission = inner.mission(id)?;
@@ -1870,7 +2225,7 @@ impl<P: EffectPort> Coordinator<P> {
             };
             if head != inner.head || lines.len() as u64 != inner.next_seq {
                 return Err(CoordinatorError::Journal(JournalError::Store(
-                    "the journal changed under this coordinator".into(),
+                    StoreFailure::ChangedUnderCoordinator,
                 )));
             }
             inner.append(SESSION, Event::SessionClosed)?;
@@ -1906,6 +2261,7 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
     ) -> Result<(MissionResumeConfirmation, u64), CoordinatorError> {
         self.with_lock(|inner| {
+            inner.clear_detail(id);
             let mission = inner.mission(id)?;
             if mission.held.is_none() {
                 return Err(illegal(mission.state, "resume"));
@@ -1915,12 +2271,12 @@ impl<P: EffectPort> Coordinator<P> {
             let (seq, number) = (inner.next_seq, inner.next_request);
             inner.next_request += 1;
             let mission = inner.mission(id)?;
-            let summary = MissionSummary::of(id, &mission.contract);
+            let summary = MissionSummary::of(id, mission.contract()?);
             let request = MissionResumeConfirmation {
                 mission: id.to_string(),
                 contract_hash: summary.hash.to_hex(),
                 request: format!("{id}/{seq}/{number}"),
-                held_reason: mission.held.clone().unwrap_or_default(),
+                held_reason: mission.held.map(|r| r.to_string()).unwrap_or_default(),
                 summary: summary.lines(),
             };
             mission.resume_asking = Some(request.clone());
@@ -1959,7 +2315,7 @@ impl<P: EffectPort> Coordinator<P> {
             };
             mission.generation += 1;
             let state = mission.state;
-            let hash = mission.contract.hash().to_hex();
+            let hash = mission.contract_ref.contract_hash.to_hex();
             match answer {
                 Ok(approval)
                     if approval.contract_hash() == asked.contract_hash
@@ -1974,7 +2330,10 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 Ok(_) => Err(CoordinatorError::ResumeStale),
                 Err(AuthorityError::Declined) => Err(CoordinatorError::Declined),
-                Err(refused) => Err(CoordinatorError::Broker(refused.class().into())),
+                Err(refused) => {
+                    inner.set_detail(id, WorkingDetail::new("broker", &refused.to_string()));
+                    Err(CoordinatorError::Broker(BrokerClass::of(refused.class())))
+                }
             }
         })
     }
@@ -1985,17 +2344,25 @@ impl<P: EffectPort> Coordinator<P> {
         self.peek(|inner| inner.broken)
     }
 
-    /// M2a-S: why a mission is held, if it is.
+    /// M2a-S: why a mission is held, if it is (a closed code).
     pub fn held(&self, id: MissionId) -> Option<String> {
-        self.peek(|inner| inner.missions.get(&id).and_then(|m| m.held.clone()))
+        self.peek(|inner| {
+            inner
+                .missions
+                .get(&id)
+                .and_then(|m| m.held.map(|r| r.to_string()))
+        })
     }
 
     pub fn state(&self, id: MissionId) -> Option<MissionState> {
         self.peek(|inner| inner.missions.get(&id).map(|m| m.state))
     }
 
+    /// The mission's contract (P0: for a terminal mission after a reopen,
+    /// fetched from the private store and verified now; `None` if it does
+    /// not verify).
     pub fn contract(&self, id: MissionId) -> Option<MissionContract> {
-        self.peek(|inner| inner.missions.get(&id).map(|m| m.contract.clone()))
+        self.contract_of(id).ok()
     }
 
     /// The hash the mission's consent covers, if it holds one.
@@ -2038,17 +2405,19 @@ enum Session {
 
 /// Replay one verified entry. Each trigger goes through the same table as
 /// live, and records must come in the order the live coordinator writes
-/// them; anything else found is refused.
+/// them; anything else found is refused, with a closed code. P0: a mission
+/// is rebuilt from its references alone; recovery loads its content.
 fn replay(
     missions: &mut BTreeMap<MissionId, Mission>,
     next_mission: &mut u64,
     session: &mut Session,
     entry: &Entry,
-) -> Result<(), String> {
+) -> Result<(), ReplayViolation> {
+    use ReplayViolation as V;
     let id = entry.mission;
     match &entry.event {
         Event::SessionOpened | Event::SessionClosed if id != SESSION => {
-            return Err(format!("{id}: a session record naming a mission"));
+            return Err(V::SessionRecordNamesMission);
         }
         Event::SessionOpened => {
             if *session != Session::Closed {
@@ -2064,37 +2433,32 @@ fn replay(
             return Ok(());
         }
         Event::SessionClosed if *session != Session::Open => {
-            return Err("a clean close of no open session".into());
+            return Err(V::CloseOfNoSession);
         }
         Event::SessionClosed if missions.values().any(|m| m.must_hold) => {
-            return Err("a clean close with a mission the session did not hold".into());
+            return Err(V::CloseWithUnheldMission);
         }
         Event::SessionClosed => {
             *session = Session::Closed;
             return Ok(());
         }
         _ if *session == Session::Closed => {
-            return Err(format!("{id}: a record after a clean close"));
+            return Err(V::RecordAfterClose);
         }
         _ => {}
     }
     if let Event::Drafted { contract } = &entry.event {
         if id.0 != *next_mission {
-            return Err(format!("{id} drafted twice or out of order"));
+            return Err(V::DraftedOutOfOrder);
         }
         if missions.len() >= MAX_MISSIONS {
-            return Err(format!("{id}: more missions than a coordinator keeps"));
+            return Err(V::TooManyMissions);
         }
-        contract
-            .validate()
-            .map_err(|e| format!("{id}: drafted contract invalid: {e:?}"))?;
-        missions.insert(id, Mission::new(contract.clone()));
+        missions.insert(id, Mission::new(contract.clone(), None));
         *next_mission = id.0 + 1;
         return Ok(());
     }
-    let mission = missions
-        .get_mut(&id)
-        .ok_or_else(|| format!("{id} was never drafted"))?;
+    let mission = missions.get_mut(&id).ok_or(V::NeverDrafted)?;
     // While held the live coordinator only stops the mission, journals an
     // action closed that the broker no longer holds, or takes the Owner's
     // resume.
@@ -2106,7 +2470,7 @@ fn replay(
             | Event::Resumed
     );
     if mission.held.is_some() && !while_held {
-        return Err(format!("{id}: a record while held"));
+        return Err(V::RecordWhileHeld);
     }
     // Before its hold, only what recovery writes: an abandoned lane call, a
     // closed action, or an end (a block, a lapse, a Stop).
@@ -2118,60 +2482,50 @@ fn replay(
         _ => false,
     };
     if mission.must_hold && !before_hold {
-        return Err(format!(
-            "{id}: a record before the hold its session requires"
-        ));
+        return Err(V::RecordBeforeHold);
     }
     match &entry.event {
         Event::Drafted { .. } => unreachable!(),
         Event::Transition { trigger } => {
-            let to = transition(mission.state, trigger)
-                .map_err(|e| format!("{id}: {} from {:?}", e.trigger, e.from))?;
+            let to = transition(mission.state, trigger).map_err(|_| V::IllegalTransition)?;
             // While an effect is unsettled the live coordinator only stops,
             // or blocks the mission on restart.
             let while_unsettled = matches!(trigger, Trigger::Stop { .. })
-                || matches!(trigger, Trigger::Block { reason } if reason == "effect_outcome_unknown");
-            if mission.unsettled.is_some() && !while_unsettled {
-                return Err(format!("{id}: a transition while an effect is unsettled"));
-            }
-            let hash = mission.contract.hash();
-            match trigger {
-                Trigger::Revise { contract } => contract
-                    .validate()
-                    .map_err(|e| format!("{id}: revised contract invalid: {e:?}"))?,
-                Trigger::Submit { hash: h } => {
-                    mission
-                        .contract
-                        .validate_for_consent()
-                        .map_err(|e| format!("{id}: submitted incomplete: {e:?}"))?;
-                    if *h != hash {
-                        return Err(format!("{id}: submit names another hash"));
+                || matches!(
+                    trigger,
+                    Trigger::Block {
+                        reason: BlockReason::EffectOutcomeUnknown
                     }
+                );
+            if mission.unsettled.is_some() && !while_unsettled {
+                return Err(V::TransitionWhileUnsettled);
+            }
+            let hash = mission.contract_ref.contract_hash;
+            match trigger {
+                Trigger::Submit { hash: h } if *h != hash => {
+                    return Err(V::SubmitOtherHash);
                 }
                 Trigger::Consent { hash: h, .. } | Trigger::Deny { hash: h } if *h != hash => {
-                    return Err(format!("{id}: consent names another hash"));
+                    return Err(V::ConsentOtherHash);
                 }
                 Trigger::Start if !mission.consented() => {
-                    return Err(format!("{id}: work without consent"));
+                    return Err(V::WorkWithoutConsent);
                 }
                 // A wait follows the settlement of the effect it waits on.
                 Trigger::AwaitApproval { effect, .. }
                     if mission.awaiting_settled != Some(*effect) =>
                 {
-                    return Err(format!("{id}: a wait for an effect not awaiting approval"));
+                    return Err(V::WaitNotAwaiting);
                 }
                 // What the live coordinator keeps: the rest of one answer
                 // (effect requests) and the lanes after the asking one.
                 Trigger::AwaitApproval {
                     rest, roles_left, ..
-                } if rest.len() >= MAX_EFFECTS_PER_CALL
-                    || !rest
-                        .iter()
-                        .all(|v| serde_json::from_value::<EffectRequest>(v.clone()).is_ok())
+                } if rest.count >= MAX_EFFECTS_PER_CALL as u64
                     || !phase_roles(mission.state).ends_with(roles_left)
                     || roles_left.len() >= phase_roles(mission.state).len() =>
                 {
-                    return Err(format!("{id}: a wait the coordinator would not write"));
+                    return Err(V::WaitNotWritten);
                 }
                 Trigger::ActionApproved { effect, phase }
                     if mission
@@ -2179,12 +2533,12 @@ fn replay(
                         .as_ref()
                         .is_none_or(|w| w.effect != *effect || w.phase != *phase) =>
                 {
-                    return Err(format!("{id}: an approval of another wait"));
+                    return Err(V::ApprovalOfOtherWait);
                 }
                 Trigger::ActionDenied { effect } | Trigger::ApprovalLapsed { effect, .. }
                     if mission.waiting.as_ref().is_none_or(|w| w.effect != *effect) =>
                 {
-                    return Err(format!("{id}: the end of another wait"));
+                    return Err(V::EndOfOtherWait);
                 }
                 _ => {}
             }
@@ -2202,7 +2556,7 @@ fn replay(
                 || invocation.mission != id
                 || invocation.seq != entry.seq
             {
-                return Err(format!("{id}: a lane invocation out of place"));
+                return Err(V::LaneOutOfPlace);
             }
             mission.pending_lane = Some(*invocation);
             mission.model_calls = mission.model_calls.saturating_add(1);
@@ -2213,14 +2567,14 @@ fn replay(
             output_hash,
         } => {
             if mission.pending_lane != Some(*invocation) {
-                return Err(format!("{id}: a lane answer without its call"));
+                return Err(V::LaneAnswerWithoutCall);
             }
             mission.pending_lane = None;
             mission.prior_outputs.push(output_hash.clone());
         }
         Event::LaneOvertaken { invocation } => {
             if mission.pending_lane != Some(*invocation) {
-                return Err(format!("{id}: a lane answer without its call"));
+                return Err(V::LaneAnswerWithoutCall);
             }
             mission.pending_lane = None;
         }
@@ -2230,7 +2584,7 @@ fn replay(
                 || mission.unsettled.is_some()
                 || mission.open_action.is_some()
             {
-                return Err(format!("{id}: an effect dispatch out of place"));
+                return Err(V::DispatchOutOfPlace);
             }
             mission.next_effect += 1;
             mission.unsettled = Some(*effect);
@@ -2239,10 +2593,10 @@ fn replay(
         }
         Event::EffectSettled { effect, outcome } => {
             if mission.unsettled != Some(*effect) {
-                return Err(format!("{id}: an effect settled that was not dispatched"));
+                return Err(V::SettledNotDispatched);
             }
             mission.unsettled = None;
-            if outcome == "awaiting_approval" {
+            if *outcome == SettledOutcome::AwaitingApproval {
                 mission.awaiting_settled = Some(*effect);
             }
         }
@@ -2251,13 +2605,13 @@ fn replay(
                 || mission.awaiting_settled != Some(*effect)
                 || mission.open_action.is_some()
             {
-                return Err(format!("{id}: a pending action out of place"));
+                return Err(V::PendingOutOfPlace);
             }
             mission.open_action = Some((*effect, pending.clone()));
         }
         Event::ApprovalClosed { effect } => {
             if mission.open_action.as_ref().map(|(e, _)| *e) != Some(*effect) {
-                return Err(format!("{id}: a closure of no open action"));
+                return Err(V::ClosureOfNoAction);
             }
             mission.open_action = None;
         }
@@ -2269,15 +2623,15 @@ fn replay(
                 || mission.unsettled.is_some()
                 || mission.dispatched_in_phase
             {
-                return Err(format!("{id}: a hold out of place"));
+                return Err(V::HoldOutOfPlace);
             }
-            mission.held = Some(reason.clone());
+            mission.held = Some(*reason);
             mission.held_journaled = true;
             mission.must_hold = false;
         }
         Event::Resumed => {
             if mission.held.is_none() {
-                return Err(format!("{id}: a resume of a mission not held"));
+                return Err(V::ResumeNotHeld);
             }
             mission.held = None;
             mission.held_journaled = false;

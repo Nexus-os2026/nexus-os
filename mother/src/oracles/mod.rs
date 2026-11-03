@@ -32,6 +32,7 @@ use crate::effect::{
 };
 use crate::journal::{MemoryJournal, MissionId};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
+use crate::private::PrivateStore as _;
 use crate::state::MissionState;
 use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
@@ -93,6 +94,10 @@ struct PortState {
     /// Each adoption: the mission, the action, and how many calls had been
     /// made when it came.
     adopted: Vec<(MissionId, PendingAction, usize)>,
+    /// P0-A: every request handed to the port, whole, in order.
+    requests: Vec<(MissionId, EffectRequest)>,
+    /// P0-A: missions whose withdrawal fails with this class.
+    withdrawal_classes: std::collections::BTreeMap<MissionId, String>,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -224,6 +229,23 @@ impl RecordingPort {
         self.lock().adopted.clone()
     }
 
+    /// P0-A: every request handed to the port for `mission`, whole.
+    pub fn requests_of(&self, mission: MissionId) -> Vec<EffectRequest> {
+        self.lock()
+            .requests
+            .iter()
+            .filter(|(m, _)| *m == mission)
+            .map(|(_, r)| r.clone())
+            .collect()
+    }
+
+    /// P0-A: withdrawing `mission` fails at the port with `class`.
+    pub fn fail_withdrawal_with(&self, mission: MissionId, class: &str) {
+        self.lock()
+            .withdrawal_classes
+            .insert(mission, class.to_string());
+    }
+
     /// How many times Mother asked about an awaited approval.
     pub fn approval_queries(&self) -> usize {
         self.calls()
@@ -244,6 +266,7 @@ impl EffectPort for RecordingPort {
             mission,
             kind: effect.kind(),
         });
+        state.requests.push((mission, effect.clone()));
         if state.cancelled.contains(&mission) {
             return Err(refusal("mission_cancelled"));
         }
@@ -340,6 +363,9 @@ impl EffectPort for RecordingPort {
         if state.failing_withdrawals.contains(&mission) {
             return Err(refusal("withdrawal_failed"));
         }
+        if let Some(class) = state.withdrawal_classes.get(&mission) {
+            return Err(refusal(class));
+        }
         Ok(())
     }
 
@@ -370,9 +396,58 @@ impl EffectPort for RecordingPort {
     }
 }
 
+/// A port's refusal with `class`. P0: the class is one of the closed
+/// registry; anything else a port says is `unknown`.
 pub fn refusal(class: &str) -> EffectRefusal {
     EffectRefusal {
-        class: class.into(),
+        class: crate::evidence::BrokerClass::of(class),
+    }
+}
+
+/// P0: the private store every in-memory world shares. It is content
+/// addressed, so sharing it between tests changes nothing any of them sees
+/// (no test removes from it; the P0 oracles that delete or swap content use
+/// their own stores).
+pub fn test_private() -> crate::private::MemoryPrivate {
+    static STORE: std::sync::OnceLock<crate::private::MemoryPrivate> = std::sync::OnceLock::new();
+    STORE
+        .get_or_init(crate::private::MemoryPrivate::new)
+        .clone()
+}
+
+/// P0: the reference to `contract`, its content kept in `store`.
+pub fn contract_ref_in(
+    store: &dyn crate::private::PrivateStore,
+    contract: &MissionContract,
+) -> crate::journal::ContractRef {
+    let bytes = serde_json::to_vec(contract).unwrap();
+    crate::journal::ContractRef {
+        contract_hash: contract.hash(),
+        content: store
+            .put(crate::private::ContentKind::Contract, &bytes)
+            .unwrap(),
+        bytes: bytes.len() as u64,
+    }
+}
+
+/// P0: a journaled draft of `contract` (by reference), its content kept in
+/// the shared test store (a hand-chained journal's `Drafted`).
+pub fn drafted(contract: &MissionContract) -> crate::journal::Event {
+    crate::journal::Event::Drafted {
+        contract: contract_ref_in(&test_private(), contract),
+    }
+}
+
+/// P0: a journaled wait's rest (by reference), its content kept in the
+/// shared test store.
+pub fn rest_ref(rest: &[EffectRequest]) -> crate::journal::RestRef {
+    let bytes = serde_json::to_vec(rest).unwrap();
+    crate::journal::RestRef {
+        content: test_private()
+            .put(crate::private::ContentKind::PausedPhase, &bytes)
+            .unwrap(),
+        count: rest.len() as u64,
+        bytes: bytes.len() as u64,
     }
 }
 
@@ -703,6 +778,7 @@ pub fn world_with(lanes: Vec<Arc<dyn Lane>>) -> World {
             port.clone(),
             Lanes::new(lanes.clone()).unwrap(),
             clock.clone(),
+            test_private(),
         )
         .unwrap(),
     );
@@ -731,6 +807,7 @@ impl World {
             self.port.clone(),
             Lanes::new(self.lanes.clone()).unwrap(),
             self.clock.clone(),
+            test_private(),
         )
     }
 

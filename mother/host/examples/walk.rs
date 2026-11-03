@@ -181,13 +181,23 @@ fn door_port(home: &Home) -> Option<Arc<GovernedPort>> {
     }
 }
 
+/// Mother over `journal` and her private store (P0: the journal keeps only
+/// references and codes; the contracts are in `private/` in her home).
 fn open(
+    home: &Home,
     journal: &FileJournal,
     port: &Arc<GovernedPort>,
     lanes: Lanes,
 ) -> Coordinator<GovernedPort> {
     let store = FileJournal::open(journal.path()).expect("journal");
-    match Coordinator::open(store, port.clone(), lanes, Arc::new(SystemClock::default())) {
+    let private = home.private().expect("private store");
+    match Coordinator::open(
+        store,
+        port.clone(),
+        lanes,
+        Arc::new(SystemClock::default()),
+        private,
+    ) {
         Ok(c) => c,
         Err(e) => panic!("Mother refused her journal: {e:?}"),
     }
@@ -285,7 +295,7 @@ fn main() {
     let Some(port1) = door_port(&home) else {
         return;
     };
-    let mother = open(&journal, &port1, lanes(vec![]));
+    let mother = open(&home, &journal, &port1, lanes(vec![]));
     let (id, consented) = draft_and_ask(
         &mother,
         contract("A one-page site for Rosa's bakery: name, hours and phone."),
@@ -301,7 +311,7 @@ fn main() {
     let Some(port) = door_port(&home) else {
         return;
     };
-    let restarted = open(&journal, &port, lanes(vec![]));
+    let restarted = open(&home, &journal, &port, lanes(vec![]));
     println!("  {id} is {}.", restarted.state(id).unwrap().as_str());
     println!(
         "  Effects sent to the broker in run 1: {}. Broker runs Mother opened: {}.",
@@ -331,7 +341,7 @@ fn main() {
     let Some(port2) = door_port(&home) else {
         return;
     };
-    let mother = open(&run2, &port2, lanes(asks.clone()));
+    let mother = open(&home, &run2, &port2, lanes(asks.clone()));
     let runs_before = mothers_runs(home.owner());
 
     println!();
@@ -377,7 +387,7 @@ fn main() {
     let Some(port) = door_port(&home) else {
         return;
     };
-    let restarted = open(&run2, &port, lanes(asks));
+    let restarted = open(&home, &run2, &port, lanes(asks));
     println!(
         "  After the restart: {stopped} is {}, {denied} is {}.",
         restarted.state(stopped).unwrap().as_str(),
@@ -397,7 +407,7 @@ fn main() {
     let Some(port3) = door_port(&home) else {
         return;
     };
-    let mother = open(&run3, &port3, lanes(vec![]));
+    let mother = open(&home, &run3, &port3, lanes(vec![]));
     let (held, consented) = draft_and_ask(
         &mother,
         contract("A one-page site for Rosa's bakery, with the weekly specials."),
@@ -415,7 +425,7 @@ fn main() {
     let Some(port) = door_port(&home) else {
         return;
     };
-    let mother = open(&run3, &port, lanes(vec![]));
+    let mother = open(&home, &run3, &port, lanes(vec![]));
     match mother.held(held) {
         Some(reason) => println!(
             "  {held} is {} and held ({reason}): it does nothing until you resume or stop it.",
