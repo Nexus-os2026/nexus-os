@@ -15,6 +15,10 @@
 //! - FC-4: every phone-like token of every leaf's text and of the title has
 //!   exactly the approved phone's digits.
 //!
+//! [`facts_report`] evaluates every check, even after an earlier one
+//! failed (M3); [`check_facts`] is its first error, in the order above. The
+//! accessors lend the approved values read-only.
+//!
 //! Not claimed (FC-4 is a conservative heuristic, and its false positives
 //! fail closed): a number split across separate blocks or written in words
 //! is missed; numbers joined only by separators read as one token, so a
@@ -152,19 +156,20 @@ impl ApprovedFacts {
         self.hours.len()
     }
 
-    /// The approved name, borrowed (M3 §5.6).
+    /// The approved name, borrowed (M3 §5.6): read-only, so the facts stay
+    /// as they were approved.
     pub fn name(&self) -> &str {
-        ""
+        &self.name
     }
 
     /// The approved hours lines, in order, borrowed (M3 §5.6).
     pub fn hours(&self) -> &[String] {
-        &[]
+        &self.hours
     }
 
     /// The approved phone, borrowed (M3 §5.6).
     pub fn phone(&self) -> &str {
-        ""
+        &self.phone
     }
 }
 
@@ -378,63 +383,76 @@ impl FactsReport {
     /// The first failing check in [`check_facts`]' order (FC-1 heading,
     /// FC-1 title, FC-2 by index, FC-3, FC-4), or `Ok` if every one passed.
     pub fn first_error(&self) -> Result<(), FactCode> {
+        if !self.name_heading {
+            return Err(FactCode::NameNotHeading);
+        }
+        if !self.name_title {
+            return Err(FactCode::NameNotTitle);
+        }
+        if let Some(i) = self.hours.iter().position(|ok| !ok) {
+            let index = u8::try_from(i).unwrap_or(u8::MAX);
+            return Err(FactCode::HoursLineMissing { index });
+        }
+        if !self.phone {
+            return Err(FactCode::PhoneMissing);
+        }
+        if !self.no_foreign_number {
+            return Err(FactCode::ForeignNumber);
+        }
         Ok(())
     }
 }
 
-/// Every facts check on `page`, each evaluated in full (M3 §5.6).
-pub fn facts_report(_page: &Page, _facts: &ApprovedFacts) -> FactsReport {
-    FactsReport {
-        name_heading: false,
-        name_title: false,
-        hours: Vec::new(),
-        phone: false,
-        no_foreign_number: false,
-    }
-}
-
-/// FC-1 to FC-4, in that order; the first missing fact is reported.
-pub fn check_facts(page: &Page, facts: &ApprovedFacts) -> Result<(), FactCode> {
+/// Every facts check on `page`, each evaluated in full (M3 §5.6): an
+/// earlier failure never skips a later check, and every hours line is
+/// checked. [`check_facts`] is its first error.
+pub fn facts_report(page: &Page, facts: &ApprovedFacts) -> FactsReport {
     let leaves = leaf_texts(page);
 
     // FC-1: exactly one h1, whose text is the name; the title is the name.
     let mut h1 = leaves.iter().filter(|l| l.tag == Tag::H1);
-    match (h1.next(), h1.next()) {
-        (Some(only), None) if same(&only.text, &facts.name) => {}
-        _ => return Err(FactCode::NameNotHeading),
-    }
-    if !same(page.title(), &facts.name) {
-        return Err(FactCode::NameNotTitle);
-    }
+    let name_heading = matches!(
+        (h1.next(), h1.next()),
+        (Some(only), None) if same(&only.text, &facts.name)
+    );
+    let name_title = same(page.title(), &facts.name);
 
     // FC-2: each hours line is the text of some li or p.
-    for (i, line) in facts.hours.iter().enumerate() {
-        if !leaves
-            .iter()
-            .any(|l| matches!(l.tag, Tag::Li | Tag::P) && same(&l.text, line))
-        {
-            let index = u8::try_from(i).unwrap_or(u8::MAX);
-            return Err(FactCode::HoursLineMissing { index });
-        }
-    }
+    let hours = facts
+        .hours
+        .iter()
+        .map(|line| {
+            leaves
+                .iter()
+                .any(|l| matches!(l.tag, Tag::Li | Tag::P) && same(&l.text, line))
+        })
+        .collect();
 
     // FC-3: the phone is the text of some leaf or span.
-    if !leaves.iter().any(|l| {
+    let phone = leaves.iter().any(|l| {
         same(&l.text, &facts.phone)
             || l.spans
                 .iter()
                 .any(|&(a, b)| same(&l.text[a..b], &facts.phone))
-    }) {
-        return Err(FactCode::PhoneMissing);
-    }
+    });
 
     // FC-4: every phone-like token has the approved phone's digits.
     let digits: String = facts.phone.chars().filter(char::is_ascii_digit).collect();
-    let texts = std::iter::once(page.title()).chain(leaves.iter().map(|l| l.text.as_str()));
-    for text in texts {
-        if phone_like_tokens(text).iter().any(|d| !same(d, &digits)) {
-            return Err(FactCode::ForeignNumber);
-        }
+    let no_foreign_number = std::iter::once(page.title())
+        .chain(leaves.iter().map(|l| l.text.as_str()))
+        .all(|text| phone_like_tokens(text).iter().all(|d| same(d, &digits)));
+
+    FactsReport {
+        name_heading,
+        name_title,
+        hours,
+        phone,
+        no_foreign_number,
     }
-    Ok(())
+}
+
+/// FC-1 to FC-4, in that order; the first missing fact is reported. It is
+/// [`facts_report`]'s first error.
+pub fn check_facts(page: &Page, facts: &ApprovedFacts) -> Result<(), FactCode> {
+    facts_report(page, facts).first_error()
 }
