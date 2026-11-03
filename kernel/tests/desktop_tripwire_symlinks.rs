@@ -13,9 +13,11 @@
 //!
 //! Decision 2: these oracles plant Unix symlinks and permissions, so they
 //! are Unix-only (L3); the helper runs in an owned child process, killed
-//! and reaped with everything it started if it overruns (L2).
+//! and reaped with everything it started if it overruns (L2). Decision 3:
+//! the group is signalled natively through the kernel's `nix`, which the
+//! kernel has on Linux and macOS only, so the oracles are gated to those.
 
-#![cfg(unix)]
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 #[path = "desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
@@ -114,25 +116,54 @@ fn g0_helper_role() {
     println!("G0-HELPER-DONE");
 }
 
-/// Kill the owned child's whole process group, then reap the child, within
-/// `REAP_WITHIN`.
-fn kill_and_reap(child: &mut Child) {
+/// The process group a cleanup may signal, from the pid of a child this
+/// test spawned in its own group. (Oracle commit of decision 3: unchecked,
+/// as before.)
+fn checked_pgid(pid: u32) -> Result<i32, String> {
+    Ok(pid as i32)
+}
+
+/// What a group signal's result means. (Oracle commit: discarded, as
+/// before.)
+fn signal_outcome(result: Result<(), nix::errno::Errno>, pgid: i32) -> Result<(), String> {
+    let _ = (result, pgid);
+    Ok(())
+}
+
+/// SIGKILL to the owned process group of the child `pid`. (Oracle commit:
+/// still the external `kill` command, its result discarded.)
+fn signal_group(pid: u32) -> Result<(), String> {
+    let pgid = checked_pgid(pid)?;
     let _ = Command::new("kill")
-        .args(["-KILL", "--", &format!("-{}", child.id())])
+        .args(["-KILL", "--", &format!("-{pgid}")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
-    let deadline = Instant::now() + REAP_WITHIN;
+    Ok(())
+}
+
+/// Kill the owned child's whole process group, then reap the child; the
+/// cleanup is bounded by `within`.
+fn kill_and_reap_within(child: &mut Child, within: Duration) -> Result<(), String> {
+    signal_group(child.id())?;
+    let deadline = Instant::now() + within;
     loop {
         match child.try_wait() {
-            Ok(Some(_)) => return,
+            Ok(Some(_)) => return Ok(()),
             Ok(None) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(20));
             }
-            _ => panic!("the killed helper was not reaped within {REAP_WITHIN:?}"),
+            Ok(None) => return Err(format!("the killed child was not reaped within {within:?}")),
+            Err(e) => return Err(format!("reaping the killed child: {e}")),
         }
     }
+}
+
+/// Kill the owned child's whole process group, then reap the child, within
+/// `REAP_WITHIN`.
+fn kill_and_reap(child: &mut Child) {
+    kill_and_reap_within(child, REAP_WITHIN).unwrap_or_else(|e| panic!("{e}"));
 }
 
 /// The helper's findings for `root`, run in an owned child process (the
@@ -358,4 +389,132 @@ fn g0_s7_a_helper_past_its_deadline_is_killed_and_reaped_with_its_children() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+// ── Decision 3, item 1: the whole cleanup is bounded and checked ───────────
+//
+// No oracle here signals a process it did not plant: a failed signal and a
+// gone group are judged on the pure decision functions, and the refusal
+// of pgid 0 or 1 (which would signal every process this user owns) is
+// checked without sending anything.
+
+#[test]
+fn g0_s8_a_failed_group_signal_fails_and_only_a_gone_group_is_gone() {
+    use nix::errno::Errno;
+    for refused in [0, 1, u32::MAX] {
+        assert!(
+            checked_pgid(refused).is_err(),
+            "process group {refused} must never be signalled"
+        );
+    }
+    let own = nix::unistd::getpgrp().as_raw() as u32;
+    assert!(checked_pgid(own).is_err(), "never this test's own group");
+    assert_eq!(checked_pgid(424242), Ok(424242));
+    assert_eq!(signal_outcome(Ok(()), 4242), Ok(()));
+    assert_eq!(
+        signal_outcome(Err(Errno::ESRCH), 4242),
+        Ok(()),
+        "a gone group is gone"
+    );
+    for error in [Errno::EPERM, Errno::EINVAL] {
+        assert!(
+            signal_outcome(Err(error), 4242).is_err(),
+            "a refused signal ({error}) was discarded as success"
+        );
+    }
+}
+
+const CLEANUP_ROLE: &str = "NEXUS_G0_CLEANUP_ROLE";
+
+/// The cleanup role: a no-op unless s9 re-runs this binary for it. It
+/// kills and reaps a child it planted within 2 s and says how that went.
+#[test]
+fn g0_cleanup_role() {
+    let Some(pidfile) = std::env::var_os(CLEANUP_ROLE) else {
+        return;
+    };
+    // Its own stdio: it must not hold the role's report pipe open.
+    let mut planted = Command::new("sleep")
+        .arg("600")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    std::fs::write(&pidfile, planted.id().to_string()).unwrap();
+    match kill_and_reap_within(&mut planted, Duration::from_secs(2)) {
+        Ok(()) => println!("G0-CLEANUP reaped"),
+        Err(e) => println!("G0-CLEANUP failed: {e}"),
+    }
+}
+
+#[test]
+fn g0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang() {
+    // A fake `kill` that hangs, first on the role's PATH: an external
+    // command can hold the cleanup forever; native signalling cannot.
+    let temp = Temp::new("fake-kill");
+    let fake = temp.0.join("bin");
+    std::fs::create_dir_all(&fake).unwrap();
+    std::fs::write(fake.join("kill"), "#!/bin/sh\nexec sleep 600\n").unwrap();
+    std::fs::set_permissions(fake.join("kill"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let pidfile = temp.0.join("planted.pid");
+    let path = format!(
+        "{}:{}",
+        fake.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let mut role = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "g0_cleanup_role",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CLEANUP_ROLE, &pidfile)
+        .env("PATH", path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let mut stdout = role.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stdout.read_to_string(&mut text);
+        text
+    });
+    let until = Instant::now() + Duration::from_secs(20);
+    let finished = loop {
+        if role.try_wait().unwrap().is_some() {
+            break true;
+        }
+        if Instant::now() > until {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    // The role's group (and a hung fake kill in it) never outlives the test.
+    let _ = kill_and_reap_within(&mut role, REAP_WITHIN);
+    let text = reader.join().unwrap_or_default();
+    let reaped = text.lines().any(|l| l.contains("G0-CLEANUP reaped"));
+    // The planted child is signalled here only if the role did not reap it
+    // (it is then still alive, so its group is still the one planted).
+    if !reaped {
+        if let Some(pid) = std::fs::read_to_string(&pidfile)
+            .ok()
+            .and_then(|pid| pid.trim().parse::<u32>().ok())
+        {
+            let _ = signal_group(pid);
+        }
+    }
+    assert!(
+        finished,
+        "the cleanup waited on a hung kill command past its deadline"
+    );
+    assert!(
+        reaped,
+        "the planted child was not killed and reaped: {text}"
+    );
 }
