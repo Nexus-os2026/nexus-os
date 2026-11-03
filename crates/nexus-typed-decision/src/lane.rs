@@ -1,11 +1,12 @@
 //! The lane composition tables of §2.2 to §2.4, as pure functions. Advice
 //! is never authority: only `Clear` is eligible, and no table is more
-//! permissive than its deterministic verdict. (T1b oracle commit:
-//! interface stub.)
+//! permissive than its deterministic verdict.
 
 use crate::budget::Refusal;
 use crate::decode::Decision;
 use crate::ident::QuestionId;
+use crate::read::{verdict, Verdict};
+use crate::registry::{QuestionSet, Reading, INJ_1, SEN_1, VER_1};
 
 /// A1's `ModelError` codes, in A1's declaration order (`ModelError::CODES`
 /// at `bdedc7fb`). T2b maps each `ModelError` onto exactly one of these.
@@ -171,8 +172,15 @@ impl Failure {
     }
 
     /// The failure a T1a preflight refusal stands for.
-    pub fn from_refusal(_refusal: &Refusal) -> Self {
-        Self::Missing
+    pub fn from_refusal(refusal: &Refusal) -> Self {
+        match refusal {
+            Refusal::ProjectionMismatch => Self::Refused(PreflightCode::ProjectionMismatch),
+            Refusal::Unrenderable => Self::Refused(PreflightCode::Unrenderable),
+            Refusal::CharNotAllowed => Self::Refused(PreflightCode::CharNotAllowed),
+            Refusal::UnsafeDelimiter => Self::Refused(PreflightCode::UnsafeDelimiter),
+            Refusal::CoverageInsufficient { .. } => Self::CoverageInsufficient,
+            Refusal::RequestTooLarge => Self::Refused(PreflightCode::RequestTooLarge),
+        }
     }
 }
 
@@ -225,7 +233,7 @@ pub enum Disposition {
 
 impl Disposition {
     pub const fn eligible(&self) -> bool {
-        false
+        matches!(self, Self::Clear)
     }
     pub const fn rank(&self) -> u8 {
         match self {
@@ -260,8 +268,35 @@ pub enum Advice<'a> {
 
 /// §2.1 rule 2: Clear only if every question is clear; otherwise the most
 /// restrictive verdict, with the first non-clear question as its reason.
-pub fn compose(_decision: &Decision) -> Disposition {
-    Disposition::Restrict(Reason::Td(Failure::Missing))
+pub fn compose(decision: &Decision) -> Disposition {
+    let questions = decision.set().questions();
+    let verdicts: Vec<Verdict> = questions
+        .iter()
+        .zip(decision.readings())
+        .map(|(q, (_, reading))| verdict(q, *reading))
+        .collect();
+    let Some(first) = verdicts.iter().position(|v| *v != Verdict::Clear) else {
+        return Disposition::Clear;
+    };
+    let reason = Reason::Question(questions[first].id());
+    if verdicts.contains(&Verdict::Restrict) {
+        Disposition::Restrict(reason)
+    } else {
+        Disposition::NeedsOwner(reason)
+    }
+}
+
+/// The decision a lane requires: present, and of exactly its registered
+/// set. Anything else is the failure the lane restricts on.
+fn required<'a>(
+    advice: Option<Advice<'a>>,
+    set: &'static QuestionSet,
+) -> Result<&'a Decision, Failure> {
+    match advice {
+        Some(Advice::Decided(decision)) if std::ptr::eq(decision.set(), set) => Ok(decision),
+        Some(Advice::Decided(_)) | None => Err(Failure::Missing),
+        Some(Advice::Failed(failure)) => Err(failure),
+    }
 }
 
 /// The Sentinel's result (§2.2).
@@ -278,14 +313,23 @@ pub enum SentinelResult {
 
 impl SentinelResult {
     pub const fn eligible(&self) -> bool {
-        false
+        matches!(self, Self::Clear)
     }
 }
 
 /// §2.2: `s1a` first; advice only after S1a passed; `None` is advice that
 /// is required but absent.
-pub fn sentinel(_s1a: Check, _advice: Option<Advice<'_>>) -> SentinelResult {
-    SentinelResult::Halt(Reason::Td(Failure::Missing))
+pub fn sentinel(s1a: Check, advice: Option<Advice<'_>>) -> SentinelResult {
+    if s1a != Check::Pass {
+        return SentinelResult::S1aRefusal(s1a);
+    }
+    match required(advice, &SEN_1).map(compose) {
+        Ok(Disposition::Clear) => SentinelResult::Clear,
+        Ok(Disposition::NeedsOwner(reason) | Disposition::Restrict(reason)) => {
+            SentinelResult::Halt(reason)
+        }
+        Err(failure) => SentinelResult::Halt(Reason::Td(failure)),
+    }
 }
 
 /// The Verifier's result (§2.3): every fact's result, and the most
@@ -305,21 +349,53 @@ impl VerifierResult {
         self.overall
     }
     pub const fn eligible(&self) -> bool {
-        false
+        self.overall.eligible()
     }
 }
 
 /// §2.3: D per fact (name, hours, phone) and the advice for the same facts.
-pub fn verifier(_d: [Check; 3], _advice: Option<Advice<'_>>) -> VerifierResult {
-    let fail = Disposition::Restrict(Reason::CheckError);
-    VerifierResult {
-        facts: [fail; 3],
-        overall: fail,
+pub fn verifier(d: [Check; 3], advice: Option<Advice<'_>>) -> VerifierResult {
+    let a: [Result<Reading, Failure>; 3] = match required(advice, &VER_1) {
+        Ok(decision) => [0, 1, 2].map(|i| Ok(decision.readings()[i].1)),
+        // Insufficient coverage reads every question Unsettled (§4.5).
+        Err(Failure::CoverageInsufficient) => [Ok(Reading::Unsettled); 3],
+        Err(failure) => [Err(failure); 3],
+    };
+    let facts = [0, 1, 2].map(|i| fact(d[i], a[i]));
+    let worst = facts.iter().map(Disposition::rank).max().unwrap_or(2);
+    let overall = facts
+        .into_iter()
+        .find(|f| f.rank() == worst)
+        .unwrap_or(Disposition::Restrict(Reason::CheckError));
+    VerifierResult { facts, overall }
+}
+
+/// One fact: D first, and A can never turn a failing D into a pass.
+fn fact(d: Check, a: Result<Reading, Failure>) -> Disposition {
+    match (d, a) {
+        (Check::Error, _) => Disposition::Restrict(Reason::CheckError),
+        (Check::Fail, Ok(Reading::Yes)) => Disposition::NeedsOwner(Reason::FormatVariant),
+        (Check::Fail, _) => Disposition::Restrict(Reason::Deterministic),
+        (Check::Pass, Ok(Reading::Yes)) => Disposition::Clear,
+        (Check::Pass, Ok(Reading::No)) => Disposition::Restrict(Reason::AdviceDisagrees),
+        (Check::Pass, Ok(_)) => Disposition::Restrict(Reason::AdviceUnsettled),
+        (Check::Pass, Err(failure)) => Disposition::Restrict(Reason::AdviceUnavailable(failure)),
     }
 }
 
 /// §2.4: the Owner's approved note, screened before the Builder lane reads
 /// it. Never a silent refusal: anything not clear needs the Owner.
-pub fn notes_screen(_advice: Option<Advice<'_>>) -> Disposition {
-    Disposition::NeedsOwner(Reason::NotesUnavailable(Failure::Missing))
+pub fn notes_screen(advice: Option<Advice<'_>>) -> Disposition {
+    match required(advice, &INJ_1) {
+        Ok(decision) => {
+            let reading = decision.readings()[0].1;
+            match (verdict(&INJ_1.questions()[0], reading), reading) {
+                (Verdict::Clear, _) => Disposition::Clear,
+                (_, Reading::Yes) => Disposition::NeedsOwner(Reason::NotesInstructsAi),
+                _ => Disposition::NeedsOwner(Reason::NotesUnsettled),
+            }
+        }
+        Err(Failure::CoverageInsufficient) => Disposition::NeedsOwner(Reason::NotesUnsettled),
+        Err(failure) => Disposition::NeedsOwner(Reason::NotesUnavailable(failure)),
+    }
 }

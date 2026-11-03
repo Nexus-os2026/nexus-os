@@ -1,7 +1,15 @@
 //! The assessment slot (§3.2, §3.2a): a pure state machine with a private
 //! epoch token, the acknowledgement states and single-use consumption. The
 //! owning component (T3, T3b, T4) holds it under its lock; no lock spans
-//! inference or a record write. (T1b oracle commit: interface stub.)
+//! inference or a record write.
+//!
+//! Every slot holds a private epoch. It moves on once when the one
+//! assessment begins and once when the slot becomes `Spent`, which
+//! invalidates every outstanding token. Each step checks, in order, its
+//! token's epoch and the exact state it needs, then (for the steps after a
+//! record write) the record, then the binding recomputed from live state;
+//! any failure makes the slot `Spent`. `Spent` is absorbing: from it no
+//! step changes anything.
 
 use std::fmt;
 
@@ -218,61 +226,208 @@ impl Slot {
         self.epoch
     }
 
-    /// Begins the assessment, under the owning lock.
-    pub fn begin(&mut self, _binding: [u8; 32]) -> Begin {
-        Begin::AlreadySpent
+    /// `Spent` for `reason`, one epoch on, unless already `Spent`.
+    fn spend(&mut self, reason: SpentReason) -> Refused {
+        if matches!(self.state, SlotState::Spent { .. }) {
+            return Refused::AlreadySpent;
+        }
+        self.state = SlotState::Spent { reason };
+        self.epoch = self.epoch.saturating_add(1);
+        Refused::Spent(reason)
     }
 
-    /// Settle step 1, under the lock, before the unlocked record write.
+    /// Begins the assessment, under the owning lock. Only an `Unassessed`
+    /// slot starts one; any other begin is a repeat, which spends the slot.
+    pub fn begin(&mut self, binding: [u8; 32]) -> Begin {
+        match self.state {
+            SlotState::Unassessed => {
+                self.state = SlotState::Pending;
+                self.epoch = self.epoch.saturating_add(1);
+                Begin::Started(AssessmentToken {
+                    epoch: self.epoch,
+                    binding,
+                })
+            }
+            SlotState::Spent { .. } => Begin::AlreadySpent,
+            _ => {
+                self.spend(SpentReason::Repeat);
+                Begin::Repeat
+            }
+        }
+    }
+
+    /// Settle step 1, under the lock, before the unlocked record write: the
+    /// token's epoch is current, the state is `Pending` and the binding is
+    /// current. Only a notes slot settles as `NeedsOwner`; for any other
+    /// slot it is a terminal restriction.
     pub fn settle_begin(
         &mut self,
-        _token: AssessmentToken,
-        _outcome: Outcome,
-        _live: &[u8; 32],
+        token: AssessmentToken,
+        outcome: Outcome,
+        live: &[u8; 32],
     ) -> Result<SettleToken, Refused> {
-        Err(Refused::AlreadySpent)
+        if token.epoch != self.epoch || self.state != SlotState::Pending {
+            return Err(self.spend(SpentReason::Invalidated));
+        }
+        if let (Outcome::NeedsOwner(reason), false) = (outcome, self.kind == SlotKind::Notes) {
+            return Err(self.spend(SpentReason::Restricted(reason)));
+        }
+        if token.binding != *live {
+            return Err(self.spend(SpentReason::Stale));
+        }
+        self.state = SlotState::Settling;
+        Ok(SettleToken {
+            epoch: token.epoch,
+            binding: token.binding,
+            outcome,
+        })
     }
 
-    /// Settle step 2, under the lock again, after the record write.
+    /// Settle step 2, under the lock again, after the record write: the
+    /// epoch is still current, the state is still `Settling`, the record
+    /// succeeded and the binding is still current. Only then is `Clear`, or
+    /// a notes `AwaitingAck` with the token's epoch, installed.
     pub fn settle_finish(
         &mut self,
-        _token: SettleToken,
-        _recorded: bool,
-        _live: &[u8; 32],
+        token: SettleToken,
+        recorded: bool,
+        live: &[u8; 32],
     ) -> Result<Installed, Refused> {
-        Err(Refused::AlreadySpent)
+        if token.epoch != self.epoch || self.state != SlotState::Settling {
+            return Err(self.spend(SpentReason::Invalidated));
+        }
+        if !recorded {
+            return Err(self.spend(SpentReason::Unrecorded));
+        }
+        if token.binding != *live {
+            return Err(self.spend(SpentReason::Stale));
+        }
+        let (state, installed) = match token.outcome {
+            Outcome::Clear => (
+                SlotState::Clear {
+                    binding: token.binding,
+                },
+                Installed::Clear,
+            ),
+            Outcome::NeedsOwner(reason) if self.kind == SlotKind::Notes => (
+                SlotState::AwaitingAck {
+                    assessment_epoch: token.epoch,
+                    binding: token.binding,
+                    reason,
+                },
+                Installed::AwaitingAck {
+                    assessment_epoch: token.epoch,
+                },
+            ),
+            Outcome::NeedsOwner(reason) => {
+                return Err(self.spend(SpentReason::Restricted(reason)));
+            }
+        };
+        self.state = state;
+        Ok(installed)
     }
 
     /// A terminal restriction: needs no token and always installs.
-    pub fn restrict(&mut self, _reason: Reason) -> Restricted {
-        Restricted::AlreadySpent
+    pub fn restrict(&mut self, reason: Reason) -> Restricted {
+        match self.spend(SpentReason::Restricted(reason)) {
+            Refused::Spent(_) => Restricted::Installed,
+            Refused::AlreadySpent => Restricted::AlreadySpent,
+        }
     }
 
     /// Acknowledgement step 1, under the coordinator's admission lock, with
-    /// the epoch of the `AwaitingAck` the coordinator displayed.
+    /// the epoch of the `AwaitingAck` the coordinator displayed: the state
+    /// is exactly `AwaitingAck`, its epoch is the slot's and the displayed
+    /// one, and the binding is unchanged.
     pub fn ack_begin(
         &mut self,
-        _displayed_epoch: u32,
-        _live: &[u8; 32],
+        displayed_epoch: u32,
+        live: &[u8; 32],
     ) -> Result<AckToken, Refused> {
-        Err(Refused::AlreadySpent)
+        let SlotState::AwaitingAck {
+            assessment_epoch,
+            binding,
+            ..
+        } = self.state
+        else {
+            return Err(self.spend(SpentReason::Invalidated));
+        };
+        if self.kind != SlotKind::Notes
+            || assessment_epoch != self.epoch
+            || displayed_epoch != assessment_epoch
+        {
+            return Err(self.spend(SpentReason::Invalidated));
+        }
+        if binding != *live {
+            return Err(self.spend(SpentReason::Stale));
+        }
+        self.state = SlotState::AckRecording {
+            assessment_epoch,
+            binding,
+        };
+        Ok(AckToken {
+            epoch: assessment_epoch,
+            binding,
+        })
     }
 
     /// Acknowledgement step 3, under the lock again, after the Owner's
-    /// decision was recorded (step 2, unlocked).
+    /// decision was recorded (step 2, unlocked): still `AckRecording` for
+    /// the same epoch and binding, the record succeeded, the binding is
+    /// still current.
     pub fn ack_finish(
         &mut self,
-        _token: AckToken,
-        _recorded: bool,
-        _live: &[u8; 32],
+        token: AckToken,
+        recorded: bool,
+        live: &[u8; 32],
     ) -> Result<(), Refused> {
-        Err(Refused::AlreadySpent)
+        let recording = SlotState::AckRecording {
+            assessment_epoch: token.epoch,
+            binding: token.binding,
+        };
+        if token.epoch != self.epoch || self.state != recording {
+            return Err(self.spend(SpentReason::Invalidated));
+        }
+        if !recorded {
+            return Err(self.spend(SpentReason::Unrecorded));
+        }
+        if token.binding != *live {
+            return Err(self.spend(SpentReason::Stale));
+        }
+        self.state = SlotState::Acknowledged {
+            assessment_epoch: token.epoch,
+            binding: token.binding,
+        };
+        Ok(())
     }
 
     /// The admission check, under the owning lock: prepare and execute for
     /// the Sentinel, completion for the Verifier, the Builder lane's
-    /// admission for a note (which consumes an acknowledgement).
-    pub fn admit(&mut self, _live: &[u8; 32]) -> Result<Admission, Refused> {
-        Err(Refused::AlreadySpent)
+    /// admission for a note. Only a current `Clear` (read, not consumed)
+    /// or a current `Acknowledged` (consumed in this same step, once) is
+    /// admitted; anything else spends the slot.
+    pub fn admit(&mut self, live: &[u8; 32]) -> Result<Admission, Refused> {
+        match self.state {
+            SlotState::Clear { binding } => {
+                if binding != *live {
+                    return Err(self.spend(SpentReason::Stale));
+                }
+                Ok(Admission::Clear)
+            }
+            SlotState::Acknowledged {
+                assessment_epoch,
+                binding,
+            } => {
+                if assessment_epoch != self.epoch {
+                    return Err(self.spend(SpentReason::Invalidated));
+                }
+                if binding != *live {
+                    return Err(self.spend(SpentReason::Stale));
+                }
+                self.state = SlotState::Consumed;
+                Ok(Admission::Acknowledged)
+            }
+            _ => Err(self.spend(SpentReason::Invalidated)),
+        }
     }
 }
