@@ -116,10 +116,24 @@ impl Review {
         self.changes.iter().filter(|c| c.kind == kind).count()
     }
 
-    /// The review's only change, if it is exactly one new file shown
-    /// completely (M2d). Interface stub: never.
+    /// The review's only change, if it is exactly one new file whose diff
+    /// is shown completely, never truncated or omitted (M2d).
     pub fn single_complete(&self) -> Option<&FileChange> {
-        None
+        match self.changes.as_slice() {
+            [only]
+                if only.kind == ChangeKind::Create
+                    && matches!(
+                        only.diff,
+                        TextDiff::Unified {
+                            truncated: false,
+                            ..
+                        }
+                    ) =>
+            {
+                Some(only)
+            }
+            _ => None,
+        }
     }
 }
 

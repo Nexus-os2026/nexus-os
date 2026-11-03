@@ -22,7 +22,7 @@ use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::apply::{ApplyError, InterruptCause, Refusal};
+use super::apply::{ApplyError, InterruptCause, Refusal, REMOVALS};
 use super::local_model::{ModelPin, LOCAL_PROVIDER};
 use super::manifest::put_bytes;
 use super::review::ChangeKind;
@@ -271,13 +271,111 @@ pub struct TempLeft {
 }
 
 /// Read one run's verified ledger and report what its project writes left
-/// uncertain or owed. Interface stub: reports nothing.
+/// uncertain or owed (M2d §6.7, M6′). It reads the ledger only: nothing on
+/// disk is opened, swept or called disposable. A prepared apply or undo with
+/// no recorded outcome is reported with the temp ids planned before any
+/// creation; a temp the kernel observed it could not remove is owed until a
+/// later record shows its removal established.
 pub fn analyze_apply(
     store: &dyn LedgerStore,
     run: Uuid,
 ) -> Result<Vec<ApplyFinding>, LedgerFailure> {
-    store.verified_records(run)?;
-    Ok(Vec::new())
+    let mut apply: Option<Vec<PreparedFile>> = None;
+    let mut restore: Option<Vec<PreparedFile>> = None;
+    let mut owed: Vec<TempLeft> = Vec::new();
+    let mut recovery: Option<&'static str> = None;
+    let mut awaiting = false;
+    for record in store.verified_records(run)? {
+        let payload: Value =
+            serde_json::from_str(&record.payload).map_err(|_| LedgerFailure::Integrity)?;
+        let text = |key: &str| payload.get(key).and_then(Value::as_str).map(str::to_string);
+        let prepared = |key: &str| -> Vec<PreparedFile> {
+            payload
+                .get(key)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|file| PreparedFile {
+                    path_sha256: file
+                        .get("path_sha256")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    temp_id: file
+                        .get("temp_id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                })
+                .collect()
+        };
+        match record.event_kind.as_str() {
+            "verify.structural" => {
+                awaiting = payload.get("passed").and_then(Value::as_bool) == Some(true)
+            }
+            "apply.prepared" => {
+                apply = Some(prepared("files"));
+                awaiting = false;
+            }
+            "apply.completed" => apply = None,
+            "apply.rolled_back" => {
+                apply = None;
+                owed.clear();
+                recovery = None;
+            }
+            "apply.recovery_required" => {
+                apply = None;
+                restore = None;
+                let failed = text("failed")
+                    .and_then(|code| APPLY_STEPS.iter().copied().find(|step| *step == code))
+                    .ok_or(LedgerFailure::Integrity)?;
+                match text("temp_id") {
+                    Some(temp_id) => owed.push(TempLeft {
+                        temp_id,
+                        path_sha256: text("path_sha256"),
+                    }),
+                    None => {
+                        if failed == "cleanup" {
+                            owed.clear();
+                        }
+                        recovery = Some(failed);
+                    }
+                }
+            }
+            "restore.prepared" => restore = Some(prepared("planned")),
+            "restore.completed" => {
+                restore = None;
+                owed.clear();
+                if recovery == Some("dir_sync") {
+                    recovery = None;
+                }
+            }
+            "restore.rejected" => restore = None,
+            "review.candidate_withdrawn"
+            | "staging.discarded"
+            | "run.cancelled"
+            | "run.revoked"
+            | "run.failed"
+            | "run.recovery_required" => awaiting = false,
+            _ => {}
+        }
+    }
+    let mut findings = Vec::new();
+    if let Some(files) = apply {
+        findings.push(ApplyFinding::PreparedWithoutOutcome { files });
+    }
+    if let Some(files) = restore {
+        findings.push(ApplyFinding::RestorePreparedWithoutOutcome { files });
+    }
+    if !owed.is_empty() {
+        findings.push(ApplyFinding::CleanupOwed { temps: owed });
+    }
+    if let Some(failed) = recovery {
+        findings.push(ApplyFinding::RecoveryRequired { failed });
+    }
+    if awaiting {
+        findings.push(ApplyFinding::StagingAwaitingApproval);
+    }
+    Ok(findings)
 }
 
 // ── The schema (P0-B, I5) ───────────────────────────────────────────────────
@@ -357,6 +455,13 @@ pub(crate) const APPLY_STEPS: &[&str] = &[
     "restore",
     "restore.completed",
     "write grant closure",
+    // M2d: an observed apply's one publication.
+    "interrupted",
+    "temp",
+    "publish",
+    "apply.op",
+    "dir_sync",
+    "cleanup",
 ];
 /// The operations whose completion record can fail after their work.
 pub(crate) const COMPLETIONS: &[&str] = &["rollback", "restore"];
@@ -483,6 +588,7 @@ const REFUSED: Schema = &[
     ("reason", Class::Code(Refusal::CODES)),
     ("path_sha256", DIGEST),
     ("path_bytes", COUNT),
+    ("interrupted", Class::Code(InterruptCause::CODES)),
 ];
 const APPLY_PREPARED: Schema = &[
     ("binding", DIGEST),
@@ -498,6 +604,7 @@ const APPLY_PREPARED: Schema = &[
     ("files[].kind", Class::Code(ChangeKind::CODES)),
     ("files[].base", DIGEST),
     ("files[].candidate", DIGEST),
+    ("files[].temp_id", ID),
 ];
 const APPLY_OP: Schema = &[("path_sha256", DIGEST), ("path_bytes", COUNT), ("ok", BOOL)];
 const APPLY_FAILED: Schema = &[
@@ -509,6 +616,16 @@ const APPLY_FAILED: Schema = &[
     ("unrestored[].owner_version_temp", ID),
     ("attempt_ok", BOOL),
     ("completion_unrecorded", Class::Code(COMPLETIONS)),
+    ("interrupted", Class::Code(InterruptCause::CODES)),
+    ("temp_id", ID),
+    ("removal", Class::Code(REMOVALS)),
+];
+const RESTORE_PREPARED: Schema = &[
+    ("binding", DIGEST),
+    ("files", COUNT),
+    ("planned[].path_sha256", DIGEST),
+    ("planned[].path_bytes", COUNT),
+    ("planned[].temp_id", ID),
 ];
 const VERIFY_PREPARED: Schema = &[
     ("binding", DIGEST),
@@ -567,7 +684,8 @@ pub(crate) fn schema(kind: EventKind) -> Schema {
         K::ApplyRejected | K::RestoreRejected => REFUSED,
         K::ApplyPrepared => APPLY_PREPARED,
         K::ApplyOp => APPLY_OP,
-        K::ApplyCompleted | K::RestorePrepared | K::RestoreCompleted => BINDING_FILES,
+        K::ApplyCompleted | K::RestoreCompleted => BINDING_FILES,
+        K::RestorePrepared => RESTORE_PREPARED,
         K::ApplyRolledBack | K::ApplyRecoveryRequired => APPLY_FAILED,
         K::RestoreApproved | K::RestoreDeclined => BINDING,
         K::VerificationPrepared => VERIFY_PREPARED,
@@ -726,6 +844,9 @@ pub(crate) fn refusal_facts(refusal: &Refusal) -> Value {
     facts.insert("reason".to_string(), json!(refusal.code()));
     if let Some(path) = refusal.path() {
         insert_path(&mut facts, path);
+    }
+    if let Refusal::Interrupted(cause) = refusal {
+        facts.insert("interrupted".to_string(), json!(cause.code()));
     }
     Value::Object(facts)
 }

@@ -745,6 +745,12 @@ pub struct CodingRun {
     verifier: verifier::VerifierState,
     /// The emergency-stop watch the run was admitted under (M0-FIX F5).
     stop: crate::emergency_stop::StopWatch,
+    /// M2d: the watch on the broker's kernel stop the run also observes.
+    observed: Option<crate::emergency_stop::StopWatch>,
+    /// M2d (H2′): the watches an approved undo took when it started.
+    undo_watches: Option<apply::UndoWatches>,
+    /// M2d: temporary files whose removal is not established.
+    owed: Option<apply::Owed>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -768,7 +774,16 @@ impl CodingRun {
         binding: WorkspaceBinding,
         scopes: RunScopes,
     ) -> Result<Self, RunError> {
-        Self::create_inner(ledger, registry, project_grant, binding, scopes, None, None)
+        Self::create_inner(
+            ledger,
+            registry,
+            project_grant,
+            binding,
+            scopes,
+            None,
+            None,
+            None,
+        )
     }
 
     /// Create a run over an owner-selected project. The run's grant is the
@@ -780,6 +795,28 @@ impl CodingRun {
         ledger: Arc<dyn LedgerStore>,
         project: ProjectGrant,
         scopes: RunScopes,
+    ) -> Result<Self, RunError> {
+        Self::selected(ledger, project, scopes, None)
+    }
+
+    /// Create a run over an owner-selected project that also observes
+    /// `stop` (the broker's kernel stop authority, M2d): it is refused if
+    /// either authority's stop is in force, and halted by either one's stop,
+    /// exactly as by its own.
+    pub fn create_for_project_observing(
+        ledger: Arc<dyn LedgerStore>,
+        project: ProjectGrant,
+        scopes: RunScopes,
+        stop: &Arc<crate::emergency_stop::StopAuthority>,
+    ) -> Result<Self, RunError> {
+        Self::selected(ledger, project, scopes, Some(stop))
+    }
+
+    fn selected(
+        ledger: Arc<dyn LedgerStore>,
+        project: ProjectGrant,
+        scopes: RunScopes,
+        observed: Option<&Arc<crate::emergency_stop::StopAuthority>>,
     ) -> Result<Self, RunError> {
         let ProjectGrant {
             project,
@@ -802,23 +839,11 @@ impl CodingRun {
             scopes,
             Some((project, identity)),
             Some(lease),
+            observed,
         )
     }
 
-    /// Create a run over an owner-selected project that also observes
-    /// `stop` (the broker's kernel stop authority, M2d): it is refused, and
-    /// halted, if either authority is engaged. Interface stub: `stop` is not
-    /// observed yet.
-    pub fn create_for_project_observing(
-        ledger: Arc<dyn LedgerStore>,
-        project: ProjectGrant,
-        scopes: RunScopes,
-        stop: &Arc<crate::emergency_stop::StopAuthority>,
-    ) -> Result<Self, RunError> {
-        let _ = stop;
-        Self::create_for_project(ledger, project, scopes)
-    }
-
+    #[allow(clippy::too_many_arguments)]
     fn create_inner(
         ledger: Arc<dyn LedgerStore>,
         registry: Arc<WorkspaceAuthorityRegistry>,
@@ -827,10 +852,18 @@ impl CodingRun {
         scopes: RunScopes,
         selected: Option<(ProjectId, NodeIdentity)>,
         project_lease: Option<ProjectReadLease>,
+        observed: Option<&Arc<crate::emergency_stop::StopAuthority>>,
     ) -> Result<Self, RunError> {
-        // M0-FIX F5: no run while the owner's emergency stop is in force.
-        let stop = match stop_authority().admit() {
-            Ok(stop) => stop,
+        // M0-FIX F5: no run while the owner's emergency stop is in force
+        // (M2d: on either authority the run observes).
+        let admitted = stop_authority().admit().and_then(|stop| {
+            observed
+                .map(|authority| authority.admit())
+                .transpose()
+                .map(|observed| (stop, observed))
+        });
+        let (stop, observed) = match admitted {
+            Ok(watches) => watches,
             Err(_) => {
                 // The refused run's own read grant closes now.
                 if let Some(mut lease) = project_lease {
@@ -868,6 +901,9 @@ impl CodingRun {
             restore_approved: None,
             verifier: verifier::VerifierState::default(),
             stop,
+            observed,
+            undo_watches: None,
+            owed: None,
         };
         let mut facts = json!({
             "project_grant": project_grant,
@@ -1132,10 +1168,37 @@ impl CodingRun {
     /// stop is in force (an applied run's restore works again after the
     /// resume).
     fn stop_refusal(&self) -> Result<(), RunError> {
-        if (self.stop_ends() && self.stop.halted()) || self.stop.authority().is_stopped() {
+        let watches = || std::iter::once(&self.stop).chain(self.observed.as_ref());
+        let halted = watches().any(crate::emergency_stop::StopWatch::halted);
+        let in_force = watches().any(|watch| watch.authority().is_stopped());
+        if (self.stop_ends() && halted) || in_force {
             return Err(RunError::Revoked(RevocationReason::EmergencyStop));
         }
         Ok(())
+    }
+
+    /// Record a halt in the halt log of the stop that ended the run.
+    fn record_stop_halt(&self) {
+        let watch = match &self.observed {
+            Some(observed) if observed.halted() && !self.stop.halted() => observed,
+            _ => &self.stop,
+        };
+        watch.record_halt(
+            crate::emergency_stop::HaltArea::Coding,
+            crate::emergency_stop::HaltOutcome::Ended,
+        );
+    }
+
+    /// M2d (H2′): fresh watches on both authorities for an undo that starts
+    /// now; `None` while either stop is in force. The run's own admission
+    /// watches are never rearmed.
+    fn undo_watches(&self) -> Option<apply::UndoWatches> {
+        let run = self.stop.authority().admit().ok()?;
+        let observed = match &self.observed {
+            Some(watch) => Some(watch.authority().admit().ok()?),
+            None => None,
+        };
+        Some(apply::UndoWatches::new(run, observed))
     }
 
     /// M0-FIX F5: end a run the owner's emergency stop halted (its candidate
@@ -1145,10 +1208,7 @@ impl CodingRun {
     pub(crate) fn halt_if_stopped(&mut self) -> Result<(), RunError> {
         let refusal = self.stop_refusal();
         if refusal.is_err() && self.stop_ends() {
-            self.stop.record_halt(
-                crate::emergency_stop::HaltArea::Coding,
-                crate::emergency_stop::HaltOutcome::Ended,
-            );
+            self.record_stop_halt();
             self.verification = None;
             self.approved = None;
             self.enter_terminal(RunState::Revoked(RevocationReason::EmergencyStop));
@@ -1173,10 +1233,7 @@ impl CodingRun {
         if let Some(state) = terminal {
             if !self.state.is_terminal() {
                 if state == RunState::Revoked(RevocationReason::EmergencyStop) {
-                    self.stop.record_halt(
-                        crate::emergency_stop::HaltArea::Coding,
-                        crate::emergency_stop::HaltOutcome::Ended,
-                    );
+                    self.record_stop_halt();
                 }
                 self.enter_terminal(state);
             }
