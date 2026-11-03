@@ -131,6 +131,11 @@ pub enum FailureClass {
     /// or its start could not be recorded), or to let it take its next step
     /// (its grant was revoked or expired).
     Refused,
+    /// M2d (Codex review 1 of PR #64, H2): the effect may have happened and
+    /// whether it did is not established: recovery is required. Recorded
+    /// as the outcome `uncertain`, never as a plain failure or a
+    /// cancellation.
+    Uncertain,
 }
 
 impl FailureClass {
@@ -144,6 +149,7 @@ impl FailureClass {
             FailureClass::Unavailable => "unavailable",
             FailureClass::Abandoned => "abandoned",
             FailureClass::Refused => "refused",
+            FailureClass::Uncertain => "uncertain",
         }
     }
 }
@@ -1189,6 +1195,14 @@ impl CommitmentRegistry {
             // cancellation beside it, never hidden as "cancelled".
             let (state, outcome_str, failure) = match &outcome {
                 Outcome::Succeeded { .. } => (CommitmentState::Succeeded, "succeeded", None),
+                Outcome::Failed {
+                    class: FailureClass::Uncertain,
+                    ..
+                } => (
+                    CommitmentState::Failed,
+                    "uncertain",
+                    Some(FailureClass::Uncertain.as_str()),
+                ),
                 Outcome::Failed { class, .. } => {
                     (CommitmentState::Failed, "failed", Some(class.as_str()))
                 }
@@ -1546,6 +1560,33 @@ impl CommitmentRegistry {
         }
     }
 
+    /// M2d (§6.3, Codex D2 condition 4): whether the commitment's deadline
+    /// is reached on either clock (reached exactly counts), as `live_check`
+    /// decides it before a start. A commitment this registry no longer
+    /// knows counts as expired (fail closed).
+    pub fn expired(&self, id: CommitmentId) -> bool {
+        let now = self.now();
+        self.entries()
+            .get(&id)
+            .is_none_or(|e| now.monotonic_ms >= e.deadline_ms || now.wall_ms >= e.expires_wall_ms)
+    }
+
+    /// M2d: whether a grant the commitment relies on has reached its expiry
+    /// (rather than been revoked), so that an observer can name the cause.
+    pub(crate) fn grant_expired(&self, id: CommitmentId) -> bool {
+        let now = self.now();
+        let grants = self
+            .entries()
+            .get(&id)
+            .map(|e| e.prepared.grants.clone())
+            .unwrap_or_default();
+        grants.iter().any(|grant| {
+            self.0
+                .grants
+                .expired_at(*grant, now.monotonic_ms, now.wall_ms)
+        })
+    }
+
     /// The prepared action of a commitment that is executing under `guard`
     /// (actuators read what they committed to, nothing else).
     pub fn prepared_for(&self, guard: &ExecutionGuard) -> Option<PreparedAction> {
@@ -1603,6 +1644,20 @@ impl ExecutionGuard {
     /// [`CommitmentRegistry::lapse`]).
     pub fn lapse(&self) -> Option<&'static str> {
         self.registry.lapse(self.id)
+    }
+
+    /// M2d: whether the commitment's deadline is reached on either clock
+    /// (see [`CommitmentRegistry::expired`]). `still_authorized` does not
+    /// check it; a step that must not happen after the deadline (a Files
+    /// publication) asks both.
+    pub fn expired(&self) -> bool {
+        self.registry.expired(self.id)
+    }
+
+    /// M2d: whether a grant the commitment relies on has expired (rather
+    /// than been revoked).
+    pub(crate) fn grant_expired(&self) -> bool {
+        self.registry.grant_expired(self.id)
     }
 
     /// The same question, with the run's cancellation, for what outlives one

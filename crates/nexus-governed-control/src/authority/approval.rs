@@ -235,6 +235,58 @@ pub trait ControlConfirmer {
     fn confirm_held_mission(&self, _request: &MissionResumeConfirmation) -> bool {
         false
     }
+    /// M2d: the Owner's yes to undoing the last file Files created in this
+    /// session. A confirmer without the dialog declines every undo.
+    fn confirm_undo(&self, _request: &UndoConfirmation) -> bool {
+        false
+    }
+}
+
+/// What the Owner is asked before an undo removes the one file Files
+/// created last in this session (M2d §6.5, §6.6): the workspace, the file's
+/// name, its exact bytes, its full SHA-256 and the identity (device and
+/// inode) of the file that will be removed. The facts are the broker's own
+/// record and the kernel's; the file is removed only if it still is exactly
+/// that file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UndoConfirmation {
+    pub workspace: String,
+    pub file: String,
+    pub bytes: u64,
+    /// The full SHA-256 of the content (64 lowercase hex digits).
+    pub sha256: String,
+    pub device: u64,
+    pub inode: u64,
+}
+
+impl UndoConfirmation {
+    pub fn title(&self) -> &'static str {
+        "Undo the file Mother created?"
+    }
+
+    /// Every fact in the header; what happens in the details.
+    pub fn text(&self) -> ConfirmationText {
+        ConfirmationText {
+            header: vec![
+                ("Workspace", self.workspace.clone()),
+                ("File", self.file.clone()),
+                ("Size", format!("{} bytes", self.bytes)),
+                ("SHA-256", self.sha256.clone()),
+                (
+                    "Identity",
+                    format!("device {}, inode {}", self.device, self.inode),
+                ),
+            ],
+            details: vec![
+                "The file will be removed.".to_string(),
+                "Only this file, and only if it is still exactly this file.".to_string(),
+            ],
+        }
+    }
+
+    pub fn message(&self) -> String {
+        self.text().plain()
+    }
 }
 
 /// What the owner is asked before an agent gets a door (Mother Nexus M2c):

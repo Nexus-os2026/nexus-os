@@ -25,7 +25,10 @@ use crate::control::{Control, EffectOutput, Preparation};
 use crate::display::{AgentDisplay, DisplayStatus, InputIntent, PerceptionIntent};
 use crate::egress::{Egress, EgressIntent};
 use crate::evidence_store::PrimaryEvidence;
-use crate::files::{Exclusions, FileCreate, Files, WorkspaceInfo};
+use crate::files::{
+    CleanupRetry, Exclusions, FileCreate, Files, RecoveryEntry, UndoReport, WorkingDetail,
+    WorkspaceInfo,
+};
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
@@ -324,6 +327,9 @@ impl GovernedControl {
     /// which can start any more.
     pub fn settle(&self) {
         self.control.prune();
+        // M2d-B2: the staging of Files effects that ended is discarded here,
+        // never on a Stop path.
+        self.files.drain();
         let detached: Vec<RunId> = self
             .detached
             .lock()
@@ -391,7 +397,10 @@ impl GovernedControl {
             Intent::Observe(intent) => self.display.prepare_observation(authority, run, intent),
             Intent::Input(intent) => self.display.prepare_input(authority, run, intent),
             Intent::Synthetic(intent) => synthetic::prepare(authority, run, intent),
-            Intent::File(intent) => self.files.prepare(authority, run, intent),
+            Intent::File(intent) => {
+                self.files
+                    .prepare(authority, run, intent, self.kernel_stop.authority())
+            }
         }?;
         // P4-UAT05: a synthetic action is R2 or nothing, refused before any
         // commitment exists.
@@ -412,8 +421,15 @@ impl GovernedControl {
         if let Intent::Connector(intent) = intent {
             return self.connectors.propose(&self.control, agent, run, intent);
         }
-        let preparation = self.prepare(run, intent)?;
-        self.control.propose(agent, run, preparation)
+        let proposed = self
+            .prepare(run, intent)
+            .and_then(|preparation| self.control.propose(agent, run, preparation));
+        // M2d-B2: a refused Files proposal's staging is discarded now (its
+        // effect only handed the run over when it was dropped).
+        if matches!(intent, Intent::File(_)) {
+            self.files.drain();
+        }
+        proposed
     }
 
     /// Authorize (R2: the owner's native approval of exactly this
@@ -503,6 +519,23 @@ impl GovernedControl {
     /// An emergency stop: every effect first, unconditionally (the display
     /// stopped too), then the records, which may only become owed (EL-1
     /// §6).
+    ///
+    /// The acknowledgement contract (Architect's H1 decision, Option B):
+    /// Stop ingress, and confirmation that the halt is engaged, are
+    /// independent of evidence and cleanup; this call returning means its
+    /// synchronous recording phase finished, and hosts do not wait for that
+    /// return to acknowledge Stop.
+    ///
+    /// The engagement comes first and is memory only: the kernel stop (twice,
+    /// see below), the runs, the commitments, the lease ends, the generation,
+    /// and the pending effects, dropped outside the pending table (a Files
+    /// effect only hands its run to the deferred collection). No lock it
+    /// takes is held by anyone across evidence, filesystem or cleanup work
+    /// (the kernel stop's halt log releases its state before the audit), so
+    /// the halt is engaged, and observable in memory, before any blocking
+    /// dependency. Only after it does Stop tear the agent display down,
+    /// which may stop the display's processes (cleanup that follows the
+    /// engagement), and then write the records.
     fn stop_for(&self, reason: Option<&'static str>) -> usize {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
@@ -777,6 +810,57 @@ impl GovernedControl {
         &self.files
     }
 
+    /// M2d (§6.6, H2′): undo the last file Files created in this process,
+    /// once, after the Owner's own dialog (`ControlConfirmer::confirm_undo`)
+    /// and under fresh authority: the kernel takes fresh stop watches when
+    /// this undo starts, before its dialog, and checks those same watches
+    /// at its final check (U1); a fresh write grant is issued for it. The
+    /// Owner's only: no door route. Refused while a stop is in force, when
+    /// there is nothing to undo (a restart offers nothing), and when the
+    /// file is no longer exactly the one created (nothing is touched). An
+    /// interrupted or refused undo stays offered. A completed undo reports
+    /// a kernel write grant that lapsed after its final check (U1).
+    pub fn files_undo(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<UndoReport, AuthorityError> {
+        self.files
+            .undo(self.authority(), self.kernel_stop.authority(), confirmer)
+    }
+
+    /// M2d (§6.7): the startup recovery report: what the Files ledger says
+    /// is uncertain or owed (a prepared apply or undo without an outcome,
+    /// temps owed, recovery required, staging awaiting approval), with ids
+    /// and digests only. Reporting only: nothing is swept, and a ledger
+    /// that cannot be read is an error, never an empty report.
+    pub fn files_recovery_report(&self) -> Result<Vec<RecoveryEntry>, AuthorityError> {
+        self.files.recovery_report()
+    }
+
+    /// M2d (I4, D-O24): the Owner-only detail behind a Files execution's
+    /// failure code, held in memory and taken once.
+    pub fn files_working_detail(&self, id: CommitmentId) -> Option<WorkingDetail> {
+        self.files.working_detail(id)
+    }
+
+    /// M2d (R3): the Owner's startup hold before every Files publication
+    /// (the host's `--hold-before-publish`), at most 30 seconds and set
+    /// before the workspace is registered. During it a cancellation, a stop
+    /// or an expiry is seen at once; after it the ordinary final check
+    /// still decides. It approves nothing.
+    pub fn hold_files_before_publish(&self, hold: Duration) -> Result<(), AuthorityError> {
+        self.files.set_hold(hold)
+    }
+
+    /// M2d (§6.6; Codex review 1 of PR #64, M1): the Owner's bounded retry
+    /// of owed Files cleanup (temporary files the kernel could not remove,
+    /// staging whose removal failed): one attempt per owed run; what is
+    /// established is released, the rest stays owned and in the recovery
+    /// report. The Owner's only: no door route.
+    pub fn files_retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
+        self.files.retry_cleanup()
+    }
+
     /// Ask the owner, natively, for a grant (a synthetic one lasts at most
     /// `synthetic::GRANT_TTL`).
     pub fn request_grant(
@@ -960,6 +1044,8 @@ pub enum AgentOutcome {
 
 #[cfg(test)]
 mod door_tests;
+#[cfg(all(test, target_os = "linux"))]
+mod files_exec_tests;
 #[cfg(all(test, target_os = "linux"))]
 mod files_tests;
 #[cfg(test)]

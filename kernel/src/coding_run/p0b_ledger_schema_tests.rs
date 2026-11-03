@@ -321,6 +321,8 @@ fn p0b_schema_code_registries_are_closed_and_keep_their_spellings() {
         Refusal::VerificationInProgress,
         Refusal::VerificationCleanupFailed,
         Refusal::EmergencyStopped,
+        Refusal::Interrupted(InterruptCause::Cancelled),
+        Refusal::ProcessDumpable,
     ];
 
     // Unit variants keep the spelling the ledger used before P0-B.
@@ -403,6 +405,13 @@ fn p0b_schema_code_registries_are_closed_and_keep_their_spellings() {
         ApplyError::CompletionUnrecorded { operation: "x" },
         ApplyError::AuthorityNotClosed {
             after: Box::new(Err(ApplyError::InvalidState)),
+        },
+        ApplyError::Interrupted {
+            cause: InterruptCause::Revoked,
+        },
+        ApplyError::CleanupOwed {
+            cause: CleanupCause::Undo,
+            temps: Vec::new(),
         },
     ];
     let codes: Vec<&'static str> = applies.iter().map(ApplyError::code).collect();

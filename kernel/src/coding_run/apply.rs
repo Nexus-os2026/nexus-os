@@ -21,11 +21,26 @@
 //! descriptors: a replacement is written to an exclusive temporary file,
 //! fsynced, and atomically exchanged with the target (`RENAME_EXCHANGE`); the
 //! displaced file must be the very file checked in preflight, otherwise the
-//! exchange is undone. A creation is published with `link`, which never
-//! replaces. If any step fails, already-applied files are restored in reverse
-//! order and the outcome is reported as rolled back or as requiring
-//! recovery, never as applied. Multi-file apply is not atomic; the ledger
+//! exchange is undone. The inherited apply publishes a creation with one
+//! `renameat2(RENAME_NOREPLACE)`, which never replaces. If any step
+//! fails, already-applied files are restored in reverse order and the
+//! outcome is reported as rolled back or as requiring recovery, never as
+//! applied. Multi-file apply is not atomic; the ledger
 //! and the filesystem are separate transactional domains.
+//!
+//! M2d's observed apply ([`CodingRun::apply_observed`]) publishes exactly one
+//! new root-level file. The candidate is an anonymous `O_TMPFILE` file of the
+//! workspace directory, so there is no pathname to substitute. It is checked
+//! to hold the approved bytes, then linked with `linkat` (create-only), and
+//! the name is checked to hold it. Between that check and the link the inode
+//! is still writable through a descriptor, so publication requires the
+//! process to be **non-dumpable** (`PR_SET_DUMPABLE` 0, set by the host at
+//! startup): other processes of the same user can then neither open its
+//! `/proc/<pid>/fd` entries nor attach to it, while the process itself still
+//! links through `/proc/self/fd`. A dumpable process is refused
+//! ([`Refusal::ProcessDumpable`]). Not claimed: root or a `CAP_SYS_PTRACE`
+//! holder can still reach the descriptor; the `ptrace_scope` setting is
+//! irrelevant, as non-dumpable is the stronger restriction.
 //!
 //! Restore ("Restore this coding run") undoes exactly one successful apply
 //! of this run, after its own native confirmation and over a fresh write
@@ -39,14 +54,20 @@
 use serde_json::json;
 use thiserror::Error;
 
-use super::fsops::{DirHandle, EntryKind, NodeIdentity};
+use std::collections::BTreeMap;
+
+use serde_json::Value;
+
+use super::fsops::{plan_temp_name, DirHandle, EntryKind, NodeIdentity};
 use super::ledger::{self, record, EventKind};
-use super::manifest::ManifestEntry;
-use super::review::{display_safe, ChangeKind, Review, ReviewBinding};
-use super::scope::RelPath;
+use super::manifest::{Manifest, ManifestEntry};
+use super::review::{display_safe, ChangeKind, FileChange, Review, ReviewBinding};
+use super::scope::{RelPath, TEMP_PREFIX};
 use super::structural::StructuralProfile;
 use super::{CodingRun, ProjectGrant, RunError, RunId, RunState, StagingParent};
+use crate::emergency_stop::StopWatch;
 use crate::manifest::FsPermissionLevel;
+use crate::workspace_authority::WorkspaceAuthorityError;
 
 const MAX_DISPLAY_PATHS: usize = 12;
 const MAX_DISPLAY_NAME: usize = 64;
@@ -84,6 +105,60 @@ pub struct ConfirmationRequest {
     pub base_short: String,
     pub paths: Vec<String>,
     pub more_paths: usize,
+    /// The full [`ReviewBinding::hash`] the request is about (M2d).
+    pub review_hash: [u8; 32],
+    /// The exact byte count of the one file the request is about, if it
+    /// is about exactly one file.
+    pub bytes: Option<u64>,
+    /// The full SHA-256 (64 hex) of that one file's content.
+    pub sha256_full: Option<String>,
+    /// For a restore of one created file: the identity of the file that
+    /// will be removed.
+    pub identity: Option<FileIdentity>,
+}
+
+/// A file's device and inode, shown to the owner. It is a fact, never
+/// authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileIdentity {
+    pub dev: u64,
+    pub ino: u64,
+}
+
+/// What can interrupt an observed apply before its publication (M2d, I8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptCause {
+    EmergencyStop,
+    Cancelled,
+    Revoked,
+    Expired,
+    CommitmentExpired,
+}
+
+/// The caller's view of the authority an observed apply runs under (M2d,
+/// I8). The broker implements it over its execution guard.
+pub trait ApplyInterrupt {
+    /// Asked once, at the final check before publication: `Some` refuses
+    /// the publication.
+    fn interrupted(&self) -> Option<InterruptCause>;
+    /// Called once the final check has passed, just before publication. A
+    /// no-op in production; a test seam.
+    fn passed_final_check(&self) {}
+}
+
+/// Why owned temporary files had to be removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CleanupCause {
+    /// The final check refused the publication.
+    Interrupted(InterruptCause),
+    /// The temporary file could not be written completely.
+    TempWriteFailed,
+    /// The publishing rename failed.
+    PublicationFailed,
+    /// The publication could not be recorded, so it was undone.
+    Unrecorded,
+    /// The owner's undo moved the created file aside.
+    Undo,
 }
 
 impl ConfirmationRequest {
@@ -143,6 +218,10 @@ impl ConfirmationRequest {
             base_short: binding.base_manifest_hash.to_hex()[..12].to_string(),
             paths: Vec::new(),
             more_paths: 0,
+            review_hash: binding.hash(),
+            bytes: None,
+            sha256_full: None,
+            identity: None,
         }
     }
 
@@ -224,6 +303,15 @@ pub enum Refusal {
     VerificationCleanupFailed,
     /// The owner's emergency stop ended the run or is in force (M0-FIX F5).
     EmergencyStopped,
+    /// An interruption reached the operation before it touched anything
+    /// (M2d: an undo's final check U1).
+    Interrupted(InterruptCause),
+    /// M2d: the process is dumpable, so other processes of the same user
+    /// could open its descriptors through `/proc/<pid>/fd` (or attach to it)
+    /// and write the candidate between its verification and its link. Files
+    /// is refused before anything is prepared; the host makes the process
+    /// non-dumpable at startup ([`super::make_non_dumpable`]).
+    ProcessDumpable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -253,6 +341,18 @@ pub enum ApplyError {
     AuthorityNotClosed {
         after: Box<Result<ApplyReport, ApplyError>>,
     },
+    /// The final check refused the publication: nothing was published and
+    /// the temporary file's removal was established (M2d).
+    #[error("interrupted before publication: {cause:?}; nothing was published")]
+    Interrupted { cause: InterruptCause },
+    /// Temporary files the run created could not be confirmed removed; the
+    /// run keeps owning them (backend-random temp ids) until
+    /// [`CodingRun::retry_cleanup`] establishes their removal (M2d).
+    #[error("cleanup owed after {cause:?}; recovery required")]
+    CleanupOwed {
+        cause: CleanupCause,
+        temps: Vec<String>,
+    },
 }
 
 /// What a successful apply or restore wrote.
@@ -281,6 +381,9 @@ pub(crate) struct AppliedFile {
     candidate: ManifestEntry,
     installed: NodeIdentity,
     preimage: Option<Preimage>,
+    /// The temporary name planned and recorded for this file before it was
+    /// written (M6′); free again once the file is in place.
+    temp: String,
 }
 
 /// A directory created by an apply.
@@ -300,6 +403,9 @@ pub(crate) struct ApplyRecord {
     storage: DirHandle,
     storage_parent: DirHandle,
     storage_name: String,
+    /// M2d: the publication's directory sync failed; the file is in place
+    /// and its undo stays available while the run requires recovery.
+    unsynced: bool,
 }
 
 /// One planned write, checked in preflight.
@@ -315,6 +421,8 @@ struct Planned {
     candidate: ManifestEntry,
     base: Option<ManifestEntry>,
     pre: Option<(Vec<u8>, NodeIdentity, u32)>,
+    /// The backend-random temporary name, recorded before creation (M6′).
+    temp: String,
 }
 
 #[cfg(test)]
@@ -324,6 +432,28 @@ pub(crate) enum HookPoint {
     BeforeWrite,
     /// After the replacement is written, before the exchange.
     BeforeExchange,
+    /// M2d: the temporary file is written and synced; the final check is
+    /// next.
+    BeforeFinalCheck,
+    /// M2d: the final check passed; the publishing rename is next.
+    AfterFinalCheck,
+    /// M2d: an undo is prepared and recorded; its final check U1 is next.
+    BeforeUnpublish,
+}
+
+// M2d test seams: the removal of an owned temporary file, the publishing
+// rename, and directory syncs of the publication protocol fail.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static REMOVE_TEMP_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    pub(crate) static RENAME_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    pub(crate) static SYNC_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    /// The workspace cannot hold an anonymous (`O_TMPFILE`) file.
+    pub(crate) static TMPFILE_UNSUPPORTED: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
@@ -338,6 +468,9 @@ fn hook(_point: &str, _path: &RelPath) -> bool {
     {
         let point = match _point {
             "write" => HookPoint::BeforeWrite,
+            "final" => HookPoint::BeforeFinalCheck,
+            "handoff" => HookPoint::AfterFinalCheck,
+            "unpublish" => HookPoint::BeforeUnpublish,
             _ => HookPoint::BeforeExchange,
         };
         let path = _path.as_string();
@@ -386,6 +519,328 @@ fn close_write_grant(grant: &ProjectGrant) -> bool {
 
 fn refused(refusal: Refusal) -> ApplyError {
     ApplyError::Refused(refusal)
+}
+
+// ── M2d: one publication, cleanup ownership, the final check ───────────────
+
+#[derive(Clone, Copy)]
+enum Seam {
+    Remove,
+    Rename,
+    Sync,
+    Tmpfile,
+}
+
+/// Whether a test seam injects this failure (never in production).
+fn seam(_seam: Seam) -> bool {
+    #[cfg(test)]
+    {
+        let cell = match _seam {
+            Seam::Remove => &REMOVE_TEMP_FAILS,
+            Seam::Rename => &RENAME_FAILS,
+            Seam::Sync => &SYNC_FAILS,
+            Seam::Tmpfile => &TMPFILE_UNSUPPORTED,
+        };
+        return cell.try_with(std::cell::Cell::get).unwrap_or(false);
+    }
+    #[allow(unreachable_code)]
+    false
+}
+
+/// Why an owned temporary file's removal is not established.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Removal {
+    RemoveFailed,
+    NotOurs,
+    StillPresent,
+    SyncFailed,
+}
+
+impl Removal {
+    fn code(self) -> &'static str {
+        match self {
+            Self::RemoveFailed => "remove_failed",
+            Self::NotOurs => "not_ours",
+            Self::StillPresent => "still_present",
+            Self::SyncFailed => "sync_failed",
+        }
+    }
+}
+
+/// Every [`Removal`] code (the ledger's `removal` registry).
+pub(crate) const REMOVALS: &[&str] = &["remove_failed", "not_ours", "still_present", "sync_failed"];
+
+/// A temporary file the run created in the owner's folder. It stays owned
+/// until its removal is established: removed (only if it is still the very
+/// file created), `lstat` shows the name absent, and the directory is
+/// synced. `Drop` tries once more, as defense in depth only.
+#[derive(Debug)]
+pub(crate) struct OwnedTemp {
+    dir: DirHandle,
+    name: String,
+    identity: Option<NodeIdentity>,
+    released: bool,
+}
+
+impl OwnedTemp {
+    /// The backend-random id of its name (what the ledger records).
+    fn id(&self) -> String {
+        temp_id(&self.name).to_string()
+    }
+
+    /// One attempt to establish the removal; once established, a no-op.
+    fn release(&mut self) -> Result<(), Removal> {
+        if self.released {
+            return Ok(());
+        }
+        match self.dir.entry_metadata(&self.name) {
+            Ok(None) => {}
+            Ok(Some(found)) => {
+                let ours =
+                    found.file_type().is_file() && self.identity == Some(NodeIdentity::of(&found));
+                if !ours {
+                    return Err(Removal::NotOurs);
+                }
+                if seam(Seam::Remove) || self.dir.remove_temp(&self.name).is_err() {
+                    return Err(Removal::RemoveFailed);
+                }
+            }
+            Err(_) => return Err(Removal::StillPresent),
+        }
+        if !matches!(self.dir.entry_metadata(&self.name), Ok(None)) {
+            return Err(Removal::StillPresent);
+        }
+        if seam(Seam::Sync) || self.dir.sync().is_err() {
+            return Err(Removal::SyncFailed);
+        }
+        self.released = true;
+        Ok(())
+    }
+}
+
+impl Drop for OwnedTemp {
+    fn drop(&mut self) {
+        if !self.released {
+            let _ = self.release();
+        }
+    }
+}
+
+/// The private pre-image store of one apply.
+#[derive(Debug)]
+struct Store {
+    parent: DirHandle,
+    name: String,
+    dir: DirHandle,
+}
+
+impl Store {
+    fn discard(self) {
+        discard_storage(&self.parent, &self.name, &self.dir);
+    }
+}
+
+/// What a run becomes once its owed removals are established.
+#[derive(Debug, Clone, Copy)]
+enum Settled {
+    RolledBack,
+    Restored {
+        binding: ReviewBinding,
+        files: usize,
+    },
+    /// Recovery stays required for other reasons.
+    Recovery,
+}
+
+/// Temporary files whose removal is not established, kept by the run until
+/// [`CodingRun::retry_cleanup`] establishes it.
+#[derive(Debug)]
+pub(crate) struct Owed {
+    temps: Vec<OwnedTemp>,
+    cause: CleanupCause,
+    then: Settled,
+    store: Option<Store>,
+}
+
+/// The stop watches an undo took for both authorities when it started,
+/// before its dialog (H2′). Checked when it runs and at U1; never
+/// refreshed, so a stop during the undo needs a new undo.
+#[derive(Debug)]
+pub(crate) struct UndoWatches {
+    run: StopWatch,
+    observed: Option<StopWatch>,
+}
+
+impl UndoWatches {
+    pub(crate) fn new(run: StopWatch, observed: Option<StopWatch>) -> Self {
+        Self { run, observed }
+    }
+}
+
+/// Whether a stop was engaged since either watch was admitted, or is in
+/// force.
+fn stopped(run: &StopWatch, observed: Option<&StopWatch>) -> bool {
+    std::iter::once(run)
+        .chain(observed)
+        .any(|watch| watch.halted() || watch.authority().is_stopped())
+}
+
+/// The final check (§6.3 step 3; U1 for an undo): the caller's guard (which
+/// may hold, bounded, before it answers), then the kernel stop on both
+/// authorities, then the write grant, whose revocation or expiry (reached
+/// exactly counts) refuses. Only memory is read: no lock is held and no
+/// filesystem work is done.
+fn final_check(
+    grant: &ProjectGrant,
+    guard: Option<&dyn ApplyInterrupt>,
+    run: &StopWatch,
+    observed: Option<&StopWatch>,
+) -> Option<InterruptCause> {
+    if let Some(cause) = guard.and_then(|guard| guard.interrupted()) {
+        return Some(cause);
+    }
+    if stopped(run, observed) {
+        return Some(InterruptCause::EmergencyStop);
+    }
+    lapse(grant)
+}
+
+/// Whether the write grant has lapsed: `None` while it resolves, else
+/// `Expired` (reached exactly counts) or `Revoked` (any other refusal).
+/// Memory only. The final check and the close of an attempt share it.
+fn lapse(grant: &ProjectGrant) -> Option<InterruptCause> {
+    match grant.authority.resolve(grant.grant, grant.binding) {
+        Ok(_) => None,
+        Err(WorkspaceAuthorityError::ExpiredGrant) => Some(InterruptCause::Expired),
+        Err(_) => Some(InterruptCause::Revoked),
+    }
+}
+
+/// The id part of a temporary name.
+fn temp_id(name: &str) -> &str {
+    name.strip_prefix(TEMP_PREFIX).unwrap_or(name)
+}
+
+/// The candidate as an anonymous file of the workspace directory, held by
+/// this descriptor alone until it is published. Dropped unpublished, it is
+/// freed by the kernel: nothing is left behind and nothing is owed.
+struct Anonymous {
+    file: std::fs::File,
+    identity: NodeIdentity,
+}
+
+impl Anonymous {
+    /// Whether it is still the unlinked file created, holding exactly the
+    /// approved bytes.
+    fn holds(&self, approved: &ManifestEntry) -> bool {
+        use std::os::unix::fs::{FileExt as _, MetadataExt as _};
+        let Ok(found) = self.file.metadata() else {
+            return false;
+        };
+        if NodeIdentity::of(&found) != self.identity
+            || found.nlink() != 0
+            || found.len() != approved.size
+            || approved.size > MAX_FILE
+        {
+            return false;
+        }
+        let mut bytes = vec![0; approved.size as usize];
+        self.file.read_exact_at(&mut bytes, 0).is_ok() && ManifestEntry::of(&bytes) == *approved
+    }
+}
+
+/// Create the candidate as an anonymous file of `dir`, write and sync it.
+/// `None` if the filesystem cannot hold anonymous files or a step fails:
+/// Files is then refused, fail closed, never done through a named file.
+fn write_candidate(dir: &DirHandle, content: &[u8]) -> Option<Anonymous> {
+    use std::io::Write as _;
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+    if seam(Seam::Tmpfile) {
+        return None;
+    }
+    let mut file = dir.create_anonymous().ok()?;
+    let found = file.metadata().ok()?;
+    if found.dev() != dir.identity().dev || found.nlink() != 0 {
+        return None;
+    }
+    let identity = NodeIdentity::of(&found);
+    let permissions = std::fs::Permissions::from_mode(CREATED_FILE_MODE);
+    let written = file.write_all(content).is_ok()
+        && file.set_permissions(permissions).is_ok()
+        && file.sync_all().is_ok();
+    written.then_some(Anonymous { file, identity })
+}
+
+/// What moving a created file aside, to its recorded temporary name, and
+/// removing it gave.
+enum Unpublish {
+    /// Removed, and the removal established.
+    Removed,
+    /// Not the file Nexus created: renamed back, durably (the directory
+    /// synced), nothing else done.
+    NotOurs,
+    /// Renamed back, but the return is not durable (the directory sync
+    /// failed): recovery stays required.
+    NotOursUnsynced,
+    /// Not ours, and it could not be renamed back: it is at the temp name.
+    Stuck,
+    /// It could not be moved: nothing was done.
+    NotMoved,
+    /// Ours and moved aside, but its removal is not established.
+    Owed(OwnedTemp, Removal),
+}
+
+fn unpublish(file: &AppliedFile, temp: &str) -> Unpublish {
+    let Ok(handle) = file.dir.try_clone() else {
+        return Unpublish::NotMoved;
+    };
+    if file.dir.rename_noreplace(&file.name, temp).is_err() {
+        return Unpublish::NotMoved;
+    }
+    let moved = file.dir.read_with_identity(temp, MAX_FILE);
+    let ours = matches!(&moved, Ok((content, identity, _))
+        if *identity == file.installed && ManifestEntry::of(content) == file.candidate);
+    if !ours {
+        // Someone else's file: put it back (compensating, never cancelled).
+        if file.dir.rename_noreplace(temp, &file.name).is_err() {
+            return Unpublish::Stuck;
+        }
+        return if !seam(Seam::Sync) && file.dir.sync().is_ok() {
+            Unpublish::NotOurs
+        } else {
+            Unpublish::NotOursUnsynced
+        };
+    }
+    let mut owned = OwnedTemp {
+        dir: handle,
+        name: temp.to_string(),
+        identity: Some(file.installed),
+        released: false,
+    };
+    match owned.release() {
+        Ok(()) => Unpublish::Removed,
+        Err(removal) => Unpublish::Owed(owned, removal),
+    }
+}
+
+/// The `apply.prepared` facts: every file by digest with its planned temp
+/// id, recorded before anything is created.
+fn prepared_facts(binding: &ReviewBinding, preimages: Vec<Value>, plan: &[Planned]) -> Value {
+    json!({
+        "binding": hex::encode(binding.hash()),
+        "preimages": preimages,
+        "files": plan.iter().map(|p| {
+            let path = p.path.as_string();
+            json!({
+                "path_sha256": ledger::path_sha256(&path),
+                "path_bytes": path.len(),
+                "kind": p.kind.code(),
+                "base": p.base.as_ref().map(|e| hex::encode(e.sha256)),
+                "candidate": hex::encode(p.candidate.sha256),
+                "temp_id": temp_id(&p.temp),
+            })
+        }).collect::<Vec<_>>(),
+    })
 }
 
 impl CodingRun {
@@ -464,6 +919,7 @@ impl CodingRun {
         grant: ProjectGrant,
         storage: &StagingParent,
     ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = None;
         // M0-FIX F5: refused, before any write, by the emergency stop.
         let result = if self.halt_if_stopped().is_err() {
             self.approved = None;
@@ -474,13 +930,57 @@ impl CodingRun {
             self.approved = None;
             Err(refused(Refusal::ApprovalMismatch))
         };
-        // The write grant never outlives the attempt, and no outcome is
-        // clean unless its closure is confirmed.
-        if !close_write_grant(&grant) {
+        self.end_attempt(&grant, result)
+    }
+
+    /// Apply a candidate that is exactly one new root-level file, through
+    /// one publication right after a final check of every authority (M2d
+    /// §6.3, Codex D2): the candidate is written and synced first, as an
+    /// anonymous `O_TMPFILE` file of the workspace (no pathname exists to
+    /// substitute), and checked to hold the approved bytes; then `guard`,
+    /// the kernel stop on both authorities and the write grant are checked;
+    /// then one `linkat` publishes exactly that inode, never replacing an
+    /// existing entry (D1), and the name is verified to hold it. A
+    /// filesystem without anonymous files refuses (fail closed). An interruption before that check publishes
+    /// nothing; one after it lets only this rename complete, with no retry,
+    /// no other destination and no second file. Nothing waits for it.
+    pub fn apply_observed(
+        &mut self,
+        approval: OwnerApproval,
+        grant: ProjectGrant,
+        storage: &StagingParent,
+        guard: &dyn ApplyInterrupt,
+    ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = None;
+        let result = if self.halt_if_stopped().is_err() {
+            self.approved = None;
+            Err(refused(Refusal::EmergencyStopped))
+        } else if !super::process_non_dumpable() {
+            // Fail closed before any candidate exists (Codex review 2).
+            self.approved = None;
+            Err(refused(Refusal::ProcessDumpable))
+        } else if approval.kind == ConfirmationKind::Apply {
+            self.publish_one(approval.binding, &grant, storage, guard)
+        } else {
+            self.approved = None;
+            Err(refused(Refusal::ApprovalMismatch))
+        };
+        self.end_attempt(&grant, result)
+    }
+
+    /// The write grant never outlives the attempt, and no outcome is clean
+    /// unless its closure is confirmed; a refusal is recorded (informational:
+    /// nothing was written and no state changed).
+    fn end_attempt(
+        &mut self,
+        grant: &ProjectGrant,
+        result: Result<ApplyReport, ApplyError>,
+    ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = lapse(grant);
+        if !close_write_grant(grant) {
             return Err(self.authority_not_closed(result));
         }
         if let Err(ApplyError::Refused(refusal)) = &result {
-            // Informational: nothing was written and no state changed.
             let _ = record(
                 self.ledger.as_ref(),
                 self.id.0,
@@ -489,6 +989,78 @@ impl CodingRun {
             );
         }
         result
+    }
+
+    /// The write grant of this run's last apply or restore attempt, as the
+    /// kernel found it right before closing it at the attempt's end (M2d-K2,
+    /// §11 M4′): `None` if it still resolved (the kernel then revoked it
+    /// itself), `Some(Expired)` if it had expired, `Some(Revoked)` if it no
+    /// longer resolved for any other reason. An observed apply's final check
+    /// and an undo's U1 require the grant to resolve, so `Some` after a
+    /// publication or a completed undo means the grant lapsed after that
+    /// check. Reset when each attempt starts: `None` before any attempt and
+    /// for an attempt that never reached its close. Memory only.
+    pub fn write_grant_at_close(&self) -> Option<InterruptCause> {
+        self.write_grant_at_close
+    }
+
+    /// The temporary files this run owes, by id (M2d).
+    pub fn cleanup_owed(&self) -> Vec<String> {
+        self.owed
+            .iter()
+            .flat_map(|owed| owed.temps.iter().map(OwnedTemp::id))
+            .collect()
+    }
+
+    /// One bounded attempt, per owner command, to establish the removal of
+    /// every temporary file this run owes (M2d §6.6). Once established, the
+    /// outcome is recorded and the run becomes what the removal completes
+    /// (rolled back, or restored for an undo); otherwise it stays owed.
+    pub fn retry_cleanup(&mut self) -> Result<(), ApplyError> {
+        let owed = self.owed.as_mut().ok_or(ApplyError::InvalidState)?;
+        let mut established = true;
+        for temp in &mut owed.temps {
+            established &= temp.release().is_ok();
+        }
+        if !established {
+            return Err(ApplyError::CleanupOwed {
+                cause: owed.cause,
+                temps: owed.temps.iter().map(OwnedTemp::id).collect(),
+            });
+        }
+        let Some(mut owed) = self.owed.take() else {
+            return Err(ApplyError::InvalidState);
+        };
+        let (event, facts, operation, state) = match owed.then {
+            Settled::RolledBack => (
+                EventKind::ApplyRolledBack,
+                json!({ "failed": "cleanup" }),
+                "rollback",
+                ApplyState::RolledBack,
+            ),
+            Settled::Restored { binding, files } => (
+                EventKind::RestoreCompleted,
+                json!({ "binding": hex::encode(binding.hash()), "files": files }),
+                "restore",
+                ApplyState::Restored,
+            ),
+            Settled::Recovery => (
+                EventKind::ApplyRecoveryRequired,
+                json!({ "failed": "cleanup" }),
+                "restore",
+                ApplyState::RecoveryRequired,
+            ),
+        };
+        if record(self.ledger.as_ref(), self.id.0, event, &facts).is_err() {
+            return Err(self.completion_unrecorded(operation, &Failed::Step("cleanup")));
+        }
+        self.apply_state = state;
+        if state != ApplyState::RecoveryRequired {
+            if let Some(store) = owed.store.take() {
+                store.discard();
+            }
+        }
+        Ok(())
     }
 
     /// The write grant stayed live after an attempt: the run requires
@@ -507,12 +1079,16 @@ impl CodingRun {
         }
     }
 
-    fn apply_inner(
+    /// The checks every apply starts with: the state, this run's single-use
+    /// approval of the current candidate, the write grant and its root, and
+    /// the verified candidate's bytes. Returns the root, the candidate, its
+    /// changed files' bytes and the base.
+    #[allow(clippy::type_complexity)]
+    fn checked_candidate(
         &mut self,
         binding: ReviewBinding,
         grant: &ProjectGrant,
-        storage: &StagingParent,
-    ) -> Result<ApplyReport, ApplyError> {
+    ) -> Result<(DirHandle, Manifest, BTreeMap<RelPath, Vec<u8>>, Manifest), ApplyError> {
         if self.state != RunState::StructurallyVerified
             || self.apply_state != ApplyState::NotApplied
         {
@@ -547,6 +1123,16 @@ impl CodingRun {
             .base
             .clone()
             .ok_or(refused(Refusal::CandidateChanged))?;
+        Ok((root, candidate, bytes, base))
+    }
+
+    fn apply_inner(
+        &mut self,
+        binding: ReviewBinding,
+        grant: &ProjectGrant,
+        storage: &StagingParent,
+    ) -> Result<ApplyReport, ApplyError> {
+        let (root, candidate, bytes, base) = self.checked_candidate(binding, grant)?;
         let mut plan = Vec::new();
         for (path, entry) in candidate.entries() {
             let before = base.get(path);
@@ -578,20 +1164,7 @@ impl CodingRun {
             discard_storage(&storage.handle, &storage_name, &storage_dir);
             return Err(refused(Refusal::PreimageUnavailable));
         };
-        let prepared = json!({
-            "binding": hex::encode(binding.hash()),
-            "preimages": preimages,
-            "files": plan.iter().map(|p| {
-                let path = p.path.as_string();
-                json!({
-                    "path_sha256": ledger::path_sha256(&path),
-                    "path_bytes": path.len(),
-                    "kind": p.kind.code(),
-                    "base": p.base.as_ref().map(|e| hex::encode(e.sha256)),
-                    "candidate": hex::encode(p.candidate.sha256),
-                })
-            }).collect::<Vec<_>>(),
-        });
+        let prepared = prepared_facts(&binding, preimages, &plan);
         if record(
             self.ledger.as_ref(),
             self.id.0,
@@ -667,9 +1240,295 @@ impl CodingRun {
             storage: storage_dir,
             storage_parent,
             storage_name,
+            unsynced: false,
         });
         self.apply_state = ApplyState::Applied;
         Ok(ApplyReport { binding, files })
+    }
+
+    /// M2d §6.3 for one new root-level file: preflight and `apply.prepared`
+    /// (with the planned temp id), the owned temporary file, the final
+    /// check, the handoff, one `rename_noreplace`, the directory sync, then
+    /// the records.
+    fn publish_one(
+        &mut self,
+        binding: ReviewBinding,
+        grant: &ProjectGrant,
+        storage: &StagingParent,
+        guard: &dyn ApplyInterrupt,
+    ) -> Result<ApplyReport, ApplyError> {
+        let (root, candidate, bytes, base) = self.checked_candidate(binding, grant)?;
+        if let Some(path) = base
+            .entries()
+            .keys()
+            .find(|path| candidate.get(path).is_none())
+        {
+            return Err(refused(Refusal::Unsupported(path.as_string())));
+        }
+        let changed: Vec<(&RelPath, &ManifestEntry)> = candidate
+            .entries()
+            .iter()
+            .filter(|(path, entry)| base.get(path) != Some(*entry))
+            .collect();
+        let (path, entry) = match changed.as_slice() {
+            [(path, entry)] if base.get(path).is_none() && path.components().len() == 1 => {
+                ((*path).clone(), (*entry).clone())
+            }
+            [] => return Err(refused(Refusal::Unsupported(String::new()))),
+            [(path, _), ..] => return Err(refused(Refusal::Unsupported(path.as_string()))),
+        };
+        if !self.scopes.editable(&path) {
+            return Err(refused(Refusal::OutsideScope(path.as_string())));
+        }
+        let content = bytes
+            .get(&path)
+            .cloned()
+            .ok_or(refused(Refusal::CandidateChanged))?;
+        let planned = self.preflight(&root, &path, None, entry, content)?;
+        let plan = std::slice::from_ref(&planned);
+        let (dir, name, preimages) = self.store_preimages(storage, plan)?;
+        let Ok(parent) = storage.handle.try_clone() else {
+            discard_storage(&storage.handle, &name, &dir);
+            return Err(refused(Refusal::PreimageUnavailable));
+        };
+        let store = Store { parent, name, dir };
+        let prepared = prepared_facts(&binding, preimages, plan);
+        if record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ApplyPrepared,
+            &prepared,
+        )
+        .is_err()
+        {
+            store.discard();
+            return Err(refused(Refusal::Unrecorded));
+        }
+
+        // The candidate, as an anonymous file of the workspace directory: no
+        // pathname exists to substitute; it is complete and synced before the
+        // handoff, and freed unless it is published.
+        let Planned {
+            dir,
+            name,
+            content,
+            candidate,
+            temp,
+            ..
+        } = planned;
+        let written = if hook("write", &path) {
+            None
+        } else {
+            write_candidate(&dir, &content)
+        };
+        let Some(anonymous) = written else {
+            return Err(self.unpublished(CleanupCause::TempWriteFailed, store));
+        };
+        hook("final", &path);
+        // It must still hold exactly the approved bytes.
+        if !anonymous.holds(&candidate) {
+            return Err(self.unpublished(CleanupCause::TempWriteFailed, store));
+        }
+
+        // FINAL CHECK, then the handoff into the one publication.
+        if let Some(cause) = final_check(grant, Some(guard), &self.stop, self.observed.as_ref()) {
+            return Err(self.unpublished(CleanupCause::Interrupted(cause), store));
+        }
+        guard.passed_final_check();
+        hook("handoff", &path);
+
+        // PUBLICATION: link exactly the inode the descriptor holds; an
+        // existing entry is never replaced.
+        if seam(Seam::Rename) || dir.link_anonymous(&anonymous.file, &name).is_err() {
+            return Err(self.unpublished(CleanupCause::PublicationFailed, store));
+        }
+        let installed = anonymous.identity;
+        drop(anonymous);
+        // The name must now hold that inode with the approved bytes;
+        // otherwise this is never Applied.
+        let published = dir.read_with_identity(&name, MAX_FILE);
+        let verified = matches!(&published, Ok((bytes, identity, _))
+            if *identity == installed && ManifestEntry::of(bytes) == candidate);
+        if !verified {
+            self.apply_state = ApplyState::RecoveryRequired;
+            let mut facts = ledger::path_facts(&path.as_string());
+            facts["failed"] = json!("verify");
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::ApplyRecoveryRequired,
+                &facts,
+            );
+            return Err(ApplyError::RecoveryRequired {
+                failed: "verify".to_string(),
+                unrestored: vec![path.as_string()],
+            });
+        }
+        let file = AppliedFile {
+            path: path.clone(),
+            kind: ChangeKind::Create,
+            dir,
+            name,
+            candidate,
+            installed,
+            preimage: None,
+            temp,
+        };
+
+        // The directory sync, then the records.
+        let synced = !seam(Seam::Sync) && file.dir.sync().is_ok();
+        let text = path.as_string();
+        let op = json!({
+            "path_sha256": ledger::path_sha256(&text),
+            "path_bytes": text.len(),
+            "ok": true,
+        });
+        if record(self.ledger.as_ref(), self.id.0, EventKind::ApplyOp, &op).is_err() {
+            return Err(self.compensate(file, store, Failed::Step("apply.op")));
+        }
+        if !synced {
+            // The file is in place but not durably linked: recovery is
+            // required, and its undo stays available.
+            self.applied = Some(ApplyRecord {
+                binding,
+                files: vec![file],
+                dirs: Vec::new(),
+                storage: store.dir,
+                storage_parent: store.parent,
+                storage_name: store.name,
+                unsynced: true,
+            });
+            self.apply_state = ApplyState::RecoveryRequired;
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::ApplyRecoveryRequired,
+                &json!({ "failed": "dir_sync" }),
+            );
+            return Err(ApplyError::RecoveryRequired {
+                failed: "dir_sync".to_string(),
+                unrestored: Vec::new(),
+            });
+        }
+        let completed = json!({ "binding": hex::encode(binding.hash()), "files": 1 });
+        if record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ApplyCompleted,
+            &completed,
+        )
+        .is_err()
+        {
+            return Err(self.compensate(file, store, Failed::Step("apply.completed")));
+        }
+        self.applied = Some(ApplyRecord {
+            binding,
+            files: vec![file],
+            dirs: Vec::new(),
+            storage: store.dir,
+            storage_parent: store.parent,
+            storage_name: store.name,
+            unsynced: false,
+        });
+        self.apply_state = ApplyState::Applied;
+        Ok(ApplyReport {
+            binding,
+            files: vec![(path, ChangeKind::Create)],
+        })
+    }
+
+    /// Nothing was published (the anonymous candidate, if any, is freed
+    /// with its descriptor): record the outcome, `RolledBack`, or
+    /// `Interrupted` for an interruption.
+    fn unpublished(&mut self, cause: CleanupCause, store: Store) -> ApplyError {
+        let (code, interrupted) = match cause {
+            CleanupCause::Interrupted(cause) => ("interrupted", Some(cause)),
+            CleanupCause::TempWriteFailed => ("temp", None),
+            _ => ("publish", None),
+        };
+        let mut facts = json!({ "failed": code });
+        if let Some(cause) = interrupted {
+            facts["interrupted"] = json!(cause.code());
+        }
+        if record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ApplyRolledBack,
+            &facts,
+        )
+        .is_err()
+        {
+            return self.completion_unrecorded("rollback", &Failed::Step(code));
+        }
+        self.apply_state = ApplyState::RolledBack;
+        store.discard();
+        match interrupted {
+            Some(cause) => ApplyError::Interrupted { cause },
+            None => ApplyError::RolledBack {
+                failed: code.to_string(),
+            },
+        }
+    }
+
+    /// The publication could not be recorded: undo it, verified, through its
+    /// recorded temporary name (compensating, never cancelled).
+    fn compensate(&mut self, file: AppliedFile, store: Store, failed: Failed) -> ApplyError {
+        let temp = file.temp.clone();
+        let path = file.path.as_string();
+        let (unrestored, hidden) = match unpublish(&file, &temp) {
+            Unpublish::Removed => (Vec::new(), Vec::new()),
+            Unpublish::Owed(owned, removal) => {
+                return self.owe(
+                    vec![(owned, removal, path)],
+                    CleanupCause::Unrecorded,
+                    &failed.facts(),
+                    Settled::RolledBack,
+                    Some(store),
+                );
+            }
+            Unpublish::NotOurs | Unpublish::NotOursUnsynced | Unpublish::NotMoved => {
+                (vec![path], Vec::new())
+            }
+            Unpublish::Stuck => (Vec::new(), vec![(path, temp)]),
+        };
+        let Store { parent, name, dir } = store;
+        self.finish_failed(failed, unrestored, hidden, &parent, name, dir)
+    }
+
+    /// The run owes these temporary files: it requires recovery, each is
+    /// recorded by its id and why its removal is not established, and the
+    /// run keeps them until a retry establishes it.
+    fn owe(
+        &mut self,
+        temps: Vec<(OwnedTemp, Removal, String)>,
+        cause: CleanupCause,
+        facts: &Value,
+        then: Settled,
+        store: Option<Store>,
+    ) -> ApplyError {
+        self.apply_state = ApplyState::RecoveryRequired;
+        for (temp, removal, path) in &temps {
+            let mut facts = facts.clone();
+            facts["temp_id"] = json!(temp.id());
+            facts["removal"] = json!(removal.code());
+            facts["path_sha256"] = json!(ledger::path_sha256(path));
+            facts["path_bytes"] = json!(path.len());
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::ApplyRecoveryRequired,
+                &facts,
+            );
+        }
+        let temps: Vec<OwnedTemp> = temps.into_iter().map(|(temp, ..)| temp).collect();
+        let ids = temps.iter().map(OwnedTemp::id).collect();
+        self.owed = Some(Owed {
+            temps,
+            cause,
+            then,
+            store,
+        });
+        ApplyError::CleanupOwed { cause, temps: ids }
     }
 
     /// Record a failed apply after rollback and set the resulting state.
@@ -842,6 +1701,7 @@ impl CodingRun {
             candidate,
             base,
             pre,
+            temp: plan_temp_name(),
         })
     }
 
@@ -898,12 +1758,35 @@ impl CodingRun {
         confirmer: &dyn OwnerConfirmer,
     ) -> Result<OwnerApproval, ApplyError> {
         let record_ = self.applied.as_ref().ok_or(ApplyError::InvalidState)?;
-        if self.apply_state != ApplyState::Applied {
+        if !self.restorable() {
             return Err(ApplyError::InvalidState);
         }
+        // H2′: this undo's own watches on both authorities, taken now,
+        // before its dialog; refused while a stop is in force.
+        let Some(watches) = self.undo_watches() else {
+            let refusal = Refusal::EmergencyStopped;
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::RestoreRejected,
+                &ledger::refusal_facts(&refusal),
+            );
+            return Err(refused(refusal));
+        };
         let binding = record_.binding;
-        let request = ConfirmationRequest::new(ConfirmationKind::Restore, project_name, &binding)
-            .with_paths(record_.files.iter().map(|f| (&f.path, f.kind)));
+        let mut request =
+            ConfirmationRequest::new(ConfirmationKind::Restore, project_name, &binding)
+                .with_paths(record_.files.iter().map(|f| (&f.path, f.kind)));
+        if let [file] = record_.files.as_slice() {
+            request.bytes = Some(file.candidate.size);
+            request.sha256_full = Some(hex::encode(file.candidate.sha256));
+            if file.kind == ChangeKind::Create {
+                request.identity = Some(FileIdentity {
+                    dev: file.installed.dev,
+                    ino: file.installed.ino,
+                });
+            }
+        }
         let confirmed = confirmer.confirm(&request);
         let event = if confirmed {
             EventKind::RestoreApproved
@@ -921,10 +1804,22 @@ impl CodingRun {
             return Err(refused(Refusal::Declined));
         }
         self.restore_approved = Some(binding);
+        self.undo_watches = Some(watches);
         Ok(OwnerApproval {
             kind: ConfirmationKind::Restore,
             binding,
         })
+    }
+
+    /// Whether this run's apply can be undone: it is applied, or its
+    /// publication's directory sync failed (the file is in place).
+    fn restorable(&self) -> bool {
+        self.apply_state == ApplyState::Applied
+            || (self.apply_state == ApplyState::RecoveryRequired
+                && self
+                    .applied
+                    .as_ref()
+                    .is_some_and(|applied| applied.unsynced))
     }
 
     /// Restore this run's apply: only if every applied file still has the
@@ -935,12 +1830,14 @@ impl CodingRun {
         approval: OwnerApproval,
         grant: ProjectGrant,
     ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = None;
+        let watches = self.undo_watches.take();
         // M0-FIX F5: refused, before any write, while the stop is in force.
         let result = if self.halt_if_stopped().is_err() {
             self.restore_approved = None;
             Err(refused(Refusal::EmergencyStopped))
         } else if approval.kind == ConfirmationKind::Restore {
-            self.restore_inner(approval.binding, &grant)
+            self.restore_inner(approval.binding, &grant, watches)
         } else {
             self.restore_approved = None;
             Err(refused(Refusal::ApprovalMismatch))
@@ -948,6 +1845,7 @@ impl CodingRun {
         // Clean success needs the durable completion (checked inside) and a
         // confirmed closure of the write grant; only then is the run
         // Restored and the private pre-image store discarded.
+        self.write_grant_at_close = lapse(&grant);
         if !close_write_grant(&grant) {
             let after = result.map(|(report, _kept)| report);
             return Err(self.authority_not_closed(after));
@@ -980,12 +1878,21 @@ impl CodingRun {
     /// Restore on disk and record its durable completion. On success the
     /// consumed apply record (holding the pre-image store) is returned for
     /// the caller to discard once the write grant is confirmed closed.
+    ///
+    /// M2d: the undo's own watches (H2′) are checked first and again at U1,
+    /// right before the first unpublishing rename, with the write grant.
+    /// Temporary names are planned and recorded before anything moves; a
+    /// created file is moved aside to its name, removed only if it is still
+    /// the very file Nexus created, and owned until its removal is
+    /// established. A file found not ours is renamed back: with nothing yet
+    /// touched the undo is `Stale` and stays offered.
     fn restore_inner(
         &mut self,
         binding: ReviewBinding,
         grant: &ProjectGrant,
+        watches: Option<UndoWatches>,
     ) -> Result<(ApplyReport, ApplyRecord), ApplyError> {
-        if self.apply_state != ApplyState::Applied || self.applied.is_none() {
+        if !self.restorable() || self.applied.is_none() {
             return Err(ApplyError::InvalidState);
         }
         let approved = self.restore_approved.take();
@@ -995,6 +1902,11 @@ impl CodingRun {
         }
         if approved != Some(binding) || record_binding != Some(binding) {
             return Err(refused(Refusal::ApprovalMismatch));
+        }
+        // An approval never exists without the watches its undo took.
+        let watches = watches.ok_or(refused(Refusal::NotApproved))?;
+        if stopped(&watches.run, watches.observed.as_ref()) {
+            return Err(refused(Refusal::Interrupted(InterruptCause::EmergencyStop)));
         }
         let root = self.project_root_for_write(grant)?;
         let max = self.profile.max_file_bytes;
@@ -1026,13 +1938,37 @@ impl CodingRun {
                 }
             }
         }
+        let mut temps: Vec<String> = applied.files.iter().map(|_| plan_temp_name()).collect();
+        let planned: Vec<Value> = applied
+            .files
+            .iter()
+            .zip(&temps)
+            .map(|(file, temp)| {
+                let mut facts = ledger::path_facts(&file.path.as_string());
+                facts["temp_id"] = json!(temp_id(temp));
+                facts
+            })
+            .collect();
+        let first = applied.files.first().map(|f| f.path.clone());
         record(
             self.ledger.as_ref(),
             self.id.0,
             EventKind::RestorePrepared,
-            &json!({ "binding": hex::encode(binding.hash()), "files": applied.files.len() }),
+            &json!({
+                "binding": hex::encode(binding.hash()),
+                "files": applied.files.len(),
+                "planned": planned,
+            }),
         )
         .map_err(|_| refused(Refusal::Unrecorded))?;
+
+        // U1: the undo's final check, with the watches it took at its start.
+        if let Some(path) = &first {
+            hook("unpublish", path);
+        }
+        if let Some(cause) = final_check(grant, None, &watches.run, watches.observed.as_ref()) {
+            return Err(refused(Refusal::Interrupted(cause)));
+        }
 
         let mut applied = self.applied.take().ok_or(ApplyError::InvalidState)?;
         let files: Vec<(RelPath, ChangeKind)> = applied
@@ -1040,37 +1976,98 @@ impl CodingRun {
             .iter()
             .map(|f| (f.path.clone(), f.kind))
             .collect();
-        let unrestored = rollback(&mut applied.files, &mut applied.dirs, &applied.storage);
-        if unrestored.is_empty() {
-            // Files are restored; success is claimed only after the durable
-            // completion record. Without it the pre-image store is kept.
-            if record(
-                self.ledger.as_ref(),
-                self.id.0,
-                EventKind::RestoreCompleted,
-                &json!({ "binding": hex::encode(binding.hash()), "files": files.len() }),
-            )
-            .is_err()
-            {
-                return Err(
-                    self.completion_unrecorded("restore", &Failed::Step("restore.completed"))
+        let (mut unrestored, mut hidden, mut owed) = (Vec::new(), Vec::new(), Vec::new());
+        let mut done = 0usize;
+        while let Some(file) = applied.files.pop() {
+            let temp = temps.pop().unwrap_or_else(plan_temp_name);
+            let path = file.path.as_string();
+            match file.kind {
+                ChangeKind::Create => match unpublish(&file, &temp) {
+                    Unpublish::Removed => {}
+                    Unpublish::Owed(owned, removal) => owed.push((owned, removal, path)),
+                    Unpublish::NotOurs if done == 0 => {
+                        // Nothing was touched: the undo is stale and stays
+                        // offered.
+                        applied.files.push(file);
+                        self.applied = Some(applied);
+                        return Err(refused(Refusal::Stale(path)));
+                    }
+                    Unpublish::NotOurs | Unpublish::NotOursUnsynced | Unpublish::NotMoved => {
+                        unrestored.push(path)
+                    }
+                    Unpublish::Stuck => hidden.push((path, temp)),
+                },
+                ChangeKind::Replace => {
+                    if !restore_replaced(&file, &applied.storage) {
+                        unrestored.push(path);
+                    }
+                }
+                ChangeKind::Delete => unrestored.push(path),
+            }
+            done += 1;
+        }
+        while let Some(created) = applied.dirs.pop() {
+            let _ = created
+                .parent
+                .remove_subdir_if_identity(&created.name, created.identity);
+        }
+        if !unrestored.is_empty() || !hidden.is_empty() {
+            // Partial: recovery is required whether or not this is recorded.
+            if !owed.is_empty() {
+                let _ = self.owe(
+                    owed,
+                    CleanupCause::Undo,
+                    &json!({ "failed": "restore" }),
+                    Settled::Recovery,
+                    None,
                 );
             }
-            Ok((ApplyReport { binding, files }, applied))
-        } else {
-            // Partial: recovery is required whether or not this is recorded.
             self.apply_state = ApplyState::RecoveryRequired;
             let _ = record(
                 self.ledger.as_ref(),
                 self.id.0,
                 EventKind::ApplyRecoveryRequired,
-                &json!({ "failed": "restore", "unrestored": unrestored_facts(&unrestored, &[]) }),
+                &json!({ "failed": "restore", "unrestored": unrestored_facts(&unrestored, &hidden) }),
             );
-            Err(ApplyError::RecoveryRequired {
+            unrestored.extend(hidden.into_iter().map(|(path, temp)| {
+                format!("{path} (your concurrent version is saved as {temp})")
+            }));
+            return Err(ApplyError::RecoveryRequired {
                 failed: "restore".to_string(),
                 unrestored,
-            })
+            });
         }
+        if !owed.is_empty() {
+            let store = Store {
+                parent: applied.storage_parent,
+                name: applied.storage_name,
+                dir: applied.storage,
+            };
+            let settled = Settled::Restored {
+                binding,
+                files: files.len(),
+            };
+            return Err(self.owe(
+                owed,
+                CleanupCause::Undo,
+                &json!({ "failed": "restore" }),
+                settled,
+                Some(store),
+            ));
+        }
+        // Files are restored; success is claimed only after the durable
+        // completion record. Without it the pre-image store is kept.
+        if record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::RestoreCompleted,
+            &json!({ "binding": hex::encode(binding.hash()), "files": files.len() }),
+        )
+        .is_err()
+        {
+            return Err(self.completion_unrecorded("restore", &Failed::Step("restore.completed")));
+        }
+        Ok((ApplyReport { binding, files }, applied))
     }
 }
 
@@ -1139,8 +2136,13 @@ fn reaches(root: &DirHandle, path: &RelPath, expected: NodeIdentity) -> bool {
 }
 
 fn request_for(kind: ConfirmationKind, project_name: &str, review: &Review) -> ConfirmationRequest {
-    ConfirmationRequest::new(kind, project_name, &review.binding)
-        .with_paths(review.changes.iter().map(|c| (&c.path, c.kind)))
+    let mut request = ConfirmationRequest::new(kind, project_name, &review.binding)
+        .with_paths(review.changes.iter().map(|c| (&c.path, c.kind)));
+    if let [FileChange { new: Some(new), .. }] = review.changes.as_slice() {
+        request.bytes = Some(new.size);
+        request.sha256_full = Some(hex::encode(new.sha256));
+    }
+    request
 }
 
 fn preimages_slots(plan: &[Planned]) -> std::collections::BTreeMap<RelPath, Preimage> {
@@ -1187,13 +2189,14 @@ fn write_one(
         name,
         content,
         candidate,
+        temp,
         ..
     } = planned;
     match kind {
         ChangeKind::Replace => {
             let pre = preimage.ok_or(WriteFailure::Failed)?;
-            let (temp, installed) = dir
-                .write_temp_with_mode(&content, pre.mode)
+            let installed = dir
+                .write_temp_named_with_mode(&temp, &content, pre.mode)
                 .map_err(failed)?;
             if hook("exchange", &path) {
                 let _ = dir.remove_temp(&temp);
@@ -1222,6 +2225,7 @@ fn write_one(
                     candidate,
                     installed,
                     preimage: Some(pre),
+                    temp: temp.clone(),
                 });
                 return Err(WriteFailure::OwnerVersionAt(temp));
             }
@@ -1234,6 +2238,7 @@ fn write_one(
                 candidate,
                 installed,
                 preimage: Some(pre),
+                temp,
             });
             removed.map_err(failed)
         }
@@ -1269,14 +2274,16 @@ fn write_one(
                 };
                 dir = sub;
             }
-            let (temp, installed) = dir
-                .write_temp_with_mode(&content, CREATED_FILE_MODE)
+            let installed = dir
+                .write_temp_named_with_mode(&temp, &content, CREATED_FILE_MODE)
                 .map_err(failed)?;
-            if dir.link_temp(&temp, &name).is_err() {
+            // M2d: published by one rename that never replaces; the
+            // temporary name is consumed by it.
+            if dir.rename_noreplace(&temp, &name).is_err() {
                 let _ = dir.remove_temp(&temp);
                 return Err(WriteFailure::Failed);
             }
-            let removed = dir.remove_temp(&temp).and_then(|()| dir.sync());
+            let synced = dir.sync();
             applied.push(AppliedFile {
                 path,
                 kind,
@@ -1285,8 +2292,9 @@ fn write_one(
                 candidate,
                 installed,
                 preimage: None,
+                temp,
             });
-            removed.map_err(failed)
+            synced.map_err(failed)
         }
         ChangeKind::Delete => Err(WriteFailure::Failed),
     }

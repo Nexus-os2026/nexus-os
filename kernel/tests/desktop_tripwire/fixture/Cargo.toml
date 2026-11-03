@@ -1,0 +1,10 @@
+# G0's real offline Cargo fixture (M2b design §11 A2, A4). It is its own
+# workspace, never part of the repository's. Its one member has a disabled
+# optional dependency on a wrapper, and the wrapper depends on a stub named
+# `webkit6`. Both stubs are excluded from membership (A4), so only the
+# optional edge can bring `webkit6` into the graph: default-feature
+# resolution must lack it, and all-features resolution must contain it.
+[workspace]
+resolver = "2"
+members = ["member"]
+exclude = ["wrapper", "webkit6"]

@@ -397,6 +397,20 @@ impl GrantStore {
             .cloned()
     }
 
+    /// M2d: whether grant `id` exists, is not revoked and has reached its
+    /// expiry on either clock at the given readings.
+    pub(crate) fn expired_at(&self, id: GrantId, monotonic_ms: u64, wall_ms: u64) -> bool {
+        self.grants
+            .lock()
+            .expect("grant store")
+            .map
+            .get(&id)
+            .is_some_and(|grant| {
+                !grant.revoked
+                    && (grant.expires_ms <= monotonic_ms || grant.expires_wall_ms <= wall_ms)
+            })
+    }
+
     /// Every live grant of `kind`.
     pub fn live_of(&self, kind: CapabilityKind) -> Vec<Grant> {
         let (now, wall) = (self.clock.monotonic_ms(), self.clock.wall_ms());

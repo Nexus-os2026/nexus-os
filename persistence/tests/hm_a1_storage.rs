@@ -1315,6 +1315,23 @@ fn hm_n2_current_row_matches_scan_and_requires_canonical_ids() {
 
 use std::path::{Path, PathBuf};
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "../../kernel/tests/desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
+/// M2b-A (G1–G8): the restored checks see the desktop. Its production
+/// sources are in this scan, so the guard's expected lists, all empty,
+/// hold for it.
+fn assert_desktop_scanned(files: &[PathBuf]) {
+    let scanned: Vec<String> = files.iter().map(|f| relative(f)).collect();
+    for rel in ["mother/desktop/src/lib.rs", "mother/desktop/src/app.rs"] {
+        assert!(
+            scanned.iter().any(|s| s == rel),
+            "the desktop source {rel} is not scanned"
+        );
+    }
+}
+
 const IN_SCOPE_TABLES: [&str; 5] = [
     "agent_memory",
     "task_history",
@@ -1534,26 +1551,6 @@ fn has_word(text: &str, word: &str) -> bool {
     false
 }
 
-/// Mother Nexus cleanup (2026-10-31): the old desktop app was removed with
-/// its desktop-specific checks (see `archive/nexus-before-mother`). This
-/// tripwire fails as soon as a desktop source tree returns, so those
-/// checks must be restored and re-pinned before the guard can pass.
-fn assert_desktop_removed(files: &[PathBuf]) {
-    let desktop: Vec<String> = files
-        .iter()
-        .map(|f| relative(f))
-        .filter(|rel| rel.starts_with("app/"))
-        .collect();
-    assert!(
-        desktop.is_empty(),
-        "desktop source returned; restore and re-pin its checks: {desktop:?}"
-    );
-    assert!(
-        !workspace_root().join("app/src-tauri").exists(),
-        "app/src-tauri returned; restore and re-pin its checks"
-    );
-}
-
 #[test]
 fn hm_n5_hm_tables_are_named_only_in_the_hm_modules() {
     // Ported (mission P3-C11-HM-M3 R12): only the hm modules name an hm_*
@@ -1562,7 +1559,8 @@ fn hm_n5_hm_tables_are_named_only_in_the_hm_modules() {
     // declared `#[cfg(test)]` in `app/src-tauri/src/lib.rs`) was removed
     // with the desktop.
     let files = source_files(&["rs", "sql", "ts", "tsx", "js", "py", "json", "toml"]);
-    assert_desktop_removed(&files);
+    desktop_tripwire::assert_no_desktop();
+    assert_desktop_scanned(&files);
     let mut hits = Vec::new();
     for f in &files {
         let rel = relative(f);
