@@ -142,8 +142,9 @@ const RUN_CLASSES: &[&str] = &["owner"];
 /// Operations named in detail (M2d: a Files create).
 const OPERATIONS: &[&str] = &["create"];
 /// What interrupted a Files publication after its final check (Codex
-/// review 1 of PR #64, H3; the kernel's interruption causes).
-const INTERRUPTIONS: &[&str] = &[
+/// review 1 of PR #64, H3; the kernel's interruption causes). M2d-C: a
+/// door's view of a Succeeded commitment names them in this order.
+pub(crate) const INTERRUPTIONS: &[&str] = &[
     "emergency_stop",
     "cancelled",
     "revoked",

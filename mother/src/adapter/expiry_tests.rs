@@ -28,6 +28,7 @@ fn view(state: CommitmentState) -> CommitmentView {
         created_wall_ms: CREATED,
         expires_wall_ms: EXPIRES,
         binding_short: "0000".into(),
+        interrupted: vec![],
     }
 }
 

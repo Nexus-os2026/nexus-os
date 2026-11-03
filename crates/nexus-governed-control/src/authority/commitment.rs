@@ -34,6 +34,7 @@ use super::clock::Clock;
 use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::{
     bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy,
+    INTERRUPTIONS,
 };
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
@@ -192,6 +193,10 @@ pub struct CommitmentView {
     pub created_wall_ms: u64,
     pub expires_wall_ms: u64,
     pub binding_short: String,
+    /// M2d-C (§11 M4′): for a Succeeded commitment, the controlled codes
+    /// its effect reported beside the success (its Finished record's
+    /// `interrupted` detail), in the registry's order; empty otherwise.
+    pub interrupted: Vec<&'static str>,
 }
 
 struct Entry {
@@ -217,6 +222,8 @@ struct Entry {
     /// written): while it is, no other transition starts, and it completes
     /// only with its own token.
     reserved: Option<Reservation>,
+    /// M2d-C: what a success reported as interrupting it (its view's).
+    interrupted: Vec<&'static str>,
 }
 
 impl Entry {
@@ -235,6 +242,7 @@ impl Entry {
             created_wall_ms: self.created_wall_ms,
             expires_wall_ms: self.expires_wall_ms,
             binding_short: self.binding.short(),
+            interrupted: self.interrupted.clone(),
         }
     }
 
@@ -737,6 +745,7 @@ impl CommitmentRegistry {
             state: CommitmentState::Prepared,
             approval: None,
             reserved: None,
+            interrupted: Vec::new(),
         };
         // Evidence first: an unrecorded commitment is never created. It is
         // not in the registry yet, so nothing can act on it meanwhile.
@@ -1208,6 +1217,19 @@ impl CommitmentRegistry {
                 }
                 Outcome::Cancelled { .. } => (CommitmentState::Cancelled, "cancelled", None),
             };
+            // M2d-C: the codes the record's detail keeps (its first 16
+            // entries), of the registry only, in its order.
+            if let Outcome::Succeeded { meta } = &outcome {
+                let meta = &meta[..meta.len().min(16)];
+                entry.interrupted = INTERRUPTIONS
+                    .iter()
+                    .copied()
+                    .filter(|code| {
+                        meta.iter()
+                            .any(|(k, v)| k == "interrupted" && v.as_str() == *code)
+                    })
+                    .collect();
+            }
             self.end_entry(
                 id,
                 entry,
