@@ -678,6 +678,15 @@ impl Authority {
     /// Whether a door may be issued now (Mother Nexus M2c): the store not
     /// latched, no recovery required, no emergency stop, not quitting.
     pub(crate) fn door_admissible(&self) -> Result<(), AuthorityError> {
+        self.evidence_admissible()?;
+        self.mission_admissible()
+    }
+
+    /// Whether the evidence store can still record new work (M2e-B; Codex
+    /// review 1 of PR #75, MEDIUM 1): not latched, and no recovery
+    /// required. A known evidence failure permits no new work: what would
+    /// start against it could only be recorded as uncertain.
+    pub(crate) fn evidence_admissible(&self) -> Result<(), AuthorityError> {
         if let Some(primary) = self.evidence.primary() {
             let health = primary.health();
             if health.latched {
@@ -689,7 +698,7 @@ impl Authority {
                 ));
             }
         }
-        self.mission_admissible()
+        Ok(())
     }
 
     /// The record of the owner's answer to a door: a yes is a gating record

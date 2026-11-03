@@ -36,8 +36,9 @@ use crate::authority::evidence::Privacy;
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
-use crate::inference::{Admitted, ModelIdentityView};
-use nexus_kernel::inference::{CallDeadline, CallMeter, ModelReply, ModelRequest};
+use crate::inference::{
+    Admitted, CallDeadline, CallMeter, ModelCallOutcome, ModelIdentityView, ModelRequest,
+};
 use std::fmt;
 use std::sync::Arc;
 
@@ -373,27 +374,32 @@ impl AgentDoor {
     /// this door's halt, the session's end or the Owner's Stop. Admitted
     /// in one hold of the runs lock (the run this door's live agent run,
     /// admitted for inference to the registered model, under its attempt
-    /// ceiling); then no broker lock is held. Every attempt is recorded
-    /// (Restricted). The reply is untrusted data.
+    /// ceiling); then no broker lock is held. Refused before any attempt
+    /// (nothing charged, sent or recorded) while the evidence store cannot
+    /// record. Every attempt is recorded (Restricted), and what became of
+    /// its record is returned with the transport's result. The reply is
+    /// untrusted data.
     pub fn model_call(
         &self,
         run: RunId,
         request: &ModelRequest,
         meter: &dyn CallMeter,
         deadline: &dyn CallDeadline,
-    ) -> Result<ModelReply, AuthorityError> {
+    ) -> Result<ModelCallOutcome, AuthorityError> {
         self.not_halted()?;
         let model = self
             .control
             .registered_model()
             .ok_or(AuthorityError::ModelNotRegistered)?;
+        // A known evidence failure permits no new inference.
+        self.control.authority().evidence_admissible()?;
         let ticket = self.control.authority().runs().admit_model_call(
             run,
             &self.core.agent,
             self.core.group,
             &model.identity,
         )?;
-        crate::inference::call(
+        Ok(crate::inference::call(
             self.control.authority(),
             self.control.kernel_stop_authority(),
             &model,
@@ -404,7 +410,7 @@ impl AgentDoor {
             },
             request,
             (meter, deadline),
-        )
+        ))
     }
 
     /// The yeses cached at this door (tests).

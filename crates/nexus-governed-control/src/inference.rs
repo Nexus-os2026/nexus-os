@@ -31,14 +31,28 @@
 //!
 //! [`GovernedControl::register_local_model`]: crate::governed::GovernedControl::register_local_model
 
+use crate::authority::evidence::EndStatus;
 use crate::authority::ids::{AgentId, RunId};
 use crate::authority::run::{CallTicket, RunRegistry};
 use crate::authority::{Authority, AuthorityError};
 use nexus_kernel::emergency_stop::StopAuthority;
 use nexus_kernel::inference::{
-    AbsoluteDeadline, CallCancel, CallContext, CallDeadline, CallMeter, CancelCause, Charged,
-    LoopbackEndpoint, MeterRefusal, ModelError, ModelPinSpec, ModelReply, ModelRequest,
-    ModelTransport, SystemClocks, VerifiedOllama, CALL_HARD_TIMEOUT,
+    CallCancel, CallContext, CancelCause, LoopbackEndpoint, ModelTransport, VerifiedOllama,
+    CALL_HARD_TIMEOUT,
+};
+
+/// The kernel's local-model types a door's caller needs (design v2 §13:
+/// Mother names the kernel types through these re-exports; the §9.3
+/// ports; Codex review 1 of PR #75, MEDIUM 2): building a request and its
+/// schema, reading a reply and its error codes, implementing the meter and
+/// the absolute deadline, and the pin and its identity. The transport
+/// itself stays the broker's: its endpoint, the verified runtime, the
+/// transport trait, a call's context, and the cancellation and dispatch
+/// hooks are not re-exported.
+pub use nexus_kernel::inference::{
+    grammar, AbsoluteDeadline, CallDeadline, CallMeter, Charged, DeadlineClock, MeterRefusal,
+    ModelError, ModelIdentity, ModelPinSpec, ModelReply, ModelRequest, ResponseSchema,
+    RuntimeConfig, SystemClocks, Think, MAX_RENDERED_CONTENT_BYTES,
 };
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
@@ -146,6 +160,8 @@ impl LocalModels {
         spec: &ModelPinSpec,
         stop: &Arc<StopAuthority>,
     ) -> Result<ModelIdentityView, AuthorityError> {
+        // Nothing is asked of the runtime while the store cannot record.
+        authority.evidence_admissible()?;
         authority.mission_admissible()?;
         let endpoint = LoopbackEndpoint::parse(endpoint).map_err(AuthorityError::ModelCall)?;
         let reservation = Reservation::take(&self.slot)?;
@@ -248,6 +264,12 @@ pub(crate) struct CallTiming {
 
 /// The host's CLOCK_MONOTONIC in milliseconds (not a process-relative
 /// clock), or `None` if it cannot be read.
+///
+/// Read through the broker's existing `libc` (Codex review 1 of PR #75,
+/// LOW): no safe reader is reachable without a new dependency. `nix` is
+/// not a dependency of this crate, and adding it would change Cargo.lock;
+/// the kernel's safe reader (`nix::time::clock_gettime`) is private to its
+/// transport. The one call below is the whole unsafe surface.
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
 pub(crate) fn host_monotonic_ms() -> Option<u64> {
@@ -271,6 +293,36 @@ pub(crate) fn host_monotonic_ms() -> Option<u64> {
     None
 }
 
+/// What one attempted model call came to (design v2 §8; Codex review 1 of
+/// PR #75, MEDIUM 1): the transport's result, and what became of the
+/// attempt's record. A record that was not written (owed, or uncertain
+/// because the store latched during the call) is reported here beside the
+/// result, never silent; the caller decides what an unrecorded call is
+/// worth. A refusal before any attempt is the door's own `Err`: nothing
+/// was charged, sent or recorded.
+#[derive(Debug)]
+#[must_use = "an attempt's record status must be read"]
+pub struct ModelCallOutcome {
+    result: Result<ModelReply, AuthorityError>,
+    record: EndStatus,
+}
+
+impl ModelCallOutcome {
+    /// What became of the attempt's record: recorded, owed or uncertain.
+    pub fn record(&self) -> EndStatus {
+        self.record
+    }
+
+    /// The transport's result (a reply is untrusted data).
+    pub fn result(&self) -> &Result<ModelReply, AuthorityError> {
+        &self.result
+    }
+
+    pub fn into_result(self) -> Result<ModelReply, AuthorityError> {
+        self.result
+    }
+}
+
 /// A call the runs lock admitted (see [`RunRegistry::admit_model_call`]).
 pub(crate) struct Admitted<'a> {
     pub(crate) run: RunId,
@@ -279,8 +331,8 @@ pub(crate) struct Admitted<'a> {
 }
 
 /// One admitted call: the watch, the deadline and the cancellation it is
-/// ended by, the kernel transport, then its record. No broker lock is held
-/// here.
+/// ended by, the kernel transport, then its record, whose status is
+/// returned with the result. No broker lock is held here.
 pub(crate) fn call(
     authority: &Authority,
     stop: &Arc<StopAuthority>,
@@ -288,7 +340,7 @@ pub(crate) fn call(
     admitted: Admitted<'_>,
     request: &ModelRequest,
     (meter, deadline): (&dyn CallMeter, &dyn CallDeadline),
-) -> Result<ModelReply, AuthorityError> {
+) -> ModelCallOutcome {
     let Admitted { run, agent, ticket } = admitted;
     let tap = Tap {
         meter,
@@ -330,9 +382,13 @@ pub(crate) fn call(
         timing,
     );
     // The call has happened: its record is an end record (owed, never
-    // waited for), written with no lock held.
-    authority.record_model_call(run, agent, detail);
-    result.map_err(AuthorityError::ModelCall)
+    // waited for), written with no lock held; what became of it is
+    // reported with the result.
+    let record = authority.record_model_call(run, agent, detail);
+    ModelCallOutcome {
+        result: result.map_err(AuthorityError::ModelCall),
+        record,
+    }
 }
 
 /// A `model_call` record's detail: the registered keys only.
