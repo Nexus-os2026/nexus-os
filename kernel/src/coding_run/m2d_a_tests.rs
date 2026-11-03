@@ -401,6 +401,9 @@ fn undo(
 
 // ── D-O7: Ordering A, a cause before the final check ────────────────────────
 
+/// What the workspace held when the final check came: (name, bytes).
+type Seen = Rc<RefCell<Option<Vec<(String, Vec<u8>)>>>>;
+
 fn ordering_a(cause: Cause) {
     let ws = new_ws();
     let (mut run, binding) = verified_file(&ws);
@@ -409,7 +412,7 @@ fn ordering_a(cause: Cause) {
     let guard = Rc::new(Guard::default());
     let injector = Injector::new(&ws, &grant, &guard);
     let root = ws.root.clone();
-    let seen: Rc<RefCell<Option<Vec<(String, Vec<u8>)>>>> = Rc::new(RefCell::new(None));
+    let seen: Seen = Rc::new(RefCell::new(None));
     let saw = Rc::clone(&seen);
     let result = with_hooks(
         move |point, _| {
@@ -838,6 +841,7 @@ struct FailOn {
 }
 
 impl FailOn {
+    #[allow(clippy::new_ret_no_self)]
     fn new(ws: &Ws, kind: &'static str) -> Arc<dyn LedgerStore> {
         Arc::new(Self {
             inner: Arc::clone(&ws.ledger),
