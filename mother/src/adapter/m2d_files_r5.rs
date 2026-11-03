@@ -36,7 +36,7 @@ type Hold = Arc<Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>>;
 /// A journal whose next append, once armed, waits for its release.
 struct Gated {
     inner: FileJournal,
-    hold: Hold,
+    pub(super) hold: Hold,
 }
 
 impl JournalStore for Gated {
@@ -80,20 +80,20 @@ impl Lane for Ticking {
     }
 }
 
-struct Scenario<'a> {
-    home: &'a Home,
-    ws: PathBuf,
-    folder: String,
-    port: Arc<GovernedPort>,
-    mother: Coordinator<GovernedPort>,
-    clock: Arc<ManualClock>,
-    owner: FilesOwner,
+pub(super) struct Scenario<'a> {
+    pub(super) home: &'a Home,
+    pub(super) ws: PathBuf,
+    pub(super) folder: String,
+    pub(super) port: Arc<GovernedPort>,
+    pub(super) mother: Coordinator<GovernedPort>,
+    pub(super) clock: Arc<ManualClock>,
+    pub(super) owner: FilesOwner,
     hold: Hold,
-    tick: Arc<OnceLock<Mutex<Option<Box<dyn FnOnce() + Send>>>>>,
+    pub(super) tick: Arc<OnceLock<Mutex<Option<Box<dyn FnOnce() + Send>>>>>,
 }
 
 impl<'a> Scenario<'a> {
-    fn new(home: &'a Home, journal: &str) -> Self {
+    pub(super) fn new(home: &'a Home, journal: &str) -> Self {
         Self::with_port(
             home,
             journal,
@@ -163,7 +163,7 @@ impl<'a> Scenario<'a> {
     }
 
     /// Approved and advanced to the Builder's File A, waiting.
-    fn waiting(&self, tag: &str) -> MissionId {
+    pub(super) fn waiting(&self, tag: &str) -> MissionId {
         let id = self.approved(tag);
         for _ in 0..3 {
             self.mother.advance(id).unwrap();
@@ -173,7 +173,7 @@ impl<'a> Scenario<'a> {
     }
 
     /// The Owner approves the waiting File natively: authorized, poised.
-    fn approve(&self, id: MissionId) -> (RunId, CommitmentId) {
+    pub(super) fn approve(&self, id: MissionId) -> (RunId, CommitmentId) {
         let pending = self.port.pending(id).expect("the waiting action");
         let run = RunId::parse(&pending.run).unwrap();
         let commitment = CommitmentId::parse(&pending.commitment).unwrap();
@@ -184,7 +184,7 @@ impl<'a> Scenario<'a> {
         (run, commitment)
     }
 
-    fn execute(&self, (run, commitment): (RunId, CommitmentId)) -> bool {
+    pub(super) fn execute(&self, (run, commitment): (RunId, CommitmentId)) -> bool {
         self.home
             .control
             .execute(commitment, &mother_agent(), run)
@@ -199,7 +199,7 @@ impl<'a> Scenario<'a> {
             .is_none_or(|cell| cell.is_engaged())
     }
 
-    fn hold_next_append(&self) -> (mpsc::Receiver<()>, mpsc::Sender<()>) {
+    pub(super) fn hold_next_append(&self) -> (mpsc::Receiver<()>, mpsc::Sender<()>) {
         let (entered_tx, entered) = mpsc::channel();
         let (release, release_rx) = mpsc::channel();
         *self.hold.lock().unwrap() = Some((entered_tx, release_rx));
