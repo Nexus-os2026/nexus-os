@@ -28,7 +28,7 @@ use std::sync::Arc;
 /// snapshot's read.
 fn read(status: ApprovalStatus) -> Publication {
     match status {
-        ApprovalStatus::RecoveryRequired => Publication::Published {
+        ApprovalStatus::RecoveryRequired { .. } => Publication::Published {
             recovery_required: true,
             interrupted: vec![],
         },

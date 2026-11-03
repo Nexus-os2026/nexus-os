@@ -31,7 +31,7 @@ use std::time::Duration;
 /// snapshot's read.
 fn read(status: ApprovalStatus) -> Publication {
     match status {
-        ApprovalStatus::RecoveryRequired => Publication::Published {
+        ApprovalStatus::RecoveryRequired { .. } => Publication::Published {
             recovery_required: true,
             interrupted: vec![],
         },
@@ -227,7 +227,8 @@ fn m2d_c_r1_a_recovery_required_publication_ends_the_mission() {
     let w = world();
     let id = waiting(&w);
     let calls = w.keyed_calls();
-    w.port.approval_reply(ApprovalStatus::RecoveryRequired);
+    w.port
+        .approval_reply(ApprovalStatus::RecoveryRequired { causes: vec![] });
     assert_eq!(w.mother.advance(id).unwrap().to, MissionState::Blocked);
     truthful_then_ended(&w, id, "file_publication_recovery_required", calls);
 
@@ -235,7 +236,9 @@ fn m2d_c_r1_a_recovery_required_publication_ends_the_mission() {
     let id = waiting(&w);
     let calls = w.keyed_calls();
     w.port
-        .set_publication(Some(read(ApprovalStatus::RecoveryRequired)));
+        .set_publication(Some(read(ApprovalStatus::RecoveryRequired {
+            causes: vec![],
+        })));
     assert_eq!(w.mother.stop(id), Ok(MissionState::Blocked));
     truthful_then_ended(&w, id, "file_publication_recovery_required", calls);
 }
@@ -269,7 +272,7 @@ fn m2d_c_r1_the_port_reads_recovery_and_the_codes_round_trip() {
     for interrupted in [vec![], vec!["revoked"]] {
         assert_eq!(
             status_of(&view(true, interrupted), 2_000, 2_000, 600_000),
-            ApprovalStatus::RecoveryRequired
+            ApprovalStatus::RecoveryRequired { causes: vec![] }
         );
     }
     for code in [
