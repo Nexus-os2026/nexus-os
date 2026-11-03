@@ -475,7 +475,9 @@ impl RunRegistry {
     }
 
     /// Open a run; with `group` (M2c), it joins that door's group at
-    /// insertion, in the same hold of the lock.
+    /// insertion, in the same hold of the lock (tests; the broker opens
+    /// through [`Self::open_in_with`]).
+    #[cfg(test)]
     pub(crate) fn open_in(
         &self,
         agent: AgentId,
