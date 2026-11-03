@@ -37,10 +37,13 @@ use std::time::Duration;
 
 const BOUND: Duration = Duration::from_secs(30);
 
+/// A journal append's hold: its entry signal and its release.
+type Hold = Arc<Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>>;
+
 /// A journal whose next append, once armed, waits for its release.
 struct Gated {
     inner: FileJournal,
-    hold: Arc<Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>>,
+    hold: Hold,
 }
 
 impl JournalStore for Gated {
@@ -67,7 +70,7 @@ struct Scenario<'a> {
     port: Arc<GovernedPort>,
     mother: Coordinator<GovernedPort>,
     owner: FilesOwner,
-    hold: Arc<Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>>,
+    hold: Hold,
 }
 
 impl<'a> Scenario<'a> {
@@ -77,7 +80,7 @@ impl<'a> Scenario<'a> {
             .unwrap()
             .join(&folder);
         let port = Arc::new(port_for(&home.control, true).with_workspace(folder.clone()));
-        let hold: Arc<Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>> = Arc::default();
+        let hold: Hold = Arc::default();
         let mother = Coordinator::open(
             Gated {
                 inner: FileJournal::open(&home.dir.join(journal)).unwrap(),
