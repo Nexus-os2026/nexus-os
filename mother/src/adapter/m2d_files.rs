@@ -65,7 +65,7 @@ fn ledger_state(files: &Path) -> LedgerState {
 /// True at the first reading after the Files ledger changed since the first
 /// reading that followed `run`'s execution start record (the reading
 /// `begin` takes after it, before the commitment executes).
-fn past_the_start(home: &Home, run: RunId) -> impl Fn() -> bool + Send + 'static {
+pub(super) fn past_the_start(home: &Home, run: RunId) -> impl Fn() -> bool + Send + 'static {
     let (gate, run) = (home.gate.clone(), run.to_string());
     let files = home.dir.join("broker").join("files");
     let since: Mutex<Option<LedgerState>> = Mutex::new(None);
