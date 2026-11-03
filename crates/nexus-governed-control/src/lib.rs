@@ -488,6 +488,97 @@
 //!     let _: Absent = door.register_local_model();
 //! }
 //! ```
+//!
+//! Codex review 1 of PR #75 (MEDIUM 2): a door's caller names the kernel's
+//! local-model types through these re-exports only (design v2 §13; the
+//! §9.3 ports): it builds a request, reads a reply and its codes,
+//! implements the meter and the deadline, and reads the pin, the identity
+//! and the outcome of an attempt. Its compiling twin:
+//!
+//! ```
+//! use nexus_governed_control::authority::evidence::EndStatus;
+//! use nexus_governed_control::authority::AuthorityError;
+//! use nexus_governed_control::inference::{
+//!     grammar, AbsoluteDeadline, CallDeadline, CallMeter, Charged, MeterRefusal,
+//!     ModelCallOutcome, ModelError, ModelIdentity, ModelIdentityView, ModelPinSpec, ModelReply,
+//!     ModelRequest, ResponseSchema, RuntimeConfig, SystemClocks, Think,
+//!     MAX_RENDERED_CONTENT_BYTES,
+//! };
+//! struct Meter;
+//! impl CallMeter for Meter {
+//!     fn charge(&self) -> Result<Charged, MeterRefusal> {
+//!         Err(MeterRefusal::Exhausted)
+//!     }
+//!     fn settle(&self, _call: u32) {}
+//! }
+//! struct Never;
+//! impl CallDeadline for Never {
+//!     fn expired(&self) -> bool {
+//!         false
+//!     }
+//! }
+//! let request = ModelRequest::new("s".into(), "u".into(), grammar::worker_schema()).unwrap();
+//! assert!(request.rendered_bytes() <= MAX_RENDERED_CONTENT_BYTES);
+//! assert!(ResponseSchema::new(r#"{"type":"object"}"#).is_ok());
+//! let deadline = AbsoluteDeadline::within(SystemClocks, std::time::Duration::from_secs(60));
+//! assert!(!deadline.expired());
+//! assert_eq!(ModelError::Late.code(), "late");
+//! assert_eq!(ModelError::CODES.len(), 23);
+//! let spec = ModelPinSpec {
+//!     name: "qwen3.6:35b-a3b".into(),
+//!     digest: "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c".into(),
+//!     runtime_version: "0.40.13".into(),
+//!     config: RuntimeConfig {
+//!         num_ctx: 8192,
+//!         temperature_milli: 0,
+//!         seed: 7,
+//!         think: Think::Off,
+//!         truncate: false,
+//!     },
+//! };
+//! let identity: [u8; 32] = ModelIdentity::from_spec(&spec).unwrap().digest();
+//! fn reads(reply: &ModelReply) -> (&str, u32, u32, u32) {
+//!     let tokens = (reply.prompt_tokens(), reply.output_tokens());
+//!     (reply.content(), tokens.0, tokens.1, reply.latency_ms())
+//! }
+//! fn outcome(attempt: ModelCallOutcome) -> (EndStatus, Result<ModelReply, AuthorityError>) {
+//!     (attempt.record(), attempt.into_result())
+//! }
+//! let _ = (identity, reads, outcome, Meter, Never, None::<ModelIdentityView>);
+//! ```
+//!
+//! The transport itself stays the broker's: its endpoint, the verified
+//! runtime, the transport trait, its call context, the cancellation and
+//! dispatch hooks, and the registered model (each block fails with the
+//! error its tag names).
+//!
+//! ```compile_fail,E0432
+//! use nexus_governed_control::inference::VerifiedOllama; // the verified runtime
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_governed_control::inference::LoopbackEndpoint; // the endpoint's parser
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_governed_control::inference::ModelTransport; // the transport trait
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_governed_control::inference::CallContext; // a call's context
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_governed_control::inference::CallCancel; // the cancellation hook
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use nexus_governed_control::inference::CallObserver; // the dispatch hook
+//! ```
+//!
+//! ```compile_fail,E0603
+//! use nexus_governed_control::inference::RegisteredModel; // the registered model
+//! ```
 
 #![deny(unsafe_code)]
 

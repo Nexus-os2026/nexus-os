@@ -1579,3 +1579,83 @@ fn pr75_r1_m1_a_a_failed_store_refuses_registration_and_calls_before_any_request
     assert_eq!(g.fake.total(), 0, "no request reached the runtime");
     assert_eq!(g.door.model_identity(), None);
 }
+
+/// Codex review 1 of PR #75, MEDIUM 1 (b): evidence that fails during or
+/// after a call is exposed, never silent. The attempt's outcome carries the
+/// transport's result and what became of its record: a record that could
+/// not be committed is Owed; a store that latches during a (failed) call
+/// makes it Uncertain, beside the call's own error. After that, ordering
+/// (a): no new call starts. Control: a healthy store's attempt is Recorded.
+#[test]
+fn pr75_r1_m1_b_evidence_failing_during_a_call_is_reported_with_its_result() {
+    use super::ModelCallOutcome;
+    use crate::authority::evidence::EndStatus;
+    use crate::evidence_store::Fault;
+    let scratch = Scratch::new();
+    let history = Arc::new(MemoryEvidence::new(10_000));
+    let primary = PrimaryEvidence::open(&scratch.store(), vec![history.clone()]).unwrap();
+    let f = Fx::over(primary.clone(), history);
+    f.register().unwrap();
+    let run = f.admitted(&f.door, 1);
+    let meter = Meter::new();
+    let call = |f: &Fx| -> ModelCallOutcome {
+        f.door
+            .model_call(run, &request("x"), &*meter, &Deadline::default())
+            .expect("an attempt")
+    };
+
+    let outcome = call(&f);
+    assert!(
+        matches!(outcome.record(), EndStatus::Recorded { .. }),
+        "control"
+    );
+    assert_eq!(
+        outcome.result().as_ref().map(ModelReply::content).ok(),
+        Some(FINISH)
+    );
+
+    // The next call's record is not committed: owed, and said so.
+    let store = primary.clone();
+    f.fake.set(move |path| {
+        (path == "/api/chat").then(|| {
+            store.store().refuse_next_insert();
+            healthy(path)
+        })
+    });
+    let outcome = call(&f);
+    assert_eq!(outcome.record(), EndStatus::Owed);
+    assert_eq!(
+        outcome
+            .into_result()
+            .map(|reply| reply.content().to_string())
+            .ok()
+            .as_deref(),
+        Some(FINISH)
+    );
+
+    // The store latches during the next call, which fails: uncertain, said
+    // so, beside the call's own error.
+    let store = primary.clone();
+    f.fake.set(move |path| {
+        (path == "/api/chat").then(|| {
+            store.store().plant_fault(Fault::FailCommit);
+            Answer::Json(500, "{}".into())
+        })
+    });
+    let outcome = call(&f);
+    assert_eq!(outcome.record(), EndStatus::Uncertain);
+    assert_eq!(class(outcome.into_result()), "model_unavailable");
+    assert!(primary.health().latched);
+
+    // Then no new call starts.
+    f.fake.set(|_| None);
+    let chats = f.fake.count("/api/chat");
+    assert_eq!(
+        class(
+            f.door
+                .model_call(run, &request("x"), &*meter, &Deadline::default())
+        ),
+        "evidence_unavailable"
+    );
+    assert_eq!(f.fake.count("/api/chat"), chats, "no chat after the latch");
+}
