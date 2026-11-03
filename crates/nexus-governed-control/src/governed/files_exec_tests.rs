@@ -1206,3 +1206,37 @@ fn m2d_b2_d_o24_failures_are_codes_and_detail_is_the_owner_s() {
     assert!(f.detail(view.id).is_none(), "taken once");
     assert!(f.detail(CommitmentId::fresh()).is_none());
 }
+
+// ---------------------------------------------------------------- oracle-add: MD-15
+
+/// D-O11, oracle-add: MD-15 (a report that sweeps) survived the frozen
+/// D-O11 oracle above, which compares the state only between two report
+/// calls of a restarted broker (one without the workspace). No report call
+/// sweeps anything, the first included, on a restarted broker and on the
+/// broker that holds the workspace: a left temp in the workspace and the
+/// staging of a create awaiting approval are as they were before the first
+/// report, and that create still executes.
+#[test]
+fn m2d_b2_d_o11_b_no_report_call_sweeps_anything() {
+    let f = Fx::new();
+    let waiting = f.ready("waiting.txt", "w\n");
+    let temp =
+        f.ws.join(".nexus-coding-run-tmp-0123456789abcdef0123456789abcdef");
+    std::fs::write(&temp, b"left behind").unwrap();
+    let (entries, staged) = (f.entries(), f.staged());
+    assert!(!staged.is_empty(), "the waiting create is staged");
+    let restarted = broker(
+        &f.root,
+        &Arc::new(MemoryEvidence::new(1_000)),
+        &Arc::new(ManualClock::default()),
+        &StopAuthority::new(),
+    );
+    restarted.files_recovery_report().unwrap();
+    f.gov.files_recovery_report().unwrap();
+    assert_eq!(f.entries(), entries, "no workspace entry deleted");
+    assert_eq!(f.staged(), staged, "no staging deleted");
+    assert_eq!(std::fs::read(&temp).unwrap(), b"left behind");
+    f.execute(&waiting)
+        .expect("the waiting create still executes");
+    assert!(f.ws.join("waiting.txt").exists());
+}
