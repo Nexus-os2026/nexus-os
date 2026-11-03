@@ -500,6 +500,10 @@ impl RunRegistry {
         group: Option<GroupId>,
         halt: Option<HaltCell>,
     ) -> Result<RunId, AuthorityError> {
+        // R6-1: a mission whose cell is engaged opens no run.
+        if halt.as_ref().is_some_and(HaltCell::is_engaged) {
+            return Err(AuthorityError::Halted);
+        }
         let id = RunId::fresh();
         let entry = RunEntry {
             view: RunView {
@@ -867,15 +871,9 @@ impl RunRegistry {
         if entry.class != RunClass::Agent {
             return Err(AuthorityError::WrongRun);
         }
-        if entry.view.finished {
-            return Err(AuthorityError::RunNotActive);
-        }
-        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
-            return Err(AuthorityError::RunCancelled);
-        }
-        if entry.halted() {
-            return Err(AuthorityError::Halted);
-        }
+        let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        run_admissible(table, entry)?;
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         let attach = |entry: &mut RunEntry| {
             if let Some(cell) = cell {
                 entry.halts.push(cell.clone());
@@ -937,17 +935,7 @@ impl RunRegistry {
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        // M2c PR-B: a run of a halted door's group says so; round 5 (H1):
-        // so does a run whose mission halt cell is engaged.
-        if runs.in_halted_group(entry) || entry.halted() {
-            return Err(AuthorityError::Halted);
-        }
-        if entry.view.finished {
-            return Err(AuthorityError::RunNotActive);
-        }
-        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
-            return Err(AuthorityError::RunCancelled);
-        }
+        run_admissible(runs, entry)?;
         Ok(entry)
     }
 
@@ -1438,7 +1426,7 @@ fn live_door<'a>(
     agent: &AgentId,
 ) -> Result<&'a mut DoorEntry, AuthorityError> {
     match doors.get_mut(&group) {
-        Some(door) if door.halted => Err(AuthorityError::Halted),
+        Some(door) if door.is_halted() => Err(AuthorityError::Halted),
         Some(door) if door.active && door.alive() && &door.agent == agent => Ok(door),
         _ => Err(AuthorityError::NotMember),
     }
@@ -1461,7 +1449,17 @@ fn live_member(
     if !entry.groups.contains(&group) {
         return Err(AuthorityError::NotMember);
     }
-    if table.in_halted_group(entry) {
+    run_admissible(table, entry)
+}
+
+/// M2d-C round 6 (R6-1): the one run-admission check, read by every
+/// admission (opening into a group, join and adoption, proposal,
+/// authorization and execution, the Files and inference admissions and a
+/// model call): the run's groups' halts, its mission halt cells (the only
+/// "stopped" fact), and its own finished and cancelled flags. Under the
+/// runs lock.
+fn run_admissible(table: &Table, entry: &RunEntry) -> Result<(), AuthorityError> {
+    if table.in_halted_group(entry) || entry.halted() {
         return Err(AuthorityError::Halted);
     }
     if entry.view.finished {

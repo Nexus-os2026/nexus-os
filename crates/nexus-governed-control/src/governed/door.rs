@@ -154,6 +154,12 @@ impl AgentDoor {
             .open_run_in_with(self.core.agent.clone(), self.core.group, cell)
     }
 
+    /// Tests: this door's group.
+    #[cfg(test)]
+    pub(crate) fn group_for_test(&self) -> GroupId {
+        self.core.group
+    }
+
     /// M2d-C round 5 (C1): this agent's partition of the broker's halt
     /// table (taken once, when a port is built; not on a Stop path).
     pub fn halt_cells(&self) -> HaltCells {
