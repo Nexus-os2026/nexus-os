@@ -459,6 +459,7 @@ pub(crate) const MODEL_CLASSES: [&str; ModelError::CODES.len()] = [
     "model_stopped",
     "model_cancelled",
     "model_late",
+    "model_unsafe_delimiter",
 ];
 
 /// The `outcome` codes a `model_call` record may hold: `ok` and each of

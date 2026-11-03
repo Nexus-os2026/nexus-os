@@ -523,7 +523,7 @@
 //! let deadline = AbsoluteDeadline::within(SystemClocks, std::time::Duration::from_secs(60));
 //! assert!(!deadline.expired());
 //! assert_eq!(ModelError::Late.code(), "late");
-//! assert_eq!(ModelError::CODES.len(), 23);
+//! assert_eq!(ModelError::CODES.len(), 24);
 //! let spec = ModelPinSpec {
 //!     name: "qwen3.6:35b-a3b".into(),
 //!     digest: "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c".into(),

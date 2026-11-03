@@ -103,6 +103,7 @@ pub(crate) const REASONS: &[&str] = &[
     "model_stopped",
     "model_cancelled",
     "model_late",
+    "model_unsafe_delimiter",
     "facts_invalid",
     "file_type_not_allowed",
     "page_not_inert",
