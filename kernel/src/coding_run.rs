@@ -112,6 +112,10 @@ mod worker;
 #[cfg(test)]
 mod tests;
 
+/// M2e-A2's pre-registered oracles for the local model refit.
+#[cfg(test)]
+mod m2e_a2_tests;
+
 #[cfg(test)]
 thread_local! {
     /// A test's own emergency-stop authority for the runs this thread

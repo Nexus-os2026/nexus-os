@@ -2276,3 +2276,8 @@ mod dispatch_panic_payload {
         assert_eq!(ctx.meter.events(), [Metered::Charge(1), Metered::Settle(1)]);
     }
 }
+
+// ── M2e-A2: N1's conversation route (pre-registered) ────────────────────────
+
+#[path = "n1_tests.rs"]
+mod n1;
