@@ -34,6 +34,8 @@ pub(crate) mod at {
     pub(crate) const MISSION_RECORDED: &str = "door.mission_recorded";
     pub(crate) const ISSUE_ANSWERED: &str = "issue.answered";
     pub(crate) const ISSUE_RECORDED: &str = "issue.recorded";
+    pub(crate) const CONSENT_BEFORE_FILL: &str = "door.consent_before_fill";
+    pub(crate) const ADMIT_BEFORE_BIND: &str = "door.admit_before_bind";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

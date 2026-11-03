@@ -71,6 +71,12 @@ pub(crate) const REASONS: &[&str] = &[
     "unavailable",
     "journal_failed",
     "recovery_required",
+    "not_admitted",
+    "no_consent",
+    "already_admitted",
+    "file_exists",
+    "change_too_large_to_show",
+    "unsupported_mount_topology",
 ];
 
 /// Why the authority refused. The message is bounded and names no input.
@@ -107,6 +113,22 @@ pub enum AuthorityError {
     /// Mother Nexus M2c PR-B: the calling door, or the run's door group, is
     /// halted (final).
     Halted,
+    /// M2d-B1: a Files intent on a run that holds no Files admission.
+    NotAdmitted,
+    /// M2d-B1: the door holds no usable cached yes of the Owner's to this
+    /// contract hash and request (never given, given at another door, or
+    /// invalidated by a Stop or a halt since).
+    NoConsent,
+    /// M2d-B1: the run is already admitted, to another consent.
+    AlreadyAdmitted,
+    /// M2d-B1: the file to create already exists (create-only).
+    FileExists,
+    /// M2d-B1: the change cannot be shown to the Owner whole.
+    ChangeTooLargeToShow,
+    /// M2d-B1: the workspace, or a protected or reserved location, is
+    /// reached through a mount that is not a whole filesystem (a subtree
+    /// bind mount), or the mount topology cannot be read or matched.
+    UnsupportedMountTopology,
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
@@ -148,6 +170,12 @@ impl AuthorityError {
             AuthorityError::Capacity => "capacity",
             AuthorityError::NotMember => "not_member",
             AuthorityError::Halted => "halted",
+            AuthorityError::NotAdmitted => "not_admitted",
+            AuthorityError::NoConsent => "no_consent",
+            AuthorityError::AlreadyAdmitted => "already_admitted",
+            AuthorityError::FileExists => "file_exists",
+            AuthorityError::ChangeTooLargeToShow => "change_too_large_to_show",
+            AuthorityError::UnsupportedMountTopology => "unsupported_mount_topology",
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",
@@ -388,20 +416,26 @@ impl Authority {
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionApproval, AuthorityError> {
-        self.confirm_mission_as(request, confirmer, Privacy::Owner)
+        self.confirm_mission_as(request, confirmer, Privacy::Owner, || Ok(()))
+            .map(|(approval, _, ())| approval)
     }
 
     /// [`Self::confirm_mission`], its record of class `privacy`. An agent's
     /// door asks as `Restricted`: its holder supplies every label, so only
     /// Mother's controlled request label is admitted ([`controlled`]),
     /// refused before any dialog or record otherwise, and the record is
-    /// sealed as Restricted.
-    pub(crate) fn confirm_mission_as(
+    /// sealed as Restricted. M2d-B1: `before_ask` runs once every check
+    /// before the dialog has passed, immediately before the Owner is asked
+    /// (a door reserves its consent slot there); refused, nothing is asked
+    /// or recorded. What it returns is held across the dialog and returned
+    /// with the approval and the record's own time.
+    pub(crate) fn confirm_mission_as<T>(
         &self,
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
         privacy: Privacy,
-    ) -> Result<MissionApproval, AuthorityError> {
+        before_ask: impl FnOnce() -> Result<T, AuthorityError>,
+    ) -> Result<(MissionApproval, u64, T), AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         if privacy == Privacy::Restricted {
             controlled(&request.request, None)?;
@@ -414,18 +448,15 @@ impl Authority {
             return Err(AuthorityError::EvidenceUnavailable);
         }
         self.mission_admissible()?;
+        let reserved = before_ask()?;
         let yes = confirmer.confirm_mission(request);
         let phase = if yes {
             EvidencePhase::MissionConsented
         } else {
             EvidencePhase::MissionDeclined
         };
-        let mut record = EvidenceRecord::new(
-            phase,
-            self.clock.wall_ms(),
-            self.generation.current(),
-            privacy,
-        );
+        let at_wall_ms = self.clock.wall_ms();
+        let mut record = EvidenceRecord::new(phase, at_wall_ms, self.generation.current(), privacy);
         record
             .detail
             .push(("contract_hash".into(), request.contract_hash.clone()));
@@ -445,10 +476,10 @@ impl Authority {
         // Evidence first: an unrecorded consent is no consent.
         let seq = write_record(&*self.evidence, &record)
             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
-        Ok(MissionApproval::confirmed(
-            request.contract_hash.clone(),
-            request.request.clone(),
-            seq,
+        Ok((
+            MissionApproval::confirmed(request.contract_hash.clone(), request.request.clone(), seq),
+            at_wall_ms,
+            reserved,
         ))
     }
 
@@ -469,20 +500,23 @@ impl Authority {
         request: &MissionResumeConfirmation,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionResumeApproval, AuthorityError> {
-        self.confirm_held_mission_as(request, confirmer, Privacy::Owner)
+        self.confirm_held_mission_as(request, confirmer, Privacy::Owner, || Ok(()))
+            .map(|(approval, _, ())| approval)
     }
 
     /// [`Self::confirm_held_mission`], its record of class `privacy`. An
     /// agent's door asks as `Restricted`: only Mother's controlled mission
     /// id, request label and held reasons are admitted ([`controlled`]),
     /// refused before any dialog or record otherwise, and the record is
-    /// sealed as Restricted.
-    pub(crate) fn confirm_held_mission_as(
+    /// sealed as Restricted. `before_ask` as for
+    /// [`Self::confirm_mission_as`].
+    pub(crate) fn confirm_held_mission_as<T>(
         &self,
         request: &MissionResumeConfirmation,
         confirmer: &dyn ControlConfirmer,
         privacy: Privacy,
-    ) -> Result<MissionResumeApproval, AuthorityError> {
+        before_ask: impl FnOnce() -> Result<T, AuthorityError>,
+    ) -> Result<(MissionResumeApproval, u64, T), AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         for label in [&request.mission, &request.held_reason] {
             if label.is_empty() || label.chars().count() > MAX_MISSION_REQUEST || !is_plain(label) {
@@ -505,18 +539,15 @@ impl Authority {
             return Err(AuthorityError::EvidenceUnavailable);
         }
         self.mission_admissible()?;
+        let reserved = before_ask()?;
         let yes = confirmer.confirm_held_mission(request);
         let phase = if yes {
             EvidencePhase::MissionResumeConfirmed
         } else {
             EvidencePhase::MissionResumeDeclined
         };
-        let mut record = EvidenceRecord::new(
-            phase,
-            self.clock.wall_ms(),
-            self.generation.current(),
-            privacy,
-        );
+        let at_wall_ms = self.clock.wall_ms();
+        let mut record = EvidenceRecord::new(phase, at_wall_ms, self.generation.current(), privacy);
         record
             .detail
             .push(("mission".into(), request.mission.clone()));
@@ -545,10 +576,14 @@ impl Authority {
         // After the record (M2c §2.6 step 6): the record says the owner said
         // yes; no approval exists if a stop or quitting came meanwhile.
         self.mission_admissible()?;
-        Ok(MissionResumeApproval::confirmed(
-            request.contract_hash.clone(),
-            request.request.clone(),
-            seq,
+        Ok((
+            MissionResumeApproval::confirmed(
+                request.contract_hash.clone(),
+                request.request.clone(),
+                seq,
+            ),
+            at_wall_ms,
+            reserved,
         ))
     }
 
