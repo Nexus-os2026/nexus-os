@@ -24,12 +24,12 @@ use nexus_governed_control::authority::evidence::{
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::GovernedControl;
-use nexus_mother_desktop::app::{launch, Started};
+use nexus_mother_desktop::app::{launch, Opened, Started};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// The longest any one wait of a live test may take: shorter than the
@@ -117,6 +117,10 @@ fn private(dir: &Path) {
         .unwrap();
 }
 
+/// The evidence store `gated_broker` opened in this process (one broker
+/// per process), so the desktop can close its session at Quit.
+static GATED_EVIDENCE: OnceLock<Arc<PrimaryEvidence>> = OnceLock::new();
+
 /// The broker as `Home::open` builds it, with `gate` as one more
 /// projection.
 pub fn gated_broker(
@@ -131,6 +135,7 @@ pub fn gated_broker(
             vec![gate, Arc::new(MemoryEvidence::new(256))],
         )
         .map_err(|e| format!("evidence store: {}", e.as_str()))?;
+        let _ = GATED_EVIDENCE.set(evidence.clone());
         let control = GovernedControl::new(
             &broker,
             Vault::Disabled,
@@ -178,7 +183,18 @@ pub fn launch_isolated(
     label: &str,
     open: impl FnOnce(&Path) -> Result<Arc<GovernedControl>, String>,
 ) -> Started {
-    let started = launch(&home(label), None, open).expect("the desktop starts");
+    let started = launch(&home(label), None, |dir: &Path| {
+        let owner = open(dir)?;
+        let evidence = GATED_EVIDENCE
+            .get()
+            .cloned()
+            .ok_or("the gated broker kept no evidence store")?;
+        Ok(Opened {
+            owner,
+            close_session: Box::new(move || evidence.close_session()),
+        })
+    })
+    .expect("the desktop starts");
     assert_isolated_display();
     started
 }

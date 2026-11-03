@@ -16,6 +16,7 @@ use crate::window::{build, AtStart, MainWindow, Probe};
 use gtk::glib;
 use gtk::prelude::*;
 use gtk4 as gtk;
+use nexus_governed_control::authority::evidence::EndStatus;
 use nexus_governed_control::governed::GovernedControl;
 use nexus_mother_host::Home;
 use std::ffi::OsStr;
@@ -60,9 +61,22 @@ impl std::fmt::Display for StartError {
     }
 }
 
+/// The evidence store's session close, the last step of a clean Quit.
+pub type CloseSession = Box<dyn FnOnce() -> EndStatus + Send>;
+
+/// What opening the broker gives the desktop: the Owner's side of the
+/// broker, and the one action it may take on the evidence store, closing
+/// its session at a clean Quit.
+pub struct Opened {
+    pub owner: Arc<GovernedControl>,
+    pub close_session: CloseSession,
+}
+
 /// A started desktop: the broker, the Stop route and the window.
 pub struct Started {
     pub owner: Arc<GovernedControl>,
+    /// Taken by `finish`.
+    pub close_session: Option<CloseSession>,
     pub route: Arc<StopRoute>,
     pub window: MainWindow,
     pub probe: Arc<Probe>,
@@ -80,7 +94,10 @@ pub fn home_dir() -> Result<PathBuf, StartError> {
 pub fn start(home_dir: &Path, gtk_debug: Option<&OsStr>) -> Result<Started, StartError> {
     launch(home_dir, gtk_debug, |dir| {
         Home::open(dir, Arc::new(NoDialogs))
-            .map(|home| home.owner().clone())
+            .map(|home| Opened {
+                owner: home.owner().clone(),
+                close_session: Box::new(move || home.close_session()),
+            })
             .map_err(|e| e.0)
     })
 }
@@ -91,14 +108,17 @@ pub fn start(home_dir: &Path, gtk_debug: Option<&OsStr>) -> Result<Started, Star
 pub fn launch(
     home_dir: &Path,
     gtk_debug: Option<&OsStr>,
-    open: impl FnOnce(&Path) -> Result<Arc<GovernedControl>, String>,
+    open: impl FnOnce(&Path) -> Result<Opened, String>,
 ) -> Result<Started, StartError> {
     // 1. The inspector: nothing is opened if it is asked for.
     if inspector_requested(gtk_debug) {
         return Err(StartError::InspectorRequested);
     }
     // 2. The broker, before GTK.
-    let owner = open(home_dir).map_err(StartError::Broker)?;
+    let Opened {
+        owner,
+        close_session,
+    } = open(home_dir).map_err(StartError::Broker)?;
     let at_start = if owner.status().emergency_stopped && owner.authority().recovery_required() {
         AtStart::StoppedForRecovery
     } else {
@@ -133,6 +153,7 @@ pub fn launch(
     );
     Ok(Started {
         owner,
+        close_session: Some(close_session),
         route,
         window,
         probe,
@@ -142,9 +163,13 @@ pub fn launch(
 }
 
 /// After the main loop ended: close the window and Quit within `within`.
-pub fn finish(started: Started, within: Duration) -> QuitOutcome {
+pub fn finish(mut started: Started, within: Duration) -> QuitOutcome {
     started.window.window.destroy();
-    quit(&started.route, &started.owner, within)
+    let close_session = started
+        .close_session
+        .take()
+        .unwrap_or_else(|| Box::new(|| EndStatus::Uncertain));
+    quit(&started.route, &started.owner, close_session, within)
 }
 
 /// The binary: start, run the main loop, Quit; the exit code.

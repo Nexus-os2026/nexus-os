@@ -13,7 +13,7 @@
 
 use nexus_governed_control::authority::approval::ControlConfirmer;
 use nexus_governed_control::authority::clock::SystemClock;
-use nexus_governed_control::authority::evidence::MemoryEvidence;
+use nexus_governed_control::authority::evidence::{EndStatus, MemoryEvidence};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
@@ -34,6 +34,9 @@ pub struct Home {
     dir: PathBuf,
     control: Arc<GovernedControl>,
     confirmer: Confirmer,
+    /// The evidence store, kept only to close its session on a clean
+    /// Quit (`close_session`); nothing else of it is handed out.
+    evidence: Arc<PrimaryEvidence>,
 }
 
 /// Why a home cannot be opened.
@@ -57,7 +60,7 @@ impl Home {
         let control = GovernedControl::new(
             &broker,
             Vault::Disabled,
-            evidence,
+            evidence.clone(),
             Arc::new(SystemClock::default()),
         )
         .map_err(|e| HomeError(format!("broker: {e:?}")))?;
@@ -65,6 +68,7 @@ impl Home {
             dir: dir.to_path_buf(),
             control: Arc::new(control),
             confirmer,
+            evidence,
         })
     }
 
@@ -99,6 +103,14 @@ impl Home {
     pub fn door(&self) -> Result<AgentDoor, AuthorityError> {
         self.control
             .issue_agent_door(mother_agent(), self.confirmer.clone())
+    }
+
+    /// A clean shutdown's last step (M2b-A decision 2): the evidence store
+    /// records this session's `session_closed`. Call it once, after the
+    /// broker shut down. Only `Recorded` means the session is closed; the
+    /// next start then finds no unclean session.
+    pub fn close_session(&self) -> EndStatus {
+        self.evidence.close_session()
     }
 
     /// The Owner's side of the broker (grants, approvals, the emergency

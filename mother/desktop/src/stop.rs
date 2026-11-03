@@ -15,6 +15,7 @@
 //! **Quit** joins every worker within a bound. A timed-out join is reported
 //! as such, never as a clean shutdown, and Quit then exits non-zero.
 
+use nexus_governed_control::authority::evidence::EndStatus;
 use nexus_governed_control::governed::GovernedControl;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
@@ -305,10 +306,20 @@ impl StopRoute {
 /// How Quit ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QuitOutcome {
-    /// Every Stop worker joined, and the broker shut down.
+    /// Every Stop worker joined, the broker shut down, and the evidence
+    /// store recorded the session's close (its sequence number).
     Clean {
         joined: usize,
         runs_cancelled: usize,
+        session_closed: u64,
+    },
+    /// The workers joined and the broker shut down, but the evidence store
+    /// did not record the session's close: `close` is what it answered
+    /// ("owed", "uncertain") or "no answer in time". Never clean.
+    SessionNotClosed {
+        joined: usize,
+        runs_cancelled: usize,
+        close: &'static str,
     },
     /// Something was still running when the bound passed.
     Unclean {
@@ -337,9 +348,21 @@ impl QuitOutcome {
             QuitOutcome::Clean {
                 joined,
                 runs_cancelled,
+                session_closed,
             } => format!(
                 "Mother quit: {joined} Stop worker(s) joined; the broker shut down \
-                 ({runs_cancelled} open run(s) cancelled)."
+                 ({runs_cancelled} open run(s) cancelled); the evidence session closed \
+                 (record {session_closed})."
+            ),
+            QuitOutcome::SessionNotClosed {
+                joined,
+                runs_cancelled,
+                close,
+            } => format!(
+                "Mother quit, but the evidence session was not closed (the store answered: \
+                 {close}): {joined} Stop worker(s) joined, the broker shut down \
+                 ({runs_cancelled} open run(s) cancelled), and the next start will record \
+                 this session as unfinished."
             ),
             QuitOutcome::Unclean {
                 stop_workers_running: 0,
@@ -360,10 +383,17 @@ impl QuitOutcome {
     }
 }
 
-/// Quit (design §6.6, A3): join the Stop workers, then shut the broker
-/// down, everything within `within`. A wait that times out is reported as
-/// such; nothing after it is attempted that could block on the store.
-pub fn quit(route: &StopRoute, owner: &Arc<GovernedControl>, within: Duration) -> QuitOutcome {
+/// Quit (design §6.6, A3; decision 2): join the Stop workers, shut the
+/// broker down, then close the evidence session, everything within
+/// `within`. A wait that times out is reported as such; nothing after it
+/// is attempted that could block on the store. Clean only once the store
+/// recorded the session's close.
+pub fn quit(
+    route: &StopRoute,
+    owner: &Arc<GovernedControl>,
+    close_session: Box<dyn FnOnce() -> EndStatus + Send>,
+    within: Duration,
+) -> QuitOutcome {
     let deadline = Instant::now() + within;
     let joined = match route.join_within(within) {
         Joined::All { joined } => joined,
@@ -388,14 +418,44 @@ pub fn quit(route: &StopRoute, owner: &Arc<GovernedControl>, within: Duration) -
             shut_down: false,
         };
     }
-    match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-        Ok(runs_cancelled) => QuitOutcome::Clean {
+    let runs_cancelled = match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        Ok(runs_cancelled) => runs_cancelled,
+        Err(_) => {
+            return QuitOutcome::Unclean {
+                stop_workers_running: 0,
+                shut_down: false,
+            }
+        }
+    };
+    // The session's close writes the store too: on its own thread, within
+    // the same bound.
+    let (tx, rx) = mpsc::channel();
+    let spawned = std::thread::Builder::new()
+        .name("nexus-close".into())
+        .spawn(move || {
+            let _ = tx.send(close_session());
+        });
+    let answer = if spawned.is_ok() {
+        rx.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .ok()
+    } else {
+        None
+    };
+    match answer {
+        Some(EndStatus::Recorded { seq }) => QuitOutcome::Clean {
             joined,
             runs_cancelled,
+            session_closed: seq,
         },
-        Err(_) => QuitOutcome::Unclean {
-            stop_workers_running: 0,
-            shut_down: false,
+        Some(other) => QuitOutcome::SessionNotClosed {
+            joined,
+            runs_cancelled,
+            close: other.as_str(),
+        },
+        None => QuitOutcome::SessionNotClosed {
+            joined,
+            runs_cancelled,
+            close: "no answer in time",
         },
     }
 }
