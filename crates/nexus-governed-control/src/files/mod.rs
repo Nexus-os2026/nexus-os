@@ -1690,6 +1690,27 @@ pub(crate) fn mountinfo_for_test(text: Option<Result<String, ()>>) {
     MOUNTINFO.with(|mountinfo| *mountinfo.borrow_mut() = text);
 }
 
+/// Whether block device `major:minor` is backed only by real hardware
+/// (Owner decision, Option 1). Not walked in this build.
+#[cfg(target_os = "linux")]
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn hardware_backed(_major: u64, _minor: u64) -> bool {
+    true
+}
+
+#[cfg(all(test, target_os = "linux"))]
+thread_local! {
+    /// Tests only: the directory this thread reads in place of `/sys`.
+    static SYSFS: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Tests only: read `root` in place of `/sys` on this thread (`None`: the
+/// real one).
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn sysfs_for_test(root: Option<PathBuf>) {
+    SYSFS.with(|sysfs| *sysfs.borrow_mut() = root);
+}
+
 /// Where a protected or reserved location is: its longest existing
 /// ancestor, canonical (`existing`), the location itself (`real`: `existing`
 /// with the missing components appended), and whether it exists completely
