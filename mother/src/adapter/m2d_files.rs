@@ -7,12 +7,15 @@
 //! executes each File create at the front door, as at the terminal.
 //!
 //! A cause after the final check lands at a reading of the broker's clock
-//! (`TestClock`), the one step of the broker's an outside test reaches: the
-//! first reading once the temporary file is in the workspace is the final
-//! check's deadline test (after its cancellation test); the first once the
-//! name is there is the check after the publication. The kernel write
-//! grant's lapse is not reachable from here: the broker oracle and
-//! `oracles::m2d_c` cover it.
+//! (`TestClock`), the one step of the broker's an outside test reaches. The
+//! candidate is an anonymous file (no name exists before the publication),
+//! so the final check is found through the Files ledger: the first reading
+//! after the ledger changes past the execution's start record (the
+//! kernel's `apply.prepared`, then nothing but the kernel until the final
+//! check) is the final check's deadline test, after its cancellation test.
+//! The first reading once the name is there is the check after the
+//! publication. The kernel write grant's lapse is not reachable from here:
+//! the broker oracle and `oracles::m2d_c` cover it.
 
 use super::m2c_support::{consent, fence_port, port_for, resume, Home};
 use super::p0_support::{canaries, files_under, hits_in};
@@ -46,14 +49,42 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-fn has_temp(ws: &Path) -> bool {
-    std::fs::read_dir(ws).is_ok_and(|entries| {
-        entries.filter_map(Result::ok).any(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(".nexus-coding-run-tmp-")
+/// The Files ledger's files, as (length, modification time) each.
+fn ledger_state(files: &Path) -> Vec<Option<(u64, std::time::SystemTime)>> {
+    ["ledger.db", "ledger.db-wal"]
+        .iter()
+        .map(|name| {
+            let meta = std::fs::metadata(files.join(name)).ok()?;
+            Some((meta.len(), meta.modified().ok()?))
         })
-    })
+        .collect()
+}
+
+/// True at the first reading after the Files ledger changed since the first
+/// reading that followed `run`'s execution start record (the reading
+/// `begin` takes after it, before the commitment executes).
+fn past_the_start(home: &Home, run: RunId) -> impl Fn() -> bool + Send + 'static {
+    let (gate, run) = (home.gate.clone(), run.to_string());
+    let files = home.dir.join("broker").join("files");
+    let since: Mutex<Option<Vec<Option<(u64, std::time::SystemTime)>>>> = Mutex::new(None);
+    move || {
+        let started = gate
+            .seen()
+            .iter()
+            .any(|s| s.phase == "started" && s.run.as_deref() == Some(run.as_str()));
+        if !started {
+            return false;
+        }
+        let now = ledger_state(&files);
+        let mut since = since.lock().unwrap();
+        match since.as_ref() {
+            None => {
+                *since = Some(now);
+                false
+            }
+            Some(before) => *before != now,
+        }
+    }
 }
 
 struct Fx<'a> {
@@ -561,14 +592,16 @@ impl<'a> Fx<'a> {
             let id = self.waiting(&format!("MKFILE:{a} MKFILE:{b} VFILE:{code}-c.txt"));
             let (run, commitment) = self.approve(&self.port, id);
             let (control, clock) = (self.home.control.clone(), self.home.clock.clone());
-            let (ws, name) = (self.ws.clone(), self.ws.join(&a));
+            let name = self.ws.join(&a);
             let grant = *self.grant.lock().unwrap();
             let published = move || name.exists();
             match code {
-                "cancelled" => self.home.clock.arm(
-                    move || has_temp(&ws) && !ws.join(&a).exists(),
-                    move || control.cancel_run(run).unwrap(),
-                ),
+                "cancelled" => self
+                    .home
+                    .clock
+                    .arm(past_the_start(self.home, run), move || {
+                        control.cancel_run(run).unwrap()
+                    }),
                 "revoked" => self
                     .home
                     .clock
