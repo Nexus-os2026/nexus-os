@@ -180,10 +180,10 @@ pub use structural::{
     StructuralOutcome, StructuralProfile, StructuralVerification, StructuralViolation,
 };
 pub use verifier::{
-    ExecutionGeneration, StreamSummary, VerificationCandidate, VerificationError,
-    VerificationPhase, VerificationResult, VerifierCleanup, VerifierExit, VerifierInputs,
-    VerifierLaunchApproval, VerifierLaunchBinding, VerifierLaunchConfirmer, VerifierLaunchFacts,
-    VerifierLaunchRequest, VerifierMarker, VerifierOutcome,
+    ExecutionGeneration, InertPageError, InertPageResult, StreamSummary, VerificationCandidate,
+    VerificationError, VerificationPhase, VerificationResult, VerifierCleanup, VerifierExit,
+    VerifierInputs, VerifierLaunchApproval, VerifierLaunchBinding, VerifierLaunchConfirmer,
+    VerifierLaunchFacts, VerifierLaunchRequest, VerifierMarker, VerifierOutcome,
 };
 pub use worker::{
     run_worker, EditProposal, ProposalOp, ProposalRejection, WorkerError, WorkerLimits,
@@ -1659,6 +1659,8 @@ impl CodingRun {
             "verification": match binding.verification {
                 VerifierMarker::NoResult => Value::Null,
                 VerifierMarker::Result(hash) => json!(hex::encode(hash)),
+                // S1a-C skeleton: not implemented.
+                VerifierMarker::InertPage(_) => Value::Null,
             },
             "create": review.count(ChangeKind::Create),
             "replace": review.count(ChangeKind::Replace),

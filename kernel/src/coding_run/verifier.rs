@@ -38,6 +38,7 @@ use super::manifest::{put_bytes, Manifest, ManifestEntry, ManifestHash};
 use super::review::{display_safe, ReviewBinding};
 use super::scope::RelPath;
 use super::{CodingRun, RunError, RunId, StructuralVerification};
+use crate::inert_page::{ApprovedFacts, FactCode, PageVerdict, RefusalCode};
 
 const INPUTS_DOMAIN: &[u8] = b"nexus.coding_run.verifier_inputs.v1";
 const LAUNCH_DOMAIN: &[u8] = b"nexus.coding_run.verifier_launch.v1";
@@ -261,6 +262,7 @@ impl VerificationResult {
 pub enum VerifierMarker {
     NoResult,
     Result([u8; 32]),
+    InertPage([u8; 32]),
 }
 
 impl VerifierMarker {
@@ -271,8 +273,57 @@ impl VerifierMarker {
                 hasher.update([1u8]);
                 hasher.update(hash);
             }
+            // S1a-C skeleton: no distinct encoding yet.
+            Self::InertPage(hash) => {
+                hasher.update([1u8]);
+                hasher.update(hash);
+            }
         }
     }
+}
+
+/// S1a-C skeleton: the inert page check of a run's one changed file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InertPageResult {
+    pub run_id: RunId,
+    pub candidate_manifest_hash: ManifestHash,
+    pub structural_binding_hash: [u8; 32],
+    pub path_sha256: [u8; 32],
+    pub page: PageVerdict,
+}
+
+impl InertPageResult {
+    /// S1a-C skeleton: not implemented.
+    pub fn binding_hash(&self) -> [u8; 32] {
+        [0; 32]
+    }
+}
+
+/// Why an inert page check or recheck was refused: codes only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum InertPageError {
+    #[error("the inert page check is not available in this state")]
+    InvalidState,
+    #[error("this run's inert page check is spent")]
+    Spent,
+    #[error("this run's page was not checked")]
+    NotChecked,
+    #[error("the approved facts differ from the checked facts")]
+    FactsChanged,
+    #[error("the stored inert page verdict no longer matches")]
+    Stale,
+    #[error("the checked page is no longer available")]
+    CandidateUnavailable,
+    #[error("the candidate does not change exactly that one page")]
+    NotSingleFile,
+    #[error("the inert page check could not be recorded")]
+    Unrecorded,
+    #[error("refused: the owner's emergency stop ended this run")]
+    EmergencyStopped,
+    #[error("inert page refused: {0}")]
+    Refused(RefusalCode),
+    #[error("page fact missing: {0}")]
+    FactMissing(FactCode),
 }
 
 /// The backend's native confirmation of a verifier launch. Only the
@@ -852,6 +903,36 @@ impl CodingRun {
         .map_err(|_| VerificationError::Unrecorded)?;
         self.verifier.phase = VerificationPhase::Idle;
         Ok(())
+    }
+
+    /// S1a-C skeleton: not implemented.
+    pub fn check_inert_page(
+        &mut self,
+        _path: &str,
+        _facts: Option<ApprovedFacts>,
+    ) -> Result<InertPageResult, InertPageError> {
+        Err(InertPageError::InvalidState)
+    }
+
+    /// S1a-C skeleton: not implemented.
+    pub fn recheck_inert_page(
+        &mut self,
+        _expected: Option<&ApprovedFacts>,
+    ) -> Result<(), InertPageError> {
+        Err(InertPageError::NotChecked)
+    }
+
+    /// S1a-C skeleton: not implemented.
+    pub fn latest_inert_page(&self) -> Option<&InertPageResult> {
+        None
+    }
+
+    /// S1a-C skeleton: not implemented.
+    #[cfg(test)]
+    pub(crate) fn alter_inert_result_for_test(
+        &mut self,
+        _alter: impl FnOnce(&mut InertPageResult),
+    ) {
     }
 }
 

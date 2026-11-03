@@ -1797,6 +1797,11 @@ mod p2e_materialize;
 #[path = "p2h_verification_tests.rs"]
 mod p2h_verification;
 
+// ── S1a-C: the inert page check bound to the run (pre-registered) ─────────
+
+#[path = "s1a_c_inert_slot_tests.rs"]
+mod s1a_c_inert_slot;
+
 // ── M0-FIX F5: the owner's emergency stop halts coding runs ───────────────
 
 #[path = "m0_f5_stop_tests.rs"]
