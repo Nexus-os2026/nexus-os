@@ -127,15 +127,49 @@ pub enum Joined {
     TimedOut { still_running: usize },
 }
 
+/// Test seams (compiled only into the crate's own unit tests): hold a
+/// worker after it published `done`, or hold a press between the spawn and
+/// registering the worker's handle.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct Seams {
+    pub after_done: Option<Box<dyn Fn() + Send + Sync>>,
+    pub before_register: Option<Box<dyn Fn() + Send + Sync>>,
+}
+
 /// The Stop route: every Stop button and shortcut goes through it.
 pub struct StopRoute {
     desk: Arc<Desk>,
-    owner: Arc<GovernedControl>,
+    /// The blocking part of one Stop: the broker's `emergency_stop()`.
+    body: Arc<dyn Fn() + Send + Sync>,
+    #[cfg(test)]
+    seams: Arc<Seams>,
 }
 
 impl StopRoute {
     pub fn new(desk: Arc<Desk>, owner: Arc<GovernedControl>) -> Arc<Self> {
-        Arc::new(Self { desk, owner })
+        Arc::new(Self {
+            desk,
+            body: Arc::new(move || {
+                owner.emergency_stop();
+            }),
+            #[cfg(test)]
+            seams: Arc::new(Seams::default()),
+        })
+    }
+
+    /// A route whose Stop body is `body`, with `seams` (unit tests only).
+    #[cfg(test)]
+    pub(crate) fn with_body(
+        desk: Arc<Desk>,
+        body: impl Fn() + Send + Sync + 'static,
+        seams: Seams,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            desk,
+            body: Arc::new(body),
+            seams: Arc::new(seams),
+        })
     }
 
     pub fn desk(&self) -> &Arc<Desk> {
@@ -166,14 +200,13 @@ impl StopRoute {
         };
         // The blocking part, on its own new thread, after the unlock.
         let desk = self.desk.clone();
-        let owner = self.owner.clone();
+        let body = self.body.clone();
+        #[cfg(test)]
+        let seams = self.seams.clone();
         let spawned = std::thread::Builder::new()
             .name(format!("nexus-stop-{worker}"))
             .spawn(move || {
-                let panicked = catch_unwind(AssertUnwindSafe(|| {
-                    owner.emergency_stop();
-                }))
-                .is_err();
+                let panicked = catch_unwind(AssertUnwindSafe(|| body())).is_err();
                 let mut state = desk.lock();
                 if let Some(entry) = state.workers.iter_mut().find(|w| w.id == worker) {
                     entry.done = true;
@@ -184,7 +217,16 @@ impl StopRoute {
                     state.receipts.panicked += 1;
                 }
                 desk.changed.notify_all();
+                drop(state);
+                #[cfg(test)]
+                if let Some(seam) = &seams.after_done {
+                    seam();
+                }
             });
+        #[cfg(test)]
+        if let Some(seam) = &self.seams.before_register {
+            seam();
+        }
         let mut state = self.desk.lock();
         match spawned {
             Ok(handle) => {
@@ -342,3 +384,7 @@ pub fn quit(route: &StopRoute, owner: &Arc<GovernedControl>, within: Duration) -
         },
     }
 }
+
+#[cfg(test)]
+#[path = "stop_tests.rs"]
+mod tests;
