@@ -289,22 +289,22 @@ impl<'a> Fx<'a> {
         assert_eq!(refused, BrokerClass::NotAdmitted, "(a)");
         let other_hash = "cd".repeat(32);
         assert_eq!(
-            class(port.admit(m, &admission(&other_hash, one))),
+            class(port.admit_files(m, &admission(&other_hash, one))),
             BrokerClass::NoConsent
         );
         let unasked = admission(&hash, "msn-000901/3/3");
         assert_eq!(
-            class(port.admit(m, &unasked)),
+            class(port.admit_files(m, &unasked)),
             BrokerClass::NoConsent,
             "(b)"
         );
         let other = self.port();
-        let theirs = other.admit(MissionId(902), &admission(&hash, one));
+        let theirs = other.admit_files(MissionId(902), &admission(&hash, one));
         assert_eq!(class(theirs), BrokerClass::NoConsent, "(c)");
-        port.admit(m, &admission(&hash, one)).unwrap();
-        port.admit(m, &admission(&hash, one))
+        port.admit_files(m, &admission(&hash, one)).unwrap();
+        port.admit_files(m, &admission(&hash, one))
             .expect("the same admission again");
-        let second = port.admit(m, &admission(&hash, two));
+        let second = port.admit_files(m, &admission(&hash, two));
         assert_eq!(class(second), BrokerClass::AlreadyAdmitted, "(d)");
         let run = port.run_of(m).unwrap();
         let stale = port.perform(m, 2, &create).unwrap_err().class;
@@ -551,7 +551,7 @@ impl<'a> Fx<'a> {
             consent_request: request,
             generation: 1,
         };
-        let refused = port.admit(MissionId(903), &old).unwrap_err().class;
+        let refused = port.admit_files(MissionId(903), &old).unwrap_err().class;
         assert_eq!(refused, BrokerClass::NoConsent);
 
         let port = self.port();
