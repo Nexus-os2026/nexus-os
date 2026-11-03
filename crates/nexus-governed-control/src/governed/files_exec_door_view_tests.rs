@@ -84,10 +84,7 @@ fn m2d_c_the_door_sees_no_interruption_otherwise() {
     assert!(seen.interrupted.is_empty(), "{seen:?}");
     assert!(recorded(&f, plain.id).is_empty());
     let other = f.gov.issue_agent_door(mother(), f.owner.clone()).unwrap();
-    assert!(matches!(
-        other.commitment(plain.id),
-        Lookup::NotMine { .. }
-    ));
+    assert!(matches!(other.commitment(plain.id), Lookup::NotMine { .. }));
 
     let g = Fx::new();
     let view = g.ready(NAME, CONTENT);
