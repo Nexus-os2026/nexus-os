@@ -53,6 +53,9 @@ pub(crate) mod at {
     /// H1 decision (rows 4-5): an actual staging removal is about to be
     /// attempted.
     pub(crate) const FILE_DISCARD: &str = "files.discard";
+    /// Codex re-check 2 of PR #64 (HIGH 1): a Files execution has passed
+    /// its revalidation and start, and takes the one Files slot next.
+    pub(crate) const FILE_EXECUTE_START: &str = "files.execute_start";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

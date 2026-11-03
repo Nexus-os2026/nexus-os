@@ -523,14 +523,18 @@ impl GovernedControl {
     /// Stop ingress, and confirmation that the halt is engaged, are
     /// independent of evidence and cleanup; this call returning means its
     /// synchronous recording phase finished, and hosts do not wait for that
-    /// return to acknowledge Stop. Everything before the records is memory
-    /// only, and no lock it takes is held by anyone across evidence,
-    /// filesystem or cleanup work: the kernel stop's state (its halt log
-    /// releases it before the audit), the runs, the commitments, the lease
-    /// table, the generation, and the pending table, whose effects are
-    /// dropped outside it (a Files effect only hands its run to the
-    /// deferred collection). The halt is therefore engaged, and observable
-    /// in memory, before any blocking dependency.
+    /// return to acknowledge Stop.
+    ///
+    /// The engagement comes first and is memory only: the kernel stop (twice,
+    /// see below), the runs, the commitments, the lease ends, the generation,
+    /// and the pending effects, dropped outside the pending table (a Files
+    /// effect only hands its run to the deferred collection). No lock it
+    /// takes is held by anyone across evidence, filesystem or cleanup work
+    /// (the kernel stop's halt log releases its state before the audit), so
+    /// the halt is engaged, and observable in memory, before any blocking
+    /// dependency. Only after it does Stop tear the agent display down,
+    /// which may stop the display's processes (cleanup that follows the
+    /// engagement), and then write the records.
     fn stop_for(&self, reason: Option<&'static str>) -> usize {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.

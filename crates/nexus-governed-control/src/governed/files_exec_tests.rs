@@ -37,6 +37,8 @@ use std::time::{Duration, Instant};
 mod review1;
 #[path = "files_exec_review2_tests.rs"]
 mod review2;
+#[path = "files_exec_review3_tests.rs"]
+mod review3;
 
 const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const LABEL: &str = "msn-000001/1/1";
