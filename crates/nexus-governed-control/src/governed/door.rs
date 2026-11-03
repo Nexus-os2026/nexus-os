@@ -34,6 +34,7 @@ use crate::authority::clock::Clock;
 use crate::authority::commitment::{CommitmentState, CommitmentView};
 use crate::authority::effect::CapabilityKind;
 use crate::authority::evidence::Privacy;
+use crate::authority::halt_cell::{HaltCell, HaltCells};
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
@@ -139,6 +140,24 @@ impl AgentDoor {
         self.core
             .halt
             .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// M2d-C round 5 (H1): [`Self::open_run`] with the mission's halt cell,
+    /// which the run keeps from its insertion (in the same hold): once the
+    /// cell is engaged, no admission of the run passes and an execution of
+    /// it sees the cell at its final check.
+    pub fn open_run_with_halt(&self, cell: &HaltCell) -> Result<RunId, AuthorityError> {
+        self.not_halted()?;
+        self.control.settle();
+        self.control
+            .authority()
+            .open_run_in_with(self.core.agent.clone(), self.core.group, cell)
+    }
+
+    /// M2d-C round 5 (C1): this agent's partition of the broker's halt
+    /// table (taken once, when a port is built; not on a Stop path).
+    pub fn halt_cells(&self) -> HaltCells {
+        self.control.authority().halt_cells(&self.core.agent)
     }
 
     /// PR-B: refused once this door is halted (read under the runs lock);

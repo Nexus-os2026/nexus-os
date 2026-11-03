@@ -26,6 +26,7 @@
 
 use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
 use super::halt::{HaltReason, RecordBatch};
+use super::halt_cell::HaltCell;
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
 use crate::inert_page::ApprovedFacts;
@@ -45,11 +46,16 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 pub struct CancelToken {
     run: Arc<AtomicBool>,
     doors: Vec<Arc<AtomicBool>>,
+    /// M2d-C round 5 (H1, C6): the run's mission halt cells, ORed with the
+    /// flags above; never reset or replaced.
+    halts: Vec<Arc<AtomicBool>>,
 }
 
 impl CancelToken {
     pub fn is_cancelled(&self) -> bool {
-        self.run.load(Ordering::SeqCst) || self.doors.iter().any(|d| d.load(Ordering::SeqCst))
+        self.run.load(Ordering::SeqCst)
+            || self.doors.iter().any(|d| d.load(Ordering::SeqCst))
+            || self.halts.iter().any(|h| h.load(Ordering::SeqCst))
     }
 }
 
@@ -113,6 +119,16 @@ struct RunEntry {
     /// M2d-C round 4 (rule 2): its pinned commitments; while any is, the
     /// run is never pruned.
     pins: u32,
+    /// M2d-C round 5 (H1, C1): its missions' halt cells, attached at its
+    /// opening or at an adoption; append-only, never removed.
+    halts: Vec<HaltCell>,
+}
+
+impl RunEntry {
+    /// Rule 3 / H1: an engaged halt cell of the run.
+    fn halted(&self) -> bool {
+        self.halts.iter().any(HaltCell::is_engaged)
+    }
 }
 
 /// M2d-B1: which yes of the Owner's a cached consent is.
@@ -289,7 +305,8 @@ impl Table {
             .any(|group| self.doors.get(group).is_some_and(DoorEntry::is_halted))
     }
 
-    /// `entry`'s token: its own flag and its groups' halt flags (rule 3).
+    /// `entry`'s token: its own flag, its groups' halt flags (rule 3) and
+    /// its mission halt cells (H1).
     fn token(&self, entry: &RunEntry) -> CancelToken {
         CancelToken {
             run: entry.cancelled.clone(),
@@ -298,6 +315,7 @@ impl Table {
                 .iter()
                 .filter_map(|group| self.doors.get(group).map(|door| door.halt_flag.clone()))
                 .collect(),
+            halts: entry.halts.iter().map(HaltCell::flag).collect(),
         }
     }
 
@@ -466,6 +484,20 @@ impl RunRegistry {
         now_wall_ms: u64,
         group: Option<GroupId>,
     ) -> Result<RunId, AuthorityError> {
+        self.open_in_with(agent, origin, class, now_wall_ms, group, None)
+    }
+
+    /// [`Self::open_in`] with a mission's halt cell (H1), kept by the run
+    /// from its insertion, in the same hold.
+    pub(crate) fn open_in_with(
+        &self,
+        agent: AgentId,
+        origin: RunOrigin,
+        class: RunClass,
+        now_wall_ms: u64,
+        group: Option<GroupId>,
+        halt: Option<HaltCell>,
+    ) -> Result<RunId, AuthorityError> {
         let id = RunId::fresh();
         let entry = RunEntry {
             view: RunView {
@@ -484,6 +516,7 @@ impl RunRegistry {
             inference_admission: None,
             model_attempts: 0,
             pins: 0,
+            halts: halt.into_iter().collect(),
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -619,6 +652,10 @@ impl RunRegistry {
         }
         if !entry.groups.contains(&group) {
             return Err(AuthorityError::NotMember);
+        }
+        // Round 5 (H1): an engaged mission cell refuses as a halt does.
+        if !halted_too && entry.halted() {
+            return Err(AuthorityError::Halted);
         }
         Ok(())
     }
@@ -863,8 +900,9 @@ impl RunRegistry {
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        // M2c PR-B: a run of a halted door's group says so.
-        if runs.in_halted_group(entry) {
+        // M2c PR-B: a run of a halted door's group says so; round 5 (H1):
+        // so does a run whose mission halt cell is engaged.
+        if runs.in_halted_group(entry) || entry.halted() {
             return Err(AuthorityError::Halted);
         }
         if entry.view.finished {

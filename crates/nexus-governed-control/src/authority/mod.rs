@@ -9,6 +9,7 @@ pub mod commitment;
 pub mod effect;
 pub mod evidence;
 pub mod halt;
+pub mod halt_cell;
 pub mod ids;
 pub mod policy;
 pub mod run;
@@ -285,6 +286,8 @@ pub struct Authority {
     clock: Arc<dyn Clock>,
     /// M2c PR-B: every door halt's records, accounted for.
     halt_counters: Arc<HaltCounters>,
+    /// M2d-C round 5 (C1): the broker's halt table, as long as it lives.
+    halt_table: Arc<halt_cell::HaltTable>,
 }
 
 impl Authority {
@@ -311,7 +314,13 @@ impl Authority {
             evidence,
             clock,
             halt_counters: Arc::new(HaltCounters::default()),
+            halt_table: Arc::default(),
         }
+    }
+
+    /// M2d-C round 5 (C1): `agent`'s partition of the halt table.
+    pub(crate) fn halt_cells(&self, agent: &AgentId) -> halt_cell::HaltCells {
+        halt_cell::HaltCells::of(self.halt_table.clone(), agent.clone())
     }
 
     /// M2c PR-B: an empty record batch, counted from now on.
@@ -839,6 +848,23 @@ impl Authority {
         self.open_classed(agent, RunOrigin::AgentGoal, RunClass::Agent, Some(group))
     }
 
+    /// M2d-C round 5 (H1): [`Self::open_run_in`] with a mission's halt
+    /// cell, kept by the run from its insertion, in the same hold.
+    pub(crate) fn open_run_in_with(
+        &self,
+        agent: AgentId,
+        group: GroupId,
+        cell: &halt_cell::HaltCell,
+    ) -> Result<RunId, AuthorityError> {
+        self.open_with(
+            agent,
+            RunOrigin::AgentGoal,
+            RunClass::Agent,
+            Some(group),
+            Some(cell.clone()),
+        )
+    }
+
     /// Open the run of one of the owner's own commands (the unified front
     /// door): the only way to an owner run. Its agent identity is a label
     /// for display and evidence; what makes it the owner's is the class the
@@ -864,6 +890,17 @@ impl Authority {
         class: RunClass,
         group: Option<GroupId>,
     ) -> Result<RunId, AuthorityError> {
+        self.open_with(agent, origin, class, group, None)
+    }
+
+    fn open_with(
+        &self,
+        agent: AgentId,
+        origin: RunOrigin,
+        class: RunClass,
+        group: Option<GroupId>,
+        cell: Option<halt_cell::HaltCell>,
+    ) -> Result<RunId, AuthorityError> {
         if self.runs.is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -877,9 +914,9 @@ impl Authority {
         if class == RunClass::Owner {
             record.detail.push(("class".into(), "owner".into()));
         }
-        let run = self
-            .runs
-            .open_in(agent, origin, class, self.clock.wall_ms(), group)?;
+        let run =
+            self.runs
+                .open_in_with(agent, origin, class, self.clock.wall_ms(), group, cell)?;
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::OPEN_INSERTED);
         record.run = Some(run.to_string());
