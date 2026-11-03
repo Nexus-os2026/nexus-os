@@ -183,22 +183,34 @@ pub fn launch_isolated(
     started
 }
 
-/// Run a bounded tool; its output, or `None` if it exited unsuccessfully.
-pub fn try_tool(program: &str, args: &[&str]) -> Option<String> {
+/// A bounded tool that exited unsuccessfully: its status and stderr.
+#[derive(Debug)]
+pub struct ToolFailure {
+    pub status: std::process::ExitStatus,
+    pub stderr: String,
+}
+
+/// Run a bounded tool; its output, or how it failed.
+pub fn try_tool(program: &str, args: &[&str]) -> Result<String, ToolFailure> {
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap_or_else(|e| panic!("{program} is required: {e}"));
     let deadline = Instant::now() + WAIT;
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             let output = child.wait_with_output().unwrap();
-            return status
-                .success()
-                .then(|| String::from_utf8_lossy(&output.stdout).into_owned());
+            return if status.success() {
+                Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+            } else {
+                Err(ToolFailure {
+                    status,
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                })
+            };
         }
         if Instant::now() > deadline {
             let _ = child.kill();
@@ -207,6 +219,14 @@ pub fn try_tool(program: &str, args: &[&str]) -> Option<String> {
         }
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+/// G13: whether a failed bus query failed only because its name vanished
+/// between the listing and the query. Oracle commit: the meaning G13 had
+/// (every failure counted as a vanished name); decision 2 narrows it.
+pub fn vanished_name(stderr: &str) -> bool {
+    let _ = stderr;
+    true
 }
 
 /// Run a bounded tool; its output.

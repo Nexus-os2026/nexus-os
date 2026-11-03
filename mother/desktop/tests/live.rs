@@ -406,7 +406,9 @@ fn g13_the_desktop_owns_no_bus_name_and_exports_nothing() {
                 // A name may disappear between the listing and the query (the
                 // query tools' own connections do): the live desktop's own
                 // connection cannot, so a vanished name is not the desktop's.
-                let bus = |method: &str, arg: Option<&str>| -> Option<String> {
+                // Only that failure is tolerated (`vanished_name`); any other
+                // failed query fails the test.
+                let bus = |method: &str, arg: Option<&str>| {
                     let mut args = vec![
                         "--session".to_string(),
                         "--print-reply".to_string(),
@@ -431,8 +433,10 @@ fn g13_the_desktop_owns_no_bus_name_and_exports_nothing() {
                     if name == "org.freedesktop.DBus" {
                         continue;
                     }
-                    let Some(pid) = bus("GetConnectionUnixProcessID", Some(name)) else {
-                        continue;
+                    let pid = match bus("GetConnectionUnixProcessID", Some(name)) {
+                        Ok(pid) => pid,
+                        Err(failure) if support::vanished_name(&failure.stderr) => continue,
+                        Err(failure) => panic!("the PID query for {name} failed: {failure:?}"),
                     };
                     if pid.lines().any(|l| l.trim() == format!("uint32 {me}")) {
                         mine.push(name.clone());
@@ -512,4 +516,21 @@ fn g14_the_content_area_is_labels_frames_and_the_stop_button() {
             assert!(finish(started, QUIT_WITHIN).is_clean());
         },
     );
+}
+
+/// G13's tolerance, exactly: a name that vanished between the listing and
+/// the query, and nothing else.
+#[test]
+fn g13_only_a_vanished_name_is_tolerated() {
+    let vanished = "Error org.freedesktop.DBus.Error.NameHasNoOwner: Could not get PID of name ':1.8': no such name\n";
+    assert!(support::vanished_name(vanished));
+    for other in [
+        "Error org.freedesktop.DBus.Error.AccessDenied: Rejected send message\n",
+        "Error org.freedesktop.DBus.Error.NoReply: Did not receive a reply\n",
+        "Error org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable\n",
+        "Failed to open connection to \"session\" message bus: Connection refused\n",
+        "",
+    ] {
+        assert!(!support::vanished_name(other), "tolerated: {other:?}");
+    }
 }
