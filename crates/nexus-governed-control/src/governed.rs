@@ -147,6 +147,8 @@ pub struct GovernedControl {
     browser: Browser,
     /// M2d-B1: the Files domain (the one registered workspace).
     files: Files,
+    /// M2e-B: the process's one local model, once the host registers it.
+    models: crate::inference::LocalModels,
     /// Runs whose agent or command has ended while something of theirs
     /// still waits: each finishes once nothing in it can start any more.
     detached: Mutex<HashSet<RunId>>,
@@ -281,6 +283,7 @@ impl GovernedControl {
             display: AgentDisplay::new(root.clone()),
             browser: Browser::new(root),
             files,
+            models: crate::inference::LocalModels::default(),
             control,
             egress,
             detached: Mutex::new(HashSet::new()),
@@ -859,6 +862,40 @@ impl GovernedControl {
     /// report. The Owner's only: no door route.
     pub fn files_retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
         self.files.retry_cleanup()
+    }
+
+    /// M2e-B (design v2 §8): register the process's one local model, the
+    /// host's own selection (no door route), at the loopback `endpoint`,
+    /// pinned to `spec`. The kernel transport verifies it with no broker
+    /// lock held, under a watch of this front door's kernel stop, the
+    /// session's end and an absolute 30 s deadline: the runtime's version
+    /// and cloud status, the model's name, digest, description and
+    /// capabilities. Refused under Stop, while quitting, off loopback, for
+    /// a second model, and on any mismatch (its `model_<code>` class). The
+    /// registration is recorded first (Restricted: the manifest digest and
+    /// the identity digest); unrecorded, there is no model. Nothing is
+    /// persisted: after a restart the host registers it again.
+    pub fn register_local_model(
+        &self,
+        endpoint: &str,
+        spec: nexus_kernel::inference::ModelPinSpec,
+    ) -> Result<crate::inference::ModelIdentityView, AuthorityError> {
+        self.models.register(
+            self.authority(),
+            endpoint,
+            &spec,
+            self.kernel_stop.authority(),
+        )
+    }
+
+    /// M2e-B: the registered local model, if any.
+    pub(crate) fn registered_model(&self) -> Option<Arc<crate::inference::RegisteredModel>> {
+        self.models.registered()
+    }
+
+    /// M2e-B: the stop authority a model call admits its watch from.
+    pub(crate) fn kernel_stop_authority(&self) -> &Arc<StopAuthority> {
+        self.kernel_stop.authority()
     }
 
     /// Ask the owner, natively, for a grant (a synthetic one lasts at most

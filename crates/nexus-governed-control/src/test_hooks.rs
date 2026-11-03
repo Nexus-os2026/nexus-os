@@ -36,6 +36,9 @@ pub(crate) mod at {
     pub(crate) const ISSUE_RECORDED: &str = "issue.recorded";
     pub(crate) const CONSENT_BEFORE_FILL: &str = "door.consent_before_fill";
     pub(crate) const ADMIT_BEFORE_BIND: &str = "door.admit_before_bind";
+    /// M2e-B: an inference admission passed the door's own checks; its
+    /// binding, in one hold of the runs lock, is next.
+    pub(crate) const INFERENCE_BEFORE_BIND: &str = "door.inference_before_bind";
     /// M2d-B2: an observed Files apply is at its final check (the
     /// candidate written and synced; the guard is asked next).
     pub(crate) const FILE_BEFORE_FINAL: &str = "files.before_final";

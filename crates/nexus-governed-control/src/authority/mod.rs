@@ -78,6 +78,31 @@ pub(crate) const REASONS: &[&str] = &[
     "file_exists",
     "change_too_large_to_show",
     "unsupported_mount_topology",
+    "model_not_registered",
+    "model_identity_mismatch",
+    "model_not_local",
+    "model_invalid_address",
+    "model_invalid_model_name",
+    "model_cloud_name",
+    "model_cloud_enabled",
+    "model_not_installed",
+    "model_digest_mismatch",
+    "model_runtime_mismatch",
+    "model_remote",
+    "model_config_mismatch",
+    "model_unavailable",
+    "model_timeout",
+    "model_request_too_large",
+    "model_response_too_large",
+    "model_malformed",
+    "model_truncated",
+    "model_tool_calls",
+    "model_thinking_leaked",
+    "model_empty_content",
+    "model_over_budget",
+    "model_stopped",
+    "model_cancelled",
+    "model_late",
     "facts_invalid",
     "file_type_not_allowed",
     "page_not_inert",
@@ -134,6 +159,14 @@ pub enum AuthorityError {
     /// reached through a mount that is not a whole filesystem (a subtree
     /// bind mount), or the mount topology cannot be read or matched.
     UnsupportedMountTopology,
+    /// M2e-B: no local model is registered in this process.
+    ModelNotRegistered,
+    /// M2e-B: the model identity a caller expects is not the registered
+    /// one.
+    ModelIdentityMismatch,
+    /// M2e-B: the kernel's local model transport refused or ended a model
+    /// call or a registration (its fixed code only).
+    ModelCall(nexus_kernel::inference::ModelError),
     /// M2d-B2: a Files operation reached the Owner's workspace and its
     /// outcome is not established (a sync, a record or a cleanup failed):
     /// recovery is required, and nothing is called done.
@@ -195,6 +228,9 @@ impl AuthorityError {
             AuthorityError::ChangeTooLargeToShow => "change_too_large_to_show",
             AuthorityError::UnsupportedMountTopology => "unsupported_mount_topology",
             AuthorityError::RecoveryRequired => "recovery_required",
+            AuthorityError::ModelNotRegistered => "model_not_registered",
+            AuthorityError::ModelIdentityMismatch => "model_identity_mismatch",
+            AuthorityError::ModelCall(error) => crate::inference::model_class(*error),
             AuthorityError::FactsInvalid(_) => "facts_invalid",
             AuthorityError::FileTypeNotAllowed => "file_type_not_allowed",
             AuthorityError::PageNotInert(_) => "page_not_inert",
@@ -389,6 +425,53 @@ impl Authority {
             record.detail.push(("cleanup".into(), cleanup.into()));
         }
         self.record_end(&record)
+    }
+
+    /// M2e-B: the one builder of the model records. Restricted: a door's
+    /// run is an agent's, and the registration names no run; its detail
+    /// is the registered counts, digests and codes only.
+    fn model_record(
+        &self,
+        phase: EvidencePhase,
+        run: Option<RunId>,
+        agent: Option<&AgentId>,
+        detail: Vec<(String, String)>,
+    ) -> EvidenceRecord {
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Restricted,
+        );
+        record.run = run.map(|run| run.to_string());
+        record.agent = agent.map(ToString::to_string);
+        record.detail = detail;
+        record
+    }
+
+    /// M2e-B: the host registered the process's model (a gating record:
+    /// unrecorded, the model is not registered).
+    pub(crate) fn record_model_registered(
+        &self,
+        detail: Vec<(String, String)>,
+    ) -> Result<(), AuthorityError> {
+        self.record(&self.model_record(EvidencePhase::ModelRegistered, None, None, detail))
+    }
+
+    /// M2e-B: one attempted model call of `run` (an end record: the call
+    /// has happened).
+    pub(crate) fn record_model_call(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        detail: Vec<(String, String)>,
+    ) -> EndStatus {
+        self.record_end(&self.model_record(
+            EvidencePhase::ModelCall,
+            Some(run),
+            Some(agent),
+            detail,
+        ))
     }
 
     /// Whether the evidence store requires the owner's acknowledgement of
@@ -638,6 +721,15 @@ impl Authority {
     /// Whether a door may be issued now (Mother Nexus M2c): the store not
     /// latched, no recovery required, no emergency stop, not quitting.
     pub(crate) fn door_admissible(&self) -> Result<(), AuthorityError> {
+        self.evidence_admissible()?;
+        self.mission_admissible()
+    }
+
+    /// Whether the evidence store can still record new work (M2e-B; Codex
+    /// review 1 of PR #75, MEDIUM 1): not latched, and no recovery
+    /// required. A known evidence failure permits no new work: what would
+    /// start against it could only be recorded as uncertain.
+    pub(crate) fn evidence_admissible(&self) -> Result<(), AuthorityError> {
         if let Some(primary) = self.evidence.primary() {
             let health = primary.health();
             if health.latched {
@@ -649,7 +741,19 @@ impl Authority {
                 ));
             }
         }
-        self.mission_admissible()
+        Ok(())
+    }
+
+    /// Whether new inference may start (M2e-B; Architect decision 1 on PR
+    /// #75): [`Self::evidence_admissible`], and no record owed. While any
+    /// record waits to be written, a model call or a registration would
+    /// start against a store already known to be failing.
+    pub(crate) fn inference_admissible(&self) -> Result<(), AuthorityError> {
+        self.evidence_admissible()?;
+        match self.evidence.primary() {
+            Some(primary) if primary.health().owed > 0 => Err(AuthorityError::EvidenceUnavailable),
+            _ => Ok(()),
+        }
     }
 
     /// The record of the owner's answer to a door: a yes is a gating record

@@ -55,6 +55,13 @@ pub enum EvidencePhase {
     /// Mother Nexus M2c PR-B: an agent door was halted (it took effect
     /// first): the door's opaque id and the reason.
     DoorHalted,
+    /// M2e-B: the Owner's host registered the process's one local model:
+    /// its manifest digest and its identity digest.
+    ModelRegistered,
+    /// M2e-B: one attempted model call of a door's run: counts, digests,
+    /// the outcome's code and the host monotonic return time; never a
+    /// prompt, a reply or a model name.
+    ModelCall,
 }
 
 impl EvidencePhase {
@@ -88,6 +95,8 @@ impl EvidencePhase {
             EvidencePhase::MissionResumeConfirmed => "mission_resume_confirmed",
             EvidencePhase::MissionResumeDeclined => "mission_resume_declined",
             EvidencePhase::DoorHalted => "door_halted",
+            EvidencePhase::ModelRegistered => "model_registered",
+            EvidencePhase::ModelCall => "model_call",
         }
     }
 }
@@ -139,8 +148,9 @@ const SERVICES: &[&str] = &["Gmail", "Outlook", "Slack", "Discord"];
 const AREAS: &[&str] = &["cognitive_loop", "coding", "model_call"];
 /// The `class` a run-opened record names.
 const RUN_CLASSES: &[&str] = &["owner"];
-/// Operations named in detail (M2d: a Files create).
-const OPERATIONS: &[&str] = &["create"];
+/// Operations named in detail (M2d: a Files create; M2e-B: a model
+/// call).
+const OPERATIONS: &[&str] = &["create", "model_call"];
 /// What interrupted a Files publication after its final check (Codex
 /// review 1 of PR #64, H3; the kernel's interruption causes). M2d-C: a
 /// door's view of a Succeeded commitment names them in this order.
@@ -190,6 +200,12 @@ pub(crate) fn is_held_reason(text: &str) -> bool {
 fn registered(key: &str) -> Option<Kept> {
     Some(match key {
         "status" | "bytes" | "redirects" | "lines" => Kept::Count,
+        // M2e-B: a model call's counts and host monotonic times (ms).
+        "call" | "prompt_bytes" | "tokens_in" | "tokens_out" | "latency_ms"
+        | "returned_mono_ms" | "sent_mono_ms" => Kept::Count,
+        // M2e-B: the model's manifest digest and its identity digest.
+        "model_digest" | "identity" => Kept::Sha256,
+        "outcome" => Kept::Code(&crate::inference::OUTCOMES),
         "lease" => Kept::Lease,
         "door" => Kept::Door,
         // The Owner's answers at a door's mission and held-mission dialogs
