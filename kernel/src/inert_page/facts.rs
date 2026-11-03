@@ -151,6 +151,21 @@ impl ApprovedFacts {
     pub(super) fn hours_lines(&self) -> usize {
         self.hours.len()
     }
+
+    /// The approved name, borrowed (M3 §5.6).
+    pub fn name(&self) -> &str {
+        ""
+    }
+
+    /// The approved hours lines, in order, borrowed (M3 §5.6).
+    pub fn hours(&self) -> &[String] {
+        &[]
+    }
+
+    /// The approved phone, borrowed (M3 §5.6).
+    pub fn phone(&self) -> &str {
+        ""
+    }
 }
 
 impl std::fmt::Debug for ApprovedFacts {
@@ -339,6 +354,43 @@ fn leaf_texts(page: &Page) -> Vec<LeafText> {
         blocks(&footer.blocks);
     }
     out
+}
+
+/// The result of every facts check on one page (M3 §5.6): FC-1's heading
+/// and title, FC-2 for each hours line in order, FC-3 and FC-4, each
+/// evaluated even after an earlier one failed. Booleans only, so its
+/// `Debug` shows no content.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FactsReport {
+    /// FC-1: exactly one `h1`, whose text is the name.
+    pub name_heading: bool,
+    /// FC-1: the decoded title is the name.
+    pub name_title: bool,
+    /// FC-2: whether each hours line is the text of some `li` or `p`.
+    pub hours: Vec<bool>,
+    /// FC-3: the phone is the text of some leaf or span.
+    pub phone: bool,
+    /// FC-4: no phone-like token has other digits than the phone's.
+    pub no_foreign_number: bool,
+}
+
+impl FactsReport {
+    /// The first failing check in [`check_facts`]' order (FC-1 heading,
+    /// FC-1 title, FC-2 by index, FC-3, FC-4), or `Ok` if every one passed.
+    pub fn first_error(&self) -> Result<(), FactCode> {
+        Ok(())
+    }
+}
+
+/// Every facts check on `page`, each evaluated in full (M3 §5.6).
+pub fn facts_report(_page: &Page, _facts: &ApprovedFacts) -> FactsReport {
+    FactsReport {
+        name_heading: false,
+        name_title: false,
+        hours: Vec::new(),
+        phone: false,
+        no_foreign_number: false,
+    }
 }
 
 /// FC-1 to FC-4, in that order; the first missing fact is reported.

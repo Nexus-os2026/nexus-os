@@ -1,11 +1,12 @@
 //! S1a-A oracles (pre-registered; design v2 §8): S-O1, S-O1b, S-O2 to S-O6
 //! and S-O18. S1a-B oracles: S-O3 (facts part), S-O9, S-O10, S-O13 (verdict
 //! part) and S-O15, with S-O7's corpus tie (S-O7 and S-O8 are hosted in
-//! `agents/web-builder/tests/`).
+//! `agents/web-builder/tests/`). M3-A oracle: M3-O16 (the facts report).
 
 use super::*;
 
 mod facts_fixtures;
+mod m3_o16_facts_report;
 mod s_o10_facts;
 mod s_o15_bound;
 mod s_o18_label_guard;

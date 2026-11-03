@@ -39,7 +39,7 @@ mod verdict;
 #[cfg(test)]
 mod tests;
 
-pub use facts::{check_facts, ApprovedFacts, FactCode};
+pub use facts::{check_facts, facts_report, ApprovedFacts, FactCode, FactsReport};
 pub use policy::{policy_hash, PolicyParams, LABEL_PASSED, MOTHER_CSS, POLICY_V1};
 pub use tree::{
     Attrs, Block, Class, Inline, Leaf, List, Main, MainItem, Page, Region, Section, Tag,
