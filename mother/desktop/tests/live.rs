@@ -534,3 +534,61 @@ fn g13_only_a_vanished_name_is_tolerated() {
         assert!(!support::vanished_name(other), "tolerated: {other:?}");
     }
 }
+
+// ── Decision 2, finding 4: a clean Quit closes the evidence session ──────
+
+const R1: &str = "r1_a_clean_quit_closes_the_evidence_session_and_a_relaunch_finds_it_closed";
+
+fn r1_phase() -> String {
+    std::env::var("NEXUS_DESKTOP_LIVE_PHASE").unwrap_or_default()
+}
+
+fn r1_home() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var("NEXUS_DESKTOP_LIVE_HOME").expect("the shared home"))
+        .join("mother")
+}
+
+/// Two processes on one home: phase 1 starts the production desktop and
+/// quits cleanly; phase 2, a relaunch, finds no unclean session.
+#[test]
+fn r1_a_clean_quit_closes_the_evidence_session_and_a_relaunch_finds_it_closed() {
+    let shared = if std::env::var_os(harness::CHILD).is_some() {
+        String::new()
+    } else {
+        harness::fresh_dir("restart").display().to_string()
+    };
+    let opts = |phase: &str, display: bool| Opts {
+        display,
+        env: vec![
+            ("NEXUS_DESKTOP_LIVE_PHASE", phase.to_string()),
+            ("NEXUS_DESKTOP_LIVE_HOME", shared.clone()),
+        ],
+        ..Opts::default()
+    };
+    live(R1, opts("1", true), || {
+        if r1_phase() != "1" {
+            return;
+        }
+        let started = start(&r1_home(), None).expect("the desktop starts");
+        support::assert_isolated_display();
+        drive(&started, |_| ());
+        let outcome = finish(started, QUIT_WITHIN);
+        assert!(outcome.is_clean(), "{outcome:?}");
+    });
+    live(R1, opts("2", false), || {
+        if r1_phase() != "2" {
+            return;
+        }
+        let store = nexus_governed_control::evidence_store::PrimaryEvidence::open(
+            &r1_home().join("broker/p3-evidence/evidence.sqlite3"),
+            vec![],
+        )
+        .expect("the store reopens");
+        let health = store.health();
+        assert_eq!(
+            health.unclean_sessions, 0,
+            "the relaunch found the clean Quit's session unclosed"
+        );
+        assert!(!health.recovery_required);
+    });
+}
