@@ -158,6 +158,82 @@
 //!     let _ = mother.request_consent(id, owner);
 //! }
 //! ```
+//!
+//! P0-A (design §5.4 P0-O19, oracles first): every error Mother returns
+//! carries closed codes, never text. None of these open forms compiles:
+//!
+//! ```compile_fail,E0308
+//! let _ = nexus_mother::journal::JournalError::Store(String::new());
+//! ```
+//!
+//! ```compile_fail,E0559
+//! let _ = nexus_mother::journal::JournalError::Inconsistent { line: 1, reason: String::new() };
+//! ```
+//!
+//! ```compile_fail,E0559
+//! let _ = nexus_mother::contract::ContractError::UnansweredQuestion { id: String::new() };
+//! ```
+//!
+//! ```compile_fail,E0308
+//! let _ = nexus_mother::coordinator::CoordinatorError::Broker(String::new());
+//! ```
+//!
+//! ```compile_fail,E0308
+//! let _ = nexus_mother::coordinator::CoordinatorError::Withdrawal(String::new());
+//! ```
+//!
+//! ```compile_fail,E0308
+//! let _ = nexus_mother::coordinator::CoordinatorError::Lanes(String::new());
+//! ```
+//!
+//! ```compile_fail,E0308
+//! let _ = nexus_mother::effect::EffectRefusal { class: String::new() };
+//! ```
+//!
+//! The Owner's detail (I4) has no `Debug`, `Display`, `Clone` or
+//! `Serialize`: it is shown only through an `OwnerView`.
+//!
+//! ```compile_fail,E0277
+//! fn needs<T: std::fmt::Debug>() {}
+//! needs::<nexus_mother::evidence::WorkingDetail>();
+//! ```
+//!
+//! ```compile_fail,E0277
+//! fn needs<T: std::fmt::Display>() {}
+//! needs::<nexus_mother::evidence::WorkingDetail>();
+//! ```
+//!
+//! ```compile_fail,E0277
+//! fn needs<T: Clone>() {}
+//! needs::<nexus_mother::evidence::WorkingDetail>();
+//! ```
+//!
+//! ```compile_fail,E0277
+//! fn needs<T: serde::Serialize>() {}
+//! needs::<nexus_mother::evidence::WorkingDetail>();
+//! ```
+//!
+//! The closed forms that replace them compile:
+//!
+//! ```
+//! use nexus_mother::contract::ContractError;
+//! use nexus_mother::coordinator::{CoordinatorError, LaneConfig};
+//! use nexus_mother::effect::EffectRefusal;
+//! use nexus_mother::evidence::{BrokerClass, OwnerView, WorkingDetail};
+//! use nexus_mother::journal::{JournalError, ReplayViolation, StoreFailure};
+//! use nexus_mother::lane::LaneRole;
+//! let _ = JournalError::Store(StoreFailure::Injected);
+//! let _ = JournalError::Inconsistent { line: 1, code: ReplayViolation::NotEvidence };
+//! let _ = JournalError::Legacy { line: 1 };
+//! let _ = ContractError::UnansweredQuestion { index: 0 };
+//! let _ = CoordinatorError::Broker(BrokerClass::Unknown);
+//! let _ = CoordinatorError::Withdrawal(BrokerClass::Unknown);
+//! let _ = CoordinatorError::Lanes(LaneConfig::Missing(LaneRole::Builder));
+//! let _ = EffectRefusal { class: BrokerClass::Unknown };
+//! fn show(d: WorkingDetail, owner: &mut dyn OwnerView) {
+//!     d.show(owner)
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 

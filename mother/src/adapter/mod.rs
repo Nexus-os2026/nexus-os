@@ -82,6 +82,10 @@ mod m2c_halt;
 #[cfg(test)]
 pub(crate) mod m2c_support;
 #[cfg(test)]
+mod p0_privacy;
+#[cfg(test)]
+pub(crate) mod p0_support;
+#[cfg(test)]
 mod real_broker;
 #[cfg(test)]
 mod scan;

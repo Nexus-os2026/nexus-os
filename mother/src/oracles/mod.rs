@@ -93,6 +93,10 @@ struct PortState {
     /// Each adoption: the mission, the action, and how many calls had been
     /// made when it came.
     adopted: Vec<(MissionId, PendingAction, usize)>,
+    /// P0-A: every request handed to the port, whole, in order.
+    requests: Vec<(MissionId, EffectRequest)>,
+    /// P0-A: missions whose withdrawal fails with this class.
+    withdrawal_classes: std::collections::BTreeMap<MissionId, String>,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -224,6 +228,23 @@ impl RecordingPort {
         self.lock().adopted.clone()
     }
 
+    /// P0-A: every request handed to the port for `mission`, whole.
+    pub fn requests_of(&self, mission: MissionId) -> Vec<EffectRequest> {
+        self.lock()
+            .requests
+            .iter()
+            .filter(|(m, _)| *m == mission)
+            .map(|(_, r)| r.clone())
+            .collect()
+    }
+
+    /// P0-A: withdrawing `mission` fails at the port with `class`.
+    pub fn fail_withdrawal_with(&self, mission: MissionId, class: &str) {
+        self.lock()
+            .withdrawal_classes
+            .insert(mission, class.to_string());
+    }
+
     /// How many times Mother asked about an awaited approval.
     pub fn approval_queries(&self) -> usize {
         self.calls()
@@ -244,6 +265,7 @@ impl EffectPort for RecordingPort {
             mission,
             kind: effect.kind(),
         });
+        state.requests.push((mission, effect.clone()));
         if state.cancelled.contains(&mission) {
             return Err(refusal("mission_cancelled"));
         }
@@ -339,6 +361,9 @@ impl EffectPort for RecordingPort {
         self.changed.notify_all();
         if state.failing_withdrawals.contains(&mission) {
             return Err(refusal("withdrawal_failed"));
+        }
+        if let Some(class) = state.withdrawal_classes.get(&mission) {
+            return Err(refusal(class));
         }
         Ok(())
     }
