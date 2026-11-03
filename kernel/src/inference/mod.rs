@@ -186,13 +186,35 @@ pub trait CallDeadline: Send + Sync {
     fn expired(&self) -> bool;
 }
 
+/// The caller's content-free notice that a chat request was handed to the
+/// HTTP client (M2e amendment, M3 design §8.5).
+///
+/// `dispatched` is called at most once per call, for the chat request
+/// only (never for the version, status, tags or show requests), with the
+/// host's CLOCK_MONOTONIC in milliseconds read immediately before the
+/// request is handed to the HTTP client. It is never called for a call
+/// refused before that (an identity check, the cloud status, the byte
+/// bound, the meter, or a Stop, cancel or deadline before the send), and no
+/// value is ever estimated: where the clock cannot be read, there is no
+/// notice. It marks the hand-off, not decoding.
+///
+/// It runs on the request's own thread while the request waits for it, so
+/// it must be fast and must never block: until it returns, the call cannot
+/// be ended by a cancel, a Stop or a deadline. It holds no lock of the
+/// transport's.
+pub trait CallObserver: Send + Sync {
+    fn dispatched(&self, sent_mono_ms: u64);
+}
+
 /// What a call is charged to and ended by. `stop` is the watch the caller's
 /// work was admitted under; the transport never admits a watch of its own.
+/// `observer`, if any, is told when the chat request is dispatched.
 pub struct CallContext<'a> {
     pub meter: &'a dyn CallMeter,
     pub cancel: &'a dyn CallCancel,
     pub deadline: &'a dyn CallDeadline,
     pub stop: &'a StopWatch,
+    pub observer: Option<&'a dyn CallObserver>,
 }
 
 /// A model a caller may consult. Its reply is untrusted data.

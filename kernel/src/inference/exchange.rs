@@ -9,7 +9,7 @@ use crate::emergency_stop::{HaltArea, HaltOutcome, StopWatch};
 
 use super::endpoint::LoopbackEndpoint;
 use super::ollama::ApiPath;
-use super::{CallCancel, CallContext, CallDeadline, ModelError};
+use super::{CallCancel, CallContext, CallDeadline, CallObserver, ModelError};
 
 /// The backstop on any one request, whatever the caller's deadline.
 pub const CALL_HARD_TIMEOUT: Duration = Duration::from_secs(180);
@@ -100,6 +100,10 @@ pub(super) struct Guard<'a> {
     pub(super) cancel: &'a dyn CallCancel,
     pub(super) deadline: &'a dyn CallDeadline,
     pub(super) stop: &'a StopWatch,
+    /// The caller's dispatch observer (M2e-A1b interface stub: carried,
+    /// never notified).
+    #[allow(dead_code)]
+    pub(super) observer: Option<&'a dyn CallObserver>,
 }
 
 impl<'a> Guard<'a> {
@@ -108,6 +112,7 @@ impl<'a> Guard<'a> {
             cancel: ctx.cancel,
             deadline: ctx.deadline,
             stop: ctx.stop,
+            observer: ctx.observer,
         }
     }
 
