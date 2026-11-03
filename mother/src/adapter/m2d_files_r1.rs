@@ -25,6 +25,7 @@ use super::{mother_agent, FileJournal, GovernedPort};
 use crate::coordinator::Coordinator;
 use crate::coordinator::Lanes;
 use crate::effect::EffectPort;
+use crate::evidence::{SettlementEnd, SettlementOutcome};
 use crate::journal::{Event, MissionId};
 use crate::lane::LaneRole;
 use crate::oracles::m2c_owner::OwnerLiftsTheStop;
@@ -119,7 +120,7 @@ impl<'a> Scenario<'a> {
                 !matches!(
                     e,
                     Event::Transition {
-                        trigger: Trigger::ActionApproved { .. }
+                        trigger: Trigger::Settled { .. }
                     }
                 )
             })
@@ -129,12 +130,13 @@ impl<'a> Scenario<'a> {
                 tail.as_slice(),
                 [
                     Event::Transition {
-                        trigger: Trigger::ActionApproved { .. }
+                        trigger: Trigger::Settled {
+                            outcome: SettlementOutcome::Published { .. },
+                            end: SettlementEnd::Block(_),
+                            ..
+                        }
                     },
                     Event::ApprovalClosed { .. },
-                    Event::Transition {
-                        trigger: Trigger::Block { .. }
-                    },
                 ]
             ),
             "{tag}: {tail:?}"

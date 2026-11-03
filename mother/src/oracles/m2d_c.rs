@@ -12,6 +12,7 @@ use crate::adapter::status_of;
 use crate::coordinator::{Coordinator, Lanes};
 use crate::effect::{Admission, ApprovalStatus, EffectOutcome, EffectRequest};
 use crate::evidence::{BlockReason, BrokerClass, MotherRefusal, PublicationCause};
+use crate::evidence::{SettlementEnd, SettlementOutcome};
 use crate::journal::{Event, MissionId};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, ScriptedLane, Verdict};
 use crate::state::{MissionState, Trigger};
@@ -539,7 +540,7 @@ fn m2d_c_an_overtaken_publication_is_a_success_then_the_end() {
                 !matches!(
                     e,
                     Event::Transition {
-                        trigger: Trigger::ActionApproved { .. }
+                        trigger: Trigger::Settled { .. }
                     }
                 )
             })
@@ -549,14 +550,13 @@ fn m2d_c_an_overtaken_publication_is_a_success_then_the_end() {
                 tail.as_slice(),
                 [
                     Event::Transition {
-                        trigger: Trigger::ActionApproved { .. }
-                    },
-                    Event::ApprovalClosed { .. },
-                    Event::Transition {
-                        trigger: Trigger::Block {
-                            reason: BlockReason::FilePublicationInterrupted(_)
+                        trigger: Trigger::Settled {
+                            outcome: SettlementOutcome::Published { .. },
+                            end: SettlementEnd::Block(BlockReason::FilePublicationInterrupted(_)),
+                            ..
                         }
                     },
+                    Event::ApprovalClosed { .. },
                 ]
             ),
             "{code}: {tail:?}"

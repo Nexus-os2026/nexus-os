@@ -23,6 +23,7 @@ use super::{create_private, mother_agent, FileJournal, GovernedPort};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{Admission, EffectPort};
 use crate::evidence::BrokerClass;
+use crate::evidence::{SettlementEnd, SettlementOutcome};
 use crate::journal::{Event, MissionId};
 use crate::lane::LaneRole;
 use crate::oracles::m2c_confirmers::answering;
@@ -641,7 +642,7 @@ impl<'a> Fx<'a> {
                     !matches!(
                         e,
                         Event::Transition {
-                            trigger: Trigger::ActionApproved { .. }
+                            trigger: Trigger::Settled { .. }
                         }
                     )
                 })
@@ -651,12 +652,13 @@ impl<'a> Fx<'a> {
                     tail.as_slice(),
                     [
                         Event::Transition {
-                            trigger: Trigger::ActionApproved { .. }
+                            trigger: Trigger::Settled {
+                                outcome: SettlementOutcome::Published { .. },
+                                end: SettlementEnd::Block(_),
+                                ..
+                            }
                         },
                         Event::ApprovalClosed { .. },
-                        Event::Transition {
-                            trigger: Trigger::Block { .. }
-                        },
                     ]
                 ),
                 "{code}: {tail:?}"

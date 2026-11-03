@@ -18,6 +18,7 @@ use crate::adapter::status_of;
 use crate::effect::Publication;
 use crate::effect::{ApprovalStatus, EffectOutcome};
 use crate::evidence::BlockReason;
+use crate::evidence::{SettlementEnd, SettlementOutcome};
 use crate::journal::{Event, MissionId};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::commitment::{
@@ -57,7 +58,8 @@ fn waiting(w: &World) -> MissionId {
     id
 }
 
-/// The journal from the mission's `ActionApproved` on.
+/// The journal from the mission's settlement on (round 4: its start, if
+/// any, and its one terminal line).
 fn tail(w: &World, id: MissionId) -> Vec<Event> {
     w.mother
         .journal()
@@ -68,30 +70,52 @@ fn tail(w: &World, id: MissionId) -> Vec<Event> {
         .skip_while(|e| {
             !matches!(
                 e,
-                Event::Transition {
-                    trigger: Trigger::ActionApproved { .. }
-                }
+                Event::SettlementStarted { .. }
+                    | Event::Transition {
+                        trigger: Trigger::Settled { .. }
+                    }
             )
         })
         .collect()
 }
 
-/// A success, then the action closed, then the end: nothing after it.
+/// Round 4: whether the journal claims a publication.
+fn claims_success(events: &[Event]) -> bool {
+    events.iter().any(|e| {
+        matches!(
+            e,
+            Event::Transition {
+                trigger: Trigger::Settled {
+                    outcome: SettlementOutcome::Published { .. },
+                    ..
+                }
+            }
+        )
+    })
+}
+
+/// Round 4: the success and the end in one terminal line (after the
+/// settlement's start, on a Stop), then the action closed: nothing after.
 fn truthful_then_ended(w: &World, id: MissionId, code: &str, calls: usize) {
     assert_eq!(w.mother.state(id), Some(MissionState::Blocked), "{code}");
     assert_eq!(w.mother.reason(id).as_deref(), Some(code));
     let tail = tail(w, id);
+    let rest = match tail.as_slice() {
+        [Event::SettlementStarted { .. }, rest @ ..] => rest,
+        all => all,
+    };
     assert!(
         matches!(
-            tail.as_slice(),
+            rest,
             [
                 Event::Transition {
-                    trigger: Trigger::ActionApproved { .. }
+                    trigger: Trigger::Settled {
+                        outcome: SettlementOutcome::Published { .. },
+                        end: SettlementEnd::Block(_),
+                        ..
+                    }
                 },
                 Event::ApprovalClosed { .. },
-                Event::Transition {
-                    trigger: Trigger::Block { .. }
-                },
             ]
         ),
         "{code}: {tail:?}"
@@ -128,10 +152,15 @@ fn m2d_c_r1_an_emergency_stop_reconciles_a_publication_that_ran() {
     }
     let w = world();
     let id = waiting(&w);
+    w.port
+        .set_publication(Some(Publication::ConfirmedNotPublished));
     w.port.set_emergency(true);
     assert!(w.mother.advance(id).is_err());
     assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
-    assert!(tail(&w, id).is_empty(), "nothing ran: no success journaled");
+    assert!(
+        !claims_success(&tail(&w, id)),
+        "nothing ran: no success journaled"
+    );
 }
 
 /// HIGH 1, the time budget spent while a File waited: one that ran is
@@ -149,10 +178,12 @@ fn m2d_c_r1_the_time_budget_reconciles_a_publication_that_ran() {
 
     let w = world();
     let id = waiting(&w);
+    w.port
+        .set_publication(Some(Publication::ConfirmedNotPublished));
     w.clock.advance(Duration::from_millis(3_600_001));
     w.mother.advance(id).unwrap();
     assert_eq!(w.mother.reason(id).as_deref(), Some("budget_time"));
-    assert!(tail(&w, id).is_empty());
+    assert!(!claims_success(&tail(&w, id)));
 }
 
 /// HIGH 1, the Owner's Stop of a mission whose File ran: journaled, then
@@ -181,8 +212,10 @@ fn m2d_c_r1_the_owner_s_stop_reconciles_a_publication_that_ran() {
     }
     let w = world();
     let id = waiting(&w);
+    w.port
+        .set_publication(Some(Publication::ConfirmedNotPublished));
     assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
-    assert!(tail(&w, id).is_empty());
+    assert!(!claims_success(&tail(&w, id)));
 }
 
 /// HIGH 2: a publication that succeeded with recovery required is

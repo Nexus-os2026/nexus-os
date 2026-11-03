@@ -20,6 +20,7 @@ use crate::adapter::p0_support::action;
 use crate::coordinator::CoordinatorError;
 use crate::effect::Publication;
 use crate::effect::{ApprovalStatus, EffectOutcome};
+use crate::evidence::{SettlementEnd, SettlementOutcome};
 use crate::journal::{Event, MissionId};
 use crate::state::{MissionState, Trigger};
 use std::sync::Arc;
@@ -64,6 +65,8 @@ fn events(w: &World, id: MissionId) -> Vec<Event> {
         .collect()
 }
 
+/// The successes journaled (round 4: an ordinary approval, or a
+/// settlement's published outcome).
 fn approvals(w: &World, id: MissionId) -> usize {
     events(w, id)
         .iter()
@@ -72,6 +75,10 @@ fn approvals(w: &World, id: MissionId) -> usize {
                 e,
                 Event::Transition {
                     trigger: Trigger::ActionApproved { .. }
+                        | Trigger::Settled {
+                            outcome: SettlementOutcome::Published { .. },
+                            ..
+                        }
                 }
             )
         })
@@ -86,15 +93,16 @@ fn settled(w: &World, id: MissionId, code: &str, calls: usize) {
     let events = events(w, id);
     assert!(
         matches!(
-            &events[events.len() - 3..],
+            &events[events.len() - 2..],
             [
                 Event::Transition {
-                    trigger: Trigger::ActionApproved { .. }
+                    trigger: Trigger::Settled {
+                        outcome: SettlementOutcome::Published { .. },
+                        end: SettlementEnd::Block(_),
+                        ..
+                    }
                 },
                 Event::ApprovalClosed { .. },
-                Event::Transition {
-                    trigger: Trigger::Block { .. }
-                },
             ]
         ),
         "{code}: {events:?}"
@@ -204,6 +212,8 @@ fn m2d_c_r2_an_unreadable_broker_ends_the_mission_uncertain() {
 fn m2d_c_r2_controls_the_ordinary_paths_are_unchanged() {
     let w = world();
     let id = waiting(&w);
+    w.port
+        .set_publication(Some(Publication::ConfirmedNotPublished));
     assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
     assert_eq!(approvals(&w, id), 0);
     assert!(w.port.is_cancelled(id));
