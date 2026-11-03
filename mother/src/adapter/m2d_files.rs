@@ -329,7 +329,11 @@ impl<'a> Fx<'a> {
     /// canary of the names and contents. Returns a name now taken.
     fn create_composed(&self) -> String {
         let cs = canaries();
-        let (a, b, c) = (cs.c.clone(), cs.cl.clone(), format!("v-{}", &cs.cl[9..]));
+        let (a, b, c) = (
+            format!("{}.txt", cs.c),
+            format!("{}.txt", cs.cl),
+            format!("v-{}.txt", &cs.cl[9..]),
+        );
         let id = self.waiting(&format!("MKFILE:{a} MKFILE:{b} VFILE:{c}"));
         let first = self.approve(&self.port, id);
         let shown = self.owner.0.lock().unwrap().last().cloned().unwrap();
