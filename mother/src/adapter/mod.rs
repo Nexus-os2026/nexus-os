@@ -92,6 +92,8 @@ pub use private_file::FilePrivate;
 #[cfg(test)]
 mod p0_api;
 #[cfg(test)]
+mod p0_dirsync;
+#[cfg(test)]
 mod p0_privacy;
 #[cfg(test)]
 pub(crate) mod p0_support;

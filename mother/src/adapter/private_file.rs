@@ -21,6 +21,49 @@ fn io(e: std::io::Error) -> PrivateError {
     PrivateError::Io(IoKind::of(e.kind()))
 }
 
+/// Sync a directory (its entries durable). Tests see every call and can
+/// make one fail ([`seam`]).
+fn sync_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(test)]
+    seam::sync(dir)?;
+    #[cfg(unix)]
+    std::fs::File::open(dir)?.sync_all()?;
+    Ok(())
+}
+
+/// Tests: a fault seam over [`sync_dir`], per thread. It records every
+/// directory sync attempted and can make the sync of one directory fail;
+/// it changes nothing else.
+#[cfg(test)]
+pub(crate) mod seam {
+    use std::cell::RefCell;
+    use std::path::{Path, PathBuf};
+
+    thread_local! {
+        static SYNCED: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
+        static FAIL: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    }
+
+    /// Every directory sync this thread attempted since the last take, in
+    /// order.
+    pub(crate) fn take_synced() -> Vec<PathBuf> {
+        SYNCED.with(|s| std::mem::take(&mut *s.borrow_mut()))
+    }
+
+    /// Every later sync of `dir` on this thread fails, until cleared.
+    pub(crate) fn fail_sync_of(dir: Option<PathBuf>) {
+        FAIL.with(|f| *f.borrow_mut() = dir);
+    }
+
+    pub(super) fn sync(dir: &Path) -> std::io::Result<()> {
+        SYNCED.with(|s| s.borrow_mut().push(dir.to_path_buf()));
+        if FAIL.with(|f| f.borrow().as_deref() == Some(dir)) {
+            return Err(std::io::Error::other("injected directory sync failure"));
+        }
+        Ok(())
+    }
+}
+
 /// `dir` exists (created 0700 if absent), is a directory and not a link,
 /// and (on Unix) only this user may enter it.
 fn private_dir(dir: &Path) -> Result<(), PrivateError> {
@@ -73,8 +116,7 @@ impl FilePrivate {
         file.sync_all()?;
         drop(file);
         std::fs::rename(temp, target)?;
-        #[cfg(unix)]
-        std::fs::File::open(dir)?.sync_all()?;
+        sync_dir(dir)?;
         Ok(())
     }
 }
