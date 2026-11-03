@@ -40,8 +40,8 @@ impl LoopbackEndpoint {
     /// `http://localhost:<port>` (an optional trailing `/`). Any other host,
     /// a LAN, public or unspecified address, a mapped address or another
     /// name, is [`ModelError::NotLocal`]. Another scheme, user information,
-    /// a missing port, a path, a query or a fragment is
-    /// [`ModelError::InvalidAddress`].
+    /// a port that is not written (an explicit `:80` is written), a path, a
+    /// query or a fragment is [`ModelError::InvalidAddress`].
     pub fn parse(raw: &str) -> Result<Self, ModelError> {
         if raw.chars().any(|c| c.is_whitespace() || c.is_control()) {
             return Err(ModelError::InvalidAddress);
@@ -64,7 +64,13 @@ impl LoopbackEndpoint {
         {
             return Err(ModelError::InvalidAddress);
         }
-        let port = url.port().ok_or(ModelError::InvalidAddress)?;
+        // The port must be written. The URL parser drops a written default
+        // port (`:80`), so the written text is read, and it must agree with
+        // the parsed address that is connected to.
+        let port = written_port(raw).ok_or(ModelError::InvalidAddress)?;
+        if url.port_or_known_default() != Some(port) {
+            return Err(ModelError::InvalidAddress);
+        }
         Ok(Self {
             addr: SocketAddr::new(ip, port),
         })
@@ -74,4 +80,27 @@ impl LoopbackEndpoint {
     pub fn addr(&self) -> SocketAddr {
         self.addr
     }
+}
+
+/// The port written in the authority of `http://<host>:<port>...`, if any:
+/// the digits after the host (after `]` for an IPv6 literal). An authority
+/// with user information (`@`, even empty) has none.
+fn written_port(raw: &str) -> Option<u16> {
+    let rest = raw
+        .get(..7)
+        .filter(|scheme| scheme.eq_ignore_ascii_case("http://"))
+        .map(|_| &raw[7..])?;
+    let authority = &rest[..rest.find(['/', '?', '#', '\\']).unwrap_or(rest.len())];
+    if authority.contains('@') {
+        return None;
+    }
+    let after_host = match authority.strip_prefix('[') {
+        Some(v6) => &v6[v6.find(']')? + 1..],
+        None => &authority[authority.find(':')?..],
+    };
+    let digits = after_host.strip_prefix(':')?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
 }
