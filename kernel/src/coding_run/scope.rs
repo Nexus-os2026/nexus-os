@@ -6,7 +6,13 @@
 //! created: [`RunScopes`] has no setters and enforces
 //! `WriteScope ⊆ ReadScope` and `ProtectedInputs ⊆ ReadScope`.
 
+use sha2::{Digest as _, Sha256};
 use thiserror::Error;
+
+use super::manifest::put_bytes;
+
+/// Domain of a scope set's digest ([`ScopeSet::digest`]).
+const SCOPE_DOMAIN: &[u8] = b"nexus.coding_run.scope_set.v1";
 
 /// Reserved prefix for the staging area's own temporary files. Project paths
 /// may not use it, so a leftover temporary file is never a scoped path.
@@ -37,6 +43,37 @@ pub enum ScopeError {
     ProtectedOutsideRead,
     #[error("read scope is empty")]
     EmptyReadScope,
+}
+
+impl ScopeError {
+    /// A fixed code (the variant name) for records.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Absolute => "Absolute",
+            Self::Empty => "Empty",
+            Self::Traversal => "Traversal",
+            Self::GitMetadata => "GitMetadata",
+            Self::ForbiddenCharacter => "ForbiddenCharacter",
+            Self::TooLong => "TooLong",
+            Self::Reserved => "Reserved",
+            Self::WriteOutsideRead => "WriteOutsideRead",
+            Self::ProtectedOutsideRead => "ProtectedOutsideRead",
+            Self::EmptyReadScope => "EmptyReadScope",
+        }
+    }
+
+    pub const CODES: &'static [&'static str] = &[
+        "Absolute",
+        "Empty",
+        "Traversal",
+        "GitMetadata",
+        "ForbiddenCharacter",
+        "TooLong",
+        "Reserved",
+        "WriteOutsideRead",
+        "ProtectedOutsideRead",
+        "EmptyReadScope",
+    ];
 }
 
 /// A validated relative path inside a project or staging root.
@@ -188,7 +225,20 @@ impl ScopeSet {
         other.entries.iter().all(|entry| self.covers_entry(entry))
     }
 
-    /// Unambiguous encoding for hashing and ledger facts.
+    /// SHA-256 over a domain tag, the entry count and each entry's
+    /// unambiguous encoding, length-prefixed. The ledger records a scope as
+    /// this digest and its entry count, never its paths.
+    pub fn digest(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        put_bytes(&mut hasher, SCOPE_DOMAIN);
+        hasher.update((self.entries.len() as u64).to_be_bytes());
+        for entry in self.describe() {
+            put_bytes(&mut hasher, entry.as_bytes());
+        }
+        hasher.finalize().into()
+    }
+
+    /// Unambiguous encoding for hashing.
     pub(crate) fn describe(&self) -> Vec<String> {
         self.entries
             .iter()

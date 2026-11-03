@@ -1801,3 +1801,13 @@ mod p2h_verification;
 
 #[path = "m0_f5_stop_tests.rs"]
 mod m0_f5_stop;
+
+// ── P0-B: the coding-run ledger keeps evidence only (pre-registered) ───────
+
+#[path = "p0b_ledger_privacy_tests.rs"]
+mod p0b_ledger_privacy;
+
+// ── P0-B: the ledger schema's own tests ────────────────────────────────────
+
+#[path = "p0b_ledger_schema_tests.rs"]
+mod p0b_ledger_schema;
