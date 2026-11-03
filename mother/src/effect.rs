@@ -88,8 +88,9 @@ pub enum ApprovalStatus {
     Overtaken { causes: Vec<&'static str> },
     /// M2d (Codex review 1 of PR #78, HIGH 2): it ran, and the broker
     /// requires recovery (the file is published; its directory sync, or
-    /// its write grant's closure, failed).
-    RecoveryRequired,
+    /// its write grant's closure, failed). Round 5 (D6): with the codes of
+    /// a cause that also ended its authority after its final check.
+    RecoveryRequired { causes: Vec<&'static str> },
     /// M2d-C round 4 (addendum 3): a File whose outcome the broker cannot
     /// confirm either way (uncertain, unreadable or unknown): a file may
     /// exist. Never "not published".

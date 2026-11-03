@@ -1072,10 +1072,13 @@ pub(crate) fn status_of(
                 }
                 _ => ApprovalStatus::Waiting,
             },
+            // D6: recovery required keeps the interruption codes.
             PublicationClass::Published {
                 recovery_required: true,
-                ..
-            } => ApprovalStatus::RecoveryRequired,
+                interrupted,
+            } => ApprovalStatus::RecoveryRequired {
+                causes: interrupted.clone(),
+            },
             PublicationClass::Published { interrupted, .. } if !interrupted.is_empty() => {
                 ApprovalStatus::Overtaken {
                     causes: interrupted.clone(),
@@ -1103,7 +1106,9 @@ pub(crate) fn status_of(
         // broker's final check.
         // M2d (Codex review 1 of PR #78, HIGH 2): published, recovery
         // required.
-        CommitmentState::Succeeded if view.recovery_required => ApprovalStatus::RecoveryRequired,
+        CommitmentState::Succeeded if view.recovery_required => ApprovalStatus::RecoveryRequired {
+            causes: view.interrupted.clone(),
+        },
         CommitmentState::Succeeded if !view.interrupted.is_empty() => ApprovalStatus::Overtaken {
             causes: view.interrupted.clone(),
         },

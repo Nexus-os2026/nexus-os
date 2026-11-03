@@ -1764,10 +1764,11 @@ impl<P: EffectPort> Coordinator<P> {
                 report.reason = self.reason(id);
                 return Ok(report);
             }
-            ApprovalStatus::RecoveryRequired if file => {
+            // D6: both recovery and the interruption codes are recorded.
+            ApprovalStatus::RecoveryRequired { causes } if file => {
                 report.to = settled(SettlementOutcome::Published {
                     recovery_required: true,
-                    interrupted: Vec::new(),
+                    interrupted: causes.iter().map(|c| PublicationCause::of(c)).collect(),
                 })?;
                 report.reason = self.reason(id);
                 return Ok(report);
@@ -1792,7 +1793,7 @@ impl<P: EffectPort> Coordinator<P> {
             }
             // Only a File is overtaken, recovery-required or uncertain.
             ApprovalStatus::Overtaken { .. }
-            | ApprovalStatus::RecoveryRequired
+            | ApprovalStatus::RecoveryRequired { .. }
             | ApprovalStatus::Uncertain => {
                 Some(lapsed(LapseReason::ApprovalLapsed(BrokerClass::Unknown)))
             }
