@@ -44,7 +44,9 @@ pub use endpoint::LoopbackEndpoint;
 pub use exchange::{AbsoluteDeadline, DeadlineClock, SystemClocks, CALL_HARD_TIMEOUT};
 pub use identity::{ModelIdentity, ModelPinSpec, RuntimeConfig, Think, LOCAL_PROVIDER};
 pub use ollama::VerifiedOllama;
-pub use request::{ModelReply, ModelRequest, ResponseSchema, MAX_RENDERED_CONTENT_BYTES};
+pub use request::{
+    ModelReply, ModelRequest, ResponseSchema, MAX_RENDERED_CONTENT_BYTES, SCAFFOLD_FLOOR,
+};
 
 /// Why a model call or a registration was refused. Each variant is a fixed
 /// code ([`ModelError::code`]) with a fixed phrase: no name, path or body.

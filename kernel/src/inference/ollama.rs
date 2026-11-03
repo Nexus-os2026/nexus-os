@@ -9,7 +9,7 @@ use serde_json::Value;
 use super::endpoint::LoopbackEndpoint;
 use super::exchange::{exchange, Guard, Reply};
 use super::identity::ModelIdentity;
-use super::request::{json_string, ModelReply, ModelRequest};
+use super::request::{json_string, ModelReply, ModelRequest, SCAFFOLD_FLOOR};
 use super::{
     CallCancel, CallContext, CallDeadline, CallMeter, ModelError, ModelPinSpec, ModelTransport,
     Think,
@@ -349,7 +349,13 @@ fn read_chat(
     };
     let (prompt, output) = (count("prompt_eval_count")?, count("eval_count")?);
     let num_ctx = u64::from(identity.config().num_ctx);
-    if prompt >= num_ctx / 2 || prompt.saturating_add(output) >= num_ctx {
+    // Below the scaffold floor the fixed texts were not all processed; at
+    // half the context the runtime would have truncated; at the context the
+    // answer would have shifted it.
+    if prompt < u64::from(SCAFFOLD_FLOOR)
+        || prompt >= num_ctx / 2
+        || prompt.saturating_add(output) >= num_ctx
+    {
         return Err(ModelError::Truncated);
     }
     let content = message

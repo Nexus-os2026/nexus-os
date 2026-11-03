@@ -13,6 +13,21 @@ use super::ModelError;
 /// under half the context, where the runtime would otherwise truncate.
 pub const MAX_RENDERED_CONTENT_BYTES: usize = 3_936;
 
+/// The fewest prompt tokens a reply may report (design §10.4
+/// `SCAFFOLD_FLOOR`). A reply that reports fewer, 0 included, cannot have
+/// processed the fixed qualified texts, and is refused as `Truncated`.
+///
+/// **PROVISIONAL until Q-R3.** Q-R3 (design §4) measures the token count of
+/// the fixed qualified texts on the pinned runtime and freezes this value.
+/// 256 is conservative: the smallest qualified Builder prompt (the 1,024-byte
+/// system instruction and the 1,970-byte fixed user text, with no notes) is
+/// about 3,000 bytes of English text, which is at least 374 tokens even at 8
+/// bytes per token; the qualification measured 587 prompt tokens for it with
+/// the bakery notes. **Binding:** M2e-C2 must not enable the Builder lane
+/// until Q-R3 has frozen this value.
+// PROVISIONAL until Q-R3: replace with the frozen SCAFFOLD_FLOOR.
+pub const SCAFFOLD_FLOOR: u32 = 256;
+
 /// The template allowance and the margin of the byte bound (tokens).
 const TEMPLATE_ALLOWANCE: usize = 96;
 const MARGIN: usize = 64;
