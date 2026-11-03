@@ -921,10 +921,15 @@ impl CommitmentRegistry {
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
+            let files = entry.prepared.kind == CapabilityKind::Files;
+            #[cfg(test)]
+            self.fire(crate::test_hooks::at::PREPARE_RUN_CHECKED);
+            // D5: the run's check and a File's retention are one hold of the
+            // runs lock; a retention that fails refuses the admission.
             let refused = if entries.len() >= self.capacity() {
                 Some(AuthorityError::Capacity)
             } else {
-                self.0.runs.check(run, agent).err()
+                self.0.runs.check_retaining(run, agent, files).err()
             };
             match refused {
                 Some(error) => {
@@ -940,14 +945,10 @@ impl CommitmentRegistry {
                     Some(error)
                 }
                 None => {
-                    #[cfg(test)]
-                    self.fire(crate::test_hooks::at::PREPARE_RUN_CHECKED);
-                    // Rule 2: pinned as it becomes visible, its run retained
-                    // in the same hold (the run was just checked under it).
+                    // Rule 2: pinned as it becomes visible (its run retained
+                    // in the check's hold).
                     let mut entry = entry;
-                    if entry.prepared.kind == CapabilityKind::Files {
-                        entry.pinned = self.0.runs.retain(run).is_ok();
-                    }
+                    entry.pinned = files;
                     entries.insert(id, entry);
                     None
                 }

@@ -774,15 +774,6 @@ impl RunRegistry {
         self.runs.lock().expect("runs").len()
     }
 
-    /// M2d-C round 4 (rule 2): retain `run` for one more pinned commitment
-    /// (called holding the commitments lock: the entries → runs order).
-    pub(crate) fn retain(&self, run: RunId) -> Result<(), AuthorityError> {
-        let mut runs = self.runs.lock().map_err(|_| unreadable())?;
-        let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
-        entry.pins = entry.pins.checked_add(1).ok_or(AuthorityError::Capacity)?;
-        Ok(())
-    }
-
     /// Rule 2: one pinned commitment of `run` was acknowledged (called
     /// holding the commitments lock). Never panics.
     pub(crate) fn release(&self, run: RunId) -> Result<(), AuthorityError> {
@@ -903,6 +894,26 @@ impl RunRegistry {
         Ok(())
     }
 
+    /// M2d-C round 5 (D5): [`Self::check`], and with `retain` one more
+    /// pinned commitment retained for the run, in the same hold.
+    pub(crate) fn check_retaining(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        retain: bool,
+    ) -> Result<(), AuthorityError> {
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        let mut runs = self.runs.lock().map_err(|_| unreadable())?;
+        Self::checked(&runs, run, agent)?;
+        if retain {
+            let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+            entry.pins = entry.pins.checked_add(1).ok_or(AuthorityError::Capacity)?;
+        }
+        Ok(())
+    }
+
     /// The run exists, belongs to `agent`, is not cancelled or finished, and
     /// no emergency stop is in force.
     pub(crate) fn check(&self, run: RunId, agent: &AgentId) -> Result<CancelToken, AuthorityError> {
@@ -910,6 +921,16 @@ impl RunRegistry {
             return Err(AuthorityError::EmergencyStopped);
         }
         let runs = self.runs.lock().expect("runs");
+        let entry = Self::checked(&runs, run, agent)?;
+        Ok(runs.token(entry))
+    }
+
+    /// [`Self::check`]'s decisions, under the caller's hold.
+    fn checked<'t>(
+        runs: &'t Table,
+        run: RunId,
+        agent: &AgentId,
+    ) -> Result<&'t RunEntry, AuthorityError> {
         let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
@@ -925,7 +946,7 @@ impl RunRegistry {
         if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
             return Err(AuthorityError::RunCancelled);
         }
-        Ok(runs.token(entry))
+        Ok(entry)
     }
 
     /// Cancel one run: set its token. Returns whether the run was active.
