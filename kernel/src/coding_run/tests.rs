@@ -1817,3 +1817,8 @@ mod p0b_ledger_privacy;
 
 #[path = "p0b_ledger_schema_tests.rs"]
 mod p0b_ledger_schema;
+
+// ── M2d-A: one create-only publication, cleanup ownership, undo, report ────
+
+#[path = "m2d_a_tests.rs"]
+mod m2d_a;

@@ -61,6 +61,8 @@ pub enum IntegrityViolation {
     HashMismatch { seq: i64 },
     /// A stored field cannot be decoded (for example a malformed hash).
     MalformedEntry { seq: i64 },
+    /// A stored run id is not a canonical UUID.
+    MalformedRunId,
 }
 
 impl std::fmt::Display for IntegrityViolation {
@@ -72,6 +74,7 @@ impl std::fmt::Display for IntegrityViolation {
             Self::PreviousHashMismatch { seq } => write!(f, "previous-hash mismatch at {seq}"),
             Self::HashMismatch { seq } => write!(f, "entry hash mismatch at {seq}"),
             Self::MalformedEntry { seq } => write!(f, "malformed entry at {seq}"),
+            Self::MalformedRunId => write!(f, "malformed run id"),
         }
     }
 }
@@ -247,6 +250,29 @@ impl CodingRunLedger {
             previous_hash,
             current_hash,
         })
+    }
+
+    /// The id of every run with at least one entry, in ascending order (M2d
+    /// startup recovery report). A stored id that is not a canonical UUID is
+    /// an integrity violation. Reading only.
+    pub fn run_ids(&self) -> Result<Vec<Uuid>, LedgerError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LedgerError::Unavailable("ledger lock poisoned".into()))?;
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT run_id FROM coding_run_ledger ORDER BY run_id ASC")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut ids = Vec::new();
+        for row in rows {
+            let text = row?;
+            let id = Uuid::parse_str(&text)
+                .ok()
+                .filter(|id| id.hyphenated().to_string() == text)
+                .ok_or(LedgerError::Integrity(IntegrityViolation::MalformedRunId))?;
+            ids.push(id);
+        }
+        Ok(ids)
     }
 
     /// Read every entry of a run and verify it: the sequence must run 0, 1, 2,
@@ -614,6 +640,30 @@ mod tests {
         bad = event(Uuid::nil(), "run.test", "{}");
         assert!(ledger.append(bad).is_err());
         assert!(ledger.verify_run(run).unwrap().is_empty());
+    }
+
+    #[test]
+    fn m2d_a_run_ids_lists_every_run_once_and_refuses_a_malformed_id() {
+        let temp = TempLedger::new();
+        let ledger = CodingRunLedger::open(&temp.path()).unwrap();
+        assert!(ledger.run_ids().unwrap().is_empty());
+        let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
+        for run in [a, b, a] {
+            ledger.append(event(run, "run.created", "{}")).unwrap();
+        }
+        let mut expected = vec![a, b];
+        expected.sort_by_key(|id| id.to_string());
+        assert_eq!(ledger.run_ids().unwrap(), expected);
+        let raw = temp.raw();
+        raw.execute(
+            "INSERT INTO coding_run_ledger VALUES ('not-a-uuid', 0, 0, 'b', 'k', '{}', 'x', 'y')",
+            [],
+        )
+        .unwrap();
+        assert!(matches!(
+            ledger.run_ids(),
+            Err(LedgerError::Integrity(IntegrityViolation::MalformedRunId))
+        ));
     }
 
     #[test]
