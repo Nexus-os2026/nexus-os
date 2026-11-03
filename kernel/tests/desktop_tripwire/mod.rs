@@ -321,48 +321,117 @@ pub fn findings_of(root: &Path, doc: &Value) -> Vec<String> {
     found.into_iter().collect()
 }
 
-/// Every directory under `dir`, outside build output and VCS metadata.
-fn directories(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+/// Directories the walk does not enter: build output, VCS metadata,
+/// dependencies. Their names are still checked like every other entry's.
+const NOT_ENTERED: [&str; 3] = ["target", ".git", "node_modules"];
+
+/// One entry the walk met, of any type.
+struct Entry {
+    /// Relative to the root, with `/` separators.
+    rel: String,
+    /// "directory", "file", "symlink", other, or unknown (its type could
+    /// not be read: that is an error too).
+    kind: &'static str,
+}
+
+/// Every entry under `dir`, whatever its type. A symlink is listed and
+/// never followed; one that cannot be resolved (dangling, a loop) is an
+/// error. Every `read_dir`, entry and `file_type` failure is an error in
+/// `errors`, never skipped: the guard fails closed.
+fn walk(root: &Path, dir: &Path, entries: &mut Vec<Entry>, errors: &mut Vec<String>) {
+    let rel_of = |path: &Path| {
+        path.strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/")
     };
-    for entry in entries.flatten() {
+    let listing = match std::fs::read_dir(dir) {
+        Ok(listing) => listing,
+        Err(e) => {
+            errors.push(format!("cannot read {}: {e}", rel_of(dir)));
+            return;
+        }
+    };
+    for entry in listing {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                errors.push(format!("cannot read an entry of {}: {e}", rel_of(dir)));
+                continue;
+            }
+        };
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
-        if is_dir && !matches!(name.as_str(), "target" | ".git" | "node_modules") {
-            out.push(path.clone());
-            directories(&path, out);
+        let rel = rel_of(&path);
+        // The name is recorded first, whatever the entry's type.
+        entries.push(Entry {
+            rel: rel.clone(),
+            kind: "unknown",
+        });
+        let kind = match entry.file_type() {
+            Ok(kind) => kind,
+            Err(e) => {
+                errors.push(format!("cannot read the type of {rel}: {e}"));
+                continue;
+            }
+        };
+        let last = entries.len() - 1;
+        if kind.is_symlink() {
+            entries[last].kind = "symlink";
+            if let Err(e) = std::fs::metadata(&path) {
+                errors.push(format!("symlink {rel} cannot be resolved: {e}"));
+            }
+            continue;
+        }
+        if kind.is_dir() {
+            entries[last].kind = "directory";
+            let name = entry.file_name();
+            if !NOT_ENTERED.iter().any(|skip| name == *skip) {
+                walk(root, &path, entries, errors);
+            }
+        } else if kind.is_file() {
+            entries[last].kind = "file";
+        } else {
+            entries[last].kind = "other";
         }
     }
 }
 
-/// What the tree at `root` breaks: `app/`, any `src-tauri`, and a
-/// `mother/desktop` that is not the registered package in `docs`.
+/// What the tree at `root` breaks: an `app` at the root and a `src-tauri`
+/// anywhere, of any type (a symlink included); a `mother/desktop` that is
+/// a symlink or not the registered package in `docs`; and every traversal
+/// error.
 pub fn tree_findings(root: &Path, docs: &[Value]) -> Vec<String> {
+    let mut entries = Vec::new();
     let mut found = Vec::new();
-    if root.join("app").exists() {
-        found.push("app/ exists: the old desktop returned".to_string());
-    }
-    let mut dirs = Vec::new();
-    directories(root, &mut dirs);
-    for dir in dirs {
-        if dir.file_name().is_some_and(|name| name == "src-tauri") {
-            let rel = dir.strip_prefix(root).unwrap_or(&dir);
-            found.push(format!("{} exists: a src-tauri tree", rel.display()));
-        }
-    }
-    if root.join(DESKTOP_DIR).exists() {
-        let registered = !docs.is_empty()
-            && docs.iter().all(|doc| {
-                graph(doc)
-                    .ok()
-                    .is_some_and(|graph| registered_desktop(root, &graph).is_some())
-            });
-        if !registered {
+    walk(root, root, &mut entries, &mut found);
+    for entry in &entries {
+        let name = entry.rel.rsplit('/').next().unwrap_or(&entry.rel);
+        if entry.rel == "app" {
             found.push(format!(
-                "{DESKTOP_DIR} exists but is not the registered {DESKTOP_NAME} member"
+                "app exists ({}): the old desktop returned",
+                entry.kind
             ));
+        }
+        if name == "src-tauri" {
+            found.push(format!(
+                "{} exists ({}): a src-tauri tree",
+                entry.rel, entry.kind
+            ));
+        }
+        if entry.rel == DESKTOP_DIR {
+            let registered = entry.kind == "directory"
+                && !docs.is_empty()
+                && docs.iter().all(|doc| {
+                    graph(doc)
+                        .ok()
+                        .is_some_and(|graph| registered_desktop(root, &graph).is_some())
+                });
+            if !registered {
+                found.push(format!(
+                    "{DESKTOP_DIR} exists ({}) but is not the registered {DESKTOP_NAME} member",
+                    entry.kind
+                ));
+            }
         }
     }
     found
