@@ -92,10 +92,10 @@ use nexus_kernel::coding_run::{
 use nexus_kernel::emergency_stop::StopAuthority;
 #[cfg(target_os = "linux")]
 use nexus_kernel::emergency_stop::StopWatch;
-#[cfg(all(test, target_os = "linux"))]
-use nexus_kernel::workspace_authority::WorkspaceGrantId;
 #[cfg(target_os = "linux")]
-use nexus_kernel::workspace_authority::{WorkspaceAuthorityRegistry, WorkspaceBinding};
+use nexus_kernel::workspace_authority::{
+    WorkspaceAuthorityRegistry, WorkspaceBinding, WorkspaceGrantId,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -382,8 +382,9 @@ pub enum RecoveryFinding {
     /// of PR #64, M1).
     StagingNotDiscarded,
     /// In this process: a kernel write grant issued for this run's undo
-    /// could not be confirmed closed when the undo was refused; it stays
-    /// live until it expires (Codex re-check 2 of PR #64, HIGH 2).
+    /// could not be confirmed closed, whether the undo was refused, its
+    /// restore returned, or it unwound; it stays live until it expires
+    /// (Codex re-check 2 of PR #64, HIGH 2; re-check 3).
     WriteGrantNotClosed,
 }
 
@@ -567,7 +568,7 @@ struct Shared {
     hold_ms: AtomicU64,
     #[cfg(test)]
     hooks: Arc<crate::test_hooks::Hooks>,
-    /// Tests: the closure of an issued, unused write grant fails.
+    /// Tests: the closure of an undo's issued write grant fails.
     #[cfg(all(test, target_os = "linux"))]
     closure_fails: AtomicBool,
     /// Tests: the last write grant issued, to revoke at a hook.
@@ -1159,15 +1160,30 @@ impl ApplyInterrupt for Observer<'_> {
     }
 }
 
-/// A kernel write grant an undo was issued and has not yet handed to the
-/// kernel's restore (Codex re-check 2 of PR #64, HIGH 2). Every exit before
-/// that hand-over closes it with [`IssuedGrant::close`], whose answer the
-/// caller surfaces; `Drop` closes it as a backstop only.
+/// A kernel write grant an undo was issued, armed for the grant's whole life
+/// (Codex re-check 2 of PR #64, HIGH 2; re-check 3, the Architect's design:
+/// "armed for the grant's whole life, outcome always recorded"). It is armed
+/// from issue across the kernel's restore until [`IssuedGrant::close`]
+/// settles it explicitly; any other exit, an unwind included, settles it in
+/// `Drop`. Settling always attempts the closure and always records a closure
+/// that is not established as [`RecoveryFinding::WriteGrantNotClosed`] in the
+/// list the recovery report reads; `Drop` never panics.
+///
+/// The kernel's restore takes the `ProjectGrant` by value (it closes it
+/// itself), so the guard keeps the grant's identity, its id and binding
+/// (both `Copy`), which is all a closure needs: the registry's `revoke` and
+/// `resolve` take only these. Closing after the kernel's own closure is
+/// harmless: `revoke` is idempotent (it keeps the first `revoked_at` and
+/// answers `Ok` for a grant already revoked or expired), so the second
+/// closure only confirms the first.
 #[cfg(target_os = "linux")]
 struct IssuedGrant<'a> {
     registry: &'a WorkspaceAuthorityRegistry,
-    grant: Option<ProjectGrant>,
-    #[cfg_attr(not(test), allow(dead_code))]
+    id: WorkspaceGrantId,
+    binding: WorkspaceBinding,
+    /// The kernel run, for a recorded closure that is not established.
+    run: String,
+    armed: bool,
     shared: &'a Shared,
 }
 
@@ -1175,44 +1191,59 @@ struct IssuedGrant<'a> {
 impl<'a> IssuedGrant<'a> {
     fn new(
         registry: &'a WorkspaceAuthorityRegistry,
-        grant: ProjectGrant,
+        grant: &ProjectGrant,
+        run: String,
         shared: &'a Shared,
     ) -> Self {
         Self {
             registry,
-            grant: Some(grant),
+            id: grant.grant_id(),
+            binding: grant.binding(),
+            run,
+            armed: true,
             shared,
         }
     }
 
-    /// The grant, for the kernel's restore (which closes it itself).
-    fn hand_over(mut self) -> Option<ProjectGrant> {
-        self.grant.take()
-    }
-
-    /// Close it: revoked, or confirmed not to resolve any more (revoked or
-    /// expired already). Whether that closure is established.
+    /// Settle it now: whether its closure is established (a failure is
+    /// already recorded; the caller answers recovery required).
     fn close(mut self) -> bool {
-        self.close_now()
+        self.settle()
     }
 
-    fn close_now(&mut self) -> bool {
-        let Some(grant) = self.grant.take() else {
+    /// Close it, revoked or confirmed not to resolve any more (revoked or
+    /// expired already), and record a closure that is not established. The
+    /// list's lock is held only to push, and a poisoned list is still
+    /// written: nothing here panics.
+    fn settle(&mut self) -> bool {
+        if !std::mem::replace(&mut self.armed, false) {
             return true;
-        };
+        }
+        let closed = self.closure();
+        if !closed {
+            self.shared
+                .unclosed
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(std::mem::take(&mut self.run));
+        }
+        closed
+    }
+
+    fn closure(&self) -> bool {
         #[cfg(test)]
         if self.shared.closure_fails.load(Ordering::SeqCst) {
             return false;
         }
-        let (id, binding) = (grant.grant_id(), grant.binding());
-        self.registry.revoke(id, binding).is_ok() || self.registry.resolve(id, binding).is_err()
+        self.registry.revoke(self.id, self.binding).is_ok()
+            || self.registry.resolve(self.id, self.binding).is_err()
     }
 }
 
 #[cfg(target_os = "linux")]
 impl Drop for IssuedGrant<'_> {
     fn drop(&mut self) {
-        let _ = self.close_now();
+        let _ = self.settle();
     }
 }
 
@@ -1985,32 +2016,33 @@ impl Files {
             .map_err(project_error)?;
         #[cfg(test)]
         self.shared.note_write_grant(&kernel.authority, &write);
-        let issued = IssuedGrant::new(&kernel.authority, write, &self.shared);
+        // Armed from here until settled, across the restore and any unwind.
+        let issued = IssuedGrant::new(
+            &kernel.authority,
+            &write,
+            applied.run.id().to_string(),
+            &self.shared,
+        );
         #[cfg(test)]
         self.shared.fire(crate::test_hooks::at::FILE_UNDO_APPROVED);
         if let Err(error) = lifetime.check(authority) {
             // HIGH 2: the unused grant is closed now; a closure that is not
             // established is recovery required, and reported.
-            if issued.close() {
-                return Err(error);
-            }
-            self.shared
-                .unclosed
-                .lock()
-                .expect("files unclosed")
-                .push(applied.run.id().to_string());
+            return Err(if issued.close() {
+                error
+            } else {
+                AuthorityError::RecoveryRequired
+            });
+        }
+        #[cfg(test)]
+        self.shared.fire(crate::test_hooks::at::FILE_UNDO_RESTORE);
+        let restored = applied.run.restore(approval, write);
+        // Re-check 3: closed again (idempotent) and confirmed, whatever the
+        // restore answered; not established is recovery required, reported.
+        if !issued.close() {
             return Err(AuthorityError::RecoveryRequired);
         }
-        let Some(write) = issued.hand_over() else {
-            return Err(AuthorityError::Unavailable(
-                "the undo's write grant is gone",
-            ));
-        };
-        applied
-            .run
-            .restore(approval, write)
-            .map(|_| ())
-            .map_err(undo_error)
+        restored.map(|_| ()).map_err(undo_error)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -2173,7 +2205,7 @@ impl Files {
         noted.is_some_and(|(authority, grant, binding)| authority.resolve(grant, binding).is_ok())
     }
 
-    /// Make the closure of an issued, unused write grant fail (tests).
+    /// Make the closure of an undo's issued write grant fail (tests).
     #[cfg(all(test, target_os = "linux"))]
     pub(crate) fn fail_grant_closure_for_test(&self, failing: bool) {
         self.shared.closure_fails.store(failing, Ordering::SeqCst);

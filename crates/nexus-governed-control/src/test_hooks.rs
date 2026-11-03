@@ -56,6 +56,10 @@ pub(crate) mod at {
     /// Codex re-check 2 of PR #64 (HIGH 1): a Files execution has passed
     /// its revalidation and start, and takes the one Files slot next.
     pub(crate) const FILE_EXECUTE_START: &str = "files.execute_start";
+    /// Codex re-check 3 of PR #64: an undo's write grant is issued, its
+    /// lifetime checked, and its guard armed; the kernel's restore, in the
+    /// same scope, is next.
+    pub(crate) const FILE_UNDO_RESTORE: &str = "files.undo_restore";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

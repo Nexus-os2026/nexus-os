@@ -41,6 +41,8 @@ mod review2;
 mod review3;
 #[path = "files_exec_review4_tests.rs"]
 mod review4;
+#[path = "files_exec_review5_tests.rs"]
+mod review5;
 
 const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const LABEL: &str = "msn-000001/1/1";
