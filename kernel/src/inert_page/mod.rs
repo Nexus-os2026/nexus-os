@@ -244,13 +244,24 @@ pub fn lexical_findings(candidate: &[u8]) -> LexicalFindings {
 
 /// The full check, S1 to S4. `Ok` holds the typed tree of an accepted page.
 pub fn check(candidate: &[u8]) -> Result<Page, Refusal> {
-    let _ = candidate;
-    Err(Refusal {
-        code: RefusalCode::NotCanonical,
-        offset: 0,
-        line: 1,
-        column: 1,
-    })
+    if let Some((code, offset)) = scan::scan(candidate).first() {
+        return Err(Refusal::at(code, candidate, offset as usize));
+    }
+    // S1 passed, so the input is UTF-8.
+    let text = std::str::from_utf8(candidate)
+        .map_err(|e| Refusal::at(RefusalCode::NotUtf8, candidate, e.valid_up_to()))?;
+    let page =
+        parse::parse_document(text).map_err(|(code, at)| Refusal::at(code, candidate, at))?;
+    let canonical = serialize(&page);
+    if canonical != candidate {
+        let same = canonical
+            .iter()
+            .zip(candidate)
+            .take_while(|(a, b)| a == b)
+            .count();
+        return Err(Refusal::at(RefusalCode::NotCanonical, candidate, same));
+    }
+    Ok(page)
 }
 
 /// The canonical bytes of `page`.
