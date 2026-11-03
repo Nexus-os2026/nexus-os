@@ -2183,3 +2183,207 @@ fn m2d_a_a_a_non_dumpable_process_keeps_its_candidate_to_itself() {
     drop(stdin);
     assert!(matches!(child.finish(), ChildEnd::Exited(status) if status.success()));
 }
+
+// ── M2d-K2: the write grant's state when the attempt closed it (§11 M4′) ───
+//
+// Codex re-check 2 of PR #64, HIGH 3: a kernel write grant revoked or
+// expired after the final check lets the publication complete, and the
+// kernel's own closure at the attempt's end then hides it. The run now
+// keeps what the grant's state was right before the kernel closed it.
+
+/// Lands a write-grant lapse from any thread (the ledger tap below).
+fn land_lapse(
+    registry: &WorkspaceAuthorityRegistry,
+    grant: WorkspaceGrantId,
+    binding: WorkspaceBinding,
+    cause: Cause,
+) {
+    match cause {
+        Cause::WriteRevoked => registry.revoke(grant, binding).unwrap(),
+        Cause::WriteExpired => {
+            let expires = registry
+                .resolve(grant, binding)
+                .ok()
+                .and_then(|g| g.expires_at());
+            let deadline = Instant::now() + WAIT;
+            while let Some(at) = expires {
+                if SystemTime::now() >= at {
+                    break;
+                }
+                assert!(Instant::now() < deadline, "the write grant never expired");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+        other => panic!("not a write-grant lapse: {other:?}"),
+    }
+}
+
+/// The workspace ledger, running `on` once, right after the first record of
+/// `kind` is appended.
+struct Tap {
+    inner: Arc<CodingRunLedger>,
+    kind: &'static str,
+    on: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl LedgerStore for Tap {
+    fn append(&self, event: NewLedgerEvent<'_>) -> Result<LedgerRecord, LedgerFailure> {
+        let record = LedgerStore::append(self.inner.as_ref(), event)?;
+        if event.event_kind == self.kind {
+            let on = self.on.lock().unwrap().take();
+            if let Some(on) = on {
+                on();
+            }
+        }
+        Ok(record)
+    }
+    fn verified_records(&self, run: Uuid) -> Result<Vec<LedgerRecord>, LedgerFailure> {
+        self.inner.verified_records(run)
+    }
+}
+
+/// An observed apply, with `cause` (a write-grant lapse) landing at the
+/// kernel's `AfterFinalCheck`, once the final check has passed.
+fn apply_with(
+    ws: &Ws,
+    run: &mut CodingRun,
+    binding: WorkspaceBinding,
+    cause: Option<Cause>,
+) -> Result<ApplyReport, ApplyError> {
+    let approval = run.request_approval(&ws.info.name, &Answer::yes()).unwrap();
+    let grant = match cause {
+        Some(cause) => grant_for(ws, binding, cause),
+        None => ws.write_grant(binding),
+    };
+    let guard = Rc::new(Guard::default());
+    let injector = Injector::new(ws, &grant, &guard);
+    with_hooks(
+        move |point, _| {
+            if let (HookPoint::AfterFinalCheck, Some(cause)) = (point, cause) {
+                injector.land(cause);
+            }
+            false
+        },
+        || run.apply_observed(approval, grant, &ws.staging(), &*guard),
+    )
+}
+
+/// An undo whose write grant lapses (`cause`) after U1, when its completion
+/// is recorded, through `tap` (the run's ledger).
+fn undo_with(
+    ws: &Ws,
+    run: &mut CodingRun,
+    binding: WorkspaceBinding,
+    tap: &Tap,
+    cause: Option<Cause>,
+) -> Result<ApplyReport, ApplyError> {
+    let approval = run.request_restore(&ws.info.name, &Answer::yes()).unwrap();
+    let grant = match cause {
+        Some(cause) => grant_for(ws, binding, cause),
+        None => ws.write_grant(binding),
+    };
+    if let Some(cause) = cause {
+        let (registry, id) = (Arc::clone(&ws.registry), grant.grant_id());
+        *tap.on.lock().unwrap() = Some(Box::new(move || land_lapse(&registry, id, binding, cause)));
+    }
+    run.restore(approval, grant)
+}
+
+/// A run over the workspace whose ledger is a tap on `kind`.
+fn tapped(ws: &Ws, kind: &'static str) -> (CodingRun, WorkspaceBinding, Arc<Tap>) {
+    let tap = Arc::new(Tap {
+        inner: Arc::clone(&ws.ledger),
+        kind,
+        on: Mutex::new(None),
+    });
+    let (run, binding) = verified_file_with(ws, Arc::clone(&tap) as Arc<dyn LedgerStore>);
+    (run, binding, tap)
+}
+
+#[test]
+fn m2d_k2_a_write_grant_revoked_after_the_final_check_is_reported_at_close() {
+    let ws = new_ws();
+    let (mut run, binding) = verified_file(&ws);
+    assert_eq!(run.write_grant_at_close(), None, "no attempt yet");
+    apply_with(&ws, &mut run, binding, Some(Cause::WriteRevoked)).unwrap();
+    assert_eq!(entries(&ws.root), vec![NAME.to_string()], "published once");
+    assert_eq!(run.apply_state(), ApplyState::Applied);
+    assert_eq!(run.write_grant_at_close(), Some(InterruptCause::Revoked));
+}
+
+#[test]
+fn m2d_k2_a_write_grant_expired_after_the_final_check_is_reported_at_close() {
+    let ws = new_ws();
+    let (mut run, binding) = verified_file(&ws);
+    apply_with(&ws, &mut run, binding, Some(Cause::WriteExpired)).unwrap();
+    assert_eq!(entries(&ws.root), vec![NAME.to_string()], "published once");
+    assert_eq!(run.write_grant_at_close(), Some(InterruptCause::Expired));
+}
+
+#[test]
+fn m2d_k2_a_live_write_grant_closed_by_the_kernel_is_none() {
+    let ws = new_ws();
+    let (mut run, binding) = verified_file(&ws);
+    apply_with(&ws, &mut run, binding, None).unwrap();
+    assert_eq!(entries(&ws.root), vec![NAME.to_string()]);
+    assert_eq!(run.write_grant_at_close(), None);
+}
+
+#[test]
+fn m2d_k2_each_attempt_reports_its_own_write_grant() {
+    // The apply's grant lapsed; the undo's did not.
+    let ws = new_ws();
+    let (mut run, binding, tap) = tapped(&ws, "restore.completed");
+    apply_with(&ws, &mut run, binding, Some(Cause::WriteRevoked)).unwrap();
+    assert_eq!(run.write_grant_at_close(), Some(InterruptCause::Revoked));
+    undo_with(&ws, &mut run, binding, &tap, None).unwrap();
+    assert!(entries(&ws.root).is_empty());
+    assert_eq!(run.write_grant_at_close(), None, "a stale apply value");
+}
+
+#[test]
+fn m2d_k2_undo_write_grant_revoked_or_expired_after_u1_is_reported_at_close() {
+    for (cause, expected) in [
+        (Cause::WriteRevoked, InterruptCause::Revoked),
+        (Cause::WriteExpired, InterruptCause::Expired),
+    ] {
+        let ws = new_ws();
+        let (mut run, binding, tap) = tapped(&ws, "restore.completed");
+        apply_with(&ws, &mut run, binding, None).unwrap();
+        assert_eq!(run.write_grant_at_close(), None, "{cause:?}");
+        undo_with(&ws, &mut run, binding, &tap, Some(cause))
+            .unwrap_or_else(|e| panic!("{cause:?}: {e:?}"));
+        assert!(entries(&ws.root).is_empty(), "{cause:?}: undone");
+        assert_eq!(run.apply_state(), ApplyState::Restored, "{cause:?}");
+        assert_eq!(run.write_grant_at_close(), Some(expected), "{cause:?}");
+    }
+}
+
+#[test]
+fn m2d_k2_an_attempt_that_never_reached_its_close_reports_nothing_stale() {
+    // The apply's grant lapsed; the undo then never reaches its close (a
+    // defect: it panics before U1). Its own attempt reads nothing, never the
+    // apply's value.
+    let ws = new_ws();
+    let (mut run, binding) = verified_file(&ws);
+    apply_with(&ws, &mut run, binding, Some(Cause::WriteRevoked)).unwrap();
+    assert_eq!(run.write_grant_at_close(), Some(InterruptCause::Revoked));
+    let approval = run.request_restore(&ws.info.name, &Answer::yes()).unwrap();
+    let grant = ws.write_grant(binding);
+    let panicked = with_hooks(
+        |point, _| {
+            if point == HookPoint::BeforeUnpublish {
+                panic!("a defect inside the undo attempt");
+            }
+            false
+        },
+        || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run.restore(approval, grant)
+            }))
+            .is_err()
+        },
+    );
+    assert!(panicked);
+    assert_eq!(run.write_grant_at_close(), None, "a stale apply value");
+}
