@@ -69,6 +69,7 @@ fn on_store() -> OnStore {
         contract_hash: HASH.into(),
         request: LABEL.into(),
         summary: vec!["A one-page site for Rosa's bakery".into()],
+        page_facts: None,
     })
     .expect("the Owner consents");
     let run = door.open_run().unwrap();

@@ -1848,6 +1848,7 @@ fn consent(request: &str, summary: &str) -> MissionConfirmation {
         contract_hash: CONTRACT.into(),
         request: request.into(),
         summary: vec![summary.into()],
+        page_facts: None,
     }
 }
 

@@ -21,7 +21,7 @@ pub(crate) mod scripted;
 mod tests;
 
 use self::approval::{
-    AcknowledgementConfirmation, ControlConfirmer, MissionApproval, MissionConfirmation,
+    AcknowledgementConfirmation, ControlConfirmer, FactsView, MissionApproval, MissionConfirmation,
     MissionResumeApproval, MissionResumeConfirmation, ResumeConfirmation, MAX_MISSION_REQUEST,
     MAX_MISSION_SUMMARY_LINES,
 };
@@ -33,6 +33,7 @@ use self::halt::{HaltCounters, RecordBatch};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
 use self::run::{GroupId, Lift, Refusal, RunClass, RunOrigin, RunRegistry};
+use crate::inert_page::ApprovedFacts;
 use std::fmt;
 use std::sync::Arc;
 
@@ -77,6 +78,10 @@ pub(crate) const REASONS: &[&str] = &[
     "file_exists",
     "change_too_large_to_show",
     "unsupported_mount_topology",
+    "facts_invalid",
+    "file_type_not_allowed",
+    "page_not_inert",
+    "page_fact_missing",
 ];
 
 /// Why the authority refused. The message is bounded and names no input.
@@ -133,6 +138,15 @@ pub enum AuthorityError {
     /// outcome is not established (a sync, a record or a cleanup failed):
     /// recovery is required, and nothing is called done.
     RecoveryRequired,
+    /// S1a-D+B: the page facts of a mission request are refused by S1a's
+    /// construction (its code), before any dialog.
+    FactsInvalid(&'static str),
+    /// S1a-D (O4): Files creates only `*.html` (checked) and `*.txt`.
+    FileTypeNotAllowed,
+    /// S1a-D: the inert page check refused the page (its refusal code).
+    PageNotInert(&'static str),
+    /// S1a-D: the page lacks a fact of its admission (S1a's fact code).
+    PageFactMissing(&'static str),
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
@@ -181,6 +195,10 @@ impl AuthorityError {
             AuthorityError::ChangeTooLargeToShow => "change_too_large_to_show",
             AuthorityError::UnsupportedMountTopology => "unsupported_mount_topology",
             AuthorityError::RecoveryRequired => "recovery_required",
+            AuthorityError::FactsInvalid(_) => "facts_invalid",
+            AuthorityError::FileTypeNotAllowed => "file_type_not_allowed",
+            AuthorityError::PageNotInert(_) => "page_not_inert",
+            AuthorityError::PageFactMissing(_) => "page_fact_missing",
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",
@@ -207,6 +225,12 @@ impl fmt::Display for AuthorityError {
             }
             AuthorityError::Unavailable(why) => write!(f, "governed control: unavailable: {why}"),
             AuthorityError::Ended { cause, evidence } => write!(f, "{cause} ({evidence})"),
+            // S1a-D+B: the class and S1a's code, never content.
+            AuthorityError::FactsInvalid(code)
+            | AuthorityError::PageNotInert(code)
+            | AuthorityError::PageFactMissing(code) => {
+                write!(f, "governed control: refused: {}:{code}", self.class())
+            }
             other => write!(f, "governed control: refused: {}", other.class()),
         }
     }
@@ -422,7 +446,7 @@ impl Authority {
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionApproval, AuthorityError> {
         self.confirm_mission_as(request, confirmer, Privacy::Owner, || Ok(()))
-            .map(|(approval, _, ())| approval)
+            .map(|(approval, _, (), _)| approval)
     }
 
     /// [`Self::confirm_mission`], its record of class `privacy`. An agent's
@@ -434,17 +458,30 @@ impl Authority {
     /// (a door reserves its consent slot there); refused, nothing is asked
     /// or recorded. What it returns is held across the dialog and returned
     /// with the approval and the record's own time.
+    ///
+    /// S1a-D+B (M3 §6.1): the request's page facts are built with S1a's own
+    /// construction before anything else is asked or recorded; refused,
+    /// nothing is shown (`facts_invalid` with S1a's code). Built, they are
+    /// the facts the dialog shows, and they are returned with the approval
+    /// for the door to cache with the yes. The record keeps only their
+    /// hash.
     pub(crate) fn confirm_mission_as<T>(
         &self,
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
         privacy: Privacy,
         before_ask: impl FnOnce() -> Result<T, AuthorityError>,
-    ) -> Result<(MissionApproval, u64, T), AuthorityError> {
+    ) -> Result<(MissionApproval, u64, T, Option<ApprovedFacts>), AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         if privacy == Privacy::Restricted {
             controlled(&request.request, None)?;
         }
+        let facts = request
+            .page_facts
+            .as_ref()
+            .map(FactsView::approved)
+            .transpose()
+            .map_err(|code| AuthorityError::FactsInvalid(code.as_str()))?;
         if self
             .evidence
             .primary()
@@ -471,6 +508,11 @@ impl Authority {
         record
             .detail
             .push(("summary_digest".into(), summary_digest(&request.summary)));
+        if let Some(facts) = &facts {
+            record
+                .detail
+                .push(("facts_hash".into(), hex::encode(facts.hash())));
+        }
         if !yes {
             // The owner's decline has taken effect and permits nothing.
             self.record_end(&record);
@@ -485,6 +527,7 @@ impl Authority {
             MissionApproval::confirmed(request.contract_hash.clone(), request.request.clone(), seq),
             at_wall_ms,
             reserved,
+            facts,
         ))
     }
 
