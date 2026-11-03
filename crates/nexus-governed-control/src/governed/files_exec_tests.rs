@@ -46,7 +46,9 @@ mod review5;
 
 const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const LABEL: &str = "msn-000001/1/1";
-const NAME: &str = "index.html";
+/// Plain text (S1a-D's O4: Files creates only `*.html`, checked, and
+/// `*.txt`); these oracles are about the publication, not the page check.
+const NAME: &str = "notes.txt";
 const CONTENT: &str = "<h1>Rosa's bakery</h1>\n<p>Fresh bread daily.</p>\n";
 /// The Files commitment's lifetime (the deadline that also bounds
 /// publication).
@@ -534,13 +536,13 @@ fn m2d_b2_d_o1_create_composed() {
     assert!(end.target_digest.is_some());
 
     // Mother continues in the same run: File B.
-    f.create("style.css", "h1 { color: brown; }\n").expect("B");
-    assert_eq!(f.entries(), vec![NAME.to_string(), "style.css".to_string()]);
+    f.create("style.txt", "h1 { color: brown; }\n").expect("B");
+    assert_eq!(f.entries(), vec![NAME.to_string(), "style.txt".to_string()]);
     f.gov
         .files_undo(&*f.owner)
         .expect("the last create is undone");
     assert_eq!(f.entries(), vec![NAME.to_string()], "only B was undone");
-    assert_eq!(f.owner.undos().last().unwrap().file, "style.css");
+    assert_eq!(f.owner.undos().last().unwrap().file, "style.txt");
 }
 
 // ---------------------------------------------------------------- D-O5, D-O6
@@ -1179,8 +1181,11 @@ fn m2d_b2_d_o21_a_created_file_leaves_no_trace() {
         "nxsecret_{}",
         &hex::encode(crate::authority::ids::random16())[..16]
     );
-    let output = f.create(&c, &format!("{c}\n{cl}\n")).expect("a valid name");
-    assert!(f.ws.join(&c).exists());
+    let name = format!("{c}.txt");
+    let output = f
+        .create(&name, &format!("{c}\n{cl}\n"))
+        .expect("a valid name");
+    assert!(f.ws.join(&name).exists());
     let mut haystack = format!("{output:?}");
     for record in f.evidence.records() {
         haystack.push_str(&format!("{record:?}\n{}\n", record.to_json()));
