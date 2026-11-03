@@ -229,8 +229,7 @@ pub fn try_tool(program: &str, args: &[&str]) -> Result<String, ToolFailure> {
             };
         }
         if Instant::now() > deadline {
-            let _ = child.kill();
-            let _ = child.wait();
+            super::harness::kill_and_reap(&mut child);
             panic!("{program} {args:?} overran {WAIT:?}");
         }
         std::thread::sleep(Duration::from_millis(10));
@@ -268,8 +267,7 @@ pub fn run_tool(program: &str, args: &[&str]) -> String {
             return String::from_utf8_lossy(&output.stdout).into_owned();
         }
         if Instant::now() > deadline {
-            let _ = child.kill();
-            let _ = child.wait();
+            super::harness::kill_and_reap(&mut child);
             panic!("{program} {args:?} overran {WAIT:?}");
         }
         std::thread::sleep(Duration::from_millis(10));

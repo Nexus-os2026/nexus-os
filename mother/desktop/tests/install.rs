@@ -61,7 +61,15 @@ fn i1_a_relative_cargo_target_dir_from_elsewhere_installs_nothing_stale() {
             let _ = Command::new("kill")
                 .args(["-KILL", "--", &format!("-{}", child.id())])
                 .status();
-            let _ = child.wait();
+            // Reaped within a bound, never waited on without one.
+            let reap_until = Instant::now() + Duration::from_secs(10);
+            while child.try_wait().ok().flatten().is_none() && Instant::now() < reap_until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            assert!(
+                child.try_wait().ok().flatten().is_some(),
+                "the killed install script was not reaped"
+            );
             break None;
         }
         std::thread::sleep(Duration::from_millis(50));

@@ -146,8 +146,7 @@ impl Xvfb {
         let display = match rx.recv_timeout(STEP) {
             Ok(line) if !line.trim().is_empty() => format!(":{}", line.trim()),
             _ => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_group(&mut child);
                 panic!("Xvfb printed no display within {STEP:?}");
             }
         };
@@ -171,8 +170,7 @@ impl Xvfb {
 
 impl Drop for Xvfb {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        kill_group(&mut self.child);
     }
 }
 
@@ -250,6 +248,20 @@ fn base_env(display: Option<&str>) -> Vec<(String, String)> {
 
 /// How long a killed child may take to be reaped.
 const REAP: Duration = Duration::from_secs(10);
+
+/// Kill `child` (not its group: a tool the tests run directly) and reap
+/// it within `REAP`; its exit status, if it was reaped.
+pub fn kill_and_reap(child: &mut Child) -> Option<std::process::ExitStatus> {
+    let _ = child.kill();
+    let deadline = Instant::now() + REAP;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            _ => return None,
+        }
+    }
+}
 
 /// Kill a child's whole process group (the child's own group), then reap
 /// the child within `REAP`; its exit status, if it was reaped.
