@@ -701,6 +701,18 @@ impl Authority {
         Ok(())
     }
 
+    /// Whether new inference may start (M2e-B; Architect decision 1 on PR
+    /// #75): [`Self::evidence_admissible`], and no record owed. While any
+    /// record waits to be written, a model call or a registration would
+    /// start against a store already known to be failing.
+    pub(crate) fn inference_admissible(&self) -> Result<(), AuthorityError> {
+        self.evidence_admissible()?;
+        match self.evidence.primary() {
+            Some(primary) if primary.health().owed > 0 => Err(AuthorityError::EvidenceUnavailable),
+            _ => Ok(()),
+        }
+    }
+
     /// The record of the owner's answer to a door: a yes is a gating record
     /// (no door exists unless it is written); a no is an end record.
     pub(crate) fn record_door(

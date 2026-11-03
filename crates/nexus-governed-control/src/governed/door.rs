@@ -376,7 +376,7 @@ impl AgentDoor {
     /// admitted for inference to the registered model, under its attempt
     /// ceiling); then no broker lock is held. Refused before any attempt
     /// (nothing charged, sent or recorded) while the evidence store cannot
-    /// record. Every attempt is recorded (Restricted), and what became of
+    /// record or owes a record. Every attempt is recorded (Restricted), and what became of
     /// its record is returned with the transport's result. The reply is
     /// untrusted data.
     pub fn model_call(
@@ -391,8 +391,9 @@ impl AgentDoor {
             .control
             .registered_model()
             .ok_or(AuthorityError::ModelNotRegistered)?;
-        // A known evidence failure permits no new inference.
-        self.control.authority().evidence_admissible()?;
+        // A known evidence failure (a latched store, recovery required, or
+        // any record owed) permits no new inference.
+        self.control.authority().inference_admissible()?;
         let ticket = self.control.authority().runs().admit_model_call(
             run,
             &self.core.agent,

@@ -160,8 +160,9 @@ impl LocalModels {
         spec: &ModelPinSpec,
         stop: &Arc<StopAuthority>,
     ) -> Result<ModelIdentityView, AuthorityError> {
-        // Nothing is asked of the runtime while the store cannot record.
-        authority.evidence_admissible()?;
+        // Nothing is asked of the runtime while the store cannot record or
+        // owes a record.
+        authority.inference_admissible()?;
         authority.mission_admissible()?;
         let endpoint = LoopbackEndpoint::parse(endpoint).map_err(AuthorityError::ModelCall)?;
         let reservation = Reservation::take(&self.slot)?;
