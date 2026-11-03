@@ -32,6 +32,7 @@ fn open_base(label: &str) -> PathBuf {
 #[cfg(unix)]
 #[test]
 fn p0_chain_io_a_metadata_failure_fails_the_open() {
+    let _scenario = seam::pause_scenario();
     let base = open_base("chain-io");
     let a = base.join("a");
     seam::pause_after_creating(Some(a.clone()));

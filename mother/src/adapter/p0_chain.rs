@@ -28,6 +28,7 @@ fn open_base(label: &str) -> PathBuf {
 #[cfg(unix)]
 #[test]
 fn p0_chain_a_put_syncs_the_link_of_a_directory_another_opener_created() {
+    let _scenario = seam::pause_scenario();
     let base = open_base("chain-race");
     let a = base.join("a");
     seam::pause_after_creating(Some(a.clone()));

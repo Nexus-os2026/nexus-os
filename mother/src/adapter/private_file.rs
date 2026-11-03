@@ -351,6 +351,15 @@ pub(crate) mod seam {
         PAUSE.lock().unwrap_or_else(|p| p.into_inner())
     }
 
+    /// One scenario at a time arms the pause point: each holds this for its
+    /// whole run, so parallel tests never arm or release each other's.
+    static SCENARIO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Take the pause point for a whole scenario.
+    pub(crate) fn pause_scenario() -> std::sync::MutexGuard<'static, ()> {
+        SCENARIO.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
     /// The next thread to create `dir` pauses just after creating it.
     pub(crate) fn pause_after_creating(dir: Option<PathBuf>) {
         let mut p = pause();
