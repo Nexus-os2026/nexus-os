@@ -264,6 +264,15 @@ fn a1_a_second_stop_does_not_wait_behind_the_first_stop_s_write() {
                 assert_eq!(receipts.finished, 0, "A is still in its write");
                 assert_eq!(held.left(), 0);
                 assert!(kernel_stopped() && d.owner.status().emergency_stopped);
+                // Decision 2: B's dispatch has completed (its press returned,
+                // so its worker's handle is registered) before the store is
+                // released, so no worker can finish unregistered.
+                wait_until("B's dispatch completed", || {
+                    d.probe
+                        .stop_presses
+                        .load(std::sync::atomic::Ordering::SeqCst)
+                        == 2
+                });
                 // 4. The store released: both workers finish and are joined.
                 held.release();
                 assert_eq!(

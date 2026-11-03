@@ -84,3 +84,45 @@ fn f1_a_worker_that_published_done_but_has_not_returned_is_still_running() {
         "the returned worker is joined"
     );
 }
+
+#[test]
+fn f2_a_worker_whose_handle_is_not_yet_registered_is_reported_then_joined() {
+    let (hold, reached, open) = Hold::new();
+    let route = StopRoute::with_body(
+        Desk::new(),
+        || {},
+        Seams {
+            after_done: None,
+            before_register: Some(hold.seam()),
+        },
+    );
+    // The press (the GTK thread in production) is held between the spawn
+    // and registering the worker's handle; the worker itself finishes.
+    let presser = {
+        let route = route.clone();
+        std::thread::spawn(move || route.press())
+    };
+    reached
+        .recv_timeout(WAIT)
+        .expect("the press reached registration");
+    let deadline = std::time::Instant::now() + WAIT;
+    while route.receipts().finished < 1 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the worker never finished"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(
+        join_bounded(&route, Duration::from_millis(200)),
+        Some(Joined::TimedOut { still_running: 1 }),
+        "a started worker whose handle is not registered is reported, never dropped"
+    );
+    open.send(()).unwrap();
+    presser.join().unwrap();
+    assert_eq!(
+        join_bounded(&route, WAIT),
+        Some(Joined::All { joined: 1 }),
+        "every worker started is joined"
+    );
+}
