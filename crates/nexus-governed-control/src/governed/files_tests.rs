@@ -1341,10 +1341,18 @@ fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
                         && (at == path
                             || (at != point && at.starts_with(&point) && path.starts_with(&at)))
                 });
+                // The Owner's Option 1: ext4 and xfs on real hardware
+                // (the walk itself is checked against the evaluator's own
+                // in m2d_b1_d_o18_i).
+                let hardware = fstype(only) == "tmpfs" || {
+                    let (major, minor) = device.split_once(':').unwrap();
+                    crate::files::hardware_backed(major.parse().unwrap(), minor.parse().unwrap())
+                };
                 decoded(only[3]) == Path::new("/")
                     && ["ext4", "xfs", "tmpfs"].contains(&fstype(only).as_str())
                     && path.starts_with(&point)
                     && !between
+                    && hardware
             }
             _ => false,
         };
@@ -1433,14 +1441,27 @@ fn m2d_b1_d_o18_f_only_a_whole_local_filesystem_mounted_once_is_supported() {
         reserved,
         uid: crate::launcher::effective_uid(),
     };
+    // The Owner's Option 1: the devices these tables call ext4 or xfs are on
+    // real hardware (NVMe partitions in a fake /sys).
+    let hardware = FakeSys::new(dirs.path("sys"));
+    hardware
+        .disk("nvme0n1", "259:0", &[])
+        .partition("nvme0n1", "nvme0n1p1", "259:1")
+        .partition("nvme0n1", "nvme0n1p2", "259:2")
+        .link(&rootfs, "nvme0n1/nvme0n1p1");
+    if tmpfs != rootfs {
+        hardware.link(&tmpfs, "nvme0n1/nvme0n1p2");
+    }
     let select = |mountinfo: String, path: &Path, reserved: Vec<PathBuf>| {
         mountinfo_for_test(Some(Ok(mountinfo)));
+        crate::files::sysfs_for_test(Some(hardware.0.clone()));
         let gov = control(&root, &evidence);
         let result = gov
             .register_workspace_in(path, &with(reserved))
             .map(|_| ())
             .map_err(|error| error.class());
         mountinfo_for_test(None);
+        crate::files::sysfs_for_test(None);
         result
     };
     let plain = dirs.path("plain/ws");
