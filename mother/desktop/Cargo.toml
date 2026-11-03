@@ -16,5 +16,11 @@ nexus-governed-control = { path = "../../crates/nexus-governed-control" }
 nexus-kernel = { path = "../../kernel" }
 nexus-mother-host = { path = "../host" }
 
+# Test-only (M2b-A decision 3): native process-group signalling for the
+# live harness's bounded cleanup. The kernel's own nix 0.29, already in
+# Cargo.lock; no new lock entry, nothing linked into the binary.
+[dev-dependencies]
+nix = { version = "0.29", default-features = false, features = ["process", "signal"] }
+
 [lints]
 workspace = true
