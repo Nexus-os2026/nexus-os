@@ -586,6 +586,7 @@ fn m2d_c_the_port_reads_an_interrupted_success_as_overtaken() {
         expires_wall_ms: 601_000,
         binding_short: "0000".into(),
         interrupted,
+        recovery_required: false,
     };
     assert_eq!(
         status_of(&view(vec![]), 2_000, 2_000, 600_000),
