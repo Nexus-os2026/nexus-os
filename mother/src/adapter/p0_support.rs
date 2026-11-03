@@ -116,7 +116,7 @@ fn base64_core(text: &[u8], offset: usize, alphabet: &[u8; 64]) -> String {
     let trimmed = encoded.trim_end_matches('=');
     let skip = [0, 2, 3][offset];
     let mut core: Vec<char> = trimmed.chars().skip(skip).collect();
-    if padded.len() % 3 != 0 {
+    if !padded.len().is_multiple_of(3) {
         core.pop();
     }
     core.into_iter().collect()

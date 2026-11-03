@@ -104,6 +104,69 @@ impl Home {
     }
 
     /// P0: Mother's private store, for `Coordinator::open`.
+    ///
+    /// P0-A (oracles first; registered as `host/src/p0_tests.rs`, moved
+    /// here unchanged): the host gives Mother her private store in her
+    /// home, beside the journal.
+    ///
+    /// ```
+    /// use nexus_governed_control::authority::approval::{
+    ///     AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ControlConfirmer,
+    ///     GrantConfirmation, MissionConfirmation, MissionResumeConfirmation, ResumeConfirmation,
+    /// };
+    /// use nexus_mother::private::{ContentKind, PrivateStore};
+    /// use nexus_mother_host::Home;
+    /// use std::sync::Arc;
+    ///
+    /// /// Declines every dialog (no door is issued in this test).
+    /// struct NoOne;
+    ///
+    /// impl ControlConfirmer for NoOne {
+    ///     fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+    ///         false
+    ///     }
+    ///     fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+    ///         false
+    ///     }
+    ///     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+    ///         false
+    ///     }
+    ///     fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+    ///         false
+    ///     }
+    ///     fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+    ///         false
+    ///     }
+    ///     fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
+    ///         false
+    ///     }
+    ///     fn confirm_held_mission(&self, _: &MissionResumeConfirmation) -> bool {
+    ///         false
+    ///     }
+    /// }
+    ///
+    /// let home = Home::fresh_temp("p0-private", Arc::new(NoOne)).unwrap();
+    /// let private = home.private().unwrap();
+    /// let id = private.put(ContentKind::Contract, b"{}").unwrap();
+    /// let path = home
+    ///     .dir()
+    ///     .join("private")
+    ///     .join("contract")
+    ///     .join(id.to_hex());
+    /// assert!(path.is_file(), "{}", path.display());
+    /// let again = home.private().unwrap();
+    /// assert_eq!(again.get(ContentKind::Contract, &id).unwrap(), b"{}");
+    /// #[cfg(unix)]
+    /// {
+    ///     use std::os::unix::fs::PermissionsExt;
+    ///     let mode = std::fs::metadata(home.dir().join("private"))
+    ///         .unwrap()
+    ///         .permissions()
+    ///         .mode();
+    ///     assert_eq!(mode & 0o777, 0o700);
+    /// }
+    /// let _ = std::fs::remove_dir_all(home.dir());
+    /// ```
     pub fn private(&self) -> Result<FilePrivate, PrivateError> {
         FilePrivate::open(&self.private_path())
     }
