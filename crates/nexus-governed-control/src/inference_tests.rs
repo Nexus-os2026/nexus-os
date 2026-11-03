@@ -1649,6 +1649,24 @@ fn pr75_r1_m1_b_evidence_failing_during_a_call_is_reported_with_its_result() {
         Some(FINISH)
     );
 
+    // While that record is owed, no new call starts (Architect decision 1
+    // on PR #75); a record written next pays it first.
+    f.fake.set(|_| None);
+    let chats = f.fake.count("/api/chat");
+    assert_eq!(
+        class(
+            f.door
+                .model_call(run, &request("x"), &*meter, &Deadline::default())
+        ),
+        "evidence_unavailable"
+    );
+    assert_eq!(f.fake.count("/api/chat"), chats, "no chat while owed");
+    let _ = f
+        .door
+        .open_run()
+        .expect("the owed record is paid, then this");
+    assert_eq!(primary.health().owed, 0);
+
     // The store latches during the next call, which fails: uncertain, said
     // so, beside the call's own error.
     let store = primary.clone();
