@@ -593,7 +593,7 @@ fn m2d_b1_d_o15_restart_run_life_and_workspace_identity() {
     assert!(f.door.admit_files(finished, HASH, &label(1)).is_err());
     assert_eq!(f.admission(finished), None);
     let cancelled = f.door.open_run().unwrap();
-    f.door.cancel_run(cancelled).unwrap();
+    let _ = f.door.cancel_run(cancelled).unwrap().write();
     assert!(f.door.admit_files(cancelled, HASH, &label(1)).is_err());
     assert_eq!(f.admission(cancelled), None);
     let (_, owner_run) = f.gov.open_owner_run(vec![]).unwrap();
