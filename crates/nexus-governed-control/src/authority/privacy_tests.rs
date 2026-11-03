@@ -1726,9 +1726,10 @@ fn body_span(text: &str, marker: &str) -> Option<(usize, usize)> {
 /// `authority::write_end` (in `authority/evidence.rs`), no production code
 /// writes to an evidence sink (`.record(` or `.record_end(` on a receiver
 /// that names an evidence sink, or `EvidenceSink::record`); the only other
-/// place is the test fan-out `TeeEvidence`, itself a sink. And the 15
-/// `EvidenceRecord::new` sites are where the inventory says. A guard, not
-/// a proof.
+/// place is the test fan-out `TeeEvidence`, itself a sink. And the 16
+/// `EvidenceRecord::new` sites are where the inventory says (M2e-B adds
+/// `authority/mod.rs`'s Restricted model record builder). A guard, not a
+/// proof.
 #[test]
 fn p0c_one_choke_point_writes_every_record() {
     let mut writes = Vec::new();
@@ -1779,7 +1780,7 @@ fn p0c_one_choke_point_writes_every_record() {
     );
     let inventory: BTreeMap<String, usize> = [
         ("authority/commitment.rs", 1),
-        ("authority/mod.rs", 9),
+        ("authority/mod.rs", 10),
         ("authority/policy.rs", 1),
         ("authority/run.rs", 2),
         ("broker.rs", 2),
@@ -1787,7 +1788,7 @@ fn p0c_one_choke_point_writes_every_record() {
     .into_iter()
     .map(|(path, n)| (path.to_string(), n))
     .collect();
-    assert_eq!(builders, inventory, "the 15 record builders");
+    assert_eq!(builders, inventory, "the 16 record builders");
 }
 
 // ---------------------------------------------------------------- consent and resume
