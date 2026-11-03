@@ -401,8 +401,9 @@ fn undo(
 
 // ── D-O7: Ordering A, a cause before the final check ────────────────────────
 
-/// What the workspace held when the final check came: (name, bytes).
-type Seen = Rc<RefCell<Option<Vec<(String, Vec<u8>)>>>>;
+/// What the workspace held when the final check came: its entry names, and
+/// the bytes of each anonymous file of it this process holds.
+type Seen = Rc<RefCell<Option<(Vec<String>, Vec<Vec<u8>>)>>>;
 
 fn ordering_a(cause: Cause) {
     let ws = new_ws();
@@ -417,11 +418,11 @@ fn ordering_a(cause: Cause) {
     let result = with_hooks(
         move |point, _| {
             if point == HookPoint::BeforeFinalCheck {
-                let found = entries(&root)
+                let anonymous = anonymous_files(&root)
                     .into_iter()
-                    .map(|n| (n.clone(), std::fs::read(root.join(&n)).unwrap()))
+                    .map(|fd| std::fs::read(format!("/proc/self/fd/{fd}")).unwrap())
                     .collect();
-                *saw.borrow_mut() = Some(found);
+                *saw.borrow_mut() = Some((entries(&root), anonymous));
                 injector.land(cause);
             }
             false
@@ -436,15 +437,13 @@ fn ordering_a(cause: Cause) {
         "{cause:?}"
     );
     // Staging, content and fsync finished before the handoff: the complete
-    // temporary file existed, under the id recorded before its creation.
-    let temp_id = ws.temp_id(&run);
+    // candidate existed as an anonymous file of the workspace, with no
+    // pathname to substitute, after its intent id was recorded.
+    let _temp_id = ws.temp_id(&run);
     assert_eq!(
         seen.borrow().clone(),
-        Some(vec![(
-            format!("{TEMP_PREFIX}{temp_id}"),
-            CONTENT.as_bytes().to_vec()
-        )]),
-        "{cause:?}: the temp was not complete when the final check came"
+        Some((Vec::new(), vec![CONTENT.as_bytes().to_vec()])),
+        "{cause:?}: the complete candidate was not held anonymously when the final check came"
     );
     assert!(entries(&ws.root).is_empty(), "{cause:?}: published or left");
     assert_eq!(run.apply_state(), ApplyState::RolledBack, "{cause:?}");
@@ -703,11 +702,8 @@ fn m2d_a_d1_an_observed_apply_publishes_exactly_one_new_root_level_file() {
 // ── D-O10: cleanup ownership, injected failures ─────────────────────────────
 
 #[test]
-fn m2d_a_d_o10_an_unremovable_temp_after_an_interruption_is_owed_until_a_retry() {
-    for (seam_cell, removal) in [
-        (&REMOVE_TEMP_FAILS, "remove_failed"),
-        (&SYNC_FAILS, "sync_failed"),
-    ] {
+fn m2d_a_d_o10_an_interruption_leaves_nothing_to_remove_even_when_removal_would_fail() {
+    for seam_cell in [&REMOVE_TEMP_FAILS, &SYNC_FAILS] {
         let ws = new_ws();
         let (mut run, binding) = verified_file(&ws);
         let approval = run.request_approval(&ws.info.name, &Answer::yes()).unwrap();
@@ -723,46 +719,28 @@ fn m2d_a_d_o10_an_unremovable_temp_after_an_interruption_is_owed_until_a_retry()
             },
             || run.apply_observed(approval, ws.write_grant(binding), &ws.staging(), &*guard),
         );
-        let temp_id = ws.temp_id(&run);
+        seam(seam_cell, false);
         assert_eq!(
             result,
-            Err(ApplyError::CleanupOwed {
-                cause: CleanupCause::Interrupted(InterruptCause::Cancelled),
-                temps: vec![temp_id.clone()],
-            }),
-            "{removal}"
+            Err(ApplyError::Interrupted {
+                cause: InterruptCause::Cancelled
+            })
         );
-        assert!(!ws.root.join(NAME).exists(), "{removal}: published");
-        assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
-        let records = ws.records(&run);
-        let owed = last_of(&records, "apply.recovery_required").expect("recorded");
-        assert_eq!(owed["failed"], "interrupted");
-        assert_eq!(owed["interrupted"], "Cancelled");
-        assert_eq!(owed["temp_id"], temp_id.as_str());
-        assert_eq!(owed["removal"], removal);
-        assert_eq!(
-            analyze_apply(ws.ledger.as_ref(), run.id().ledger_key()).unwrap(),
-            vec![ApplyFinding::CleanupOwed {
-                temps: vec![TempLeft {
-                    temp_id: temp_id.clone(),
-                    path_sha256: Some(path_sha256(NAME)),
-                }],
-            }],
-            "{removal}"
-        );
-        // One bounded attempt per call: still failing, still owed.
-        assert!(matches!(
-            run.retry_cleanup(),
-            Err(ApplyError::CleanupOwed { .. })
-        ));
-        seam(seam_cell, false);
-        run.retry_cleanup().unwrap();
-        assert!(entries(&ws.root).is_empty(), "{removal}");
+        assert!(entries(&ws.root).is_empty(), "published or left");
         assert_eq!(run.apply_state(), ApplyState::RolledBack);
+        assert!(run.cleanup_owed().is_empty());
+        assert_eq!(run.retry_cleanup(), Err(ApplyError::InvalidState));
+        let records = ws.records(&run);
+        let outcome = last_of(&records, "apply.rolled_back").expect("apply.rolled_back");
+        assert_eq!(outcome["failed"], "interrupted");
+        assert_eq!(outcome["interrupted"], "Cancelled");
+        assert!(!ws
+            .kinds(&run)
+            .iter()
+            .any(|k| k == "apply.recovery_required"));
         assert!(analyze_apply(ws.ledger.as_ref(), run.id().ledger_key())
             .unwrap()
             .is_empty());
-        assert_eq!(run.retry_cleanup(), Err(ApplyError::InvalidState));
     }
 }
 
@@ -1068,7 +1046,7 @@ fn m2d_a_d_o11_crash_after_prepare_reports_the_planned_temp_id() {
 }
 
 #[test]
-fn m2d_a_d_o11_crash_with_the_temp_written_names_the_real_leftover() {
+fn m2d_a_d_o11_crash_at_the_final_check_leaves_no_pathname_and_is_uncertain() {
     let ws = new_ws();
     let (signal, crashed) = mpsc::channel();
     let (mut run, binding) = verified_file(&ws);
@@ -1099,15 +1077,14 @@ fn m2d_a_d_o11_crash_with_the_temp_written_names_the_real_leftover() {
         let payload: Value = serde_json::from_str(&prepared.payload).unwrap();
         payload["files"][0]["temp_id"].as_str().unwrap().to_string()
     };
-    assert_eq!(entries(&ws.root), vec![format!("{TEMP_PREFIX}{temp_id}")]);
+    assert!(entries(&ws.root).is_empty(), "a pathname exists");
     assert_eq!(
         report_after_restart(&ws, id),
         vec![ApplyFinding::PreparedWithoutOutcome {
             files: vec![prepared_file(&temp_id)]
         }]
     );
-    // Not swept: the leftover is still there for the owner.
-    assert_eq!(entries(&ws.root), vec![format!("{TEMP_PREFIX}{temp_id}")]);
+    assert!(entries(&ws.root).is_empty(), "a pathname exists");
 }
 
 #[test]
@@ -1658,26 +1635,25 @@ fn m2d_a_d_o21_name_and_content_canaries_stay_out_of_the_ledger_and_the_report()
     let name = canary.c.clone();
     let content = format!("{}\n{}\n", canary.c, canary.cl);
     let (mut findings, mut targets) = (Vec::new(), Vec::new());
-    // 0: an interrupted publication whose temp cannot be removed; 1: a
-    // publication and a stale undo; 2: a publication and an unremovable
-    // undo. Each owed cleanup is then retried.
+    // 0: a publication whose record fails, undone, with a temp that cannot
+    // be removed; 1: a publication and a stale undo; 2: a publication and an
+    // unremovable undo. Each owed cleanup is then retried.
     for scenario in 0..3 {
         let ws = new_ws();
         let edits = vec![create(&name, &content)];
-        let (mut run, binding) =
-            verified_with(&ws, ws.store(), edits, files_scopes(&[name.as_str()]));
+        let store = if scenario == 0 {
+            FailOn::new(&ws, "apply.op")
+        } else {
+            ws.store()
+        };
+        let (mut run, binding) = verified_with(&ws, store, edits, files_scopes(&[name.as_str()]));
         let approval = run.request_approval(&ws.info.name, &Answer::yes()).unwrap();
-        let guard = Rc::new(Guard::default());
-        let flag = Rc::clone(&guard);
-        let _ = with_hooks(
-            move |point, _| {
-                if point == HookPoint::BeforeFinalCheck && scenario == 0 {
-                    flag.cause.set(Some(InterruptCause::Revoked));
-                    seam(&REMOVE_TEMP_FAILS, true);
-                }
-                false
-            },
-            || run.apply_observed(approval, ws.write_grant(binding), &ws.staging(), &*guard),
+        seam(&REMOVE_TEMP_FAILS, scenario == 0);
+        let _ = run.apply_observed(
+            approval,
+            ws.write_grant(binding),
+            &ws.staging(),
+            &Guard::default(),
         );
         if scenario == 1 {
             std::fs::write(ws.root.join(&name), "edited\n").unwrap();
