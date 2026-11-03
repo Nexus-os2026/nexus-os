@@ -28,6 +28,8 @@ use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
+use crate::inference::MAX_MODEL_ATTEMPTS;
+use nexus_kernel::inference::ModelError;
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::{Deref, DerefMut};
@@ -99,6 +101,8 @@ struct RunEntry {
     files_admission: Option<FilesAdmission>,
     /// M2e-B: the run's inference admission, set once and never changed.
     inference_admission: Option<InferenceAdmission>,
+    /// M2e-B: the model calls this run attempted (never refunded).
+    model_attempts: u32,
 }
 
 /// M2d-B1: which yes of the Owner's a cached consent is.
@@ -175,6 +179,22 @@ pub(crate) struct InferenceAdmission {
     pub(crate) identity: [u8; 32],
 }
 
+/// M2e-B: what an admitted model call is ended by besides the kernel
+/// stop, taken in the same hold of the runs lock that admitted it: the
+/// run's token and its door's halt flag.
+pub(crate) struct CallTicket {
+    pub(crate) token: CancelToken,
+    door_halted: Arc<AtomicBool>,
+}
+
+impl CallTicket {
+    /// Whether the admitting door was halted since (set in the same hold of
+    /// the runs lock that marks the door halted and cancels its runs).
+    pub(crate) fn door_halted(&self) -> bool {
+        self.door_halted.load(Ordering::SeqCst)
+    }
+}
+
 /// Most yeses one door caches, reserved slots included (H1′): the next is
 /// refused before the Owner is asked.
 pub(crate) const MAX_CONSENTS: usize = 64;
@@ -200,6 +220,9 @@ struct DoorEntry {
     active: bool,
     /// M2c PR-B: halted (final): its runs refuse every admission.
     halted: bool,
+    /// M2e-B: `halted`, readable without the lock by an admitted model
+    /// call (set in the same hold that sets `halted`).
+    halt_flag: Arc<AtomicBool>,
     members: BTreeSet<RunId>,
     /// M2d-B1 (H1′): the Owner's yeses cached at this door.
     consents: Vec<Consent>,
@@ -415,6 +438,7 @@ impl RunRegistry {
             groups: group.into_iter().collect(),
             files_admission: None,
             inference_admission: None,
+            model_attempts: 0,
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -475,6 +499,7 @@ impl RunRegistry {
                 agent: agent.clone(),
                 active: false,
                 halted: false,
+                halt_flag: Arc::new(AtomicBool::new(false)),
                 members: BTreeSet::new(),
                 consents: Vec::new(),
                 pending_consents: 0,
@@ -575,6 +600,7 @@ impl RunRegistry {
         entry.consents.clear();
         if newly {
             entry.halted = true;
+            entry.halt_flag.store(true, Ordering::SeqCst);
             // A door's record: its agent, its opaque id and a reason code.
             let mut record = EvidenceRecord::new(
                 EvidencePhase::DoorHalted,
@@ -924,26 +950,23 @@ impl RunRegistry {
         })
     }
 
-    /// M2d-B1 (A3, H1′), a door's admission of `run` for Files, in one hold
-    /// of the runs lock: no Stop, not quitting; the door live, issued, not
-    /// halted and `agent`'s; the run `agent`'s agent run, listing the
-    /// group, in no halted group, neither finished nor cancelled; a yes to
-    /// exactly `contract_hash` and `request` cached at this door in the
-    /// current lifetime. Then the binding is installed, once: the same
-    /// admission again is the same binding, another is refused. Any refusal
-    /// changes nothing.
+    /// M2d-B1 (A3, H1′) and M2e-B, what a door's admission of `run`
+    /// shares, under the runs lock the caller holds: no Stop, not quitting;
+    /// the door live, issued, not halted and `agent`'s; the run `agent`'s
+    /// agent run, listing the group, in no halted group, neither finished
+    /// nor cancelled; a yes to exactly `contract_hash` and `request` cached
+    /// at this door in the current lifetime, which is returned. Changes
+    /// nothing.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn admit_files(
+    fn admissible(
         &self,
+        table: &mut Table,
         run: RunId,
         agent: &AgentId,
         group: GroupId,
         contract_hash: &str,
         request: &str,
-        workspace: AdmittedWorkspace,
-    ) -> Result<FilesAdmission, AuthorityError> {
-        let mut guard = self.runs.lock().expect("runs");
-        let table = &mut *guard;
+    ) -> Result<Consent, AuthorityError> {
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -962,25 +985,27 @@ impl RunRegistry {
             .find(|c| c.life == now && c.contract_hash == contract_hash && c.request == request)
             .cloned();
         let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
-        if &entry.view.agent != agent {
-            return Err(AuthorityError::WrongAgent);
-        }
-        if entry.class != RunClass::Agent {
-            return Err(AuthorityError::WrongRun);
-        }
-        if !entry.groups.contains(&group) {
-            return Err(AuthorityError::NotMember);
-        }
-        if table.in_halted_group(entry) {
-            return Err(AuthorityError::Halted);
-        }
-        if entry.view.finished {
-            return Err(AuthorityError::RunNotActive);
-        }
-        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
-            return Err(AuthorityError::RunCancelled);
-        }
-        let consent = consent.ok_or(AuthorityError::NoConsent)?;
+        live_member(table, entry, agent, group)?;
+        consent.ok_or(AuthorityError::NoConsent)
+    }
+
+    /// M2d-B1 (A3, H1′), a door's admission of `run` for Files, in one hold
+    /// of the runs lock: [`Self::admissible`]. Then the binding is
+    /// installed, once: the same admission again is the same binding,
+    /// another is refused. Any refusal changes nothing.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn admit_files(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+        contract_hash: &str,
+        request: &str,
+        workspace: AdmittedWorkspace,
+    ) -> Result<FilesAdmission, AuthorityError> {
+        let mut guard = self.runs.lock().expect("runs");
+        let table = &mut *guard;
+        let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
         let admission = FilesAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1004,6 +1029,93 @@ impl RunRegistry {
                 Ok(admission)
             }
         }
+    }
+
+    /// M2e-B (design v2 §8), a door's admission of `run` for inference, in
+    /// one hold of the runs lock: [`Self::admissible`] (every H1′ rule,
+    /// shared with Files). Then the binding to the yes and to `identity`
+    /// is installed, once: the same admission again is the same binding,
+    /// another is refused. Any refusal changes nothing.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn admit_inference(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+        contract_hash: &str,
+        request: &str,
+        identity: [u8; 32],
+    ) -> Result<InferenceAdmission, AuthorityError> {
+        let mut guard = self.runs.lock().expect("runs");
+        let table = &mut *guard;
+        let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
+        let admission = InferenceAdmission {
+            contract_hash: consent.contract_hash,
+            request: consent.request,
+            evidence_seq: consent.evidence_seq,
+            kind: consent.kind,
+            consented_wall_ms: consent.at_wall_ms,
+            identity,
+        };
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        match &entry.inference_admission {
+            Some(bound)
+                if bound.contract_hash == admission.contract_hash
+                    && bound.request == admission.request
+                    && bound.identity == admission.identity =>
+            {
+                Ok(bound.clone())
+            }
+            Some(_) => Err(AuthorityError::AlreadyAdmitted),
+            None => {
+                entry.inference_admission = Some(admission.clone());
+                Ok(admission)
+            }
+        }
+    }
+
+    /// M2e-B (design v2 §6 step 3), a door's model call on `run`, in one
+    /// hold of the runs lock: no Stop, not quitting; the door live, issued,
+    /// not halted and `agent`'s; the run `agent`'s agent run, listing the
+    /// group, in no halted group, neither finished nor cancelled; its
+    /// inference admission for `identity`; fewer than
+    /// [`MAX_MODEL_ATTEMPTS`] attempts so far. The attempt is then counted
+    /// (never refunded) and the run's token and the door's halt flag are
+    /// returned. Any refusal changes nothing.
+    pub(crate) fn admit_model_call(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+        identity: &[u8; 32],
+    ) -> Result<CallTicket, AuthorityError> {
+        let mut guard = self.runs.lock().expect("runs");
+        let table = &mut *guard;
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let door_halted = live_door(&mut table.doors, group, agent)?.halt_flag.clone();
+        let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        live_member(table, entry, agent, group)?;
+        let admission = entry
+            .inference_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        if &admission.identity != identity {
+            return Err(AuthorityError::ModelIdentityMismatch);
+        }
+        if entry.model_attempts >= MAX_MODEL_ATTEMPTS {
+            return Err(AuthorityError::ModelCall(ModelError::OverBudget));
+        }
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        entry.model_attempts += 1;
+        Ok(CallTicket {
+            token: CancelToken(entry.cancelled.clone()),
+            door_halted,
+        })
     }
 
     /// M2d-B1: `run`'s Files admission, if it has one.
@@ -1084,6 +1196,35 @@ fn live_door<'a>(
         Some(door) if door.active && door.alive() && &door.agent == agent => Ok(door),
         _ => Err(AuthorityError::NotMember),
     }
+}
+
+/// `entry` is `agent`'s agent run, lists `group`, is in no halted group
+/// and is neither finished nor cancelled. Under the runs lock.
+fn live_member(
+    table: &Table,
+    entry: &RunEntry,
+    agent: &AgentId,
+    group: GroupId,
+) -> Result<(), AuthorityError> {
+    if &entry.view.agent != agent {
+        return Err(AuthorityError::WrongAgent);
+    }
+    if entry.class != RunClass::Agent {
+        return Err(AuthorityError::WrongRun);
+    }
+    if !entry.groups.contains(&group) {
+        return Err(AuthorityError::NotMember);
+    }
+    if table.in_halted_group(entry) {
+        return Err(AuthorityError::Halted);
+    }
+    if entry.view.finished {
+        return Err(AuthorityError::RunNotActive);
+    }
+    if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
+        return Err(AuthorityError::RunCancelled);
+    }
+    Ok(())
 }
 
 /// A slot reserved at a door for a yes whose dialog is open (H1′). Filled,

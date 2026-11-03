@@ -403,6 +403,53 @@ impl Authority {
         self.record_end(&record)
     }
 
+    /// M2e-B: the one builder of the model records. Restricted: a door's
+    /// run is an agent's, and the registration names no run; its detail
+    /// is the registered counts, digests and codes only.
+    fn model_record(
+        &self,
+        phase: EvidencePhase,
+        run: Option<RunId>,
+        agent: Option<&AgentId>,
+        detail: Vec<(String, String)>,
+    ) -> EvidenceRecord {
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Restricted,
+        );
+        record.run = run.map(|run| run.to_string());
+        record.agent = agent.map(ToString::to_string);
+        record.detail = detail;
+        record
+    }
+
+    /// M2e-B: the host registered the process's model (a gating record:
+    /// unrecorded, the model is not registered).
+    pub(crate) fn record_model_registered(
+        &self,
+        detail: Vec<(String, String)>,
+    ) -> Result<(), AuthorityError> {
+        self.record(&self.model_record(EvidencePhase::ModelRegistered, None, None, detail))
+    }
+
+    /// M2e-B: one attempted model call of `run` (an end record: the call
+    /// has happened).
+    pub(crate) fn record_model_call(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        detail: Vec<(String, String)>,
+    ) -> EndStatus {
+        self.record_end(&self.model_record(
+            EvidencePhase::ModelCall,
+            Some(run),
+            Some(agent),
+            detail,
+        ))
+    }
+
     /// Whether the evidence store requires the owner's acknowledgement of
     /// unsettled actions before anything is admitted (EL-1 §7).
     pub fn recovery_required(&self) -> bool {

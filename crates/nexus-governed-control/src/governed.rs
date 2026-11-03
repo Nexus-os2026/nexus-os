@@ -865,14 +865,27 @@ impl GovernedControl {
     }
 
     /// M2e-B (design v2 §8): register the process's one local model, the
-    /// host's own (no door route).
+    /// host's own selection (no door route), at the loopback `endpoint`,
+    /// pinned to `spec`. The kernel transport verifies it with no broker
+    /// lock held, under a watch of this front door's kernel stop, the
+    /// session's end and an absolute 30 s deadline: the runtime's version
+    /// and cloud status, the model's name, digest, description and
+    /// capabilities. Refused under Stop, while quitting, off loopback, for
+    /// a second model, and on any mismatch (its `model_<code>` class). The
+    /// registration is recorded first (Restricted: the manifest digest and
+    /// the identity digest); unrecorded, there is no model. Nothing is
+    /// persisted: after a restart the host registers it again.
     pub fn register_local_model(
         &self,
         endpoint: &str,
         spec: nexus_kernel::inference::ModelPinSpec,
     ) -> Result<crate::inference::ModelIdentityView, AuthorityError> {
-        self.models
-            .register(endpoint, &spec, self.kernel_stop.authority())
+        self.models.register(
+            self.authority(),
+            endpoint,
+            &spec,
+            self.kernel_stop.authority(),
+        )
     }
 
     /// M2e-B: the registered local model, if any.

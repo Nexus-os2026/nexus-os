@@ -148,8 +148,9 @@ const SERVICES: &[&str] = &["Gmail", "Outlook", "Slack", "Discord"];
 const AREAS: &[&str] = &["cognitive_loop", "coding", "model_call"];
 /// The `class` a run-opened record names.
 const RUN_CLASSES: &[&str] = &["owner"];
-/// Operations named in detail (M2d: a Files create).
-const OPERATIONS: &[&str] = &["create"];
+/// Operations named in detail (M2d: a Files create; M2e-B: a model
+/// call).
+const OPERATIONS: &[&str] = &["create", "model_call"];
 /// What interrupted a Files publication after its final check (Codex
 /// review 1 of PR #64, H3; the kernel's interruption causes).
 const INTERRUPTIONS: &[&str] = &[
@@ -198,6 +199,12 @@ pub(crate) fn is_held_reason(text: &str) -> bool {
 fn registered(key: &str) -> Option<Kept> {
     Some(match key {
         "status" | "bytes" | "redirects" | "lines" => Kept::Count,
+        // M2e-B: a model call's counts and host monotonic times (ms).
+        "call" | "prompt_bytes" | "tokens_in" | "tokens_out" | "latency_ms"
+        | "returned_mono_ms" | "sent_mono_ms" => Kept::Count,
+        // M2e-B: the model's manifest digest and its identity digest.
+        "model_digest" | "identity" => Kept::Sha256,
+        "outcome" => Kept::Code(&crate::inference::OUTCOMES),
         "lease" => Kept::Lease,
         "door" => Kept::Door,
         // The Owner's answers at a door's mission and held-mission dialogs
