@@ -117,37 +117,50 @@ fn g0_helper_role() {
 }
 
 /// The process group a cleanup may signal, from the pid of a child this
-/// test spawned in its own group. (Oracle commit of decision 3: unchecked,
-/// as before.)
+/// test spawned in its own group. Never 0 or 1 (which would signal every
+/// process this user owns), never out of range, never this test's own
+/// group.
 fn checked_pgid(pid: u32) -> Result<i32, String> {
-    Ok(pid as i32)
+    let pgid =
+        i32::try_from(pid).map_err(|_| format!("refusing process group {pid}: out of range"))?;
+    if pgid <= 1 {
+        return Err(format!(
+            "refusing process group {pgid}: never a broadcast or init's group"
+        ));
+    }
+    if pgid == nix::unistd::getpgrp().as_raw() {
+        return Err(format!(
+            "refusing process group {pgid}: it is this test's own"
+        ));
+    }
+    Ok(pgid)
 }
 
-/// What a group signal's result means. (Oracle commit: discarded, as
-/// before.)
+/// What a group signal's result means: delivered, or the group no longer
+/// exists (ESRCH: gone). Any other error is a failure.
 fn signal_outcome(result: Result<(), nix::errno::Errno>, pgid: i32) -> Result<(), String> {
-    let _ = (result, pgid);
-    Ok(())
+    match result {
+        Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
+        Err(error) => Err(format!("signalling process group {pgid} failed: {error}")),
+    }
 }
 
-/// SIGKILL to the owned process group of the child `pid`. (Oracle commit:
-/// still the external `kill` command, its result discarded.)
+/// SIGKILL to the owned process group of the child `pid`, natively, its
+/// result checked.
 fn signal_group(pid: u32) -> Result<(), String> {
     let pgid = checked_pgid(pid)?;
-    let _ = Command::new("kill")
-        .args(["-KILL", "--", &format!("-{pgid}")])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    Ok(())
+    let result = nix::sys::signal::killpg(
+        nix::unistd::Pid::from_raw(pgid),
+        nix::sys::signal::Signal::SIGKILL,
+    );
+    signal_outcome(result, pgid)
 }
 
 /// Kill the owned child's whole process group, then reap the child; the
-/// cleanup is bounded by `within`.
+/// whole cleanup, signal included, is bounded by one deadline, `within`.
 fn kill_and_reap_within(child: &mut Child, within: Duration) -> Result<(), String> {
-    signal_group(child.id())?;
     let deadline = Instant::now() + within;
+    signal_group(child.id())?;
     loop {
         match child.try_wait() {
             Ok(Some(_)) => return Ok(()),
