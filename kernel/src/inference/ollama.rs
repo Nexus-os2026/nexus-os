@@ -94,6 +94,7 @@ impl VerifiedOllama {
             cancel,
             deadline,
             stop,
+            observer: None,
         };
         check_runtime(&endpoint, &identity, &guard)?;
         check_show(&endpoint, &identity, &guard)?;
