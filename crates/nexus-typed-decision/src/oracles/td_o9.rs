@@ -142,6 +142,9 @@ fn td_o9_the_sentinel_table() {
     );
 }
 
+/// What A is for each fact: a reading, or the failure that stands for it.
+type PerFact = [Result<Reading, Failure>; 3];
+
 /// §2.3's per-fact table, restated.
 fn fact(d: Check, a: Result<Reading, Failure>) -> Disposition {
     match (d, a) {
@@ -166,7 +169,7 @@ fn td_o9_the_verifier_table() {
         .collect();
     let other = wrong_set();
     // Per fact, what A is for each advice.
-    let mut advices: Vec<(Option<Advice<'_>>, [Result<Reading, Failure>; 3])> = vec![
+    let mut advices: Vec<(Option<Advice<'_>>, PerFact)> = vec![
         (None, [Err(Failure::Missing); 3]),
         (Some(Advice::Decided(&other)), [Err(Failure::Missing); 3]),
     ];
