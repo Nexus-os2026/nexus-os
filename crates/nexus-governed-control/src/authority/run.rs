@@ -97,6 +97,8 @@ struct RunEntry {
     groups: Vec<GroupId>,
     /// M2d-B1: the run's Files admission, set once and never changed.
     files_admission: Option<FilesAdmission>,
+    /// M2e-B: the run's inference admission, set once and never changed.
+    inference_admission: Option<InferenceAdmission>,
 }
 
 /// M2d-B1: which yes of the Owner's a cached consent is.
@@ -158,6 +160,19 @@ pub(crate) struct FilesAdmission {
     pub(crate) kind: ConsentKind,
     pub(crate) consented_wall_ms: u64,
     pub(crate) workspace: AdmittedWorkspace,
+}
+
+/// M2e-B (design v2 §8): a run's inference admission: the Owner's yes it
+/// rests on (as for Files) and the model identity it was admitted for.
+/// Installed once; never changed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct InferenceAdmission {
+    pub(crate) contract_hash: String,
+    pub(crate) request: String,
+    pub(crate) evidence_seq: u64,
+    pub(crate) kind: ConsentKind,
+    pub(crate) consented_wall_ms: u64,
+    pub(crate) identity: [u8; 32],
 }
 
 /// Most yeses one door caches, reserved slots included (H1′): the next is
@@ -399,6 +414,7 @@ impl RunRegistry {
             cancelled: Arc::new(AtomicBool::new(false)),
             groups: group.into_iter().collect(),
             files_admission: None,
+            inference_admission: None,
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -997,6 +1013,15 @@ impl RunRegistry {
             .ok()?
             .get(&run)
             .and_then(|entry| entry.files_admission.clone())
+    }
+
+    /// M2e-B: `run`'s inference admission, if it has one.
+    pub(crate) fn inference_admission(&self, run: RunId) -> Option<InferenceAdmission> {
+        self.runs
+            .lock()
+            .ok()?
+            .get(&run)
+            .and_then(|entry| entry.inference_admission.clone())
     }
 
     /// The yeses cached at `group` (tests).

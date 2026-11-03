@@ -55,6 +55,13 @@ pub enum EvidencePhase {
     /// Mother Nexus M2c PR-B: an agent door was halted (it took effect
     /// first): the door's opaque id and the reason.
     DoorHalted,
+    /// M2e-B: the Owner's host registered the process's one local model:
+    /// its manifest digest and its identity digest.
+    ModelRegistered,
+    /// M2e-B: one attempted model call of a door's run: counts, digests,
+    /// the outcome's code and the host monotonic return time; never a
+    /// prompt, a reply or a model name.
+    ModelCall,
 }
 
 impl EvidencePhase {
@@ -88,6 +95,8 @@ impl EvidencePhase {
             EvidencePhase::MissionResumeConfirmed => "mission_resume_confirmed",
             EvidencePhase::MissionResumeDeclined => "mission_resume_declined",
             EvidencePhase::DoorHalted => "door_halted",
+            EvidencePhase::ModelRegistered => "model_registered",
+            EvidencePhase::ModelCall => "model_call",
         }
     }
 }

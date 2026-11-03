@@ -116,6 +116,9 @@ fn every_authority_class_and_halt_reason_is_a_registered_reason() {
         ChangeTooLargeToShow,
         UnsupportedMountTopology,
         RecoveryRequired,
+        ModelNotRegistered,
+        ModelIdentityMismatch,
+        ModelCall(nexus_kernel::inference::ModelError::Late),
         Closed(""),
         InvalidAction(""),
         Unavailable(""),
@@ -163,6 +166,9 @@ fn every_authority_class_and_halt_reason_is_a_registered_reason() {
             | ChangeTooLargeToShow
             | UnsupportedMountTopology
             | RecoveryRequired
+            | ModelNotRegistered
+            | ModelIdentityMismatch
+            | ModelCall(_)
             | Closed(_)
             | InvalidAction(_)
             | Unavailable(_)

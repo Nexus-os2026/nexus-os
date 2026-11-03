@@ -316,6 +316,50 @@ impl AgentDoor {
             .map(|_| ())
     }
 
+    /// M2e-B (design v2 §8): the registered local model, if any.
+    pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {
+        self.control
+            .registered_model()
+            .map(|model| model.view.clone())
+    }
+
+    /// M2e-B (design v2 §8): bind one of this door's runs, once, to the
+    /// Owner's yes cached at this door and to the registered model.
+    /// STUB: binds nothing and checks nothing.
+    pub fn admit_inference(
+        &self,
+        _run: RunId,
+        _contract_hash: &str,
+        _request: &str,
+        _expected_identity: [u8; 32],
+    ) -> Result<(), AuthorityError> {
+        Ok(())
+    }
+
+    /// M2e-B (design v2 §6 step 3, §8): one model call of one of this
+    /// door's runs. STUB: no admission, ceiling, cancellation or record.
+    pub fn model_call(
+        &self,
+        run: RunId,
+        request: &nexus_kernel::inference::ModelRequest,
+        meter: &dyn nexus_kernel::inference::CallMeter,
+        deadline: &dyn nexus_kernel::inference::CallDeadline,
+    ) -> Result<nexus_kernel::inference::ModelReply, AuthorityError> {
+        let model = self
+            .control
+            .registered_model()
+            .ok_or(AuthorityError::ModelNotRegistered)?;
+        crate::inference::call(
+            &model,
+            run,
+            &self.core.agent,
+            request,
+            meter,
+            deadline,
+            self.control.kernel_stop_authority(),
+        )
+    }
+
     /// The yeses cached at this door (tests).
     #[cfg(test)]
     pub(crate) fn consents_cached(&self) -> usize {

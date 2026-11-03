@@ -77,6 +77,31 @@ pub(crate) const REASONS: &[&str] = &[
     "file_exists",
     "change_too_large_to_show",
     "unsupported_mount_topology",
+    "model_not_registered",
+    "model_identity_mismatch",
+    "model_not_local",
+    "model_invalid_address",
+    "model_invalid_model_name",
+    "model_cloud_name",
+    "model_cloud_enabled",
+    "model_not_installed",
+    "model_digest_mismatch",
+    "model_runtime_mismatch",
+    "model_remote",
+    "model_config_mismatch",
+    "model_unavailable",
+    "model_timeout",
+    "model_request_too_large",
+    "model_response_too_large",
+    "model_malformed",
+    "model_truncated",
+    "model_tool_calls",
+    "model_thinking_leaked",
+    "model_empty_content",
+    "model_over_budget",
+    "model_stopped",
+    "model_cancelled",
+    "model_late",
 ];
 
 /// Why the authority refused. The message is bounded and names no input.
@@ -129,6 +154,14 @@ pub enum AuthorityError {
     /// reached through a mount that is not a whole filesystem (a subtree
     /// bind mount), or the mount topology cannot be read or matched.
     UnsupportedMountTopology,
+    /// M2e-B: no local model is registered in this process.
+    ModelNotRegistered,
+    /// M2e-B: the model identity a caller expects is not the registered
+    /// one.
+    ModelIdentityMismatch,
+    /// M2e-B: the kernel's local model transport refused or ended a model
+    /// call or a registration (its fixed code only).
+    ModelCall(nexus_kernel::inference::ModelError),
     /// M2d-B2: a Files operation reached the Owner's workspace and its
     /// outcome is not established (a sync, a record or a cleanup failed):
     /// recovery is required, and nothing is called done.
@@ -181,6 +214,9 @@ impl AuthorityError {
             AuthorityError::ChangeTooLargeToShow => "change_too_large_to_show",
             AuthorityError::UnsupportedMountTopology => "unsupported_mount_topology",
             AuthorityError::RecoveryRequired => "recovery_required",
+            AuthorityError::ModelNotRegistered => "model_not_registered",
+            AuthorityError::ModelIdentityMismatch => "model_identity_mismatch",
+            AuthorityError::ModelCall(error) => crate::inference::model_class(*error),
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",

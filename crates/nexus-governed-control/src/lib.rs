@@ -470,6 +470,7 @@ pub mod evidence_store;
 pub mod executable;
 pub mod files;
 pub mod governed;
+pub mod inference;
 pub mod ingress;
 mod launcher;
 pub(crate) mod ledger;
