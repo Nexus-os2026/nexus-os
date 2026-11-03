@@ -19,7 +19,7 @@ use crate::coding_run::ledger::path_sha256;
 use crate::coding_run::scope::TEMP_PREFIX;
 use crate::emergency_stop::{StopAuthority, StopController};
 use std::cell::{Cell, RefCell};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::sync::Mutex;
@@ -56,7 +56,16 @@ struct Ws {
     broker_ctl: StopController,
 }
 
+/// A workspace in a process made non-dumpable, as the host does at startup
+/// before any Files work (Codex review 2 of PR #58). Process-wide and
+/// idempotent.
 fn new_ws() -> Ws {
+    nix::sys::prctl::set_dumpable(false).expect("PR_SET_DUMPABLE 0");
+    fixture_ws()
+}
+
+/// A workspace, the process left as it is.
+fn fixture_ws() -> Ws {
     let tmp = tempfile::tempdir().unwrap();
     let base = tmp.path().canonicalize().unwrap();
     let root = base.join("workspace");
@@ -1946,4 +1955,231 @@ fn m2d_a_d_o11_a_kept_owner_version_is_reported_never_as_cleanup() {
         std::fs::read_to_string(&kept).unwrap(),
         "the owner's version\n"
     );
+}
+
+// ── Added after Codex review 2 of PR #58: the process is non-dumpable ──────
+
+const HELPER_MODE: &str = "NEXUS_M2D_A_HELPER";
+
+fn child_line(lines: &mpsc::Receiver<String>, prefix: &str) -> String {
+    loop {
+        let line = lines
+            .recv_timeout(WAIT)
+            .unwrap_or_else(|_| panic!("the child never said {prefix}"));
+        // The harness may print its own text before ours on a line.
+        if let Some((_, rest)) = line.split_once(&format!("{prefix} ")) {
+            return rest.trim().to_string();
+        }
+    }
+}
+
+/// The test binary re-run as a held child in `mode`
+/// (`m2d_a_helper_child`), owned through `GuardedChild` and ended with
+/// `finish`; its stdout lines arrive on the receiver.
+fn helper_child(
+    mode: &str,
+) -> (
+    crate::emergency_stop::GuardedChild,
+    std::process::ChildStdin,
+    mpsc::Receiver<String>,
+) {
+    use crate::emergency_stop::{GuardedChild, HaltArea};
+    use std::io::BufRead as _;
+    let authority = StopAuthority::new();
+    let watch = authority.admit().unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "coding_run::tests::m2d_a::m2d_a_helper_child",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(HELPER_MODE, mode)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let (child, pipes) = GuardedChild::spawn(&mut command, &watch, HaltArea::Coding).unwrap();
+    let stdout = pipes.stdout.unwrap();
+    let (send, lines) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+        {
+            if send.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    (child, pipes.stdin.unwrap(), lines)
+}
+
+fn go(stdin: &mut std::process::ChildStdin) {
+    use std::io::Write as _;
+    stdin.write_all(b"GO\n").unwrap();
+    stdin.flush().unwrap();
+}
+
+fn wait_go() {
+    let mut line = String::new();
+    let _ = std::io::stdin().read_line(&mut line);
+}
+
+fn say(line: String) {
+    use std::io::Write as _;
+    println!("{line}");
+    std::io::stdout().flush().unwrap();
+}
+
+/// One observed publication in `ws`: its refusal code (or `-`), whether
+/// anything was published, whether the candidate step was ever reached,
+/// and whether an apply was prepared.
+fn attempt(ws: &Ws) -> String {
+    let (mut run, binding) = verified_file(ws);
+    let reached = Rc::new(Cell::new(false));
+    let saw = Rc::clone(&reached);
+    let result = with_hooks(
+        move |_, _| {
+            saw.set(true);
+            false
+        },
+        || ws.observed(&mut run, binding, &Guard::default()),
+    );
+    let code = result
+        .as_ref()
+        .err()
+        .and_then(ApplyError::detail_code)
+        .unwrap_or("-");
+    let prepared = ws.kinds(&run).iter().any(|k| k == "apply.prepared");
+    format!(
+        "code={code} published={} reached={} prepared={prepared} entries={}",
+        ws.root.join(NAME).exists(),
+        reached.get(),
+        entries(&ws.root).len()
+    )
+}
+
+/// The child side of the non-dumpable oracles; a no-op unless run by them.
+#[test]
+#[ignore]
+fn m2d_a_helper_child() {
+    let Ok(mode) = std::env::var(HELPER_MODE) else {
+        return;
+    };
+    match mode.as_str() {
+        // A fresh, dumpable process attempts one publication.
+        "dumpable" => {
+            let dumpable = nix::sys::prctl::get_dumpable().unwrap();
+            say(format!("DUMPABLE {dumpable}"));
+            say(format!("OUTCOME {}", attempt(&fixture_ws())));
+        }
+        "live" => {
+            say(format!("FIRST {}", attempt(&fixture_ws())));
+            // Control: while dumpable, another process of the same user can
+            // open an anonymous file of ours for writing.
+            let ws = fixture_ws();
+            let control = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .mode(0o600)
+                .custom_flags(nix::libc::O_TMPFILE)
+                .open(&ws.root)
+                .unwrap();
+            say(format!(
+                "CONTROL {} {}",
+                std::process::id(),
+                std::os::fd::AsRawFd::as_raw_fd(&control)
+            ));
+            wait_go();
+            drop(control);
+            nix::sys::prctl::set_dumpable(false).unwrap();
+            say(format!(
+                "NONDUMPABLE {}",
+                !nix::sys::prctl::get_dumpable().unwrap()
+            ));
+            let (mut run, binding) = verified_file(&ws);
+            let root = ws.root.clone();
+            let result = with_hooks(
+                move |point, _| {
+                    if point == HookPoint::BeforeFinalCheck {
+                        for fd in anonymous_files(&root) {
+                            say(format!("CANDIDATE {} {fd}", std::process::id()));
+                        }
+                        wait_go();
+                    }
+                    false
+                },
+                || ws.observed(&mut run, binding, &Guard::default()),
+            );
+            let content = std::fs::read(ws.root.join(NAME)).map(hex::encode);
+            say(format!(
+                "DONE ok={} content={}",
+                result.is_ok(),
+                content.unwrap_or_else(|_| "-".to_string())
+            ));
+        }
+        other => panic!("unknown helper mode {other}"),
+    }
+}
+
+/// Added after registration (Codex review 2 of PR #58, HIGH): in a process
+/// that is still dumpable, so that other processes of the same user could
+/// open its descriptors, the publication is refused before any candidate
+/// exists: nothing prepared, no candidate step, nothing published.
+#[test]
+fn m2d_a_a_a_dumpable_process_never_publishes() {
+    use crate::emergency_stop::ChildEnd;
+    let (child, _stdin, lines) = helper_child("dumpable");
+    assert_eq!(
+        child_line(&lines, "DUMPABLE"),
+        "true",
+        "the helper must start dumpable"
+    );
+    assert_eq!(
+        child_line(&lines, "OUTCOME"),
+        "code=ProcessDumpable published=false reached=false prepared=false entries=0"
+    );
+    assert!(matches!(child.finish(), ChildEnd::Exited(status) if status.success()));
+}
+
+/// Added after registration (Codex review 2 of PR #58, HIGH), live: a
+/// dumpable process is refused; once the process is non-dumpable, another
+/// process of the same user can no longer open its anonymous candidate for
+/// writing (control: it could while the process was dumpable), and the
+/// publication then succeeds with exactly the approved bytes.
+#[test]
+fn m2d_a_a_a_non_dumpable_process_keeps_its_candidate_to_itself() {
+    use crate::emergency_stop::ChildEnd;
+    let (child, mut stdin, lines) = helper_child("live");
+    let pid = child.id().to_string();
+    assert!(
+        child_line(&lines, "FIRST").starts_with("code=ProcessDumpable published=false"),
+        "a dumpable process published"
+    );
+    let open_for_writing = |line: String| {
+        let (owner, fd) = line.split_once(' ').unwrap();
+        assert_eq!(owner, pid);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(format!("/proc/{owner}/fd/{fd}"))
+    };
+    let control = open_for_writing(child_line(&lines, "CONTROL"));
+    assert!(control.is_ok(), "control: {control:?}");
+    go(&mut stdin);
+    assert_eq!(child_line(&lines, "NONDUMPABLE"), "true");
+    let refused = open_for_writing(child_line(&lines, "CANDIDATE"));
+    let error = refused.expect_err("another process opened the candidate for writing");
+    assert!(
+        matches!(error.raw_os_error(), Some(code) if code == nix::libc::EACCES || code == nix::libc::EPERM),
+        "{error:?}"
+    );
+    go(&mut stdin);
+    assert_eq!(
+        child_line(&lines, "DONE"),
+        format!("ok=true content={}", hex::encode(CONTENT))
+    );
+    drop(stdin);
+    assert!(matches!(child.finish(), ChildEnd::Exited(status) if status.success()));
 }
