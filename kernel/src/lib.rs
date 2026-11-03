@@ -27,6 +27,7 @@ pub mod governed_http;
 pub mod governed_path;
 pub mod hm;
 pub mod identity_home;
+pub mod inert_page;
 pub mod kill_gates;
 pub mod lifecycle;
 pub mod manifest;
