@@ -1675,3 +1675,55 @@ fn pr75_r1_m1_b_evidence_failing_during_a_call_is_reported_with_its_result() {
     );
     assert_eq!(f.fake.count("/api/chat"), chats, "no chat after the latch");
 }
+
+/// Architect decision on PR #75 (after Codex review 1, decision 1): while
+/// any record is owed, no new inference starts. A store holding an owed
+/// record (not latched) refuses a call and a registration with
+/// `evidence_unavailable`, before any attempt is counted and before any
+/// request or charge. Once a later record pays it, the run still has its
+/// remaining attempts: the refused call counted none.
+#[test]
+fn pr75_d1_an_owed_record_refuses_calls_and_registration_before_any_attempt() {
+    let scratch = Scratch::new();
+    let history = Arc::new(MemoryEvidence::new(10_000));
+    let primary = PrimaryEvidence::open(&scratch.store(), vec![history.clone()]).unwrap();
+    let f = Fx::over(primary.clone(), history);
+    f.register().unwrap();
+    let run = f.admitted(&f.door, 1);
+    let meter = Meter::new();
+    assert_eq!(class(f.call(run, &meter)), "ok", "control: attempt 1");
+
+    // A record the store does not commit now is owed; the store is not
+    // latched.
+    let other = f.door.open_run().unwrap();
+    primary.store().refuse_next_insert();
+    let _ = f.door.cancel_run(other).unwrap().write();
+    assert_eq!(primary.health().owed, 1);
+    assert!(!primary.health().latched);
+    let (requests, charged) = (f.fake.total(), meter.charged());
+    assert_eq!(class(f.call(run, &meter)), "evidence_unavailable");
+    assert_eq!(f.fake.total(), requests, "no request reached the runtime");
+    assert_eq!(meter.charged(), charged, "nothing was charged");
+
+    // A later record pays it first; then the run's attempts 2 to 8 run and
+    // the ninth is refused: the refused call was never an attempt.
+    let _ = f.door.open_run().unwrap();
+    assert_eq!(primary.health().owed, 0);
+    for n in 2..=8 {
+        assert_eq!(class(f.call(run, &meter)), "ok", "attempt {n}");
+    }
+    assert_eq!(class(f.call(run, &meter)), "model_over_budget");
+
+    // A registration while a record is owed asks the runtime nothing.
+    let scratch = Scratch::new();
+    let history = Arc::new(MemoryEvidence::new(10_000));
+    let primary = PrimaryEvidence::open(&scratch.store(), vec![history.clone()]).unwrap();
+    let g = Fx::over(primary.clone(), history);
+    let run = g.door.open_run().unwrap();
+    primary.store().refuse_next_insert();
+    let _ = g.door.cancel_run(run).unwrap().write();
+    assert_eq!(primary.health().owed, 1);
+    assert_eq!(class(g.register()), "evidence_unavailable");
+    assert_eq!(g.fake.total(), 0, "no request reached the runtime");
+    assert_eq!(g.door.model_identity(), None);
+}
