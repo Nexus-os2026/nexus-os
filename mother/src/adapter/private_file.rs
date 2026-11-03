@@ -12,7 +12,9 @@
 //! or stricter and of the store's owner: every directory Mother creates
 //! is one), and that root's parent. Every put, after its blob's rename,
 //! syncs every directory of the chain, from the top down, and then the
-//! kind directory. Whoever created a directory, and however the path was
+//! kind directory. The chain stops only at a verified boundary (a
+//! directory read successfully and not private to the store's owner); a
+//! level whose metadata cannot be read fails the open. Whoever created a directory, and however the path was
 //! spelled, its link is durable before the put returns. Nothing about
 //! durability is remembered between calls or shared between stores. A
 //! missing level is created on its own (0700) and synced with its parent
@@ -146,21 +148,44 @@ fn private_dir(dir: &Path, owner: Option<u32>) -> Result<u32, PrivateError> {
     }
 }
 
+/// Whether `dir`, read successfully, is a private directory of `owner`
+/// (0700 or stricter). `Ok(false)` only for a verified boundary: a
+/// directory that exists, was read, and is not private to `owner`. A read
+/// that fails, or anything but a directory, is an error.
+fn private_and_owned(dir: &Path, owner: u32) -> Result<bool, PrivateError> {
+    let meta = metadata(dir).map_err(io)?;
+    if !meta.is_dir() {
+        return Err(PrivateError::NotPrivate);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        Ok(meta.permissions().mode() & 0o077 == 0 && meta.uid() == owner)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = owner;
+        Ok(false)
+    }
+}
+
 /// The chain above the canonical store directory `dir`: `dir`, each
 /// directory above it while that directory is private and `owner`'s
 /// (Mother's home root is the last), and then the next one up (that
-/// root's parent), unless the root is the file system's root.
-fn chain_of(dir: &Path, owner: u32) -> Vec<PathBuf> {
+/// root's parent, a verified boundary), unless the root is the file
+/// system's root. Every read error is returned: the chain is never cut
+/// short by a level that could not be read.
+fn chain_of(dir: &Path, owner: u32) -> Result<Vec<PathBuf>, PrivateError> {
     let mut chain = vec![dir.to_path_buf()];
     let mut at = dir;
     while let Some(parent) = at.parent() {
         chain.push(parent.to_path_buf());
-        if private_dir(parent, Some(owner)).is_err() {
+        if !private_and_owned(parent, owner)? {
             break;
         }
         at = parent;
     }
-    chain
+    Ok(chain)
 }
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
@@ -173,7 +198,7 @@ impl FilePrivate {
         let owner = private_dir(dir, None)?;
         let dir = std::fs::canonicalize(dir).map_err(io)?;
         private_dir(&dir, Some(owner))?;
-        let chain = chain_of(&dir, owner);
+        let chain = chain_of(&dir, owner)?;
         for level in chain.iter().rev() {
             sync_dir(level).map_err(io)?;
         }
