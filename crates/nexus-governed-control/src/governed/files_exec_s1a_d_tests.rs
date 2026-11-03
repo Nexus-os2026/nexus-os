@@ -18,6 +18,9 @@
 //! A child of the B2 oracles, for their fixture (`Fx`, `Owner`, `Cause`);
 //! its own fixture adds the facts to the Owner's consent.
 
+#[path = "files_exec_s1a_d_review1_tests.rs"]
+mod review1;
+
 use super::*;
 use crate::authority::approval::{FactsView, FACTS_BLOCK_TITLE};
 use crate::authority::ids::{random16, Digest};

@@ -85,9 +85,9 @@ use nexus_kernel::coding_run::ProjectGrant;
 use nexus_kernel::coding_run::{
     analyze_apply, ApplyError, ApplyFinding, ApplyInterrupt, ApplyState, CandidateEdit, ChangeKind,
     CleanupStatus, CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InertPageError,
-    InertPageResult, InterruptCause, LedgerFailure, LedgerFile, OwnerConfirmer, PreparedFile,
-    ProjectError, ProjectInfo, ProjectRegistry, Refusal, RelPath, RevocationReason, RunError,
-    RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft, VerifierMarker,
+    InertPageResult, InterruptCause, LedgerFailure, LedgerFile, ManifestEntry, OwnerConfirmer,
+    PreparedFile, ProjectError, ProjectInfo, ProjectRegistry, Refusal, RelPath, RevocationReason,
+    RunError, RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft, VerifierMarker,
 };
 use nexus_kernel::emergency_stop::StopAuthority;
 #[cfg(target_os = "linux")]
@@ -755,8 +755,9 @@ struct FilesEffect {
     bytes: u64,
     lines: usize,
     sha256: String,
-    /// The SHA-256 of the staged content (`sha256`'s bytes).
-    digest: [u8; 32],
+    /// The reviewed candidate's manifest entry: its SHA-256 and size, equal
+    /// to the input shown (checked at prepare).
+    candidate: ManifestEntry,
     /// S1a-D: a page's recorded inert page pass, as prepare's check
     /// returned it (`None` for plain text). Its binding hash is the review's
     /// marker, so the Owner's approval covers it.
@@ -1179,18 +1180,16 @@ impl PendingEffect for FilesEffect {
                 .expect("files closed")
                 .insert(self.broker_run);
         }
-        // S1a-D+B (M3 §6.2): the receipt, from the staged candidate the
-        // kernel published and, for a page, its inert verdict; overtaken
+        // S1a-D+B (M3 §6.2): the receipt, from the verified candidate the
+        // kernel published (for either class; a page's verdict names the
+        // same bytes) and, for a page, its verdict's policy; overtaken
         // exactly when this effect reports an interruption beside its
         // success (the same codes its end record carries).
         shared.receipt(
             guard.commitment(),
             FileReceipt {
-                sha256: self
-                    .page
-                    .as_ref()
-                    .map_or(self.digest, |page| page.page.candidate_sha256),
-                bytes: self.bytes,
+                sha256: self.candidate.sha256,
+                bytes: self.candidate.size,
                 policy_hash: self.page.as_ref().map(|page| page.page.policy_hash),
                 overtaken: !interrupted.is_empty(),
             },
@@ -1598,15 +1597,19 @@ fn finding(finding: ApplyFinding) -> RecoveryFinding {
 /// Returns the review's full hash. S1a-D (§7 step 2): a page is checked
 /// once, after structural verification, with `facts` (its admission's);
 /// its review must then name exactly that pass, and plain text's no
-/// verification. The page's pass is returned with the hash.
+/// verification. The page's pass is returned with the hash. Codex review 1
+/// of PR #74: for either class, the reviewed candidate (the bytes the
+/// kernel verified and would publish) must be exactly the input the Owner
+/// is shown, its SHA-256 and size; its entry is returned too, for the
+/// receipt.
 #[cfg(target_os = "linux")]
 fn stage_one(
     run: &mut CodingRun,
-    staging: &StagingParent,
+    (staging, _shared): (&StagingParent, &Shared),
     path: &RelPath,
     content: &[u8],
     (class, facts): (FileClass, Option<ApprovedFacts>),
-) -> Result<([u8; 32], Option<InertPageResult>), AuthorityError> {
+) -> Result<([u8; 32], Option<InertPageResult>, ManifestEntry), AuthorityError> {
     run.grant(staging).map_err(run_error)?;
     run.snapshot().map_err(run_error)?;
     run.edit(CandidateEdit::Create {
@@ -1614,6 +1617,8 @@ fn stage_one(
         content: content.to_vec(),
     })
     .map_err(run_error)?;
+    #[cfg(test)]
+    _shared.fire(crate::test_hooks::at::FILE_STAGED);
     if !run.verify_structural().map_err(run_error)?.passed() {
         return Err(refused("the file is not plain new text"));
     }
@@ -1648,11 +1653,18 @@ fn stage_one(
             "the review does not name the file's check",
         ));
     }
-    match review.single_complete() {
-        Some(only) if &only.path == path && only.kind == ChangeKind::Create => {
-            Ok((review.binding.hash(), page))
+    let only = match review.single_complete() {
+        Some(only) if &only.path == path && only.kind == ChangeKind::Create => only,
+        _ => return Err(AuthorityError::ChangeTooLargeToShow),
+    };
+    // The verified, reviewed candidate is the input shown, for either
+    // class: a same-UID edit of the staging before its verification is
+    // refused here, before any commitment.
+    match &only.new {
+        Some(entry) if entry.sha256 == digest && entry.size == content.len() as u64 => {
+            Ok((review.binding.hash(), page, entry.clone()))
         }
-        _ => Err(AuthorityError::ChangeTooLargeToShow),
+        Some(_) | None => Err(AuthorityError::TargetChanged),
     }
 }
 
@@ -2649,9 +2661,9 @@ impl Files {
             .expect("files hook")
             .take()
             .unwrap_or(facts);
-        let (review_hash, page) = match stage_one(
+        let (review_hash, page, candidate) = match stage_one(
             &mut staged,
-            &backend.staging,
+            (&backend.staging, &self.shared),
             &path,
             create.content.as_bytes(),
             (class, facts),
@@ -2695,10 +2707,7 @@ impl Files {
             bytes: create.content.len() as u64,
             lines: line_count(&create.content),
             sha256: sha256_hex(create.content.as_bytes()),
-            digest: {
-                use sha2::{Digest as _, Sha256};
-                Sha256::digest(create.content.as_bytes()).into()
-            },
+            candidate,
             page,
             target,
         };
