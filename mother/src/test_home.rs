@@ -5,7 +5,7 @@
 //! ports get their doors from the test helpers, each with the Owner's
 //! stated answer.
 
-use crate::adapter::{create_private, FileJournal};
+use crate::adapter::{create_private, FileJournal, FilePrivate};
 use crate::journal::JournalError;
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::evidence::{
@@ -85,6 +85,11 @@ impl TestHome {
 
     pub fn journal(&self) -> Result<FileJournal, JournalError> {
         FileJournal::open(&self.journal_path())
+    }
+
+    /// P0: Mother's private store in this home.
+    pub fn private(&self) -> FilePrivate {
+        FilePrivate::open(&self.dir.join("private")).expect("the private store opens")
     }
 }
 

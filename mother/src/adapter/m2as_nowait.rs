@@ -241,6 +241,7 @@ fn withdraw_asks_the_broker_for_a_handed_commitment(control: &Arc<GovernedContro
         port.clone(),
         Lanes::new(keyed_lanes()).unwrap(),
         Arc::new(SystemClock::default()),
+        crate::oracles::test_private(),
     )
     .unwrap();
     let approve = |markers: &str| {

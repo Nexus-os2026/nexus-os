@@ -109,7 +109,14 @@ fn a_doubly_claimed_live_action_fails_the_open_closed(
     let port = Arc::new(port_for(control, true));
     let lanes = || Lanes::new(keyed_lanes()).unwrap();
     let clock = || Arc::new(SystemClock::default());
-    let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
+    let mother = Coordinator::open(
+        journal.clone(),
+        port.clone(),
+        lanes(),
+        clock(),
+        crate::oracles::test_private(),
+    )
+    .unwrap();
     let mut ids = Vec::new();
     for n in 0..2 {
         let id = mother
@@ -147,7 +154,7 @@ fn a_doubly_claimed_live_action_fails_the_open_closed(
                 *id,
                 Event::Transition {
                     trigger: Trigger::Stop {
-                        reason: "owner".into(),
+                        reason: crate::evidence::StopReason::Owner,
                     },
                 },
             )
@@ -160,7 +167,14 @@ fn a_doubly_claimed_live_action_fails_the_open_closed(
     // the request back, so it cannot be withdrawn: the open fails closed.
     let rebuilt = Arc::new(port_for(control, true));
     assert!(
-        Coordinator::open(journal.clone(), rebuilt.clone(), lanes(), clock()).is_err(),
+        Coordinator::open(
+            journal.clone(),
+            rebuilt.clone(),
+            lanes(),
+            clock(),
+            crate::oracles::test_private()
+        )
+        .is_err(),
         "an open succeeded with a journaled request it could not withdraw"
     );
 

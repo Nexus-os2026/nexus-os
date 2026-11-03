@@ -775,10 +775,13 @@ fn open_in(
         port: port.clone(),
         appends: appends.clone(),
     };
+    let private =
+        super::FilePrivate::open(&dir.join("private")).map_err(CoordinatorError::Private)?;
     Coordinator::open(
         store,
         port.clone(),
         Lanes::new(lanes.to_vec()).unwrap(),
         clock.clone(),
+        private,
     )
 }

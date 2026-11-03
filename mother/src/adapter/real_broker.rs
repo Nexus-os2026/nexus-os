@@ -85,6 +85,7 @@ fn open_mother(home: &Home, port: &Arc<GovernedPort>) -> Coordinator<GovernedPor
         port.clone(),
         Lanes::new(keyed_lanes()).unwrap(),
         Arc::new(SystemClock::default()),
+        home.private(),
     )
     .unwrap()
 }
@@ -216,6 +217,7 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
             port.clone(),
             Lanes::new(keyed_lanes()).unwrap(),
             Arc::new(SystemClock::default()),
+            w.home.private(),
         )
         .unwrap()
     };
@@ -819,7 +821,14 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
     let scene = |round: usize| {
         let journal = MemoryJournal::new();
         let port = Arc::new(port_for(control, true));
-        let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
+        let mother = Coordinator::open(
+            journal.clone(),
+            port.clone(),
+            lanes(),
+            clock(),
+            crate::oracles::test_private(),
+        )
+        .unwrap();
         let mut requests = Vec::new();
         for n in 1..=3u64 {
             let id = mother
@@ -856,7 +865,7 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
             MissionId(1),
             Event::Transition {
                 trigger: Trigger::Stop {
-                    reason: "owner".into(),
+                    reason: crate::evidence::StopReason::Owner,
                 },
             },
         );
@@ -891,7 +900,14 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
     let journal = MemoryJournal::new();
     journal.set_lines(lines.clone());
     let port = Arc::new(port_for(control, true));
-    let mother = Coordinator::open(journal.clone(), port, lanes(), clock()).unwrap();
+    let mother = Coordinator::open(
+        journal.clone(),
+        port,
+        lanes(),
+        clock(),
+        crate::oracles::test_private(),
+    )
+    .unwrap();
     let appends = journal.lines().len() - lines.len();
     assert!(appends >= 3, "{appends}");
     assert_eq!(
@@ -921,7 +937,14 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
         journal.fail_after(n);
         let port = Arc::new(port_for(control, true));
         assert!(
-            Coordinator::open(journal, port, lanes(), clock()).is_err(),
+            Coordinator::open(
+                journal,
+                port,
+                lanes(),
+                clock(),
+                crate::oracles::test_private()
+            )
+            .is_err(),
             "append {n} failed, yet open succeeded"
         );
         for (i, request) in requests.into_iter().enumerate() {
@@ -945,7 +968,14 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
     let scene = |round: usize| {
         let journal = MemoryJournal::new();
         let port = Arc::new(port_for(control, true));
-        let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
+        let mother = Coordinator::open(
+            journal.clone(),
+            port.clone(),
+            lanes(),
+            clock(),
+            crate::oracles::test_private(),
+        )
+        .unwrap();
         let mut requests = Vec::new();
         for n in 1..=2u64 {
             let id = mother
@@ -990,7 +1020,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
             MissionId(2),
             Event::Transition {
                 trigger: Trigger::Stop {
-                    reason: "owner".into(),
+                    reason: crate::evidence::StopReason::Owner,
                 },
             },
         );
@@ -999,11 +1029,14 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
             lane,
             Event::LaneInvoked {
                 invocation: crate::lane::InvocationId { mission: lane, seq },
-                identity: crate::lane::LaneIdentity {
-                    role: crate::lane::LaneRole::Sentinel,
-                    name: "keyed-sentinel".into(),
-                    version: "m1-test".into(),
-                },
+                role: crate::lane::LaneRole::Sentinel,
+                identity_sha256: crate::evidence::lane_identity_digest(
+                    &crate::lane::LaneIdentity {
+                        role: crate::lane::LaneRole::Sentinel,
+                        name: "keyed-sentinel".into(),
+                        version: "m1-test".into(),
+                    },
+                ),
                 input_hash: "0".repeat(64),
             },
         );
@@ -1041,6 +1074,7 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
         Arc::new(port_for(control, true)),
         lanes(),
         clock(),
+        crate::oracles::test_private(),
     )
     .unwrap();
     let appends = journal.lines().len() - lines.len();
@@ -1061,7 +1095,14 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
         journal.fail_after(n);
         let port = Arc::new(port_for(control, true));
         assert!(
-            Coordinator::open(journal, port, lanes(), clock()).is_err(),
+            Coordinator::open(
+                journal,
+                port,
+                lanes(),
+                clock(),
+                crate::oracles::test_private()
+            )
+            .is_err(),
             "append {n} failed, yet open succeeded"
         );
         for (i, request) in requests.into_iter().enumerate() {
@@ -1131,6 +1172,7 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
             port.clone(),
             Lanes::new(keyed_lanes()).unwrap(),
             Arc::new(SystemClock::default()),
+            w.home.private(),
         )
         .unwrap()
     };
@@ -1240,7 +1282,7 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
         id,
         Event::Transition {
             trigger: Trigger::Stop {
-                reason: "owner".into(),
+                reason: crate::evidence::StopReason::Owner,
             },
         },
     );
@@ -1260,7 +1302,9 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
         Event::Transition {
             trigger: Trigger::ApprovalLapsed {
                 effect: 0,
-                reason: "budget_time".into(),
+                reason: crate::evidence::LapseReason::Ended(
+                    crate::evidence::BlockReason::BudgetTime,
+                ),
             },
         },
     );
@@ -1298,7 +1342,7 @@ fn m2a_crash_points_on_the_real_broker(w: &World) {
         id,
         Event::Transition {
             trigger: Trigger::Stop {
-                reason: "owner".into(),
+                reason: crate::evidence::StopReason::Owner,
             },
         },
     );

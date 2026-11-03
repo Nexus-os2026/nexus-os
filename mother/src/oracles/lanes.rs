@@ -69,11 +69,17 @@ fn lanes_every_call_is_journaled_with_identity_invocation_and_hashes() {
         assert_eq!(invoked.seq, report.invocation.seq, "the id names its entry");
         match &invoked.event {
             Event::LaneInvoked {
-                identity,
+                role,
+                identity_sha256,
                 input_hash,
                 ..
             } => {
-                assert_eq!(identity, &report.identity);
+                // P0: the identity is journaled as its role and digest.
+                assert_eq!(*role, report.identity.role);
+                assert_eq!(
+                    identity_sha256,
+                    &crate::evidence::lane_identity_digest(&report.identity)
+                );
                 assert_eq!(input_hash, &report.input_hash);
                 assert_eq!(input_hash.len(), 64);
             }
@@ -189,14 +195,13 @@ fn lanes_the_time_budget_runs_from_consent_not_from_drafting() {
 fn lanes_verdicts_decide_the_outcome() {
     let w = world();
     let failed = w.mission_in(MissionState::Failed);
-    assert_eq!(
-        w.mother.reason(failed).as_deref(),
-        Some("criterion p1 does not hold")
-    );
+    // P0: the Verifier's reason is the Owner's working detail; the
+    // mission's reason is its code.
+    assert_eq!(w.mother.reason(failed).as_deref(), Some("verifier_fail"));
     let halted = w.mission_in(MissionState::Blocked);
     assert_eq!(
         w.mother.reason(halted).as_deref(),
-        Some("sentinel_halt:test halt")
+        Some("lane_halt:sentinel")
     );
     // A Researcher's halt blocks too, and nothing after it runs.
     let id = w.approved(contract_with("HALT-RESEARCHERA ASK-RESEARCHERB-NETWORK"));

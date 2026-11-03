@@ -206,13 +206,13 @@ impl JournalStore for FailingFile {
     }
     fn append(&mut self, line: &str) -> Result<(), JournalError> {
         if self.appends.load(Ordering::SeqCst) {
-            return Err(JournalError::Store("injected append failure".into()));
+            return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
         }
         self.file.append(line)
     }
     fn poison(&mut self) -> Result<(), JournalError> {
         if self.poison.load(Ordering::SeqCst) {
-            return Err(JournalError::Store("injected poison failure".into()));
+            return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
         }
         self.file.poison()
     }
@@ -335,6 +335,7 @@ impl Child {
                 Arc::new(port_for(&self.home.control, true)),
                 Lanes::new(keyed_lanes()).unwrap(),
                 Arc::new(SystemClock::default()),
+                self.home.private(),
             )
             .unwrap(),
         )
@@ -524,6 +525,7 @@ fn child_one(point: &str, dir: &Path) -> ! {
                 Arc::new(port_for(&c.home.control, true)),
                 Lanes::new(keyed_lanes()).unwrap(),
                 Arc::new(SystemClock::default()),
+                c.home.private(),
             );
             assert!(opened.is_err(), "the first SessionOpened fails");
             // No coordinator is open: none broke.
@@ -597,6 +599,7 @@ fn child_two(dir: &Path) {
             Arc::new(port),
             Lanes::new(keyed_lanes()).unwrap(),
             Arc::new(SystemClock::default()),
+            home.private(),
         )
     });
     match opened {

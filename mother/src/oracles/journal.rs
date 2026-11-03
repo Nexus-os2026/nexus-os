@@ -149,12 +149,7 @@ fn journal_a_chained_journal_that_breaks_the_state_machine_is_refused() {
         (
             "work without consent",
             vec![
-                (
-                    id,
-                    Event::Drafted {
-                        contract: c.clone(),
-                    },
-                ),
+                (id, drafted(&c)),
                 t(Trigger::Submit { hash: c.hash() }),
                 t(Trigger::Start),
             ],
@@ -162,14 +157,9 @@ fn journal_a_chained_journal_that_breaks_the_state_machine_is_refused() {
         (
             "a stopped mission restarted",
             vec![
-                (
-                    id,
-                    Event::Drafted {
-                        contract: c.clone(),
-                    },
-                ),
+                (id, drafted(&c)),
                 t(Trigger::Stop {
-                    reason: "owner".into(),
+                    reason: crate::evidence::StopReason::Owner,
                 }),
                 t(Trigger::Submit { hash: c.hash() }),
             ],
@@ -180,30 +170,12 @@ fn journal_a_chained_journal_that_breaks_the_state_machine_is_refused() {
         ),
         (
             "a mission drafted twice",
-            vec![
-                (
-                    id,
-                    Event::Drafted {
-                        contract: c.clone(),
-                    },
-                ),
-                (
-                    id,
-                    Event::Drafted {
-                        contract: c.clone(),
-                    },
-                ),
-            ],
+            vec![(id, drafted(&c)), (id, drafted(&c))],
         ),
         (
             "a submit for another hash",
             vec![
-                (
-                    id,
-                    Event::Drafted {
-                        contract: c.clone(),
-                    },
-                ),
+                (id, drafted(&c)),
                 t(Trigger::Submit {
                     hash: crate::contract::ContractHash::from_hex(&"00".repeat(32)).unwrap(),
                 }),
@@ -247,6 +219,7 @@ fn journal_an_effect_whose_outcome_was_not_recorded_blocks_its_mission() {
         after.port.clone(),
         Lanes::new(after.lanes.clone()).unwrap(),
         after.clock.clone(),
+        test_private(),
     )
     .unwrap();
     assert_eq!(reopened.state(id), Some(MissionState::Blocked));

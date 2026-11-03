@@ -55,14 +55,14 @@ fn m2a_the_waiting_transitions_are_exactly_these() {
         vec![
             Trigger::AwaitApproval {
                 effect: 0,
-                rest: vec![],
+                rest: crate::oracles::rest_ref(&[]),
                 roles_left: vec![],
             },
             Trigger::ActionApproved { effect: 0, phase },
             Trigger::ActionDenied { effect: 0 },
             Trigger::ApprovalLapsed {
                 effect: 0,
-                reason: "approval_expired".into(),
+                reason: crate::evidence::LapseReason::ApprovalExpired,
             },
         ]
     };
@@ -99,7 +99,7 @@ fn m2a_the_waiting_transitions_are_exactly_these() {
         transition(
             AwaitingApproval,
             &Trigger::Stop {
-                reason: "owner".into()
+                reason: crate::evidence::StopReason::Owner
             }
         ),
         Ok(Stopped)
@@ -407,9 +407,7 @@ fn chained(events: Vec<Event>) -> Vec<String> {
 fn waited() -> Vec<Event> {
     let c = contract();
     vec![
-        Event::Drafted {
-            contract: c.clone(),
-        },
+        crate::oracles::drafted(&c),
         Event::Transition {
             trigger: Trigger::Submit { hash: c.hash() },
         },
@@ -429,12 +427,12 @@ fn waited() -> Vec<Event> {
         },
         Event::EffectSettled {
             effect: 0,
-            outcome: "awaiting_approval".into(),
+            outcome: crate::evidence::SettledOutcome::AwaitingApproval,
         },
         Event::Transition {
             trigger: Trigger::AwaitApproval {
                 effect: 0,
-                rest: vec![],
+                rest: crate::oracles::rest_ref(&[]),
                 roles_left: vec![],
             },
         },
@@ -470,7 +468,7 @@ fn m2a_replay_accepts_a_wait_only_where_the_live_coordinator_writes_one() {
     let mut done = waited();
     done[5] = Event::EffectSettled {
         effect: 0,
-        outcome: "done".into(),
+        outcome: crate::evidence::SettledOutcome::Done,
     };
     assert!(matches!(
         opens(&w, done),
@@ -482,7 +480,7 @@ fn m2a_replay_accepts_a_wait_only_where_the_live_coordinator_writes_one() {
     other[6] = Event::Transition {
         trigger: Trigger::AwaitApproval {
             effect: 1,
-            rest: vec![],
+            rest: crate::oracles::rest_ref(&[]),
             roles_left: vec![],
         },
     };
@@ -504,7 +502,7 @@ fn m2a_replay_accepts_a_wait_only_where_the_live_coordinator_writes_one() {
         Trigger::ActionDenied { effect: 1 },
         Trigger::ApprovalLapsed {
             effect: 1,
-            reason: "approval_expired".into(),
+            reason: crate::evidence::LapseReason::ApprovalExpired,
         },
     ] {
         let mut events = waited();

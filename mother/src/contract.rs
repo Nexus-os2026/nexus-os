@@ -177,9 +177,10 @@ pub enum ContractError {
     ModelCallsOutOfRange,
     /// M1 spends no money: the money budget must be zero.
     MoneyNotZero,
-    /// A question has no answer: the contract cannot go to the Owner.
+    /// A question has no answer: the contract cannot go to the Owner. P0:
+    /// named by its index (its id is the Owner's working detail).
     UnansweredQuestion {
-        id: String,
+        index: usize,
     },
 }
 
@@ -246,10 +247,8 @@ impl MissionContract {
     /// be asked to consent to.
     pub fn validate_for_consent(&self) -> Result<(), ContractError> {
         self.validate()?;
-        match self.questions.iter().find(|q| q.answer.is_none()) {
-            Some(question) => Err(ContractError::UnansweredQuestion {
-                id: question.id.clone(),
-            }),
+        match self.questions.iter().position(|q| q.answer.is_none()) {
+            Some(index) => Err(ContractError::UnansweredQuestion { index }),
             None => Ok(()),
         }
     }

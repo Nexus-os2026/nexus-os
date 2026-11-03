@@ -27,6 +27,7 @@ fn open(
         port.clone(),
         Lanes::new(keyed_lanes()).unwrap(),
         Arc::new(SystemClock::default()),
+        crate::oracles::test_private(),
     )
 }
 

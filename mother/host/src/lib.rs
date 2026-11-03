@@ -8,6 +8,9 @@
 //! [`Home::door`], which asks the Owner, through the confirmer the host
 //! supplies, for every door. The Owner's side of the broker
 //! ([`Home::owner`]) stays here; nothing given to Mother leads to it.
+//!
+//! P0: Mother's private store ([`Home::private`]) is in her home beside the
+//! journal; the coordinator is opened with both.
 
 #![deny(unsafe_code)]
 
@@ -18,8 +21,9 @@ use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::{AgentDoor, GovernedControl};
-use nexus_mother::adapter::{create_private, mother_agent, FileJournal};
+use nexus_mother::adapter::{create_private, mother_agent, FileJournal, FilePrivate};
 use nexus_mother::journal::JournalError;
+use nexus_mother::private::PrivateError;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -91,6 +95,17 @@ impl Home {
 
     pub fn journal(&self) -> Result<FileJournal, JournalError> {
         FileJournal::open(&self.journal_path())
+    }
+
+    /// P0: where Mother keeps the contracts and paused rests her journal
+    /// names (`<home>/private`, 0700).
+    pub fn private_path(&self) -> PathBuf {
+        self.dir.join("private")
+    }
+
+    /// P0: Mother's private store, for `Coordinator::open`.
+    pub fn private(&self) -> Result<FilePrivate, PrivateError> {
+        FilePrivate::open(&self.private_path())
     }
 
     /// A new door for Mother. The Owner is asked every time, through the

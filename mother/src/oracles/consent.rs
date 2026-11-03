@@ -138,9 +138,7 @@ fn consent_a_journal_consent_to_another_hash_is_refused_on_restart() {
     other.restatement.push('!');
     let id = MissionId(1);
     let events = vec![
-        Event::Drafted {
-            contract: c.clone(),
-        },
+        drafted(&c),
         Event::Transition {
             trigger: Trigger::Submit { hash: c.hash() },
         },

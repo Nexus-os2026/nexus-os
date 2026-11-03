@@ -242,8 +242,10 @@ pub mod consent;
 pub mod contract;
 pub mod coordinator;
 pub mod effect;
+pub mod evidence;
 pub mod journal;
 pub mod lane;
+pub mod private;
 pub mod state;
 
 #[cfg(test)]

@@ -115,9 +115,7 @@ fn chained(events: Vec<Event>) -> Vec<String> {
 fn settled_awaiting() -> Vec<Event> {
     let c = contract();
     vec![
-        Event::Drafted {
-            contract: c.clone(),
-        },
+        crate::oracles::drafted(&c),
         Event::Transition {
             trigger: Trigger::Submit { hash: c.hash() },
         },
@@ -137,17 +135,29 @@ fn settled_awaiting() -> Vec<Event> {
         },
         Event::EffectSettled {
             effect: 0,
-            outcome: "awaiting_approval".into(),
+            outcome: crate::evidence::SettledOutcome::AwaitingApproval,
         },
     ]
 }
 
 fn with_wait(rest: Vec<serde_json::Value>, roles_left: Vec<LaneRole>) -> Vec<Event> {
     let mut events = settled_awaiting();
+    // P0: the rest is journaled by reference; its content (as given, even
+    // if it is not effect requests) is in the private store.
+    let bytes = serde_json::to_vec(&rest).unwrap();
     events.push(Event::Transition {
         trigger: Trigger::AwaitApproval {
             effect: 0,
-            rest,
+            rest: crate::journal::RestRef {
+                content: crate::private::PrivateStore::put(
+                    &test_private(),
+                    crate::private::ContentKind::PausedPhase,
+                    &bytes,
+                )
+                .unwrap(),
+                count: rest.len() as u64,
+                bytes: bytes.len() as u64,
+            },
             roles_left,
         },
     });
@@ -192,11 +202,23 @@ fn m2a_review_replay_checks_the_wait_s_payload() {
     ] {
         assert!(refused(&w, with_wait(vec![], roles.clone())), "{roles:?}");
     }
-    // A rest that is not an effect request, or longer than one answer.
-    assert!(refused(
-        &w,
-        with_wait(vec![serde_json::json!({"x": 1})], vec![])
-    ));
+    // A rest that is not an effect request (P0: its content is checked
+    // when recovery loads it, not at replay: the mission is stopped, its
+    // request withdrawn first), or longer than one answer.
+    w.journal.set_lines(chained(with_wait(
+        vec![serde_json::json!({"x": 1})],
+        vec![],
+    )));
+    let reopened = w.reopen().unwrap();
+    assert_eq!(reopened.state(MissionId(1)), Some(MissionState::Stopped));
+    assert!(reopened.journal().unwrap().iter().any(|e| matches!(
+        e.event,
+        Event::Transition {
+            trigger: Trigger::Stop {
+                reason: crate::evidence::StopReason::PrivateContentUnavailable
+            }
+        }
+    )));
     assert!(refused(
         &w,
         with_wait(
@@ -211,11 +233,12 @@ fn m2a_review_replay_checks_the_wait_s_payload() {
             mission: MissionId(1),
             seq: 6,
         },
-        identity: crate::lane::LaneIdentity {
+        role: LaneRole::Skeptic,
+        identity_sha256: crate::evidence::lane_identity_digest(&crate::lane::LaneIdentity {
             role: LaneRole::Skeptic,
             name: "keyed-skeptic".into(),
             version: "m1-test".into(),
-        },
+        }),
         input_hash: "0".repeat(64),
     });
     events.push(Event::LaneOvertaken {
@@ -227,7 +250,7 @@ fn m2a_review_replay_checks_the_wait_s_payload() {
     events.push(Event::Transition {
         trigger: Trigger::AwaitApproval {
             effect: 0,
-            rest: vec![],
+            rest: crate::oracles::rest_ref(&[]),
             roles_left: vec![],
         },
     });

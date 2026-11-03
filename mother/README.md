@@ -35,15 +35,24 @@ Mother turns a human goal into a governed mission:
    `crates/nexus-governed-control`. Each mission acts as the agent `mother`
    in an agent run of its own, under the Owner's standing grants.
 5. **Lanes** (`lane.rs`): Researcher A/B, Skeptic, Builder, Verifier,
-   Sentinel. Every call is journaled with the lane's identity, an
-   invocation id and the hashes of its input and output. M1 has only
-   deterministic lanes.
+   Sentinel. Every call is journaled with the lane's role, the digest of
+   its identity, an invocation id and the hashes of its input and output.
+   M1 has only deterministic lanes.
 6. **Journal** (`journal.rs`): append-only and hash-chained. After an
    orderly shutdown (`Coordinator::close`) a restarted coordinator resumes
    every mission in its state; after a crash (M2a-S) every unfinished
    mission comes back held until the Owner resumes or stops it. A Stopped
-   mission stays stopped; a tampered journal is refused.
-7. **Walk example**: `cargo run -p nexus-mother-host --example walk` (M2c: the walk lives in the host crate, which alone builds the broker).
+   mission stays stopped; a tampered journal is refused. P0: format 2,
+   evidence only (the table below); a v1 journal is refused and left as
+   it is.
+7. **Private store** (`private.rs`, `adapter/private_file.rs`, P0): the
+   contract and a paused phase's rest, content addressed and hash checked,
+   in `<home>/private/<kind>/<hex>` (directories 0700, files 0600). The
+   journal names them by reference. Nothing in it is authority.
+8. **Closed codes** (`evidence.rs`, P0): every reason, outcome and class
+   Mother records or returns is a code of a closed registry; the detail
+   behind one is the Owner's `WorkingDetail`, in memory only.
+9. **Walk example**: `cargo run -p nexus-mother-host --example walk` (M2c: the walk lives in the host crate, which alone builds the broker).
 
 ## Invariants and their oracles
 
@@ -75,6 +84,8 @@ the host, tests included).
 | M2c: consent asks through the door's bound confirmer, once, with the exact request | `adapter/m2c_door.rs` (A4), broker `governed/door_tests.rs` (A4) |
 | M2c: resume asks: a held mission resumes only after the Owner's native dialog naming its contract hash, once per request (the table below) | `adapter/m2c_door.rs` (A5, A6), broker `governed/door_tests.rs` (A5, A6-f) |
 | M2a-S: after a break, no effect dispatched after the break executes; a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
+| P0: records keep only evidence (the policy below): contract fields, a paused rest, lane reasons, port classes, question ids and broker ids with a canary appear in no journal byte, broker record or returned error (scanned raw, in every encoded form and in fragments); the private store holds them | `adapter/p0_privacy.rs` (P0-O1–O4, O9, O19, O22), `adapter/p0_api.rs` (O9, O19, O23, I2, I3), `lib.rs` (closed error forms, compile_fail) |
+| P0: private content that is missing or does not verify (content id, size, contract hash) withdraws the mission's journaled requests first, then stops it; content grants nothing; a v1 journal is refused byte for byte | `adapter/p0_privacy.rs` (P0-O5–O8), `adapter/p0_api.rs` (O8) |
 | M2c: a break halts the port's door at the broker (invariant (b) below): an effect already past the port's fenced check meets the halt at every admission step; the halt is in memory, under one broker lock at a time, each taken even if poisoned; its records are written by the call that made them, after it released the coordinator and port locks, or counted (`halt_records`) | broker `governed/halt_tests.rs` (B1–B18, R1–R6; R6 is CR8's property, an Executing member that a fully written halt leaves unsettled), `adapter/m2c_halt.rs` (M1–M8, A6-g), `adapter/m2c_crash.rs` (MC1–MC4, CR1–CR7) |
 
 M2c: how a held mission resumes. The coordinator reserves a request
@@ -335,11 +346,24 @@ Coordinator rules the oracles pin:
   refuses to approve or start it then.
 - A restart after an approved action but before its phase ended blocks the
   mission (`phase_interrupted`): re-running the phase could ask again.
-- The rest of a paused phase is journaled as data: the lane's effect
-  requests as it wrote them (URLs, methods, headers, bodies, tool and
-  connector input), before the broker has checked them. The broker refuses
-  credential headers when a request reaches it, but a lane that put a
-  secret in a request would have it written to Mother's journal.
+- P0, what each store may keep (design §5.1):
+
+  | Store | Allowed | Not allowed (where it goes instead) |
+  |---|---|---|
+  | Mother journal | ids, digests, sizes, counts, kinds, roles, states, times, the closed codes of `evidence.rs` | the contract (private store, `contract`); a paused phase's rest (private store, `paused_phase`); lane reasons (dropped; the Owner's working detail) |
+  | Mother-reachable errors | closed codes, indices, counts | detail (`WorkingDetail`, memory only) |
+
+  The coding ledger and the broker's evidence are closed by P0-B and P0-C.
+  The private store is the only place Mother keeps working content. It is
+  not encrypted, has no retention or purge, and v1 journals are refused,
+  not migrated or scrubbed. Plain SHA-256 digests of low-entropy values
+  (a lane's name) can be guessed. A blob that is missing or does not
+  verify stops its mission (`private_content_unavailable`) after its
+  requests are withdrawn; write access to Mother's home can therefore stop
+  missions, never grant anything.
+- `Advance` and `LaneReport` print no lane text, lane reason or
+  explanation in `Debug`; their fields still carry them for the Owner's
+  display.
 - Anchoring Mother's journal (and its consent entries) in the broker's
   evidence store is deferred to Gate E.
 - The journal chain is unkeyed. It detects edits, removals, reordering,

@@ -45,7 +45,7 @@ fn m2a_rebuild_the_pending_action_is_journaled_before_the_wait() {
         events[n - 3],
         Event::EffectSettled {
             effect: 0,
-            outcome: "awaiting_approval".into()
+            outcome: crate::evidence::SettledOutcome::AwaitingApproval
         }
     );
     assert_eq!(
@@ -139,9 +139,7 @@ fn chained(events: Vec<Event>) -> Vec<String> {
 fn settled(outcome: &str) -> Vec<Event> {
     let c = contract();
     vec![
-        Event::Drafted {
-            contract: c.clone(),
-        },
+        crate::oracles::drafted(&c),
         Event::Transition {
             trigger: Trigger::Submit { hash: c.hash() },
         },
@@ -161,7 +159,7 @@ fn settled(outcome: &str) -> Vec<Event> {
         },
         Event::EffectSettled {
             effect: 0,
-            outcome: outcome.into(),
+            outcome: crate::evidence::SettledOutcome::parse(outcome).unwrap(),
         },
     ]
 }
@@ -177,7 +175,7 @@ fn wait() -> Event {
     Event::Transition {
         trigger: Trigger::AwaitApproval {
             effect: 0,
-            rest: vec![],
+            rest: crate::oracles::rest_ref(&[]),
             roles_left: vec![],
         },
     }
@@ -256,9 +254,7 @@ fn m2a_rebuild_an_action_claimed_by_two_missions_is_handed_back_to_neither() {
         events.push(pending(0));
         events.push(wait());
         // Each mission drafts its own contract.
-        events[0] = Event::Drafted {
-            contract: c.clone(),
-        };
+        events[0] = crate::oracles::drafted(&c);
         for event in events {
             let entry = Entry::chained(seq, &prev, mission, event);
             prev = entry.hash.clone();
@@ -301,9 +297,7 @@ fn m2a_rebuild_a_case_changed_duplicate_is_handed_back_to_neither() {
             pending: action,
         });
         events.push(wait());
-        events[0] = Event::Drafted {
-            contract: c.clone(),
-        };
+        events[0] = crate::oracles::drafted(&c);
         for event in events {
             let entry = Entry::chained(seq, &prev, mission, event);
             prev = entry.hash.clone();
@@ -401,7 +395,7 @@ fn m2a_close_replay_accepts_a_closure_only_of_the_open_request() {
     good.push(wait());
     good.push(Event::Transition {
         trigger: Trigger::Stop {
-            reason: "owner".into(),
+            reason: crate::evidence::StopReason::Owner,
         },
     });
     good.push(Event::ApprovalClosed { effect: 0 });
@@ -449,9 +443,7 @@ fn m2a_close_a_journal_failure_during_recovery_still_withdraws_every_action() {
     for (n, stopped) in [(1u8, true), (2, true), (3, false)] {
         let mission = MissionId(n as u64);
         let mut events = settled("awaiting_approval");
-        events[0] = Event::Drafted {
-            contract: c.clone(),
-        };
+        events[0] = crate::oracles::drafted(&c);
         events.push(Event::ApprovalPending {
             effect: 0,
             pending: action_of(n),
@@ -460,7 +452,7 @@ fn m2a_close_a_journal_failure_during_recovery_still_withdraws_every_action() {
         if stopped {
             events.push(Event::Transition {
                 trigger: Trigger::Stop {
-                    reason: "owner".into(),
+                    reason: crate::evidence::StopReason::Owner,
                 },
             });
         }
@@ -500,9 +492,7 @@ fn three_open() -> Vec<String> {
     for n in 1..=3u8 {
         let mission = MissionId(n as u64);
         let mut events = settled("awaiting_approval");
-        events[0] = Event::Drafted {
-            contract: c.clone(),
-        };
+        events[0] = crate::oracles::drafted(&c);
         events.push(Event::ApprovalPending {
             effect: 0,
             pending: action_of(n),
@@ -511,7 +501,7 @@ fn three_open() -> Vec<String> {
         match n {
             1 => events.push(Event::Transition {
                 trigger: Trigger::Stop {
-                    reason: "owner".into(),
+                    reason: crate::evidence::StopReason::Owner,
                 },
             }),
             3 => events.push(Event::Transition {
@@ -587,7 +577,9 @@ fn m2a_recovery_fails_closed_when_a_withdrawal_fails() {
     w.port.fail_withdrawal(MissionId(1));
     assert!(matches!(
         w.reopen(),
-        Err(CoordinatorError::Withdrawal(class)) if class == "withdrawal_failed"
+        Err(CoordinatorError::Withdrawal(
+            crate::evidence::BrokerClass::Unknown
+        ))
     ));
     for m in 1..=3u64 {
         assert!(
@@ -612,7 +604,9 @@ fn m2a_recovery_fails_closed_when_an_interrupted_mission_s_withdrawal_fails() {
     w.port.fail_withdrawal(MissionId(1));
     assert!(matches!(
         w.reopen(),
-        Err(CoordinatorError::Withdrawal(class)) if class == "withdrawal_failed"
+        Err(CoordinatorError::Withdrawal(
+            crate::evidence::BrokerClass::Unknown
+        ))
     ));
 }
 
@@ -640,7 +634,9 @@ fn m2a_close_a_stop_whose_withdrawal_fails_is_an_error() {
     w.port.fail_withdrawal(id);
     assert!(matches!(
         w.mother.stop(id),
-        Err(CoordinatorError::Withdrawal(class)) if class == "withdrawal_failed"
+        Err(CoordinatorError::Withdrawal(
+            crate::evidence::BrokerClass::Unknown
+        ))
     ));
     assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
     assert!(w.port.is_cancelled(id), "the withdrawal was attempted");
@@ -666,17 +662,16 @@ fn three_open_and_an_unanswered_lane() -> Vec<String> {
             mission: MissionId(4),
             seq,
         },
-        identity: crate::lane::LaneIdentity {
+        role: LaneRole::Sentinel,
+        identity_sha256: crate::evidence::lane_identity_digest(&crate::lane::LaneIdentity {
             role: LaneRole::Sentinel,
             name: "keyed-sentinel".into(),
             version: "m1-test".into(),
-        },
+        }),
         input_hash: "0".repeat(64),
     };
     let mut events = vec![
-        Event::Drafted {
-            contract: c.clone(),
-        },
+        crate::oracles::drafted(&c),
         Event::Transition {
             trigger: Trigger::Submit { hash: c.hash() },
         },
