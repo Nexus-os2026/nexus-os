@@ -420,6 +420,7 @@ impl Ctx {
             cancel: &self.cancel,
             deadline: &self.deadline,
             stop: watch,
+            observer: None,
         }
     }
 
@@ -1894,5 +1895,262 @@ fn e_o1b_an_explicitly_written_default_port_is_accepted() {
             Some(ModelError::InvalidAddress),
             "{raw}"
         );
+    }
+}
+
+// ── M2e-A1b oracle-add: the dispatch observer (M3 design §8.5; M3-O44 and
+// M3-O45 at the transport) ──────────────────────────────────────────────────
+
+/// The observer reads the host's CLOCK_MONOTONIC through nix, which the
+/// kernel has on Linux and macOS only; elsewhere no dispatch is ever
+/// notified (a send time is never estimated).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod dispatch {
+    use super::*;
+
+    /// The host's CLOCK_MONOTONIC in ms, read by the test itself.
+    fn host_monotonic_ms() -> u64 {
+        let now = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC).unwrap();
+        u64::try_from(now.tv_sec()).unwrap() * 1000
+            + u64::try_from(now.tv_nsec()).unwrap() / 1_000_000
+    }
+
+    /// Records each notice with the fake runtime's requests at that moment.
+    struct Recorder {
+        log: Log,
+        notices: Mutex<Vec<(u64, Vec<String>)>>,
+    }
+
+    impl Recorder {
+        fn new(fake: &Fake) -> Arc<Self> {
+            Arc::new(Self {
+                log: fake.log.clone(),
+                notices: Mutex::default(),
+            })
+        }
+
+        fn notices(&self) -> Vec<(u64, Vec<String>)> {
+            self.notices.lock().unwrap().clone()
+        }
+    }
+
+    impl CallObserver for Recorder {
+        fn dispatched(&self, sent_mono_ms: u64) {
+            let seen = self
+                .log
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(p, _)| p.clone())
+                .collect();
+            self.notices.lock().unwrap().push((sent_mono_ms, seen));
+        }
+    }
+
+    /// A meter that runs `on_charge` right after each granted charge.
+    struct HookMeter {
+        ctx: Arc<Ctx>,
+        on_charge: Cause,
+    }
+
+    impl CallMeter for HookMeter {
+        fn charge(&self) -> Result<Charged, MeterRefusal> {
+            let charged = self.ctx.meter.charge();
+            self.on_charge.trigger(&self.ctx);
+            charged
+        }
+
+        fn settle(&self, call: u32) {
+            self.ctx.meter.settle(call);
+        }
+    }
+
+    /// A call with `recorder` as its observer (and `meter`, if any, in
+    /// place of the caller's own).
+    fn observed(
+        transport: &Arc<VerifiedOllama>,
+        ctx: &Arc<Ctx>,
+        request: ModelRequest,
+        recorder: &Arc<Recorder>,
+        meter: Option<HookMeter>,
+    ) -> Receiver<Outcome<ModelReply>> {
+        let (transport, ctx, recorder) = (transport.clone(), ctx.clone(), recorder.clone());
+        in_thread(
+            move || {
+                let meter: &dyn CallMeter = match &meter {
+                    Some(meter) => meter,
+                    None => &ctx.meter,
+                };
+                let call = CallContext {
+                    meter,
+                    cancel: &ctx.cancel,
+                    deadline: &ctx.deadline,
+                    stop: &ctx.watch,
+                    observer: Some(recorder.as_ref()),
+                };
+                transport.call(&request, &call)
+            },
+            None,
+        )
+    }
+
+    /// M3-O44 (transport): one notice, before the runtime has received the
+    /// chat request, valued on the host's CLOCK_MONOTONIC.
+    #[test]
+    fn m2e_a1b_dispatch_is_notified_once_before_the_chat_reaches_the_runtime() {
+        let fake = Fake::healthy();
+        let ctx = Ctx::new();
+        let transport = verified(&fake, &ctx);
+        let from = fake.paths().len();
+        let recorder = Recorder::new(&fake);
+        let before = host_monotonic_ms();
+        let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+        let after = host_monotonic_ms();
+        assert_eq!(outcome.code(), Ok(()));
+        let notices = recorder.notices();
+        assert_eq!(notices.len(), 1, "exactly one notice: {notices:?}");
+        let (sent, seen) = &notices[0];
+        assert_eq!(
+            seen[from..],
+            ["/api/version", "/api/status", "/api/tags"],
+            "notified after the metadata and before the runtime received the chat"
+        );
+        assert!(
+            before <= *sent && *sent <= after,
+            "host CLOCK_MONOTONIC: {before} <= {sent} <= {after}"
+        );
+        assert_eq!(
+            fake.paths()[from..],
+            ["/api/version", "/api/status", "/api/tags", "/api/chat"]
+        );
+    }
+
+    /// M3-O44 (transport): a sent chat is notified once, before the runtime
+    /// sees it, however the call then ends.
+    #[test]
+    fn m2e_a1b_a_sent_chat_is_notified_once_however_it_ends() {
+        for cause in [Cause::Stop, Cause::Cancel, Cause::Deadline] {
+            let fake = Fake::start(on("/api/chat", Reply::Hold));
+            let ctx = Ctx::new();
+            let transport = verified(&fake, &ctx);
+            let recorder = Recorder::new(&fake);
+            let rx = observed(&transport, &ctx, small(), &recorder, None);
+            fake.wait_for(Event::Request("/api/chat".into()));
+            assert_eq!(
+                recorder.notices().len(),
+                1,
+                "{cause:?}: notified before the hold"
+            );
+            cause.trigger(&ctx);
+            let outcome = within_bound(&rx, &format!("observed held chat, {cause:?}"));
+            assert_eq!(outcome.code(), Err(cause.code()), "{cause:?}");
+            assert_eq!(recorder.notices().len(), 1, "{cause:?}: once");
+        }
+        for (what, reply) in [
+            ("status 500", Reply::Json(500, r#"{"error":"x"}"#.into())),
+            ("closed without a reply", Reply::Close),
+        ] {
+            let fake = Fake::start(on("/api/chat", reply));
+            let ctx = Ctx::new();
+            let transport = verified(&fake, &ctx);
+            let recorder = Recorder::new(&fake);
+            let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+            assert_eq!(outcome.code(), Err(ModelError::Unavailable), "{what}");
+            assert_eq!(recorder.notices().len(), 1, "{what}: once");
+        }
+    }
+
+    /// M3-O45 (transport): no notice for a metadata request, nor for a call
+    /// refused before the chat is sent, including a Stop, cancel or deadline
+    /// after the charge. (Registration has no observer at all.)
+    #[test]
+    fn m2e_a1b_no_notice_for_metadata_or_a_call_refused_before_the_send() {
+        // Held metadata, ended.
+        for (path, cause) in [
+            ("/api/version", Cause::Cancel),
+            ("/api/status", Cause::Deadline),
+            ("/api/tags", Cause::Stop),
+        ] {
+            let fake = Fake::healthy();
+            let ctx = Ctx::new();
+            let transport = verified(&fake, &ctx);
+            fake.set_route(on(path, Reply::Hold));
+            let recorder = Recorder::new(&fake);
+            let rx = observed(&transport, &ctx, small(), &recorder, None);
+            fake.wait_for(Event::Request(path.into()));
+            cause.trigger(&ctx);
+            let outcome = within_bound(&rx, &format!("observed {path} held, {cause:?}"));
+            assert_eq!(outcome.code(), Err(cause.code()), "{path}");
+            assert_eq!(recorder.notices(), [], "{path} {cause:?}: no notice");
+        }
+        // Refused by the identity checks, the byte bound or the meter.
+        for (what, route, code) in [
+            (
+                "another runtime version",
+                on(
+                    "/api/version",
+                    Reply::Json(200, r#"{"version":"0.41.0"}"#.into()),
+                ),
+                ModelError::RuntimeMismatch,
+            ),
+            (
+                "cloud enabled",
+                on(
+                    "/api/status",
+                    Reply::Json(200, r#"{"cloud":{"disabled":false}}"#.into()),
+                ),
+                ModelError::CloudEnabled,
+            ),
+            (
+                "another digest",
+                on("/api/tags", Reply::Json(200, tags(OTHER_DIGEST))),
+                ModelError::DigestMismatch,
+            ),
+        ] {
+            let fake = Fake::healthy();
+            let ctx = Ctx::new();
+            let transport = verified(&fake, &ctx);
+            fake.set_route(route);
+            let recorder = Recorder::new(&fake);
+            let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+            assert_eq!(outcome.code(), Err(code), "{what}");
+            assert_eq!(recorder.notices(), [], "{what}: no notice");
+        }
+        let fake = Fake::healthy();
+        let ctx = Ctx::new();
+        let transport = verified(&fake, &ctx);
+        let recorder = Recorder::new(&fake);
+        let oversize =
+            ModelRequest::unchecked("s".repeat(2000), "u".repeat(1937), grammar::worker_schema());
+        let outcome = done(&observed(&transport, &ctx, oversize, &recorder, None));
+        assert_eq!(outcome.code(), Err(ModelError::RequestTooLarge));
+        ctx.meter.refuse.store(true, Ordering::SeqCst);
+        let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+        assert_eq!(outcome.code(), Err(ModelError::OverBudget));
+        assert_eq!(recorder.notices(), [], "byte bound, meter: no notice");
+        // Ended after the charge, before the send.
+        for cause in [Cause::Stop, Cause::Cancel, Cause::Deadline] {
+            let fake = Fake::healthy();
+            let ctx = Ctx::new();
+            let transport = verified(&fake, &ctx);
+            let recorder = Recorder::new(&fake);
+            let meter = HookMeter {
+                ctx: ctx.clone(),
+                on_charge: cause,
+            };
+            let outcome = done(&observed(&transport, &ctx, small(), &recorder, Some(meter)));
+            assert_eq!(
+                outcome.code(),
+                Err(cause.code()),
+                "{cause:?} after the charge"
+            );
+            assert_eq!(
+                recorder.notices(),
+                [],
+                "{cause:?} after the charge: no notice"
+            );
+            assert_eq!(fake.count("/api/chat"), 0, "{cause:?}: nothing sent");
+            assert_eq!(ctx.meter.events(), [Metered::Charge(1), Metered::Settle(1)]);
+        }
     }
 }

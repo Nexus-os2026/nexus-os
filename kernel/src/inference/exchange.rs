@@ -9,7 +9,7 @@ use crate::emergency_stop::{HaltArea, HaltOutcome, StopWatch};
 
 use super::endpoint::LoopbackEndpoint;
 use super::ollama::ApiPath;
-use super::{CallCancel, CallContext, CallDeadline, ModelError};
+use super::{CallCancel, CallContext, CallDeadline, CallObserver, ModelError};
 
 /// The backstop on any one request, whatever the caller's deadline.
 pub const CALL_HARD_TIMEOUT: Duration = Duration::from_secs(180);
@@ -100,6 +100,9 @@ pub(super) struct Guard<'a> {
     pub(super) cancel: &'a dyn CallCancel,
     pub(super) deadline: &'a dyn CallDeadline,
     pub(super) stop: &'a StopWatch,
+    /// The caller's dispatch observer, told only when a chat request is
+    /// handed to the HTTP client.
+    pub(super) observer: Option<&'a dyn CallObserver>,
 }
 
 impl<'a> Guard<'a> {
@@ -108,6 +111,7 @@ impl<'a> Guard<'a> {
             cancel: ctx.cancel,
             deadline: ctx.deadline,
             stop: ctx.stop,
+            observer: ctx.observer,
         }
     }
 
@@ -164,6 +168,11 @@ pub(super) fn exchange(
     };
     let url = format!("http://{addr}/{}", path.as_str());
     let hard = AbsoluteDeadline::within(SystemClocks, CALL_HARD_TIMEOUT);
+    // Only the chat request is ever notified; the metadata requests never.
+    let dispatch = match path {
+        ApiPath::Chat => guard.observer,
+        ApiPath::Version | ApiPath::Status | ApiPath::Tags | ApiPath::Show => None,
+    };
     #[cfg(test)]
     let probe = seams::probe();
     let outcome = std::thread::scope(|scope| {
@@ -183,7 +192,7 @@ pub(super) fn exchange(
                         biased;
                         () = guard.stop.halted_async() => Err(Ended::Stopped),
                         error = poll(guard, &hard) => Err(Ended::Error(error)),
-                        reply = request(local, url, body, cap) => reply.map_err(Ended::Error),
+                        reply = request(local, url, body, cap, dispatch) => reply.map_err(Ended::Error),
                     }
                 });
                 // The connection ends with the runtime.
@@ -226,12 +235,17 @@ async fn poll(guard: &Guard<'_>, hard: &AbsoluteDeadline) -> ModelError {
 }
 
 /// The request itself: no proxy, no redirect, the local address on
-/// loopback, a bounded connect and a bounded body.
+/// loopback, a bounded connect and a bounded body. `dispatch`, given for the
+/// chat request only, is told the host's CLOCK_MONOTONIC immediately before
+/// the request is handed to the HTTP client. The select polls this future
+/// only after the stop watch and the cancel and deadline poll, so a call
+/// already stopped, cancelled or expired is never notified.
 async fn request(
     local: IpAddr,
     url: String,
     body: Option<Vec<u8>>,
     cap: usize,
+    dispatch: Option<&dyn CallObserver>,
 ) -> Result<Reply, ModelError> {
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -248,6 +262,12 @@ async fn request(
             .body(body),
         None => client.get(url),
     };
+    if let Some(observer) = dispatch {
+        // Never estimated: no clock reading, no notice.
+        if let Some(sent_mono_ms) = host_monotonic_ms() {
+            observer.dispatched(sent_mono_ms);
+        }
+    }
     let mut response = request.send().await.map_err(request_error)?;
     let status = response.status().as_u16();
     if response
@@ -264,6 +284,24 @@ async fn request(
         body.extend_from_slice(&chunk);
     }
     Ok(Reply { status, body })
+}
+
+/// The host's CLOCK_MONOTONIC in milliseconds (the clock the M3 acceptance
+/// probe samples; not the process-relative [`SystemClocks`]), read through
+/// nix's safe `clock_gettime`. `None` where it cannot be read.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn host_monotonic_ms() -> Option<u64> {
+    let now = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC).ok()?;
+    let seconds = u64::try_from(now.tv_sec()).ok()?;
+    let nanos = u64::try_from(now.tv_nsec()).ok()?;
+    seconds.checked_mul(1000)?.checked_add(nanos / 1_000_000)
+}
+
+/// No CLOCK_MONOTONIC reader on this platform (the kernel has nix on Linux
+/// and macOS only): a dispatch is never notified, never estimated.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn host_monotonic_ms() -> Option<u64> {
+    None
 }
 
 fn request_error(error: reqwest::Error) -> ModelError {
