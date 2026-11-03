@@ -271,8 +271,10 @@ fn m2d_c_r1_the_port_reads_recovery_and_the_codes_round_trip() {
     };
     for interrupted in [vec![], vec!["revoked"]] {
         assert_eq!(
-            status_of(&view(true, interrupted), 2_000, 2_000, 600_000),
-            ApprovalStatus::RecoveryRequired { causes: vec![] }
+            status_of(&view(true, interrupted.clone()), 2_000, 2_000, 600_000),
+            ApprovalStatus::RecoveryRequired {
+                causes: interrupted
+            }
         );
     }
     for code in [
