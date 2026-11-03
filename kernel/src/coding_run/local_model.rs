@@ -348,3 +348,15 @@ where
 pub(crate) fn pin_for_test(model: &str) -> ModelPin {
     ModelPin::local(&loopback_endpoint("http://127.0.0.1:11434").unwrap(), model).unwrap()
 }
+
+/// A pin with any endpoint and model spelling, unchecked: the P0-B ledger
+/// oracles plant canaries in both, and the record must not depend on the
+/// spelling being one the constructor accepts.
+#[cfg(test)]
+pub(crate) fn pin_for_test_at(endpoint: &str, model: &str) -> ModelPin {
+    ModelPin {
+        provider: LOCAL_PROVIDER,
+        endpoint: endpoint.to_string(),
+        model: model.to_string(),
+    }
+}
