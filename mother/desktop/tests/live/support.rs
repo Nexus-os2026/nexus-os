@@ -222,11 +222,13 @@ pub fn try_tool(program: &str, args: &[&str]) -> Result<String, ToolFailure> {
 }
 
 /// G13: whether a failed bus query failed only because its name vanished
-/// between the listing and the query. Oracle commit: the meaning G13 had
-/// (every failure counted as a vanished name); decision 2 narrows it.
+/// between the listing and the query: the bus's own NameHasNoOwner error,
+/// and nothing else.
 pub fn vanished_name(stderr: &str) -> bool {
-    let _ = stderr;
-    true
+    stderr.lines().any(|line| {
+        line.trim_start()
+            .starts_with("Error org.freedesktop.DBus.Error.NameHasNoOwner:")
+    })
 }
 
 /// Run a bounded tool; its output.
