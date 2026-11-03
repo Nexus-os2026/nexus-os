@@ -634,10 +634,11 @@ impl CommitmentRegistry {
         if &entry.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        owner(entry.run)?;
+        // Already released: nothing to do, whatever became of its run.
         if !entry.pinned {
             return Ok(());
         }
+        owner(entry.run)?;
         match entry.publication() {
             PublicationClass::Published { .. } | PublicationClass::ConfirmedNotPublished => {}
             PublicationClass::Pending | PublicationClass::Uncertain => {
