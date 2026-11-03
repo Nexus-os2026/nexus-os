@@ -12,7 +12,7 @@ use super::tree::{
     Attrs, Block, Class, Inline, Leaf, List, Main, MainItem, Page, Region, Section, Tag,
 };
 use super::RefusalCode as C;
-use super::RefusalCode;
+use super::{work, RefusalCode};
 
 /// A refusal code and the byte offset where it applies.
 pub(super) type Fail = (RefusalCode, usize);
@@ -159,6 +159,7 @@ impl<'a> Parser<'a> {
 
     /// Consumes `lit`, or fails with `code` at the first differing byte.
     fn fixed(&mut self, lit: &str, code: RefusalCode) -> Result<(), Fail> {
+        work::add(lit.len());
         let same = lit
             .bytes()
             .zip(&self.s[self.pos..])
@@ -176,6 +177,7 @@ impl<'a> Parser<'a> {
             .iter()
             .take_while(|b| b.is_ascii_alphanumeric())
             .count();
+        work::add(len + 1);
         let name = &self.s[from..from + len];
         POLICY_V1
             .body_tags
@@ -268,6 +270,7 @@ impl<'a> Parser<'a> {
             .iter()
             .position(|&b| b == b'"')
             .map_or(self.s.len(), |k| start + k);
+        work::add(end - start + 1);
         if !lang_ok(&self.s[start..end]) {
             return Err((C::LangInvalid, start));
         }
@@ -292,6 +295,8 @@ impl<'a> Parser<'a> {
         let close = ["</", POLICY_V1.style_tag].concat();
         let rest = &self.s[self.pos..];
         let region = &rest[..find(rest, close.as_bytes()).unwrap_or(rest.len())];
+        // Found by one window per byte, then compared byte for byte.
+        work::add(2 * region.len() + 1);
         if region != css {
             let same = region.iter().zip(css).take_while(|(a, b)| a == b).count();
             return Err((C::CssMismatch, self.pos + same));
@@ -305,6 +310,7 @@ impl<'a> Parser<'a> {
     fn text_run(&mut self, flow: &mut Flow, title: bool) -> Result<String, Fail> {
         let mut out = String::new();
         while self.pos < self.s.len() && self.s[self.pos] != b'<' {
+            work::add(1);
             let at = self.pos;
             let c = if self.s[at] == b'&' {
                 let (c, entity) = POLICY_V1
@@ -341,6 +347,7 @@ impl<'a> Parser<'a> {
     }
 
     fn enter(&mut self, tag: Tag) -> Result<(), Fail> {
+        work::add(1);
         self.elements += 1;
         if self.elements > POLICY_V1.max_elements {
             return Err((C::TooManyElements, self.pos));
@@ -370,6 +377,7 @@ impl<'a> Parser<'a> {
 
     /// `</tag>` at the cursor; the element is left.
     fn end_tag(&mut self, tag: Tag) -> Result<(), Fail> {
+        work::add(1);
         self.pos += 2 + tag.name().len();
         if self.s.get(self.pos) != Some(&b'>') {
             return Err((C::AttributeSyntax, self.pos));
@@ -384,6 +392,7 @@ impl<'a> Parser<'a> {
         let mut attrs = Attrs::default();
         let (mut has_class, mut has_id) = (false, false);
         loop {
+            work::add(1);
             match self.s.get(self.pos) {
                 Some(b'>') => {
                     self.pos += 1;
@@ -399,6 +408,7 @@ impl<'a> Parser<'a> {
                 .iter()
                 .take_while(|b| !matches!(b, b' ' | b'=' | b'>' | b'/' | b'\n' | b'"' | b'\''))
                 .count();
+            work::add(len);
             let name = &self.s[name_at..name_at + len];
             let is_class = name == class_name.as_bytes();
             let is_id = name == id_name.as_bytes();
@@ -414,8 +424,11 @@ impl<'a> Parser<'a> {
             }
             let value_at = self.pos + 2;
             let Some(value_len) = self.s[value_at..].iter().position(|&b| b == b'"') else {
+                work::add(self.s.len() - value_at);
                 return Err((C::AttributeSyntax, value_at));
             };
+            // Found, then checked (and, for an id, entered in the id set).
+            work::add(3 * value_len + 1);
             let text: &'a str = self.text;
             let value = &text[value_at..value_at + value_len];
             if is_class {
@@ -445,6 +458,7 @@ impl<'a> Parser<'a> {
     fn children(&mut self, container: Tag, sections: bool) -> Result<Vec<MainItem>, Fail> {
         let mut items = Vec::new();
         loop {
+            work::add(1);
             match self.peek() {
                 Next::Start(Name::Tag(Tag::Section)) if sections => {
                     items.push(MainItem::Section(self.section()?));
@@ -522,6 +536,7 @@ impl<'a> Parser<'a> {
         self.optional_lf();
         let mut items = Vec::new();
         loop {
+            work::add(1);
             match self.peek() {
                 Next::Start(Name::Tag(Tag::Li)) => items.push(self.leaf(Tag::Li)?),
                 Next::Start(_) | Next::Text => return Err((C::ContentModel, self.pos)),
@@ -552,6 +567,7 @@ impl<'a> Parser<'a> {
     fn inlines(&mut self, parent: Tag, flow: &mut Flow) -> Result<Vec<Inline>, Fail> {
         let mut out = Vec::new();
         loop {
+            work::add(1);
             match self.peek() {
                 Next::Start(Name::Tag(Tag::Br)) => {
                     flow.br(self.pos)?;
