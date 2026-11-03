@@ -330,10 +330,10 @@ fn main() {
             headers: vec![],
             body: None,
         }),
-        EffectRequest::File {
-            relative_path: "index.html".into(),
-            write: true,
-        },
+        EffectRequest::File(nexus_governed_control::files::FileCreate {
+            name: "index.html".into(),
+            content: "<h1>Rosa's bakery</h1>\n".into(),
+        }),
     ];
     // Run 2 has its own journal (its lanes differ), so its missions are
     // numbered from 1 again.

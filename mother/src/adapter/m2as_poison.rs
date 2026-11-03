@@ -93,7 +93,7 @@ fn a_panic_inside_the_fence_leaves_the_port_refusing(
     for mission in [waiting, MissionId(9_401)] {
         calm("perform", &|| {
             let refusal = port
-                .perform(mission, &get(&format!("{origin}/poison-after")))
+                .perform(mission, 0, &get(&format!("{origin}/poison-after")))
                 .expect_err("a perform after the fence");
             assert_eq!(refusal.class, crate::evidence::BrokerClass::PortFenced);
         });

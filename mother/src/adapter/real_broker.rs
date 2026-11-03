@@ -684,6 +684,8 @@ fn real_broker_m1_oracles() {
     super::m2c_door::on_the_real_broker(&w.home, &w.origin, &w.listener);
     // M2c-B (oracles first): the halt (M1-M8, the door-halt A6-g, MC1-MC4).
     super::m2c_halt::on_the_real_broker(&w.home, &w.origin, &w.listener);
+    // M2d-C (oracles first): Files admission, create requests, refusals.
+    super::m2d_files::on_the_real_broker(&w.home, &w.origin);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);

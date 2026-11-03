@@ -80,10 +80,12 @@ fn deny_a_file_request_that_is_not_relative_never_reaches_the_port() {
     ] {
         let lane = Arc::new(
             crate::lane::ScriptedLane::new(LaneRole::Builder, "writes a file", Verdict::Continue)
-                .asking(vec![EffectRequest::File {
-                    relative_path: path.into(),
-                    write: true,
-                }]),
+                .asking(vec![EffectRequest::File(
+                    nexus_governed_control::files::FileCreate {
+                        name: path.into(),
+                        content: "<h1>Rosa's</h1>\n".into(),
+                    },
+                )]),
         );
         let mut lanes: Vec<Arc<dyn Lane>> = vec![lane];
         lanes.extend(

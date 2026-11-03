@@ -18,6 +18,7 @@ mod m2as_resume;
 mod m2as_review;
 pub(crate) mod m2c_confirmers;
 pub(crate) mod m2c_owner;
+pub(crate) mod m2d_c;
 mod mn01;
 mod review;
 mod state;
@@ -28,7 +29,8 @@ use crate::adapter::m2c_support::consent;
 use crate::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{
-    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
+    Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest,
+    PendingAction,
 };
 use crate::journal::{MemoryJournal, MissionId};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
@@ -98,6 +100,15 @@ struct PortState {
     requests: Vec<(MissionId, EffectRequest)>,
     /// P0-A: missions whose withdrawal fails with this class.
     withdrawal_classes: std::collections::BTreeMap<MissionId, String>,
+    /// M2d-C: every admission asked, in order.
+    admissions: Vec<(MissionId, Admission)>,
+    /// M2d-C: the generation of every perform, in order.
+    generations: Vec<(MissionId, u64)>,
+    /// M2d-C: the class every admission is refused with, if any.
+    admission_refused: Option<String>,
+    /// M2d-C: the workspace's display name (by default the test
+    /// contract's folder); `Some(None)`: none was given.
+    workspace: Option<Option<String>>,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -246,6 +257,26 @@ impl RecordingPort {
             .insert(mission, class.to_string());
     }
 
+    /// M2d-C: every admission asked of the port.
+    pub fn admissions(&self) -> Vec<(MissionId, Admission)> {
+        self.lock().admissions.clone()
+    }
+
+    /// M2d-C: the generation every perform carried.
+    pub fn generations(&self) -> Vec<(MissionId, u64)> {
+        self.lock().generations.clone()
+    }
+
+    /// M2d-C: every admission is refused with `class`.
+    pub fn refuse_admission(&self, class: &str) {
+        self.lock().admission_refused = Some(class.to_string());
+    }
+
+    /// M2d-C: the workspace the port says it was given.
+    pub fn set_workspace(&self, name: Option<&str>) {
+        self.lock().workspace = Some(name.map(str::to_string));
+    }
+
     /// How many times Mother asked about an awaited approval.
     pub fn approval_queries(&self) -> usize {
         self.calls()
@@ -259,6 +290,7 @@ impl EffectPort for RecordingPort {
     fn perform(
         &self,
         mission: MissionId,
+        generation: u64,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
         let mut state = self.lock();
@@ -266,6 +298,7 @@ impl EffectPort for RecordingPort {
             mission,
             kind: effect.kind(),
         });
+        state.generations.push((mission, generation));
         state.requests.push((mission, effect.clone()));
         if state.cancelled.contains(&mission) {
             return Err(refusal("mission_cancelled"));
@@ -293,6 +326,22 @@ impl EffectPort for RecordingPort {
             .replies
             .pop_front()
             .unwrap_or(Ok(EffectOutcome::Done { text: None }))
+    }
+
+    fn admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
+        let mut state = self.lock();
+        state.admissions.push((mission, admission.clone()));
+        match &state.admission_refused {
+            Some(class) => Err(refusal(class)),
+            None => Ok(()),
+        }
+    }
+
+    fn workspace(&self) -> Option<String> {
+        match &self.lock().workspace {
+            Some(given) => given.clone(),
+            None => Some("~/Sites/rosas-bakery".into()),
+        }
     }
 
     fn cancel(&self, mission: MissionId) {
@@ -456,10 +505,10 @@ pub fn rest_ref(rest: &[EffectRequest]) -> crate::journal::RestRef {
 /// One request of each kind.
 pub fn effect_of(kind: EffectKind) -> EffectRequest {
     match kind {
-        EffectKind::File => EffectRequest::File {
-            relative_path: "index.html".into(),
-            write: true,
-        },
+        EffectKind::File => EffectRequest::File(nexus_governed_control::files::FileCreate {
+            name: "index.html".into(),
+            content: "<h1>Rosa's bakery</h1>\n".into(),
+        }),
         EffectKind::Network => get("https://example.org/"),
         EffectKind::Process => EffectRequest::Process(ToolIntent {
             tool: "git".into(),

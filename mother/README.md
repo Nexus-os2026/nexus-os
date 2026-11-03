@@ -128,8 +128,19 @@ Coordinator rules the oracles pin:
   asked. Every end of a wait without the action cancels the mission's run,
   which withdraws it. Stop while waiting does the same, durably.
 - Mother refuses an effect before the port when it is forbidden, when it is
-  spend (the money budget is zero), or when it is a file request without a
-  requested folder or not relative to it. Any refusal blocks the mission.
+  spend (the money budget is zero), or when it is a File create without a
+  requested folder, whose name is not one top-level name of
+  `[A-Za-z0-9_-][A-Za-z0-9._-]` (at most 64), whose content holds a NUL or
+  exceeds 8 KiB or 150 lines, or whose requested folder is not the
+  workspace the host gave the port. Any refusal blocks the mission.
+- M2d-C: before a mission's first File effect in a consent lifetime, the
+  port's door binds its run to the Owner's yes taken in this process
+  (after a restart there is none: `files_consent_unverifiable`; a held
+  mission's resume yes admits it). Every perform carries that lifetime;
+  the port refuses another (`admission_stale`) and cancels the run. A
+  publication the broker reports as interrupted after its final check is
+  journaled as the success it is, then the mission ends
+  (`file_publication_interrupted:<cause>`) and nothing more of it runs.
 - The Owner's emergency stop is checked before every lane and every effect.
 - No coordinator lock is held while the Owner is asked, a lane runs or an
   effect runs. A result that comes after a Stop is dropped and journaled
@@ -382,8 +393,9 @@ Coordinator rules the oracles pin:
 - The journal append is made under the coordinator lock: it is the
   transition's commit (a bounded local write), so the journal's order is the
   state machine's.
-- The broker has no file or spend route: the adapter refuses both
-  (`no_broker_route`). M1 writes no files for a mission.
+- The broker has no spend route: the adapter refuses it
+  (`no_broker_route`). Files are create-only, one new top-level file per
+  approval, in the one workspace the Owner registered (M2d).
 - The journal file takes no exclusive lock: two coordinators on one file
   would interleave entries and the next open refuses the journal. A torn
   last line after a crash, or a poisoned journal, refuses the journal with

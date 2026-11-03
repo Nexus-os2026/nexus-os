@@ -24,6 +24,7 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
+use nexus_governed_control::files::FileCreate;
 use nexus_governed_control::governed::RecordBatch;
 use nexus_governed_control::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
@@ -32,8 +33,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum EffectRequest {
-    /// A path relative to the requested folder: a request, never a path.
-    File { relative_path: String, write: bool },
+    /// M2d: create one new file at the top level of the Owner's workspace
+    /// (the broker's Files route): a request, never a path.
+    File(FileCreate),
     /// A network request (the broker's egress route).
     Network(EgressIntent),
     /// A governed process (the broker's tool route).
@@ -47,7 +49,7 @@ pub enum EffectRequest {
 impl EffectRequest {
     pub fn kind(&self) -> EffectKind {
         match self {
-            EffectRequest::File { .. } => EffectKind::File,
+            EffectRequest::File(_) => EffectKind::File,
             EffectRequest::Network(_) => EffectKind::Network,
             EffectRequest::Process(_) => EffectKind::Process,
             EffectRequest::ModelTool(_) => EffectKind::ModelTool,
@@ -80,6 +82,20 @@ pub enum ApprovalStatus {
     /// It ended otherwise (revoked, failed, cancelled, or its outcome is
     /// unknown): only a stable class name.
     Lapsed { class: String },
+    /// M2d (§11 M4′): it ran, and a cause ended its authority after the
+    /// broker's final check: the broker's controlled codes, in order.
+    Overtaken { causes: Vec<&'static str> },
+}
+
+/// M2d (I7): what binds a mission's broker run to the Owner's consent, once
+/// per consent lifetime, before its first File effect: the consented
+/// contract hash, the request the Owner said yes to in this process, and
+/// the lifetime (the journal sequence of that consent or resume).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Admission {
+    pub contract_hash: String,
+    pub consent_request: String,
+    pub generation: u64,
 }
 
 /// The identity of an action a mission waits on at the broker: opaque
@@ -193,12 +209,20 @@ mod sealed {
 
 /// The calls Mother makes to reach the world.
 pub trait EffectPort: Send + Sync + sealed::Sealed {
-    /// Perform one effect for `mission`.
+    /// Perform one effect for `mission`, under its admission `generation`
+    /// (I7): once admitted, a perform of another generation is refused.
     fn perform(
         &self,
         mission: MissionId,
+        generation: u64,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal>;
+    /// M2d (I7): bind the mission's run to the Owner's consent before its
+    /// first File effect. No effect.
+    fn admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal>;
+    /// M2d: the display name of the workspace the host gave the port, if
+    /// any (data, never authority: the broker binds the workspace).
+    fn workspace(&self) -> Option<String>;
     /// The mission stopped, was denied, blocked or failed: nothing more of
     /// it may start, and what runs sees its cancellation.
     fn cancel(&self, mission: MissionId);

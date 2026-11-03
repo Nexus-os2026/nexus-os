@@ -4,8 +4,8 @@
 //! each mission acts as the agent `mother` in an agent run of its own, under
 //! the Owner's standing grants (an R2 action waits for the Owner's native
 //! approval). It never opens an owner run, authorizes, executes, grants,
-//! revokes or resumes. The broker has no file or spend route, so those
-//! effects are refused here.
+//! revokes or resumes. The broker has no spend route, so that effect is
+//! refused here.
 //!
 //! M2a: an R2 action is left waiting at the broker; the port remembers it
 //! and reports what the broker's record of it says (the Owner approves and
@@ -25,9 +25,18 @@
 //! P0: [`FilePrivate`] keeps Mother's private store in her home. Every class
 //! the port returns is one of the closed registry
 //! ([`crate::evidence::BrokerClass`]).
+//!
+//! M2d-C: a File effect goes to the broker's Files route, only for a mission
+//! the port admitted (I7: the door binds the run to the Owner's yes) and
+//! only under that admission's generation; a perform of another generation
+//! is refused (`admission_stale`) and cancels the run. The host gives the
+//! port the workspace's display name ([`GovernedPort::with_workspace`]). A
+//! publication the broker reports as interrupted after its final check is
+//! [`ApprovalStatus::Overtaken`].
 
 use crate::effect::{
-    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed, PendingAction,
+    Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed,
+    PendingAction,
 };
 use crate::evidence::BrokerClass;
 use crate::journal::{IoKind, JournalError, JournalStore, MissionId, StoreFailure};
@@ -86,6 +95,8 @@ mod m2c_door;
 mod m2c_halt;
 #[cfg(test)]
 pub(crate) mod m2c_support;
+#[cfg(test)]
+mod m2d_files;
 mod private_file;
 pub use private_file::FilePrivate;
 
@@ -134,6 +145,8 @@ struct Runs {
     /// M2a-S: the runs the fence has still to cancel, last first. A sweep a
     /// panic cut short is completed when the poisoned mutex is taken back.
     unswept: Vec<RunId>,
+    /// M2d (I7): the admission generation of each admitted mission.
+    admitted: BTreeMap<MissionId, u64>,
 }
 
 /// The EffectPort over the governed-control broker, through one agent door.
@@ -144,6 +157,8 @@ pub struct GovernedPort {
     /// a run registers either before the fence (which cancels it) or after
     /// (and cancels itself); every broker call checks `fenced` first.
     runs: Mutex<Runs>,
+    /// M2d: the workspace's display name, as the host gave it (data).
+    workspace: Option<String>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
     /// M2a-S (tests): run just before an effect is performed, and before
@@ -181,6 +196,10 @@ pub struct GovernedPort {
     /// before the coordinator takes the answer.
     #[cfg(test)]
     pub(crate) after_held_answer: crate::oracles::m2as_hooks::HookSlot,
+    /// M2d-C (tests): run once the door admitted a run, before the port
+    /// keeps the admission.
+    #[cfg(test)]
+    pub(crate) after_admit: crate::oracles::m2as_hooks::HookSlot,
 }
 
 impl GovernedPort {
@@ -189,6 +208,7 @@ impl GovernedPort {
         Self {
             door,
             runs: Mutex::new(Runs::default()),
+            workspace: None,
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
             #[cfg(test)]
@@ -209,7 +229,17 @@ impl GovernedPort {
             first_fence_cancel: Default::default(),
             #[cfg(test)]
             after_held_answer: Default::default(),
+            #[cfg(test)]
+            after_admit: Default::default(),
         }
+    }
+
+    /// M2d: the display name of the workspace the Owner registered at the
+    /// broker, as the host read it (Mother checks a File's requested folder
+    /// against it; the broker binds the workspace itself).
+    pub fn with_workspace(mut self, name: impl Into<String>) -> Self {
+        self.workspace = Some(name.into());
+        self
     }
 
     /// How many effects Mother has handed to this port.
@@ -390,6 +420,7 @@ impl EffectPort for GovernedPort {
     fn perform(
         &self,
         mission: MissionId,
+        generation: u64,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
         #[cfg(test)]
@@ -399,11 +430,23 @@ impl EffectPort for GovernedPort {
             EffectRequest::Network(intent) => Intent::Request(intent.clone()),
             EffectRequest::Process(intent) => Intent::Tool(intent.clone()),
             EffectRequest::ModelTool(intent) => Intent::Connector(intent.clone()),
-            // The broker has no file or spend route.
-            EffectRequest::File { .. } | EffectRequest::Spend { .. } => {
-                return Err(refused(BrokerClass::NoBrokerRoute))
-            }
+            EffectRequest::File(create) => Intent::File(create.clone()),
+            // The broker has no spend route.
+            EffectRequest::Spend { .. } => return Err(refused(BrokerClass::NoBrokerRoute)),
         };
+        // I7: a File only once admitted; once admitted, every effect only
+        // under that generation (another cancels the run).
+        match (
+            self.with_runs(|runs| runs.admitted.get(&mission).copied()),
+            effect,
+        ) {
+            (Some(admitted), _) if admitted != generation => {
+                self.cancel(mission);
+                return Err(refused(BrokerClass::AdmissionStale));
+            }
+            (None, EffectRequest::File(_)) => return Err(refused(BrokerClass::NotAdmitted)),
+            _ => {}
+        }
         let run = self.run_for(mission)?;
         #[cfg(test)]
         self.before_broker_action.fire();
@@ -424,6 +467,35 @@ impl EffectPort for GovernedPort {
             }
             Err(e) => Err(refused_by(e.class())),
         }
+    }
+
+    /// I7: open or reuse the mission's run, have the door bind it to the
+    /// Owner's yes to exactly this hash and request (the broker checks the
+    /// yes, the run and the workspace), then keep the generation, only if
+    /// the mission did not end and the port was not fenced meanwhile (the
+    /// same critical section as theirs).
+    fn admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
+        let run = self.run_for(mission)?;
+        self.door
+            .admit_files(run, &admission.contract_hash, &admission.consent_request)
+            .map_err(|e| refused_by(e.class()))?;
+        #[cfg(test)]
+        self.after_admit.fire();
+        let refusal = self.with_runs(|runs| {
+            if runs.fenced {
+                Some(BrokerClass::PortFenced)
+            } else if runs.ended.contains(&mission) || runs.open.get(&mission) != Some(&run) {
+                Some(BrokerClass::MissionCancelled)
+            } else {
+                runs.admitted.insert(mission, admission.generation);
+                None
+            }
+        });
+        refusal.map_or(Ok(()), |class| Err(refused(class)))
+    }
+
+    fn workspace(&self) -> Option<String> {
+        self.workspace.clone()
     }
 
     fn cancel(&self, mission: MissionId) {
@@ -776,6 +848,11 @@ pub(crate) fn status_of(
         CommitmentState::Prepared | CommitmentState::Authorized | CommitmentState::Executing => {
             ApprovalStatus::Waiting
         }
+        // M2d (§11 M4′): published, and its authority ended after the
+        // broker's final check.
+        CommitmentState::Succeeded if !view.interrupted.is_empty() => ApprovalStatus::Overtaken {
+            causes: view.interrupted.clone(),
+        },
         CommitmentState::Succeeded => ApprovalStatus::Approved,
         CommitmentState::Denied => ApprovalStatus::Denied,
         CommitmentState::Expired => ApprovalStatus::Expired,

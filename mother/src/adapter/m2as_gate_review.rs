@@ -74,6 +74,7 @@ fn a_poisoned_gate_still_refuses_and_fences(control: &Arc<GovernedControl>, orig
     let perform = catch_unwind(AssertUnwindSafe(|| {
         port.perform(
             MissionId(9_301),
+            0,
             &get(&format!("{origin}/gate-poison-after")),
         )
     }));

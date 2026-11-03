@@ -62,12 +62,12 @@
 use crate::consent::{Consent, MissionSummary};
 use crate::contract::{sha256, Budget, ContractError, ContractHash, EffectKind, MissionContract};
 use crate::effect::{
-    ApprovalStatus, EffectOutcome, EffectPort, EffectRequest, Owed, PendingAction,
+    Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRequest, Owed, PendingAction,
 };
 use crate::evidence::{
     check, lane_identity_digest, BlockReason, BrokerClass, ConsentRefusedReason, FailReason,
-    HeldReason, LapseReason, MotherRefusal, SettledOutcome, StopReason, VerifyFailReason,
-    WorkingDetail,
+    HeldReason, LapseReason, MotherRefusal, PublicationCause, SettledOutcome, StopReason,
+    VerifyFailReason, WorkingDetail,
 };
 use crate::journal::{
     verify, ContractRef, Entry, Event, JournalError, JournalStore, MissionId, ReplayViolation,
@@ -295,6 +295,14 @@ struct Mission {
     /// and not held, so the live coordinator holds it before its next
     /// record (recovery aside) and before the session's clean close.
     must_hold: bool,
+    /// M2d (I7): the consent lifetime: the journal sequence of the consent
+    /// or resume the mission works under. Every perform carries it.
+    lifetime: u64,
+    /// M2d: the request of the Owner's yes taken in this process (memory
+    /// only: after a restart there is none, and Files cannot be admitted).
+    consent_request: Option<String>,
+    /// M2d: the lifetime the port admitted, in this process.
+    admitted: Option<u64>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -337,6 +345,9 @@ impl Mission {
             held: None,
             held_journaled: false,
             must_hold: false,
+            lifetime: 0,
+            consent_request: None,
+            admitted: None,
         }
     }
 
@@ -353,6 +364,8 @@ impl Mission {
                 self.contract = None;
                 self.consent = None;
                 self.approved_wall_ms = None;
+                self.consent_request = None;
+                self.admitted = None;
             }
             Trigger::Consent { at_wall_ms, .. } => {
                 self.approved_wall_ms = Some(*at_wall_ms);
@@ -656,8 +669,50 @@ fn relative_request(path: &str) -> bool {
         && path.split(['/', '\\']).all(|part| part != "..")
 }
 
+/// M2d (§6.1 step 3): one top-level name, `[A-Za-z0-9_-][A-Za-z0-9._-]`,
+/// at most 64 characters. (It cannot start with `.`, so never with the
+/// kernel's staging prefix.)
+fn file_name_ok(name: &str) -> bool {
+    let first = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'-';
+    let bytes = name.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= nexus_governed_control::files::MAX_NAME_CHARS
+        && first(bytes[0])
+        && bytes[1..].iter().all(|&b| first(b) || b == b'.')
+}
+
+/// M2d: Mother's own refusal of a File create (§6.1 steps 2-3): the
+/// name, the content (text, size, lines) and the workspace.
+fn file_refuses(
+    contract: &MissionContract,
+    create: &nexus_governed_control::files::FileCreate,
+    workspace: Option<&str>,
+) -> Option<MotherRefusal> {
+    use nexus_governed_control::files::{MAX_FILE_BYTES, MAX_FILE_LINES};
+    let content = &create.content;
+    Some(if !relative_request(&create.name) {
+        MotherRefusal::FileRequestNotRelative
+    } else if !file_name_ok(&create.name) {
+        MotherRefusal::FileNameInvalid
+    } else if content.contains('\0') {
+        MotherRefusal::FileNotText
+    } else if content.len() > MAX_FILE_BYTES {
+        MotherRefusal::FileTooLarge
+    } else if content.split_inclusive('\n').count() > MAX_FILE_LINES {
+        MotherRefusal::FileTooManyLines
+    } else if workspace.is_none() || contract.requested_folder.as_deref() != workspace {
+        MotherRefusal::FileFolderNotWorkspace
+    } else {
+        return None;
+    })
+}
+
 /// Mother's own refusal of a lane's effect, before any port call.
-fn mother_refuses(contract: &MissionContract, effect: &EffectRequest) -> Option<MotherRefusal> {
+fn mother_refuses(
+    contract: &MissionContract,
+    effect: &EffectRequest,
+    workspace: Option<&str>,
+) -> Option<MotherRefusal> {
     let kind = effect.kind();
     if contract.forbidden_effects.contains(&kind) {
         return Some(MotherRefusal::ForbiddenEffect(kind));
@@ -670,9 +725,7 @@ fn mother_refuses(contract: &MissionContract, effect: &EffectRequest) -> Option<
         EffectRequest::File { .. } if contract.requested_folder.is_none() => {
             Some(MotherRefusal::NoRequestedFolder)
         }
-        EffectRequest::File { relative_path, .. } if !relative_request(relative_path) => {
-            Some(MotherRefusal::FileRequestNotRelative)
-        }
+        EffectRequest::File(create) => file_refuses(contract, create, workspace),
         _ => None,
     }
 }
@@ -1187,7 +1240,12 @@ impl<P: EffectPort> Coordinator<P> {
                         },
                         mono,
                     )?;
-                    inner.mission(id)?.consent = Some(consent);
+                    let lifetime = inner.next_seq - 1;
+                    let mission = inner.mission(id)?;
+                    mission.consent = Some(consent);
+                    mission.lifetime = lifetime;
+                    mission.consent_request = Some(asked.request);
+                    mission.admitted = None;
                     Ok(state)
                 }
                 Err(AuthorityError::Declined) => {
@@ -1361,9 +1419,17 @@ impl<P: EffectPort> Coordinator<P> {
             effect: waiting.effect,
             reason,
         };
+        let mut overtaken = None;
         let end = match status {
             ApprovalStatus::Waiting => return Ok(report),
             ApprovalStatus::Approved => None,
+            // M2d (§11 M4′): it ran; its authority ended after the final
+            // check. A success first, then the end.
+            ApprovalStatus::Overtaken { causes } => {
+                let first = causes.first().copied().unwrap_or("unknown");
+                overtaken = Some(PublicationCause::of(first));
+                None
+            }
             ApprovalStatus::Denied => Some(Trigger::ActionDenied {
                 effect: waiting.effect,
             }),
@@ -1396,6 +1462,11 @@ impl<P: EffectPort> Coordinator<P> {
         // journaled before anything more is sent.
         if !self.close_action(id)? {
             report.to = self.end(id, BlockReason::ApprovalNotClosed)?;
+            report.reason = self.reason(id);
+            return Ok(report);
+        }
+        if let Some(cause) = overtaken {
+            report.to = self.end(id, BlockReason::FilePublicationInterrupted(cause))?;
             report.reason = self.reason(id);
             return Ok(report);
         }
@@ -1586,8 +1657,9 @@ impl<P: EffectPort> Coordinator<P> {
         effects: &[EffectRequest],
         report: &mut Advance,
     ) -> Result<Ended, CoordinatorError> {
+        let workspace = self.port.workspace();
         for effect in effects {
-            if let Some(reason) = mother_refuses(contract, effect) {
+            if let Some(reason) = mother_refuses(contract, effect, workspace.as_deref()) {
                 self.with_lock(|inner| {
                     inner.append(
                         id,
@@ -1624,6 +1696,11 @@ impl<P: EffectPort> Coordinator<P> {
                 self.stop_for(id, StopReason::EmergencyStop)?;
                 return Err(CoordinatorError::Stopped);
             }
+            if effect.kind() == EffectKind::File {
+                if let Ended::Ended(state) = self.admit(id, generation)? {
+                    return Ok(Ended::Ended(state));
+                }
+            }
             let step = self.with_lock(|inner| {
                 let mission = inner.mission(id)?;
                 if mission.generation != generation {
@@ -1632,7 +1709,7 @@ impl<P: EffectPort> Coordinator<P> {
                 if mission.out_of_time(&*self.clock) {
                     return Ok(Then::End(BlockReason::BudgetTime));
                 }
-                let number = mission.next_effect;
+                let (number, lifetime) = (mission.next_effect, mission.lifetime);
                 inner.append(
                     id,
                     Event::EffectDispatched {
@@ -1645,14 +1722,14 @@ impl<P: EffectPort> Coordinator<P> {
                 mission.next_effect += 1;
                 mission.unsettled = Some(number);
                 mission.dispatched_in_phase = true;
-                Ok(Then::Go(number))
+                Ok(Then::Go((number, lifetime)))
             })?;
-            let number = match self.then(id, step)? {
-                Ok(number) => number,
+            let (number, lifetime) = match self.then(id, step)? {
+                Ok(reserved) => reserved,
                 Err(state) => return Ok(Ended::Ended(state)),
             };
 
-            let outcome = self.port.perform(id, effect);
+            let outcome = self.port.perform(id, lifetime, effect);
 
             let settled = match &outcome {
                 Ok(EffectOutcome::Done { .. }) => SettledOutcome::Done,
@@ -1715,6 +1792,60 @@ impl<P: EffectPort> Coordinator<P> {
             }
         }
         Ok(Ended::Through)
+    }
+
+    /// M2d (I7, §11 M3′): before a mission's first File effect in its
+    /// consent lifetime, the port admits its run to the Owner's yes taken
+    /// in this process (none after a restart: `files_consent_unverifiable`).
+    /// Reserved under the lock, asked with none held, and kept only if the
+    /// reservation and the lifetime still hold: a late answer revives
+    /// nothing. Once admitted, later File effects of the lifetime (after a
+    /// wait, in a later phase) are not admitted again.
+    fn admit(&self, id: MissionId, generation: u64) -> Result<Ended, CoordinatorError> {
+        let step = self.with_lock(|inner| {
+            let mission = inner.mission(id)?;
+            if mission.generation != generation {
+                return Err(CoordinatorError::Stopped);
+            }
+            if mission.admitted == Some(mission.lifetime) {
+                return Ok(Then::Go(None));
+            }
+            let Some(request) = mission.consent_request.clone() else {
+                return Ok(Then::End(BlockReason::FilesConsentUnverifiable));
+            };
+            Ok(Then::Go(Some(Admission {
+                contract_hash: mission.contract_ref.contract_hash.to_hex(),
+                consent_request: request,
+                generation: mission.lifetime,
+            })))
+        })?;
+        let admission = match self.then(id, step)? {
+            Ok(Some(admission)) => admission,
+            Ok(None) => return Ok(Ended::Through),
+            Err(state) => return Ok(Ended::Ended(state)),
+        };
+        let admitted = self.port.admit(id, &admission);
+        let step = self.with_lock(|inner| {
+            inner.kept(id)?;
+            let mission = inner.mission(id)?;
+            if mission.generation != generation || mission.lifetime != admission.generation {
+                return Err(CoordinatorError::Stopped);
+            }
+            Ok(match admitted {
+                Ok(()) => {
+                    mission.admitted = Some(admission.generation);
+                    Then::Go(())
+                }
+                Err(refusal) if refusal.class == BrokerClass::NoConsent => {
+                    Then::End(BlockReason::FilesConsentUnverifiable)
+                }
+                Err(refusal) => Then::End(BlockReason::BrokerRefused(refusal.class)),
+            })
+        })?;
+        Ok(match self.then(id, step)? {
+            Ok(()) => Ended::Through,
+            Err(state) => Ended::Ended(state),
+        })
     }
 
     /// Effect `effect` waits for the Owner's approval: the mission waits,
@@ -2322,10 +2453,13 @@ impl<P: EffectPort> Coordinator<P> {
                         && approval.request() == asked.request
                         && asked.contract_hash == hash =>
                 {
-                    inner.append(id, Event::Resumed)?;
+                    let lifetime = inner.append(id, Event::Resumed)?;
                     let mission = inner.mission(id)?;
                     mission.held = None;
                     mission.held_journaled = false;
+                    mission.lifetime = lifetime;
+                    mission.consent_request = Some(asked.request);
+                    mission.admitted = None;
                     Ok(state)
                 }
                 Ok(_) => Err(CoordinatorError::ResumeStale),
@@ -2546,6 +2680,7 @@ fn replay(
             if let Trigger::Consent { hash, .. } = trigger {
                 // The verified journal's record of the broker's approval.
                 mission.consent = Some(Consent::minted(*hash));
+                mission.lifetime = entry.seq;
             }
         }
         Event::LaneInvoked { invocation, .. } => {
@@ -2635,6 +2770,7 @@ fn replay(
             }
             mission.held = None;
             mission.held_journaled = false;
+            mission.lifetime = entry.seq;
         }
     }
     Ok(())

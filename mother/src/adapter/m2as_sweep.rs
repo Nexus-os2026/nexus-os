@@ -94,7 +94,7 @@ fn the_sweep_cancels_every_run(
     // A (the smaller mission: the sweep's first run) waits for approval.
     let (a, b) = (MissionId(9_501), MissionId(9_502));
     assert_eq!(
-        r.port.perform(a, &post(&format!("{origin}/{tag}-a"))),
+        r.port.perform(a, 0, &post(&format!("{origin}/{tag}-a"))),
         Ok(EffectOutcome::AwaitingApproval)
     );
     let a_run = r.port.run_of(a).expect("A's run");
@@ -110,7 +110,7 @@ fn the_sweep_cancels_every_run(
     }
     let port: Arc<GovernedPort> = r.port.clone();
     let b_url = format!("{origin}/{tag}-b");
-    let b_thread = std::thread::spawn(move || port.perform(b, &get(&b_url)));
+    let b_thread = std::thread::spawn(move || port.perform(b, 0, &get(&b_url)));
     assert!(paused.wait(MEET), "B's broker call never started");
     let b_run = r.port.run_of(b).expect("B's run");
     let runs = BTreeSet::from([a_run, b_run]);
