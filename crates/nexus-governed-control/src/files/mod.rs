@@ -28,7 +28,12 @@
 //! identity (`st_dev`, `st_ino`) along each directory's ancestor chain, not
 //! by its spelling (Codex review 2 of PR #57): a bind mount or a casefolded
 //! name gives a directory a second canonical spelling, never a second
-//! identity. The spelling checks stay as defense in depth. Not claimed: a
+//! identity. The spelling checks stay as defense in depth. A location
+//! reached through a mount that is not a whole filesystem (a subtree bind
+//! mount, whose root in `/proc/self/mountinfo` is not `/`) has ancestors no
+//! `..` walk visits, so it is refused as unsupported topology (Codex review
+//! 3 of PR #57), as it is when the mount table cannot be read, parsed or
+//! matched; the mount table is read at selection. Not claimed: a
 //! mount, link, rename or casefold change made after the selection (by the
 //! Owner, root or any other process), or an inode number reused after its
 //! directory is deleted.
@@ -319,13 +324,118 @@ pub(crate) struct Mount {
     pub(crate) mount_point: PathBuf,
 }
 
-/// The mount that contains the directory at `path` (Codex review 3 of PR
-/// #57). Not read in this build.
-#[cfg_attr(not(test), allow(dead_code))]
+/// `st_dev` as (`major`, `minor`), in the encoding Linux and glibc use.
+#[cfg(target_os = "linux")]
+fn split_dev(dev: u64) -> (u64, u64) {
+    let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & !0xfff);
+    let minor = (dev & 0xff) | ((dev >> 12) & !0xff);
+    (major, minor)
+}
+
+/// A mountinfo field as the kernel escapes it (space, tab, newline and
+/// backslash as `\ooo`, three octal digits), unescaped; `None` if an
+/// escape is malformed.
+fn unescape(field: &[u8]) -> Option<std::ffi::OsString> {
+    use std::os::unix::ffi::OsStringExt;
+    let mut out = Vec::with_capacity(field.len());
+    let mut at = 0;
+    while at < field.len() {
+        if field[at] == b'\\' {
+            let digits = field.get(at + 1..at + 4)?;
+            if !digits.iter().all(|d| (b'0'..=b'7').contains(d)) {
+                return None;
+            }
+            let value = digits
+                .iter()
+                .fold(0u32, |value, d| value * 8 + u32::from(d - b'0'));
+            out.push(u8::try_from(value).ok()?);
+            at += 4;
+        } else {
+            out.push(field[at]);
+            at += 1;
+        }
+    }
+    Some(std::ffi::OsString::from_vec(out))
+}
+
+/// Every mount `/proc/self/mountinfo`'s `text` lists (proc(5): mount id,
+/// parent id, `major:minor`, root, mount point, options, optional fields up
+/// to `-`, then the filesystem type and source). `None` if any line is
+/// malformed or none is listed: callers refuse (fail closed).
+fn parse_mountinfo(text: &[u8]) -> Option<Vec<Mount>> {
+    let number = |field: &[u8]| std::str::from_utf8(field).ok()?.parse::<u64>().ok();
+    let mut mounts = Vec::new();
+    for line in text.split(|b| *b == b'\n').filter(|line| !line.is_empty()) {
+        let fields: Vec<&[u8]> = line.split(|b| *b == b' ').collect();
+        let separator = 6 + fields.get(6..)?.iter().position(|field| *field == b"-")?;
+        if fields.len() < separator + 3 {
+            return None;
+        }
+        number(fields[0])?;
+        number(fields[1])?;
+        let (major, minor) = std::str::from_utf8(fields[2]).ok()?.split_once(':')?;
+        let mount_point = PathBuf::from(unescape(fields[4])?);
+        if !mount_point.is_absolute() {
+            return None;
+        }
+        mounts.push(Mount {
+            major: major.parse().ok()?,
+            minor: minor.parse().ok()?,
+            root: unescape(fields[3])?,
+            mount_point,
+        });
+    }
+    (!mounts.is_empty()).then_some(mounts)
+}
+
+/// The mount table this process sees.
+fn mountinfo() -> Option<Vec<u8>> {
+    #[cfg(test)]
+    if let Some(given) = MOUNTINFO.with(|mountinfo| mountinfo.borrow().clone()) {
+        return given.ok().map(String::into_bytes);
+    }
+    std::fs::read("/proc/self/mountinfo").ok()
+}
+
+/// The mount that contains the directory at `path` (canonical): of the
+/// mounts with the path's `major:minor`, the one whose mount point is the
+/// longest prefix of the path (the later one, mounted on top, when two
+/// share it). Refused (`unsupported_mount_topology`) if the path cannot be
+/// stated, the mount table cannot be read or parsed, or no mount matches.
+#[cfg(target_os = "linux")]
+pub(crate) fn mount_of(path: &Path) -> Result<Mount, AuthorityError> {
+    use std::os::unix::fs::MetadataExt;
+    let unsupported = || AuthorityError::UnsupportedMountTopology;
+    let (major, minor) = split_dev(std::fs::metadata(path).map_err(|_| unsupported())?.dev());
+    let mounts = mountinfo()
+        .and_then(|text| parse_mountinfo(&text))
+        .ok_or_else(unsupported)?;
+    let mut found: Option<&Mount> = None;
+    for mount in mounts
+        .iter()
+        .filter(|m| m.major == major && m.minor == minor && path.starts_with(&m.mount_point))
+    {
+        let depth = mount.mount_point.components().count();
+        if found.is_none_or(|best| depth >= best.mount_point.components().count()) {
+            found = Some(mount);
+        }
+    }
+    found.cloned().ok_or_else(unsupported)
+}
+
+#[cfg(not(target_os = "linux"))]
 pub(crate) fn mount_of(_path: &Path) -> Result<Mount, AuthorityError> {
-    Err(AuthorityError::Unavailable(
-        "the mount topology is not read in this build",
-    ))
+    Err(AuthorityError::UnsupportedMountTopology)
+}
+
+/// The directory at `path` is reached through a whole-filesystem mount
+/// (root `/`), or refused as unsupported topology.
+fn whole_filesystem(path: &Path) -> Result<(), AuthorityError> {
+    if mount_of(path)?.root == std::ffi::OsStr::new("/") {
+        Ok(())
+    } else {
+        Err(AuthorityError::UnsupportedMountTopology)
+    }
 }
 
 #[cfg(test)]
@@ -490,8 +600,10 @@ fn selectable(
         return Err(refused("the workspace is not a folder"));
     }
     let unresolved = || refused("a protected or reserved location cannot be resolved");
-    // The workspace and every directory above it, by identity.
+    // The workspace and every directory above it, by identity, on a
+    // whole-filesystem mount.
     let workspace = ancestry(path).ok_or_else(unresolved)?;
+    whole_filesystem(path)?;
     let exact = [
         Path::new("/"),
         exclusions.home.as_path(),
@@ -499,6 +611,7 @@ fn selectable(
     ];
     for forbidden in exact {
         let located = established(forbidden).ok_or_else(unresolved)?;
+        whole_filesystem(&located.existing)?;
         let same = located.complete
             && ancestry(&located.existing).ok_or_else(unresolved)?[0] == workspace[0];
         if same || forbidden == path || located.real == path {
@@ -512,6 +625,7 @@ fn selectable(
         .chain(std::iter::once(runtime_root));
     for tree in reserved {
         let located = established(tree).ok_or_else(unresolved)?;
+        whole_filesystem(&located.existing)?;
         let above = ancestry(&located.existing).ok_or_else(unresolved)?;
         let inside_workspace = above.contains(&workspace[0]);
         let contains_workspace = located.complete && workspace.contains(&above[0]);

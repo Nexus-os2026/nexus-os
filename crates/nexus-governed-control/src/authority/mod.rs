@@ -76,6 +76,7 @@ pub(crate) const REASONS: &[&str] = &[
     "already_admitted",
     "file_exists",
     "change_too_large_to_show",
+    "unsupported_mount_topology",
 ];
 
 /// Why the authority refused. The message is bounded and names no input.
@@ -124,6 +125,10 @@ pub enum AuthorityError {
     FileExists,
     /// M2d-B1: the change cannot be shown to the Owner whole.
     ChangeTooLargeToShow,
+    /// M2d-B1: the workspace, or a protected or reserved location, is
+    /// reached through a mount that is not a whole filesystem (a subtree
+    /// bind mount), or the mount topology cannot be read or matched.
+    UnsupportedMountTopology,
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
@@ -170,6 +175,7 @@ impl AuthorityError {
             AuthorityError::AlreadyAdmitted => "already_admitted",
             AuthorityError::FileExists => "file_exists",
             AuthorityError::ChangeTooLargeToShow => "change_too_large_to_show",
+            AuthorityError::UnsupportedMountTopology => "unsupported_mount_topology",
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",
