@@ -666,7 +666,9 @@ fn m2d_b2_d_o8_ordering_b_each_cause_lets_one_publication_complete() {
                 assert_eq!(f.entries(), vec![NAME.to_string()]);
                 continue;
             }
-            _ => f.gov.files_undo(&*f.owner).expect("undo offered"),
+            _ => {
+                f.gov.files_undo(&*f.owner).expect("undo offered");
+            }
         }
         assert_eq!(f.entries(), Vec::<String>::new(), "{cause:?}: undone");
     }
