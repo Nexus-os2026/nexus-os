@@ -104,6 +104,9 @@ struct RunEntry {
     inference_admission: Option<InferenceAdmission>,
     /// M2e-B: the model calls this run attempted (never refunded).
     model_attempts: u32,
+    /// M2d-C round 4 (rule 2): its pinned commitments; while any is, the
+    /// run is never pruned.
+    pins: u32,
 }
 
 /// M2d-B1: which yes of the Owner's a cached consent is.
@@ -299,7 +302,7 @@ impl Table {
         let ended: Vec<RunId> = self
             .runs
             .iter()
-            .filter(|(_, e)| e.view.cancelled || e.view.finished)
+            .filter(|(_, e)| (e.view.cancelled || e.view.finished) && e.pins == 0)
             .map(|(id, _)| *id)
             .collect();
         for run in ended {
@@ -335,6 +338,9 @@ pub struct RunRegistry {
     cancelled_by_stop: AtomicUsize,
     /// The desktop is quitting: no run opens any more, and nothing resumes.
     closed: AtomicBool,
+    /// Tests: a smaller capacity (0: `RUN_CAPACITY`).
+    #[cfg(test)]
+    capacity: AtomicUsize,
     /// The emergency stops of this process, from 0. It never wraps.
     stop_number: AtomicU64,
     /// A stop came with `stop_number` at its maximum: stopped for the rest
@@ -346,6 +352,11 @@ pub struct RunRegistry {
 
 /// Most runs kept (ended ones are pruned first).
 const RUN_CAPACITY: usize = 4096;
+
+/// A registry the broker cannot read (its lock poisoned).
+fn unreadable() -> AuthorityError {
+    AuthorityError::Unavailable("the broker cannot read its records")
+}
 
 /// What became of the stop before an emergency stop, as that stop found it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -448,6 +459,7 @@ impl RunRegistry {
             files_admission: None,
             inference_admission: None,
             model_attempts: 0,
+            pins: 0,
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -469,9 +481,9 @@ impl RunRegistry {
                 _ => return Err(AuthorityError::NotMember),
             }
         }
-        if runs.len() >= RUN_CAPACITY {
+        if runs.len() >= self.capacity() {
             runs.prune_ended();
-            if runs.len() >= RUN_CAPACITY {
+            if runs.len() >= self.capacity() {
                 return Err(AuthorityError::Capacity);
             }
         }
@@ -648,6 +660,79 @@ impl RunRegistry {
         if let Some(entry) = runs.get_mut(&run) {
             cancel_one(entry, wall_ms, generation, batch);
         }
+    }
+
+    /// The most runs kept (`RUN_CAPACITY`; tests may lower it).
+    fn capacity(&self) -> usize {
+        #[cfg(test)]
+        {
+            let set = self.capacity.load(Ordering::SeqCst);
+            if set > 0 {
+                return set;
+            }
+        }
+        RUN_CAPACITY
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_capacity_for_test(&self, capacity: usize) {
+        self.capacity.store(capacity, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len_for_test(&self) -> usize {
+        self.runs.lock().expect("runs").len()
+    }
+
+    /// M2d-C round 4 (rule 2): retain `run` for one more pinned commitment
+    /// (called holding the commitments lock: the entries → runs order).
+    pub(crate) fn retain(&self, run: RunId) -> Result<(), AuthorityError> {
+        let mut runs = self.runs.lock().map_err(|_| unreadable())?;
+        let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        entry.pins = entry.pins.checked_add(1).ok_or(AuthorityError::Capacity)?;
+        Ok(())
+    }
+
+    /// Rule 2: one pinned commitment of `run` was acknowledged (called
+    /// holding the commitments lock). Never panics.
+    pub(crate) fn release(&self, run: RunId) -> Result<(), AuthorityError> {
+        let mut runs = self.runs.lock().map_err(|_| unreadable())?;
+        if let Some(entry) = runs.get_mut(&run) {
+            entry.pins = entry.pins.saturating_sub(1);
+        }
+        Ok(())
+    }
+
+    /// Addendum 4: whether the door of `group` (its agent `agent`) may
+    /// acknowledge a pinned commitment of `run`: the run is its member, or
+    /// (ack-only ownership, after its door was replaced) the run is
+    /// `agent`'s agent run and no live door lists it. Never panics.
+    pub(crate) fn ack_owner(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+    ) -> Result<(), AuthorityError> {
+        let runs = self.runs.lock().map_err(|_| unreadable())?;
+        let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        if entry.groups.contains(&group) {
+            return Ok(());
+        }
+        let held = entry.groups.iter().any(|g| {
+            runs.doors
+                .get(g)
+                .is_some_and(|door| door.active && door.alive())
+        });
+        if held {
+            return Err(AuthorityError::NotMember);
+        }
+        Ok(())
     }
 
     /// M2d-C: [`Self::is_member`] that never panics: `None` when the

@@ -265,6 +265,10 @@ struct Entry {
     finished_started: bool,
     failure: Option<FailureClass>,
     handoff: u8,
+    /// M2d-C round 4 (rule 2): a Files commitment is pinned from its
+    /// insertion, with its run retained, until its exact acknowledgement:
+    /// never pruned meanwhile.
+    pinned: bool,
 }
 
 impl Entry {
@@ -423,6 +427,9 @@ pub(crate) struct Inner {
     /// The broker's test hooks (tests).
     #[cfg(test)]
     hooks: Arc<crate::test_hooks::Hooks>,
+    /// Tests: a smaller capacity (0: [`CAPACITY`]).
+    #[cfg(test)]
+    capacity: AtomicU64,
 }
 
 /// Where revocation records go: an unwritten list (the emergency stop), or
@@ -530,6 +537,8 @@ impl CommitmentRegistry {
             transitions: AtomicU64::new(0),
             #[cfg(test)]
             hooks: Arc::default(),
+            #[cfg(test)]
+            capacity: AtomicU64::new(0),
         }))
     }
 
@@ -573,6 +582,73 @@ impl CommitmentRegistry {
     /// Install the credential broker's lease table.
     pub(crate) fn set_lease_end(&self, leases: Arc<dyn LeaseEnd>) {
         *self.0.leases.lock().expect("leases") = leases;
+    }
+
+    /// The most entries kept ([`CAPACITY`]; tests may lower it).
+    fn capacity(&self) -> usize {
+        #[cfg(test)]
+        {
+            let set = self.0.capacity.load(Ordering::SeqCst);
+            if set > 0 {
+                return set as usize;
+            }
+        }
+        CAPACITY
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_capacity_for_test(&self, capacity: usize) {
+        self.0.capacity.store(capacity as u64, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len_for_test(&self) -> usize {
+        self.entries().len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pinned_for_test(&self, id: CommitmentId) -> bool {
+        self.entries().get(&id).is_some_and(|e| e.pinned)
+    }
+
+    /// M2d-C round 4 (rule 2, addendum 4): release `id`'s pin, once, for
+    /// `agent`, if `owner` accepts its run (membership of the caller's door,
+    /// or the ack-only ownership of a replacement door). Only a conclusive
+    /// outcome (published, or confirmed not published) is released; a
+    /// repeated ack, or one of a commitment no longer held, changes nothing.
+    /// Never panics: a poisoned registry is `Unavailable`.
+    pub(crate) fn ack(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        owner: impl FnOnce(RunId) -> Result<(), AuthorityError>,
+    ) -> Result<(), AuthorityError> {
+        let mut entries = self
+            .0
+            .entries
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
+        let Some(entry) = entries.get_mut(&id) else {
+            return Ok(());
+        };
+        if &entry.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        owner(entry.run)?;
+        if !entry.pinned {
+            return Ok(());
+        }
+        match entry.publication() {
+            PublicationClass::Published { .. } | PublicationClass::ConfirmedNotPublished => {}
+            PublicationClass::Pending | PublicationClass::Uncertain => {
+                return Err(AuthorityError::Unavailable(
+                    "the commitment's outcome is not conclusive",
+                ));
+            }
+        }
+        self.0.runs.release(entry.run)?;
+        entry.pinned = false;
+        Ok(())
     }
 
     fn entries(&self) -> MutexGuard<'_, HashMap<CommitmentId, Entry>> {
@@ -821,6 +897,7 @@ impl CommitmentRegistry {
             finished_started: false,
             failure: None,
             handoff: NOT_HANDED_OFF,
+            pinned: false,
         };
         // Evidence first: an unrecorded commitment is never created. It is
         // not in the registry yet, so nothing can act on it meanwhile.
@@ -836,13 +913,14 @@ impl CommitmentRegistry {
         let now = self.now();
         let refused = {
             let mut entries = self.entries();
-            if entries.len() >= CAPACITY {
-                entries.retain(|_, e| !e.state.is_final());
+            // Rule 2: a pinned entry is never pruned.
+            if entries.len() >= self.capacity() {
+                entries.retain(|_, e| !e.state.is_final() || e.pinned);
             }
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
-            let refused = if entries.len() >= CAPACITY {
+            let refused = if entries.len() >= self.capacity() {
                 Some(AuthorityError::Capacity)
             } else {
                 self.0.runs.check(run, agent).err()
@@ -861,6 +939,12 @@ impl CommitmentRegistry {
                     Some(error)
                 }
                 None => {
+                    // Rule 2: pinned as it becomes visible, its run retained
+                    // in the same hold (the run was just checked under it).
+                    let mut entry = entry;
+                    if entry.prepared.kind == CapabilityKind::Files {
+                        entry.pinned = self.0.runs.retain(run).is_ok();
+                    }
                     entries.insert(id, entry);
                     None
                 }

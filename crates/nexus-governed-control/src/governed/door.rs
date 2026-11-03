@@ -240,6 +240,23 @@ impl AgentDoor {
         })
     }
 
+    /// M2d-C round 4 (settlement design v2, rule 2; addendum 4): acknowledge
+    /// that the caller durably recorded what became of its Files commitment
+    /// `id`: its pin (and its run's retention) is released, exactly once.
+    /// Only a conclusive outcome is released; a repeated ack changes
+    /// nothing. Owner-scoped: the run must be one of this door's, or, once
+    /// the door that held it is gone, an agent run of this door's agent no
+    /// live door lists (ack-only ownership: it restores no consent, no
+    /// execution authority and shows nothing). Also once halted and at
+    /// capacity; never panics.
+    pub fn ack_commitment(&self, id: CommitmentId) -> Result<(), AuthorityError> {
+        let authority = self.control.authority();
+        let runs = authority.runs();
+        authority.commitments().ack(id, &self.core.agent, |run| {
+            runs.ack_owner(run, &self.core.agent, self.core.group)
+        })
+    }
+
     /// What this door may know of a commitment.
     pub fn commitment(&self, id: CommitmentId) -> Lookup<CommitmentView> {
         let authority = self.control.authority();
