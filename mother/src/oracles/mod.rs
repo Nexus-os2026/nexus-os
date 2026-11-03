@@ -23,6 +23,7 @@ mod m2d_c_mirror;
 mod m2d_c_r1;
 mod m2d_c_r2;
 mod m2d_c_r4;
+mod m2d_c_r5;
 mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;

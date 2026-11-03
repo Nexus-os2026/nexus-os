@@ -223,6 +223,9 @@ pub struct GovernedPort {
     /// keeps the admission.
     #[cfg(test)]
     pub(crate) after_admit: crate::oracles::m2as_hooks::HookSlot,
+    /// Round 5 (tests): run as a withdrawal begins (D3's interleaving).
+    #[cfg(test)]
+    pub(crate) before_withdraw: crate::oracles::m2as_hooks::HookSlot,
 }
 
 impl GovernedPort {
@@ -256,6 +259,8 @@ impl GovernedPort {
             after_held_answer: Default::default(),
             #[cfg(test)]
             after_admit: Default::default(),
+            #[cfg(test)]
+            before_withdraw: Default::default(),
         }
     }
 
@@ -632,6 +637,8 @@ impl EffectPort for GovernedPort {
     /// each one, never read from the record's run). Fenced: an error, unless
     /// there was nothing to withdraw.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
+        #[cfg(test)]
+        self.before_withdraw.fire();
         let entered = self.enter();
         let run = self.end(mission);
         let handed = self.with_runs(|runs| runs.handed.get(&mission).cloned().unwrap_or_default());

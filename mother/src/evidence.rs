@@ -466,9 +466,12 @@ pub enum BlockReason {
     /// M2d-C round 4 (addendum 1): a File was published, and another
     /// mission's Stop then halted the door this mission shares.
     FilePublicationDoorHalted,
+    /// M2d-C round 5 (D3): a File was published while Mother's own
+    /// deadline for its approval had passed (read after the withdrawal).
+    FilePublicationApprovalDeadline,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 17] = [
+const BLOCK_CODES: [(BlockReason, &str); 18] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -506,6 +509,10 @@ const BLOCK_CODES: [(BlockReason, &str); 17] = [
     (
         BlockReason::FilePublicationDoorHalted,
         "file_publication_interrupted:door_halted",
+    ),
+    (
+        BlockReason::FilePublicationApprovalDeadline,
+        "file_publication_interrupted:approval_deadline",
     ),
 ];
 
@@ -628,6 +635,21 @@ impl SettlementOutcome {
                 .first()
                 .map(|cause| SettlementEnd::Block(BlockReason::FilePublicationInterrupted(*cause))),
             SettlementOutcome::NotPublished => None,
+        }
+    }
+
+    /// D3: how a File read after a denial, expiry or lapse ends when it is
+    /// not confirmed not published: as on the ordinary path, a clean
+    /// publication `approval_deadline`.
+    pub fn deadline_end(&self) -> Option<SettlementEnd> {
+        match self {
+            SettlementOutcome::Published {
+                recovery_required: false,
+                interrupted,
+            } if interrupted.is_empty() => Some(SettlementEnd::Block(
+                BlockReason::FilePublicationApprovalDeadline,
+            )),
+            other => other.ordinary_end(),
         }
     }
 }

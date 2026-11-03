@@ -1806,6 +1806,32 @@ impl<P: EffectPort> Coordinator<P> {
             }
         };
         if let Some(trigger) = end {
+            // D3: a File's denial, expiry or lapse (Mother's own deadline
+            // among them) is withdrawn first, then read once: only a File
+            // confirmed not published takes the ordinary end.
+            if file {
+                let _ = self.port.withdraw(id);
+                let read = self.port.publication(id);
+                report.to = match read {
+                    Ok(Some((_, Publication::ConfirmedNotPublished))) => {
+                        self.end_plain(id, trigger, open)?
+                    }
+                    Ok(Some((pending, read))) => self.settle_terminal(
+                        id,
+                        Some(pending),
+                        settlement_outcome(read),
+                        Some(generation),
+                    )?,
+                    Ok(None) | Err(_) => self.settle_terminal(
+                        id,
+                        None,
+                        SettlementOutcome::Uncertain,
+                        Some(generation),
+                    )?,
+                };
+                report.reason = self.reason(id);
+                return Ok(report);
+            }
             report.to = self.end_plain(id, trigger, open)?;
             report.reason = self.reason(id);
             return Ok(report);
@@ -2957,7 +2983,12 @@ impl<P: EffectPort> Coordinator<P> {
                         .map(|w| w.effect)
                         .filter(|e| mission.unresolved_file == Some(*e))
                         .ok_or(CoordinatorError::Stopped)?;
-                    let end = outcome.ordinary_end().ok_or(CoordinatorError::Stopped)?;
+                    // D3: a clean publication found after a deadline ends
+                    // `approval_deadline`.
+                    let end = outcome
+                        .ordinary_end()
+                        .or_else(|| outcome.deadline_end())
+                        .ok_or(CoordinatorError::Stopped)?;
                     (effect, outcome, end)
                 }
                 _ => return Err(CoordinatorError::Stopped),
@@ -3440,7 +3471,7 @@ fn replay(
                                 .as_ref()
                                 .is_some_and(|w| w.effect == *effect) =>
                         {
-                            outcome.ordinary_end()
+                            outcome.ordinary_end().or_else(|| outcome.deadline_end())
                         }
                         None => return Err(V::SettlementOutOfPlace),
                     };
