@@ -50,7 +50,9 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// The Files ledger's files, as (length, modification time) each.
-fn ledger_state(files: &Path) -> Vec<Option<(u64, std::time::SystemTime)>> {
+type LedgerState = Vec<Option<(u64, std::time::SystemTime)>>;
+
+fn ledger_state(files: &Path) -> LedgerState {
     ["ledger.db", "ledger.db-wal"]
         .iter()
         .map(|name| {
@@ -66,7 +68,7 @@ fn ledger_state(files: &Path) -> Vec<Option<(u64, std::time::SystemTime)>> {
 fn past_the_start(home: &Home, run: RunId) -> impl Fn() -> bool + Send + 'static {
     let (gate, run) = (home.gate.clone(), run.to_string());
     let files = home.dir.join("broker").join("files");
-    let since: Mutex<Option<Vec<Option<(u64, std::time::SystemTime)>>>> = Mutex::new(None);
+    let since: Mutex<Option<LedgerState>> = Mutex::new(None);
     move || {
         let started = gate
             .seen()

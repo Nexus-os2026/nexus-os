@@ -232,6 +232,10 @@ fn m2d_c_i1_the_new_codes_round_trip_and_nothing_else_parses() {
 
 // ---------------------------------------------------------------- refusals
 
+/// A request's name and content, the contract's folder, the port's
+/// workspace, and Mother's code (none: it reaches the port).
+type Case<'a> = (&'a str, String, &'a str, Option<&'a str>, Option<&'a str>);
+
 /// D-O12 and D-O15 (h) at Mother: a request outside the rules, or for a
 /// folder that is not the Owner's workspace, ends the mission with Mother's
 /// own code before the port is asked anything (no admission, no perform).
@@ -250,7 +254,7 @@ fn m2d_c_mother_refuses_a_bad_file_request_before_the_port() {
         (8192, 150)
     );
     let (long, max) = ("n".repeat(65), "m".repeat(64));
-    let cases: Vec<(&str, String, &str, Option<&str>, Option<&str>)> = vec![
+    let cases: Vec<Case> = vec![
         (
             ".x",
             ok.into(),
