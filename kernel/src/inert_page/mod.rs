@@ -23,18 +23,49 @@
 
 #![forbid(unsafe_code)]
 
+mod facts;
 mod parse;
 mod policy;
 mod scan;
 mod tree;
+mod verdict;
 
 #[cfg(test)]
 mod tests;
 
+pub use facts::{check_facts, ApprovedFacts, FactCode};
 pub use policy::{policy_hash, PolicyParams, LABEL_PASSED, MOTHER_CSS, POLICY_V1};
 pub use tree::{
     Attrs, Block, Class, Inline, Leaf, List, Main, MainItem, Page, Region, Section, Tag,
 };
+pub use verdict::{FactsMarker, PageOutcome, PageVerdict};
+
+/// S-O15's deterministic work counter. In test builds every bounded step of
+/// the check adds to a per-thread count; in other builds [`work::add`] is
+/// empty and compiles away. It is a count, not a clock or a lock.
+mod work {
+    #[cfg(test)]
+    thread_local! {
+        static STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Counts `n` steps.
+    #[inline(always)]
+    #[allow(dead_code)] // skeleton
+    pub(super) fn add(n: usize) {
+        #[cfg(test)]
+        STEPS.with(|s| s.set(s.get().saturating_add(n as u64)));
+        #[cfg(not(test))]
+        let _ = n;
+    }
+
+    /// The steps counted on this thread since the last call, which resets
+    /// the count.
+    #[cfg(test)]
+    pub(super) fn take() -> u64 {
+        STEPS.with(|s| s.replace(0))
+    }
+}
 
 macro_rules! refusal_codes {
     ($($variant:ident => $name:literal,)*) => {
