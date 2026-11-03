@@ -618,10 +618,11 @@ fn h6_a_child_that_closes_its_streams_but_lives_is_killed_and_reaped() {
         let _ = tx.send((supervised.status, supervised.overrun));
     });
     let outcome = rx.recv_timeout(Duration::from_secs(20));
-    // Whatever happened, the planted child does not outlive the test.
-    let _ = std::process::Command::new("kill")
-        .args(["-KILL", &pid])
-        .status();
+    // Whatever happened, the planted child does not outlive the test. It is
+    // signalled only if it was not reaped (a reaped pid may be reused).
+    if !matches!(&outcome, Ok((Some(_), _))) {
+        let _ = harness::signal_group(pid.parse().expect("the planted pid"));
+    }
     let (status, overrun) = outcome.expect("the harness waited on the child without a bound");
     assert!(
         overrun.is_some(),

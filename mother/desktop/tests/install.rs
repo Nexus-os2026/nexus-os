@@ -2,6 +2,14 @@
 //! binary or refuses. Run from another directory with a relative
 //! `CARGO_TARGET_DIR`, where a stale `target/release/nexus-mother` waits,
 //! it must refuse, and install nothing.
+//!
+//! Decision 3: Unix-only (it uses Unix permissions and process groups),
+//! and its cleanup is the live harness's native, bounded group kill.
+
+#![cfg(unix)]
+
+#[path = "live/harness.rs"]
+mod harness;
 
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
@@ -58,18 +66,10 @@ fn i1_a_relative_cargo_target_dir_from_elsewhere_installs_nothing_stale() {
             break Some(status);
         }
         if Instant::now() > until {
-            let _ = Command::new("kill")
-                .args(["-KILL", "--", &format!("-{}", child.id())])
-                .status();
-            // Reaped within a bound, never waited on without one.
-            let reap_until = Instant::now() + Duration::from_secs(10);
-            while child.try_wait().ok().flatten().is_none() && Instant::now() < reap_until {
-                std::thread::sleep(Duration::from_millis(20));
+            // The whole cleanup, signal and reap, within one deadline.
+            if let Err(e) = harness::kill_group_within(&mut child, Duration::from_secs(10)) {
+                panic!("cleaning up the install script failed: {e}");
             }
-            assert!(
-                child.try_wait().ok().flatten().is_some(),
-                "the killed install script was not reaped"
-            );
             break None;
         }
         std::thread::sleep(Duration::from_millis(50));

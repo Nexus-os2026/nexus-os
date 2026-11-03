@@ -250,10 +250,15 @@ fn base_env(display: Option<&str>) -> Vec<(String, String)> {
 const REAP: Duration = Duration::from_secs(10);
 
 /// Kill `child` (not its group: a tool the tests run directly) and reap
-/// it within `REAP`; its exit status, if it was reaped.
+/// it, the whole cleanup within `REAP`; its exit status, if it was reaped.
+/// A kill that fails for a child that has not exited fails the test.
 pub fn kill_and_reap(child: &mut Child) -> Option<std::process::ExitStatus> {
-    let _ = child.kill();
     let deadline = Instant::now() + REAP;
+    if let Err(e) = child.kill() {
+        if !matches!(child.try_wait(), Ok(Some(_))) {
+            panic!("killing child {} failed: {e}", child.id());
+        }
+    }
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Some(status),
@@ -264,42 +269,54 @@ pub fn kill_and_reap(child: &mut Child) -> Option<std::process::ExitStatus> {
 }
 
 /// The process group a cleanup may signal, from the pid of a child the
-/// harness spawned in its own group. (Oracle commit of decision 3:
-/// unchecked, as before.)
+/// harness spawned in its own group. Never 0 or 1 (which would signal every
+/// process this user owns), never out of range, never the harness's own
+/// group.
 pub fn checked_pgid(pid: u32) -> Result<i32, String> {
-    Ok(pid as i32)
+    let pgid =
+        i32::try_from(pid).map_err(|_| format!("refusing process group {pid}: out of range"))?;
+    if pgid <= 1 {
+        return Err(format!(
+            "refusing process group {pgid}: never a broadcast or init's group"
+        ));
+    }
+    if pgid == nix::unistd::getpgrp().as_raw() {
+        return Err(format!(
+            "refusing process group {pgid}: it is the harness's own"
+        ));
+    }
+    Ok(pgid)
 }
 
-/// What a group signal's result means. (Oracle commit: discarded, as
-/// before.)
+/// What a group signal's result means: delivered, or the group no longer
+/// exists (ESRCH: gone). Any other error is a failure.
 pub fn signal_outcome(result: Result<(), nix::errno::Errno>, pgid: i32) -> Result<(), String> {
-    let _ = (result, pgid);
-    Ok(())
+    match result {
+        Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
+        Err(error) => Err(format!("signalling process group {pgid} failed: {error}")),
+    }
 }
 
-/// SIGKILL to the owned process group of the child `pid`. (Oracle commit:
-/// still the external `kill` command, found on PATH, its result
-/// discarded.)
+/// SIGKILL to the owned process group of the child `pid`, natively
+/// (`killpg`), its result checked.
 pub fn signal_group(pid: u32) -> Result<(), String> {
     let pgid = checked_pgid(pid)?;
-    let _ = Command::new("kill")
-        .args(["-KILL", "--", &format!("-{pgid}")])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    Ok(())
+    let result = nix::sys::signal::killpg(
+        nix::unistd::Pid::from_raw(pgid),
+        nix::sys::signal::Signal::SIGKILL,
+    );
+    signal_outcome(result, pgid)
 }
 
-/// Kill a child's whole process group (the child's own group), then reap
-/// the child; the cleanup is bounded by `within`.
+/// Kill a child's whole process group (the child's own group, the child
+/// included), then reap the child; the whole cleanup, signal included, is
+/// bounded by one deadline, `within`.
 pub fn kill_group_within(
     child: &mut Child,
     within: Duration,
 ) -> Result<std::process::ExitStatus, String> {
-    signal_group(child.id())?;
-    let _ = child.kill();
     let deadline = Instant::now() + within;
+    signal_group(child.id())?;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
