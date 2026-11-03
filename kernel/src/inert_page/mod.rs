@@ -17,7 +17,9 @@
 //! [`PageVerdict`] binds the outcome to the candidate's SHA-256, the policy
 //! hash and the approved facts ([`ApprovedFacts`], checked by
 //! [`check_facts`], FC-1 to FC-4). A missing fact never changes the pass
-//! label; a facts pass adds a separate facts line.
+//! label; a facts pass adds a separate facts line. [`facts_report`] gives
+//! every facts check's result (M3's Verifier); `check_facts` is its first
+//! error.
 //!
 //! The module does no I/O and takes no clock or lock. Its time is linear in
 //! the input, which is capped at `POLICY_V1.max_page_bytes` (S-O15 counts
@@ -39,7 +41,7 @@ mod verdict;
 #[cfg(test)]
 mod tests;
 
-pub use facts::{check_facts, ApprovedFacts, FactCode};
+pub use facts::{check_facts, facts_report, ApprovedFacts, FactCode, FactsReport};
 pub use policy::{policy_hash, PolicyParams, LABEL_PASSED, MOTHER_CSS, POLICY_V1};
 pub use tree::{
     Attrs, Block, Class, Inline, Leaf, List, Main, MainItem, Page, Region, Section, Tag,
