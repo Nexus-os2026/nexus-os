@@ -79,19 +79,34 @@ fn tail(w: &World, id: MissionId) -> Vec<Event> {
         .collect()
 }
 
-/// Round 4: whether the journal claims a publication.
+/// Round 4: whether the journal claims a publication. Round 5 (D7): in
+/// either representation: an ordinary `ActionApproved`, or a published
+/// `Settled` line.
 fn claims_success(events: &[Event]) -> bool {
     events.iter().any(|e| {
         matches!(
             e,
             Event::Transition {
-                trigger: Trigger::Settled {
-                    outcome: SettlementOutcome::Published { .. },
-                    ..
-                }
+                trigger: Trigger::ActionApproved { .. }
+                    | Trigger::Settled {
+                        outcome: SettlementOutcome::Published { .. },
+                        ..
+                    }
             }
         )
     })
+}
+
+/// Round 5 (D7): the mission's whole journal (a success claimed before the
+/// settlement's records is not skipped).
+fn all(w: &World, id: MissionId) -> Vec<Event> {
+    w.mother
+        .journal()
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.mission == id)
+        .map(|e| e.event)
+        .collect()
 }
 
 /// Round 4: the success and the end in one terminal line (after the
@@ -158,7 +173,7 @@ fn m2d_c_r1_an_emergency_stop_reconciles_a_publication_that_ran() {
     assert!(w.mother.advance(id).is_err());
     assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
     assert!(
-        !claims_success(&tail(&w, id)),
+        !claims_success(&all(&w, id)),
         "nothing ran: no success journaled"
     );
 }
@@ -183,7 +198,7 @@ fn m2d_c_r1_the_time_budget_reconciles_a_publication_that_ran() {
     w.clock.advance(Duration::from_millis(3_600_001));
     w.mother.advance(id).unwrap();
     assert_eq!(w.mother.reason(id).as_deref(), Some("budget_time"));
-    assert!(!claims_success(&tail(&w, id)));
+    assert!(!claims_success(&all(&w, id)));
 }
 
 /// HIGH 1, the Owner's Stop of a mission whose File ran: journaled, then
@@ -215,7 +230,7 @@ fn m2d_c_r1_the_owner_s_stop_reconciles_a_publication_that_ran() {
     w.port
         .set_publication(Some(Publication::ConfirmedNotPublished));
     assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
-    assert!(!claims_success(&tail(&w, id)));
+    assert!(!claims_success(&all(&w, id)));
 }
 
 /// HIGH 2: a publication that succeeded with recovery required is
