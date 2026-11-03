@@ -906,7 +906,8 @@ impl AgentDisplay {
         self.shared
             .observations
             .lock()
-            .expect("observations")
+            // M2d-C round 4 (rule 3): on a Stop path; a removal only.
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(&run);
     }
 }

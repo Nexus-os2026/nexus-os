@@ -603,9 +603,10 @@ impl GovernedControl {
             id: hex::encode(crate::authority::ids::random16()),
             agent: agent.clone(),
             group: runs.next_group(),
+            halt: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
         let life: Arc<dyn std::any::Any + Send + Sync> = core.clone();
-        runs.reserve_door(core.group, &agent, Arc::downgrade(&life))?;
+        runs.reserve_door_with(core.group, &agent, Arc::downgrade(&life), core.halt.clone())?;
         drop(life);
         let mut advisory = Vec::new();
         if authority.unclean_sessions() > 0 {

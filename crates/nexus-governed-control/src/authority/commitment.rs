@@ -1717,6 +1717,37 @@ impl CommitmentRegistry {
         result
     }
 
+    /// M2d-C round 4 (rule 3): [`Self::holding_view`] that never panics: a
+    /// poisoned registry is `Unavailable`.
+    pub(crate) fn try_holding_view<T>(
+        &self,
+        id: CommitmentId,
+        f: impl FnOnce(Option<CommitmentView>) -> Result<T, AuthorityError>,
+    ) -> Result<T, AuthorityError> {
+        let entries = self
+            .0
+            .entries
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
+        let view = entries.get(&id).map(|e| e.view(id));
+        let result = f(view);
+        drop(entries);
+        result
+    }
+
+    /// Tests: poison the registry's lock (a panic while it was held).
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(&self) {
+        std::thread::scope(|scope| {
+            let _ = scope
+                .spawn(|| {
+                    let _held = self.0.entries.lock();
+                    panic!("poisoning the commitment registry (a test)");
+                })
+                .join();
+        });
+    }
+
     pub fn views_of_run(&self, run: RunId) -> Vec<CommitmentView> {
         let mut views: Vec<CommitmentView> = self
             .entries()

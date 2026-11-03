@@ -52,6 +52,9 @@ pub(crate) struct DoorCore {
     pub(crate) id: String,
     pub(crate) agent: AgentId,
     pub(crate) group: GroupId,
+    /// M2d-C round 4 (rule 3): the door's memory stop, shared with its
+    /// group's entry: set without any lock, never cleared.
+    pub(crate) halt: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// What a door may say about a commitment.
@@ -123,8 +126,27 @@ impl AgentDoor {
         Ok(run)
     }
 
-    /// PR-B: refused once this door is halted (read under the runs lock).
+    /// M2d-C round 4 (settlement design v2, rule 3): stop this door in
+    /// memory, for good, first: no lock, no I/O, no panic. From then on
+    /// none of its runs is admitted (open, propose, authorize, execute,
+    /// join), and an execution of any of them sees the cancellation at its
+    /// final check, whatever state the registries are in. The registry work
+    /// (cancelling runs, revoking commitments, their records) is the
+    /// caller's next step, which may fail with a typed error. It affects
+    /// every run of this door's group: a host that shares one door across
+    /// missions stops them all.
+    pub fn stop_now(&self) {
+        self.core
+            .halt
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// PR-B: refused once this door is halted (read under the runs lock);
+    /// round 4: or stopped in memory (read first, without it).
     fn not_halted(&self) -> Result<(), AuthorityError> {
+        if self.core.halt.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(AuthorityError::Halted);
+        }
         if self.control.authority().runs().door_halted(self.core.group) {
             return Err(AuthorityError::Halted);
         }
@@ -196,19 +218,22 @@ impl AgentDoor {
         commitment: CommitmentId,
     ) -> Result<CommitmentView, AuthorityError> {
         let authority = self.control.authority();
-        authority.commitments().holding_view(commitment, |view| {
-            let view = view.ok_or(AuthorityError::UnknownCommitment)?;
-            if view.agent != self.core.agent {
-                return Err(AuthorityError::WrongAgent);
-            }
-            if view.run != run {
-                return Err(AuthorityError::WrongRun);
-            }
-            authority
-                .runs()
-                .join(run, &self.core.agent, self.core.group)?;
-            Ok(view)
-        })
+        // Round 4 (rule 3): on the recovery path, never a panic.
+        authority
+            .commitments()
+            .try_holding_view(commitment, |view| {
+                let view = view.ok_or(AuthorityError::UnknownCommitment)?;
+                if view.agent != self.core.agent {
+                    return Err(AuthorityError::WrongAgent);
+                }
+                if view.run != run {
+                    return Err(AuthorityError::WrongRun);
+                }
+                authority
+                    .runs()
+                    .join(run, &self.core.agent, self.core.group)?;
+                Ok(view)
+            })
     }
 
     /// M2d-C (Codex review 2 of PR #78, HIGH 3): [`AgentDoor::commitment`]

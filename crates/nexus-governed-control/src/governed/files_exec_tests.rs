@@ -37,6 +37,8 @@ use std::time::{Duration, Instant};
 mod door_read;
 #[path = "files_exec_door_view_tests.rs"]
 mod door_view;
+#[path = "files_exec_halt_tests.rs"]
+mod halt;
 #[path = "files_exec_pin_tests.rs"]
 mod pin;
 #[path = "files_exec_publication_tests.rs"]

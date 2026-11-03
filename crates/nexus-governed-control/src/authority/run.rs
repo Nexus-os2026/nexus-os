@@ -38,12 +38,18 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 /// A run's cancellation flag, observed by actuators between bounded steps.
+/// M2d-C round 4 (settlement design v2, rule 3): with the memory halt flags
+/// of the doors whose groups the run listed when the token was taken, so a
+/// door's stop engaged without any lock reaches an execution's final check.
 #[derive(Clone, Debug)]
-pub struct CancelToken(Arc<AtomicBool>);
+pub struct CancelToken {
+    run: Arc<AtomicBool>,
+    doors: Vec<Arc<AtomicBool>>,
+}
 
 impl CancelToken {
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.run.load(Ordering::SeqCst) || self.doors.iter().any(|d| d.load(Ordering::SeqCst))
     }
 }
 
@@ -246,6 +252,11 @@ impl DoorEntry {
     fn alive(&self) -> bool {
         self.life.strong_count() > 0
     }
+
+    /// Halted in the registry, or by its door's memory stop (rule 3).
+    fn is_halted(&self) -> bool {
+        self.halted || self.halt_flag.load(Ordering::SeqCst)
+    }
 }
 
 /// What the runs lock holds: the runs, and the doors' groups.
@@ -269,12 +280,25 @@ impl DerefMut for Table {
 }
 
 impl Table {
-    /// Whether `entry` lists a halted group.
+    /// Whether `entry` lists a halted group (in the registry, or by its
+    /// door's memory stop: rule 3).
     fn in_halted_group(&self, entry: &RunEntry) -> bool {
         entry
             .groups
             .iter()
-            .any(|group| self.doors.get(group).is_some_and(|door| door.halted))
+            .any(|group| self.doors.get(group).is_some_and(DoorEntry::is_halted))
+    }
+
+    /// `entry`'s token: its own flag and its groups' halt flags (rule 3).
+    fn token(&self, entry: &RunEntry) -> CancelToken {
+        CancelToken {
+            run: entry.cancelled.clone(),
+            doors: entry
+                .groups
+                .iter()
+                .filter_map(|group| self.doors.get(group).map(|door| door.halt_flag.clone()))
+                .collect(),
+        }
     }
 
     /// Reclaim the groups of doors that are gone: each entry, and its id in
@@ -508,6 +532,18 @@ impl RunRegistry {
         agent: &AgentId,
         life: DoorLife,
     ) -> Result<(), AuthorityError> {
+        self.reserve_door_with(group, agent, life, Arc::new(AtomicBool::new(false)))
+    }
+
+    /// [`Self::reserve_door`] with the door's own memory-stop flag (M2d-C
+    /// round 4, rule 3: the issued door sets it without any lock).
+    pub(crate) fn reserve_door_with(
+        &self,
+        group: GroupId,
+        agent: &AgentId,
+        life: DoorLife,
+        halt_flag: Arc<AtomicBool>,
+    ) -> Result<(), AuthorityError> {
         let mut runs = self.runs.lock().expect("runs");
         runs.prune_doors();
         if runs.doors.len() >= MAX_LIVE_DOORS {
@@ -520,7 +556,8 @@ impl RunRegistry {
                 agent: agent.clone(),
                 active: false,
                 halted: false,
-                halt_flag: Arc::new(AtomicBool::new(false)),
+                // Rule 3: the door's own flag, which its memory stop sets.
+                halt_flag,
                 members: BTreeSet::new(),
                 consents: Vec::new(),
                 pending_consents: 0,
@@ -566,8 +603,10 @@ impl RunRegistry {
         group: GroupId,
         halted_too: bool,
     ) -> Result<(), AuthorityError> {
-        let runs = self.runs.lock().expect("runs");
-        if !halted_too && runs.doors.get(&group).is_some_and(|door| door.halted) {
+        // Rule 3: a registry it cannot read is a typed error (the caller's
+        // memory stop is engaged already), never a panic.
+        let runs = self.runs.lock().map_err(|_| unreadable())?;
+        if !halted_too && runs.doors.get(&group).is_some_and(DoorEntry::is_halted) {
             return Err(AuthorityError::Halted);
         }
         let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
@@ -591,7 +630,7 @@ impl RunRegistry {
             .expect("runs")
             .doors
             .get(&group)
-            .is_some_and(|door| door.halted)
+            .is_some_and(DoorEntry::is_halted)
     }
 
     /// M2c PR-B, the halt's first step, in one hold of the runs lock, taken
@@ -660,6 +699,19 @@ impl RunRegistry {
         if let Some(entry) = runs.get_mut(&run) {
             cancel_one(entry, wall_ms, generation, batch);
         }
+    }
+
+    /// Tests: poison the registry's lock (a panic while it was held).
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(&self) {
+        std::thread::scope(|scope| {
+            let _ = scope
+                .spawn(|| {
+                    let _held = self.runs.lock();
+                    panic!("poisoning the run registry (a test)");
+                })
+                .join();
+        });
     }
 
     /// The most runs kept (`RUN_CAPACITY`; tests may lower it).
@@ -765,7 +817,7 @@ impl RunRegistry {
         agent: &AgentId,
         group: GroupId,
     ) -> Result<(), AuthorityError> {
-        let mut guard = self.runs.lock().expect("runs");
+        let mut guard = self.runs.lock().map_err(|_| unreadable())?;
         let table = &mut *guard;
         table.prune_doors();
         match table.doors.get(&group) {
@@ -820,7 +872,7 @@ impl RunRegistry {
         if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
             return Err(AuthorityError::RunCancelled);
         }
-        Ok(CancelToken(entry.cancelled.clone()))
+        Ok(runs.token(entry))
     }
 
     /// Cancel one run: set its token. Returns whether the run was active.
@@ -1227,8 +1279,9 @@ impl RunRegistry {
         }
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         entry.model_attempts += 1;
+        let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         Ok(CallTicket {
-            token: CancelToken(entry.cancelled.clone()),
+            token: table.token(entry),
             door_halted,
         })
     }
