@@ -373,6 +373,65 @@
 //!     let _: Absent = door.files();
 //! }
 //! ```
+//!
+//! M2d-B2 (D-O23): the undo, the startup recovery report, the working
+//! detail and the startup hold are the Owner's, from the front door only.
+//! Its compiling twin:
+//!
+//! ```
+//! use nexus_governed_control::governed::GovernedControl;
+//! let _ = GovernedControl::files_undo;
+//! let _ = GovernedControl::files_recovery_report;
+//! let _ = GovernedControl::files_working_detail;
+//! let _ = GovernedControl::hold_files_before_publish;
+//! ```
+//!
+//! ```compile_fail,E0599
+//! let _ = nexus_governed_control::governed::AgentDoor::files_undo; // no door route
+//! ```
+//!
+//! The probe, compiling only while each is absent from the door:
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! struct Absent;
+//! trait Probe {
+//!     fn files_undo(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn files_recovery_report(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn files_working_detail(&mut self) -> Absent {
+//!         Absent
+//!     }
+//!     fn hold_files_before_publish(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for AgentDoor {}
+//! fn probe(mut door: AgentDoor) {
+//!     let _: Absent = door.files_undo();
+//!     let _: Absent = door.files_recovery_report();
+//!     let _: Absent = door.files_working_detail();
+//!     let _: Absent = door.hold_files_before_publish();
+//! }
+//! ```
+//!
+//! A Files working detail (design I4) is shown only through an `OwnerView`:
+//! it has no `Debug` and no `Clone`.
+//!
+//! ```compile_fail,E0277
+//! fn leak(detail: nexus_governed_control::files::WorkingDetail) -> String {
+//!     format!("{:?}", detail)
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! fn twice(detail: nexus_governed_control::files::WorkingDetail) {
+//!     let _ = detail.clone();
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 
