@@ -381,13 +381,31 @@ impl Authority {
     /// it permits nothing). A yes counts only once its record is written
     /// (evidence first), and not if an emergency stop or quitting came
     /// while the owner was asked. The approval names the hash and the
-    /// request; it grants nothing.
+    /// request; it grants nothing. (The owner's own front door: its labels
+    /// are recorded as given.)
     pub fn confirm_mission(
         &self,
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionApproval, AuthorityError> {
+        self.confirm_mission_as(request, confirmer, Privacy::Owner)
+    }
+
+    /// [`Self::confirm_mission`], its record of class `privacy`. An agent's
+    /// door asks as `Restricted`: its holder supplies every label, so only
+    /// Mother's controlled request label is admitted ([`controlled`]),
+    /// refused before any dialog or record otherwise, and the record is
+    /// sealed as Restricted.
+    pub(crate) fn confirm_mission_as(
+        &self,
+        request: &MissionConfirmation,
+        confirmer: &dyn ControlConfirmer,
+        privacy: Privacy,
+    ) -> Result<MissionApproval, AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
+        if privacy == Privacy::Restricted {
+            controlled(&request.request, None)?;
+        }
         if self
             .evidence
             .primary()
@@ -406,7 +424,7 @@ impl Authority {
             phase,
             self.clock.wall_ms(),
             self.generation.current(),
-            Privacy::Owner,
+            privacy,
         );
         record
             .detail
@@ -445,11 +463,25 @@ impl Authority {
     /// checked again, and then the record stands with no approval. The
     /// approval records the owner's yes to the hash and the request: it
     /// resumes nothing and grants nothing. (A door calls this with the
-    /// confirmer its host bound.)
+    /// confirmer its host bound, through [`Self::confirm_held_mission_as`].)
     pub fn confirm_held_mission(
         &self,
         request: &MissionResumeConfirmation,
         confirmer: &dyn ControlConfirmer,
+    ) -> Result<MissionResumeApproval, AuthorityError> {
+        self.confirm_held_mission_as(request, confirmer, Privacy::Owner)
+    }
+
+    /// [`Self::confirm_held_mission`], its record of class `privacy`. An
+    /// agent's door asks as `Restricted`: only Mother's controlled mission
+    /// id, request label and held reasons are admitted ([`controlled`]),
+    /// refused before any dialog or record otherwise, and the record is
+    /// sealed as Restricted.
+    pub(crate) fn confirm_held_mission_as(
+        &self,
+        request: &MissionResumeConfirmation,
+        confirmer: &dyn ControlConfirmer,
+        privacy: Privacy,
     ) -> Result<MissionResumeApproval, AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         for label in [&request.mission, &request.held_reason] {
@@ -458,6 +490,12 @@ impl Authority {
                     "the held mission is not named by plain labels",
                 ));
             }
+        }
+        if privacy == Privacy::Restricted {
+            controlled(
+                &request.request,
+                Some((&request.mission, &request.held_reason)),
+            )?;
         }
         if self
             .evidence
@@ -477,7 +515,7 @@ impl Authority {
             phase,
             self.clock.wall_ms(),
             self.generation.current(),
-            Privacy::Owner,
+            privacy,
         );
         record
             .detail
@@ -823,6 +861,29 @@ pub(crate) struct Stopped {
     pub(crate) cancelled: usize,
     revoked: commitment::Unwritten,
     record: EvidenceRecord,
+}
+
+/// The labels an agent's door may give the owner's mission and
+/// held-mission dialogs (P0-C): only Mother's controlled values, exactly as
+/// Mother writes them. A request label `{mission}/{seq}/{number}`; for a
+/// held mission, also its mission id and one of the held reasons Mother
+/// names. Anything else is refused before any dialog or record. (The
+/// contract hash and the plain summary are checked by [`mission_text`];
+/// the summary is recorded only as its digest.)
+fn controlled(request: &str, held: Option<(&str, &str)>) -> Result<(), AuthorityError> {
+    if !evidence::is_mission_request(request) {
+        return Err(AuthorityError::InvalidAction(
+            "the mission request is not a controlled label",
+        ));
+    }
+    if let Some((mission, reason)) = held {
+        if !evidence::is_mission_id(mission) || !evidence::is_held_reason(reason) {
+            return Err(AuthorityError::InvalidAction(
+                "the held mission is not named by controlled labels",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The text of a mission or held-mission request: a SHA-256 hex digest, a

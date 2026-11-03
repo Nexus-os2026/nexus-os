@@ -121,6 +121,13 @@ enum Kept {
     Lease,
     /// A door's opaque id (32 lowercase hex).
     Door,
+    /// A SHA-256 digest (64 lowercase hex): a contract hash, a summary's
+    /// digest.
+    Sha256,
+    /// Mother's mission id ([`is_mission_id`]).
+    Mission,
+    /// Mother's request label ([`is_mission_request`]).
+    Request,
     /// One of these codes.
     Code(&'static [&'static str]),
 }
@@ -134,6 +141,37 @@ const AREAS: &[&str] = &["cognitive_loop", "coding", "model_call"];
 const RUN_CLASSES: &[&str] = &["owner"];
 /// Operations named in detail: none yet (M2d appends).
 const OPERATIONS: &[&str] = &[];
+/// Why Mother holds a mission (its `HeldReason`).
+const HELD_REASONS: &[&str] = &["unclean_shutdown"];
+
+/// Mother's mission id, exactly as Mother writes it (`msn-{:06}`): `msn-`
+/// and a number, in canonical decimal of at least six digits.
+pub(crate) fn is_mission_id(text: &str) -> bool {
+    text.strip_prefix("msn-").is_some_and(|digits| {
+        (6..=20).contains(&digits.len())
+            && digits.bytes().all(|b| b.is_ascii_digit())
+            && digits
+                .parse::<u64>()
+                .is_ok_and(|n| format!("{n:06}") == digits)
+    })
+}
+
+/// Mother's request label, exactly as Mother writes it
+/// (`{mission}/{seq}/{number}`): a mission id ([`is_mission_id`]) and two
+/// counts, separated by `/`.
+pub(crate) fn is_mission_request(text: &str) -> bool {
+    let parts: Vec<&str> = text.split('/').collect();
+    matches!(
+        parts.as_slice(),
+        [mission, seq, number]
+            if is_mission_id(mission) && Kept::Count.admits(seq) && Kept::Count.admits(number)
+    )
+}
+
+/// One of the held reasons Mother names.
+pub(crate) fn is_held_reason(text: &str) -> bool {
+    HELD_REASONS.contains(&text)
+}
 
 /// The I6 registry: the detail keys a Restricted record keeps as they are,
 /// each with its value class. Every other key's value becomes a digest.
@@ -142,6 +180,12 @@ fn registered(key: &str) -> Option<Kept> {
         "status" | "bytes" | "redirects" | "lines" => Kept::Count,
         "lease" => Kept::Lease,
         "door" => Kept::Door,
+        // The Owner's answers at a door's mission and held-mission dialogs
+        // (P0-C, Codex review 1): the controlled values only.
+        "contract_hash" | "summary_digest" => Kept::Sha256,
+        "mission" => Kept::Mission,
+        "request" => Kept::Request,
+        "held_reason" => Kept::Code(HELD_REASONS),
         "service" => Kept::Code(SERVICES),
         "reason" => Kept::Code(super::REASONS),
         "class" => Kept::Code(RUN_CLASSES),
@@ -168,6 +212,9 @@ impl Kept {
                 .strip_prefix("lease-")
                 .is_some_and(|hex| is_lower_hex(hex, 32)),
             Kept::Door => is_lower_hex(value, 32),
+            Kept::Sha256 => is_lower_hex(value, 64),
+            Kept::Mission => is_mission_id(value),
+            Kept::Request => is_mission_request(value),
             Kept::Code(codes) => codes.contains(&value),
         }
     }

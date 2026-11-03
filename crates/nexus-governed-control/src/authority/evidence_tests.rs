@@ -188,3 +188,52 @@ fn a_run_s_class_is_fixed_at_insertion_and_an_unknown_run_is_restricted() {
     assert_eq!(runs.privacy(owner), Owner, "an ended run keeps its class");
     assert_eq!(runs.privacy(theirs), Restricted);
 }
+
+#[test]
+fn a_door_s_mission_labels_are_mother_s_exactly() {
+    for id in [
+        "msn-000001",
+        "msn-123456",
+        "msn-1234567",
+        "msn-18446744073709551615",
+    ] {
+        assert!(is_mission_id(id), "{id}");
+    }
+    for not in [
+        "msn-00001",
+        "msn-0000001",
+        "msn-00000a",
+        "MSN-000001",
+        "m-1",
+        "msn-",
+        "msn-18446744073709551616",
+        "nxsecret_0123456789abcdef",
+    ] {
+        assert!(!is_mission_id(not), "{not}");
+    }
+    assert!(is_mission_request("msn-000001/2/1"));
+    for not in [
+        "msn-000001/2",
+        "msn-000001/2/1/0",
+        "msn-000001/02/1",
+        "msn-000001/2/",
+        "m-1/2/1",
+        "msn-000001/2/1 ",
+        "msn-000001/1/NXCANARY-00",
+    ] {
+        assert!(!is_mission_request(not), "{not}");
+    }
+    assert!(is_held_reason("unclean_shutdown"));
+    assert!(!is_held_reason("Unclean_shutdown"));
+    for (key, kept, not) in [
+        ("contract_hash", "ab".repeat(32), "AB".repeat(32)),
+        ("summary_digest", "ab".repeat(32), "ab".repeat(31)),
+        ("mission", "msn-000001".into(), "msn-1".into()),
+        ("request", "msn-000001/2/1".into(), "msn-000001/x/1".into()),
+        ("held_reason", "unclean_shutdown".into(), "held".into()),
+    ] {
+        let registered = registered(key).expect("a registered key");
+        assert!(registered.admits(&kept), "{key}: {kept}");
+        assert!(!registered.admits(&not), "{key}: {not}");
+    }
+}
