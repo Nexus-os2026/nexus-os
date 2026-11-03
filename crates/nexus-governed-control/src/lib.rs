@@ -456,6 +456,38 @@
 //!     let _: Absent = door.files_retry_cleanup();
 //! }
 //! ```
+//!
+//! M2e-B (E-O20): the host registers the process's one local model from
+//! the front door; a door only reads its identity, admits its own runs to
+//! a consent it holds, and calls it for them. Its compiling twin:
+//!
+//! ```
+//! use nexus_governed_control::governed::{AgentDoor, GovernedControl};
+//! let _ = GovernedControl::register_local_model;
+//! let _ = AgentDoor::model_identity;
+//! let _ = AgentDoor::admit_inference;
+//! let _ = AgentDoor::model_call;
+//! ```
+//!
+//! ```compile_fail,E0599
+//! let _ = nexus_governed_control::governed::AgentDoor::register_local_model; // no door route
+//! ```
+//!
+//! The probe, compiling only while it is absent from the door:
+//!
+//! ```
+//! use nexus_governed_control::governed::AgentDoor;
+//! struct Absent;
+//! trait Probe {
+//!     fn register_local_model(&mut self) -> Absent {
+//!         Absent
+//!     }
+//! }
+//! impl Probe for AgentDoor {}
+//! fn probe(mut door: AgentDoor) {
+//!     let _: Absent = door.register_local_model();
+//! }
+//! ```
 
 #![deny(unsafe_code)]
 

@@ -13,6 +13,10 @@ use nexus_kernel::inference::{
 };
 use std::sync::{Arc, Mutex};
 
+#[cfg(all(test, target_os = "linux"))]
+#[path = "inference_tests.rs"]
+mod tests;
+
 /// The registered model, as a door may see it: its name, its manifest
 /// digest and its identity digest (each plain hex or the name grammar).
 #[derive(Clone, Debug, PartialEq, Eq)]
