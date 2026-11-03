@@ -1789,3 +1789,284 @@ fn p0c_one_choke_point_writes_every_record() {
     .collect();
     assert_eq!(builders, inventory, "the 15 record builders");
 }
+
+// ---------------------------------------------------------------- consent and resume
+
+use super::approval::{MissionConfirmation, MissionResumeConfirmation};
+
+/// The Owner at a door's mission and held-mission dialogs: always yes or
+/// always no; every dialog raised is counted.
+struct Answers {
+    yes: bool,
+    asked: std::sync::atomic::AtomicUsize,
+}
+
+impl Answers {
+    fn new(yes: bool) -> Arc<Self> {
+        Arc::new(Self {
+            yes,
+            asked: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+
+    fn asked(&self) -> usize {
+        self.asked.load(Ordering::SeqCst)
+    }
+}
+
+impl ControlConfirmer for Answers {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
+    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
+        true
+    }
+    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        self.yes
+    }
+    fn confirm_held_mission(&self, _: &MissionResumeConfirmation) -> bool {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        self.yes
+    }
+}
+
+/// A contract hash: 64 lowercase hex digits.
+const CONTRACT: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+fn consent(request: &str, summary: &str) -> MissionConfirmation {
+    MissionConfirmation {
+        contract_hash: CONTRACT.into(),
+        request: request.into(),
+        summary: vec![summary.into()],
+    }
+}
+
+fn resume(
+    mission: &str,
+    request: &str,
+    held_reason: &str,
+    summary: &str,
+) -> MissionResumeConfirmation {
+    MissionResumeConfirmation {
+        mission: mission.into(),
+        contract_hash: CONTRACT.into(),
+        request: request.into(),
+        held_reason: held_reason.into(),
+        summary: vec![summary.into()],
+    }
+}
+
+fn mission_records(history: &MemoryEvidence) -> Vec<EvidenceRecord> {
+    history
+        .records()
+        .into_iter()
+        .filter(|r| {
+            matches!(
+                r.phase,
+                EvidencePhase::MissionConsented
+                    | EvidencePhase::MissionDeclined
+                    | EvidencePhase::MissionResumeConfirmed
+                    | EvidencePhase::MissionResumeDeclined
+            )
+        })
+        .collect()
+}
+
+/// One attempt at a door's dialog, and what it came to.
+struct Attempt {
+    case: String,
+    yes: bool,
+    asked: usize,
+    recorded: usize,
+    result: Result<(), AuthorityError>,
+}
+
+/// Codex PR #54 review 1 (HIGH): the mission-consent and held-mission
+/// records a door raises carry only controlled values. Through an agent
+/// door, for a yes and for a no: a canary in the request, the mission or
+/// the held reason is refused before any dialog or record; a canary in the
+/// summary is shown to the Owner and recorded only as its digest. No canary
+/// reaches any evidence. Controls: a controlled consent and resume are
+/// asked and recorded with their contract hash, request, mission and held
+/// reason as they are (what Mother's M2a oracles read); and the Owner's own
+/// front door keeps its behaviour (its label is recorded as given, and the
+/// scanner sees it).
+#[test]
+fn p0c_o25_door_consent_and_resume_records_carry_no_agent_text() {
+    let canaries = Canaries::new();
+    let f = Composed::new(&canaries);
+    let (c, cl) = (canaries.c.clone(), canaries.cl.clone());
+    let plain = "A one-page site";
+    let summary = canaries.text("summary");
+    let refused_consents = [
+        ("consent request C", consent(&c, plain)),
+        ("consent request Cl", consent(&cl, plain)),
+        (
+            "consent request ending in C",
+            consent(&format!("msn-000001/1/{c}"), plain),
+        ),
+    ];
+    let refused_resumes = [
+        (
+            "resume request C",
+            resume("msn-000001", &c, "unclean_shutdown", plain),
+        ),
+        (
+            "resume mission C",
+            resume(&c, "msn-000001/2/1", "unclean_shutdown", plain),
+        ),
+        (
+            "resume mission Cl",
+            resume(&cl, "msn-000001/2/1", "unclean_shutdown", plain),
+        ),
+        (
+            "resume held reason C",
+            resume("msn-000001", "msn-000001/2/1", &c, plain),
+        ),
+        (
+            "resume held reason Cl",
+            resume("msn-000001", "msn-000001/2/1", &cl, plain),
+        ),
+    ];
+    let mut attempts = Vec::new();
+    for yes in [true, false] {
+        let owner = Answers::new(yes);
+        let door = f
+            .control()
+            .issue_agent_door(mother(), owner.clone())
+            .expect("the Owner opens a door for Mother");
+        let mut attempt = |case: &str, run: &dyn Fn() -> Result<(), AuthorityError>| {
+            let (asked, recorded) = (owner.asked(), mission_records(&f.history).len());
+            let result = run();
+            attempts.push(Attempt {
+                case: case.to_string(),
+                yes,
+                asked: owner.asked() - asked,
+                recorded: mission_records(&f.history).len() - recorded,
+                result,
+            });
+        };
+        for (case, request) in &refused_consents {
+            attempt(case, &|| door.confirm_mission(request).map(|_| ()));
+        }
+        for (case, request) in &refused_resumes {
+            attempt(case, &|| door.confirm_held_mission(request).map(|_| ()));
+        }
+        let shown = consent("msn-000001/1/1", &summary);
+        attempt("consent summary C", &|| {
+            door.confirm_mission(&shown).map(|_| ())
+        });
+        let shown = resume("msn-000001", "msn-000001/2/1", "unclean_shutdown", &summary);
+        attempt("resume summary C", &|| {
+            door.confirm_held_mission(&shown).map(|_| ())
+        });
+        let control = consent("msn-000002/3/1", plain);
+        attempt("consent control", &|| {
+            door.confirm_mission(&control).map(|_| ())
+        });
+        let control = resume("msn-000002", "msn-000002/4/1", "unclean_shutdown", plain);
+        attempt("resume control", &|| {
+            door.confirm_held_mission(&control).map(|_| ())
+        });
+    }
+    let records = mission_records(&f.history);
+    let found = f.scan();
+    assert!(
+        found.is_empty(),
+        "a door's consent or resume records carry canaries: {found:?}"
+    );
+    for a in &attempts {
+        let answer = if a.yes { "yes" } else { "no" };
+        if a.case.contains("summary") || a.case.contains("control") {
+            assert_eq!(
+                (a.asked, a.recorded),
+                (1, 1),
+                "{} ({answer}): asked once, recorded once",
+                a.case
+            );
+            if a.yes {
+                assert_eq!(a.result, Ok(()), "{} ({answer})", a.case);
+            } else {
+                assert_eq!(
+                    a.result,
+                    Err(AuthorityError::Declined),
+                    "{} ({answer})",
+                    a.case
+                );
+            }
+        } else {
+            assert!(
+                matches!(a.result, Err(AuthorityError::InvalidAction(_))),
+                "{} ({answer}) is refused: {:?}",
+                a.case,
+                a.result
+            );
+            assert_eq!(
+                (a.asked, a.recorded),
+                (0, 0),
+                "{} ({answer}): refused before any dialog or record",
+                a.case
+            );
+        }
+    }
+    assert_eq!(
+        records.len(),
+        8,
+        "the summary and control answers, each recorded"
+    );
+    for record in &records {
+        assert_eq!(record.target, None);
+        for (key, value) in &record.detail {
+            match key.as_str() {
+                "contract_hash" => assert_eq!(value, CONTRACT),
+                "summary_digest" => assert!(is_sha256(value), "{value}"),
+                "request" => assert!(value.starts_with("msn-00000"), "{value}"),
+                "mission" => assert!(value.starts_with("msn-00000"), "{value}"),
+                "held_reason" => assert_eq!(value, "unclean_shutdown"),
+                other => panic!("a mission record keeps `{other}`"),
+            }
+        }
+    }
+    for (phase, request) in [
+        (EvidencePhase::MissionConsented, "msn-000002/3/1"),
+        (EvidencePhase::MissionDeclined, "msn-000002/3/1"),
+        (EvidencePhase::MissionResumeConfirmed, "msn-000002/4/1"),
+        (EvidencePhase::MissionResumeDeclined, "msn-000002/4/1"),
+    ] {
+        let record = records
+            .iter()
+            .find(|r| r.phase == phase && detail(r, "request") == Some(request))
+            .unwrap_or_else(|| panic!("the control's {} record", phase.as_str()));
+        assert_eq!(detail(record, "contract_hash"), Some(CONTRACT));
+        if request.ends_with("/4/1") {
+            assert_eq!(detail(record, "mission"), Some("msn-000002"));
+            assert_eq!(detail(record, "held_reason"), Some("unclean_shutdown"));
+        }
+    }
+
+    // The Owner's own front door keeps its behaviour.
+    let canaries = Canaries::new();
+    let f = Composed::new(&canaries);
+    let owner = Answers::new(true);
+    f.control()
+        .confirm_mission(&consent(&canaries.c, plain), &*owner)
+        .expect("the front door records the Owner's yes to its own label");
+    let records = mission_records(&f.history);
+    assert_eq!(records.len(), 1);
+    assert_eq!(detail(&records[0], "request"), Some(canaries.c.as_str()));
+    let found = f.scan();
+    assert!(
+        found.iter().any(|f| f.starts_with("C raw in ")),
+        "the front door's label is recorded as given, and the scan sees it: {found:?}"
+    );
+}
