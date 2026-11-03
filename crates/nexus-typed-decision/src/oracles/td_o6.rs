@@ -167,8 +167,11 @@ fn td_o6_duplicate_keys_are_refused_before_insertion_at_both_depths() {
     );
     let sen = "{\"hours_conflict\":0.1,\"other_contact\":0.1,\"addressed_to_ai\":0.1,\"facts_consistent\":0.9,\"other_contact\":0.1}";
     refused(&SEN_1, sen, DuplicateKey);
-    // Depth 2. A map that inserted first would keep one "fits" and accept a
-    // sum of exactly one; keeping the first or the last would also differ.
+    // Depth 2. In this fixture the repeated "fits" has no colon or value:
+    // the duplicate is refused as soon as its key is read, before its colon
+    // or value is parsed. The next case (`low_twice`) is a valid
+    // duplicate-key reply, where a first-wins and a last-wins reader would
+    // disagree.
     refused(
         mixed(),
         &mixed_with_fits("0.5,\"unclear\":0.5,\"fits\"", "0.5"),
