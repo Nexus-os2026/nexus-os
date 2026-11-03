@@ -1746,3 +1746,42 @@ fn pr75_d1_an_owed_record_refuses_calls_and_registration_before_any_attempt() {
     assert_eq!(g.fake.total(), 0, "no request reached the runtime");
     assert_eq!(g.door.model_identity(), None);
 }
+
+/// Architect decision 2 on PR #75 (the S1a-D+B merge): the page-facts
+/// agreement rule lives in the shared `admissible` helper, so inference
+/// admission inherits it (fail closed). Two yeses to one hash and request
+/// that disagree on their facts admit no inference (`no_consent`); two
+/// agreeing yeses admit, and the inference admission keeps no facts.
+#[test]
+fn pr75_d2_yeses_that_disagree_on_facts_admit_no_inference() {
+    use crate::authority::approval::FactsView;
+    let facts = |phone: &str| FactsView {
+        name: "Rosie's Bakery".into(),
+        hours: vec!["Monday to Friday: 07:00 – 17:00".into()],
+        phone: phone.into(),
+    };
+    let ask = |door: &AgentDoor, n: u32, phone: &str| {
+        door.confirm_mission(&MissionConfirmation {
+            page_facts: Some(facts(phone)),
+            ..mission(HASH, &label(n))
+        })
+        .expect("the Owner consents")
+    };
+    let f = Fx::new();
+    ask(&f.door, 1, "01632 960123");
+    ask(&f.door, 1, "020 7946 0123");
+    let run = f.door.open_run().unwrap();
+    assert_eq!(
+        class(f.door.admit_inference(run, HASH, &label(1), identity())),
+        "no_consent",
+        "two yeses disagree on the facts"
+    );
+    assert_eq!(f.admission(run), None);
+
+    ask(&f.door, 2, "01632 960123");
+    ask(&f.door, 2, "01632 960123");
+    f.door
+        .admit_inference(run, HASH, &label(2), identity())
+        .expect("agreeing yeses admit");
+    assert_eq!(f.admission(run).map(|a| a.request), Some(label(2)));
+}
