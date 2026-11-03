@@ -39,6 +39,9 @@ use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
 use crate::files::FileReceipt;
 use crate::inert_page::ApprovedFacts;
+use crate::inference::{
+    Admitted, CallDeadline, CallMeter, ModelCallOutcome, ModelIdentityView, ModelRequest,
+};
 use std::fmt;
 use std::sync::Arc;
 
@@ -328,6 +331,101 @@ impl AgentDoor {
                 workspace,
             )
             .map(|_| ())
+    }
+
+    /// M2e-B (design v2 §8): the registered local model, if any (its name,
+    /// manifest digest and identity digest).
+    pub fn model_identity(&self) -> Option<ModelIdentityView> {
+        self.control
+            .registered_model()
+            .map(|model| model.view.clone())
+    }
+
+    /// M2e-B (design v2 §8, H1′): bind one of this door's runs, once, to
+    /// the Owner's yes to exactly `contract_hash` and `request` cached at
+    /// this door, and to the registered model, which must be
+    /// `expected_identity` (the identity the Owner consented to). Validated
+    /// and installed in one hold of the runs lock with the door's life, the
+    /// run's membership and life, Stop and closure (shared with Files
+    /// admission). The same admission again is the same binding; any other
+    /// second admission is refused; any refusal binds nothing.
+    pub fn admit_inference(
+        &self,
+        run: RunId,
+        contract_hash: &str,
+        request: &str,
+        expected_identity: [u8; 32],
+    ) -> Result<(), AuthorityError> {
+        self.not_halted()?;
+        let model = self
+            .control
+            .registered_model()
+            .ok_or(AuthorityError::ModelNotRegistered)?;
+        if model.identity != expected_identity {
+            return Err(AuthorityError::ModelIdentityMismatch);
+        }
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::INFERENCE_BEFORE_BIND);
+        self.control
+            .authority()
+            .runs()
+            .admit_inference(
+                run,
+                &self.core.agent,
+                self.core.group,
+                contract_hash,
+                request,
+                model.identity,
+            )
+            .map(|_| ())
+    }
+
+    /// M2e-B (design v2 §6 step 3, §8): one model call of one of this
+    /// door's runs, charged to `meter` immediately before the chat and
+    /// ended by `deadline` (absolute, the caller's), the run's cancellation,
+    /// this door's halt, the session's end or the Owner's Stop. Admitted
+    /// in one hold of the runs lock (the run this door's live agent run,
+    /// admitted for inference to the registered model, under its attempt
+    /// ceiling); then no broker lock is held. Refused before any attempt
+    /// (nothing charged, sent or recorded) while the evidence store cannot
+    /// record or owes a record. Every attempt is recorded (Restricted), and what became of
+    /// its record is returned with the transport's result. The reply is
+    /// untrusted data.
+    pub fn model_call(
+        &self,
+        run: RunId,
+        request: &ModelRequest,
+        meter: &dyn CallMeter,
+        deadline: &dyn CallDeadline,
+    ) -> Result<ModelCallOutcome, AuthorityError> {
+        self.not_halted()?;
+        let model = self
+            .control
+            .registered_model()
+            .ok_or(AuthorityError::ModelNotRegistered)?;
+        // A known evidence failure (a latched store, recovery required, or
+        // any record owed) permits no new inference.
+        self.control.authority().inference_admissible()?;
+        let ticket = self.control.authority().runs().admit_model_call(
+            run,
+            &self.core.agent,
+            self.core.group,
+            &model.identity,
+        )?;
+        Ok(crate::inference::call(
+            self.control.authority(),
+            self.control.kernel_stop_authority(),
+            &model,
+            Admitted {
+                run,
+                agent: &self.core.agent,
+                ticket,
+            },
+            request,
+            (meter, deadline),
+        ))
     }
 
     /// S1a-D+B (M3 §6.2): the broker's receipt for a Files create of one of
