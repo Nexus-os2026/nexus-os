@@ -833,9 +833,9 @@ impl CodingRun {
             "project_grant": project_grant,
             "agent": binding.agent_id.to_string(),
             "binding_run": binding.run_id.to_string(),
-            "read": run.scopes.read().describe(),
-            "write": run.scopes.write().describe(),
-            "protected": run.scopes.protected().describe(),
+            "read": ledger::scope_facts(run.scopes.read()),
+            "write": ledger::scope_facts(run.scopes.write()),
+            "protected": ledger::scope_facts(run.scopes.protected()),
             "profile": hex::encode(run.profile.hash()),
         });
         if let Some(project) = run.project_id {
@@ -1167,7 +1167,7 @@ impl CodingRun {
         let result = action(self);
         let outcome = match &result {
             Ok(value) => json!({ "op": op, "ok": true, "facts": outcome_facts(value) }),
-            Err(error) => json!({ "op": op, "ok": false, "error": error.to_string() }),
+            Err(error) => ledger::failed_op(op, error),
         };
         if record(
             self.ledger.as_ref(),
@@ -1232,7 +1232,7 @@ impl CodingRun {
                         self.ledger.as_ref(),
                         self.id.0,
                         EventKind::OperationOutcome,
-                        &json!({ "op": op, "ok": false, "error": error.to_string() }),
+                        &ledger::failed_op(op, &error),
                     );
                     return Err(self.fail(error));
                 }
@@ -1240,7 +1240,7 @@ impl CodingRun {
         let allocated = lease.allocate(expires_at);
         let outcome = match &allocated {
             Ok(()) => json!({ "op": op, "ok": true, "facts": { "staging_grant": lease.grant } }),
-            Err(error) => json!({ "op": op, "ok": false, "error": error.to_string() }),
+            Err(error) => ledger::failed_op(op, error),
         };
         let outcome_recorded = record(
             self.ledger.as_ref(),
@@ -1297,7 +1297,7 @@ impl CodingRun {
         }
         let copied = self.mutate(
             "snapshot",
-            json!({ "read": self.scopes.read().describe() }),
+            json!({ "read": ledger::scope_facts(self.scopes.read()) }),
             |run| run.copy_read_scope(),
             |manifest: &Manifest| {
                 json!({
@@ -1377,8 +1377,10 @@ impl CodingRun {
         if let Err(error) = self.capture_base(&edit) {
             return Err(self.fail(error));
         }
+        let path = edit.path().as_string();
         let facts = json!({
-            "path": edit.path().as_string(),
+            "path_sha256": ledger::path_sha256(&path),
+            "path_bytes": path.len(),
             "kind": edit.kind(),
             "size": edit.content().len(),
             "sha256": hex::encode(ManifestEntry::of(edit.content()).sha256),
@@ -1436,10 +1438,12 @@ impl CodingRun {
     }
 
     fn reject_edit(&mut self, edit: &CandidateEdit, rejection: EditRejection) -> RunError {
+        let path = edit.path().as_string();
         let facts = json!({
-            "path": edit.path().as_string(),
+            "path_sha256": ledger::path_sha256(&path),
+            "path_bytes": path.len(),
             "kind": edit.kind(),
-            "reason": format!("{rejection:?}"),
+            "reason": rejection.code(),
         });
         match record(
             self.ledger.as_ref(),
@@ -1653,8 +1657,8 @@ impl CodingRun {
             "base_manifest": binding.base_manifest_hash.to_hex(),
             "candidate_manifest": binding.candidate_manifest_hash.to_hex(),
             "verification": match binding.verification {
-                VerifierMarker::NoResult => "none".to_string(),
-                VerifierMarker::Result(hash) => hex::encode(hash),
+                VerifierMarker::NoResult => Value::Null,
+                VerifierMarker::Result(hash) => json!(hex::encode(hash)),
             },
             "create": review.count(ChangeKind::Create),
             "replace": review.count(ChangeKind::Replace),
@@ -1839,7 +1843,7 @@ impl CodingRun {
             self.ledger.as_ref(),
             self.id.0,
             EventKind::CandidateWithdrawn,
-            &json!({ "reason": error.to_string() }),
+            &ledger::withdrawn(&error),
         );
         error
     }
@@ -1856,11 +1860,7 @@ impl CodingRun {
                 state: self.state,
             });
         }
-        let facts = json!({
-            "provider": pin.provider(),
-            "endpoint": pin.endpoint(),
-            "model": pin.model(),
-        });
+        let facts = ledger::pin_facts(&pin);
         record(
             self.ledger.as_ref(),
             self.id.0,
@@ -1924,8 +1924,10 @@ impl CodingRun {
             }
             Err(error) => return Err(self.fail(error)),
         };
+        let text = path.as_string();
         let facts = json!({
-            "path": path.as_string(),
+            "path_sha256": ledger::path_sha256(&text),
+            "path_bytes": text.len(),
             "size": content.len(),
             "sha256": hex::encode(ManifestEntry::of(&content).sha256),
         });
@@ -2091,7 +2093,7 @@ impl CodingRun {
         self.verification = None;
         self.close_project_read();
         self.close_staging();
-        let facts = json!({ "status": format!("{:?}", self.cleanup) });
+        let facts = json!({ "status": self.cleanup.code() });
         let _ = record(
             self.ledger.as_ref(),
             self.id.0,
@@ -2142,15 +2144,13 @@ impl CodingRun {
     }
 }
 
-/// The state-bearing ledger event and reason for a terminal state.
-fn terminal_event(state: RunState) -> Option<(EventKind, String)> {
+/// The state-bearing ledger event and reason code for a terminal state.
+fn terminal_event(state: RunState) -> Option<(EventKind, &'static str)> {
     match state {
-        RunState::Cancelled => Some((EventKind::RunCancelled, "cancelled".to_string())),
-        RunState::Revoked(reason) => Some((EventKind::RunRevoked, format!("{reason:?}"))),
-        RunState::Failed(reason) => Some((EventKind::RunFailed, format!("{reason:?}"))),
-        RunState::RecoveryRequired(reason) => {
-            Some((EventKind::RecoveryRequired, format!("{reason:?}")))
-        }
+        RunState::Cancelled => Some((EventKind::RunCancelled, "cancelled")),
+        RunState::Revoked(reason) => Some((EventKind::RunRevoked, reason.code())),
+        RunState::Failed(reason) => Some((EventKind::RunFailed, reason.code())),
+        RunState::RecoveryRequired(reason) => Some((EventKind::RecoveryRequired, reason.code())),
         _ => None,
     }
 }

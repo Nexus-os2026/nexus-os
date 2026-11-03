@@ -99,6 +99,8 @@ fn finish() -> serde_json::Value {
     json!({ "action": "finish", "summary": "done" })
 }
 
+/// The recorded rejections as (`path_sha256`, reason). P0-B: the ledger
+/// keeps a rejected path only by digest ([`recorded`] recomputes it).
 fn rejections(f: &Fixture, run: &CodingRun) -> Vec<(String, String)> {
     f.ledger
         .verify_run(run.id().ledger_key())
@@ -108,11 +110,19 @@ fn rejections(f: &Fixture, run: &CodingRun) -> Vec<(String, String)> {
         .map(|r| {
             let payload: serde_json::Value = serde_json::from_str(&r.payload).unwrap();
             (
-                payload["path"].as_str().unwrap_or_default().to_string(),
+                payload["path_sha256"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
                 payload["reason"].as_str().unwrap_or_default().to_string(),
             )
         })
         .collect()
+}
+
+/// The `path_sha256` the ledger records for a known path spelling.
+fn recorded(path: &str) -> String {
+    crate::coding_run::ledger::path_sha256(path)
 }
 
 fn limits() -> WorkerLimits {
@@ -512,7 +522,7 @@ fn p1_w_nc_10_read_bounds_are_enforced() {
     assert_eq!(report.files_read, 2);
     assert_eq!(
         rejections(&f, &run),
-        vec![("docs/guide.md".to_string(), "LimitReached".to_string())]
+        vec![(recorded("docs/guide.md"), "LimitReached".to_string())]
     );
 
     let model = ScriptedModel::new("m:1", vec![read(&["src/lib.rs"]), finish()]);
@@ -526,7 +536,7 @@ fn p1_w_nc_10_read_bounds_are_enforced() {
     assert_eq!(report.bytes_read, 0);
     assert_eq!(
         rejections(&f, &run),
-        vec![("src/lib.rs".to_string(), "Refused(TooLarge)".to_string())]
+        vec![(recorded("src/lib.rs"), "Refused(TooLarge)".to_string())]
     );
 }
 

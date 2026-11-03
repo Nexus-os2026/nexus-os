@@ -1806,3 +1806,8 @@ mod m0_f5_stop;
 
 #[path = "p0b_ledger_privacy_tests.rs"]
 mod p0b_ledger_privacy;
+
+// ── P0-B: the ledger schema's own tests ────────────────────────────────────
+
+#[path = "p0b_ledger_schema_tests.rs"]
+mod p0b_ledger_schema;

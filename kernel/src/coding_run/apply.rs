@@ -40,7 +40,7 @@ use serde_json::json;
 use thiserror::Error;
 
 use super::fsops::{DirHandle, EntryKind, NodeIdentity};
-use super::ledger::{record, EventKind};
+use super::ledger::{self, record, EventKind};
 use super::manifest::ManifestEntry;
 use super::review::{display_safe, ChangeKind, Review, ReviewBinding};
 use super::scope::RelPath;
@@ -485,7 +485,7 @@ impl CodingRun {
                 self.ledger.as_ref(),
                 self.id.0,
                 EventKind::ApplyRejected,
-                &json!({ "reason": format!("{refusal:?}") }),
+                &ledger::refusal_facts(refusal),
             );
         }
         result
@@ -581,12 +581,16 @@ impl CodingRun {
         let prepared = json!({
             "binding": hex::encode(binding.hash()),
             "preimages": preimages,
-            "files": plan.iter().map(|p| json!({
-                "path": p.path.as_string(),
-                "kind": format!("{:?}", p.kind),
-                "base": p.base.as_ref().map(|e| hex::encode(e.sha256)),
-                "candidate": hex::encode(p.candidate.sha256),
-            })).collect::<Vec<_>>(),
+            "files": plan.iter().map(|p| {
+                let path = p.path.as_string();
+                json!({
+                    "path_sha256": ledger::path_sha256(&path),
+                    "path_bytes": path.len(),
+                    "kind": p.kind.code(),
+                    "base": p.base.as_ref().map(|e| hex::encode(e.sha256)),
+                    "candidate": hex::encode(p.candidate.sha256),
+                })
+            }).collect::<Vec<_>>(),
         });
         if record(
             self.ledger.as_ref(),
@@ -605,7 +609,8 @@ impl CodingRun {
         let mut dirs: Vec<CreatedDir> = Vec::new();
         let mut slots = preimages_slots(&plan);
         let mut failure: Option<String> = None;
-        let mut hidden: Vec<String> = Vec::new();
+        // (path, temporary name) of each owner version that stayed hidden.
+        let mut hidden: Vec<(String, String)> = Vec::new();
         for planned in plan {
             let path = planned.path.clone();
             let slot = slots.remove(&path);
@@ -615,16 +620,18 @@ impl CodingRun {
                 write_one(planned, slot, &mut dirs, &mut applied)
             };
             if let Err(WriteFailure::OwnerVersionAt(temp)) = &outcome {
-                hidden.push(format!(
-                    "{} (your concurrent version is saved as {temp})",
-                    path.as_string()
-                ));
+                hidden.push((path.as_string(), temp.clone()));
             }
+            let text = path.as_string();
             let recorded = record(
                 self.ledger.as_ref(),
                 self.id.0,
                 EventKind::ApplyOp,
-                &json!({ "path": path.as_string(), "ok": outcome.is_ok() }),
+                &json!({
+                    "path_sha256": ledger::path_sha256(&text),
+                    "path_bytes": text.len(),
+                    "ok": outcome.is_ok(),
+                }),
             )
             .is_ok();
             if outcome.is_err() || !recorded {
@@ -641,12 +648,12 @@ impl CodingRun {
             )
             .is_ok();
         if !completed {
-            let failed = failure.unwrap_or_else(|| "apply.completed".to_string());
-            let mut unrestored = rollback(&mut applied, &mut dirs, &storage_dir);
-            unrestored.extend(hidden);
+            let failed = failure.map_or(Failed::Step("apply.completed"), Failed::File);
+            let unrestored = rollback(&mut applied, &mut dirs, &storage_dir);
             return Err(self.finish_failed(
                 failed,
                 unrestored,
+                hidden,
                 &storage.handle,
                 storage_name,
                 storage_dir,
@@ -666,15 +673,28 @@ impl CodingRun {
     }
 
     /// Record a failed apply after rollback and set the resulting state.
+    /// `unrestored` are the files the rollback could not restore, `hidden`
+    /// the owner versions left under a temporary name. The returned error
+    /// names them; the ledger keeps their digests and the temporary names'
+    /// backend ids.
     fn finish_failed(
         &mut self,
-        failed: String,
+        failed: Failed,
         unrestored: Vec<String>,
+        hidden: Vec<(String, String)>,
         storage_parent: &DirHandle,
         storage_name: String,
         storage_dir: DirHandle,
     ) -> ApplyError {
-        let facts = json!({ "failed": failed, "unrestored": unrestored });
+        let mut facts = failed.facts();
+        facts["unrestored"] = unrestored_facts(&unrestored, &hidden);
+        let mut unrestored = unrestored;
+        unrestored.extend(
+            hidden
+                .iter()
+                .map(|(path, temp)| format!("{path} (your concurrent version is saved as {temp})")),
+        );
+        let failed_text = failed.text();
         if unrestored.is_empty() {
             // A clean rollback is claimed only once it is durably recorded;
             // the pre-image store is discarded only after that.
@@ -688,7 +708,9 @@ impl CodingRun {
             {
                 self.apply_state = ApplyState::RolledBack;
                 discard_storage(storage_parent, &storage_name, &storage_dir);
-                return ApplyError::RolledBack { failed };
+                return ApplyError::RolledBack {
+                    failed: failed_text,
+                };
             }
             return self.completion_unrecorded("rollback", &failed);
         }
@@ -701,19 +723,24 @@ impl CodingRun {
             EventKind::ApplyRecoveryRequired,
             &facts,
         );
-        ApplyError::RecoveryRequired { failed, unrestored }
+        ApplyError::RecoveryRequired {
+            failed: failed_text,
+            unrestored,
+        }
     }
 
     /// The filesystem work of `operation` finished but its completion could
     /// not be recorded: recovery is required, the pre-image store is kept,
     /// and the actual state is recorded once (best effort, never retried).
-    fn completion_unrecorded(&mut self, operation: &'static str, failed: &str) -> ApplyError {
+    fn completion_unrecorded(&mut self, operation: &'static str, failed: &Failed) -> ApplyError {
         self.apply_state = ApplyState::RecoveryRequired;
+        let mut facts = failed.facts();
+        facts["completion_unrecorded"] = json!(operation);
         let _ = record(
             self.ledger.as_ref(),
             self.id.0,
             EventKind::ApplyRecoveryRequired,
-            &json!({ "failed": failed, "completion_unrecorded": operation }),
+            &facts,
         );
         ApplyError::CompletionUnrecorded { operation }
     }
@@ -839,16 +866,19 @@ impl CodingRun {
                         discard_storage(&storage.handle, &name, &dir);
                         return Err(refused(Refusal::PreimageUnavailable));
                     }
-                    json!({
-                        "path": planned.path.as_string(),
-                        "existed": true,
-                        "slot": slot,
-                        "sha256": hex::encode(ManifestEntry::of(bytes).sha256),
-                        "size": bytes.len(),
-                        "mode": format!("{:o}", mode & 0o7777),
-                    })
+                    let mut facts = ledger::path_facts(&planned.path.as_string());
+                    facts["existed"] = json!(true);
+                    facts["slot"] = json!(index);
+                    facts["sha256"] = json!(hex::encode(ManifestEntry::of(bytes).sha256));
+                    facts["size"] = json!(bytes.len());
+                    facts["mode"] = json!(mode & 0o7777);
+                    facts
                 }
-                None => json!({ "path": planned.path.as_string(), "existed": false }),
+                None => {
+                    let mut facts = ledger::path_facts(&planned.path.as_string());
+                    facts["existed"] = json!(false);
+                    facts
+                }
             };
             facts.push(entry);
         }
@@ -939,7 +969,7 @@ impl CodingRun {
                         self.ledger.as_ref(),
                         self.id.0,
                         EventKind::RestoreRejected,
-                        &json!({ "reason": format!("{refusal:?}") }),
+                        &ledger::refusal_facts(refusal),
                     );
                 }
                 Err(error)
@@ -1022,7 +1052,9 @@ impl CodingRun {
             )
             .is_err()
             {
-                return Err(self.completion_unrecorded("restore", "restore.completed"));
+                return Err(
+                    self.completion_unrecorded("restore", &Failed::Step("restore.completed"))
+                );
             }
             Ok((ApplyReport { binding, files }, applied))
         } else {
@@ -1032,7 +1064,7 @@ impl CodingRun {
                 self.ledger.as_ref(),
                 self.id.0,
                 EventKind::ApplyRecoveryRequired,
-                &json!({ "failed": "restore", "unrestored": unrestored }),
+                &json!({ "failed": "restore", "unrestored": unrestored_facts(&unrestored, &[]) }),
             );
             Err(ApplyError::RecoveryRequired {
                 failed: "restore".to_string(),
@@ -1040,6 +1072,51 @@ impl CodingRun {
             })
         }
     }
+}
+
+/// Where an apply, a rollback or a restore stopped, for its ledger record.
+enum Failed {
+    /// At one file: the returned error names it, the ledger its digest.
+    File(String),
+    /// At a named step (one of [`ledger::APPLY_STEPS`]).
+    Step(&'static str),
+}
+
+impl Failed {
+    /// What the returned error says.
+    fn text(&self) -> String {
+        match self {
+            Self::File(path) => path.clone(),
+            Self::Step(step) => (*step).to_string(),
+        }
+    }
+
+    /// What the ledger records: `failed` as a code, and a file by digest.
+    fn facts(&self) -> serde_json::Value {
+        match self {
+            Self::File(path) => {
+                let mut facts = ledger::path_facts(path);
+                facts["failed"] = json!("file");
+                facts
+            }
+            Self::Step(step) => json!({ "failed": step }),
+        }
+    }
+}
+
+/// The unrestored files by digest, then each hidden owner version by its
+/// file's digest and the backend id of the temporary name it stayed under.
+fn unrestored_facts(paths: &[String], hidden: &[(String, String)]) -> serde_json::Value {
+    let mut out: Vec<serde_json::Value> =
+        paths.iter().map(|path| ledger::path_facts(path)).collect();
+    for (path, temp) in hidden {
+        let mut facts = ledger::path_facts(path);
+        if let Some(id) = temp.strip_prefix(super::scope::TEMP_PREFIX) {
+            facts["owner_version_temp"] = json!(id);
+        }
+        out.push(facts);
+    }
+    serde_json::Value::Array(out)
 }
 
 /// Whether `path`'s parent, walked from `root` without following links, is

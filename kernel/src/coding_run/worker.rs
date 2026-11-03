@@ -68,7 +68,7 @@ pub const WORKER_LIMITS: WorkerLimits = WorkerLimits {
     deadline: Duration::from_secs(15 * 60),
 };
 
-/// The longest path spelling kept in a ledger rejection record.
+/// The longest path spelling echoed back to the model in feedback.
 const MAX_RECORDED_PATH: usize = 256;
 /// The most paths listed for the model.
 const MAX_LISTED_PATHS: usize = 2000;
@@ -590,8 +590,9 @@ fn propose(
     }
 }
 
-/// Record a rejected model answer or proposal. A rejection that cannot be
-/// recorded ends the worker.
+/// Record a rejected model answer or proposal: the raw path the model sent
+/// only by digest and size, and the reason by code. A rejection that cannot
+/// be recorded ends the worker.
 fn reject(
     run: &mut CodingRun,
     budget: &mut Budget,
@@ -601,12 +602,16 @@ fn reject(
     budget.rejected += 1;
     run.record_worker(
         EventKind::ProposalRejected,
-        &json!({ "path": bounded(raw_path), "reason": format!("{rejection:?}") }),
+        &json!({
+            "path_sha256": super::ledger::path_sha256(raw_path),
+            "path_bytes": raw_path.len(),
+            "reason": rejection.code(),
+        }),
     )
     .map_err(|error| abort(run, error))
 }
 
-/// A path spelling for records and feedback, cut to a bounded length.
+/// A path spelling for the model's feedback, cut to a bounded length.
 fn bounded(raw: &str) -> String {
     if raw.len() <= MAX_RECORDED_PATH {
         raw.to_string()
