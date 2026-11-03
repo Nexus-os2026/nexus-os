@@ -377,8 +377,14 @@ fn walk(root: &Path, dir: &Path, entries: &mut Vec<Entry>, errors: &mut Vec<Stri
         let last = entries.len() - 1;
         if kind.is_symlink() {
             entries[last].kind = "symlink";
+            // Never followed. A link whose target is simply absent (an
+            // optional tool not installed) is allowed unless its name is
+            // forbidden, which the name checks catch; any other failure to
+            // resolve it (a loop, a permission error) is a finding.
             if let Err(e) = std::fs::metadata(&path) {
-                errors.push(format!("symlink {rel} cannot be resolved: {e}"));
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    errors.push(format!("symlink {rel} cannot be resolved: {e}"));
+                }
             }
             continue;
         }
