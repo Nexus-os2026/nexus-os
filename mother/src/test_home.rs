@@ -43,6 +43,13 @@ impl TestHome {
             return Err("the home must be an absolute path".into());
         }
         create_private(dir).map_err(|e| e.to_string())?;
+        // M2d-C: the host's startup step for Files, as the host takes it
+        // before it builds the broker (the kernel refuses to publish from a
+        // dumpable process).
+        #[cfg(target_os = "linux")]
+        if !nexus_governed_control::files::make_non_dumpable() {
+            return Err("the process cannot be made non-dumpable".into());
+        }
         let broker = dir.join("broker");
         let gate = Arc::new(GatedProjection::default());
         let evidence = PrimaryEvidence::open(
