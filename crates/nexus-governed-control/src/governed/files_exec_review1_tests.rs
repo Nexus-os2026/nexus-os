@@ -1,127 +1,28 @@
 //! Oracles for Codex review 1 of PR #64 (M2d-B2), pre-registered before the
-//! repairs, with the Architect's decisions: H1 (Stop's acknowledgement does
-//! not wait on evidence storage), H2 (an explicit publication outcome; an
-//! uncertain one is never a plain failure), H3 (an interruption after the
-//! handoff is reported beside the success and ends Files for the run), H4
-//! (the undo's lifetime is taken before its cleanup), M1 (a failed staging
-//! cleanup stays owned, is reported and has the Owner's bounded retry).
+//! repairs, with the Architect's decisions: H1 (superseded: see below), H2
+//! (an explicit publication outcome; an uncertain one is never a plain
+//! failure), H3 (an interruption after the handoff is reported beside the
+//! success and ends Files for the run), H4 (the undo's lifetime is taken
+//! before its cleanup), M1 (a failed staging cleanup stays owned, is
+//! reported and has the Owner's bounded retry).
 //! A child of the B2 oracles, for their fixture.
 
 use super::*;
-use crate::evidence_store::tests::Scratch;
-use crate::evidence_store::{Fault, PrimaryEvidence};
-
-/// The bound within which a Stop must return while the store is blocked.
-const STOP_ACKNOWLEDGED_WITHIN: Duration = Duration::from_secs(1);
-
-/// A front door on the evidence store `primary`.
-fn on_store(primary: &Arc<PrimaryEvidence>, root: &TempRoot) -> Arc<GovernedControl> {
-    Arc::new(
-        GovernedControl::with_secrets(
-            root.0.path(),
-            Vault::Disabled.source(),
-            primary.clone(),
-            Arc::new(ManualClock::default()),
-        )
-        .unwrap(),
-    )
-}
-
-/// Wait (bounded) until no Stop record is waiting to be written.
-fn settled_records(gov: &GovernedControl) {
-    assert!(
-        gov.stop_records_idle_for_test(Duration::from_secs(10)),
-        "the Stop records' writer settles"
-    );
-}
 
 // ---------------------------------------------------------------- H1
 
-/// H1: with the evidence store blocked inside its mutex at COMMIT (a slow
-/// disk), the Owner's Stop returns within 1 s with the halt engaged and its
-/// record pending; once the store is released the record is written.
-#[test]
-fn m2d_b2_r1_h1_a_stop_returns_while_the_store_is_blocked() {
-    let scratch = Scratch::new();
-    let recent = Arc::new(MemoryEvidence::new(10_000));
-    let primary = PrimaryEvidence::open(&scratch.store(), vec![recent.clone()]).unwrap();
-    let root = temp_root("m2d-b2-r1-h1");
-    let gov = on_store(&primary, &root);
-    let stall = Gate::new();
-    primary.store().plant_fault(Fault::Stall(stall.clone()));
-    let (tx, rx) = mpsc::channel();
-    let stopping = gov.clone();
-    let worker = std::thread::spawn(move || {
-        stopping.emergency_stop();
-        tx.send(()).unwrap();
-    });
-    stall.reached();
-    rx.recv_timeout(STOP_ACKNOWLEDGED_WITHIN)
-        .expect("Stop returns within 1 s while the store is blocked");
-    let status = gov.status();
-    assert!(status.emergency_stopped, "the halt is engaged");
-    assert!(status.stop_records.pending >= 1, "its record is pending");
-    assert_eq!(status.stop_records.state(), "stop_record_pending");
-    assert!(!recent
-        .records()
-        .iter()
-        .any(|r| r.phase == EvidencePhase::EmergencyStop));
-    stall.open();
-    worker.join().unwrap();
-    settled_records(&gov);
-    let status = gov.status();
-    assert_eq!(status.stop_records.pending, 0);
-    assert!(status.stop_records.written >= 1);
-    assert_eq!(status.stop_records.state(), "stop_records_written");
-    assert!(recent
-        .records()
-        .iter()
-        .any(|r| r.phase == EvidencePhase::EmergencyStop));
-}
-
-/// H1: a store that fails its Stop record yields the surfaced failure
-/// status (never swallowed); one that cannot commit keeps it owed (pending)
-/// and records it when storage recovers.
-#[test]
-fn m2d_b2_r1_h1_b_a_failing_store_is_surfaced_and_recorded_on_recovery() {
-    let evidence = Arc::new(MemoryEvidence::new(1_000));
-    let root = temp_root("m2d-b2-r1-h1b");
-    let gov = Arc::new(
-        GovernedControl::with_secrets(
-            root.0.path(),
-            Vault::Disabled.source(),
-            evidence.clone(),
-            Arc::new(ManualClock::default()),
-        )
-        .unwrap(),
-    );
-    evidence.fail_from_now();
-    gov.emergency_stop();
-    settled_records(&gov);
-    let status = gov.status();
-    assert!(status.emergency_stopped);
-    assert!(status.stop_records.failed >= 1, "surfaced, not swallowed");
-    assert_eq!(status.stop_records.state(), "stop_record_failed");
-
-    let scratch = Scratch::new();
-    let recent = Arc::new(MemoryEvidence::new(10_000));
-    let primary = PrimaryEvidence::open(&scratch.store(), vec![recent.clone()]).unwrap();
-    let root = temp_root("m2d-b2-r1-h1c");
-    let gov = on_store(&primary, &root);
-    primary.store().refuse_inserts(true);
-    gov.emergency_stop();
-    settled_records(&gov);
-    let status = gov.status();
-    assert!(status.stop_records.owed >= 1, "owed while storage fails");
-    assert_eq!(status.stop_records.state(), "stop_record_pending");
-    primary.store().refuse_inserts(false);
-    gov.resume(&*Owner::new())
-        .expect("the resume pays what is owed first");
-    assert!(recent
-        .records()
-        .iter()
-        .any(|r| r.phase == EvidencePhase::EmergencyStop));
-}
+// H1 (amended): the two broker-return oracles first registered here
+// (m2d_b2_r1_h1_a_stop_returns_while_the_store_is_blocked and
+// m2d_b2_r1_h1_b_a_failing_store_is_surfaced_and_recorded_on_recovery)
+// required the asynchronous Stop records writer the Architect's H1
+// decision (Option B) rejected; they are superseded, not satisfied. Their
+// replacements are Codex's broker rows 2-6 in files_exec_review2_tests.rs:
+// m2d_b2_r2_row2_the_halt_is_engaged_while_another_writer_holds_the_store,
+// m2d_b2_r2_row3_stop_held_in_its_own_write_refuses_the_handoff_and_the_undo,
+// m2d_b2_r2_row4_a_stalled_publication_or_cleanup_does_not_hold_stop,
+// m2d_b2_r2_row5_stop_transfers_a_pending_effect_without_cleanup and
+// m2d_b2_r2_row6_stop_and_resume_revive_neither_the_old_publication_nor_the_old_undo;
+// the terminal acknowledgement rows 7-8 are M2d-D's.
 
 // ---------------------------------------------------------------- H2
 
