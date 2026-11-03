@@ -274,7 +274,7 @@ fn components_with(admission: &FilesAdmission, name: &str, vary: usize) -> Diges
     parameters_digest(&Components {
         admission,
         broker_run,
-        coding_run,
+        kernel_run: coding_run,
         grant,
         binding_agent,
         binding_run,
