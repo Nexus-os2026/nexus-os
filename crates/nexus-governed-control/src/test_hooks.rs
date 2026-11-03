@@ -47,6 +47,12 @@ pub(crate) mod at {
     /// Codex review 1 of PR #64: a Files cleanup of a handed-over run is
     /// next (H4's held cleanup).
     pub(crate) const FILE_CLEANUP: &str = "files.cleanup";
+    /// H1 decision (row 3): the observer refuses the publication's handoff
+    /// (its final check found a cause; nothing is published).
+    pub(crate) const FILE_HANDOFF_REFUSED: &str = "files.handoff_refused";
+    /// H1 decision (rows 4-5): an actual staging removal is about to be
+    /// attempted.
+    pub(crate) const FILE_DISCARD: &str = "files.discard";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

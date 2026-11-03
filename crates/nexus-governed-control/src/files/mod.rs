@@ -601,7 +601,7 @@ impl Shared {
             self.keep(run);
             return true;
         }
-        if !discard(&mut run) {
+        if !discard(&mut run, self) {
             self.keep(run);
             return true;
         }
@@ -736,12 +736,15 @@ fn owes(run: &CodingRun) -> bool {
 }
 
 /// Discard a run's staging (cancelling it first if it is still live);
-/// whether its removal is established.
+/// whether its removal is established. Never called on a Stop path: a
+/// dropped effect only hands its run over (H1 decision, requirement 2).
 #[cfg(target_os = "linux")]
-fn discard(run: &mut CodingRun) -> bool {
+fn discard(run: &mut CodingRun, _shared: &Shared) -> bool {
     if run.cleanup_status() == CleanupStatus::Discarded {
         return true;
     }
+    #[cfg(test)]
+    _shared.fire(crate::test_hooks::at::FILE_DISCARD);
     if !run.state().is_terminal() {
         let _ = run.cancel();
     }
@@ -1080,7 +1083,15 @@ impl ApplyInterrupt for Observer<'_> {
         #[cfg(test)]
         self.shared.fire(crate::test_hooks::at::FILE_BEFORE_FINAL);
         self.hold();
-        self.cause()
+        let cause = self.cause();
+        // The real refusal boundary: a cause here refuses the handoff
+        // before anything is published, recorded or cleaned.
+        #[cfg(test)]
+        if cause.is_some() {
+            self.shared
+                .fire(crate::test_hooks::at::FILE_HANDOFF_REFUSED);
+        }
+        cause
     }
 
     fn passed_final_check(&self) {
@@ -1928,7 +1939,7 @@ impl Files {
             if !run.cleanup_owed().is_empty() {
                 let _ = run.retry_cleanup();
             }
-            if !owes(&run) && discard(&mut run) {
+            if !owes(&run) && discard(&mut run, &self.shared) {
                 retry.settled += 1;
             } else {
                 retry.still_owed += 1;
@@ -1980,6 +1991,12 @@ impl Files {
     #[cfg(test)]
     pub(crate) fn hooks(&self) -> &Arc<crate::test_hooks::Hooks> {
         &self.shared.hooks
+    }
+
+    /// How many runs dropped effects handed over, not yet cleaned (tests).
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn deferred_for_test(&self) -> usize {
+        self.shared.deferred.lock().unwrap().len()
     }
 
     /// How many runs Files keeps owning for owed cleanup or recovery

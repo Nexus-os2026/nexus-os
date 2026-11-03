@@ -834,17 +834,10 @@ impl Authority {
     }
 
     /// The records of a stop that has taken effect: the commitments it
-    /// ended, then the stop. Returns the worse of what became of the last
-    /// commitment record and of the stop's own record (Codex review 1 of PR
-    /// #64, H1: the Stop path no longer writes them; its writer counts it).
-    pub(crate) fn write_stop_records(&self, stopped: Stopped) -> EndStatus {
-        let revoked = self.commitments.write_ends(stopped.revoked);
-        let stop = self.record_end(&stopped.record);
-        match (revoked, stop) {
-            (Some(EndStatus::Uncertain), _) | (_, EndStatus::Uncertain) => EndStatus::Uncertain,
-            (Some(EndStatus::Owed), _) | (_, EndStatus::Owed) => EndStatus::Owed,
-            (_, recorded) => recorded,
-        }
+    /// ended, then the stop.
+    pub(crate) fn write_stop_records(&self, stopped: Stopped) {
+        self.commitments.write_ends(stopped.revoked);
+        self.record_end(&stopped.record);
     }
 
     /// Lift an emergency stop: only after the owner's native confirmation,
