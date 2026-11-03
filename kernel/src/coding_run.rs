@@ -1652,20 +1652,24 @@ impl CodingRun {
             &self.base_contents,
             &new_bytes,
         );
-        let facts = json!({
+        let mut facts = json!({
             "binding": hex::encode(binding.hash()),
             "base_manifest": binding.base_manifest_hash.to_hex(),
             "candidate_manifest": binding.candidate_manifest_hash.to_hex(),
             "verification": match binding.verification {
                 VerifierMarker::NoResult => Value::Null,
                 VerifierMarker::Result(hash) => json!(hex::encode(hash)),
-                // S1a-C skeleton: not implemented.
+                // Recorded under "inert_page" instead.
                 VerifierMarker::InertPage(_) => Value::Null,
             },
             "create": review.count(ChangeKind::Create),
             "replace": review.count(ChangeKind::Replace),
             "delete": review.count(ChangeKind::Delete),
         });
+        // S1a-C (joint note O1): an inert page pass under its own key.
+        if let VerifierMarker::InertPage(hash) = binding.verification {
+            facts["inert_page"] = json!(hex::encode(hash));
+        }
         record(
             self.ledger.as_ref(),
             self.id.0,

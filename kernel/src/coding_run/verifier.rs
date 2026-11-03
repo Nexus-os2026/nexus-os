@@ -26,20 +26,37 @@
 //! finalizing, or its cleanup is unconfirmed. Every transition that matters
 //! is recorded in the coding-run ledger first (hashes, sizes and classes
 //! only); a transition that cannot be recorded does not happen.
+//!
+//! S1a-C: a run whose candidate changes exactly one file may instead have
+//! that file checked once by the inert page check
+//! ([`CodingRun::check_inert_page`]). The run's inert slot goes from
+//! unchecked to passed or spent: every check spends it first, and only a
+//! recorded pass fills it, together with a private copy of the approved
+//! facts. The pass is bound into the review as
+//! [`VerifierMarker::InertPage`]. [`CodingRun::recheck_inert_page`] (at
+//! execute) requires the same facts by value, re-reads the bytes through
+//! the verified manifest and requires the identical verdict. A second check,
+//! a failed recheck or a step that cannot be recorded spends the slot, and
+//! a spent run can never be reviewed, approved or applied again. A sandbox
+//! result and an inert check exclude each other. Nothing is rendered.
 
 use std::collections::BTreeSet;
 
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use super::ledger::{record, EventKind};
+use super::ledger::{record, EventKind, PATH_DOMAIN};
 use super::manifest::{put_bytes, Manifest, ManifestEntry, ManifestHash};
 use super::review::{display_safe, ReviewBinding};
 use super::scope::RelPath;
 use super::{CodingRun, RunError, RunId, StructuralVerification};
-use crate::inert_page::{ApprovedFacts, FactCode, PageVerdict, RefusalCode};
+use crate::inert_page::{
+    check as inert_check, ApprovedFacts, FactCode, FactsMarker, PageOutcome, PageVerdict,
+    RefusalCode,
+};
 
+const INERT_DOMAIN: &[u8] = b"nexus.coding_run.inert_page.v1";
 const INPUTS_DOMAIN: &[u8] = b"nexus.coding_run.verifier_inputs.v1";
 const LAUNCH_DOMAIN: &[u8] = b"nexus.coding_run.verifier_launch.v1";
 const RESULT_DOMAIN: &[u8] = b"nexus.verification.result.v1";
@@ -257,11 +274,13 @@ impl VerificationResult {
 }
 
 /// What a review binding records about verification: the latest finalized
-/// result, or explicitly none.
+/// sandbox result, the run's inert page check, or explicitly none. The tag
+/// bytes are 0, 1 and 2; the first two encode exactly as before S1a-C.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifierMarker {
     NoResult,
     Result([u8; 32]),
+    /// A recorded inert page pass ([`InertPageResult::binding_hash`]).
     InertPage([u8; 32]),
 }
 
@@ -273,31 +292,85 @@ impl VerifierMarker {
                 hasher.update([1u8]);
                 hasher.update(hash);
             }
-            // S1a-C skeleton: no distinct encoding yet.
             Self::InertPage(hash) => {
-                hasher.update([1u8]);
+                hasher.update([2u8]);
                 hasher.update(hash);
             }
         }
     }
 }
 
-/// S1a-C skeleton: the inert page check of a run's one changed file.
+/// The inert page check of a run's one changed file, bound to the run, the
+/// exact candidate (its manifest hash and structural binding) and the
+/// checked path. Advisory evidence: it grants nothing, and it never claims
+/// anything about how the page looks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InertPageResult {
     pub run_id: RunId,
     pub candidate_manifest_hash: ManifestHash,
     pub structural_binding_hash: [u8; 32],
+    /// The checked path's evidence digest (`nexus.evidence.path.v1`), as
+    /// the ledger names it.
     pub path_sha256: [u8; 32],
     pub page: PageVerdict,
 }
 
 impl InertPageResult {
-    /// S1a-C skeleton: not implemented.
+    /// SHA-256 over `put("nexus.coding_run.inert_page.v1")`, the run's UUID
+    /// bytes, the candidate manifest hash, the structural binding hash, the
+    /// path digest and the page verdict's binding hash.
     pub fn binding_hash(&self) -> [u8; 32] {
-        [0; 32]
+        let mut hasher = Sha256::new();
+        put_bytes(&mut hasher, INERT_DOMAIN);
+        hasher.update(self.run_id.0.as_bytes());
+        hasher.update(self.candidate_manifest_hash.bytes());
+        hasher.update(self.structural_binding_hash);
+        hasher.update(self.path_sha256);
+        hasher.update(self.page.binding_hash());
+        hasher.finalize().into()
+    }
+
+    /// Whether this result belongs to `run`'s current verified candidate.
+    fn is_for(&self, run: RunId, verification: &StructuralVerification) -> bool {
+        self.run_id == run
+            && self.candidate_manifest_hash == verification.candidate_manifest_hash
+            && self.structural_binding_hash == verification.binding_hash()
     }
 }
+
+/// The ledger outcome of a check after the run's first.
+const REPEAT_REFUSED: &str = "repeat_refused";
+const N_CHECK_OUTCOMES: usize = RefusalCode::CODES.len() + FactCode::CODES.len() + 2;
+
+const fn check_outcomes() -> [&'static str; N_CHECK_OUTCOMES] {
+    let mut out = [""; N_CHECK_OUTCOMES];
+    out[0] = "passed";
+    let mut i = 0;
+    while i < RefusalCode::CODES.len() {
+        out[1 + i] = RefusalCode::CODES[i].as_str();
+        i += 1;
+    }
+    let mut j = 0;
+    while j < FactCode::CODES.len() {
+        out[1 + RefusalCode::CODES.len() + j] = FactCode::CODES[j];
+        j += 1;
+    }
+    out[N_CHECK_OUTCOMES - 1] = REPEAT_REFUSED;
+    out
+}
+
+/// `page.inert_check` outcomes: `passed`, every inert refusal code, every
+/// fact code, and `repeat_refused`.
+pub(crate) const INERT_CHECK_OUTCOMES: &[&str] = &check_outcomes();
+/// `page.inert_recheck` outcomes.
+pub(crate) const INERT_RECHECK_OUTCOMES: &[&str] = &[
+    "passed",
+    "not_checked",
+    "spent",
+    "facts_changed",
+    "candidate_unavailable",
+    "stale",
+];
 
 /// Why an inert page check or recheck was refused: codes only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -324,6 +397,45 @@ pub enum InertPageError {
     Refused(RefusalCode),
     #[error("page fact missing: {0}")]
     FactMissing(FactCode),
+}
+
+impl InertPageError {
+    /// A stable, bounded code: this error's, or the refusal's or fact's.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::InvalidState => "invalid_state",
+            Self::Spent => "spent",
+            Self::NotChecked => "not_checked",
+            Self::FactsChanged => "facts_changed",
+            Self::Stale => "stale",
+            Self::CandidateUnavailable => "candidate_unavailable",
+            Self::NotSingleFile => "not_single_file",
+            Self::Unrecorded => "unrecorded",
+            Self::EmergencyStopped => "emergency_stopped",
+            Self::Refused(code) => code.as_str(),
+            Self::FactMissing(code) => code.as_str(),
+        }
+    }
+
+    fn of_run(error: RunError) -> Self {
+        match error {
+            RunError::InvalidState { .. } => Self::InvalidState,
+            _ => Self::CandidateUnavailable,
+        }
+    }
+}
+
+/// A run's single-use inert page check.
+#[derive(Debug)]
+enum InertSlot {
+    Unchecked,
+    /// A recorded pass, with the caller's facts held privately.
+    Passed {
+        result: Box<InertPageResult>,
+        facts: Option<ApprovedFacts>,
+    },
+    /// A check was attempted and is not (or no longer) a usable pass.
+    Spent,
 }
 
 /// The backend's native confirmation of a verifier launch. Only the
@@ -477,6 +589,8 @@ pub(crate) struct VerifierState {
     next: Option<ExecutionGeneration>,
     /// The latest finalized result.
     latest: Option<VerificationResult>,
+    /// The run's inert page check (S1a-C).
+    inert: InertSlot,
 }
 
 impl Default for VerifierState {
@@ -487,6 +601,7 @@ impl Default for VerifierState {
             current: None,
             next: Some(ExecutionGeneration::FIRST),
             latest: None,
+            inert: InertSlot::Unchecked,
         }
     }
 }
@@ -595,21 +710,27 @@ impl CodingRun {
     }
 
     /// The review binding of the current candidate, with the latest
-    /// finalized verification (which must be this candidate's) or none.
+    /// finalized verification or the inert page pass (which must be this
+    /// candidate's) or none. A spent inert check is never reviewable.
     pub(crate) fn review_binding(
         &self,
         verification: &StructuralVerification,
     ) -> Result<ReviewBinding, RunError> {
-        let marker = match &self.verifier.latest {
-            None => VerifierMarker::NoResult,
-            Some(result)
+        let marker = match (&self.verifier.inert, &self.verifier.latest) {
+            (InertSlot::Spent, _) => return Err(RunError::CandidateChanged),
+            (InertSlot::Passed { result, .. }, None) if result.is_for(self.id, verification) => {
+                VerifierMarker::InertPage(result.binding_hash())
+            }
+            (InertSlot::Passed { .. }, _) => return Err(RunError::CandidateChanged),
+            (InertSlot::Unchecked, None) => VerifierMarker::NoResult,
+            (InertSlot::Unchecked, Some(result))
                 if result.run_id == self.id
                     && result.candidate_manifest_hash == verification.candidate_manifest_hash
                     && result.structural_binding_hash == verification.binding_hash() =>
             {
                 VerifierMarker::Result(result.binding_hash())
             }
-            Some(_) => return Err(RunError::CandidateChanged),
+            (InertSlot::Unchecked, Some(_)) => return Err(RunError::CandidateChanged),
         };
         Ok(ReviewBinding {
             run_id: self.id,
@@ -638,7 +759,11 @@ impl CodingRun {
         &mut self,
         inputs: VerifierInputs,
     ) -> Result<VerifierLaunchBinding, VerificationError> {
-        if self.verifier.phase.blocks_apply() {
+        // S1a-C: a sandbox verification and an inert page check exclude
+        // each other.
+        if self.verifier.phase.blocks_apply()
+            || !matches!(self.verifier.inert, InertSlot::Unchecked)
+        {
             return Err(VerificationError::InvalidState);
         }
         // M0-FIX F5: nothing is prepared after the owner's emergency stop.
@@ -905,34 +1030,225 @@ impl CodingRun {
         Ok(())
     }
 
-    /// S1a-C skeleton: not implemented.
+    /// Check the run's one changed file with the inert page check, once.
+    ///
+    /// The run must be structurally verified and unapplied, with no sandbox
+    /// verification prepared, running or finalized, and the owner's
+    /// emergency stop not engaged. Its candidate must change exactly one
+    /// file, `path`, whose bytes are read through the verified manifest and
+    /// evaluated with `facts` (the admission's snapshot, taken by value).
+    /// Every call spends the run's inert slot first: a call after the first
+    /// is refused whatever its outcome (and records `repeat_refused`), so a
+    /// second check revokes an earlier pass. An evaluated outcome is
+    /// recorded (digests, counts and codes only), and only a recorded pass
+    /// fills the slot, keeping `facts` privately for
+    /// [`Self::recheck_inert_page`].
     pub fn check_inert_page(
         &mut self,
-        _path: &str,
-        _facts: Option<ApprovedFacts>,
+        path: &str,
+        facts: Option<ApprovedFacts>,
     ) -> Result<InertPageResult, InertPageError> {
-        Err(InertPageError::InvalidState)
+        let previous = std::mem::replace(&mut self.verifier.inert, InertSlot::Spent);
+        if !matches!(previous, InertSlot::Unchecked) {
+            // Informational: the slot is spent whether or not this records.
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::PageInertCheck,
+                &json!({ "outcome": REPEAT_REFUSED }),
+            );
+            return Err(InertPageError::InvalidState);
+        }
+        if self.halt_if_stopped().is_err() {
+            return Err(InertPageError::EmergencyStopped);
+        }
+        let verification = self
+            .unapplied_verification("check_inert_page")
+            .map_err(InertPageError::of_run)?;
+        if self.verifier.phase != VerificationPhase::Idle || self.verifier.latest.is_some() {
+            return Err(InertPageError::InvalidState);
+        }
+        let (path, bytes) = self.inert_candidate(Some(path))?;
+        let result = self.inert_result(&verification, &path, &bytes, facts.as_ref());
+        let mut evidence = json!({
+            "result": hex::encode(result.binding_hash()),
+            "candidate_manifest": result.candidate_manifest_hash.to_hex(),
+            "page_sha256": hex::encode(result.page.candidate_sha256),
+            "path_sha256": hex::encode(result.path_sha256),
+            "page_bytes": bytes.len(),
+            "path_bytes": path.len(),
+            "policy": hex::encode(result.page.policy_hash),
+            "facts": match result.page.facts {
+                FactsMarker::NoFacts => Value::Null,
+                FactsMarker::Facts(hash) => json!(hex::encode(hash)),
+            },
+        });
+        let outcome = match result.page.outcome {
+            PageOutcome::Passed => Ok(()),
+            PageOutcome::Refused(code) => {
+                if let Err(refusal) = inert_check(&bytes) {
+                    evidence["offset"] = json!(refusal.offset);
+                }
+                Err(InertPageError::Refused(code))
+            }
+            PageOutcome::FactMissing(code) => {
+                if let FactCode::HoursLineMissing { index } = code {
+                    evidence["fact_index"] = json!(index);
+                }
+                Err(InertPageError::FactMissing(code))
+            }
+        };
+        evidence["outcome"] = json!(outcome.map_or_else(InertPageError::code, |()| "passed"));
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::PageInertCheck,
+            &evidence,
+        )
+        .map_err(|_| InertPageError::Unrecorded)?;
+        outcome?;
+        self.verifier.inert = InertSlot::Passed {
+            result: Box::new(result.clone()),
+            facts,
+        };
+        Ok(result)
     }
 
-    /// S1a-C skeleton: not implemented.
+    /// Recheck the run's inert page pass immediately before its effect.
+    ///
+    /// In order: the slot must hold a pass (`NotChecked`, `Spent`);
+    /// `expected` must equal the retained facts by value, so a removed or
+    /// added snapshot fails too (`FactsChanged`); the bytes are read again
+    /// through the verified manifest (`CandidateUnavailable`); and their
+    /// fresh evaluation under the running policy with the retained facts
+    /// must give exactly the stored result (`Stale`). The outcome is
+    /// recorded. Any failure, an unrecorded success included, spends the
+    /// slot.
     pub fn recheck_inert_page(
         &mut self,
-        _expected: Option<&ApprovedFacts>,
+        expected: Option<&ApprovedFacts>,
     ) -> Result<(), InertPageError> {
-        Err(InertPageError::NotChecked)
+        let checked = match std::mem::replace(&mut self.verifier.inert, InertSlot::Spent) {
+            InertSlot::Passed { result, facts } => Ok((result, facts)),
+            InertSlot::Unchecked => Err(InertPageError::NotChecked),
+            InertSlot::Spent => Err(InertPageError::Spent),
+        };
+        let outcome = match &checked {
+            Ok((result, facts)) => self.inert_unchanged(result, facts.as_ref(), expected),
+            Err(error) => Err(*error),
+        };
+        let recorded = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::PageInertRecheck,
+            &json!({
+                "result": checked
+                    .as_ref()
+                    .ok()
+                    .map(|(result, _)| hex::encode(result.binding_hash())),
+                "outcome": outcome.map_or_else(InertPageError::code, |()| "passed"),
+            }),
+        );
+        match (outcome, recorded, checked) {
+            (Ok(()), Ok(_), Ok((result, facts))) => {
+                self.verifier.inert = InertSlot::Passed { result, facts };
+                Ok(())
+            }
+            (Err(error), _, _) => Err(error),
+            _ => Err(InertPageError::Unrecorded),
+        }
     }
 
-    /// S1a-C skeleton: not implemented.
+    /// The run's recorded inert page pass, while it is usable.
     pub fn latest_inert_page(&self) -> Option<&InertPageResult> {
-        None
+        match &self.verifier.inert {
+            InertSlot::Passed { result, .. } => Some(result.as_ref()),
+            InertSlot::Unchecked | InertSlot::Spent => None,
+        }
     }
 
-    /// S1a-C skeleton: not implemented.
+    /// The recheck's steps 2 to 4: the same facts, the same bytes, the same
+    /// result.
+    fn inert_unchanged(
+        &self,
+        result: &InertPageResult,
+        facts: Option<&ApprovedFacts>,
+        expected: Option<&ApprovedFacts>,
+    ) -> Result<(), InertPageError> {
+        if expected != facts {
+            return Err(InertPageError::FactsChanged);
+        }
+        let verification = self
+            .unapplied_verification("recheck_inert_page")
+            .map_err(|_| InertPageError::CandidateUnavailable)?;
+        let (path, bytes) = self
+            .inert_candidate(None)
+            .map_err(|_| InertPageError::CandidateUnavailable)?;
+        if self.inert_result(&verification, &path, &bytes, facts) != *result {
+            return Err(InertPageError::Stale);
+        }
+        Ok(())
+    }
+
+    /// The candidate's one changed file (which must be `expected`, if
+    /// given) and its bytes, read through the verified manifest: they must
+    /// still hash to the file's entry (F8).
+    fn inert_candidate(&self, expected: Option<&str>) -> Result<(String, Vec<u8>), InertPageError> {
+        let candidate = self
+            .verification_candidate()
+            .map_err(|_| InertPageError::CandidateUnavailable)?;
+        let base = self
+            .base
+            .as_ref()
+            .ok_or(InertPageError::CandidateUnavailable)?;
+        let entries = candidate.manifest.entries();
+        let mut changed = entries
+            .iter()
+            .filter(|(path, entry)| base.get(path) != Some(*entry))
+            .map(|(path, _)| path.as_string());
+        let removed = base
+            .entries()
+            .keys()
+            .any(|path| !entries.contains_key(path));
+        let (Some(path), None, false) = (changed.next(), changed.next(), removed) else {
+            return Err(InertPageError::NotSingleFile);
+        };
+        if expected.is_some_and(|expected| expected != path) {
+            return Err(InertPageError::NotSingleFile);
+        }
+        let bytes = candidate
+            .read(&path, self.profile.max_file_bytes)
+            .ok_or(InertPageError::CandidateUnavailable)?;
+        Ok((path, bytes))
+    }
+
+    /// The inert page result of `bytes` at `path` for this run's verified
+    /// candidate.
+    fn inert_result(
+        &self,
+        verification: &StructuralVerification,
+        path: &str,
+        bytes: &[u8],
+        facts: Option<&ApprovedFacts>,
+    ) -> InertPageResult {
+        let mut hasher = Sha256::new();
+        put_bytes(&mut hasher, PATH_DOMAIN);
+        put_bytes(&mut hasher, path.as_bytes());
+        InertPageResult {
+            run_id: self.id,
+            candidate_manifest_hash: verification.candidate_manifest_hash,
+            structural_binding_hash: verification.binding_hash(),
+            path_sha256: hasher.finalize().into(),
+            page: PageVerdict::evaluate(bytes, facts),
+        }
+    }
+
+    /// Test seam: alter the stored inert page pass in place.
     #[cfg(test)]
-    pub(crate) fn alter_inert_result_for_test(
-        &mut self,
-        _alter: impl FnOnce(&mut InertPageResult),
-    ) {
+    pub(crate) fn alter_inert_result_for_test(&mut self, alter: impl FnOnce(&mut InertPageResult)) {
+        if let InertSlot::Passed { result, .. } = &mut self.verifier.inert {
+            alter(result.as_mut());
+        }
     }
 }
 

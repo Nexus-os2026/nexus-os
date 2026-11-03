@@ -57,6 +57,8 @@ fn all_kinds() -> Vec<EventKind> {
         VerificationLaunched,
         VerificationFinished,
         VerificationCleanup,
+        PageInertCheck,
+        PageInertRecheck,
     ];
     assert_eq!(
         all.iter()
