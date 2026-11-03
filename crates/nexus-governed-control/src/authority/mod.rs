@@ -14,6 +14,8 @@ pub mod policy;
 pub mod run;
 
 #[cfg(test)]
+mod privacy_tests;
+#[cfg(test)]
 pub(crate) mod scripted;
 #[cfg(test)]
 mod tests;
