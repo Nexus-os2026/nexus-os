@@ -204,7 +204,7 @@ fn e_o60_renderer_control_answer_strings_are_escaped_inside_the_retained_json() 
     .to_string();
     let answer = retained(&original);
     // The retained form itself: the literal six-character escapes.
-    for escape in [r"<", r">", r"["] {
+    for escape in [r"\u003c", r"\u003e", r"\u005b"] {
         assert!(answer.as_str().contains(escape), "{escape}");
     }
 
@@ -222,7 +222,7 @@ fn e_o60_renderer_control_answer_strings_are_escaped_inside_the_retained_json() 
     let messages = sent(&fake);
     assert_eq!(messages[2].0, "assistant");
     let content = &messages[2].1;
-    for escape in [r"<", r">", r"["] {
+    for escape in [r"\u003c", r"\u003e", r"\u005b"] {
         assert!(content.contains(escape), "{escape} in {content}");
     }
     assert!(
@@ -812,7 +812,7 @@ fn n1_a_retained_answer_is_exactly_one_object_and_its_form_is_canonical() {
     }
     let spaced = format!(" \n{}\t\n", r#"{ "action" : "read", "paths" : [ "a<b" ] }"#);
     let answer = retained(&spaced);
-    assert_eq!(answer.as_str(), r#"{"action":"read","paths":["a<b"]}"#);
+    assert_eq!(answer.as_str(), r#"{"action":"read","paths":["a\u003cb"]}"#);
     assert_eq!(retained(answer.as_str()).as_str(), answer.as_str());
 }
 

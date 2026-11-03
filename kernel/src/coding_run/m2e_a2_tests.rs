@@ -831,7 +831,7 @@ fn e_o60_the_worker_sends_each_history_complete_framed_and_retained() {
         );
         assert_eq!(turns[k]["response_bytes"], json!(retained.as_str().len()));
     }
-    assert!(messages[2][4].1.contains(r"<") && !messages[2][4].1.contains('<'));
+    assert!(messages[2][4].1.contains(r"\u003c") && !messages[2][4].1.contains('<'));
     assert!(messages[1][1]
         .1
         .starts_with(&framed("Owner task:")[..FRAME_OPEN.len() + 11]));
