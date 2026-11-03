@@ -1155,6 +1155,9 @@ impl PendingEffect for FilesEffect {
         #[cfg(test)]
         shared.note_write_grant(&kernel.authority, &write);
         let observer = Observer::new(guard, &self.stop, shared.hold(), &shared);
+        // M2d-C round 4 (rule 1): from here on, an end without the
+        // kernel's proof either way is uncertain.
+        guard.handing_off();
         let result = run.apply_observed(approval, write, &self.backend.staging, &observer);
         let recovery = match result {
             Ok(_) => false,
@@ -1169,6 +1172,7 @@ impl PendingEffect for FilesEffect {
                     recovery
                 }
                 Publication::NotPublished => {
+                    guard.proven_not_published();
                     return Err(self.not_published(guard, run, &error));
                 }
                 Publication::Uncertain => {
