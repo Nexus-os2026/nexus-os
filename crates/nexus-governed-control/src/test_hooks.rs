@@ -60,6 +60,9 @@ pub(crate) mod at {
     /// lifetime checked, and its guard armed; the kernel's restore, in the
     /// same scope, is next.
     pub(crate) const FILE_UNDO_RESTORE: &str = "files.undo_restore";
+    /// Codex review 1 of PR #74: a Files create's candidate is staged; its
+    /// structural verification is next.
+    pub(crate) const FILE_STAGED: &str = "files.staged";
 }
 
 type Once = Box<dyn FnOnce() + Send>;

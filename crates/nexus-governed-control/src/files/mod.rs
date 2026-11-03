@@ -91,14 +91,18 @@ use nexus_kernel::coding_run::ProjectGrant;
 #[cfg(target_os = "linux")]
 use nexus_kernel::coding_run::{
     analyze_apply, ApplyError, ApplyFinding, ApplyInterrupt, ApplyState, CandidateEdit, ChangeKind,
-    CleanupStatus, CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InterruptCause,
-    LedgerFailure, LedgerFile, OwnerConfirmer, PreparedFile, ProjectError, ProjectInfo,
-    ProjectRegistry, Refusal, RelPath, RevocationReason, RunError, RunScopes, ScopeEntry, ScopeSet,
-    StagingParent, TempLeft,
+    CleanupStatus, CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InertPageError,
+    InertPageResult, InterruptCause, LedgerFailure, LedgerFile, ManifestEntry, OwnerConfirmer,
+    PreparedFile, ProjectError, ProjectInfo, ProjectRegistry, Refusal, RelPath, RevocationReason,
+    RunError, RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft, VerifierMarker,
 };
 use nexus_kernel::emergency_stop::StopAuthority;
 #[cfg(target_os = "linux")]
 use nexus_kernel::emergency_stop::StopWatch;
+#[cfg(any(test, target_os = "linux"))]
+use nexus_kernel::inert_page::ApprovedFacts;
+#[cfg(target_os = "linux")]
+use nexus_kernel::inert_page::{LABEL_PASSED, MOTHER_CSS};
 #[cfg(target_os = "linux")]
 use nexus_kernel::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceBinding, WorkspaceGrantId,
@@ -143,6 +147,52 @@ impl fmt::Debug for FileCreate {
             .field("content_bytes", &self.content.len())
             .finish()
     }
+}
+
+/// S1a-D (O4): what Files may create, by the name's extension. A page
+/// (`*.html`, lowercase) is checked with the inert page check; plain text
+/// (`*.txt`, lowercase) is not; any other name (another extension, an
+/// upper-case or short spelling of a page, or none) is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileClass {
+    Page,
+    Plain,
+    Refused,
+}
+
+impl FileClass {
+    /// The class of the file name `name` (one root-level component): by
+    /// its last extension, exactly and case-sensitively.
+    pub fn of(name: &str) -> Self {
+        match name.rsplit_once('.') {
+            Some((stem, "html")) if !stem.is_empty() => FileClass::Page,
+            Some((stem, "txt")) if !stem.is_empty() => FileClass::Plain,
+            _ => FileClass::Refused,
+        }
+    }
+}
+
+/// S1a-D's line beside every checked page's label (S1a design v2 §7 step
+/// 3): what the inert page check does not cover.
+pub const PAGE_NOT_CHECKED: &str =
+    "not checked: how the page looks in a browser (375 px and 1366 px are OPEN)";
+/// What a checked page's dialog says in place of S1a's facts line when its
+/// admission holds no facts.
+#[cfg(target_os = "linux")]
+const NO_FACTS_LINE: &str = "facts: not checked (none in the consent)";
+
+/// S1a-D+B (M3 §6.2): the broker's receipt for a Files create that
+/// succeeded: the published bytes' SHA-256 and size, the policy hash of the
+/// kernel's inert page verdict on them (`None` for plain text), and whether
+/// a cause overtook the publication after its final check (the effect's
+/// own interruption codes, as its end record carries them). Digests and a
+/// size only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileReceipt {
+    pub sha256: [u8; 32],
+    pub bytes: u64,
+    pub policy_hash: Option<[u8; 32]>,
+    pub overtaken: bool,
 }
 
 /// What the interface and Mother's port may know of the workspace.
@@ -271,7 +321,8 @@ pub(crate) fn display(
 }
 
 /// What a Files commitment's parameters digest binds (I9): the admission
-/// (every field), the broker run, the kernel coding run, the Files grant,
+/// (every field; S1a-D+B: its page facts by their hash), the broker run,
+/// the kernel coding run, the Files grant,
 /// both halves of the kernel workspace binding, the full review hash and
 /// the name.
 pub(crate) struct Components<'a> {
@@ -291,6 +342,11 @@ pub(crate) struct Components<'a> {
 #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
 pub(crate) fn parameters_digest(components: &Components<'_>) -> Digest {
     let admission = components.admission;
+    // S1a-D+B (S1a O8): tag 0 with no facts, tag 1 and their hash with.
+    let facts = admission.page_facts.as_ref().map_or_else(
+        || vec![0u8],
+        |facts| [&[1u8][..], &facts.hash()[..]].concat(),
+    );
     Digest::of(
         PARAMETERS_DOMAIN,
         &[
@@ -301,6 +357,7 @@ pub(crate) fn parameters_digest(components: &Components<'_>) -> Digest {
             &admission.consented_wall_ms.to_be_bytes(),
             admission.workspace.id.as_bytes(),
             admission.workspace.identity.as_bytes(),
+            &facts,
             components.broker_run.as_bytes(),
             &components.kernel_run,
             components.grant.as_bytes(),
@@ -329,6 +386,8 @@ pub const MAX_HOLD: Duration = Duration::from_secs(30);
 const HOLD_SLICE: Duration = Duration::from_millis(50);
 /// Most working details kept; the oldest goes first.
 const MAX_DETAILS: usize = 64;
+/// Most publication receipts kept; the oldest goes first.
+const MAX_RECEIPTS: usize = 64;
 /// The broker's Files state under its runtime root (reserved from every
 /// workspace): the coding-run ledger and the staging parent.
 const STATE_DIR: &str = "files";
@@ -569,6 +628,12 @@ struct Shared {
     deferred: Mutex<Vec<CodingRun>>,
     /// The Owner-only details of failed executions.
     details: Mutex<VecDeque<(CommitmentId, Lines)>>,
+    /// S1a-D+B: the receipts of the latest published creates.
+    receipts: Mutex<VecDeque<(CommitmentId, FileReceipt)>>,
+    /// S-O22's hook (tests): the facts the next preparation checks its page
+    /// with, instead of its admission's.
+    #[cfg(test)]
+    prepare_facts: Mutex<Option<Option<ApprovedFacts>>>,
     /// One Files execution or undo at a time (Codex D2 condition 3).
     busy: AtomicBool,
     /// The startup hold before each publication, in milliseconds.
@@ -616,6 +681,15 @@ impl Shared {
         details.push_back((id, lines));
         while details.len() > MAX_DETAILS {
             details.pop_front();
+        }
+    }
+
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    fn receipt(&self, id: CommitmentId, receipt: FileReceipt) {
+        let mut receipts = self.receipts.lock().expect("files receipts");
+        receipts.push_back((id, receipt));
+        while receipts.len() > MAX_RECEIPTS {
+            receipts.pop_front();
         }
     }
 
@@ -688,6 +762,13 @@ struct FilesEffect {
     bytes: u64,
     lines: usize,
     sha256: String,
+    /// The reviewed candidate's manifest entry: its SHA-256 and size, equal
+    /// to the input shown (checked at prepare).
+    candidate: ManifestEntry,
+    /// S1a-D: a page's recorded inert page pass, as prepare's check
+    /// returned it (`None` for plain text). Its binding hash is the review's
+    /// marker, so the Owner's approval covers it.
+    page: Option<InertPageResult>,
     target: Digest,
 }
 
@@ -877,6 +958,68 @@ fn apply_failure(error: &ApplyError) -> (FailureClass, String) {
     }
 }
 
+/// S1a-D: an inert page check refused at prepare, as the caller's refusal:
+/// S1a's code, never content. Exhaustive: a new kernel outcome must choose.
+#[cfg(target_os = "linux")]
+fn inert_refusal(error: InertPageError) -> AuthorityError {
+    match error {
+        InertPageError::Refused(code) => AuthorityError::PageNotInert(code.as_str()),
+        InertPageError::FactMissing(code) => AuthorityError::PageFactMissing(code.as_str()),
+        InertPageError::EmergencyStopped => AuthorityError::EmergencyStopped,
+        InertPageError::Unrecorded => {
+            AuthorityError::Unavailable("the inert page check could not be recorded")
+        }
+        InertPageError::InvalidState
+        | InertPageError::Spent
+        | InertPageError::NotChecked
+        | InertPageError::FactsChanged
+        | InertPageError::Stale
+        | InertPageError::CandidateUnavailable
+        | InertPageError::NotSingleFile => {
+            AuthorityError::Unavailable("the inert page check could not be completed")
+        }
+    }
+}
+
+/// S1a-D (§7 step 4): a failed execute-time recheck as a class and the code
+/// `page_recheck:<code>`.
+#[cfg(target_os = "linux")]
+fn recheck_failure(error: InertPageError) -> (FailureClass, String) {
+    let class = match error {
+        InertPageError::EmergencyStopped => FailureClass::Refused,
+        InertPageError::Unrecorded => FailureClass::Unavailable,
+        InertPageError::InvalidState
+        | InertPageError::Spent
+        | InertPageError::NotChecked
+        | InertPageError::FactsChanged
+        | InertPageError::Stale
+        | InertPageError::CandidateUnavailable
+        | InertPageError::NotSingleFile
+        | InertPageError::Refused(_)
+        | InertPageError::FactMissing(_) => FailureClass::TargetChanged,
+    };
+    (class, format!("page_recheck:{}", error.code()))
+}
+
+/// S1a-D (§7 step 3): what a checked page's dialog says of its check, after
+/// the file: S1a's label, the policy and stylesheet hashes, S1a's facts line
+/// (or that no facts were consented), and what the check does not cover.
+#[cfg(target_os = "linux")]
+fn page_lines(page: &InertPageResult) -> Vec<String> {
+    vec![
+        LABEL_PASSED.to_string(),
+        format!(
+            "policy {}  css {}",
+            hex::encode(page.page.policy_hash),
+            sha256_hex(MOTHER_CSS.as_bytes())
+        ),
+        page.page
+            .facts_line()
+            .unwrap_or_else(|| NO_FACTS_LINE.to_string()),
+        PAGE_NOT_CHECKED.to_string(),
+    ]
+}
+
 #[cfg(target_os = "linux")]
 impl PendingEffect for FilesEffect {
     /// The workspace is still the admitted directory, the name still
@@ -963,6 +1106,28 @@ impl PendingEffect for FilesEffect {
             Ok(approval) => approval,
             Err(error) => return Err(self.not_published(guard, run, &error)),
         };
+        // S1a-D (§7 step 4): a page is rechecked with its admission's facts
+        // (never prepare's) immediately before its publication: only the
+        // kernel write grant is issued between them. Its pass must still be
+        // the one the Owner approved. Any failure publishes nothing, spends
+        // the run's check and discards its staging.
+        if let Some(page) = &self.page {
+            let rechecked = run
+                .recheck_inert_page(self.admission.page_facts.as_ref())
+                .and_then(|()| match run.latest_inert_page() {
+                    Some(now) if now == page => Ok(()),
+                    Some(_) | None => Err(InertPageError::Stale),
+                });
+            if let Err(error) = rechecked {
+                let kept = shared.retire(run);
+                return Err(self.failed_with(
+                    guard,
+                    recheck_failure(error),
+                    error.to_string(),
+                    kept,
+                ));
+            }
+        }
         let Ok(write) = kernel.projects.grant_for_apply(kernel.project.id, binding) else {
             let kept = shared.retire(run);
             return Err(self.failed_with(
@@ -1022,6 +1187,20 @@ impl PendingEffect for FilesEffect {
                 .expect("files closed")
                 .insert(self.broker_run);
         }
+        // S1a-D+B (M3 §6.2): the receipt, from the verified candidate the
+        // kernel published (for either class; a page's verdict names the
+        // same bytes) and, for a page, its verdict's policy; overtaken
+        // exactly when this effect reports an interruption beside its
+        // success (the same codes its end record carries).
+        shared.receipt(
+            guard.commitment(),
+            FileReceipt {
+                sha256: self.candidate.sha256,
+                bytes: self.candidate.size,
+                policy_hash: self.page.as_ref().map(|page| page.page.policy_hash),
+                overtaken: !interrupted.is_empty(),
+            },
+        );
         shared.applied(Applied {
             run,
             broker_run: self.broker_run,
@@ -1422,14 +1601,22 @@ fn finding(finding: ApplyFinding) -> RecoveryFinding {
 
 /// §6.1 step 4's kernel half: grant, snapshot, the one created file,
 /// structural verification, and a review that shows exactly that file whole.
-/// Returns the review's full hash.
+/// Returns the review's full hash. S1a-D (§7 step 2): a page is checked
+/// once, after structural verification, with `facts` (its admission's);
+/// its review must then name exactly that pass, and plain text's no
+/// verification. The page's pass is returned with the hash. Codex review 1
+/// of PR #74: for either class, the reviewed candidate (the bytes the
+/// kernel verified and would publish) must be exactly the input the Owner
+/// is shown, its SHA-256 and size; its entry is returned too, for the
+/// receipt.
 #[cfg(target_os = "linux")]
 fn stage_one(
     run: &mut CodingRun,
-    staging: &StagingParent,
+    (staging, _shared): (&StagingParent, &Shared),
     path: &RelPath,
     content: &[u8],
-) -> Result<[u8; 32], AuthorityError> {
+    (class, facts): (FileClass, Option<ApprovedFacts>),
+) -> Result<([u8; 32], Option<InertPageResult>, ManifestEntry), AuthorityError> {
     run.grant(staging).map_err(run_error)?;
     run.snapshot().map_err(run_error)?;
     run.edit(CandidateEdit::Create {
@@ -1437,15 +1624,54 @@ fn stage_one(
         content: content.to_vec(),
     })
     .map_err(run_error)?;
+    #[cfg(test)]
+    _shared.fire(crate::test_hooks::at::FILE_STAGED);
     if !run.verify_structural().map_err(run_error)?.passed() {
         return Err(refused("the file is not plain new text"));
     }
+    let page = match class {
+        FileClass::Page => Some(
+            run.check_inert_page(&path.as_string(), facts)
+                .map_err(inert_refusal)?,
+        ),
+        FileClass::Plain => None,
+        FileClass::Refused => return Err(AuthorityError::FileTypeNotAllowed),
+    };
+    // The kernel checked exactly the bytes the Owner is shown.
+    let digest: [u8; 32] = {
+        use sha2::{Digest as _, Sha256};
+        Sha256::digest(content).into()
+    };
+    if page
+        .as_ref()
+        .is_some_and(|page| page.page.candidate_sha256 != digest)
+    {
+        return Err(AuthorityError::TargetChanged);
+    }
     let review = run.review().map_err(run_error)?;
-    match review.single_complete() {
-        Some(only) if &only.path == path && only.kind == ChangeKind::Create => {
-            Ok(review.binding.hash())
+    let bound = match (&page, review.binding.verification) {
+        (Some(page), VerifierMarker::InertPage(hash)) => page.binding_hash() == hash,
+        (Some(_), VerifierMarker::NoResult | VerifierMarker::Result(_)) => false,
+        (None, VerifierMarker::NoResult) => true,
+        (None, VerifierMarker::Result(_) | VerifierMarker::InertPage(_)) => false,
+    };
+    if !bound {
+        return Err(AuthorityError::Unavailable(
+            "the review does not name the file's check",
+        ));
+    }
+    let only = match review.single_complete() {
+        Some(only) if &only.path == path && only.kind == ChangeKind::Create => only,
+        _ => return Err(AuthorityError::ChangeTooLargeToShow),
+    };
+    // The verified, reviewed candidate is the input shown, for either
+    // class: a same-UID edit of the staging before its verification is
+    // refused here, before any commitment.
+    match &only.new {
+        Some(entry) if entry.sha256 == digest && entry.size == content.len() as u64 => {
+            Ok((review.binding.hash(), page, entry.clone()))
         }
-        _ => Err(AuthorityError::ChangeTooLargeToShow),
+        Some(_) | None => Err(AuthorityError::TargetChanged),
     }
 }
 
@@ -2335,6 +2561,25 @@ impl Files {
         self.workspace.lock().expect("files").clone()
     }
 
+    /// S1a-D+B: the receipt of the Files create `id`, if it was published
+    /// (one of the latest `MAX_RECEIPTS`).
+    pub(crate) fn receipt(&self, id: CommitmentId) -> Option<FileReceipt> {
+        self.shared
+            .receipts
+            .lock()
+            .expect("files receipts")
+            .iter()
+            .find(|(of, _)| *of == id)
+            .map(|(_, receipt)| *receipt)
+    }
+
+    /// S-O22's crate-private hook (tests): the next preparation checks its
+    /// page with `facts` instead of its admission's.
+    #[cfg(test)]
+    pub(crate) fn prepare_facts_for_test(&self, facts: Option<ApprovedFacts>) {
+        *self.shared.prepare_facts.lock().expect("files hook") = Some(facts);
+    }
+
     /// The registered workspace, if any.
     pub(crate) fn info(&self) -> Option<WorkspaceInfo> {
         self.current().map(|workspace| workspace.info.clone())
@@ -2457,8 +2702,22 @@ impl Files {
             Err(_) => return Err(AuthorityError::Unavailable("the workspace cannot be read")),
         }
         let summary = display(&admission, &workspace.info, &create.name, &create.content)?;
+        // S1a-D (O4): only a page (checked) or plain text, decided before
+        // any staging.
+        let class = FileClass::of(&create.name);
+        if class == FileClass::Refused {
+            return Err(AuthorityError::FileTypeNotAllowed);
+        }
         #[cfg(target_os = "linux")]
-        return self.stage(run, create, admission, workspace, grant, summary, stop);
+        return self.stage(
+            run,
+            create,
+            (admission, class),
+            workspace,
+            grant,
+            summary,
+            stop,
+        );
         #[cfg(not(target_os = "linux"))]
         {
             let _ = (run, grant, summary, stop);
@@ -2479,10 +2738,10 @@ impl Files {
         &self,
         run: RunId,
         create: &FileCreate,
-        admission: FilesAdmission,
+        (admission, class): (FilesAdmission, FileClass),
         workspace: Arc<Workspace>,
         grant: GrantId,
-        summary: Vec<String>,
+        mut summary: Vec<String>,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
         self.drain();
@@ -2504,18 +2763,39 @@ impl Files {
         let mut staged =
             CodingRun::create_for_project_observing(backend.ledger.store(), project, scopes, stop)
                 .map_err(run_error)?;
-        let review_hash = match stage_one(
+        // S1a-D: the page is checked with its admission's facts (the S-O22
+        // hook alone replaces them, in tests).
+        let facts = admission.page_facts.clone();
+        #[cfg(test)]
+        let facts = self
+            .shared
+            .prepare_facts
+            .lock()
+            .expect("files hook")
+            .take()
+            .unwrap_or(facts);
+        let (review_hash, page, candidate) = match stage_one(
             &mut staged,
-            &backend.staging,
+            (&backend.staging, &self.shared),
             &path,
             create.content.as_bytes(),
+            (class, facts),
         ) {
-            Ok(hash) => hash,
+            Ok(checked) => checked,
             Err(error) => {
                 self.shared.retire(staged);
                 return Err(error);
             }
         };
+        // S1a-D (§7 step 3): a page's dialog also says what was checked and
+        // what was not; refused whole if it cannot be shown.
+        if let Some(page) = &page {
+            summary.extend(page_lines(page));
+            if summary.len() > MAX_SUMMARY_LINES || !summary.iter().all(|line| is_plain(line)) {
+                self.shared.retire(staged);
+                return Err(AuthorityError::ChangeTooLargeToShow);
+            }
+        }
         let target = Digest::of(
             TARGET_DOMAIN,
             &[
@@ -2540,6 +2820,8 @@ impl Files {
             bytes: create.content.len() as u64,
             lines: line_count(&create.content),
             sha256: sha256_hex(create.content.as_bytes()),
+            candidate,
+            page,
             target,
         };
         let action = PreparedAction {

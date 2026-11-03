@@ -132,6 +132,7 @@ fn mission_request(label: &str) -> MissionConfirmation {
         contract_hash: HASH.into(),
         request: label.into(),
         summary: vec!["A one-page site".into()],
+        page_facts: None,
     }
 }
 

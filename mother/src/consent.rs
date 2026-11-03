@@ -118,6 +118,7 @@ impl MissionSummary {
             contract_hash: self.hash.to_hex(),
             request,
             summary: self.lines(),
+            page_facts: None,
         }
     }
 }
