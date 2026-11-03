@@ -496,7 +496,7 @@ impl RunRegistry {
         }
         if let Some(group) = group {
             match runs.doors.get(&group) {
-                Some(door) if door.halted => return Err(AuthorityError::Halted),
+                Some(door) if door.is_halted() => return Err(AuthorityError::Halted),
                 Some(door) if door.active && door.alive() => {
                     if door.agent != entry.view.agent {
                         return Err(AuthorityError::WrongAgent);
@@ -822,7 +822,7 @@ impl RunRegistry {
         let table = &mut *guard;
         table.prune_doors();
         match table.doors.get(&group) {
-            Some(door) if door.halted => return Err(AuthorityError::Halted),
+            Some(door) if door.is_halted() => return Err(AuthorityError::Halted),
             Some(door) if door.active && door.alive() && &door.agent == agent => {}
             _ => return Err(AuthorityError::NotMember),
         }
@@ -1438,7 +1438,7 @@ impl ConsentSlot<'_> {
             return Err(AuthorityError::Closed("the desktop is quitting"));
         }
         let door = match runs.doors.get_mut(&self.group) {
-            Some(door) if door.halted => return Err(AuthorityError::Halted),
+            Some(door) if door.is_halted() => return Err(AuthorityError::Halted),
             Some(door) if door.active && door.alive() => door,
             _ => return Err(AuthorityError::NotMember),
         };
