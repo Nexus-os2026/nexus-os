@@ -1412,11 +1412,18 @@ fn e_o25_d_e_a_pre_stop_yes_and_a_late_confirmation_admit_nothing() {
     );
     assert_eq!(f.admission(late), None);
 
+    // `after` was cancelled by (e)'s own Stop: it stays refused (H1′).
     f.consent(&f.door, HASH, &label(1));
+    assert_eq!(
+        class(f.door.admit_inference(after, HASH, &label(1), identity())),
+        "run_cancelled"
+    );
+    assert_eq!(f.admission(after), None);
+    // Control: the run opened after the last resume admits a fresh yes.
     f.door
-        .admit_inference(after, HASH, &label(1), identity())
+        .admit_inference(late, HASH, &label(1), identity())
         .unwrap();
-    assert!(f.admission(after).is_some());
+    assert!(f.admission(late).is_some());
 }
 
 /// E-O25 (f): at 64 cached yeses the 65th is refused before the Owner is
