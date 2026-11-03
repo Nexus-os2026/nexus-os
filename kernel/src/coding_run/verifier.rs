@@ -679,8 +679,24 @@ impl VerificationCandidate<'_> {
             return None;
         }
         let bytes = self.run.read_staged_file(&path, max_bytes).ok()?;
+        #[cfg(test)]
+        INERT_READ_BYTES.with(|n| n.set(n.get() + bytes.len() as u64));
         (ManifestEntry::of(&bytes) == *entry).then_some(bytes)
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Bytes read through [`VerificationCandidate::read`] on this thread
+    /// (S-O11c's bound on the inert page read).
+    static INERT_READ_BYTES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The bytes read through [`VerificationCandidate::read`] on this thread
+/// since the last call, which resets the count.
+#[cfg(test)]
+pub(crate) fn inert_read_bytes_for_test() -> u64 {
+    INERT_READ_BYTES.with(|n| n.replace(0))
 }
 
 impl CodingRun {

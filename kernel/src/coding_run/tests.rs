@@ -1802,6 +1802,9 @@ mod p2h_verification;
 #[path = "s1a_c_inert_slot_tests.rs"]
 mod s1a_c_inert_slot;
 
+#[path = "s1a_c_review1_tests.rs"]
+mod s1a_c_review1;
+
 // ── M0-FIX F5: the owner's emergency stop halts coding runs ───────────────
 
 #[path = "m0_f5_stop_tests.rs"]
