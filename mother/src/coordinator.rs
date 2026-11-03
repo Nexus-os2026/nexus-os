@@ -2483,7 +2483,28 @@ impl<P: EffectPort> Coordinator<P> {
     /// back to the port. Claims are compared by parsed identity: an action
     /// two missions name (a tampered journal) is handed back to neither.
     fn adopt_actions(&self) {
-        let open = self.open_actions();
+        // D4(c): an action whose conclusive outcome is journaled (an
+        // ordinary approval or a settlement, its acknowledgement or closure
+        // left undone) is never adopted: it is only handed back, and the
+        // journal's acknowledgement (ack-only ownership) settles it.
+        let conclusive: Vec<PendingAction> = self.peek(|inner| {
+            inner
+                .missions
+                .values()
+                .flat_map(|m| m.acks.iter().cloned())
+                .collect()
+        });
+        let open: Vec<(MissionId, MissionState, PendingAction)> = self
+            .open_actions()
+            .into_iter()
+            .filter(|(id, _, pending)| {
+                if conclusive.contains(pending) {
+                    self.port.hand(*id, pending);
+                    return false;
+                }
+                true
+            })
+            .collect();
         let key = |p: &PendingAction| (RunId::parse(&p.run), CommitmentId::parse(&p.commitment));
         for (id, _, pending) in &open {
             let (run, commitment) = key(pending);

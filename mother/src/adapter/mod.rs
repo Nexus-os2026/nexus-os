@@ -109,6 +109,8 @@ mod m2d_files_r2;
 mod m2d_files_r4;
 #[cfg(test)]
 mod m2d_files_r5;
+#[cfg(test)]
+mod m2d_files_r5b;
 mod private_file;
 pub use private_file::FilePrivate;
 
@@ -184,6 +186,9 @@ pub struct GovernedPort {
     /// Tests: how many acknowledgements were asked of the broker.
     #[cfg(test)]
     acks_tried: AtomicUsize,
+    /// Tests: how many adoptions were asked of the broker.
+    #[cfg(test)]
+    adopts_tried: AtomicUsize,
     /// M2a-S (tests): run just before an effect is performed, and before
     /// the broker is asked about an approval (deterministic interleavings).
     #[cfg(test)]
@@ -240,6 +245,8 @@ impl GovernedPort {
             #[cfg(test)]
             acks_tried: AtomicUsize::new(0),
             #[cfg(test)]
+            adopts_tried: AtomicUsize::new(0),
+            #[cfg(test)]
             before_perform: Default::default(),
             #[cfg(test)]
             before_approval: Default::default(),
@@ -285,6 +292,22 @@ impl GovernedPort {
     /// The broker run a mission opened, if any.
     pub fn run_of(&self, mission: MissionId) -> Option<RunId> {
         self.with_runs(|runs| runs.open.get(&mission).copied())
+    }
+
+    /// Tests (D3): Mother's own deadline for the action `mission` waits on.
+    #[cfg(test)]
+    pub(crate) fn set_deadline_for_test(&self, mission: MissionId, deadline_mono_ms: u64) {
+        self.with_runs(|runs| {
+            if let Some(waiting) = runs.waiting.get_mut(&mission) {
+                waiting.1 = deadline_mono_ms;
+            }
+        });
+    }
+
+    /// Tests (D4(c)): how many adoptions were asked of the broker.
+    #[cfg(test)]
+    pub(crate) fn adopts_tried(&self) -> usize {
+        self.adopts_tried.load(Ordering::SeqCst)
     }
 
     /// Tests: File actions this port holds and has not acknowledged.
@@ -942,6 +965,8 @@ impl GovernedPort {
         // in the adoption's hold (D4(a) refuses a run that admits only an
         // acknowledgement).
         let cell = self.with_runs(|runs| runs.cells.get(&mission).cloned());
+        #[cfg(test)]
+        self.adopts_tried.fetch_add(1, Ordering::SeqCst);
         let adopted = match &cell {
             Some(cell) => self.door.adopt_with_halt(run, commitment, cell),
             None => self.door.adopt(run, commitment),
