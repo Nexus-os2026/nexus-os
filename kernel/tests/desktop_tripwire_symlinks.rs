@@ -182,3 +182,37 @@ fn g0_s5_an_unreadable_directory_is_red_with_a_clear_error() {
         "an unreadable directory was skipped: {found:?}"
     );
 }
+
+// ── Decision 2, L1: an unrelated dangling link is allowed ──────────────────
+
+#[test]
+fn g0_s6_an_unrelated_dangling_symlink_is_allowed_a_forbidden_one_is_not() {
+    let root = fixture_copy("dangling");
+    assert!(
+        !Path::new("/opt/missing").exists(),
+        "this control needs /opt/missing to be absent"
+    );
+    std::fs::create_dir_all(root.0.join("tools/view")).unwrap();
+    // Green control: an optional tool not installed here.
+    symlink("/opt/missing", root.0.join("tools/optional-sdk")).unwrap();
+    // Still red: a forbidden name, dangling and looping.
+    symlink("/opt/missing", root.0.join("tools/src-tauri")).unwrap();
+    symlink(
+        root.0.join("tools/view/src-tauri"),
+        root.0.join("tools/view/src-tauri"),
+    )
+    .unwrap();
+    let found = findings_within_deadline(&root.0);
+    assert!(
+        !found.iter().any(|f| f.contains("optional-sdk")),
+        "an unrelated dangling symlink is a false red: {found:?}"
+    );
+    for forbidden in ["tools/src-tauri", "tools/view/src-tauri"] {
+        assert!(
+            found
+                .iter()
+                .any(|f| f.contains(forbidden) && f.contains("src-tauri tree")),
+            "{forbidden} escaped the scan: {found:?}"
+        );
+    }
+}
