@@ -1,5 +1,5 @@
 //! TD-O3: encoding, framing and preflight refusals (§5.3). The user content
-//! holds the literal six-character `<` and `>` and no raw `<` or
+//! holds the literal six-character `\u003c` and `\u003e` and no raw `<` or
 //! `>` inside strings; decoded values round-trip; the markers are exact;
 //! the first and last bytes are not whitespace; the profile refuses U+2581,
 //! U+00A0, CR and control characters; inventory spellings are refused
