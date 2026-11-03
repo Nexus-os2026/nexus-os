@@ -44,6 +44,7 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::effect::CapabilityKind;
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::governed::{
@@ -97,6 +98,8 @@ mod m2c_halt;
 pub(crate) mod m2c_support;
 #[cfg(test)]
 mod m2d_files;
+#[cfg(test)]
+mod m2d_files_r1;
 mod private_file;
 pub use private_file::FilePrivate;
 
@@ -498,6 +501,37 @@ impl EffectPort for GovernedPort {
         self.workspace.clone()
     }
 
+    /// HIGH 1: the broker's record of the action `mission` waits on, only
+    /// if it is a File create of this door's run that succeeded. Nothing
+    /// is changed: the wait stays the port's until the coordinator ends it.
+    fn publication(&self, mission: MissionId) -> Option<ApprovalStatus> {
+        self.enter().ok()?;
+        let (run, commitment, deadline) = self.with_runs(|runs| {
+            Some((
+                *runs.open.get(&mission)?,
+                runs.waiting.get(&mission)?.0,
+                runs.waiting.get(&mission)?.1,
+            ))
+        })?;
+        let Lookup::Mine(view) = self.door.commitment(commitment) else {
+            return None;
+        };
+        if view.run != run
+            || view.agent != mother_agent()
+            || view.kind != CapabilityKind::Files
+            || view.state != CommitmentState::Succeeded
+        {
+            return None;
+        }
+        let clock = self.door.clock();
+        Some(status_of(
+            &view,
+            clock.wall_ms(),
+            clock.monotonic_ms(),
+            deadline,
+        ))
+    }
+
     fn cancel(&self, mission: MissionId) {
         let entered = self.enter();
         let run = self.end(mission);
@@ -850,6 +884,9 @@ pub(crate) fn status_of(
         }
         // M2d (§11 M4′): published, and its authority ended after the
         // broker's final check.
+        // M2d (Codex review 1 of PR #78, HIGH 2): published, recovery
+        // required.
+        CommitmentState::Succeeded if view.recovery_required => ApprovalStatus::RecoveryRequired,
         CommitmentState::Succeeded if !view.interrupted.is_empty() => ApprovalStatus::Overtaken {
             causes: view.interrupted.clone(),
         },

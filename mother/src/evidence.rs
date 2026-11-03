@@ -152,6 +152,11 @@ pub enum BrokerClass {
     RecoveryRequired,
     /// M2d, the port's own: a perform of another admission generation.
     AdmissionStale,
+    /// S1a-D+B (merged from main): the broker's page and facts classes.
+    FactsInvalid,
+    FileTypeNotAllowed,
+    PageNotInert,
+    PageFactMissing,
     /// Anything outside this registry.
     Unknown,
 }
@@ -203,6 +208,10 @@ impl BrokerClass {
         BrokerClass::UnsupportedMountTopology,
         BrokerClass::RecoveryRequired,
         BrokerClass::AdmissionStale,
+        BrokerClass::FactsInvalid,
+        BrokerClass::FileTypeNotAllowed,
+        BrokerClass::PageNotInert,
+        BrokerClass::PageFactMissing,
         BrokerClass::Unknown,
     ];
 
@@ -253,6 +262,10 @@ impl BrokerClass {
             BrokerClass::UnsupportedMountTopology => "unsupported_mount_topology",
             BrokerClass::RecoveryRequired => "recovery_required",
             BrokerClass::AdmissionStale => "admission_stale",
+            BrokerClass::FactsInvalid => "facts_invalid",
+            BrokerClass::FileTypeNotAllowed => "file_type_not_allowed",
+            BrokerClass::PageNotInert => "page_not_inert",
+            BrokerClass::PageFactMissing => "page_fact_missing",
             BrokerClass::Unknown => "unknown",
         }
     }
@@ -435,9 +448,17 @@ pub enum BlockReason {
     /// M2d (§11 M4′): a File was published, and its authority ended after
     /// the broker's final check.
     FilePublicationInterrupted(PublicationCause),
+    /// M2d (Codex review 1 of PR #78, HIGH 1): a File the mission waited on
+    /// ran, and Mother then ended the mission for its time budget, or for
+    /// the Owner's Stop (an emergency Stop is the broker registry's own
+    /// `emergency_stop`).
+    FilePublicationTimeBudget,
+    FilePublicationOwnerStop,
+    /// M2d (HIGH 2): a File was published with recovery required.
+    FilePublicationRecoveryRequired,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 12] = [
+const BLOCK_CODES: [(BlockReason, &str); 15] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -455,6 +476,18 @@ const BLOCK_CODES: [(BlockReason, &str); 12] = [
     (
         BlockReason::FilesConsentUnverifiable,
         "files_consent_unverifiable",
+    ),
+    (
+        BlockReason::FilePublicationTimeBudget,
+        "file_publication_interrupted:time_budget",
+    ),
+    (
+        BlockReason::FilePublicationOwnerStop,
+        "file_publication_interrupted:owner_stop",
+    ),
+    (
+        BlockReason::FilePublicationRecoveryRequired,
+        "file_publication_recovery_required",
     ),
 ];
 

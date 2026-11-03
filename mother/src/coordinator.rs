@@ -793,7 +793,7 @@ enum Then<T> {
 /// What `advance`'s first step under the lock decided.
 enum Start {
     /// An emergency stop holds: stop the mission.
-    Emergency,
+    Emergency(Advance),
     /// The time budget is spent: end the mission.
     OutOfTime(Advance),
     /// Done in the step: report it.
@@ -1301,7 +1301,7 @@ impl<P: EffectPort> Coordinator<P> {
                 reason: None,
             };
             if emergency {
-                return Ok(Start::Emergency);
+                return Ok(Start::Emergency(report));
             }
             if mission.out_of_time(&*self.clock) {
                 return Ok(Start::OutOfTime(report));
@@ -1325,13 +1325,28 @@ impl<P: EffectPort> Coordinator<P> {
             Ok(Start::Run(report, from, roles, mission.generation))
         })?;
         let (mut report, from, roles, generation) = match start {
-            Start::Emergency => {
-                self.stop_for(id, StopReason::EmergencyStop)?;
-                return Err(CoordinatorError::Stopped);
+            Start::Emergency(mut report) => {
+                // A File that ran is reconciled first (HIGH 1): the mission
+                // then ends Blocked, reported; otherwise it is stopped.
+                let state = self.stop_for(id, StopReason::EmergencyStop)?;
+                if state == MissionState::Stopped {
+                    return Err(CoordinatorError::Stopped);
+                }
+                report.to = state;
+                report.reason = self.reason(id);
+                return Ok(report);
             }
             Start::OutOfTime(mut report) => {
-                report.to = self.end(id, BlockReason::BudgetTime)?;
-                report.reason = Some(BlockReason::BudgetTime.to_string());
+                match self.reconcile(id, BlockReason::FilePublicationTimeBudget)? {
+                    Some(state) => {
+                        report.to = state;
+                        report.reason = self.reason(id);
+                    }
+                    None => {
+                        report.to = self.end(id, BlockReason::BudgetTime)?;
+                        report.reason = Some(BlockReason::BudgetTime.to_string());
+                    }
+                }
                 return Ok(report);
             }
             Start::Done(report) => return Ok(report),
@@ -1427,7 +1442,15 @@ impl<P: EffectPort> Coordinator<P> {
             // check. A success first, then the end.
             ApprovalStatus::Overtaken { causes } => {
                 let first = causes.first().copied().unwrap_or("unknown");
-                overtaken = Some(PublicationCause::of(first));
+                overtaken = Some(BlockReason::FilePublicationInterrupted(
+                    PublicationCause::of(first),
+                ));
+                None
+            }
+            // M2d (Codex review 1 of PR #78, HIGH 2): it ran, and recovery
+            // is required. A success first, then the end.
+            ApprovalStatus::RecoveryRequired => {
+                overtaken = Some(BlockReason::FilePublicationRecoveryRequired);
                 None
             }
             ApprovalStatus::Denied => Some(Trigger::ActionDenied {
@@ -1465,8 +1488,8 @@ impl<P: EffectPort> Coordinator<P> {
             report.reason = self.reason(id);
             return Ok(report);
         }
-        if let Some(cause) = overtaken {
-            report.to = self.end(id, BlockReason::FilePublicationInterrupted(cause))?;
+        if let Some(reason) = overtaken {
+            report.to = self.end(id, reason)?;
             report.reason = self.reason(id);
             return Ok(report);
         }
@@ -2270,6 +2293,21 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         reason: StopReason,
     ) -> Result<MissionState, CoordinatorError> {
+        // M2d (Codex review 1 of PR #78, HIGH 1): a File the mission waits
+        // on that already ran is journaled as the success it is first, and
+        // the mission then ends with the interruption code, not Stopped.
+        let cause = match reason {
+            StopReason::Owner => Some(BlockReason::FilePublicationOwnerStop),
+            StopReason::EmergencyStop => Some(BlockReason::FilePublicationInterrupted(
+                PublicationCause::EmergencyStop,
+            )),
+            StopReason::PrivateContentUnavailable => None,
+        };
+        if let Some(cause) = cause {
+            if let Some(state) = self.reconcile(id, cause)? {
+                return Ok(state);
+            }
+        }
         type Stopping = (Result<MissionState, CoordinatorError>, bool);
         let step = self.with_lock(
             |inner| -> Result<Result<Stopping, MissionState>, CoordinatorError> {
@@ -2308,6 +2346,54 @@ impl<P: EffectPort> Coordinator<P> {
         journaled
     }
 
+    /// M2d (Codex review 1 of PR #78, HIGH 1): before a Stop or the time
+    /// budget ends a mission that waits on a File, ask the port (no lock
+    /// held) whether that File ran. If it did, journal it as the success it
+    /// is (`ActionApproved`, then its closure), and end the mission with
+    /// `reason` (or `file_publication_recovery_required`): nothing more of
+    /// it is dispatched. `None` when it does not wait, the File did not
+    /// run, or the mission moved meanwhile: the caller ends it as before.
+    fn reconcile(
+        &self,
+        id: MissionId,
+        reason: BlockReason,
+    ) -> Result<Option<MissionState>, CoordinatorError> {
+        let waited = self.peek(|inner| {
+            let mission = inner.missions.get(&id)?;
+            if mission.state != MissionState::AwaitingApproval || mission.held.is_some() {
+                return None;
+            }
+            mission.waiting.as_ref().map(|w| (w.effect, w.phase))
+        });
+        let Some((effect, phase)) = waited else {
+            return Ok(None);
+        };
+        let reason = match self.port.publication(id) {
+            Some(ApprovalStatus::RecoveryRequired) => BlockReason::FilePublicationRecoveryRequired,
+            Some(ApprovalStatus::Approved | ApprovalStatus::Overtaken { .. }) => reason,
+            _ => return Ok(None),
+        };
+        let fired = self.with_lock(|inner| {
+            if inner.kept(id).is_err() {
+                return false;
+            }
+            let still = inner.missions.get(&id).is_some_and(|m| {
+                m.state == MissionState::AwaitingApproval
+                    && m.waiting.as_ref().map(|w| w.effect) == Some(effect)
+            });
+            let mono = self.clock.monotonic_ms();
+            still
+                && inner
+                    .fire(id, Trigger::ActionApproved { effect, phase }, mono)
+                    .is_ok()
+        });
+        if !fired {
+            return Ok(None);
+        }
+        self.close_action(id)?;
+        Ok(Some(self.end(id, reason)?))
+    }
+
     /// Stop every mission that has not ended. Returns how many.
     pub fn stop_all(&self) -> usize {
         let live: Vec<MissionId> = self.peek(|inner| {
@@ -2319,7 +2405,13 @@ impl<P: EffectPort> Coordinator<P> {
                 .collect()
         });
         live.into_iter()
-            .filter(|id| self.stop(*id) == Ok(MissionState::Stopped))
+            .filter(|id| {
+                // A reconciled publication ends its mission Blocked (HIGH 1).
+                matches!(
+                    self.stop(*id),
+                    Ok(MissionState::Stopped | MissionState::Blocked)
+                )
+            })
             .count()
     }
 

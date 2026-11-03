@@ -19,6 +19,8 @@ mod m2as_review;
 pub(crate) mod m2c_confirmers;
 pub(crate) mod m2c_owner;
 pub(crate) mod m2d_c;
+mod m2d_c_mirror;
+mod m2d_c_r1;
 mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;
@@ -112,6 +114,8 @@ struct PortState {
     /// M2d-C: the workspace's display name (by default the test
     /// contract's folder); `Some(None)`: none was given.
     workspace: Option<Option<String>>,
+    /// M2d-C (HIGH 1): what the waited File came to, if it ran.
+    publication: Option<ApprovalStatus>,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -275,6 +279,11 @@ impl RecordingPort {
         self.lock().admission_refused = Some(class.to_string());
     }
 
+    /// M2d-C (HIGH 1): the waited File ran and came to `status`.
+    pub fn set_publication(&self, status: Option<ApprovalStatus>) {
+        self.lock().publication = status;
+    }
+
     /// M2d-C: the workspace the port says it was given.
     pub fn set_workspace(&self, name: Option<&str>) {
         self.lock().workspace = Some(name.map(str::to_string));
@@ -338,6 +347,10 @@ impl EffectPort for RecordingPort {
             Some(class) => Err(refusal(class)),
             None => Ok(()),
         }
+    }
+
+    fn publication(&self, _: MissionId) -> Option<ApprovalStatus> {
+        self.lock().publication.clone()
     }
 
     fn workspace(&self) -> Option<String> {

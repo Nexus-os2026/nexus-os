@@ -23,8 +23,8 @@
 use super::m2c_support::{consent, port_for, Home};
 use super::{mother_agent, FileJournal, GovernedPort};
 use crate::coordinator::Coordinator;
-use crate::effect::EffectPort;
 use crate::coordinator::Lanes;
+use crate::effect::EffectPort;
 use crate::journal::{Event, MissionId};
 use crate::lane::LaneRole;
 use crate::oracles::m2c_owner::OwnerLiftsTheStop;

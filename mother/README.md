@@ -142,6 +142,10 @@ Coordinator rules the oracles pin:
   publication the broker reports as interrupted after its final check is
   journaled as the success it is, then the mission ends
   (`file_publication_interrupted:<cause>`) and nothing more of it runs.
+  The same holds when an emergency Stop, the Owner's Stop or the time
+  budget ends a mission whose File already ran (`emergency_stop`,
+  `owner_stop`, `time_budget`), and a File published with recovery
+  required ends it `file_publication_recovery_required`.
 - The Owner's emergency stop is checked before every lane and every effect.
 - No coordinator lock is held while the Owner is asked, a lane runs or an
   effect runs. A result that comes after a Stop is dropped and journaled

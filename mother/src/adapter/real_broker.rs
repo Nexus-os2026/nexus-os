@@ -686,6 +686,8 @@ fn real_broker_m1_oracles() {
     super::m2c_halt::on_the_real_broker(&w.home, &w.origin, &w.listener);
     // M2d-C (oracles first): Files admission, create requests, refusals.
     super::m2d_files::on_the_real_broker(&w.home, &w.origin);
+    // Codex review 1 of PR #78, HIGH 1 (oracles first).
+    super::m2d_files_r1::on_the_real_broker(&w.home);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);

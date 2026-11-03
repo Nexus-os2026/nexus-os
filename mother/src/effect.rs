@@ -85,6 +85,10 @@ pub enum ApprovalStatus {
     /// M2d (§11 M4′): it ran, and a cause ended its authority after the
     /// broker's final check: the broker's controlled codes, in order.
     Overtaken { causes: Vec<&'static str> },
+    /// M2d (Codex review 1 of PR #78, HIGH 2): it ran, and the broker
+    /// requires recovery (the file is published; its directory sync, or
+    /// its write grant's closure, failed).
+    RecoveryRequired,
 }
 
 /// M2d (I7): what binds a mission's broker run to the Owner's consent, once
@@ -250,6 +254,11 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// What became of the action `mission` waits on (an effect that came
     /// back [`EffectOutcome::AwaitingApproval`]). Never approves it.
     fn approval(&self, mission: MissionId) -> ApprovalStatus;
+    /// M2d (Codex review 1 of PR #78, HIGH 1): if the action `mission`
+    /// waits on is a File create that ran at the broker, what it came to
+    /// (Approved, Overtaken or RecoveryRequired); otherwise none. Read
+    /// before a Stop or the time budget ends the mission. No effect.
+    fn publication(&self, mission: MissionId) -> Option<ApprovalStatus>;
     /// The identity of the action `mission` waits on, if the port knows it.
     fn pending(&self, mission: MissionId) -> Option<PendingAction>;
     /// A reopened coordinator hands back the journaled action of a mission
