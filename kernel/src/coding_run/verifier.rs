@@ -53,7 +53,7 @@ use super::scope::RelPath;
 use super::{CodingRun, RunError, RunId, StructuralVerification};
 use crate::inert_page::{
     check as inert_check, ApprovedFacts, FactCode, FactsMarker, PageOutcome, PageVerdict,
-    RefusalCode,
+    RefusalCode, POLICY_V1,
 };
 
 const INERT_DOMAIN: &[u8] = b"nexus.coding_run.inert_page.v1";
@@ -436,6 +436,49 @@ enum InertSlot {
     },
     /// A check was attempted and is not (or no longer) a usable pass.
     Spent,
+}
+
+/// What an inert page check evaluates: the page's bytes, or, for a file
+/// over S1a's input cap (`POLICY_V1.max_page_bytes`), only its verified
+/// manifest entry.
+enum PageInput {
+    Bytes(Vec<u8>),
+    Oversized(ManifestEntry),
+}
+
+impl PageInput {
+    fn len(&self) -> u64 {
+        match self {
+            Self::Bytes(bytes) => bytes.len() as u64,
+            Self::Oversized(entry) => entry.size,
+        }
+    }
+
+    /// The validator's verdict on these bytes. An oversized file is not
+    /// read: S1 refuses any input over the cap as `too_large` before any
+    /// other rule (and before the facts), and the file's SHA-256 is its
+    /// verified manifest entry's (F9), so the verdict is the one
+    /// `PageVerdict::evaluate` gives for its bytes.
+    fn verdict(&self, facts: Option<&ApprovedFacts>) -> PageVerdict {
+        match self {
+            Self::Bytes(bytes) => PageVerdict::evaluate(bytes, facts),
+            Self::Oversized(entry) => {
+                let mut verdict = PageVerdict::evaluate(&[], facts);
+                verdict.candidate_sha256 = entry.sha256;
+                verdict.outcome = PageOutcome::Refused(RefusalCode::TooLarge);
+                verdict
+            }
+        }
+    }
+
+    /// The byte offset the validator reports for a refusal of these bytes
+    /// (`too_large` at the first byte past the cap).
+    fn refusal_offset(&self) -> Option<u32> {
+        match self {
+            Self::Bytes(bytes) => inert_check(bytes).err().map(|refusal| refusal.offset),
+            Self::Oversized(_) => Some(u32::try_from(POLICY_V1.max_page_bytes).unwrap_or(u32::MAX)),
+        }
+    }
 }
 
 /// The backend's native confirmation of a verifier launch. Only the
@@ -1051,8 +1094,10 @@ impl CodingRun {
     /// The run must be structurally verified and unapplied, with no sandbox
     /// verification prepared, running or finalized, and the owner's
     /// emergency stop not engaged. Its candidate must change exactly one
-    /// file, `path`, whose bytes are read through the verified manifest and
-    /// evaluated with `facts` (the admission's snapshot, taken by value).
+    /// file, `path`, whose bytes are read through the verified manifest, at
+    /// most S1a's input cap plus one byte, and evaluated with `facts` (the
+    /// admission's snapshot, taken by value); a file over the cap is refused
+    /// as `too_large` without being read.
     /// Every call spends the run's inert slot first: a call after the first
     /// is refused whatever its outcome (and records `repeat_refused`), so a
     /// second check revokes an earlier pass. An evaluated outcome is
@@ -1084,14 +1129,14 @@ impl CodingRun {
         if self.verifier.phase != VerificationPhase::Idle || self.verifier.latest.is_some() {
             return Err(InertPageError::InvalidState);
         }
-        let (path, bytes) = self.inert_candidate(Some(path))?;
-        let result = self.inert_result(&verification, &path, &bytes, facts.as_ref());
+        let (path, input) = self.inert_candidate(Some(path))?;
+        let result = self.inert_result(&verification, &path, &input, facts.as_ref());
         let mut evidence = json!({
             "result": hex::encode(result.binding_hash()),
             "candidate_manifest": result.candidate_manifest_hash.to_hex(),
             "page_sha256": hex::encode(result.page.candidate_sha256),
             "path_sha256": hex::encode(result.path_sha256),
-            "page_bytes": bytes.len(),
+            "page_bytes": input.len(),
             "path_bytes": path.len(),
             "policy": hex::encode(result.page.policy_hash),
             "facts": match result.page.facts {
@@ -1102,8 +1147,8 @@ impl CodingRun {
         let outcome = match result.page.outcome {
             PageOutcome::Passed => Ok(()),
             PageOutcome::Refused(code) => {
-                if let Err(refusal) = inert_check(&bytes) {
-                    evidence["offset"] = json!(refusal.offset);
+                if let Some(offset) = input.refusal_offset() {
+                    evidence["offset"] = json!(offset);
                 }
                 Err(InertPageError::Refused(code))
             }
@@ -1132,7 +1177,10 @@ impl CodingRun {
 
     /// Recheck the run's inert page pass immediately before its effect.
     ///
-    /// In order: the slot must hold a pass (`NotChecked`, `Spent`);
+    /// The slot is spent first. Then, in order: the owner's emergency stop
+    /// must not be engaged (`EmergencyStopped`, exactly as for the check:
+    /// the stop ends the run, and nothing is recorded as passed); the slot
+    /// must have held a pass (`NotChecked`, `Spent`);
     /// `expected` must equal the retained facts by value, so a removed or
     /// added snapshot fails too (`FactsChanged`); the bytes are read again
     /// through the verified manifest (`CandidateUnavailable`); and their
@@ -1144,7 +1192,11 @@ impl CodingRun {
         &mut self,
         expected: Option<&ApprovedFacts>,
     ) -> Result<(), InertPageError> {
-        let checked = match std::mem::replace(&mut self.verifier.inert, InertSlot::Spent) {
+        let slot = std::mem::replace(&mut self.verifier.inert, InertSlot::Spent);
+        if self.halt_if_stopped().is_err() {
+            return Err(InertPageError::EmergencyStopped);
+        }
+        let checked = match slot {
             InertSlot::Passed { result, facts } => Ok((result, facts)),
             InertSlot::Unchecked => Err(InertPageError::NotChecked),
             InertSlot::Spent => Err(InertPageError::Spent),
@@ -1197,19 +1249,28 @@ impl CodingRun {
         let verification = self
             .unapplied_verification("recheck_inert_page")
             .map_err(|_| InertPageError::CandidateUnavailable)?;
-        let (path, bytes) = self
+        let (path, input) = self
             .inert_candidate(None)
             .map_err(|_| InertPageError::CandidateUnavailable)?;
-        if self.inert_result(&verification, &path, &bytes, facts) != *result {
+        if self.inert_result(&verification, &path, &input, facts) != *result {
             return Err(InertPageError::Stale);
         }
         Ok(())
     }
 
     /// The candidate's one changed file (which must be `expected`, if
-    /// given) and its bytes, read through the verified manifest: they must
-    /// still hash to the file's entry (F8).
-    fn inert_candidate(&self, expected: Option<&str>) -> Result<(String, Vec<u8>), InertPageError> {
+    /// given) and what the check evaluates of it. In order: the re-scanned
+    /// staging tree must still hash to the verified candidate manifest
+    /// (`CandidateUnavailable`); the candidate must change exactly that one
+    /// file (`NotSingleFile`); a file whose verified entry is over S1a's
+    /// input cap is not read at all (its entry stands for it, and it is
+    /// refused as `too_large`); any other file is read through the verified
+    /// manifest with a bound of the cap plus one byte, and its bytes must
+    /// hash to its entry (F8, `CandidateUnavailable`).
+    fn inert_candidate(
+        &self,
+        expected: Option<&str>,
+    ) -> Result<(String, PageInput), InertPageError> {
         let candidate = self
             .verification_candidate()
             .map_err(|_| InertPageError::CandidateUnavailable)?;
@@ -1220,31 +1281,35 @@ impl CodingRun {
         let entries = candidate.manifest.entries();
         let mut changed = entries
             .iter()
-            .filter(|(path, entry)| base.get(path) != Some(*entry))
-            .map(|(path, _)| path.as_string());
+            .filter(|(path, entry)| base.get(path) != Some(*entry));
         let removed = base
             .entries()
             .keys()
             .any(|path| !entries.contains_key(path));
-        let (Some(path), None, false) = (changed.next(), changed.next(), removed) else {
+        let (Some((rel, entry)), None, false) = (changed.next(), changed.next(), removed) else {
             return Err(InertPageError::NotSingleFile);
         };
+        let path = rel.as_string();
         if expected.is_some_and(|expected| expected != path) {
             return Err(InertPageError::NotSingleFile);
         }
+        let cap = POLICY_V1.max_page_bytes as u64;
+        if entry.size > cap {
+            return Ok((path, PageInput::Oversized(entry.clone())));
+        }
         let bytes = candidate
-            .read(&path, self.profile.max_file_bytes)
+            .read(&path, cap + 1)
             .ok_or(InertPageError::CandidateUnavailable)?;
-        Ok((path, bytes))
+        Ok((path, PageInput::Bytes(bytes)))
     }
 
-    /// The inert page result of `bytes` at `path` for this run's verified
+    /// The inert page result of `input` at `path` for this run's verified
     /// candidate.
     fn inert_result(
         &self,
         verification: &StructuralVerification,
         path: &str,
-        bytes: &[u8],
+        input: &PageInput,
         facts: Option<&ApprovedFacts>,
     ) -> InertPageResult {
         let mut hasher = Sha256::new();
@@ -1255,7 +1320,7 @@ impl CodingRun {
             candidate_manifest_hash: verification.candidate_manifest_hash,
             structural_binding_hash: verification.binding_hash(),
             path_sha256: hasher.finalize().into(),
-            page: PageVerdict::evaluate(bytes, facts),
+            page: input.verdict(facts),
         }
     }
 
