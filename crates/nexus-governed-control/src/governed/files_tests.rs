@@ -1254,25 +1254,73 @@ fn m2d_b1_d_o18_d_subtree_bind_mounts_are_refused() {
     assert_eq!(outcomes, expected);
 }
 
-/// The parser on real data (no seam): `/proc/self/mountinfo` of this host
-/// is read and parsed, and the mount found for the workspace, and for `/`,
-/// is the one whose mount point is the longest prefix of the path with the
-/// path's device; an ordinary host's are whole-filesystem mounts (root /).
+/// The parser on real data (no seam), whatever this host's topology (Codex
+/// review 5, LOW 2): `/proc/self/mountinfo` is read and every line of it
+/// parsed; and the decision for the workspace and for `/` agrees with the
+/// rule evaluated independently here from the raw table: accepted, with
+/// that entry's mount point, device and root `/`, iff the path's device is
+/// listed exactly once, with root `/`, a supported type, a mount point that
+/// is the path or its ancestor, and no other mount point between them or at
+/// the path; otherwise refused, `unsupported_mount_topology`. On a supported
+/// host every earlier assertion holds (and `/`'s mount point is `/`).
 #[test]
 fn m2d_b1_d_o18_e_the_real_mountinfo_is_parsed() {
     use std::os::unix::fs::MetadataExt;
+    let raw = std::fs::read("/proc/self/mountinfo").expect("the mount table is readable");
+    let parsed = crate::files::parse_mountinfo(&raw).expect("the real table parses in full");
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    let lines: Vec<Vec<&str>> = text
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| line.split(' ').collect())
+        .collect();
+    assert_eq!(parsed.len(), lines.len(), "every line is a mount");
+    let fstype = |fields: &[&str]| {
+        let separator = 6 + fields[6..].iter().position(|f| *f == "-").unwrap();
+        fields[separator + 1].to_string()
+    };
     let dirs = Dirs::new();
     for path in [dirs.ws(), PathBuf::from("/")] {
-        let mount = crate::files::mount_of(&path).expect("the path's mount is found");
-        assert!(path.starts_with(&mount.mount_point), "{mount:?}");
-        assert_eq!(
-            format!("{}:{}", mount.major, mount.minor),
-            major_minor(std::fs::metadata(&path).unwrap().dev())
+        let device = major_minor(std::fs::metadata(&path).unwrap().dev());
+        let listed: Vec<&Vec<&str>> = lines.iter().filter(|f| f[2] == device).collect();
+        let supported = match listed.as_slice() {
+            [only] => {
+                let point = Path::new(only[4]);
+                let between = lines.iter().any(|other| {
+                    let at = Path::new(other[4]);
+                    other[0] != only[0]
+                        && (at == path
+                            || (at != point && at.starts_with(point) && path.starts_with(at)))
+                });
+                only[3] == "/"
+                    && ["ext4", "xfs", "tmpfs"].contains(&fstype(only).as_str())
+                    && path.starts_with(point)
+                    && !between
+            }
+            _ => false,
+        };
+        eprintln!(
+            "{}: device {device} listed {} time(s); supported {supported}",
+            path.display(),
+            listed.len()
         );
-        assert_eq!(mount.root, std::ffi::OsString::from("/"), "{mount:?}");
+        match crate::files::mount_of(&path) {
+            Ok(mount) => {
+                assert!(supported, "accepted although the rule refuses: {mount:?}");
+                assert_eq!(mount.mount_point, PathBuf::from(listed[0][4]));
+                assert!(path.starts_with(&mount.mount_point), "{mount:?}");
+                assert_eq!(format!("{}:{}", mount.major, mount.minor), device);
+                assert_eq!(mount.root, std::ffi::OsString::from("/"), "{mount:?}");
+                if path == Path::new("/") {
+                    assert_eq!(mount.mount_point, PathBuf::from("/"));
+                }
+            }
+            Err(error) => {
+                assert!(!supported, "refused although the rule accepts: {error:?}");
+                assert_eq!(error, AuthorityError::UnsupportedMountTopology);
+            }
+        }
     }
-    let root_mount = crate::files::mount_of(Path::new("/")).unwrap();
-    assert_eq!(root_mount.mount_point, PathBuf::from("/"));
 }
 
 // ---------------------------------------------------------------- Codex review 4 of PR #57
@@ -1417,6 +1465,76 @@ fn m2d_b1_d_o18_f_only_a_whole_local_filesystem_mounted_once_is_supported() {
         (outcomes[5].0, refused),
         (outcomes[6].0, Ok(())),
         (outcomes[7].0, Ok(())),
+    ];
+    assert_eq!(outcomes, expected);
+}
+
+// ---------------------------------------------------------------- Codex review 5 of PR #57
+
+/// Codex review 5 (LOW 1): a record is well formed only when every
+/// required field is present and non-empty. Codex's exact record, ending
+/// `- ext4 /dev/root ` (the superblock options an empty final field once
+/// the line is split on spaces), and one with an empty source, each refuse
+/// the whole table (`unsupported_mount_topology`), although the record is
+/// another device's; the control, the same record with its options,
+/// is accepted. Through the mountinfo seam over real directories.
+#[test]
+fn m2d_b1_d_o18_g_empty_required_fields_refuse_the_table() {
+    use crate::files::mountinfo_for_test;
+    let root = temp_root("m2d-b1-ws-fields");
+    let evidence = Arc::new(MemoryEvidence::new(1_000));
+    let dirs = Dirs::new();
+    std::fs::create_dir_all(dirs.path("plain/ws")).unwrap();
+    let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let rootfs = dev_of(Path::new("/"));
+    let tmpfs = dev_of(&tmp);
+    // Each device the selection meets, listed once and well formed.
+    let mut ordinary = format!("1 0 {rootfs} / / rw,relatime shared:1 - ext4 /dev/root rw\n");
+    if tmpfs != rootfs {
+        ordinary.push_str(&format!(
+            "2 1 {tmpfs} / {} rw,relatime shared:2 - tmpfs tmpfs rw\n",
+            tmp.display()
+        ));
+    }
+    // Another device's record, at a mount point the selection never meets.
+    let other = |tail: &str| {
+        format!(
+            "{ordinary}9 1 4095:1048575 / /nexus-m2d-b1-elsewhere rw,relatime shared:9 - {tail}\n"
+        )
+    };
+    let select = |mountinfo: String| {
+        mountinfo_for_test(Some(Ok(mountinfo)));
+        let gov = control(&root, &evidence);
+        let result = gov
+            .register_workspace_in(
+                &dirs.path("plain/ws"),
+                &Exclusions {
+                    home: dirs.path("home"),
+                    identity_home: dirs.path("ident"),
+                    reserved: vec![],
+                    uid: crate::launcher::effective_uid(),
+                },
+            )
+            .map(|_| ())
+            .map_err(|error| error.class());
+        mountinfo_for_test(None);
+        result
+    };
+    let outcomes = vec![
+        (
+            "Codex's record: empty superblock options",
+            select(other("ext4 /dev/root ")),
+        ),
+        ("an empty source", select(other("ext4  rw"))),
+        (
+            "control: the same record, well formed",
+            select(other("ext4 /dev/root rw")),
+        ),
+    ];
+    let expected = vec![
+        (outcomes[0].0, Err("unsupported_mount_topology")),
+        (outcomes[1].0, Err("unsupported_mount_topology")),
+        (outcomes[2].0, Ok(())),
     ];
     assert_eq!(outcomes, expected);
 }

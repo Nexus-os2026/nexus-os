@@ -1223,17 +1223,22 @@ fn unescape(field: &[u8]) -> Option<std::ffi::OsString> {
 
 /// Every mount `/proc/self/mountinfo`'s `text` lists (proc(5): mount id,
 /// parent id, `major:minor`, root, mount point, options, optional fields up
-/// to `-`, then the filesystem type, the source and the superblock options,
-/// all three required). `None` if any line is malformed or none is listed:
-/// callers refuse the whole table (fail closed).
+/// to `-`, then exactly the filesystem type, the source and the superblock
+/// options). Every field must be present and non-empty (Codex review 5: a
+/// doubled or trailing space leaves an empty one, such as empty superblock
+/// options) and well formed. `None` if any line is malformed or none is
+/// listed: callers refuse the whole table (fail closed).
 #[cfg(target_os = "linux")]
-fn parse_mountinfo(text: &[u8]) -> Option<Vec<Mount>> {
+pub(crate) fn parse_mountinfo(text: &[u8]) -> Option<Vec<Mount>> {
     let number = |field: &[u8]| std::str::from_utf8(field).ok()?.parse::<u64>().ok();
     let mut mounts = Vec::new();
     for line in text.split(|b| *b == b'\n').filter(|line| !line.is_empty()) {
         let fields: Vec<&[u8]> = line.split(|b| *b == b' ').collect();
+        if fields.iter().any(|field| field.is_empty()) {
+            return None;
+        }
         let separator = 6 + fields.get(6..)?.iter().position(|field| *field == b"-")?;
-        if fields.len() < separator + 4 {
+        if fields.len() != separator + 4 {
             return None;
         }
         let (major, minor) = std::str::from_utf8(fields[2]).ok()?.split_once(':')?;
