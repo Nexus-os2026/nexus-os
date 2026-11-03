@@ -35,11 +35,23 @@ impl ControlConfirmer for During {
 }
 
 /// The parent's waiting POST (named apart from the bindings below).
-fn waiting_on(f: &Fixture, door: &crate::governed::AgentDoor, run: RunId, path: &str) -> CommitmentId {
+fn waiting_on(
+    f: &Fixture,
+    door: &crate::governed::AgentDoor,
+    run: RunId,
+    path: &str,
+) -> CommitmentId {
     waiting(f, door, run, path)
 }
 
-fn adoptable(f: &Fixture) -> (crate::governed::AgentDoor, crate::governed::AgentDoor, RunId, CommitmentId) {
+fn adoptable(
+    f: &Fixture,
+) -> (
+    crate::governed::AgentDoor,
+    crate::governed::AgentDoor,
+    RunId,
+    CommitmentId,
+) {
     let owner = Owner::new(true, true, true);
     let first = f.door_with(&owner);
     let run = first.open_run().unwrap();
