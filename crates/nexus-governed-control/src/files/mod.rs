@@ -24,6 +24,15 @@
 //! registers nothing with the kernel yet, and a request that passes every
 //! check above is refused, fail closed, before any commitment exists.
 //!
+//! Overlap with a protected or reserved location is decided by directory
+//! identity (`st_dev`, `st_ino`) along each directory's ancestor chain, not
+//! by its spelling (Codex review 2 of PR #57): a bind mount or a casefolded
+//! name gives a directory a second canonical spelling, never a second
+//! identity. The spelling checks stay as defense in depth. Not claimed: a
+//! mount, link, rename or casefold change made after the selection (by the
+//! Owner, root or any other process), or an inode number reused after its
+//! directory is deleted.
+//!
 //! Path validation is not an OS sandbox: these checks bound what the broker
 //! asks the kernel for; they are not confinement.
 
@@ -299,13 +308,23 @@ pub(crate) fn mount_alias_for_test(link: PathBuf) {
     MOUNTED.with(|mounted| mounted.borrow_mut().push(link));
 }
 
+/// Where a protected or reserved location is: its longest existing
+/// ancestor, canonical (`existing`), the location itself (`real`: `existing`
+/// with the missing components appended), and whether it exists completely
+/// (`existing == real`).
+struct Located {
+    existing: PathBuf,
+    real: PathBuf,
+    complete: bool,
+}
+
 /// Where `path` really is (Codex review 1 of PR #57): its longest existing
 /// ancestor resolved canonically (links included), with the components
 /// below it appended, none of which exists yet. `None` when that cannot be
 /// established: a relative path; the first missing component present after
 /// all (a dangling or looping link, an entry that cannot be read); or a `.`
 /// or `..` below the existing part. A caller refuses on `None`.
-fn established(path: &Path) -> Option<PathBuf> {
+fn established(path: &Path) -> Option<Located> {
     use std::path::Component;
     if !path.is_absolute() {
         return None;
@@ -320,11 +339,15 @@ fn established(path: &Path) -> Option<PathBuf> {
                     _ => return None,
                 }
             }
-            let mut real = canonical;
+            let mut real = canonical.clone();
             for part in missing.iter().rev() {
                 real.push(part);
             }
-            return Some(real);
+            return Some(Located {
+                existing: canonical,
+                real,
+                complete: missing.is_empty(),
+            });
         }
         match existing.components().next_back()? {
             Component::Normal(part) => missing.push(part),
@@ -332,6 +355,47 @@ fn established(path: &Path) -> Option<PathBuf> {
         }
         existing = existing.parent()?;
     }
+}
+
+/// Most directories an ancestry walk visits.
+#[cfg(target_os = "linux")]
+const MAX_ANCESTRY: usize = 4096;
+
+/// The identities (`st_dev`, `st_ino`) of the directory `dir` opens and of
+/// every directory above it, walking `..` from the open directory itself
+/// (`/proc/self/fd/<fd>/..`, as `openat(fd, "..")` does) up to the root,
+/// whose `..` is itself. `None` if an open or a stat fails, an entry is not
+/// a directory, or the walk does not end: callers refuse (fail closed).
+#[cfg(target_os = "linux")]
+fn ancestry(dir: &Path) -> Option<Vec<(u64, u64)>> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let open = |path: &Path| {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_PATH | libc::O_DIRECTORY)
+            .open(path)
+            .ok()
+    };
+    let mut current = open(dir)?;
+    let mut chain: Vec<(u64, u64)> = Vec::new();
+    for _ in 0..MAX_ANCESTRY {
+        let meta = current.metadata().ok()?;
+        if !meta.is_dir() {
+            return None;
+        }
+        let id = (meta.dev(), meta.ino());
+        if chain.last() == Some(&id) {
+            return Some(chain);
+        }
+        if chain.contains(&id) {
+            return None;
+        }
+        chain.push(id);
+        let parent = format!("/proc/self/fd/{}/..", current.as_raw_fd());
+        current = open(Path::new(&parent))?;
+    }
+    None
 }
 
 /// The identity of the directory `root` names now: it must still be a real
@@ -357,11 +421,17 @@ fn identity_of(_root: &Path) -> Result<Digest, AuthorityError> {
 }
 
 /// §6.2: the broker's checks of the Owner's selection, in order: absolute,
-/// its own canonical path (no link), a directory, not exactly `/`, `$HOME`
-/// or the identity home (as given, or where it really is), no overlap in
-/// either direction with a reserved tree (as given, or where it really is,
-/// [`established`]; one that cannot be established refuses), the current
-/// user's, empty. Returns the identity of the directory it checked.
+/// its own canonical path (no link), a directory; not `/`, `$HOME` or the
+/// identity home, and no overlap in either direction with a reserved tree,
+/// each decided by directory identity ([`ancestry`]: the workspace is a
+/// protected location if their identities are equal; a reserved location
+/// is inside or equal to the workspace if the workspace's identity is in
+/// the ancestor-or-self chain of the location's longest existing ancestor;
+/// the workspace is inside or equal to a reserved location that exists
+/// completely if the location's identity is in the workspace's chain), and
+/// by spelling too (as given, or where it really is, [`established`]); a
+/// location that cannot be established or opened refuses; the current
+/// user's; empty. Returns the identity of the directory it checked.
 #[cfg(target_os = "linux")]
 fn selectable(
     path: &Path,
@@ -385,14 +455,18 @@ fn selectable(
         return Err(refused("the workspace is not a folder"));
     }
     let unresolved = || refused("a protected or reserved location cannot be resolved");
+    // The workspace and every directory above it, by identity.
+    let workspace = ancestry(path).ok_or_else(unresolved)?;
     let exact = [
         Path::new("/"),
         exclusions.home.as_path(),
         exclusions.identity_home.as_path(),
     ];
     for forbidden in exact {
-        let real = established(forbidden).ok_or_else(unresolved)?;
-        if forbidden == path || real == path {
+        let located = established(forbidden).ok_or_else(unresolved)?;
+        let same = located.complete
+            && ancestry(&located.existing).ok_or_else(unresolved)?[0] == workspace[0];
+        if same || forbidden == path || located.real == path {
             return Err(refused("this folder cannot be the workspace"));
         }
     }
@@ -402,11 +476,14 @@ fn selectable(
         .map(PathBuf::as_path)
         .chain(std::iter::once(runtime_root));
     for tree in reserved {
-        let real = established(tree).ok_or_else(unresolved)?;
-        if [tree, real.as_path()]
+        let located = established(tree).ok_or_else(unresolved)?;
+        let above = ancestry(&located.existing).ok_or_else(unresolved)?;
+        let inside_workspace = above.contains(&workspace[0]);
+        let contains_workspace = located.complete && workspace.contains(&above[0]);
+        let by_spelling = [tree, located.real.as_path()]
             .iter()
-            .any(|tree| path.starts_with(tree) || tree.starts_with(path))
-        {
+            .any(|tree| path.starts_with(tree) || tree.starts_with(path));
+        if inside_workspace || contains_workspace || by_spelling {
             return Err(refused("the workspace overlaps a reserved location"));
         }
     }
