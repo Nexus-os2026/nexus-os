@@ -17,6 +17,13 @@
 //! the runs lock before anything is settled, asked or written; it still
 //! allows `cancel_run` and `halt` (they only stop effects) and answers
 //! `clock`, `emergency_stopped` and `commitment`. Nothing lifts a door halt.
+//!
+//! M2d-B1 (design v2 §6.1 step 2, §11 H1′): the Owner's yeses at a door's
+//! mission and held-mission dialogs are cached in the door's bounded table,
+//! a slot reserved before the dialog and filled only if the lifetime it was
+//! asked in still holds; [`AgentDoor::admit_files`] binds one of the door's
+//! runs, once, to one of those yeses and the Owner's registered workspace.
+//! A door registers no workspace and grants nothing.
 
 use super::{AgentOutcome, GovernedControl, HaltReason, Intent, RecordBatch};
 use crate::authority::approval::{
@@ -27,7 +34,7 @@ use crate::authority::clock::Clock;
 use crate::authority::commitment::CommitmentView;
 use crate::authority::evidence::Privacy;
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
-use crate::authority::run::GroupId;
+use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
 use std::fmt;
 use std::sync::Arc;
@@ -232,10 +239,14 @@ impl AgentDoor {
     ) -> Result<MissionApproval, AuthorityError> {
         self.not_halted()?;
         let authority = self.control.authority();
+        let runs = authority.runs();
         // The door's holder supplies the labels: only controlled ones, and
-        // the record is Restricted (P0-C).
-        let approval =
-            authority.confirm_mission_as(request, &*self.confirmer, Privacy::Restricted)?;
+        // the record is Restricted (P0-C). M2d-B1: a slot in this door's
+        // consent table is reserved just before the Owner is asked.
+        let (approval, slot) =
+            authority.confirm_mission_as(request, &*self.confirmer, Privacy::Restricted, || {
+                runs.consent_slot(self.core.group, &self.core.agent)
+            })?;
         #[cfg(test)]
         self.control
             .hooks()
@@ -244,7 +255,75 @@ impl AgentDoor {
         // if this door was halted, or a stop came, meanwhile.
         self.not_halted()?;
         authority.mission_admissible()?;
+        self.cache(
+            slot,
+            approval.contract_hash(),
+            approval.request(),
+            approval.evidence_seq(),
+            ConsentKind::Mission,
+        )?;
         Ok(approval)
+    }
+
+    /// M2d-B1 (H1′): cache the Owner's recorded yes in this door's table,
+    /// only if the lifetime it was asked in still holds; otherwise no
+    /// approval exists.
+    fn cache(
+        &self,
+        slot: crate::authority::run::ConsentSlot<'_>,
+        contract_hash: &str,
+        request: &str,
+        evidence_seq: u64,
+        kind: ConsentKind,
+    ) -> Result<(), AuthorityError> {
+        let at_wall_ms = self.control.authority().clock().wall_ms();
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::CONSENT_BEFORE_FILL);
+        slot.fill(contract_hash, request, evidence_seq, kind, at_wall_ms)
+    }
+
+    /// M2d-B1 (A3, H1′): bind one of this door's runs, once, to the Owner's
+    /// yes to exactly `contract_hash` and `request` cached at this door, and
+    /// to the workspace the Owner registered (its identity checked now, with
+    /// no lock held). The binding is validated and installed in one hold of
+    /// the runs lock with the door's life, the run's membership and life,
+    /// Stop and closure. The same admission again is the same binding; any
+    /// other second admission is refused; any refusal binds nothing.
+    pub fn admit_files(
+        &self,
+        run: RunId,
+        contract_hash: &str,
+        request: &str,
+    ) -> Result<(), AuthorityError> {
+        self.not_halted()?;
+        let workspace = self.control.files().admissible()?;
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::ADMIT_BEFORE_BIND);
+        self.control
+            .authority()
+            .runs()
+            .admit_files(
+                run,
+                &self.core.agent,
+                self.core.group,
+                contract_hash,
+                request,
+                workspace,
+            )
+            .map(|_| ())
+    }
+
+    /// The yeses cached at this door (tests).
+    #[cfg(test)]
+    pub(crate) fn consents_cached(&self) -> usize {
+        self.control
+            .authority()
+            .runs()
+            .consents_cached(self.core.group)
     }
 
     /// Ask the owner, through the confirmer the host bound to this door, to
@@ -256,10 +335,12 @@ impl AgentDoor {
         request: &MissionResumeConfirmation,
     ) -> Result<MissionResumeApproval, AuthorityError> {
         self.not_halted()?;
-        let approval = self.control.authority().confirm_held_mission_as(
+        let runs = self.control.authority().runs();
+        let (approval, slot) = self.control.authority().confirm_held_mission_as(
             request,
             &*self.confirmer,
             Privacy::Restricted,
+            || runs.consent_slot(self.core.group, &self.core.agent),
         )?;
         #[cfg(test)]
         self.control
@@ -267,6 +348,13 @@ impl AgentDoor {
             .fire(crate::test_hooks::at::HELD_RECORDED);
         // After the record (§2.6 step 6): no approval if halted meanwhile.
         self.not_halted()?;
+        self.cache(
+            slot,
+            approval.contract_hash(),
+            approval.request(),
+            approval.evidence_seq(),
+            ConsentKind::Resume,
+        )?;
         Ok(approval)
     }
 }

@@ -85,6 +85,9 @@ pub const SYNTHETIC_EFFECT: &str = "Synthetic R2-approval test: no external effe
 pub const ANY_AGENT_USE: &str = "any agent, until it expires or you revoke it";
 pub const OWNER_ONLY_USE: &str =
     "Owner-session commands only; agent runs are refused; every use requires separate native approval.";
+/// M2d: who may use a Files grant.
+pub const FILES_USE: &str =
+    "Agent runs admitted to a mission you consented to; each file needs your approval of its complete content.";
 
 /// The Effect row: the class and what it means, except for the synthetic
 /// probe. A synthetic request of any class but R2 is refused before it is
@@ -105,7 +108,8 @@ fn effect_row(class: EffectClass, kind: CapabilityKind) -> String {
             | CapabilityKind::Browser
             | CapabilityKind::Perception
             | CapabilityKind::Input
-            | CapabilityKind::Connector,
+            | CapabilityKind::Connector
+            | CapabilityKind::Files,
             EffectClass::R0 | EffectClass::R1 | EffectClass::R2,
         ) => format!("{} ({})", class, class.meaning()),
     }
@@ -115,6 +119,7 @@ fn effect_row(class: EffectClass, kind: CapabilityKind) -> String {
 fn who_may_use(kind: CapabilityKind) -> &'static str {
     match kind {
         CapabilityKind::Synthetic => OWNER_ONLY_USE,
+        CapabilityKind::Files => FILES_USE,
         CapabilityKind::Tool
         | CapabilityKind::Egress
         | CapabilityKind::Browser

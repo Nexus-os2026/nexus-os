@@ -25,6 +25,7 @@ use crate::control::{Control, EffectOutput, Preparation};
 use crate::display::{AgentDisplay, DisplayStatus, InputIntent, PerceptionIntent};
 use crate::egress::{Egress, EgressIntent};
 use crate::evidence_store::PrimaryEvidence;
+use crate::files::{Exclusions, FileCreate, Files, WorkspaceInfo};
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
@@ -60,6 +61,9 @@ pub enum Intent {
     Input(InputIntent),
     /// P4-UAT05: the owner's synthetic approval probe (owner runs only).
     Synthetic(SyntheticIntent),
+    /// M2d: create one new file in the registered workspace (runs admitted
+    /// through a door only).
+    File(FileCreate),
 }
 
 /// What the owner may grant, as data. Each becomes a canonical scope built
@@ -97,6 +101,10 @@ pub enum GrantRequest {
     /// variant with no fields, so that a request carrying any field is
     /// refused (a unit variant here would ignore one).
     Synthetic {},
+    /// M2d: create-only Files in the registered workspace, named by its id.
+    Files {
+        workspace: String,
+    },
 }
 
 /// What the interface shows about the control.
@@ -134,6 +142,8 @@ pub struct GovernedControl {
     tools: Tools,
     display: AgentDisplay,
     browser: Browser,
+    /// M2d-B1: the Files domain (the one registered workspace).
+    files: Files,
     /// Runs whose agent or command has ended while something of theirs
     /// still waits: each finishes once nothing in it can start any more.
     detached: Mutex<HashSet<RunId>>,
@@ -237,6 +247,7 @@ impl GovernedControl {
         clock: Arc<dyn Clock>,
     ) -> Result<Self, AuthorityError> {
         let root = RuntimeRoot::open(root)?;
+        let files = Files::new(root.path().to_path_buf());
         // The owner's Stop/Resume path holds the kernel stop's controller
         // (M0-FIX2 F10): the process's, which is minted once (first claim
         // wins), so a second front door, or one built after anything else
@@ -266,6 +277,7 @@ impl GovernedControl {
             tools: Tools::production(root.clone()),
             display: AgentDisplay::new(root.clone()),
             browser: Browser::new(root),
+            files,
             control,
             egress,
             detached: Mutex::new(HashSet::new()),
@@ -379,6 +391,7 @@ impl GovernedControl {
             Intent::Observe(intent) => self.display.prepare_observation(authority, run, intent),
             Intent::Input(intent) => self.display.prepare_input(authority, run, intent),
             Intent::Synthetic(intent) => synthetic::prepare(authority, run, intent),
+            Intent::File(intent) => self.files.prepare(authority, run, intent),
         }?;
         // P4-UAT05: a synthetic action is R2 or nothing, refused before any
         // commitment exists.
@@ -704,7 +717,64 @@ impl GovernedControl {
                 session_r1,
             } => AgentDisplay::input_scope(*max_steps, *session_r1),
             GrantRequest::Synthetic {} => Ok(synthetic::grant_scope()),
+            GrantRequest::Files { workspace } => self.files.grant_scope(workspace),
         }
+    }
+
+    /// M2d (§6.2): register the one workspace of this process, the Owner's
+    /// own selection (the host's `--workspace`), never a door's. Exactly
+    /// `/`, `$HOME` or the identity home is refused; so is a folder inside
+    /// or containing a `reserved` tree (the host names Mother's home, the
+    /// staging parent and the Files ledger directory; the broker adds its
+    /// runtime root and `<identity home>/.nexus`), one that is not its own
+    /// canonical path, not the current user's or not empty. Nothing is
+    /// persisted: after a restart the Owner selects it again.
+    pub fn register_workspace(
+        &self,
+        path: &Path,
+        reserved: &[&Path],
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .filter(|home| home.is_absolute())
+            .ok_or(AuthorityError::Unavailable("no home directory"))?;
+        let identity_home = nexus_kernel::identity_home::identity_home()
+            .map_err(|_| AuthorityError::Unavailable("no identity home"))?;
+        let mut trees: Vec<std::path::PathBuf> = reserved.iter().map(|p| p.to_path_buf()).collect();
+        trees.push(identity_home.join(".nexus"));
+        #[cfg(target_os = "linux")]
+        let uid = crate::launcher::effective_uid();
+        #[cfg(not(target_os = "linux"))]
+        let uid = u32::MAX;
+        self.register_workspace_in(
+            path,
+            &Exclusions {
+                home,
+                identity_home,
+                reserved: trees,
+                uid,
+            },
+        )
+    }
+
+    /// [`Self::register_workspace`] with what may not be the workspace
+    /// given (tests name their own homes).
+    pub(crate) fn register_workspace_in(
+        &self,
+        path: &Path,
+        exclusions: &Exclusions,
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        self.files.register(path, exclusions)
+    }
+
+    /// The registered workspace, if any (its id and display name).
+    pub fn workspace(&self) -> Option<WorkspaceInfo> {
+        self.files.info()
+    }
+
+    /// The Files domain (a door's admission reads the workspace).
+    pub(crate) fn files(&self) -> &Files {
+        &self.files
     }
 
     /// Ask the owner, natively, for a grant (a synthetic one lasts at most
@@ -890,6 +960,8 @@ pub enum AgentOutcome {
 
 #[cfg(test)]
 mod door_tests;
+#[cfg(all(test, target_os = "linux"))]
+mod files_tests;
 #[cfg(test)]
 mod halt_tests;
 #[cfg(test)]

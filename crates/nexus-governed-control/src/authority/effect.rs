@@ -70,6 +70,9 @@ pub enum CapabilityKind {
     /// P4-UAT05: the owner's synthetic approval probe: the R2 approval path
     /// with no external effect.
     Synthetic,
+    /// M2d: creating one new small text file at the top level of the
+    /// Owner's selected workspace (create-only).
+    Files,
 }
 
 impl CapabilityKind {
@@ -82,6 +85,7 @@ impl CapabilityKind {
             CapabilityKind::Input => "input",
             CapabilityKind::Connector => "connector",
             CapabilityKind::Synthetic => "synthetic",
+            CapabilityKind::Files => "files",
         }
     }
 }

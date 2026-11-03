@@ -385,6 +385,7 @@ pub mod display;
 pub mod egress;
 pub mod evidence_store;
 pub mod executable;
+pub mod files;
 pub mod governed;
 pub mod ingress;
 mod launcher;

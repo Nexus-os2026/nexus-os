@@ -86,6 +86,15 @@ pub enum GrantScope {
     /// P4-UAT05: the owner's synthetic approval probe (no external effect);
     /// built only by `crate::synthetic`.
     Synthetic,
+    /// M2d: create-only Files in the one workspace the Owner registered in
+    /// this process (`workspace` its id, `root` its canonical path, as
+    /// shown), whose directory had `identity` when the Owner granted it;
+    /// built only by `crate::files`.
+    Files {
+        workspace: String,
+        root: String,
+        identity: Digest,
+    },
 }
 
 impl GrantScope {
@@ -98,6 +107,7 @@ impl GrantScope {
             GrantScope::Input { .. } => CapabilityKind::Input,
             GrantScope::Connector { .. } => CapabilityKind::Connector,
             GrantScope::Synthetic => CapabilityKind::Synthetic,
+            GrantScope::Files { .. } => CapabilityKind::Files,
         }
     }
 
@@ -178,6 +188,19 @@ impl GrantScope {
                     .to_string(),
                 "A receipt is never evidence that a real-world action happened".to_string(),
             ],
+            GrantScope::Files {
+                workspace, root, ..
+            } => {
+                let mut lines = vec!["Create new text files in the workspace folder:".to_string()];
+                lines.extend(super::evidence::wrapped(root));
+                lines.extend([
+                    format!("Workspace id: {workspace}"),
+                    "Each file: new (never replacing anything), at the folder's top level, at most 8 KiB and 150 lines of text".to_string(),
+                    "Never: replace, delete or rename a file, or make a folder".to_string(),
+                    "Each file also needs your approval of its complete content".to_string(),
+                ]);
+                lines
+            }
         }
     }
 }

@@ -109,6 +109,11 @@ fn every_authority_class_and_halt_reason_is_a_registered_reason() {
         Capacity,
         NotMember,
         Halted,
+        NotAdmitted,
+        NoConsent,
+        AlreadyAdmitted,
+        FileExists,
+        ChangeTooLargeToShow,
         Closed(""),
         InvalidAction(""),
         Unavailable(""),
@@ -149,6 +154,11 @@ fn every_authority_class_and_halt_reason_is_a_registered_reason() {
             | Capacity
             | NotMember
             | Halted
+            | NotAdmitted
+            | NoConsent
+            | AlreadyAdmitted
+            | FileExists
+            | ChangeTooLargeToShow
             | Closed(_)
             | InvalidAction(_)
             | Unavailable(_)

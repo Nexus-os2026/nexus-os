@@ -12,10 +12,21 @@
 //! is its group: a run joins it when the door opens the run (at insertion)
 //! or adopts it, and leaves it only when the registry drops the run or the
 //! door is gone. Every membership change is made under the runs lock.
+//!
+//! M2d-B1 (design v2 §11 H1′): each door's group also keeps a bounded table
+//! of the Owner's yeses given at that door in this process (mission consent
+//! and held-mission resume). An entry carries the lifetime it was asked in
+//! (the stop epoch, the door's halt state and closure, read under this lock
+//! before the Owner is asked) and is inserted only if that lifetime still
+//! holds; a Stop or a halt empties the table, and a stale entry never
+//! admits. A run's Files admission binds it once, for good, to one such yes
+//! and the registered workspace, validated in the same hold of this lock as
+//! the door's life, the run's membership and life, Stop and closure.
+//! Nothing here reads evidence: consent is never reconstructed from it.
 
 use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
 use super::halt::{HaltReason, RecordBatch};
-use super::ids::{AgentId, RunId};
+use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -84,7 +95,74 @@ struct RunEntry {
     /// M2c: the door groups the run belongs to (at most
     /// `MAX_GROUPS_PER_RUN` live ones).
     groups: Vec<GroupId>,
+    /// M2d-B1: the run's Files admission, set once and never changed.
+    files_admission: Option<FilesAdmission>,
 }
+
+/// M2d-B1: which yes of the Owner's a cached consent is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ConsentKind {
+    /// The Owner's consent to a mission (`confirm_mission`).
+    Mission,
+    /// The Owner's yes to resuming a held mission (`confirm_held_mission`).
+    Resume,
+}
+
+impl ConsentKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            ConsentKind::Mission => "mission consent",
+            ConsentKind::Resume => "held-mission resume",
+        }
+    }
+}
+
+/// The lifetime a door's yes was asked in (H1′): the stop epoch (this
+/// process's stop number), the door's halt state and closure, read under
+/// the runs lock before the Owner was asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Life {
+    stop_epoch: u64,
+    halted: bool,
+    closed: bool,
+}
+
+/// One cached yes of the Owner's at a door (H1′).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Consent {
+    contract_hash: String,
+    request: String,
+    evidence_seq: u64,
+    kind: ConsentKind,
+    at_wall_ms: u64,
+    life: Life,
+}
+
+/// The workspace a run is admitted to: its id, and its directory's identity
+/// when the admission was made.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AdmittedWorkspace {
+    pub(crate) id: String,
+    pub(crate) identity: Digest,
+}
+
+/// M2d-B1 (A3): a run's Files admission: the Owner's yes it rests on (the
+/// contract hash, the request, the record's sequence number, its kind and
+/// time) and the workspace. Installed once; never changed or taken from an
+/// intent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FilesAdmission {
+    pub(crate) contract_hash: String,
+    pub(crate) request: String,
+    pub(crate) evidence_seq: u64,
+    pub(crate) kind: ConsentKind,
+    pub(crate) consented_wall_ms: u64,
+    pub(crate) workspace: AdmittedWorkspace,
+}
+
+/// Most yeses one door caches, reserved slots included (H1′): the next is
+/// refused before the Owner is asked.
+pub(crate) const MAX_CONSENTS: usize = 64;
 
 /// A door's group (Mother Nexus M2c): a monotonic number, never reused.
 pub(crate) type GroupId = u64;
@@ -108,6 +186,10 @@ struct DoorEntry {
     /// M2c PR-B: halted (final): its runs refuse every admission.
     halted: bool,
     members: BTreeSet<RunId>,
+    /// M2d-B1 (H1′): the Owner's yeses cached at this door.
+    consents: Vec<Consent>,
+    /// M2d-B1: slots reserved for yeses whose dialog is open.
+    pending_consents: usize,
 }
 
 impl DoorEntry {
@@ -316,6 +398,7 @@ impl RunRegistry {
             privacy: class.privacy(),
             cancelled: Arc::new(AtomicBool::new(false)),
             groups: group.into_iter().collect(),
+            files_admission: None,
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -377,6 +460,8 @@ impl RunRegistry {
                 active: false,
                 halted: false,
                 members: BTreeSet::new(),
+                consents: Vec::new(),
+                pending_consents: 0,
             },
         );
         Ok(())
@@ -470,6 +555,8 @@ impl RunRegistry {
             return (BTreeSet::new(), false);
         };
         let newly = !entry.halted;
+        // H1′: a halt invalidates every yes the door cached.
+        entry.consents.clear();
         if newly {
             entry.halted = true;
             // A door's record: its agent, its opaque id and a reason code.
@@ -644,6 +731,11 @@ impl RunRegistry {
             }
         };
         self.stopped.store(true, Ordering::SeqCst);
+        // H1′: a Stop invalidates every yes every door cached (the stop
+        // number moved too, so no slot reserved before it fills).
+        for door in runs.doors.values_mut() {
+            door.consents.clear();
+        }
         let mut cancelled = 0usize;
         for entry in runs.values_mut() {
             let was_active = !entry.view.cancelled && !entry.view.finished;
@@ -782,6 +874,142 @@ impl RunRegistry {
         panic!("the runs lock is poisoned on purpose (test)");
     }
 
+    /// M2d-B1 (H1′), before the Owner is asked a mission or held-mission
+    /// question at a door: under the runs lock, refuse under a Stop, while
+    /// quitting, for a door that is not live and issued, halted or another
+    /// agent's, or at `MAX_CONSENTS` (cached and reserved); otherwise
+    /// reserve one slot and read the lifetime the yes is asked in.
+    pub(crate) fn consent_slot(
+        &self,
+        group: GroupId,
+        agent: &AgentId,
+    ) -> Result<ConsentSlot<'_>, AuthorityError> {
+        let mut runs = self.runs.lock().expect("runs");
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let door = live_door(&mut runs.doors, group, agent)?;
+        if door.consents.len().saturating_add(door.pending_consents) >= MAX_CONSENTS {
+            return Err(AuthorityError::Capacity);
+        }
+        door.pending_consents += 1;
+        Ok(ConsentSlot {
+            registry: self,
+            group,
+            life: Life {
+                stop_epoch: self.stop_number.load(Ordering::SeqCst),
+                halted: false,
+                closed: false,
+            },
+            held: true,
+        })
+    }
+
+    /// M2d-B1 (A3, H1′), a door's admission of `run` for Files, in one hold
+    /// of the runs lock: no Stop, not quitting; the door live, issued, not
+    /// halted and `agent`'s; the run `agent`'s agent run, listing the
+    /// group, in no halted group, neither finished nor cancelled; a yes to
+    /// exactly `contract_hash` and `request` cached at this door in the
+    /// current lifetime. Then the binding is installed, once: the same
+    /// admission again is the same binding, another is refused. Any refusal
+    /// changes nothing.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn admit_files(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+        contract_hash: &str,
+        request: &str,
+        workspace: AdmittedWorkspace,
+    ) -> Result<FilesAdmission, AuthorityError> {
+        let mut guard = self.runs.lock().expect("runs");
+        let table = &mut *guard;
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let now = Life {
+            stop_epoch: self.stop_number.load(Ordering::SeqCst),
+            halted: false,
+            closed: false,
+        };
+        let door = live_door(&mut table.doors, group, agent)?;
+        let consent = door
+            .consents
+            .iter()
+            .find(|c| c.life == now && c.contract_hash == contract_hash && c.request == request)
+            .cloned();
+        let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        if !entry.groups.contains(&group) {
+            return Err(AuthorityError::NotMember);
+        }
+        if table.in_halted_group(entry) {
+            return Err(AuthorityError::Halted);
+        }
+        if entry.view.finished {
+            return Err(AuthorityError::RunNotActive);
+        }
+        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
+            return Err(AuthorityError::RunCancelled);
+        }
+        let consent = consent.ok_or(AuthorityError::NoConsent)?;
+        let admission = FilesAdmission {
+            contract_hash: consent.contract_hash,
+            request: consent.request,
+            evidence_seq: consent.evidence_seq,
+            kind: consent.kind,
+            consented_wall_ms: consent.at_wall_ms,
+            workspace,
+        };
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        match &entry.files_admission {
+            Some(bound)
+                if bound.contract_hash == admission.contract_hash
+                    && bound.request == admission.request
+                    && bound.workspace == admission.workspace =>
+            {
+                Ok(bound.clone())
+            }
+            Some(_) => Err(AuthorityError::AlreadyAdmitted),
+            None => {
+                entry.files_admission = Some(admission.clone());
+                Ok(admission)
+            }
+        }
+    }
+
+    /// M2d-B1: `run`'s Files admission, if it has one.
+    pub(crate) fn files_admission(&self, run: RunId) -> Option<FilesAdmission> {
+        self.runs
+            .lock()
+            .ok()?
+            .get(&run)
+            .and_then(|entry| entry.files_admission.clone())
+    }
+
+    /// The yeses cached at `group` (tests).
+    #[cfg(test)]
+    pub(crate) fn consents_cached(&self, group: GroupId) -> usize {
+        self.runs
+            .lock()
+            .expect("runs")
+            .doors
+            .get(&group)
+            .map_or(0, |door| door.consents.len())
+    }
+
     /// P0: the privacy class `run` was given at insertion. A run this
     /// registry does not know (never opened, or pruned), or a poisoned
     /// lock, is Restricted: missing state never selects the Owner class.
@@ -816,6 +1044,93 @@ impl RunRegistry {
             .collect();
         views.sort_by_key(|v| v.opened_wall_ms);
         views
+    }
+}
+
+/// The door entry of `group` if it is live, issued, not halted and
+/// `agent`'s. Under the runs lock.
+fn live_door<'a>(
+    doors: &'a mut BTreeMap<GroupId, DoorEntry>,
+    group: GroupId,
+    agent: &AgentId,
+) -> Result<&'a mut DoorEntry, AuthorityError> {
+    match doors.get_mut(&group) {
+        Some(door) if door.halted => Err(AuthorityError::Halted),
+        Some(door) if door.active && door.alive() && &door.agent == agent => Ok(door),
+        _ => Err(AuthorityError::NotMember),
+    }
+}
+
+/// A slot reserved at a door for a yes whose dialog is open (H1′). Filled,
+/// the yes is cached if its lifetime still holds; dropped unfilled (refused,
+/// declined, panicked), the slot is given back.
+pub(crate) struct ConsentSlot<'a> {
+    registry: &'a RunRegistry,
+    group: GroupId,
+    life: Life,
+    held: bool,
+}
+
+impl ConsentSlot<'_> {
+    /// Cache the Owner's recorded yes, in one hold of the runs lock: the
+    /// slot is given back first; then a Stop, a stop since the question was
+    /// asked (even one already lifted), quitting, or a door that is gone,
+    /// halted or not issued refuses it, and nothing is cached.
+    pub(crate) fn fill(
+        mut self,
+        contract_hash: &str,
+        request: &str,
+        evidence_seq: u64,
+        kind: ConsentKind,
+        at_wall_ms: u64,
+    ) -> Result<(), AuthorityError> {
+        let registry = self.registry;
+        let mut runs = registry.runs.lock().expect("runs");
+        self.held = false;
+        let door = runs.doors.get_mut(&self.group);
+        if let Some(door) = door {
+            door.pending_consents = door.pending_consents.saturating_sub(1);
+        }
+        if registry.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if registry.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let door = match runs.doors.get_mut(&self.group) {
+            Some(door) if door.halted => return Err(AuthorityError::Halted),
+            Some(door) if door.active && door.alive() => door,
+            _ => return Err(AuthorityError::NotMember),
+        };
+        if registry.stop_number.load(Ordering::SeqCst) != self.life.stop_epoch {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if door.consents.len() >= MAX_CONSENTS {
+            return Err(AuthorityError::Capacity);
+        }
+        door.consents.push(Consent {
+            contract_hash: contract_hash.to_string(),
+            request: request.to_string(),
+            evidence_seq,
+            kind,
+            at_wall_ms,
+            life: self.life,
+        });
+        Ok(())
+    }
+}
+
+impl Drop for ConsentSlot<'_> {
+    /// Never under the runs lock of this thread (a slot is held across the
+    /// Owner's dialog, with no lock); a poisoned lock keeps the slot.
+    fn drop(&mut self) {
+        if self.held {
+            if let Ok(mut runs) = self.registry.runs.lock() {
+                if let Some(door) = runs.doors.get_mut(&self.group) {
+                    door.pending_consents = door.pending_consents.saturating_sub(1);
+                }
+            }
+        }
     }
 }
 
