@@ -63,11 +63,12 @@ use crate::consent::{Consent, MissionSummary};
 use crate::contract::{sha256, Budget, ContractError, ContractHash, EffectKind, MissionContract};
 use crate::effect::{
     Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRequest, Owed, PendingAction,
+    Publication,
 };
 use crate::evidence::{
     check, lane_identity_digest, BlockReason, BrokerClass, ConsentRefusedReason, FailReason,
-    HeldReason, LapseReason, MotherRefusal, PublicationCause, SettledOutcome, StopReason,
-    VerifyFailReason, WorkingDetail,
+    HeldReason, LapseReason, MotherRefusal, PublicationCause, SettleCause, SettledOutcome,
+    SettlementOutcome, StopReason, VerifyFailReason, WorkingDetail, FILE_UNCERTAIN_NOTICE,
 };
 use crate::journal::{
     verify, ContractRef, Entry, Event, JournalError, JournalStore, MissionId, ReplayViolation,
@@ -303,27 +304,18 @@ struct Mission {
     consent_request: Option<String>,
     /// M2d: the lifetime the port admitted, in this process.
     admitted: Option<u64>,
-    /// M2d (Codex review 2 of PR #78, decision A): a Stop or the time
-    /// budget is settling the File this mission waits on. Memory only;
-    /// while set the mission is not runnable: no call starts, no reserved
-    /// call is kept (the generation moved), and no transition is taken but
-    /// the settlement's own terminal one.
-    settling: Option<Settling>,
-}
-
-/// What a settlement ends a mission with (decision A).
-#[derive(Clone, Copy, Debug)]
-struct Settling {
-    /// The interruption code, if the File ran.
-    cause: BlockReason,
-    /// Otherwise: the Stop, or the budget's lapse, as before.
-    otherwise: Otherwise,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum Otherwise {
-    Stop(StopReason),
-    Lapse(BlockReason),
+    /// M2d-C round 4 (settlement design v2): the File effect dispatched
+    /// and not yet resolved (a refusal, its approval, a denial or lapse
+    /// confirmed not published, or its settlement's terminal line).
+    unresolved_file: Option<u64>,
+    /// Rule 4/6: the File whose settlement began, and its first cause. From
+    /// then on the mission is never runnable again (on replay too); only
+    /// the settlement's terminal line ends it.
+    settlement: Option<(u64, SettleCause)>,
+    /// Rule 2/6: the broker's identities of this mission's File actions
+    /// whose conclusive outcome is journaled, acknowledged again on every
+    /// reopen (idempotently; an uncertain one is never among them).
+    acks: Vec<PendingAction>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -369,7 +361,9 @@ impl Mission {
             lifetime: 0,
             consent_request: None,
             admitted: None,
-            settling: None,
+            unresolved_file: None,
+            settlement: None,
+            acks: Vec::new(),
         }
     }
 
@@ -378,6 +372,26 @@ impl Mission {
     /// verified journal.
     fn apply(&mut self, trigger: &Trigger, to: MissionState, mono_now: u64) {
         let mut dispatched = false;
+        // Round 4: the waited File, resolved by its approval, a denial or a
+        // lapse (each confirmed not published, or published cleanly): its
+        // journaled identity is owed an acknowledgement.
+        let waited_file = self
+            .waiting
+            .as_ref()
+            .map(|w| w.effect)
+            .filter(|effect| self.unresolved_file == Some(*effect));
+        if let (
+            Some(effect),
+            Trigger::ActionApproved { .. }
+            | Trigger::ActionDenied { .. }
+            | Trigger::ApprovalLapsed { .. },
+        ) = (waited_file, trigger)
+        {
+            if let Some((_, pending)) = self.open_action.as_ref().filter(|(e, _)| *e == effect) {
+                self.acks.push(pending.clone());
+            }
+            self.unresolved_file = None;
+        }
         match trigger {
             Trigger::Revise { contract } => {
                 // The caller sets the new contract itself (live); replay
@@ -422,6 +436,19 @@ impl Mission {
             }
             Trigger::ActionDenied { .. } => {
                 self.waiting = None;
+            }
+            Trigger::Settled {
+                action,
+                outcome,
+                end,
+                ..
+            } => {
+                self.waiting = None;
+                self.reason = Some(end.as_str());
+                if let Some(pending) = action.as_ref().filter(|_| outcome.conclusive()) {
+                    self.acks.push(pending.clone());
+                }
+                self.unresolved_file = None;
             }
             _ => {}
         }
@@ -648,16 +675,16 @@ impl Inner {
             .ok_or(CoordinatorError::UnknownMission)
     }
 
-    /// Journal a trigger, then take it. A settling mission takes none
-    /// (decision A): only its settlement's terminal transition, through
-    /// [`Inner::fire_settling`].
+    /// Journal a trigger, then take it. A mission whose File settlement
+    /// began takes none (rule 6): only the settlement's terminal line,
+    /// through [`Inner::fire_settling`].
     fn fire(
         &mut self,
         id: MissionId,
         trigger: Trigger,
         mono_now: u64,
     ) -> Result<MissionState, CoordinatorError> {
-        if self.mission(id)?.settling.is_some() {
+        if self.mission(id)?.settlement.is_some() {
             return Err(CoordinatorError::Stopped);
         }
         self.fire_settling(id, trigger, mono_now)
@@ -681,35 +708,6 @@ impl Inner {
         )?;
         self.mission(id)?.apply(&trigger, to, mono_now);
         Ok(to)
-    }
-}
-
-impl Inner {
-    /// Decision A, step 1 (under the lock): a mission waiting on an action
-    /// (not held, the coordinator usable) becomes settling, not runnable,
-    /// its reservations void. `Some(Err(state))`: it is settling already,
-    /// and the first cause stands. `None`: not eligible.
-    fn enter_settling(
-        &mut self,
-        id: MissionId,
-        settling: Settling,
-    ) -> Result<Option<Result<(), MissionState>>, CoordinatorError> {
-        if self.usable().is_err() {
-            return Ok(None);
-        }
-        let mission = self.mission(id)?;
-        if mission.settling.is_some() {
-            return Ok(Some(Err(mission.state)));
-        }
-        if mission.state != MissionState::AwaitingApproval
-            || mission.held.is_some()
-            || mission.waiting.is_none()
-        {
-            return Ok(None);
-        }
-        mission.settling = Some(settling);
-        mission.generation += 1;
-        Ok(Some(Ok(())))
     }
 }
 
@@ -887,6 +885,40 @@ impl<P: EffectPort> Drop for Busy<'_, P> {
                 mission.busy = false;
             }
         }
+    }
+}
+
+/// M2d-C round 4: what one mission's first Stop step did (rule 4).
+enum Stepped {
+    /// Terminal already, or its settlement under way (the first cause
+    /// stands): left as it is.
+    Done(MissionState),
+    /// Its File's settlement began: withdrawn and reconciled after every
+    /// first step.
+    Settle,
+    /// An ordinary Stop: whether it was journaled, and whether the mission
+    /// may have dispatched (then it is withdrawn).
+    Stopped(Result<MissionState, CoordinatorError>, bool),
+    /// No File: the time budget (or another end) blocks it, as before.
+    End(BlockReason),
+}
+
+/// Rule 1: only a confirmed not-published read says nothing was written;
+/// pending (executing, or not answered) is uncertain once it is stopped.
+fn settlement_outcome(read: Publication) -> SettlementOutcome {
+    match read {
+        Publication::Published {
+            recovery_required,
+            interrupted,
+        } => SettlementOutcome::Published {
+            recovery_required,
+            interrupted: interrupted
+                .iter()
+                .map(|c| PublicationCause::of(c))
+                .collect(),
+        },
+        Publication::ConfirmedNotPublished => SettlementOutcome::NotPublished,
+        Publication::Pending | Publication::Uncertain => SettlementOutcome::Uncertain,
     }
 }
 
@@ -1346,8 +1378,8 @@ impl<P: EffectPort> Coordinator<P> {
             inner.clear_detail(id);
             let mission = inner.mission(id)?;
             mission.not_held()?;
-            // Decision A: a settling mission is not runnable.
-            if mission.settling.is_some() {
+            // Rule 6: a mission whose File settlement began never runs again.
+            if mission.settlement.is_some() {
                 return Err(CoordinatorError::Stopped);
             }
             if mission.busy {
@@ -1408,17 +1440,14 @@ impl<P: EffectPort> Coordinator<P> {
                 return Ok(report);
             }
             Start::OutOfTime(mut report) => {
-                let budget = Otherwise::Lapse(BlockReason::BudgetTime);
-                match self.settle(id, BlockReason::FilePublicationTimeBudget, budget)? {
-                    Some(state) => {
-                        report.to = state;
-                        report.reason = self.reason(id);
-                    }
-                    None => {
-                        report.to = self.end(id, BlockReason::BudgetTime)?;
-                        report.reason = Some(BlockReason::BudgetTime.to_string());
-                    }
-                }
+                // Rule 4: through the barrier (a File settles; any other
+                // mission is blocked `budget_time`, as before).
+                report.to = self
+                    .barrier(vec![(id, SettleCause::TimeBudget)], true)
+                    .into_iter()
+                    .find(|(mission, _)| *mission == id)
+                    .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)?;
+                report.reason = self.reason(id);
                 return Ok(report);
             }
             Start::Done(report) => return Ok(report),
@@ -1492,9 +1521,17 @@ impl<P: EffectPort> Coordinator<P> {
             let Some(waiting) = mission.waiting.clone() else {
                 return Ok(Then::End(BlockReason::WaitUnknown));
             };
-            Ok(Then::Go((waiting, mission.contract()?.clone())))
+            // Round 4: the wait is the mission's unresolved File, and its
+            // journaled identity (owed an acknowledgement once conclusive).
+            let file = mission.unresolved_file == Some(waiting.effect);
+            let open = mission
+                .open_action
+                .as_ref()
+                .filter(|(e, _)| file && *e == waiting.effect)
+                .map(|(_, pending)| pending.clone());
+            Ok(Then::Go((waiting, mission.contract()?.clone(), file, open)))
         })?;
-        let (waiting, contract) = match self.then(id, step)? {
+        let (waiting, contract, file, open) = match self.then(id, step)? {
             Ok(found) => found,
             Err(state) => {
                 report.to = state;
@@ -1506,24 +1543,57 @@ impl<P: EffectPort> Coordinator<P> {
             effect: waiting.effect,
             reason,
         };
-        let mut overtaken = None;
+        // Addendum 3, the ordinary path's dispositions for a File: a clean
+        // publication goes on; one published with an interruption or with
+        // recovery required, and one the broker cannot confirm either way,
+        // end in one terminal line (`Trigger::Settled`); a denial, expiry or
+        // lapse is taken only as the broker's confirmation that nothing was
+        // published (the port reports nothing else so); a still valid wait
+        // keeps waiting.
+        let settled =
+            |outcome: SettlementOutcome| self.settle_terminal(id, None, outcome, Some(generation));
         let end = match status {
             ApprovalStatus::Waiting => return Ok(report),
             ApprovalStatus::Approved => None,
-            // M2d (§11 M4′): it ran; its authority ended after the final
-            // check. A success first, then the end.
-            ApprovalStatus::Overtaken { causes } => {
-                let first = causes.first().copied().unwrap_or("unknown");
-                overtaken = Some(BlockReason::FilePublicationInterrupted(
-                    PublicationCause::of(first),
-                ));
-                None
+            ApprovalStatus::Overtaken { causes } if file => {
+                report.to = settled(SettlementOutcome::Published {
+                    recovery_required: false,
+                    interrupted: causes.iter().map(|c| PublicationCause::of(c)).collect(),
+                })?;
+                report.reason = self.reason(id);
+                return Ok(report);
             }
-            // M2d (Codex review 1 of PR #78, HIGH 2): it ran, and recovery
-            // is required. A success first, then the end.
-            ApprovalStatus::RecoveryRequired => {
-                overtaken = Some(BlockReason::FilePublicationRecoveryRequired);
-                None
+            ApprovalStatus::RecoveryRequired if file => {
+                report.to = settled(SettlementOutcome::Published {
+                    recovery_required: true,
+                    interrupted: Vec::new(),
+                })?;
+                report.reason = self.reason(id);
+                return Ok(report);
+            }
+            ApprovalStatus::Uncertain if file => {
+                report.to = settled(SettlementOutcome::Uncertain)?;
+                report.reason = self.reason(id);
+                return Ok(report);
+            }
+            ApprovalStatus::Lapsed { class }
+                if file
+                    && matches!(
+                        BrokerClass::of(&class),
+                        BrokerClass::ApprovalOutcomeUnknown
+                            | BrokerClass::PortFenced
+                            | BrokerClass::Unknown
+                    ) =>
+            {
+                report.to = settled(SettlementOutcome::Uncertain)?;
+                report.reason = self.reason(id);
+                return Ok(report);
+            }
+            // Only a File is overtaken, recovery-required or uncertain.
+            ApprovalStatus::Overtaken { .. }
+            | ApprovalStatus::RecoveryRequired
+            | ApprovalStatus::Uncertain => {
+                Some(lapsed(LapseReason::ApprovalLapsed(BrokerClass::Unknown)))
             }
             ApprovalStatus::Denied => Some(Trigger::ActionDenied {
                 effect: waiting.effect,
@@ -1535,16 +1605,7 @@ impl<P: EffectPort> Coordinator<P> {
             }
         };
         if let Some(trigger) = end {
-            report.to = self.end_with(id, trigger)?;
-            report.reason = self.reason(id);
-            self.port.ack_publication(id);
-            return Ok(report);
-        }
-        // It ran, and its authority ended or recovery is required: the
-        // success and the end in one hold of the lock (decision A), never
-        // runnable in between.
-        if let Some(reason) = overtaken {
-            report.to = self.finish_publication(id, Some(generation), Ok(Some(reason)))?;
+            report.to = self.end_plain(id, trigger, open)?;
             report.reason = self.reason(id);
             return Ok(report);
         }
@@ -1565,8 +1626,10 @@ impl<P: EffectPort> Coordinator<P> {
             )?;
             Ok::<_, CoordinatorError>(inner.mission(id)?.generation)
         })?;
-        // Journaled: the port may drop the File's outcome (decision B).
-        self.port.ack_publication(id);
+        // Journaled: the broker may release the File's pin (rule 2).
+        if let Some(pending) = &open {
+            let _ = self.port.ack(id, pending);
+        }
         // The approved action is final at the broker: its closure is
         // journaled before anything more is sent.
         if !self.close_action(id)? {
@@ -1826,6 +1889,9 @@ impl<P: EffectPort> Coordinator<P> {
                 mission.next_effect += 1;
                 mission.unsettled = Some(number);
                 mission.dispatched_in_phase = true;
+                if effect.kind() == EffectKind::File {
+                    mission.unresolved_file = Some(number);
+                }
                 Ok(Then::Go((number, lifetime)))
             })?;
             let (number, lifetime) = match self.then(id, step)? {
@@ -1861,6 +1927,12 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 let mission = inner.mission(id)?;
                 mission.unsettled = None;
+                // A refused File was never committed at the broker.
+                if !matches!(settled, SettledOutcome::AwaitingApproval)
+                    && mission.unresolved_file == Some(number)
+                {
+                    mission.unresolved_file = None;
+                }
                 if mission.generation != generation {
                     return Err(CoordinatorError::Stopped);
                 }
@@ -2030,8 +2102,21 @@ impl<P: EffectPort> Coordinator<P> {
 
     /// End a mission for `reason` (Blocked) and cancel what it opened at
     /// the port; a waiting mission's wait lapses (which withdraws the
-    /// pending action).
+    /// pending action). Round 4 (rule 7, addendum 2): a mission whose File
+    /// is unresolved ends only through its settlement.
     fn end(&self, id: MissionId, reason: BlockReason) -> Result<MissionState, CoordinatorError> {
+        if self.file_unresolved(id) {
+            return self.settle_one(id, SettleCause::Ended(reason));
+        }
+        self.end_plain_block(id, reason)
+    }
+
+    /// [`Self::end`] of a mission with no unresolved File.
+    fn end_plain_block(
+        &self,
+        id: MissionId,
+        reason: BlockReason,
+    ) -> Result<MissionState, CoordinatorError> {
         let trigger = self.with_lock(|inner| {
             let mission = inner.mission(id)?;
             Ok::<_, CoordinatorError>(match (&mission.waiting, mission.state) {
@@ -2042,12 +2127,61 @@ impl<P: EffectPort> Coordinator<P> {
                 _ => Trigger::Block { reason },
             })
         })?;
-        self.end_with(id, trigger)
+        self.end_plain(id, trigger, None)
     }
 
     /// End a mission with `trigger` (Block, Fail, VerifyFail, or the end of
-    /// a wait) and cancel what it opened at the port.
+    /// a wait) and cancel what it opened at the port. Round 4: a mission
+    /// whose File is unresolved ends only through its settlement.
     fn end_with(&self, id: MissionId, trigger: Trigger) -> Result<MissionState, CoordinatorError> {
+        if self.file_unresolved(id) {
+            let cause = match &trigger {
+                Trigger::Stop { reason } => SettleCause::Stop(*reason),
+                Trigger::Block { reason }
+                | Trigger::ApprovalLapsed {
+                    reason: LapseReason::Ended(reason),
+                    ..
+                } => SettleCause::Ended(*reason),
+                _ => SettleCause::Ended(BlockReason::PhaseInterrupted),
+            };
+            return self.settle_one(id, cause);
+        }
+        self.end_plain(id, trigger, None)
+    }
+
+    /// Whether the mission, unfinished, has a File not yet resolved.
+    fn file_unresolved(&self, id: MissionId) -> bool {
+        self.peek(|inner| {
+            inner
+                .missions
+                .get(&id)
+                .is_some_and(|m| !m.state.is_terminal() && m.unresolved_file.is_some())
+        })
+    }
+
+    /// One mission's settlement for an end that is not a Stop (no door
+    /// halt: [`Self::barrier`] with `halt` false).
+    fn settle_one(
+        &self,
+        id: MissionId,
+        cause: SettleCause,
+    ) -> Result<MissionState, CoordinatorError> {
+        self.barrier(vec![(id, cause)], false)
+            .into_iter()
+            .find(|(mission, _)| *mission == id)
+            .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)
+    }
+
+    /// The end itself: journal `trigger` (in memory if the journal fails),
+    /// then withdraw and close. `ack`: the File action whose conclusive
+    /// end this is (a denial or lapse confirmed not published), acknowledged
+    /// once the end is journaled.
+    fn end_plain(
+        &self,
+        id: MissionId,
+        trigger: Trigger,
+        ack: Option<PendingAction>,
+    ) -> Result<MissionState, CoordinatorError> {
         let mono = self.clock.monotonic_ms();
         let result = self.with_lock(|inner| {
             let from = inner.mission(id)?.state;
@@ -2067,6 +2201,9 @@ impl<P: EffectPort> Coordinator<P> {
         // confirmed closed stays open in the journal and is withdrawn again
         // on every reopen).
         let withdrawn = self.port.withdraw(id);
+        if let Some(pending) = ack.filter(|_| result.is_ok()) {
+            let _ = self.port.ack(id, &pending);
+        }
         let closed = self.close_action(id);
         let state = result?;
         withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
@@ -2237,6 +2374,13 @@ impl<P: EffectPort> Coordinator<P> {
                         Ok::<_, CoordinatorError>(())
                     })?;
                 }
+                Err(_) if self.file_unresolved(id) => {
+                    // Round 4: through its settlement, never an ordinary Stop.
+                    let stop = SettleCause::Stop(StopReason::PrivateContentUnavailable);
+                    if let Err(e) = self.settle_one(id, stop) {
+                        first_error.get_or_insert(e);
+                    }
+                }
                 Err(_) => {
                     // Withdraw first: if the Stop cannot be journaled, nothing
                     // of the mission is left approvable at the broker.
@@ -2283,6 +2427,33 @@ impl<P: EffectPort> Coordinator<P> {
             }
             Ok::<_, CoordinatorError>(())
         })?;
+        // Round 4 (rule 6): a settlement begun before the restart cannot read
+        // the broker as it was: it ends uncertain (never "not published",
+        // unless Mother's own journal shows the port refused the File).
+        let begun: Vec<MissionId> = self.peek(|inner| {
+            inner
+                .missions
+                .iter()
+                .filter(|(_, m)| !m.state.is_terminal() && m.settlement.is_some())
+                .map(|(id, _)| *id)
+                .collect()
+        });
+        for id in begun {
+            let _ = self.port.withdraw(id);
+            self.settle_terminal(id, None, SettlementOutcome::Uncertain, None)?;
+        }
+        // Addendum 2: every conclusive File outcome journaled is acknowledged
+        // again (idempotent at the broker); an uncertain one never is.
+        let owed: Vec<(MissionId, PendingAction)> = self.peek(|inner| {
+            inner
+                .missions
+                .iter()
+                .flat_map(|(id, m)| m.acks.iter().map(|p| (*id, p.clone())))
+                .collect()
+        });
+        for (id, pending) in owed {
+            let _ = self.port.ack(id, &pending);
+        }
         // A mission interrupted after dispatching an effect in its current
         // phase is blocked: an unsettled effect may have happened, and
         // re-running the phase would repeat a settled one.
@@ -2374,64 +2545,129 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         reason: StopReason,
     ) -> Result<MissionState, CoordinatorError> {
-        // M2d (Codex review 1 of PR #78, HIGH 1): a File the mission waits
-        // on that already ran is journaled as the success it is first, and
-        // the mission then ends with the interruption code, not Stopped.
-        let cause = match reason {
-            StopReason::Owner => Some(BlockReason::FilePublicationOwnerStop),
-            StopReason::EmergencyStop => Some(BlockReason::FilePublicationInterrupted(
-                PublicationCause::EmergencyStop,
-            )),
-            StopReason::PrivateContentUnavailable => None,
-        };
-        enum Stopped {
-            /// Ended (terminal already), or a settlement already under way.
-            Done(MissionState),
-            /// This Stop entered the settlement (decision A).
-            Settle(BlockReason),
+        self.barrier(vec![(id, SettleCause::Stop(reason))], true)
+            .into_iter()
+            .find(|(mission, _)| *mission == id)
+            .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)
+    }
+
+    /// M2d-C round 4 (settlement design v2, rules 4-5; addendum 1): every
+    /// Stop path (the Owner's Stop of one mission or of all, the emergency
+    /// Stop, the time budget), and with `halt` false every other end of a
+    /// mission whose File is unresolved, in this order:
+    /// 1. with no lock held, the port's memory-only stop, first, if a File
+    ///    may be live there (`halt_all`): its scope is the port's shared
+    ///    door, so every unfinished mission is then stopped with these
+    ///    (`door_halted`), none left looking runnable;
+    /// 2. each mission's first step under the lock: terminal already, or
+    ///    its settlement already begun (the first cause stands), it is left
+    ///    as it is; one with an unresolved File journals `SettlementStarted`
+    ///    (the journal's own failure machinery: a failed append still leaves
+    ///    it settling, in memory) and is never runnable again; any other is
+    ///    stopped (or, for the time budget, blocked) as before;
+    /// 3. only then, every settling mission is withdrawn, and then read
+    ///    once and ended (`reconcile`). Nothing waits.
+    fn barrier(
+        &self,
+        targets: Vec<(MissionId, SettleCause)>,
+        halt: bool,
+    ) -> Vec<(MissionId, Result<MissionState, CoordinatorError>)> {
+        let mut all = targets;
+        if halt && self.port.halt_all() {
+            let others: Vec<MissionId> = self.peek(|inner| {
+                inner
+                    .missions
+                    .iter()
+                    .filter(|(id, m)| !m.state.is_terminal() && !all.iter().any(|(t, _)| t == *id))
+                    .map(|(id, _)| *id)
+                    .collect()
+            });
+            all.extend(
+                others
+                    .into_iter()
+                    .map(|id| (id, SettleCause::Stop(StopReason::DoorHalted))),
+            );
         }
-        type Stopping = (Result<MissionState, CoordinatorError>, bool);
-        let step = self.with_lock(
-            |inner| -> Result<Result<Stopping, Stopped>, CoordinatorError> {
-                inner.clear_detail(id);
+        let mut results = Vec::with_capacity(all.len());
+        let mut settling = Vec::new();
+        for (id, cause) in all {
+            match self.stop_step(id, cause) {
+                Ok(Stepped::Settle) => settling.push(id),
+                Ok(Stepped::Done(state)) => results.push((id, Ok(state))),
+                Ok(Stepped::Stopped(journaled, may_have_dispatched)) => {
+                    results.push((id, self.after_stop(id, journaled, may_have_dispatched)))
+                }
+                Ok(Stepped::End(reason)) => results.push((id, self.end_plain_block(id, reason))),
+                Err(e) => results.push((id, Err(e))),
+            }
+        }
+        let withdrawn: Vec<(MissionId, Result<(), CoordinatorError>)> = settling
+            .iter()
+            .map(|id| {
+                let withdrawn = self.port.withdraw(*id);
+                (
+                    *id,
+                    withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class)),
+                )
+            })
+            .collect();
+        for (id, withdrawn) in withdrawn {
+            let state = self
+                .reconcile(id)
+                .and_then(|state| withdrawn.map(|()| state));
+            results.push((id, state));
+        }
+        results
+    }
+
+    /// Step 2 of [`Self::barrier`], in one hold of the lock.
+    fn stop_step(&self, id: MissionId, cause: SettleCause) -> Result<Stepped, CoordinatorError> {
+        self.with_lock(|inner| {
+            inner.clear_detail(id);
+            let mission = inner.mission(id)?;
+            if mission.state.is_terminal() {
+                // M2a-S: on a broken coordinator a terminal state may be in
+                // memory only (a Stop or denial the journal lost): never Ok.
+                inner.usable()?;
+                return Ok(Stepped::Done(inner.mission(id)?.state));
+            }
+            if mission.settlement.is_some() {
+                return Ok(Stepped::Done(mission.state));
+            }
+            if let Some(effect) = mission.unresolved_file {
+                // The existing machinery: a failed append fences the port and
+                // poisons the journal; the mission settles in memory anyway.
+                let _ = inner.append(id, Event::SettlementStarted { effect, cause });
                 let mission = inner.mission(id)?;
-                if mission.state.is_terminal() {
-                    // M2a-S: on a broken coordinator a terminal state may be in
-                    // memory only (a Stop or denial the journal lost): never Ok.
-                    inner.usable()?;
-                    return Ok(Err(Stopped::Done(inner.mission(id)?.state)));
-                }
-                // In the same hold as an ordinary Stop's record: a mission
-                // waiting on a File becomes settling instead.
-                if let Some(cause) = cause {
-                    let settling = Settling {
-                        cause,
-                        otherwise: Otherwise::Stop(reason),
-                    };
-                    match inner.enter_settling(id, settling)? {
-                        Some(Ok(())) => return Ok(Err(Stopped::Settle(cause))),
-                        Some(Err(state)) => return Ok(Err(Stopped::Done(state))),
-                        None => {}
-                    }
-                }
+                mission.settlement = Some((effect, cause));
+                mission.generation += 1;
+                return Ok(Stepped::Settle);
+            }
+            let reason = match cause {
+                SettleCause::Stop(reason) => reason,
+                SettleCause::TimeBudget => return Ok(Stepped::End(BlockReason::BudgetTime)),
+                SettleCause::Ended(reason) => return Ok(Stepped::End(reason)),
+            };
+            let may_have_dispatched = mission.approved_wall_ms.is_some();
+            let mono = self.clock.monotonic_ms();
+            let journaled = inner.fire(id, Trigger::Stop { reason }, mono);
+            if journaled.is_err() {
+                // The journal failed: the mission stops in memory all the same.
                 let mission = inner.mission(id)?;
-                let may_have_dispatched = mission.approved_wall_ms.is_some();
-                let mono = self.clock.monotonic_ms();
-                let journaled = inner.fire(id, Trigger::Stop { reason }, mono);
-                if journaled.is_err() {
-                    // The journal failed: the mission stops in memory all the same.
-                    let mission = inner.mission(id)?;
-                    mission.state = MissionState::Stopped;
-                    mission.generation += 1;
-                }
-                Ok(Ok((journaled, may_have_dispatched)))
-            },
-        )?;
-        let (journaled, may_have_dispatched) = match step {
-            Ok(stopping) => stopping,
-            Err(Stopped::Done(state)) => return Ok(state),
-            Err(Stopped::Settle(cause)) => return self.complete_settlement(id, cause),
-        };
+                mission.state = MissionState::Stopped;
+                mission.generation += 1;
+            }
+            Ok(Stepped::Stopped(journaled, may_have_dispatched))
+        })
+    }
+
+    /// An ordinary Stop's withdrawal and closure, as before.
+    fn after_stop(
+        &self,
+        id: MissionId,
+        journaled: Result<MissionState, CoordinatorError>,
+        may_have_dispatched: bool,
+    ) -> Result<MissionState, CoordinatorError> {
         if may_have_dispatched {
             let withdrawn = self.port.withdraw(id);
             let closed = self.close_action(id);
@@ -2443,191 +2679,126 @@ impl<P: EffectPort> Coordinator<P> {
         journaled
     }
 
-    /// M2d (Codex review 2 of PR #78: the Architect's one design). A Stop
-    /// (the Owner's or the emergency one) or the time budget ending a
-    /// mission that waits on a File settles it:
-    /// 1. under the lock, the mission becomes settling (decision A): not
-    ///    runnable, its reservations void; a mission already settling keeps
-    ///    its first cause and this call does nothing more;
-    /// 2. with no lock held, the port withdraws it (the broker's stop, in
-    ///    memory: decision B), then reads what became of the File;
-    /// 3. the terminal transition, in one hold of the lock: a File that ran
-    ///    is journaled as the success it is (`ActionApproved` and its
-    ///    closure) and the mission ends `cause` (or
-    ///    `file_publication_recovery_required`); one that did not run ends
-    ///    `otherwise`, as before; a read that failed (decision C) ends it
-    ///    `file_publication_uncertain`: a file may exist;
-    /// 4. the port is told it may drop the File's outcome.
-    ///
-    /// `None` when the mission does not wait on an action, is held, is
-    /// terminal or the coordinator is broken: the caller ends it as before.
-    fn settle(
-        &self,
-        id: MissionId,
-        cause: BlockReason,
-        otherwise: Otherwise,
-    ) -> Result<Option<MissionState>, CoordinatorError> {
-        let entered =
-            self.with_lock(|inner| inner.enter_settling(id, Settling { cause, otherwise }))?;
-        match entered {
-            None => Ok(None),
-            Some(Err(state)) => Ok(Some(state)),
-            Some(Ok(())) => self.complete_settlement(id, cause).map(Some),
-        }
+    /// Rule 5: one snapshot of the settling mission's File, with no lock
+    /// held, then its terminal line. Published: the truthful success and
+    /// the cause's block; confirmed not published (by the broker, or by
+    /// Mother's own journal: the port refused it): the cause's end; pending,
+    /// uncertain, unknown or unreadable: `file_publication_uncertain`, the
+    /// pin kept.
+    fn reconcile(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        let (action, outcome) = match self.port.publication(id) {
+            Ok(Some((pending, read))) => (Some(pending), settlement_outcome(read)),
+            Ok(None) | Err(_) => (None, SettlementOutcome::Uncertain),
+        };
+        self.settle_terminal(id, action, outcome, None)
     }
 
-    /// A settlement entered (step 1 done): steps 2-4.
-    fn complete_settlement(
+    /// Rules 5-6, addendum 2: the File's terminal line (`Trigger::Settled`:
+    /// its outcome and the mission's end, one journal line), in one hold of
+    /// the lock. `reserved`: the ordinary path's wait reservation (the
+    /// broker's own answer; the end follows from the outcome); `None`: a
+    /// settlement (the end follows from its first cause). A journal that
+    /// fails ends the mission in memory and acknowledges nothing; otherwise
+    /// a conclusive outcome is acknowledged. Then the closure, as for any
+    /// end.
+    fn settle_terminal(
         &self,
         id: MissionId,
-        cause: BlockReason,
-    ) -> Result<MissionState, CoordinatorError> {
-        let withdrawn = self.port.withdraw(id);
-        let read = self.port.publication(id);
-        let state = self.finish_publication(
-            id,
-            None,
-            read.map(|status| match status {
-                Some(ApprovalStatus::RecoveryRequired) => {
-                    Some(BlockReason::FilePublicationRecoveryRequired)
-                }
-                Some(ApprovalStatus::Approved | ApprovalStatus::Overtaken { .. }) => Some(cause),
-                _ => None,
-            })
-            .map_err(|_| ()),
-        )?;
-        withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
-        Ok(state)
-    }
-
-    /// The terminal transition of a File the mission waited on, in one hold
-    /// of the lock (decision A).
-    /// - `Ok(Some(reason))`: it ran: `ActionApproved`, its closure if the
-    ///   port confirms the action final (asked first, with no lock held),
-    ///   then Blocked `reason`.
-    /// - `Ok(None)`: it did not run: the settlement's `otherwise`.
-    /// - `Err(())`: the broker could not be read: Blocked
-    ///   `file_publication_uncertain`, no success claimed.
-    ///
-    /// `reserved`: the wait's reservation (the ordinary path, which must
-    /// still hold); `None` for a settlement (the mission must be settling).
-    /// Then the port withdraws the mission (the ordinary path; a settlement
-    /// withdrew first), the closure is journaled if it was not, and the port
-    /// may drop the File's outcome.
-    fn finish_publication(
-        &self,
-        id: MissionId,
+        action: Option<PendingAction>,
+        outcome: SettlementOutcome,
         reserved: Option<u64>,
-        outcome: Result<Option<BlockReason>, ()>,
     ) -> Result<MissionState, CoordinatorError> {
-        let pending =
-            self.peek(|inner| inner.missions.get(&id).and_then(|m| m.open_action.clone()));
-        let ran = matches!(outcome, Ok(Some(_)));
-        let closed = ran && pending.as_ref().is_some_and(|(_, p)| self.port.settled(p));
         let mono = self.clock.monotonic_ms();
-        let ended = self.with_lock(|inner| {
+        let (result, owed) = self.with_lock(|inner| {
             let mission = inner.mission(id)?;
-            let settling = match reserved {
-                Some(generation) => {
-                    if mission.generation != generation || mission.settling.is_some() {
+            if mission.state.is_terminal() {
+                return Err(CoordinatorError::Stopped);
+            }
+            let (effect, outcome, end) = match (mission.settlement, reserved) {
+                (Some((effect, cause)), None) => {
+                    // Mother's own journal proves the port refused it.
+                    let outcome = if mission.unresolved_file != Some(effect) && action.is_none() {
+                        SettlementOutcome::NotPublished
+                    } else {
+                        outcome
+                    };
+                    let end = cause.end(&outcome);
+                    (effect, outcome, end)
+                }
+                (None, Some(generation)) => {
+                    if mission.generation != generation {
                         return Err(CoordinatorError::Stopped);
                     }
-                    None
+                    let effect = mission
+                        .waiting
+                        .as_ref()
+                        .map(|w| w.effect)
+                        .filter(|e| mission.unresolved_file == Some(*e))
+                        .ok_or(CoordinatorError::Stopped)?;
+                    let end = outcome.ordinary_end().ok_or(CoordinatorError::Stopped)?;
+                    (effect, outcome, end)
                 }
-                None => Some(mission.settling.ok_or(CoordinatorError::Stopped)?),
+                _ => return Err(CoordinatorError::Stopped),
             };
-            let Some(waiting) = mission.waiting.clone() else {
-                return Err(CoordinatorError::Stopped);
+            // The journaled identity, when there is one.
+            let action = match mission.open_action.as_ref() {
+                Some((e, pending)) if *e == effect => Some(pending.clone()),
+                _ => action,
             };
-            let (effect, phase) = (waiting.effect, waiting.phase);
-            let last = match outcome {
-                Ok(Some(reason)) => {
-                    // A settlement ends with its own (first) cause, unless
-                    // recovery is required.
-                    let reason = match settling {
-                        Some(settling)
-                            if reason != BlockReason::FilePublicationRecoveryRequired =>
-                        {
-                            settling.cause
-                        }
-                        _ => reason,
-                    };
-                    let approval = Trigger::ActionApproved { effect, phase };
-                    match inner.fire_settling(id, approval.clone(), mono) {
-                        Ok(_) => {
-                            let open = inner.mission(id)?.open_action.as_ref().map(|(e, _)| *e);
-                            if closed
-                                && open == Some(effect)
-                                && inner.append(id, Event::ApprovalClosed { effect }).is_ok()
-                            {
-                                inner.mission(id)?.open_action = None;
-                            }
-                        }
-                        // The journal failed: in memory all the same (the
-                        // journal, poisoned, will not reopen; if poisoning
-                        // failed too, it reopens with the mission held).
-                        Err(_) => {
-                            let to = transition(MissionState::AwaitingApproval, &approval)
-                                .map_err(|e| refusal(MissionState::AwaitingApproval, e))?;
-                            inner.mission(id)?.apply(&approval, to, mono);
-                        }
-                    }
-                    Trigger::Block { reason }
-                }
-                // Still waiting (nothing approved): the wait lapses, ended
-                // uncertain.
-                Err(()) => Trigger::ApprovalLapsed {
-                    effect,
-                    reason: LapseReason::Ended(BlockReason::FilePublicationUncertain),
-                },
-                Ok(None) => match settling.map(|s| s.otherwise) {
-                    Some(Otherwise::Stop(reason)) => Trigger::Stop { reason },
-                    Some(Otherwise::Lapse(reason)) => Trigger::ApprovalLapsed {
-                        effect,
-                        reason: LapseReason::Ended(reason),
-                    },
-                    None => return Err(CoordinatorError::Stopped),
-                },
+            let trigger = Trigger::Settled {
+                effect,
+                action: action.clone(),
+                outcome: outcome.clone(),
+                end,
             };
-            let from = inner.mission(id)?.state;
-            let result = inner.fire_settling(id, last.clone(), mono);
-            if let (Err(CoordinatorError::Journal(_)), Ok(to)) = (&result, transition(from, &last))
+            let from = mission.state;
+            let result = inner.fire_settling(id, trigger.clone(), mono);
+            if let (Err(CoordinatorError::Journal(_)), Ok(to)) =
+                (&result, transition(from, &trigger))
             {
-                inner.mission(id)?.apply(&last, to, mono);
+                inner.mission(id)?.apply(&trigger, to, mono);
             }
-            inner.mission(id)?.settling = None;
-            result
-        });
+            let owed = action.filter(|_| result.is_ok() && outcome.conclusive());
+            Ok((result, owed))
+        })?;
         let withdrawn = match reserved {
             Some(_) => self.port.withdraw(id),
             None => Ok(()),
         };
-        let state = ended?;
-        self.close_action(id)?;
-        self.port.ack_publication(id);
+        if let Some(pending) = owed {
+            // A failed acknowledgement is kept by the port and tried again;
+            // the journal's record is tried again on every reopen.
+            let _ = self.port.ack(id, &pending);
+        }
+        let closed = self.close_action(id);
+        let state = result?;
         withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
+        closed?;
         Ok(state)
     }
 
-    /// Stop every mission that has not ended. Returns how many.
+    /// Stop every mission that has not ended, through one barrier. Returns
+    /// how many it stopped or (a File's settlement) blocked.
     pub fn stop_all(&self) -> usize {
-        let live: Vec<MissionId> = self.peek(|inner| {
+        let live: Vec<(MissionId, SettleCause)> = self.peek(|inner| {
             inner
                 .missions
                 .iter()
                 .filter(|(_, m)| !m.state.is_terminal())
-                .map(|(id, _)| *id)
+                .map(|(id, _)| (*id, SettleCause::Stop(StopReason::Owner)))
                 .collect()
         });
-        live.into_iter()
-            .filter(|id| {
-                // A reconciled publication ends its mission Blocked (HIGH 1).
-                matches!(
-                    self.stop(*id),
-                    Ok(MissionState::Stopped | MissionState::Blocked)
-                )
-            })
+        self.barrier(live, true)
+            .into_iter()
+            .filter(|(_, state)| matches!(state, Ok(MissionState::Stopped | MissionState::Blocked)))
             .count()
+    }
+
+    /// M2d-C round 4 (addendum 5): what the Owner is told of a mission whose
+    /// File's outcome is uncertain, exactly; `None` otherwise.
+    pub fn notice(&self, id: MissionId) -> Option<&'static str> {
+        let uncertain = BlockReason::FilePublicationUncertain.as_str();
+        (self.reason(id).as_deref() == Some(uncertain.as_str())).then_some(FILE_UNCERTAIN_NOTICE)
     }
 
     /// M2a-S: shut down in order, journaling the clean close that lets the
@@ -2703,6 +2874,10 @@ impl<P: EffectPort> Coordinator<P> {
             let mission = inner.mission(id)?;
             if mission.held.is_none() {
                 return Err(illegal(mission.state, "resume"));
+            }
+            // Rule 6: a mission whose File settlement began never resumes.
+            if mission.settlement.is_some() {
+                return Err(CoordinatorError::Stopped);
             }
             // A broken or closed coordinator asks the Owner nothing.
             inner.usable()?;
@@ -2906,9 +3081,10 @@ fn replay(
     let while_held = matches!(
         &entry.event,
         Event::Transition {
-            trigger: Trigger::Stop { .. }
+            trigger: Trigger::Stop { .. } | Trigger::Settled { .. }
         } | Event::ApprovalClosed { .. }
             | Event::Resumed
+            | Event::SettlementStarted { .. }
     );
     if mission.held.is_some() && !while_held {
         return Err(V::RecordWhileHeld);
@@ -2916,7 +3092,10 @@ fn replay(
     // Before its hold, only what recovery writes: an abandoned lane call, a
     // closed action, or an end (a block, a lapse, a Stop).
     let before_hold = match &entry.event {
-        Event::Held { .. } | Event::LaneOvertaken { .. } | Event::ApprovalClosed { .. } => true,
+        Event::Held { .. }
+        | Event::LaneOvertaken { .. }
+        | Event::ApprovalClosed { .. }
+        | Event::SettlementStarted { .. } => true,
         Event::Transition { trigger } => {
             transition(mission.state, trigger).is_ok_and(MissionState::is_terminal)
         }
@@ -2929,9 +3108,13 @@ fn replay(
         Event::Drafted { .. } => unreachable!(),
         Event::Transition { trigger } => {
             let to = transition(mission.state, trigger).map_err(|_| V::IllegalTransition)?;
+            // Rule 6: once a File's settlement began, only its terminal line.
+            if mission.settlement.is_some() && !matches!(trigger, Trigger::Settled { .. }) {
+                return Err(V::SettlementConflict);
+            }
             // While an effect is unsettled the live coordinator only stops,
-            // or blocks the mission on restart.
-            let while_unsettled = matches!(trigger, Trigger::Stop { .. })
+            // or blocks the mission on restart (or settles its File).
+            let while_unsettled = matches!(trigger, Trigger::Stop { .. } | Trigger::Settled { .. })
                 || matches!(
                     trigger,
                     Trigger::Block {
@@ -2981,6 +3164,36 @@ fn replay(
                 {
                     return Err(V::EndOfOtherWait);
                 }
+                Trigger::Settled {
+                    effect,
+                    action,
+                    outcome,
+                    end,
+                } => {
+                    // Addendum 2: the exact File, its first cause's end, and
+                    // the journaled identity.
+                    let expected = match mission.settlement {
+                        Some((started, cause)) if started == *effect => Some(cause.end(outcome)),
+                        Some(_) => return Err(V::SettlementConflict),
+                        None if mission.unresolved_file == Some(*effect)
+                            && mission
+                                .waiting
+                                .as_ref()
+                                .is_some_and(|w| w.effect == *effect) =>
+                        {
+                            outcome.ordinary_end()
+                        }
+                        None => return Err(V::SettlementOutOfPlace),
+                    };
+                    if expected != Some(*end) {
+                        return Err(V::SettlementConflict);
+                    }
+                    if let Some((open, pending)) = &mission.open_action {
+                        if open == effect && action.as_ref() != Some(pending) {
+                            return Err(V::SettlementConflict);
+                        }
+                    }
+                }
                 _ => {}
             }
             mission.apply(trigger, to, 0);
@@ -2991,6 +3204,9 @@ fn replay(
             }
         }
         Event::LaneInvoked { invocation, .. } => {
+            if mission.settlement.is_some() {
+                return Err(V::SettlementConflict);
+            }
             if !mission.state.is_working()
                 || mission.state == MissionState::Explaining
                 || mission.pending_lane.is_some()
@@ -3020,16 +3236,20 @@ fn replay(
             }
             mission.pending_lane = None;
         }
-        Event::EffectDispatched { effect, .. } => {
+        Event::EffectDispatched { effect, kind, .. } => {
             if !mission.state.is_working()
                 || *effect != mission.next_effect
                 || mission.unsettled.is_some()
                 || mission.open_action.is_some()
+                || mission.settlement.is_some()
             {
                 return Err(V::DispatchOutOfPlace);
             }
             mission.next_effect += 1;
             mission.unsettled = Some(*effect);
+            if *kind == EffectKind::File {
+                mission.unresolved_file = Some(*effect);
+            }
             mission.dispatched_in_phase = true;
             mission.awaiting_settled = None;
         }
@@ -3040,12 +3260,15 @@ fn replay(
             mission.unsettled = None;
             if *outcome == SettledOutcome::AwaitingApproval {
                 mission.awaiting_settled = Some(*effect);
+            } else if mission.unresolved_file == Some(*effect) {
+                mission.unresolved_file = None;
             }
         }
         Event::ApprovalPending { effect, pending } => {
             if !mission.state.may_wait()
                 || mission.awaiting_settled != Some(*effect)
                 || mission.open_action.is_some()
+                || mission.settlement.is_some()
             {
                 return Err(V::PendingOutOfPlace);
             }
@@ -3059,11 +3282,23 @@ fn replay(
         }
         Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
         Event::SessionOpened | Event::SessionClosed => unreachable!(),
+        // Rule 4/6: the File's settlement began; its first cause stands.
+        Event::SettlementStarted { effect, cause } => {
+            if mission.state.is_terminal() || mission.settlement.is_some() {
+                return Err(V::SettlementConflict);
+            }
+            if mission.unresolved_file != Some(*effect) {
+                return Err(V::SettlementOutOfPlace);
+            }
+            mission.settlement = Some((*effect, *cause));
+            mission.generation += 1;
+        }
         Event::Held { reason } => {
             if mission.state.is_terminal()
                 || mission.pending_lane.is_some()
                 || mission.unsettled.is_some()
                 || mission.dispatched_in_phase
+                || mission.settlement.is_some()
             {
                 return Err(V::HoldOutOfPlace);
             }
@@ -3074,6 +3309,9 @@ fn replay(
         Event::Resumed => {
             if mission.held.is_none() {
                 return Err(V::ResumeNotHeld);
+            }
+            if mission.settlement.is_some() {
+                return Err(V::SettlementConflict);
             }
             mission.held = None;
             mission.held_journaled = false;

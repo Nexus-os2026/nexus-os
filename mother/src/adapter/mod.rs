@@ -36,14 +36,16 @@
 
 use crate::effect::{
     Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed,
-    PendingAction,
+    PendingAction, Publication,
 };
 use crate::evidence::BrokerClass;
 use crate::journal::{IoKind, JournalError, JournalStore, MissionId, StoreFailure};
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
-use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::commitment::{
+    CommitmentState, CommitmentView, PublicationClass,
+};
 use nexus_governed_control::authority::effect::CapabilityKind;
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
@@ -102,6 +104,8 @@ mod m2d_files;
 mod m2d_files_r1;
 #[cfg(test)]
 mod m2d_files_r2;
+#[cfg(test)]
+mod m2d_files_r4;
 mod private_file;
 pub use private_file::FilePrivate;
 
@@ -152,6 +156,11 @@ struct Runs {
     unswept: Vec<RunId>,
     /// M2d (I7): the admission generation of each admitted mission.
     admitted: BTreeMap<MissionId, u64>,
+    /// M2d-C round 4 (rule 2): the File commitments this port counts live
+    /// (`files_live`) until their acknowledgement, and those whose
+    /// acknowledgement failed (tried again with the next one).
+    files: BTreeSet<CommitmentId>,
+    unacked: BTreeSet<CommitmentId>,
 }
 
 /// The EffectPort over the governed-control broker, through one agent door.
@@ -166,6 +175,13 @@ pub struct GovernedPort {
     workspace: Option<String>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
+    /// M2d-C round 4 (addendum 1): File actions that may be live here (from
+    /// just before the broker is asked until their acknowledgement; an
+    /// uncertain one never leaves). Read without any lock.
+    files_live: AtomicUsize,
+    /// Tests: how many acknowledgements were asked of the broker.
+    #[cfg(test)]
+    acks_tried: AtomicUsize,
     /// M2a-S (tests): run just before an effect is performed, and before
     /// the broker is asked about an approval (deterministic interleavings).
     #[cfg(test)]
@@ -216,6 +232,9 @@ impl GovernedPort {
             workspace: None,
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
+            files_live: AtomicUsize::new(0),
+            #[cfg(test)]
+            acks_tried: AtomicUsize::new(0),
             #[cfg(test)]
             before_perform: Default::default(),
             #[cfg(test)]
@@ -262,6 +281,23 @@ impl GovernedPort {
         self.with_runs(|runs| runs.open.get(&mission).copied())
     }
 
+    /// Tests: File actions counted live here.
+    #[cfg(test)]
+    pub(crate) fn files_live(&self) -> usize {
+        self.files_live.load(Ordering::SeqCst)
+    }
+
+    /// Tests: acknowledgements asked of the broker, and those it refused.
+    #[cfg(test)]
+    pub(crate) fn acks_tried(&self) -> usize {
+        self.acks_tried.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn unacked(&self) -> usize {
+        self.with_runs(|runs| runs.unacked.len())
+    }
+
     /// M2a-S (tests): whether the port was fenced.
     #[cfg(test)]
     pub(crate) fn fenced(&self) -> bool {
@@ -282,6 +318,7 @@ impl GovernedPort {
             Err(poisoned) => {
                 let mut runs = poisoned.into_inner();
                 runs.fenced = true;
+                self.door.stop_now();
                 let mut owed = Owed::default();
                 if let Ok(batch) = catch_unwind(AssertUnwindSafe(|| {
                     self.door.halt(HaltReason::JournalFailed)
@@ -462,12 +499,26 @@ impl EffectPort for GovernedPort {
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
         let asked_at = self.door.clock().monotonic_ms();
-        match self.door.agent_action(run, &intent) {
+        // Addendum 1: counted live before the broker is asked.
+        let file = matches!(effect, EffectRequest::File(_));
+        if file {
+            self.files_live.fetch_add(1, Ordering::SeqCst);
+        }
+        let answer = self.door.agent_action(run, &intent);
+        if file && !matches!(answer, Ok(AgentOutcome::AwaitingApproval(_))) {
+            self.files_live.fetch_sub(1, Ordering::SeqCst);
+        }
+        match answer {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
                 let deadline = asked_at.saturating_add(lifetime);
-                self.with_runs(|runs| runs.waiting.insert(mission, (view.id, deadline)));
+                self.with_runs(|runs| {
+                    runs.waiting.insert(mission, (view.id, deadline));
+                    if file {
+                        runs.files.insert(view.id);
+                    }
+                });
                 Ok(EffectOutcome::AwaitingApproval)
             }
             Err(e) => Err(refused_by(e.class())),
@@ -503,50 +554,64 @@ impl EffectPort for GovernedPort {
         self.workspace.clone()
     }
 
-    /// HIGH 1: the broker's record of the action `mission` waits on, only
-    /// if it is a File create of this door's run that succeeded. Nothing
-    /// is changed: the wait stays the port's until the coordinator
-    /// acknowledges it. Decision C: a read the broker cannot answer (its
-    /// registry poisoned: `try_commitment`), or a fenced port, is an error,
-    /// never a panic.
-    fn publication(&self, mission: MissionId) -> Result<Option<ApprovalStatus>, EffectRefusal> {
+    /// Rule 1/5: one snapshot of the File action the mission dispatched last
+    /// here, read from the broker's pinned record (`try_commitment`: never a
+    /// panic). A record the door cannot show as its own is uncertain; a
+    /// fenced port, or a broker that cannot be read, is an error.
+    fn publication(
+        &self,
+        mission: MissionId,
+    ) -> Result<Option<(PendingAction, Publication)>, EffectRefusal> {
         self.enter()?;
         let Some((run, commitment, deadline)) = self.with_runs(|runs| {
-            Some((
-                *runs.open.get(&mission)?,
-                runs.waiting.get(&mission)?.0,
-                runs.waiting.get(&mission)?.1,
-            ))
+            let (commitment, deadline) = *runs.waiting.get(&mission)?;
+            Some((*runs.open.get(&mission)?, commitment, deadline))
         }) else {
             return Ok(None);
+        };
+        let pending = PendingAction {
+            run: run.to_string(),
+            commitment: commitment.to_string(),
+            deadline_mono_ms: deadline,
         };
         let lookup = self
             .door
             .try_commitment(commitment)
             .map_err(|e| refused_by(e.class()))?;
-        let Lookup::Mine(view) = lookup else {
-            return Ok(None);
+        let read = match lookup {
+            Lookup::Mine(view)
+                if view.run == run
+                    && view.agent == mother_agent()
+                    && view.kind == CapabilityKind::Files =>
+            {
+                publication_of(&view.publication)
+            }
+            _ => Publication::Uncertain,
         };
-        if view.run != run
-            || view.agent != mother_agent()
-            || view.kind != CapabilityKind::Files
-            || view.state != CommitmentState::Succeeded
-        {
-            return Ok(None);
-        }
-        let clock = self.door.clock();
-        Ok(Some(status_of(
-            &view,
-            clock.wall_ms(),
-            clock.monotonic_ms(),
-            deadline,
-        )))
+        Ok(Some((pending, read)))
     }
 
-    /// Decision B: the waited action is dropped only once the coordinator
-    /// journaled what became of it.
-    fn ack_publication(&self, mission: MissionId) {
-        self.with_runs(|runs| runs.waiting.remove(&mission));
+    /// Rule 2: release the broker's pin of `pending`; every earlier one that
+    /// failed is tried again first. Kept (and counted live) until the broker
+    /// takes it. Also once fenced: an acknowledgement only releases.
+    fn ack(&self, _mission: MissionId, pending: &PendingAction) -> Result<(), EffectRefusal> {
+        let id = CommitmentId::parse(&pending.commitment).ok_or(refused(BrokerClass::Unknown))?;
+        let owed: Vec<CommitmentId> = self.with_runs(|runs| runs.unacked.iter().copied().collect());
+        for other in owed.into_iter().filter(|other| *other != id) {
+            let _ = self.ack_one(other);
+        }
+        self.ack_one(id)
+    }
+
+    /// Rule 3 / addendum 1: the door's memory stop, first, when a File may
+    /// be live here (lock-free count): the door is shared by every mission
+    /// of this port, so all of them are stopped with it.
+    fn halt_all(&self) -> bool {
+        if self.files_live.load(Ordering::SeqCst) == 0 {
+            return false;
+        }
+        self.door.stop_now();
+        true
     }
 
     fn cancel(&self, mission: MissionId) {
@@ -633,6 +698,8 @@ impl EffectPort for GovernedPort {
             #[cfg(test)]
             let _held = crate::effect::held::Held::port();
             runs.fenced = true;
+            // Round 4 (rule 3): the door's memory stop before anything.
+            self.door.stop_now();
             // M2c PR-B: the door's halt first. From its first step nothing
             // of this door is admitted; once it returns none of its
             // commitments moves to Executing. A panic in it is counted as a
@@ -699,6 +766,15 @@ impl EffectPort for GovernedPort {
         #[cfg(test)]
         self.before_approval.fire();
         let Ok(()) = self.enter() else {
+            // Round 4: a File's outcome is not known to a fenced port.
+            let file = self.with_runs(|runs| {
+                runs.waiting
+                    .get(&mission)
+                    .is_some_and(|(c, _)| runs.files.contains(c))
+            });
+            if file {
+                return ApprovalStatus::Uncertain;
+            }
             return ApprovalStatus::Lapsed {
                 class: "port_fenced".into(),
             };
@@ -718,8 +794,18 @@ impl EffectPort for GovernedPort {
         let Some((run, commitment, deadline)) = found else {
             return unknown();
         };
+        // Round 4 (addendum 3): a File this port cannot read is uncertain,
+        // never a lapse; the read never panics.
+        let file = self.with_runs(|runs| runs.files.contains(&commitment));
+        let unknown = || {
+            if file {
+                ApprovalStatus::Uncertain
+            } else {
+                unknown()
+            }
+        };
         // Only a commitment of one of this door's runs is known here.
-        let Lookup::Mine(view) = self.door.commitment(commitment) else {
+        let Ok(Lookup::Mine(view)) = self.door.try_commitment(commitment) else {
             return unknown();
         };
         if view.run != run || view.agent != mother_agent() {
@@ -789,10 +875,13 @@ impl GovernedPort {
         let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
             return false;
         };
-        match self.door.commitment(commitment) {
-            Lookup::Unknown => true,
-            Lookup::NotMine { settled } => settled,
-            Lookup::Mine(view) => {
+        // Round 4 (rule 3): never a panic; an unreadable broker withdrew
+        // nothing it can confirm.
+        match self.door.try_commitment(commitment) {
+            Err(_) => false,
+            Ok(Lookup::Unknown) => true,
+            Ok(Lookup::NotMine { settled }) => settled,
+            Ok(Lookup::Mine(view)) => {
                 cancelled == Some(view.run)
                     || !matches!(
                         view.state,
@@ -811,10 +900,11 @@ impl GovernedPort {
         let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
             return false;
         };
-        match self.door.commitment(commitment) {
-            Lookup::Unknown => true,
-            Lookup::NotMine { settled } => settled,
-            Lookup::Mine(view) => {
+        match self.door.try_commitment(commitment) {
+            Err(_) => false,
+            Ok(Lookup::Unknown) => true,
+            Ok(Lookup::NotMine { settled }) => settled,
+            Ok(Lookup::Mine(view)) => {
                 RunId::parse(&pending.run) == Some(view.run)
                     && view.agent == mother_agent()
                     && !matches!(
@@ -859,7 +949,51 @@ impl GovernedPort {
             }
             runs.open.insert(mission, run);
             runs.waiting.insert(mission, (commitment, deadline));
+            // Round 4: an adopted File is live here until acknowledged.
+            if view.kind == CapabilityKind::Files && runs.files.insert(commitment) {
+                self.files_live.fetch_add(1, Ordering::SeqCst);
+            }
         });
+    }
+
+    /// Rule 2: one acknowledgement at the broker; a counted File leaves
+    /// the count once, and its wait slot is dropped.
+    fn ack_one(&self, id: CommitmentId) -> Result<(), EffectRefusal> {
+        #[cfg(test)]
+        self.acks_tried.fetch_add(1, Ordering::SeqCst);
+        match self.door.ack_commitment(id) {
+            Ok(()) => {
+                let counted = self.with_runs(|runs| {
+                    runs.unacked.remove(&id);
+                    runs.waiting.retain(|_, (c, _)| *c != id);
+                    runs.files.remove(&id)
+                });
+                if counted {
+                    self.files_live.fetch_sub(1, Ordering::SeqCst);
+                }
+                Ok(())
+            }
+            Err(e) => {
+                self.with_runs(|runs| runs.unacked.insert(id));
+                Err(refused_by(e.class()))
+            }
+        }
+    }
+}
+
+/// The broker's publication class, as Mother reads it.
+fn publication_of(class: &PublicationClass) -> Publication {
+    match class {
+        PublicationClass::Published {
+            recovery_required,
+            interrupted,
+        } => Publication::Published {
+            recovery_required: *recovery_required,
+            interrupted: interrupted.clone(),
+        },
+        PublicationClass::ConfirmedNotPublished => Publication::ConfirmedNotPublished,
+        PublicationClass::Pending => Publication::Pending,
+        PublicationClass::Uncertain => Publication::Uncertain,
     }
 }
 
@@ -890,6 +1024,36 @@ pub(crate) fn status_of(
     deadline_mono_ms: u64,
 ) -> ApprovalStatus {
     let expired = now_wall_ms >= view.expires_wall_ms || now_mono_ms >= deadline_mono_ms;
+    // M2d-C round 4 (rule 1, addendum 3): a File by its publication class;
+    // only one confirmed not published is denied, expired or lapsed.
+    if view.kind == CapabilityKind::Files {
+        return match &view.publication {
+            PublicationClass::Pending => match view.state {
+                CommitmentState::Prepared | CommitmentState::Authorized if expired => {
+                    ApprovalStatus::Expired
+                }
+                _ => ApprovalStatus::Waiting,
+            },
+            PublicationClass::Published {
+                recovery_required: true,
+                ..
+            } => ApprovalStatus::RecoveryRequired,
+            PublicationClass::Published { interrupted, .. } if !interrupted.is_empty() => {
+                ApprovalStatus::Overtaken {
+                    causes: interrupted.clone(),
+                }
+            }
+            PublicationClass::Published { .. } => ApprovalStatus::Approved,
+            PublicationClass::ConfirmedNotPublished => match view.state {
+                CommitmentState::Denied => ApprovalStatus::Denied,
+                CommitmentState::Expired => ApprovalStatus::Expired,
+                other => ApprovalStatus::Lapsed {
+                    class: other.as_str().into(),
+                },
+            },
+            PublicationClass::Uncertain => ApprovalStatus::Uncertain,
+        };
+    }
     match view.state {
         CommitmentState::Prepared | CommitmentState::Authorized if expired => {
             ApprovalStatus::Expired

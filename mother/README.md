@@ -139,18 +139,28 @@ Coordinator rules the oracles pin:
   (after a restart there is none: `files_consent_unverifiable`; a held
   mission's resume yes admits it). Every perform carries that lifetime;
   the port refuses another (`admission_stale`) and cancels the run. A
-  publication the broker reports as interrupted after its final check is
-  journaled as the success it is, then the mission ends
-  (`file_publication_interrupted:<cause>`) and nothing more of it runs.
-  The same holds when an emergency Stop, the Owner's Stop or the time
-  budget ends a mission whose File already ran (`emergency_stop`,
-  `owner_stop`, `time_budget`), and a File published with recovery
-  required ends it `file_publication_recovery_required`.
-  Such a Stop first makes the mission settling: nothing of it runs any
-  more and a second Stop keeps the first cause; the broker's stop and
-  withdrawal come first, then the reading, then one terminal record. A
-  broker that cannot be read ends it `file_publication_uncertain` (a file
-  may exist). The port keeps the waited File until Mother acknowledges it.
+  File's outcome is read from the broker's pinned record and its explicit
+  publication class (settlement design v2); only "confirmed not
+  published" is taken as nothing written. A clean publication goes on; one
+  interrupted after its final check, or published with recovery required,
+  ends the mission in one terminal journal line (`Settled`: the truthful
+  success and the end together, `file_publication_interrupted:<cause>` or
+  `file_publication_recovery_required`); one the broker cannot confirm
+  either way ends it `file_publication_uncertain`, the Owner told exactly:
+  "A file may exist in your folder. A write already handed off may still
+  finish. Mother will not retry or continue this mission."
+  Every Stop path (the Owner's, Stop everything, the emergency Stop, the
+  time budget) first engages the port's memory-only stop when a File may
+  be live there (the shared door's halt: every mission of the port is then
+  stopped, `door_halted`), before any lock or journal write; then each
+  mission's first step journals `SettlementStarted` for an unresolved File
+  (never runnable again, its first cause kept, on replay too); only then
+  are they withdrawn and each read once. Pending, uncertain, unknown or
+  unreadable is `file_publication_uncertain` and stays pinned; a
+  conclusive outcome is acknowledged after its terminal line, and again on
+  every reopen. A crash after the start, before the terminal line, reopens
+  uncertain. Not claimed: later automatic resolution of an uncertain File
+  (M2d-R), verified success or guaranteed undo for it.
 - The Owner's emergency stop is checked before every lane and every effect.
 - No coordinator lock is held while the Owner is asked, a lane runs or an
   effect runs. A result that comes after a Stop is dropped and journaled

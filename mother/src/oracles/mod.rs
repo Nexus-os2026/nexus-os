@@ -22,6 +22,7 @@ pub(crate) mod m2d_c;
 mod m2d_c_mirror;
 mod m2d_c_r1;
 mod m2d_c_r2;
+mod m2d_c_r4;
 mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;
@@ -36,7 +37,7 @@ use crate::contract::{Budget, EffectKind, MissionContract, PassCriterion, Questi
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{
     Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest,
-    PendingAction,
+    PendingAction, Publication,
 };
 use crate::journal::{MemoryJournal, MissionId};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
@@ -116,7 +117,7 @@ struct PortState {
     /// contract's folder); `Some(None)`: none was given.
     workspace: Option<Option<String>>,
     /// M2d-C (HIGH 1): what the waited File came to, if it ran.
-    publication: Option<ApprovalStatus>,
+    publication: Option<Publication>,
     /// M2d-C (review 2): the read fails; the next read is held (and was
     /// entered), until released; every acknowledgement.
     publication_fails: bool,
@@ -124,6 +125,23 @@ struct PortState {
     publication_entered: bool,
     publication_released: bool,
     acks: Vec<MissionId>,
+    /// M2d-C round 4: every acknowledged identity, in order; whether an
+    /// acknowledgement fails; whether `halt_all` reports a port-wide stop,
+    /// and how often it was engaged.
+    acked: Vec<PendingAction>,
+    ack_fails: bool,
+    halt_scope: bool,
+    halts: usize,
+}
+
+/// M2d-C round 4: the identity a recording port's File snapshot carries
+/// when no pending action was scripted.
+fn recorded_action() -> PendingAction {
+    PendingAction {
+        run: "run-00000000000000000000000000000001".into(),
+        commitment: "cmt-00000000000000000000000000000001".into(),
+        deadline_mono_ms: u64::MAX,
+    }
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -287,9 +305,30 @@ impl RecordingPort {
         self.lock().admission_refused = Some(class.to_string());
     }
 
-    /// M2d-C (HIGH 1): the waited File ran and came to `status`.
-    pub fn set_publication(&self, status: Option<ApprovalStatus>) {
-        self.lock().publication = status;
+    /// M2d-C round 4: the snapshot of a mission's File reads `read`
+    /// (`None`: the port holds no such action).
+    pub fn set_publication(&self, read: Option<Publication>) {
+        self.lock().publication = read;
+    }
+
+    /// M2d-C round 4: every acknowledged identity, in order.
+    pub fn acked(&self) -> Vec<PendingAction> {
+        self.lock().acked.clone()
+    }
+
+    /// M2d-C round 4: acknowledgements fail (until set false).
+    pub fn fail_acks(&self, fail: bool) {
+        self.lock().ack_fails = fail;
+    }
+
+    /// M2d-C round 4: `halt_all` reports (and engages) a port-wide stop.
+    pub fn set_halt_scope(&self, port_wide: bool) {
+        self.lock().halt_scope = port_wide;
+    }
+
+    /// How often `halt_all` was called.
+    pub fn halts(&self) -> usize {
+        self.lock().halts
     }
 
     /// M2d-C (review 2): the broker read fails.
@@ -392,7 +431,10 @@ impl EffectPort for RecordingPort {
         }
     }
 
-    fn publication(&self, _: MissionId) -> Result<Option<ApprovalStatus>, EffectRefusal> {
+    fn publication(
+        &self,
+        _: MissionId,
+    ) -> Result<Option<(PendingAction, Publication)>, EffectRefusal> {
         let mut state = self.lock();
         if state.hold_publication {
             state.hold_publication = false;
@@ -410,11 +452,24 @@ impl EffectPort for RecordingPort {
         if state.publication_fails {
             return Err(refusal("unavailable"));
         }
-        Ok(state.publication.clone())
+        let pending = state.pending.clone().unwrap_or_else(recorded_action);
+        Ok(state.publication.clone().map(|read| (pending, read)))
     }
 
-    fn ack_publication(&self, mission: MissionId) {
-        self.lock().acks.push(mission);
+    fn ack(&self, mission: MissionId, pending: &PendingAction) -> Result<(), EffectRefusal> {
+        let mut state = self.lock();
+        if state.ack_fails {
+            return Err(refusal("unavailable"));
+        }
+        state.acks.push(mission);
+        state.acked.push(pending.clone());
+        Ok(())
+    }
+
+    fn halt_all(&self) -> bool {
+        let mut state = self.lock();
+        state.halts += 1;
+        state.halt_scope
     }
 
     fn workspace(&self) -> Option<String> {

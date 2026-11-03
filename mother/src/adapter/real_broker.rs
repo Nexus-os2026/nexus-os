@@ -690,6 +690,7 @@ fn real_broker_m1_oracles() {
     super::m2d_files_r1::on_the_real_broker(&w.home);
     // Codex review 2 of PR #78 (oracles first).
     super::m2d_files_r2::on_the_real_broker(&w.home);
+    super::m2d_files_r4::on_the_real_broker(&w.home);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
