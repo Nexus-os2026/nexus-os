@@ -21,6 +21,7 @@ pub(crate) mod m2c_owner;
 pub(crate) mod m2d_c;
 mod m2d_c_mirror;
 mod m2d_c_r1;
+mod m2d_c_r2;
 mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;
@@ -116,6 +117,13 @@ struct PortState {
     workspace: Option<Option<String>>,
     /// M2d-C (HIGH 1): what the waited File came to, if it ran.
     publication: Option<ApprovalStatus>,
+    /// M2d-C (review 2): the read fails; the next read is held (and was
+    /// entered), until released; every acknowledgement.
+    publication_fails: bool,
+    hold_publication: bool,
+    publication_entered: bool,
+    publication_released: bool,
+    acks: Vec<MissionId>,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -284,6 +292,41 @@ impl RecordingPort {
         self.lock().publication = status;
     }
 
+    /// M2d-C (review 2): the broker read fails.
+    pub fn fail_publication(&self) {
+        self.lock().publication_fails = true;
+    }
+
+    /// M2d-C (review 2): the next read blocks until released.
+    pub fn hold_publication(&self) {
+        let mut state = self.lock();
+        state.hold_publication = true;
+        state.publication_released = false;
+    }
+
+    pub fn wait_publication_entered(&self) -> bool {
+        let deadline = Instant::now() + HOLD_BOUND;
+        let mut state = self.lock();
+        while !state.publication_entered {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return false;
+            }
+            state = self.changed.wait_timeout(state, left).expect("port").0;
+        }
+        true
+    }
+
+    pub fn release_publication(&self) {
+        self.lock().publication_released = true;
+        self.changed.notify_all();
+    }
+
+    /// M2d-C (review 2): every mission whose waited action was acknowledged.
+    pub fn acks(&self) -> Vec<MissionId> {
+        self.lock().acks.clone()
+    }
+
     /// M2d-C: the workspace the port says it was given.
     pub fn set_workspace(&self, name: Option<&str>) {
         self.lock().workspace = Some(name.map(str::to_string));
@@ -349,8 +392,29 @@ impl EffectPort for RecordingPort {
         }
     }
 
-    fn publication(&self, _: MissionId) -> Option<ApprovalStatus> {
-        self.lock().publication.clone()
+    fn publication(&self, _: MissionId) -> Result<Option<ApprovalStatus>, EffectRefusal> {
+        let mut state = self.lock();
+        if state.hold_publication {
+            state.hold_publication = false;
+            state.publication_entered = true;
+            self.changed.notify_all();
+            let deadline = Instant::now() + HOLD_BOUND;
+            while !state.publication_released {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    break;
+                }
+                state = self.changed.wait_timeout(state, left).expect("port").0;
+            }
+        }
+        if state.publication_fails {
+            return Err(refusal("unavailable"));
+        }
+        Ok(state.publication.clone())
+    }
+
+    fn ack_publication(&self, mission: MissionId) {
+        self.lock().acks.push(mission);
     }
 
     fn workspace(&self) -> Option<String> {

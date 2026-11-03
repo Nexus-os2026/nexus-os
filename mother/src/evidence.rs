@@ -456,9 +456,13 @@ pub enum BlockReason {
     FilePublicationOwnerStop,
     /// M2d (HIGH 2): a File was published with recovery required.
     FilePublicationRecoveryRequired,
+    /// M2d (Codex review 2 of PR #78, decision C): a Stop or the time
+    /// budget ended a mission waiting on a File the broker could not say
+    /// anything of: a file may exist.
+    FilePublicationUncertain,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 15] = [
+const BLOCK_CODES: [(BlockReason, &str); 16] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -488,6 +492,10 @@ const BLOCK_CODES: [(BlockReason, &str); 15] = [
     (
         BlockReason::FilePublicationRecoveryRequired,
         "file_publication_recovery_required",
+    ),
+    (
+        BlockReason::FilePublicationUncertain,
+        "file_publication_uncertain",
     ),
 ];
 

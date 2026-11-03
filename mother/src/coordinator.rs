@@ -303,6 +303,27 @@ struct Mission {
     consent_request: Option<String>,
     /// M2d: the lifetime the port admitted, in this process.
     admitted: Option<u64>,
+    /// M2d (Codex review 2 of PR #78, decision A): a Stop or the time
+    /// budget is settling the File this mission waits on. Memory only;
+    /// while set the mission is not runnable: no call starts, no reserved
+    /// call is kept (the generation moved), and no transition is taken but
+    /// the settlement's own terminal one.
+    settling: Option<Settling>,
+}
+
+/// What a settlement ends a mission with (decision A).
+#[derive(Clone, Copy, Debug)]
+struct Settling {
+    /// The interruption code, if the File ran.
+    cause: BlockReason,
+    /// Otherwise: the Stop, or the budget's lapse, as before.
+    otherwise: Otherwise,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Otherwise {
+    Stop(StopReason),
+    Lapse(BlockReason),
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -348,6 +369,7 @@ impl Mission {
             lifetime: 0,
             consent_request: None,
             admitted: None,
+            settling: None,
         }
     }
 
@@ -626,8 +648,24 @@ impl Inner {
             .ok_or(CoordinatorError::UnknownMission)
     }
 
-    /// Journal a trigger, then take it.
+    /// Journal a trigger, then take it. A settling mission takes none
+    /// (decision A): only its settlement's terminal transition, through
+    /// [`Inner::fire_settling`].
     fn fire(
+        &mut self,
+        id: MissionId,
+        trigger: Trigger,
+        mono_now: u64,
+    ) -> Result<MissionState, CoordinatorError> {
+        if self.mission(id)?.settling.is_some() {
+            return Err(CoordinatorError::Stopped);
+        }
+        self.fire_settling(id, trigger, mono_now)
+    }
+
+    /// [`Inner::fire`] without the settling guard: the settlement's own
+    /// terminal transition.
+    fn fire_settling(
         &mut self,
         id: MissionId,
         trigger: Trigger,
@@ -643,6 +681,35 @@ impl Inner {
         )?;
         self.mission(id)?.apply(&trigger, to, mono_now);
         Ok(to)
+    }
+}
+
+impl Inner {
+    /// Decision A, step 1 (under the lock): a mission waiting on an action
+    /// (not held, the coordinator usable) becomes settling, not runnable,
+    /// its reservations void. `Some(Err(state))`: it is settling already,
+    /// and the first cause stands. `None`: not eligible.
+    fn enter_settling(
+        &mut self,
+        id: MissionId,
+        settling: Settling,
+    ) -> Result<Option<Result<(), MissionState>>, CoordinatorError> {
+        if self.usable().is_err() {
+            return Ok(None);
+        }
+        let mission = self.mission(id)?;
+        if mission.settling.is_some() {
+            return Ok(Some(Err(mission.state)));
+        }
+        if mission.state != MissionState::AwaitingApproval
+            || mission.held.is_some()
+            || mission.waiting.is_none()
+        {
+            return Ok(None);
+        }
+        mission.settling = Some(settling);
+        mission.generation += 1;
+        Ok(Some(Ok(())))
     }
 }
 
@@ -1279,6 +1346,10 @@ impl<P: EffectPort> Coordinator<P> {
             inner.clear_detail(id);
             let mission = inner.mission(id)?;
             mission.not_held()?;
+            // Decision A: a settling mission is not runnable.
+            if mission.settling.is_some() {
+                return Err(CoordinatorError::Stopped);
+            }
             if mission.busy {
                 return Err(CoordinatorError::Busy);
             }
@@ -1337,7 +1408,8 @@ impl<P: EffectPort> Coordinator<P> {
                 return Ok(report);
             }
             Start::OutOfTime(mut report) => {
-                match self.reconcile(id, BlockReason::FilePublicationTimeBudget)? {
+                let budget = Otherwise::Lapse(BlockReason::BudgetTime);
+                match self.settle(id, BlockReason::FilePublicationTimeBudget, budget)? {
                     Some(state) => {
                         report.to = state;
                         report.reason = self.reason(id);
@@ -1465,11 +1537,23 @@ impl<P: EffectPort> Coordinator<P> {
         if let Some(trigger) = end {
             report.to = self.end_with(id, trigger)?;
             report.reason = self.reason(id);
+            self.port.ack_publication(id);
+            return Ok(report);
+        }
+        // It ran, and its authority ended or recovery is required: the
+        // success and the end in one hold of the lock (decision A), never
+        // runnable in between.
+        if let Some(reason) = overtaken {
+            report.to = self.finish_publication(id, Some(generation), Ok(Some(reason)))?;
+            report.reason = self.reason(id);
             return Ok(report);
         }
 
         // Approved, and it ran at the broker: the phase goes on.
         let generation = self.with_lock(|inner| {
+            if inner.mission(id)?.generation != generation {
+                return Err(CoordinatorError::Stopped);
+            }
             let mono = self.clock.monotonic_ms();
             report.to = inner.fire(
                 id,
@@ -1481,15 +1565,12 @@ impl<P: EffectPort> Coordinator<P> {
             )?;
             Ok::<_, CoordinatorError>(inner.mission(id)?.generation)
         })?;
+        // Journaled: the port may drop the File's outcome (decision B).
+        self.port.ack_publication(id);
         // The approved action is final at the broker: its closure is
         // journaled before anything more is sent.
         if !self.close_action(id)? {
             report.to = self.end(id, BlockReason::ApprovalNotClosed)?;
-            report.reason = self.reason(id);
-            return Ok(report);
-        }
-        if let Some(reason) = overtaken {
-            report.to = self.end(id, reason)?;
             report.reason = self.reason(id);
             return Ok(report);
         }
@@ -2303,22 +2384,37 @@ impl<P: EffectPort> Coordinator<P> {
             )),
             StopReason::PrivateContentUnavailable => None,
         };
-        if let Some(cause) = cause {
-            if let Some(state) = self.reconcile(id, cause)? {
-                return Ok(state);
-            }
+        enum Stopped {
+            /// Ended (terminal already), or a settlement already under way.
+            Done(MissionState),
+            /// This Stop entered the settlement (decision A).
+            Settle(BlockReason),
         }
         type Stopping = (Result<MissionState, CoordinatorError>, bool);
         let step = self.with_lock(
-            |inner| -> Result<Result<Stopping, MissionState>, CoordinatorError> {
+            |inner| -> Result<Result<Stopping, Stopped>, CoordinatorError> {
                 inner.clear_detail(id);
                 let mission = inner.mission(id)?;
                 if mission.state.is_terminal() {
                     // M2a-S: on a broken coordinator a terminal state may be in
                     // memory only (a Stop or denial the journal lost): never Ok.
                     inner.usable()?;
-                    return Ok(Err(inner.mission(id)?.state));
+                    return Ok(Err(Stopped::Done(inner.mission(id)?.state)));
                 }
+                // In the same hold as an ordinary Stop's record: a mission
+                // waiting on a File becomes settling instead.
+                if let Some(cause) = cause {
+                    let settling = Settling {
+                        cause,
+                        otherwise: Otherwise::Stop(reason),
+                    };
+                    match inner.enter_settling(id, settling)? {
+                        Some(Ok(())) => return Ok(Err(Stopped::Settle(cause))),
+                        Some(Err(state)) => return Ok(Err(Stopped::Done(state))),
+                        None => {}
+                    }
+                }
+                let mission = inner.mission(id)?;
                 let may_have_dispatched = mission.approved_wall_ms.is_some();
                 let mono = self.clock.monotonic_ms();
                 let journaled = inner.fire(id, Trigger::Stop { reason }, mono);
@@ -2333,7 +2429,8 @@ impl<P: EffectPort> Coordinator<P> {
         )?;
         let (journaled, may_have_dispatched) = match step {
             Ok(stopping) => stopping,
-            Err(state) => return Ok(state),
+            Err(Stopped::Done(state)) => return Ok(state),
+            Err(Stopped::Settle(cause)) => return self.complete_settlement(id, cause),
         };
         if may_have_dispatched {
             let withdrawn = self.port.withdraw(id);
@@ -2346,52 +2443,170 @@ impl<P: EffectPort> Coordinator<P> {
         journaled
     }
 
-    /// M2d (Codex review 1 of PR #78, HIGH 1): before a Stop or the time
-    /// budget ends a mission that waits on a File, ask the port (no lock
-    /// held) whether that File ran. If it did, journal it as the success it
-    /// is (`ActionApproved`, then its closure), and end the mission with
-    /// `reason` (or `file_publication_recovery_required`): nothing more of
-    /// it is dispatched. `None` when it does not wait, the File did not
-    /// run, or the mission moved meanwhile: the caller ends it as before.
-    fn reconcile(
+    /// M2d (Codex review 2 of PR #78: the Architect's one design). A Stop
+    /// (the Owner's or the emergency one) or the time budget ending a
+    /// mission that waits on a File settles it:
+    /// 1. under the lock, the mission becomes settling (decision A): not
+    ///    runnable, its reservations void; a mission already settling keeps
+    ///    its first cause and this call does nothing more;
+    /// 2. with no lock held, the port withdraws it (the broker's stop, in
+    ///    memory: decision B), then reads what became of the File;
+    /// 3. the terminal transition, in one hold of the lock: a File that ran
+    ///    is journaled as the success it is (`ActionApproved` and its
+    ///    closure) and the mission ends `cause` (or
+    ///    `file_publication_recovery_required`); one that did not run ends
+    ///    `otherwise`, as before; a read that failed (decision C) ends it
+    ///    `file_publication_uncertain`: a file may exist;
+    /// 4. the port is told it may drop the File's outcome.
+    ///
+    /// `None` when the mission does not wait on an action, is held, is
+    /// terminal or the coordinator is broken: the caller ends it as before.
+    fn settle(
         &self,
         id: MissionId,
-        reason: BlockReason,
+        cause: BlockReason,
+        otherwise: Otherwise,
     ) -> Result<Option<MissionState>, CoordinatorError> {
-        let waited = self.peek(|inner| {
-            let mission = inner.missions.get(&id)?;
-            if mission.state != MissionState::AwaitingApproval || mission.held.is_some() {
-                return None;
-            }
-            mission.waiting.as_ref().map(|w| (w.effect, w.phase))
-        });
-        let Some((effect, phase)) = waited else {
-            return Ok(None);
-        };
-        let reason = match self.port.publication(id) {
-            Some(ApprovalStatus::RecoveryRequired) => BlockReason::FilePublicationRecoveryRequired,
-            Some(ApprovalStatus::Approved | ApprovalStatus::Overtaken { .. }) => reason,
-            _ => return Ok(None),
-        };
-        let fired = self.with_lock(|inner| {
-            if inner.kept(id).is_err() {
-                return false;
-            }
-            let still = inner.missions.get(&id).is_some_and(|m| {
-                m.state == MissionState::AwaitingApproval
-                    && m.waiting.as_ref().map(|w| w.effect) == Some(effect)
-            });
-            let mono = self.clock.monotonic_ms();
-            still
-                && inner
-                    .fire(id, Trigger::ActionApproved { effect, phase }, mono)
-                    .is_ok()
-        });
-        if !fired {
-            return Ok(None);
+        let entered =
+            self.with_lock(|inner| inner.enter_settling(id, Settling { cause, otherwise }))?;
+        match entered {
+            None => Ok(None),
+            Some(Err(state)) => Ok(Some(state)),
+            Some(Ok(())) => self.complete_settlement(id, cause).map(Some),
         }
+    }
+
+    /// A settlement entered (step 1 done): steps 2-4.
+    fn complete_settlement(
+        &self,
+        id: MissionId,
+        cause: BlockReason,
+    ) -> Result<MissionState, CoordinatorError> {
+        let withdrawn = self.port.withdraw(id);
+        let read = self.port.publication(id);
+        let state = self.finish_publication(
+            id,
+            None,
+            read.map(|status| match status {
+                Some(ApprovalStatus::RecoveryRequired) => {
+                    Some(BlockReason::FilePublicationRecoveryRequired)
+                }
+                Some(ApprovalStatus::Approved | ApprovalStatus::Overtaken { .. }) => Some(cause),
+                _ => None,
+            })
+            .map_err(|_| ()),
+        )?;
+        withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
+        Ok(state)
+    }
+
+    /// The terminal transition of a File the mission waited on, in one hold
+    /// of the lock (decision A).
+    /// - `Ok(Some(reason))`: it ran: `ActionApproved`, its closure if the
+    ///   port confirms the action final (asked first, with no lock held),
+    ///   then Blocked `reason`.
+    /// - `Ok(None)`: it did not run: the settlement's `otherwise`.
+    /// - `Err(())`: the broker could not be read: Blocked
+    ///   `file_publication_uncertain`, no success claimed.
+    ///
+    /// `reserved`: the wait's reservation (the ordinary path, which must
+    /// still hold); `None` for a settlement (the mission must be settling).
+    /// Then the port withdraws the mission (the ordinary path; a settlement
+    /// withdrew first), the closure is journaled if it was not, and the port
+    /// may drop the File's outcome.
+    fn finish_publication(
+        &self,
+        id: MissionId,
+        reserved: Option<u64>,
+        outcome: Result<Option<BlockReason>, ()>,
+    ) -> Result<MissionState, CoordinatorError> {
+        let pending =
+            self.peek(|inner| inner.missions.get(&id).and_then(|m| m.open_action.clone()));
+        let ran = matches!(outcome, Ok(Some(_)));
+        let closed = ran && pending.as_ref().is_some_and(|(_, p)| self.port.settled(p));
+        let mono = self.clock.monotonic_ms();
+        let ended = self.with_lock(|inner| {
+            let mission = inner.mission(id)?;
+            let settling = match reserved {
+                Some(generation) => {
+                    if mission.generation != generation || mission.settling.is_some() {
+                        return Err(CoordinatorError::Stopped);
+                    }
+                    None
+                }
+                None => Some(mission.settling.ok_or(CoordinatorError::Stopped)?),
+            };
+            let Some(waiting) = mission.waiting.clone() else {
+                return Err(CoordinatorError::Stopped);
+            };
+            let (effect, phase) = (waiting.effect, waiting.phase);
+            let last = match outcome {
+                Ok(Some(reason)) => {
+                    // A settlement ends with its own (first) cause, unless
+                    // recovery is required.
+                    let reason = match settling {
+                        Some(settling)
+                            if reason != BlockReason::FilePublicationRecoveryRequired =>
+                        {
+                            settling.cause
+                        }
+                        _ => reason,
+                    };
+                    let approval = Trigger::ActionApproved { effect, phase };
+                    match inner.fire_settling(id, approval.clone(), mono) {
+                        Ok(_) => {
+                            let open = inner.mission(id)?.open_action.as_ref().map(|(e, _)| *e);
+                            if closed
+                                && open == Some(effect)
+                                && inner.append(id, Event::ApprovalClosed { effect }).is_ok()
+                            {
+                                inner.mission(id)?.open_action = None;
+                            }
+                        }
+                        // The journal failed: in memory all the same (the
+                        // journal, poisoned, will not reopen; if poisoning
+                        // failed too, it reopens with the mission held).
+                        Err(_) => {
+                            let to = transition(MissionState::AwaitingApproval, &approval)
+                                .map_err(|e| refusal(MissionState::AwaitingApproval, e))?;
+                            inner.mission(id)?.apply(&approval, to, mono);
+                        }
+                    }
+                    Trigger::Block { reason }
+                }
+                // Still waiting (nothing approved): the wait lapses, ended
+                // uncertain.
+                Err(()) => Trigger::ApprovalLapsed {
+                    effect,
+                    reason: LapseReason::Ended(BlockReason::FilePublicationUncertain),
+                },
+                Ok(None) => match settling.map(|s| s.otherwise) {
+                    Some(Otherwise::Stop(reason)) => Trigger::Stop { reason },
+                    Some(Otherwise::Lapse(reason)) => Trigger::ApprovalLapsed {
+                        effect,
+                        reason: LapseReason::Ended(reason),
+                    },
+                    None => return Err(CoordinatorError::Stopped),
+                },
+            };
+            let from = inner.mission(id)?.state;
+            let result = inner.fire_settling(id, last.clone(), mono);
+            if let (Err(CoordinatorError::Journal(_)), Ok(to)) = (&result, transition(from, &last))
+            {
+                inner.mission(id)?.apply(&last, to, mono);
+            }
+            inner.mission(id)?.settling = None;
+            result
+        });
+        let withdrawn = match reserved {
+            Some(_) => self.port.withdraw(id),
+            None => Ok(()),
+        };
+        let state = ended?;
         self.close_action(id)?;
-        Ok(Some(self.end(id, reason)?))
+        self.port.ack_publication(id);
+        withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
+        Ok(state)
     }
 
     /// Stop every mission that has not ended. Returns how many.

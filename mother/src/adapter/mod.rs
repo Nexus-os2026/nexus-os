@@ -100,6 +100,8 @@ pub(crate) mod m2c_support;
 mod m2d_files;
 #[cfg(test)]
 mod m2d_files_r1;
+#[cfg(test)]
+mod m2d_files_r2;
 mod private_file;
 pub use private_file::FilePrivate;
 
@@ -503,33 +505,48 @@ impl EffectPort for GovernedPort {
 
     /// HIGH 1: the broker's record of the action `mission` waits on, only
     /// if it is a File create of this door's run that succeeded. Nothing
-    /// is changed: the wait stays the port's until the coordinator ends it.
-    fn publication(&self, mission: MissionId) -> Option<ApprovalStatus> {
-        self.enter().ok()?;
-        let (run, commitment, deadline) = self.with_runs(|runs| {
+    /// is changed: the wait stays the port's until the coordinator
+    /// acknowledges it. Decision C: a read the broker cannot answer (its
+    /// registry poisoned: `try_commitment`), or a fenced port, is an error,
+    /// never a panic.
+    fn publication(&self, mission: MissionId) -> Result<Option<ApprovalStatus>, EffectRefusal> {
+        self.enter()?;
+        let Some((run, commitment, deadline)) = self.with_runs(|runs| {
             Some((
                 *runs.open.get(&mission)?,
                 runs.waiting.get(&mission)?.0,
                 runs.waiting.get(&mission)?.1,
             ))
-        })?;
-        let Lookup::Mine(view) = self.door.commitment(commitment) else {
-            return None;
+        }) else {
+            return Ok(None);
+        };
+        let lookup = self
+            .door
+            .try_commitment(commitment)
+            .map_err(|e| refused_by(e.class()))?;
+        let Lookup::Mine(view) = lookup else {
+            return Ok(None);
         };
         if view.run != run
             || view.agent != mother_agent()
             || view.kind != CapabilityKind::Files
             || view.state != CommitmentState::Succeeded
         {
-            return None;
+            return Ok(None);
         }
         let clock = self.door.clock();
-        Some(status_of(
+        Ok(Some(status_of(
             &view,
             clock.wall_ms(),
             clock.monotonic_ms(),
             deadline,
-        ))
+        )))
+    }
+
+    /// Decision B: the waited action is dropped only once the coordinator
+    /// journaled what became of it.
+    fn ack_publication(&self, mission: MissionId) {
+        self.with_runs(|runs| runs.waiting.remove(&mission));
     }
 
     fn cancel(&self, mission: MissionId) {
@@ -709,11 +726,9 @@ impl EffectPort for GovernedPort {
             return unknown();
         }
         let clock = self.door.clock();
-        let status = status_of(&view, clock.wall_ms(), clock.monotonic_ms(), deadline);
-        if status != ApprovalStatus::Waiting {
-            self.with_runs(|runs| runs.waiting.remove(&mission));
-        }
-        status
+        // Kept until the coordinator acknowledges it (decision B): a Stop
+        // after this answer still sees the File.
+        status_of(&view, clock.wall_ms(), clock.monotonic_ms(), deadline)
     }
 
     /// Final at the broker, or not held there at all. An action that is

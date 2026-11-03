@@ -257,8 +257,14 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// M2d (Codex review 1 of PR #78, HIGH 1): if the action `mission`
     /// waits on is a File create that ran at the broker, what it came to
     /// (Approved, Overtaken or RecoveryRequired); otherwise none. Read
-    /// before a Stop or the time budget ends the mission. No effect.
-    fn publication(&self, mission: MissionId) -> Option<ApprovalStatus>;
+    /// before a Stop or the time budget ends the mission. No effect. An
+    /// error: the broker could not be read (Codex review 2 of PR #78,
+    /// decision C); the port never panics for it.
+    fn publication(&self, mission: MissionId) -> Result<Option<ApprovalStatus>, EffectRefusal>;
+    /// M2d (decision B): the coordinator journaled what became of the
+    /// action `mission` waited on; the port may drop it. Until then the
+    /// port keeps it, whatever it answered.
+    fn ack_publication(&self, mission: MissionId);
     /// The identity of the action `mission` waits on, if the port knows it.
     fn pending(&self, mission: MissionId) -> Option<PendingAction>;
     /// A reopened coordinator hands back the journaled action of a mission

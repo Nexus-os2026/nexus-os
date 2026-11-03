@@ -146,6 +146,11 @@ Coordinator rules the oracles pin:
   budget ends a mission whose File already ran (`emergency_stop`,
   `owner_stop`, `time_budget`), and a File published with recovery
   required ends it `file_publication_recovery_required`.
+  Such a Stop first makes the mission settling: nothing of it runs any
+  more and a second Stop keeps the first cause; the broker's stop and
+  withdrawal come first, then the reading, then one terminal record. A
+  broker that cannot be read ends it `file_publication_uncertain` (a file
+  may exist). The port keeps the waited File until Mother acknowledges it.
 - The Owner's emergency stop is checked before every lane and every effect.
 - No coordinator lock is held while the Owner is asked, a lane runs or an
   effect runs. A result that comes after a Stop is dropped and journaled
