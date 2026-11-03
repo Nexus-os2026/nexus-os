@@ -249,6 +249,10 @@ pub enum ApplyFinding {
     RestorePreparedWithoutOutcome { files: Vec<PreparedFile> },
     /// Temporary files the kernel observed it could not remove.
     CleanupOwed { temps: Vec<TempLeft> },
+    /// The Owner's own versions, kept under temporary names (by id and
+    /// path digest) where an apply or undo could not put them back. They are
+    /// the Owner's files: never cleanup.
+    OwnerVersionKept { versions: Vec<TempLeft> },
     /// Recovery is required for another recorded reason (a code).
     RecoveryRequired { failed: &'static str },
     /// A verified candidate was awaiting approval; its staging may remain.
@@ -284,6 +288,7 @@ pub fn analyze_apply(
     let mut restore: Option<Vec<PreparedFile>> = None;
     let mut owed: Vec<TempLeft> = Vec::new();
     let mut recovery: Option<&'static str> = None;
+    let mut kept: Vec<TempLeft> = Vec::new();
     let mut awaiting = false;
     for record in store.verified_records(run)? {
         let payload: Value =
@@ -333,6 +338,18 @@ pub fn analyze_apply(
                 let failed = text("failed")
                     .and_then(|code| APPLY_STEPS.iter().copied().find(|step| *step == code))
                     .ok_or(LedgerFailure::Integrity)?;
+                let unrestored = payload.get("unrestored").and_then(Value::as_array);
+                for entry in unrestored.into_iter().flatten() {
+                    if let Some(temp_id) = entry.get("owner_version_temp").and_then(Value::as_str) {
+                        kept.push(TempLeft {
+                            temp_id: temp_id.to_string(),
+                            path_sha256: entry
+                                .get("path_sha256")
+                                .and_then(Value::as_str)
+                                .map(str::to_string),
+                        });
+                    }
+                }
                 match text("temp_id") {
                     Some(temp_id) => owed.push(TempLeft {
                         temp_id,
@@ -373,6 +390,9 @@ pub fn analyze_apply(
     }
     if !owed.is_empty() {
         findings.push(ApplyFinding::CleanupOwed { temps: owed });
+    }
+    if !kept.is_empty() {
+        findings.push(ApplyFinding::OwnerVersionKept { versions: kept });
     }
     if let Some(failed) = recovery {
         findings.push(ApplyFinding::RecoveryRequired { failed });
