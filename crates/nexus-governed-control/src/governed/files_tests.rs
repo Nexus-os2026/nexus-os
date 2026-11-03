@@ -1870,7 +1870,7 @@ fn m2d_b1_d_o18_i_the_real_sysfs_walk_is_consistent() {
             path.display()
         );
         if let Ok(mount) = crate::files::mount_of(&path) {
-            if mount.fstype != std::ffi::OsString::from("tmpfs") {
+            if mount.fstype != "tmpfs" {
                 assert!(
                     independent,
                     "accepted although not on real hardware: {mount:?}"
