@@ -208,6 +208,35 @@ impl AgentDoor {
         })
     }
 
+    /// M2d-C (Codex review 2 of PR #78, HIGH 3): [`AgentDoor::commitment`]
+    /// that never panics: a registry the broker cannot read (its lock
+    /// poisoned) is `Unavailable`; otherwise the same answer.
+    pub fn try_commitment(
+        &self,
+        id: CommitmentId,
+    ) -> Result<Lookup<CommitmentView>, AuthorityError> {
+        let unavailable = AuthorityError::Unavailable("the broker cannot read its records");
+        let authority = self.control.authority();
+        let Some(view) = authority
+            .commitments()
+            .try_view(id)
+            .ok_or(unavailable.clone())?
+        else {
+            return Ok(Lookup::Unknown);
+        };
+        let agents = view.agent == self.core.agent;
+        let member = authority
+            .runs()
+            .try_is_member(view.run, self.core.group)
+            .ok_or(unavailable)?;
+        if agents && member {
+            return Ok(Lookup::Mine(view));
+        }
+        Ok(Lookup::NotMine {
+            settled: agents && view.state.is_final(),
+        })
+    }
+
     /// What this door may know of a commitment.
     pub fn commitment(&self, id: CommitmentId) -> Lookup<CommitmentView> {
         let authority = self.control.authority();

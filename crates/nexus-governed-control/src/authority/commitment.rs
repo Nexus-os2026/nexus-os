@@ -1535,6 +1535,13 @@ impl CommitmentRegistry {
         self.entries().get(&id).map(|e| e.view(id))
     }
 
+    /// M2d-C: [`Self::view`] that never panics: `None` when the registry's
+    /// lock is poisoned, `Some(view)` otherwise.
+    pub(crate) fn try_view(&self, id: CommitmentId) -> Option<Option<CommitmentView>> {
+        let entries = self.0.entries.lock().ok()?;
+        Some(entries.get(&id).map(|e| e.view(id)))
+    }
+
     /// M2c: run `f` on the view of `id` while the commitments lock is held
     /// (a door's adoption joins its group inside: entries → runs, the
     /// existing order).

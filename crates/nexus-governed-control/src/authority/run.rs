@@ -608,6 +608,16 @@ impl RunRegistry {
         }
     }
 
+    /// M2d-C: [`Self::is_member`] that never panics: `None` when the
+    /// registry's lock is poisoned.
+    pub(crate) fn try_is_member(&self, run: RunId, group: GroupId) -> Option<bool> {
+        let runs = self.runs.lock().ok()?;
+        Some(
+            runs.get(&run)
+                .is_some_and(|entry| entry.groups.contains(&group)),
+        )
+    }
+
     /// M2c: whether `run` lists `group` (read-only).
     pub(crate) fn is_member(&self, run: RunId, group: GroupId) -> bool {
         self.runs
