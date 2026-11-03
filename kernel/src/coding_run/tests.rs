@@ -903,8 +903,9 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     // the two crate roots that declare them may name it; a desktop source
     // tree, when one returns, is scanned with the same rule and the same two
     // governed-flow exceptions.
-    const GOVERNED_FLOW: &str = "app/src-tauri/src/coding_flow.rs";
-    const GOVERNED_VERIFICATION: &str = "app/src-tauri/src/coding_flow/verification.rs";
+    // M2b-A (G1–G8): the two old-desktop governed-flow exceptions are gone;
+    // the registered desktop (`mother/desktop`) is scanned with no
+    // exception.
     const DECLARATIONS: [&str; 4] = [
         "kernel/src/lib.rs",
         "persistence/src/lib.rs",
@@ -943,6 +944,8 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     for required in [
         "kernel/src/lib.rs",
         "crates/nexus-governed-control/src/lib.rs",
+        "mother/desktop/src/lib.rs",
+        "mother/desktop/src/app.rs",
     ] {
         assert!(
             sources.iter().any(|path| rel(path) == required),
@@ -951,11 +954,7 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     }
     for path in sources {
         let rel = rel(&path);
-        if rel.starts_with("kernel/src/coding_run/")
-            || DECLARATIONS.contains(&rel.as_str())
-            || rel == GOVERNED_FLOW
-            || rel == GOVERNED_VERIFICATION
-        {
+        if rel.starts_with("kernel/src/coding_run/") || DECLARATIONS.contains(&rel.as_str()) {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();
