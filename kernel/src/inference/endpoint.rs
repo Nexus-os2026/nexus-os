@@ -1,14 +1,13 @@
 //! The loopback address of the local model runtime.
-//!
-//! M2e-A1 interface stub: the inherited behaviour. The kernel's coding-run
-//! transport takes any `url::Url` (`LocalEndpoint = url::Url`, F1); this
-//! stub keeps whatever host address the URL names.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use super::ModelError;
 
-/// The address of the local model runtime.
+/// A checked loopback address: `127.0.0.1` or `::1`, with a port. It is
+/// made only by [`LoopbackEndpoint::parse`]. The name `localhost` becomes
+/// `127.0.0.1`, so no name is ever resolved. Every connection is made to
+/// this IP literal, and the address is checked again before each one.
 ///
 /// There is no other way to make one than parsing: not a literal,
 ///
@@ -37,27 +36,41 @@ pub struct LoopbackEndpoint {
 }
 
 impl LoopbackEndpoint {
-    /// Parse an HTTP address (stub: any host address, as the inherited
-    /// transport accepts).
+    /// Parse `http://127.0.0.1:<port>`, `http://[::1]:<port>` or
+    /// `http://localhost:<port>` (an optional trailing `/`). Any other host,
+    /// a LAN, public or unspecified address, a mapped address or another
+    /// name, is [`ModelError::NotLocal`]. Another scheme, user information,
+    /// a missing port, a path, a query or a fragment is
+    /// [`ModelError::InvalidAddress`].
     pub fn parse(raw: &str) -> Result<Self, ModelError> {
-        let url = crate::governed_http::http_url(raw).map_err(|_| ModelError::InvalidAddress)?;
+        if raw.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(ModelError::InvalidAddress);
+        }
+        let url = url::Url::parse(raw).map_err(|_| ModelError::InvalidAddress)?;
         let ip = match url.host() {
-            Some(url::Host::Ipv4(ip)) => IpAddr::V4(ip),
-            Some(url::Host::Ipv6(ip)) => IpAddr::V6(ip),
+            Some(url::Host::Ipv4(ip)) if ip == Ipv4Addr::LOCALHOST => IpAddr::V4(ip),
+            Some(url::Host::Ipv6(ip)) if ip == Ipv6Addr::LOCALHOST => IpAddr::V6(ip),
             Some(url::Host::Domain(name)) if name.eq_ignore_ascii_case("localhost") => {
                 IpAddr::V4(Ipv4Addr::LOCALHOST)
             }
-            _ => return Err(ModelError::InvalidAddress),
+            _ => return Err(ModelError::NotLocal),
         };
-        let port = url
-            .port_or_known_default()
-            .ok_or(ModelError::InvalidAddress)?;
+        if url.scheme() != "http"
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !matches!(url.path(), "" | "/")
+        {
+            return Err(ModelError::InvalidAddress);
+        }
+        let port = url.port().ok_or(ModelError::InvalidAddress)?;
         Ok(Self {
             addr: SocketAddr::new(ip, port),
         })
     }
 
-    /// The socket address.
+    /// The loopback socket address.
     pub fn addr(&self) -> SocketAddr {
         self.addr
     }
