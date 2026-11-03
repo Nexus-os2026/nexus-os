@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "../../tests/desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
 struct Fixture {
     _tmp: tempfile::TempDir,
     project: PathBuf,
@@ -890,11 +894,10 @@ fn p1a_nc_29_no_project_owner_bytes_change() {
 const P1A_NC_30_AUTHORIZED: [&str; 1] = ["crates/nexus-governed-control/src/files/mod.rs"];
 
 /// Whether P1A-NC-30 skips the workspace source `rel`: the primitive's own
-/// module, its ledger, the two crate roots that declare them, the desktop's
-/// governed flow, and the authorized consumers, each by exact path.
+/// module, its ledger and the two crate roots that declare them, and the
+/// authorized consumers (each by exact path). No desktop source is exempt
+/// (M2b-A).
 fn p1a_nc_30_exempt(rel: &str) -> bool {
-    const GOVERNED_FLOW: &str = "app/src-tauri/src/coding_flow.rs";
-    const GOVERNED_VERIFICATION: &str = "app/src-tauri/src/coding_flow/verification.rs";
     const DECLARATIONS: [&str; 4] = [
         "kernel/src/lib.rs",
         "persistence/src/lib.rs",
@@ -903,13 +906,13 @@ fn p1a_nc_30_exempt(rel: &str) -> bool {
     ];
     rel.starts_with("kernel/src/coding_run/")
         || DECLARATIONS.contains(&rel)
-        || rel == GOVERNED_FLOW
-        || rel == GOVERNED_VERIFICATION
         || P1A_NC_30_AUTHORIZED.contains(&rel)
 }
 
 #[test]
 fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
+    // G0 (M2b-A): no desktop or webview outside the registered desktop.
+    desktop_tripwire::assert_no_desktop();
     // Phase One P1-08: the governed coding flow (`coding_flow.rs`) is the one
     // desktop module that reaches the primitive; every other desktop source,
     // including the command registry in lib.rs, must not. Phase Two: its
@@ -922,10 +925,13 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     // the two crate roots that declare them may name it; a desktop source
     // tree, when one returns, is scanned with the same rule and the same two
     // governed-flow exceptions.
+    // M2b-A (G1–G8): the two old-desktop governed-flow exceptions are gone;
+    // the registered desktop (`mother/desktop`) is scanned with no
+    // exception.
     //
     // M2d-K: the one authorized consumer, the broker's Files module
     // (`P1A_NC_30_AUTHORIZED`, exact path); every other broker source is
-    // still scanned.
+    // still scanned. The exemptions are decided by `p1a_nc_30_exempt`.
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .canonicalize()
@@ -958,6 +964,8 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     for required in [
         "kernel/src/lib.rs",
         "crates/nexus-governed-control/src/lib.rs",
+        "mother/desktop/src/lib.rs",
+        "mother/desktop/src/app.rs",
     ] {
         assert!(
             sources.iter().any(|path| rel(path) == required),
@@ -1000,18 +1008,21 @@ fn m2d_k_p1a_nc_30_has_exactly_one_authorized_consumer() {
         "vendor/crates/nexus-governed-control/src/files/mod.rs",
         "mother/src/files/mod.rs",
         "mother/host/src/files/mod.rs",
+        // M2b-A: no desktop exception, old or registered.
+        "app/src-tauri/src/coding_flow.rs",
+        "app/src-tauri/src/coding_flow/verification.rs",
+        "mother/desktop/src/lib.rs",
+        "mother/desktop/src/app.rs",
     ] {
         assert!(!p1a_nc_30_exempt(scanned), "{scanned} must stay scanned");
     }
-    // The existing exemptions are unchanged.
+    // The other exemptions are M2b-A's, unchanged.
     for kept in [
         "kernel/src/coding_run/apply.rs",
         "kernel/src/coding_run.rs",
         "kernel/src/lib.rs",
         "persistence/src/lib.rs",
         "persistence/src/coding_run_ledger.rs",
-        "app/src-tauri/src/coding_flow.rs",
-        "app/src-tauri/src/coding_flow/verification.rs",
     ] {
         assert!(p1a_nc_30_exempt(kept), "{kept} stays exempt");
     }

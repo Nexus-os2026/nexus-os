@@ -3,6 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
+/// G0 (M2b-A): the shared desktop tripwire.
+#[path = "../../../kernel/tests/desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
 fn crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -60,6 +64,61 @@ fn in_adapter(rel: &str) -> bool {
     rel.starts_with("src/adapter/")
 }
 
+/// M2b-A (G10): the desktop is host code. Its tests are test code; its
+/// production sources (`desktop/src/`) are scanned like Mother's, with
+/// exactly the exceptions below.
+fn in_desktop_tests(rel: &str) -> bool {
+    rel.starts_with("desktop/tests/")
+}
+
+/// The only kernel items the desktop's production code may name: the
+/// identity home (its state directory) and the kernel Stop's reads.
+const DESKTOP_KERNEL_PATHS: [&str; 2] = [
+    concat!("nexus_", "kernel::identity_home::nexus_state_path"),
+    concat!("nexus_", "kernel::emergency_stop::StopAuthority"),
+];
+
+/// `text` with the desktop's allowed kernel paths removed; any other
+/// kernel reference stays and is caught.
+fn without_desktop_kernel_paths(text: &str) -> String {
+    let mut text = text.to_string();
+    for path in DESKTOP_KERNEL_PATHS {
+        text = text.replace(path, "");
+    }
+    text
+}
+
+/// The only host item the desktop's production code may name: its
+/// binary's exit code, in `desktop/src/main.rs`.
+fn without_desktop_exit_code(rel: &str, text: &str) -> String {
+    if rel == "desktop/src/main.rs" {
+        text.replace(concat!("std::", "process::ExitCode"), "")
+    } else {
+        text.to_string()
+    }
+}
+
+#[test]
+fn scan_m2b_the_desktop_exceptions_are_exact() {
+    let kernel = concat!("nexus_", "kernel");
+    let planted = format!("use {kernel}::identity_home::nexus_state_path;\nuse {kernel}::emergency_stop::StopAuthority;\nuse {kernel}::emergency_stop::StopController;");
+    let left = without_desktop_kernel_paths(&planted);
+    assert_eq!(left.matches(kernel).count(), 1, "{left}");
+    let exit = concat!("std::", "process::ExitCode");
+    let other = concat!("std::", "process::exit");
+    assert!(!without_desktop_exit_code("desktop/src/main.rs", exit).contains("std::"));
+    assert!(without_desktop_exit_code("desktop/src/main.rs", other).contains("std::"));
+    assert!(without_desktop_exit_code("desktop/src/app.rs", exit).contains("std::"));
+    let files: Vec<String> = mother_sources().into_iter().map(|(rel, _)| rel).collect();
+    for rel in [
+        "desktop/src/lib.rs",
+        "desktop/src/main.rs",
+        "desktop/src/confirm.rs",
+    ] {
+        assert!(files.contains(&rel.to_string()), "{rel}: {files:?}");
+    }
+}
+
 #[test]
 fn scan_the_tree_is_what_the_scans_expect() {
     let files: Vec<String> = mother_sources().into_iter().map(|(rel, _)| rel).collect();
@@ -105,11 +164,11 @@ fn scan_no_host_access_outside_the_adapter() {
     .collect();
     let mut checked = 0;
     for (rel, text) in mother_sources() {
-        if in_adapter(&rel) {
+        if in_adapter(&rel) || in_desktop_tests(&rel) {
             continue;
         }
         checked += 1;
-        let text = code(&text);
+        let text = without_desktop_exit_code(&rel, &code(&text));
         for needle in &needles {
             assert!(!text.contains(needle.as_str()), "{rel}: {needle}");
         }
@@ -142,7 +201,15 @@ fn scan_no_kernel_or_legacy_stack_dependency() {
         assert!(!manifest.contains(needle.as_str()), "Cargo.toml: {needle}");
     }
     for (rel, text) in mother_sources() {
+        if in_desktop_tests(&rel) {
+            continue;
+        }
         let text = code(&text);
+        let text = if rel.starts_with("desktop/src/") {
+            without_desktop_kernel_paths(&text)
+        } else {
+            text
+        };
         for needle in &needles {
             assert!(!text.contains(needle.as_str()), "{rel}: {needle}");
         }
@@ -194,9 +261,13 @@ fn confirm_bodies(text: &str) -> Vec<String> {
 fn scan_no_production_consent_confirmer() {
     let needle = format!("{}{}", "ControlConfirmer", " for");
     let gone = format!("{}{}", "Mission", "Confirmer");
-    let test_only =
-        |rel: &str| rel.starts_with("src/oracles/") || rel == "src/adapter/real_broker.rs";
+    let test_only = |rel: &str| {
+        rel.starts_with("src/oracles/")
+            || rel == "src/adapter/real_broker.rs"
+            || in_desktop_tests(rel)
+    };
     let mut walk_impls = 0;
+    let mut desktop_impls = 0;
     for (rel, text) in mother_sources() {
         let text = code(&text);
         assert!(
@@ -205,6 +276,26 @@ fn scan_no_production_consent_confirmer() {
         );
         let impls = text.matches(needle.as_str()).count();
         if impls == 0 || test_only(&rel) {
+            continue;
+        }
+        // M2b-A (G10): the desktop's one confirmer answers no to all seven
+        // questions: it has no dialogs yet.
+        if rel.starts_with("desktop/") {
+            assert_eq!(rel, "desktop/src/confirm.rs", "a confirmer in the desktop");
+            assert_eq!(impls, 1, "{rel}");
+            desktop_impls += impls;
+            for dialog in [
+                "confirm_action",
+                "confirm_grant",
+                "confirm_resume",
+                "confirm_acknowledgement",
+                "confirm_mission",
+                "confirm_agent_door",
+                "confirm_held_mission",
+            ] {
+                let bodies = bodies_of(&text, dialog);
+                assert_eq!(bodies, vec!["false".to_string()], "desktop: {dialog}");
+            }
             continue;
         }
         // M2c-A (A8): the walk lives in the host crate (N2).
@@ -248,6 +339,7 @@ fn scan_no_production_consent_confirmer() {
         walk_impls, 1,
         "the walk example's terminal confirmer, exactly once"
     );
+    assert_eq!(desktop_impls, 1, "the desktop's confirmer, exactly once");
 
     // The rest of the workspace: outside test code, no confirmer answers a
     // literal yes to a mission; in the broker, every answer is no.
@@ -535,4 +627,12 @@ fn scan_m2c_the_port_acts_through_its_door() {
     for needle in ["door.agent_action(", "door.cancel_run(", "door.open_run("] {
         assert!(adapter.contains(needle), "adapter: {needle}");
     }
+}
+
+/// G0 (M2b-A PR-1): Mother's tree reaches no desktop or webview package
+/// except through the registered `nexus-mother-desktop`, in the resolved
+/// graph, with every feature configuration.
+#[test]
+fn scan_m2b_no_desktop_outside_the_registered_package() {
+    desktop_tripwire::assert_no_desktop();
 }

@@ -1,0 +1,163 @@
+//! Decision 2, findings 1 and 2: the Stop route's bounded join, on the
+//! schedules production cannot force, through the route's test seams. The
+//! Stop body here is a stand-in (one broker per process; the live tests
+//! drive the real `emergency_stop()`); the join is what is judged.
+
+use super::{Desk, Joined, QuitOutcome, Seams, StopRoute};
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+/// A seam that holds its thread until the test opens it.
+#[derive(Clone)]
+struct Hold {
+    reached: Arc<Mutex<Option<mpsc::Sender<()>>>>,
+    open: Arc<Mutex<mpsc::Receiver<()>>>,
+}
+
+impl Hold {
+    /// The hold, the receiver of "a thread reached it", and the opener.
+    fn new() -> (Self, mpsc::Receiver<()>, mpsc::Sender<()>) {
+        let (reached_tx, reached_rx) = mpsc::channel();
+        let (open_tx, open_rx) = mpsc::channel();
+        (
+            Self {
+                reached: Arc::new(Mutex::new(Some(reached_tx))),
+                open: Arc::new(Mutex::new(open_rx)),
+            },
+            reached_rx,
+            open_tx,
+        )
+    }
+
+    fn seam(&self) -> Box<dyn Fn() + Send + Sync> {
+        let hold = self.clone();
+        Box::new(move || {
+            if let Some(reached) = hold.reached.lock().unwrap().take() {
+                let _ = reached.send(());
+                let _ = hold.open.lock().unwrap().recv();
+            }
+        })
+    }
+}
+
+const WAIT: Duration = Duration::from_secs(10);
+
+/// `route.join_within(within)` on its own thread; `None` if it did not
+/// return within `WAIT` (an unbounded join).
+fn join_bounded(route: &Arc<StopRoute>, within: Duration) -> Option<Joined> {
+    let (tx, rx) = mpsc::channel();
+    let route = route.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(route.join_within(within));
+    });
+    rx.recv_timeout(WAIT).ok()
+}
+
+#[test]
+fn f1_a_worker_that_published_done_but_has_not_returned_is_still_running() {
+    let (hold, reached, open) = Hold::new();
+    let route = StopRoute::with_body(
+        Desk::new(),
+        || {},
+        Seams {
+            after_done: Some(hold.seam()),
+            before_register: None,
+        },
+    );
+    route.press();
+    // The interval: `done` is published, the thread has not returned.
+    reached
+        .recv_timeout(WAIT)
+        .expect("the worker published done");
+    assert_eq!(route.receipts().finished, 1);
+    let joined = join_bounded(&route, Duration::from_millis(200));
+    assert_eq!(
+        joined,
+        Some(Joined::TimedOut { still_running: 1 }),
+        "a join that waits past its bound, or reports an unreturned worker as joined"
+    );
+    open.send(()).unwrap();
+    assert_eq!(
+        join_bounded(&route, WAIT),
+        Some(Joined::All { joined: 1 }),
+        "the returned worker is joined"
+    );
+}
+
+#[test]
+fn f2_a_worker_whose_handle_is_not_yet_registered_is_reported_then_joined() {
+    let (hold, reached, open) = Hold::new();
+    let route = StopRoute::with_body(
+        Desk::new(),
+        || {},
+        Seams {
+            after_done: None,
+            before_register: Some(hold.seam()),
+        },
+    );
+    // The press (the GTK thread in production) is held between the spawn
+    // and registering the worker's handle; the worker itself finishes.
+    let presser = {
+        let route = route.clone();
+        std::thread::spawn(move || route.press())
+    };
+    reached
+        .recv_timeout(WAIT)
+        .expect("the press reached registration");
+    let deadline = std::time::Instant::now() + WAIT;
+    while route.receipts().finished < 1 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the worker never finished"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(
+        join_bounded(&route, Duration::from_millis(200)),
+        Some(Joined::TimedOut { still_running: 1 }),
+        "a started worker whose handle is not registered is reported, never dropped"
+    );
+    open.send(()).unwrap();
+    presser.join().unwrap();
+    assert_eq!(
+        join_bounded(&route, WAIT),
+        Some(Joined::All { joined: 1 }),
+        "every worker started is joined"
+    );
+}
+
+/// Decision 3, item 3: a close that timed out may still record
+/// session_closed later, before the process exits; Quit says only what it
+/// knows.
+#[test]
+fn d3_a_close_timeout_is_reported_as_unconfirmed_never_as_a_known_state() {
+    let timed_out = QuitOutcome::SessionNotClosed {
+        joined: 1,
+        runs_cancelled: 0,
+        close: "no answer in time",
+    }
+    .report();
+    assert!(
+        timed_out
+            .contains("closing the evidence session could not be confirmed within the deadline"),
+        "{timed_out}"
+    );
+    for answer in ["no answer in time", "owed", "uncertain"] {
+        let report = QuitOutcome::SessionNotClosed {
+            joined: 1,
+            runs_cancelled: 0,
+            close: answer,
+        }
+        .report();
+        assert!(
+            !report.contains("unfinished"),
+            "a restart outcome is claimed: {report}"
+        );
+        assert!(
+            !report.contains("next start"),
+            "a restart outcome is claimed: {report}"
+        );
+        assert!(!report.to_lowercase().contains("clean"), "{report}");
+    }
+}

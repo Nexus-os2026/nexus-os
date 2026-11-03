@@ -113,6 +113,12 @@ jobs:
 
       # espeak-ng: the governed speech tool's live test runs here, and fails
       # rather than skips under CI if the engine is missing.
+      # M2b-A, Mother's desktop: libgtk-4-dev builds gtk4; xdotool delivers
+      # the live tests' real XTest input; dbus provides the private session
+      # bus (dbus-daemon) of G13; libglib2.0-bin provides `gdbus introspect`;
+      # gvfs is GIO's vfs module, which opens the desktop's session-bus
+      # connection on an Ubuntu desktop: without it the runner's desktop
+      # holds no connection, and G13 (which requires one) would check nothing.
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -129,7 +135,12 @@ jobs:
             glib-2.0 \
             pkg-config \
             xvfb \
-            espeak-ng
+            espeak-ng \
+            libgtk-4-dev \
+            xdotool \
+            dbus \
+            libglib2.0-bin \
+            gvfs
 
       # The runner image makes /opt world-writable (`chmod -R 777 /opt`), and
       # the governed browser refuses a Chrome that anyone but root could
@@ -172,8 +183,40 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      # M2b-A G0: the desktop tripwire reads the resolved graph with
+      # `cargo metadata --locked --offline` over every target. A Linux build
+      # downloads only the packages Linux needs, so fetch every locked
+      # package first; a missing one would fail the guard (it fails closed).
+      - name: Fetch every locked package (the G0 tripwire reads them offline)
+        run: cargo fetch --locked
+
       - name: Run tests
         run: cargo test --workspace --locked
+
+      # M2b-A: the desktop's live tests again, each required by name. Every
+      # live test re-runs itself in an isolated child on its own Xvfb and
+      # reads the child's report strictly; here each must print its own
+      # `ok` line, so none can pass by not running.
+      - name: Mother's desktop live tests, each ok line required
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p nexus-mother-desktop --locked --test live -- --list \
+            | sed -n 's/: test$//p' > live-tests.txt
+          count="$(wc -l < live-tests.txt)"
+          if (( count < 14 )); then
+            echo "::error::expected at least 14 live tests, found $count"
+            exit 1
+          fi
+          cargo test -p nexus-mother-desktop --locked --test live 2>&1 | tee live.log
+          missing=0
+          while read -r name; do
+            if ! grep -qx "test $name ... ok" live.log; then
+              echo "::error::live test $name did not report ok"
+              missing=1
+            fi
+          done < live-tests.txt
+          exit "$missing"
 
   # P0-LINUX-FINAL-R1 repair B: the Rust dependency gate on the candidate
   # itself. scripts/security-audit.sh installs the pinned cargo-audit 0.22.1
