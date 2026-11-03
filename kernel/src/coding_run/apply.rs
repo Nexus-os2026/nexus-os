@@ -702,6 +702,13 @@ fn final_check(
     if stopped(run, observed) {
         return Some(InterruptCause::EmergencyStop);
     }
+    lapse(grant)
+}
+
+/// Whether the write grant has lapsed: `None` while it resolves, else
+/// `Expired` (reached exactly counts) or `Revoked` (any other refusal).
+/// Memory only. The final check and the close of an attempt share it.
+fn lapse(grant: &ProjectGrant) -> Option<InterruptCause> {
     match grant.authority.resolve(grant.grant, grant.binding) {
         Ok(_) => None,
         Err(WorkspaceAuthorityError::ExpiredGrant) => Some(InterruptCause::Expired),
@@ -912,6 +919,7 @@ impl CodingRun {
         grant: ProjectGrant,
         storage: &StagingParent,
     ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = None;
         // M0-FIX F5: refused, before any write, by the emergency stop.
         let result = if self.halt_if_stopped().is_err() {
             self.approved = None;
@@ -943,6 +951,7 @@ impl CodingRun {
         storage: &StagingParent,
         guard: &dyn ApplyInterrupt,
     ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = None;
         let result = if self.halt_if_stopped().is_err() {
             self.approved = None;
             Err(refused(Refusal::EmergencyStopped))
@@ -967,6 +976,7 @@ impl CodingRun {
         grant: &ProjectGrant,
         result: Result<ApplyReport, ApplyError>,
     ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = lapse(grant);
         if !close_write_grant(grant) {
             return Err(self.authority_not_closed(result));
         }
@@ -979,6 +989,19 @@ impl CodingRun {
             );
         }
         result
+    }
+
+    /// The write grant of this run's last apply or restore attempt, as the
+    /// kernel found it right before closing it at the attempt's end (M2d-K2,
+    /// §11 M4′): `None` if it still resolved (the kernel then revoked it
+    /// itself), `Some(Expired)` if it had expired, `Some(Revoked)` if it no
+    /// longer resolved for any other reason. An observed apply's final check
+    /// and an undo's U1 require the grant to resolve, so `Some` after a
+    /// publication or a completed undo means the grant lapsed after that
+    /// check. Reset when each attempt starts: `None` before any attempt and
+    /// for an attempt that never reached its close. Memory only.
+    pub fn write_grant_at_close(&self) -> Option<InterruptCause> {
+        self.write_grant_at_close
     }
 
     /// The temporary files this run owes, by id (M2d).
@@ -1807,6 +1830,7 @@ impl CodingRun {
         approval: OwnerApproval,
         grant: ProjectGrant,
     ) -> Result<ApplyReport, ApplyError> {
+        self.write_grant_at_close = None;
         let watches = self.undo_watches.take();
         // M0-FIX F5: refused, before any write, while the stop is in force.
         let result = if self.halt_if_stopped().is_err() {
@@ -1821,6 +1845,7 @@ impl CodingRun {
         // Clean success needs the durable completion (checked inside) and a
         // confirmed closure of the write grant; only then is the run
         // Restored and the private pre-image store discarded.
+        self.write_grant_at_close = lapse(&grant);
         if !close_write_grant(&grant) {
             let after = result.map(|(report, _kept)| report);
             return Err(self.authority_not_closed(after));
