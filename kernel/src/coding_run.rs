@@ -767,6 +767,9 @@ pub struct CodingRun {
     undo_watches: Option<apply::UndoWatches>,
     /// M2d: temporary files whose removal is not established.
     owed: Option<apply::Owed>,
+    /// M2d-K2: the last apply or restore attempt's write grant as the
+    /// kernel found it right before closing it.
+    write_grant_at_close: Option<InterruptCause>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -920,6 +923,7 @@ impl CodingRun {
             observed,
             undo_watches: None,
             owed: None,
+            write_grant_at_close: None,
         };
         let mut facts = json!({
             "project_grant": project_grant,
