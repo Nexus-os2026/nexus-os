@@ -1773,9 +1773,10 @@ fn a_cancellation_while_the_start_is_recorded_wins() {
     assert_eq!(f.state(id), CommitmentState::Revoked);
     let revoked = f.last(EvidencePhase::Revoked, id);
     assert!(
-        revoked
-            .detail
-            .contains(&("interrupted".to_string(), "start".to_string())),
+        revoked.detail.contains(&(
+            "interrupted_sha256".to_string(),
+            crate::authority::evidence::text_digest("start")
+        )),
         "{:?}",
         revoked.detail
     );
@@ -1826,9 +1827,10 @@ fn whatever_ends_a_commitment_while_its_transition_is_recorded_wins() {
     assert_eq!(authorizing.join().unwrap(), Err(AuthorityError::NotPending));
     assert_eq!(f.state(id), CommitmentState::Denied);
     let denied = f.last(EvidencePhase::Denied, id);
-    assert!(denied
-        .detail
-        .contains(&("interrupted".to_string(), "authorization".to_string())));
+    assert!(denied.detail.contains(&(
+        "interrupted_sha256".to_string(),
+        crate::authority::evidence::text_digest("authorization")
+    )));
 
     // An emergency stop while the approval is recorded: no approval.
     let f = Arc::new(scripted());

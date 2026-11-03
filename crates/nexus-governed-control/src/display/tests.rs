@@ -303,8 +303,12 @@ fn observations_need_a_grant_and_leave_only_a_digest_in_evidence() {
     let records = h.evidence.records();
     let finished = records.iter().rev().find(|r| r.outcome.is_some()).unwrap();
     assert_eq!(finished.class, Some(EffectClass::R0));
+    // P0-C: an agent run's record keeps each value as its digest (I6).
+    let text_digest = crate::authority::evidence::text_digest;
     assert!(
-        finished.detail.iter().any(|(_, v)| *v == digest),
+        finished
+            .detail
+            .contains(&("sha256_sha256".to_string(), text_digest(&digest))),
         "the digest is evidence"
     );
     // Only metadata reaches the evidence: never pixels, not even a prefix.
@@ -312,8 +316,22 @@ fn observations_need_a_grant_and_leave_only_a_digest_in_evidence() {
         finished.detail.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(
         keys,
-        std::collections::BTreeSet::from(["format", "height", "observation", "sha256", "width"])
+        std::collections::BTreeSet::from([
+            "format_sha256",
+            "height_sha256",
+            "observation_sha256",
+            "sha256_sha256",
+            "width_sha256"
+        ])
     );
+    for (key, value) in &out.meta {
+        assert!(
+            finished
+                .detail
+                .contains(&(format!("{key}_sha256"), text_digest(value))),
+            "{key}"
+        );
+    }
     let head = hex::encode(&png[..24]);
     assert!(!format!("{records:?}").contains(&head), "never pixels");
     // A region outside the display is refused.

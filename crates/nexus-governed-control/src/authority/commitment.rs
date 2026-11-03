@@ -32,12 +32,15 @@
 use super::approval::{ActionConfirmation, ControlConfirmer, R2Approval};
 use super::clock::Clock;
 use super::effect::{CapabilityKind, EffectClass};
-use super::evidence::{bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
+use super::evidence::{
+    bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy,
+};
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
 use super::run::{CancelToken, RunRegistry};
 use super::AuthorityError;
+use super::{write_end, write_record};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -188,6 +191,9 @@ pub struct CommitmentView {
 struct Entry {
     agent: AgentId,
     run: RunId,
+    /// P0: its run's privacy class, copied when it is created and never
+    /// derived again (every record of it is built with it).
+    privacy: Privacy,
     prepared: PreparedAction,
     generation: u64,
     deadline_ms: u64,
@@ -499,10 +505,7 @@ impl CommitmentRegistry {
     /// only once it is written); returns its sequence number. Never called
     /// with a lock held.
     fn record(&self, record: &EvidenceRecord) -> Result<u64, AuthorityError> {
-        self.0
-            .evidence
-            .record(record)
-            .map_err(|_| AuthorityError::EvidenceUnavailable)
+        write_record(&*self.0.evidence, record).map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 
     /// Pay what transitions made under the lock owe, once it is released:
@@ -521,7 +524,7 @@ impl CommitmentRegistry {
     pub(crate) fn write_ends(&self, records: Unwritten) -> Option<EndStatus> {
         let mut last = None;
         for record in &records.0 {
-            last = Some(self.0.evidence.record_end(record));
+            last = Some(write_end(&*self.0.evidence, record));
         }
         last
     }
@@ -533,7 +536,12 @@ impl CommitmentRegistry {
         entry: &Entry,
         now: Now,
     ) -> EvidenceRecord {
-        let mut record = EvidenceRecord::new(phase, now.wall_ms, self.0.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            now.wall_ms,
+            self.0.generation.current(),
+            entry.privacy,
+        );
         record.commitment = Some(id.to_string());
         record.agent = Some(entry.agent.to_string());
         record.run = Some(entry.run.to_string());
@@ -669,6 +677,9 @@ impl CommitmentRegistry {
         ttl: Duration,
     ) -> Result<CommitmentView, AuthorityError> {
         self.0.runs.check(run, agent)?;
+        // Fixed now, from the class the run was admitted with (a run gone
+        // meanwhile is Restricted), and kept for the commitment's life.
+        let privacy = self.0.runs.privacy(run);
         // Every commitment rests on at least one live grant of its own kind.
         if prepared.grants.is_empty() {
             return Err(AuthorityError::NoCoveringGrant);
@@ -709,6 +720,7 @@ impl CommitmentRegistry {
         let entry = Entry {
             agent: agent.clone(),
             run,
+            privacy,
             binding: binding_of(id, agent, run, &prepared, &salted, generation, deadline_ms),
             salted,
             prepared,

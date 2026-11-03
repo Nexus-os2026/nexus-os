@@ -92,6 +92,139 @@ impl EvidencePhase {
     }
 }
 
+/// Whose evidence a record is (P0, I6), fixed when its run is admitted and
+/// copied, when they are created, into each commitment and credential
+/// lease of the run: `Owner` only for a backend-issued owner run
+/// ([`super::run::RunClass::Owner`]); `Restricted` for every other run, an
+/// unknown one included. Never derived from door membership, a name or any
+/// other text, and never relaxed. A record that names no run takes the
+/// class its builder's inventory gives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Privacy {
+    /// Kept as written.
+    Owner,
+    /// Evidence only (I6): no target text; the registered counts, ids and
+    /// codes; every other detail value as `<key>_sha256`.
+    Restricted,
+}
+
+/// The digest domain of a Restricted record's text (I9).
+pub(crate) const TEXT_DOMAIN: &str = "nexus.evidence.text.v1";
+
+/// How a Restricted record keeps the value of a registered detail key
+/// (I6). The registries are finite per key: a value that is not exactly
+/// one of them is not kept, however much it looks like one.
+enum Kept {
+    /// A count: canonical decimal digits.
+    Count,
+    /// A credential lease's id (`lease-` and 32 lowercase hex).
+    Lease,
+    /// A door's opaque id (32 lowercase hex).
+    Door,
+    /// A SHA-256 digest (64 lowercase hex): a contract hash, a summary's
+    /// digest.
+    Sha256,
+    /// Mother's mission id ([`is_mission_id`]).
+    Mission,
+    /// Mother's request label ([`is_mission_request`]).
+    Request,
+    /// One of these codes.
+    Code(&'static [&'static str]),
+}
+
+/// The credential services the connector catalog names
+/// (`connector::catalog`).
+const SERVICES: &[&str] = &["Gmail", "Outlook", "Slack", "Discord"];
+/// The kernel's halt areas (`nexus_kernel::emergency_stop::HaltArea`).
+const AREAS: &[&str] = &["cognitive_loop", "coding", "model_call"];
+/// The `class` a run-opened record names.
+const RUN_CLASSES: &[&str] = &["owner"];
+/// Operations named in detail: none yet (M2d appends).
+const OPERATIONS: &[&str] = &[];
+/// Why Mother holds a mission (its `HeldReason`).
+const HELD_REASONS: &[&str] = &["unclean_shutdown"];
+
+/// Mother's mission id, exactly as Mother writes it (`msn-{:06}`): `msn-`
+/// and a number, in canonical decimal of at least six digits.
+pub(crate) fn is_mission_id(text: &str) -> bool {
+    text.strip_prefix("msn-").is_some_and(|digits| {
+        (6..=20).contains(&digits.len())
+            && digits.bytes().all(|b| b.is_ascii_digit())
+            && digits
+                .parse::<u64>()
+                .is_ok_and(|n| format!("{n:06}") == digits)
+    })
+}
+
+/// Mother's request label, exactly as Mother writes it
+/// (`{mission}/{seq}/{number}`): a mission id ([`is_mission_id`]) and two
+/// counts, separated by `/`.
+pub(crate) fn is_mission_request(text: &str) -> bool {
+    let parts: Vec<&str> = text.split('/').collect();
+    matches!(
+        parts.as_slice(),
+        [mission, seq, number]
+            if is_mission_id(mission) && Kept::Count.admits(seq) && Kept::Count.admits(number)
+    )
+}
+
+/// One of the held reasons Mother names.
+pub(crate) fn is_held_reason(text: &str) -> bool {
+    HELD_REASONS.contains(&text)
+}
+
+/// The I6 registry: the detail keys a Restricted record keeps as they are,
+/// each with its value class. Every other key's value becomes a digest.
+fn registered(key: &str) -> Option<Kept> {
+    Some(match key {
+        "status" | "bytes" | "redirects" | "lines" => Kept::Count,
+        "lease" => Kept::Lease,
+        "door" => Kept::Door,
+        // The Owner's answers at a door's mission and held-mission dialogs
+        // (P0-C, Codex review 1): the controlled values only.
+        "contract_hash" | "summary_digest" => Kept::Sha256,
+        "mission" => Kept::Mission,
+        "request" => Kept::Request,
+        "held_reason" => Kept::Code(HELD_REASONS),
+        "service" => Kept::Code(SERVICES),
+        "reason" => Kept::Code(super::REASONS),
+        "class" => Kept::Code(RUN_CLASSES),
+        "area" => Kept::Code(AREAS),
+        "op" => Kept::Code(OPERATIONS),
+        _ => return None,
+    })
+}
+
+fn is_lower_hex(text: &str, len: usize) -> bool {
+    text.len() == len && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+impl Kept {
+    fn admits(&self, value: &str) -> bool {
+        match self {
+            Kept::Count => {
+                !value.is_empty()
+                    && value.len() <= 20
+                    && value.bytes().all(|b| b.is_ascii_digit())
+                    && value.parse::<u64>().is_ok_and(|n| n.to_string() == value)
+            }
+            Kept::Lease => value
+                .strip_prefix("lease-")
+                .is_some_and(|hex| is_lower_hex(hex, 32)),
+            Kept::Door => is_lower_hex(value, 32),
+            Kept::Sha256 => is_lower_hex(value, 64),
+            Kept::Mission => is_mission_id(value),
+            Kept::Request => is_mission_request(value),
+            Kept::Code(codes) => codes.contains(&value),
+        }
+    }
+}
+
+/// The digest a Restricted record keeps for `text` (I9).
+pub(crate) fn text_digest(text: &str) -> String {
+    super::ids::Digest::of(TEXT_DOMAIN, &[text.as_bytes()]).to_hex()
+}
+
 /// One evidence record. Every text field is bounded by `bounded`.
 #[derive(Clone, Debug)]
 pub struct EvidenceRecord {
@@ -114,6 +247,10 @@ pub struct EvidenceRecord {
     pub failure: Option<&'static str>,
     pub cancelled: bool,
     pub detail: Vec<(String, String)>,
+    /// Whose evidence it is (I6): given by its builder, never changed.
+    privacy: Privacy,
+    /// Sealed (I6 applied) on its way to a sink: sealing is done once.
+    sealed: bool,
 }
 
 /// Longest text a record keeps for one field.
@@ -273,7 +410,14 @@ fn truncated(text: String) -> String {
 }
 
 impl EvidenceRecord {
-    pub fn new(phase: EvidencePhase, at_wall_ms: u64, policy_generation: u64) -> Self {
+    /// A record of `privacy`'s class: its builder must say whose evidence
+    /// it is (P0: all 15 builders do, by their inventory).
+    pub(crate) fn new(
+        phase: EvidencePhase,
+        at_wall_ms: u64,
+        policy_generation: u64,
+        privacy: Privacy,
+    ) -> Self {
         Self {
             phase,
             at_wall_ms,
@@ -294,7 +438,34 @@ impl EvidenceRecord {
             failure: None,
             cancelled: false,
             detail: Vec::new(),
+            privacy,
+            sealed: false,
         }
+    }
+
+    /// I6, applied once: an Owner record is kept as written; a Restricted
+    /// one loses its target text, and each detail value that is not
+    /// admitted by its key's registry is replaced by its digest, under
+    /// `<key>_sha256`. Identities, classes, digests, times and fixed codes
+    /// in the other fields are what the backend wrote and stay.
+    fn seal(&mut self) {
+        if std::mem::replace(&mut self.sealed, true) || self.privacy == Privacy::Owner {
+            return;
+        }
+        self.target = None;
+        for (key, value) in &mut self.detail {
+            if !registered(key).is_some_and(|kept| kept.admits(value)) {
+                *value = text_digest(value);
+                key.push_str("_sha256");
+            }
+        }
+    }
+
+    /// This record as a sink receives it.
+    fn sealed(&self) -> EvidenceRecord {
+        let mut sealed = self.clone();
+        sealed.seal();
+        sealed
     }
 
     /// The record as bounded JSON, as the audit chain stores it.
@@ -397,6 +568,23 @@ pub trait EvidenceSink: Send + Sync {
     }
 }
 
+/// The one way a gating record reaches a sink (P0 §5.2): sealed first
+/// (I6), so the store, its owed list, its projections and every later
+/// reader see only what its privacy class keeps. A source scan permits no
+/// other sink write in the crate (a guard, not a proof).
+pub(crate) fn write_record(
+    sink: &dyn EvidenceSink,
+    record: &EvidenceRecord,
+) -> Result<u64, EvidenceUnavailable> {
+    sink.record(&record.sealed())
+}
+
+/// The one way an end record reaches a sink: sealed first, as
+/// [`write_record`] does.
+pub(crate) fn write_end(sink: &dyn EvidenceSink, record: &EvidenceRecord) -> EndStatus {
+    sink.record_end(&record.sealed())
+}
+
 /// A copy of the evidence of record (the audit trail, the interface's
 /// recent history): written only after the store committed the record,
 /// best effort; what it does never changes an outcome (EL-1 §6).
@@ -483,3 +671,7 @@ impl EvidenceSink for TeeEvidence {
         Ok(seq)
     }
 }
+
+#[cfg(test)]
+#[path = "evidence_tests.rs"]
+mod tests;

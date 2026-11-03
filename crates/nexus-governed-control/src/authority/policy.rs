@@ -10,10 +10,11 @@ use super::approval::{ControlConfirmer, GrantConfirmation};
 use super::clock::Clock;
 use super::effect::CapabilityKind;
 use super::evidence::{
-    is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, MAX_DETAIL, MAX_FIELD,
+    is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy, MAX_DETAIL,
+    MAX_FIELD,
 };
 use super::ids::{Digest, GrantId};
-use super::AuthorityError;
+use super::{write_end, write_record, AuthorityError};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -410,15 +411,14 @@ impl GrantStore {
         id: Option<GrantId>,
         scope: &GrantScope,
     ) -> Result<(), AuthorityError> {
-        self.evidence
-            .record(&self.record_of(phase, id, scope))
+        write_record(&*self.evidence, &self.record_of(phase, id, scope))
             .map(|_| ())
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 
     /// Write one end record (what it records has taken effect).
     fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
-        self.evidence.record_end(record)
+        write_end(&*self.evidence, record)
     }
 
     fn record_of(
@@ -427,8 +427,13 @@ impl GrantStore {
         id: Option<GrantId>,
         scope: &GrantScope,
     ) -> EvidenceRecord {
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        // The owner's own grant records: kept as written.
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Owner,
+        );
         record.kind = Some(scope.kind());
         // Every line of the scope, each in its own bounded field (cut into
         // pieces if long), so that no flag is lost to one joined, truncated

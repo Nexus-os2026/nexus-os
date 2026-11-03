@@ -300,7 +300,7 @@ fn mission_request(label: &str) -> MissionConfirmation {
 
 fn held_request(label: &str) -> MissionResumeConfirmation {
     MissionResumeConfirmation {
-        mission: "m-1".into(),
+        mission: "msn-000001".into(),
         contract_hash: HASH.into(),
         request: label.into(),
         held_reason: "unclean_shutdown".into(),
@@ -465,7 +465,7 @@ fn m2c_a4_consent_through_the_door_asks_the_bound_confirmer() {
     let f = Fixture::new();
     let declines = Owner::new(true, false, false);
     let door = f.door_with(&declines);
-    let request = mission_request("m-1/7/1");
+    let request = mission_request("msn-000001/7/1");
     assert_eq!(
         door.confirm_mission(&request).unwrap_err(),
         AuthorityError::Declined
@@ -474,20 +474,20 @@ fn m2c_a4_consent_through_the_door_asks_the_bound_confirmer() {
     let declined = f.records(EvidencePhase::MissionDeclined);
     assert_eq!(declined.len(), 1);
     assert_eq!(detail(&declined[0], "contract_hash"), Some(HASH));
-    assert_eq!(detail(&declined[0], "request"), Some("m-1/7/1"));
+    assert_eq!(detail(&declined[0], "request"), Some("msn-000001/7/1"));
 
     let owner = Owner::yes();
     let door = f.door_with(&owner);
-    let request = mission_request("m-1/8/2");
+    let request = mission_request("msn-000001/8/2");
     let approval = door.confirm_mission(&request).unwrap();
     assert_eq!(owner.missions(), vec![request]);
     assert_eq!(
         (approval.contract_hash(), approval.request()),
-        (HASH, "m-1/8/2")
+        (HASH, "msn-000001/8/2")
     );
     let consented = f.records(EvidencePhase::MissionConsented);
     assert_eq!(consented.len(), 1);
-    assert_eq!(detail(&consented[0], "request"), Some("m-1/8/2"));
+    assert_eq!(detail(&consented[0], "request"), Some("msn-000001/8/2"));
 }
 
 // ---------------------------------------------------------------- A5/A6
@@ -500,7 +500,7 @@ fn m2c_a5_resume_through_the_door_asks_the_bound_confirmer() {
     let f = Fixture::new();
     let declines = Owner::new(true, false, false);
     let door = f.door_with(&declines);
-    let request = held_request("m-1/9/1");
+    let request = held_request("msn-000001/9/1");
     assert_eq!(
         door.confirm_held_mission(&request).unwrap_err(),
         AuthorityError::Declined
@@ -509,21 +509,21 @@ fn m2c_a5_resume_through_the_door_asks_the_bound_confirmer() {
     let declined = f.records(EvidencePhase::MissionResumeDeclined);
     assert_eq!(declined.len(), 1);
     assert_eq!(detail(&declined[0], "contract_hash"), Some(HASH));
-    assert_eq!(detail(&declined[0], "request"), Some("m-1/9/1"));
+    assert_eq!(detail(&declined[0], "request"), Some("msn-000001/9/1"));
     assert!(f.records(EvidencePhase::MissionResumeConfirmed).is_empty());
 
     let owner = Owner::yes();
     let door = f.door_with(&owner);
-    let request = held_request("m-1/10/2");
+    let request = held_request("msn-000001/10/2");
     let approval = door.confirm_held_mission(&request).unwrap();
     assert_eq!(owner.helds(), vec![request]);
     assert_eq!(
         (approval.contract_hash(), approval.request()),
-        (HASH, "m-1/10/2")
+        (HASH, "msn-000001/10/2")
     );
     let confirmed = f.records(EvidencePhase::MissionResumeConfirmed);
     assert_eq!(confirmed.len(), 1);
-    assert_eq!(detail(&confirmed[0], "request"), Some("m-1/10/2"));
+    assert_eq!(detail(&confirmed[0], "request"), Some("msn-000001/10/2"));
     assert!(approval.evidence_seq() > 0);
 
     // A confirmer without the held-mission dialog says no: the trait's
@@ -533,7 +533,7 @@ fn m2c_a5_resume_through_the_door_asks_the_bound_confirmer() {
         .issue_agent_door(mother(), Arc::new(DoorOnly))
         .unwrap();
     assert_eq!(
-        door.confirm_held_mission(&held_request("m-1/11/3"))
+        door.confirm_held_mission(&held_request("msn-000001/11/3"))
             .unwrap_err(),
         AuthorityError::Declined
     );
@@ -550,7 +550,7 @@ fn m2c_a6_f_resume_under_an_emergency_stop_is_refused_before_the_dialog() {
     let door = f.door_with(&owner);
     let bad = MissionResumeConfirmation {
         contract_hash: "not-a-hash".into(),
-        ..held_request("m-1/1/1")
+        ..held_request("msn-000001/1/1")
     };
     assert!(matches!(
         door.confirm_held_mission(&bad),
@@ -563,7 +563,7 @@ fn m2c_a6_f_resume_under_an_emergency_stop_is_refused_before_the_dialog() {
         control.emergency_stop();
     });
     assert_eq!(
-        door.confirm_held_mission(&held_request("m-1/2/2"))
+        door.confirm_held_mission(&held_request("msn-000001/2/2"))
             .unwrap_err(),
         AuthorityError::EmergencyStopped
     );
@@ -571,14 +571,14 @@ fn m2c_a6_f_resume_under_an_emergency_stop_is_refused_before_the_dialog() {
     assert!(f.records(EvidencePhase::MissionResumeConfirmed).is_empty());
 
     assert_eq!(
-        door.confirm_held_mission(&held_request("m-1/3/3"))
+        door.confirm_held_mission(&held_request("msn-000001/3/3"))
             .unwrap_err(),
         AuthorityError::EmergencyStopped
     );
     assert_eq!(owner.helds().len(), 1, "refused before the dialog");
     assert!(door.emergency_stopped());
     assert_eq!(
-        door.confirm_mission(&mission_request("m-1/4/4"))
+        door.confirm_mission(&mission_request("msn-000001/4/4"))
             .unwrap_err(),
         AuthorityError::EmergencyStopped
     );

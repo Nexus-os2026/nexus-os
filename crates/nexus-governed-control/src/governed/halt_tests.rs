@@ -137,7 +137,7 @@ fn mission_request(label: &str) -> MissionConfirmation {
 
 fn held_request(label: &str) -> MissionResumeConfirmation {
     MissionResumeConfirmation {
-        mission: "m-1".into(),
+        mission: "msn-000001".into(),
         contract_hash: HASH.into(),
         request: label.into(),
         held_reason: "unclean_shutdown".into(),
@@ -621,10 +621,10 @@ fn m2c_b3_a_start_held_in_the_store_is_refused() {
     assert_eq!(f.state(id), CommitmentState::Revoked);
     let _ = batch.write();
     let revoked = f.records(EvidencePhase::Revoked);
-    assert!(revoked.iter().any(|r| r
-        .detail
+    assert!(revoked
         .iter()
-        .any(|(k, v)| k == "interrupted" && v == "start")));
+        .any(|r| r.detail.iter().any(|(k, v)| k == "interrupted_sha256"
+            && *v == crate::authority::evidence::text_digest("start"))));
     f.gov.probe_locks();
 }
 
@@ -1830,12 +1830,12 @@ fn m2c_b12_scope_and_the_halted_door() {
     );
     assert_eq!(door.finish_when_settled(run), Err(AuthorityError::Halted));
     assert_eq!(
-        door.confirm_mission(&mission_request("m-1/1/1"))
+        door.confirm_mission(&mission_request("msn-000001/1/1"))
             .unwrap_err(),
         AuthorityError::Halted
     );
     assert_eq!(
-        door.confirm_held_mission(&held_request("m-1/2/2"))
+        door.confirm_held_mission(&held_request("msn-000001/2/2"))
             .unwrap_err(),
         AuthorityError::Halted
     );
@@ -2119,12 +2119,12 @@ fn m2c_b17_consent_and_resume_post_record_checks() {
     let door = f.gov.issue_agent_door(mother(), owner.clone()).unwrap();
     let batch = halt(&door);
     assert_eq!(
-        door.confirm_mission(&mission_request("m-1/1/1"))
+        door.confirm_mission(&mission_request("msn-000001/1/1"))
             .unwrap_err(),
         AuthorityError::Halted
     );
     assert_eq!(
-        door.confirm_held_mission(&held_request("m-1/2/2"))
+        door.confirm_held_mission(&held_request("msn-000001/2/2"))
             .unwrap_err(),
         AuthorityError::Halted
     );
@@ -2146,10 +2146,10 @@ fn m2c_b17_consent_and_resume_post_record_checks() {
         }
         let records = f.count(phase);
         let answer = if at == at::HELD_RECORDED {
-            door.confirm_held_mission(&held_request("m-1/3/3"))
+            door.confirm_held_mission(&held_request("msn-000001/3/3"))
                 .map(|_| ())
         } else {
-            door.confirm_mission(&mission_request("m-1/4/4"))
+            door.confirm_mission(&mission_request("msn-000001/4/4"))
                 .map(|_| ())
         };
         assert_eq!(answer, Err(AuthorityError::Halted), "{at}");
@@ -2158,8 +2158,12 @@ fn m2c_b17_consent_and_resume_post_record_checks() {
     }
     // Positive control.
     let door = f.door();
-    assert!(door.confirm_held_mission(&held_request("m-1/5/5")).is_ok());
-    assert!(door.confirm_mission(&mission_request("m-1/6/6")).is_ok());
+    assert!(door
+        .confirm_held_mission(&held_request("msn-000001/5/5"))
+        .is_ok());
+    assert!(door
+        .confirm_mission(&mission_request("msn-000001/6/6"))
+        .is_ok());
 }
 
 // ---------------------------------------------------------------- B18

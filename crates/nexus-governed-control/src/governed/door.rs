@@ -25,6 +25,7 @@ use crate::authority::approval::{
 };
 use crate::authority::clock::Clock;
 use crate::authority::commitment::CommitmentView;
+use crate::authority::evidence::Privacy;
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::GroupId;
 use crate::authority::AuthorityError;
@@ -231,7 +232,10 @@ impl AgentDoor {
     ) -> Result<MissionApproval, AuthorityError> {
         self.not_halted()?;
         let authority = self.control.authority();
-        let approval = authority.confirm_mission(request, &*self.confirmer)?;
+        // The door's holder supplies the labels: only controlled ones, and
+        // the record is Restricted (P0-C).
+        let approval =
+            authority.confirm_mission_as(request, &*self.confirmer, Privacy::Restricted)?;
         #[cfg(test)]
         self.control
             .hooks()
@@ -252,10 +256,11 @@ impl AgentDoor {
         request: &MissionResumeConfirmation,
     ) -> Result<MissionResumeApproval, AuthorityError> {
         self.not_halted()?;
-        let approval = self
-            .control
-            .authority()
-            .confirm_held_mission(request, &*self.confirmer)?;
+        let approval = self.control.authority().confirm_held_mission_as(
+            request,
+            &*self.confirmer,
+            Privacy::Restricted,
+        )?;
         #[cfg(test)]
         self.control
             .hooks()

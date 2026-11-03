@@ -346,7 +346,12 @@ fn el1_n4_an_unclean_session_alone_does_not_require_recovery() {
     assert!(!health.recovery_required);
     assert!(store.recovery().is_none());
     assert!(store
-        .gate(&EvidenceRecord::new(EvidencePhase::RunOpened, 1, 1))
+        .gate(&EvidenceRecord::new(
+            EvidencePhase::RunOpened,
+            1,
+            1,
+            crate::authority::evidence::Privacy::Owner
+        ))
         .0
         .is_ok());
 }
@@ -565,7 +570,12 @@ fn el1_m6_c3_records_paid_by_the_acknowledgement_are_projected() {
     // required; this one is refused).
     evidence.store().refuse_inserts(true);
     assert_eq!(
-        evidence.record_end(&EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1)),
+        evidence.record_end(&EvidenceRecord::new(
+            EvidencePhase::RunCancelled,
+            1,
+            1,
+            crate::authority::evidence::Privacy::Owner
+        )),
         EndStatus::Owed
     );
     evidence.store().refuse_inserts(false);
@@ -595,7 +605,12 @@ fn el1_m6_c4_an_acknowledgement_beyond_the_store_is_refused() {
     let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
     evidence.store().refuse_inserts(true);
     assert_eq!(
-        evidence.record_end(&EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1)),
+        evidence.record_end(&EvidenceRecord::new(
+            EvidencePhase::RunCancelled,
+            1,
+            1,
+            crate::authority::evidence::Privacy::Owner
+        )),
         EndStatus::Owed
     );
     evidence.store().refuse_inserts(false);
@@ -774,7 +789,12 @@ fn el1_m6_ma5_a_finished_effect_is_settled_after_a_clean_or_unclean_restart() {
 fn owe_one(evidence: &PrimaryEvidence) {
     evidence.store().refuse_inserts(true);
     assert_eq!(
-        evidence.record_end(&EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1)),
+        evidence.record_end(&EvidenceRecord::new(
+            EvidencePhase::RunCancelled,
+            1,
+            1,
+            crate::authority::evidence::Privacy::Owner
+        )),
         EndStatus::Owed
     );
     evidence.store().refuse_inserts(false);

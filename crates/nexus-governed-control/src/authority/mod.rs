@@ -14,6 +14,8 @@ pub mod policy;
 pub mod run;
 
 #[cfg(test)]
+mod privacy_tests;
+#[cfg(test)]
 pub(crate) mod scripted;
 #[cfg(test)]
 mod tests;
@@ -25,13 +27,51 @@ use self::approval::{
 };
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
-use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
+use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy};
+pub(crate) use self::evidence::{write_end, write_record};
 use self::halt::{HaltCounters, RecordBatch};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
 use self::run::{GroupId, Lift, Refusal, RunClass, RunOrigin, RunRegistry};
 use std::fmt;
 use std::sync::Arc;
+
+/// The I6 registry of `reason` codes: every name [`AuthorityError::class`]
+/// gives, a door halt's reasons ([`halt::HaltReason`]) and the stop's
+/// `recovery_required` (a test keeps them in step).
+pub(crate) const REASONS: &[&str] = &[
+    "unknown_commitment",
+    "unknown_run",
+    "unknown_grant",
+    "unknown_lease",
+    "wrong_agent",
+    "wrong_run",
+    "not_pending",
+    "not_authorized",
+    "expired",
+    "stale_policy_generation",
+    "grant_not_live",
+    "no_covering_grant",
+    "run_cancelled",
+    "run_not_active",
+    "emergency_stopped",
+    "resume_superseded",
+    "approval_required",
+    "approval_not_applicable",
+    "approval_mismatch",
+    "declined",
+    "target_changed",
+    "parameters_changed",
+    "evidence_unavailable",
+    "capacity",
+    "not_member",
+    "halted",
+    "closed",
+    "invalid_action",
+    "unavailable",
+    "journal_failed",
+    "recovery_required",
+];
 
 /// Why the authority refused. The message is bounded and names no input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -236,15 +276,14 @@ impl Authority {
 
     /// A gating record: what it permits happens only once it is written.
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
-        self.evidence
-            .record(record)
+        write_record(&*self.evidence, record)
             .map(|_| ())
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 
     /// An end record: what it records has already taken effect (EL-1 §6).
     fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
-        self.evidence.record_end(record)
+        write_end(&*self.evidence, record)
     }
 
     /// Record that the agent display is starting (it is a process Phase
@@ -282,6 +321,7 @@ impl Authority {
             EvidencePhase::KernelHalt,
             self.clock.wall_ms(),
             self.generation.current(),
+            Privacy::Owner,
         );
         record.outcome = Some(outcome);
         record.detail.push(("area".into(), area.into()));
@@ -341,13 +381,31 @@ impl Authority {
     /// it permits nothing). A yes counts only once its record is written
     /// (evidence first), and not if an emergency stop or quitting came
     /// while the owner was asked. The approval names the hash and the
-    /// request; it grants nothing.
+    /// request; it grants nothing. (The owner's own front door: its labels
+    /// are recorded as given.)
     pub fn confirm_mission(
         &self,
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionApproval, AuthorityError> {
+        self.confirm_mission_as(request, confirmer, Privacy::Owner)
+    }
+
+    /// [`Self::confirm_mission`], its record of class `privacy`. An agent's
+    /// door asks as `Restricted`: its holder supplies every label, so only
+    /// Mother's controlled request label is admitted ([`controlled`]),
+    /// refused before any dialog or record otherwise, and the record is
+    /// sealed as Restricted.
+    pub(crate) fn confirm_mission_as(
+        &self,
+        request: &MissionConfirmation,
+        confirmer: &dyn ControlConfirmer,
+        privacy: Privacy,
+    ) -> Result<MissionApproval, AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
+        if privacy == Privacy::Restricted {
+            controlled(&request.request, None)?;
+        }
         if self
             .evidence
             .primary()
@@ -362,8 +420,12 @@ impl Authority {
         } else {
             EvidencePhase::MissionDeclined
         };
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            privacy,
+        );
         record
             .detail
             .push(("contract_hash".into(), request.contract_hash.clone()));
@@ -381,9 +443,7 @@ impl Authority {
         // A stop pressed, or quitting begun, while the owner was asked wins.
         self.mission_admissible()?;
         // Evidence first: an unrecorded consent is no consent.
-        let seq = self
-            .evidence
-            .record(&record)
+        let seq = write_record(&*self.evidence, &record)
             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
         Ok(MissionApproval::confirmed(
             request.contract_hash.clone(),
@@ -403,11 +463,25 @@ impl Authority {
     /// checked again, and then the record stands with no approval. The
     /// approval records the owner's yes to the hash and the request: it
     /// resumes nothing and grants nothing. (A door calls this with the
-    /// confirmer its host bound.)
+    /// confirmer its host bound, through [`Self::confirm_held_mission_as`].)
     pub fn confirm_held_mission(
         &self,
         request: &MissionResumeConfirmation,
         confirmer: &dyn ControlConfirmer,
+    ) -> Result<MissionResumeApproval, AuthorityError> {
+        self.confirm_held_mission_as(request, confirmer, Privacy::Owner)
+    }
+
+    /// [`Self::confirm_held_mission`], its record of class `privacy`. An
+    /// agent's door asks as `Restricted`: only Mother's controlled mission
+    /// id, request label and held reasons are admitted ([`controlled`]),
+    /// refused before any dialog or record otherwise, and the record is
+    /// sealed as Restricted.
+    pub(crate) fn confirm_held_mission_as(
+        &self,
+        request: &MissionResumeConfirmation,
+        confirmer: &dyn ControlConfirmer,
+        privacy: Privacy,
     ) -> Result<MissionResumeApproval, AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         for label in [&request.mission, &request.held_reason] {
@@ -416,6 +490,12 @@ impl Authority {
                     "the held mission is not named by plain labels",
                 ));
             }
+        }
+        if privacy == Privacy::Restricted {
+            controlled(
+                &request.request,
+                Some((&request.mission, &request.held_reason)),
+            )?;
         }
         if self
             .evidence
@@ -431,8 +511,12 @@ impl Authority {
         } else {
             EvidencePhase::MissionResumeDeclined
         };
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            privacy,
+        );
         record
             .detail
             .push(("mission".into(), request.mission.clone()));
@@ -456,9 +540,7 @@ impl Authority {
         // A stop pressed, or quitting begun, while the owner was asked wins.
         self.mission_admissible()?;
         // Evidence first: an unrecorded yes is no yes.
-        let seq = self
-            .evidence
-            .record(&record)
+        let seq = write_record(&*self.evidence, &record)
             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
         // After the record (M2c §2.6 step 6): the record says the owner said
         // yes; no approval exists if a stop or quitting came meanwhile.
@@ -500,8 +582,12 @@ impl Authority {
         } else {
             EvidencePhase::AgentDoorDeclined
         };
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Restricted,
+        );
         record.agent = Some(agent.to_string());
         record.detail.push(("door".into(), door.to_string()));
         if yes {
@@ -536,8 +622,12 @@ impl Authority {
         phase: EvidencePhase,
         detail: Vec<(String, String)>,
     ) -> EvidenceRecord {
-        let mut record =
-            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        let mut record = EvidenceRecord::new(
+            phase,
+            self.clock.wall_ms(),
+            self.generation.current(),
+            Privacy::Owner,
+        );
         record.detail = detail;
         record
     }
@@ -594,6 +684,7 @@ impl Authority {
             EvidencePhase::RunOpened,
             self.clock.wall_ms(),
             self.generation.current(),
+            class.privacy(),
         );
         record.agent = Some(agent.to_string());
         if class == RunClass::Owner {
@@ -630,6 +721,7 @@ impl Authority {
             EvidencePhase::RunCancelled,
             self.clock.wall_ms(),
             self.generation.current(),
+            self.runs.privacy(run),
         );
         record.run = Some(run.to_string());
         record.agent = Some(view.agent.to_string());
@@ -676,6 +768,7 @@ impl Authority {
             EvidencePhase::EmergencyStop,
             self.clock.wall_ms(),
             self.generation.current(),
+            Privacy::Owner,
         );
         record.cancelled = true;
         record
@@ -747,6 +840,7 @@ impl Authority {
             EvidencePhase::Resumed,
             self.clock.wall_ms(),
             self.generation.current(),
+            Privacy::Owner,
         );
         record
             .detail
@@ -767,6 +861,29 @@ pub(crate) struct Stopped {
     pub(crate) cancelled: usize,
     revoked: commitment::Unwritten,
     record: EvidenceRecord,
+}
+
+/// The labels an agent's door may give the owner's mission and
+/// held-mission dialogs (P0-C): only Mother's controlled values, exactly as
+/// Mother writes them. A request label `{mission}/{seq}/{number}`; for a
+/// held mission, also its mission id and one of the held reasons Mother
+/// names. Anything else is refused before any dialog or record. (The
+/// contract hash and the plain summary are checked by [`mission_text`];
+/// the summary is recorded only as its digest.)
+fn controlled(request: &str, held: Option<(&str, &str)>) -> Result<(), AuthorityError> {
+    if !evidence::is_mission_request(request) {
+        return Err(AuthorityError::InvalidAction(
+            "the mission request is not a controlled label",
+        ));
+    }
+    if let Some((mission, reason)) = held {
+        if !evidence::is_mission_id(mission) || !evidence::is_held_reason(reason) {
+            return Err(AuthorityError::InvalidAction(
+                "the held mission is not named by controlled labels",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The text of a mission or held-mission request: a SHA-256 hex digest, a
