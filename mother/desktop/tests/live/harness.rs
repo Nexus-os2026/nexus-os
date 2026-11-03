@@ -248,8 +248,12 @@ fn base_env(display: Option<&str>) -> Vec<(String, String)> {
     env
 }
 
-/// Kill a child's whole process group (the child's own group).
-fn kill_group(child: &mut Child) {
+/// How long a killed child may take to be reaped.
+const REAP: Duration = Duration::from_secs(10);
+
+/// Kill a child's whole process group (the child's own group), then reap
+/// the child within `REAP`; its exit status, if it was reaped.
+fn kill_group(child: &mut Child) -> Option<std::process::ExitStatus> {
     let group = child.id().to_string();
     let _ = Command::new(tool("kill"))
         .args(["-KILL", "--", &format!("-{group}")])
@@ -258,7 +262,14 @@ fn kill_group(child: &mut Child) {
         .stderr(Stdio::null())
         .status();
     let _ = child.kill();
-    let _ = child.wait();
+    let deadline = Instant::now() + REAP;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            _ => return None,
+        }
+    }
 }
 
 /// What supervising one owned child gave: its stdout and stderr lines, its
@@ -317,10 +328,35 @@ pub fn supervise(child: &mut Child, step: Duration, whole: Duration) -> Supervis
             break Some(format!("overran {whole:?}"));
         }
     };
-    if overrun.is_some() {
-        kill_group(child);
+    // The streams closed (or a reader failed): the process itself is still
+    // supervised, under the same deadline, never waited on without a bound.
+    let mut overrun = overrun;
+    if overrun.is_none() {
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    return Supervised {
+                        out,
+                        err,
+                        status: Some(status),
+                        overrun: None,
+                    };
+                }
+                Ok(None) if started.elapsed() <= whole => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Ok(None) => {
+                    overrun = Some(format!("its output closed, but it ran past {whole:?}"));
+                    break;
+                }
+                Err(e) => {
+                    overrun = Some(format!("waiting for it failed: {e}"));
+                    break;
+                }
+            }
+        }
     }
-    let status = child.wait().ok();
+    let status = kill_group(child);
     Supervised {
         out,
         err,
