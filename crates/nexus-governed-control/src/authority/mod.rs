@@ -411,7 +411,7 @@ impl Authority {
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionApproval, AuthorityError> {
         self.confirm_mission_as(request, confirmer, Privacy::Owner, || Ok(()))
-            .map(|(approval, ())| approval)
+            .map(|(approval, _, ())| approval)
     }
 
     /// [`Self::confirm_mission`], its record of class `privacy`. An agent's
@@ -422,14 +422,14 @@ impl Authority {
     /// before the dialog has passed, immediately before the Owner is asked
     /// (a door reserves its consent slot there); refused, nothing is asked
     /// or recorded. What it returns is held across the dialog and returned
-    /// with the approval.
+    /// with the approval and the record's own time.
     pub(crate) fn confirm_mission_as<T>(
         &self,
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
         privacy: Privacy,
         before_ask: impl FnOnce() -> Result<T, AuthorityError>,
-    ) -> Result<(MissionApproval, T), AuthorityError> {
+    ) -> Result<(MissionApproval, u64, T), AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         if privacy == Privacy::Restricted {
             controlled(&request.request, None)?;
@@ -449,12 +449,8 @@ impl Authority {
         } else {
             EvidencePhase::MissionDeclined
         };
-        let mut record = EvidenceRecord::new(
-            phase,
-            self.clock.wall_ms(),
-            self.generation.current(),
-            privacy,
-        );
+        let at_wall_ms = self.clock.wall_ms();
+        let mut record = EvidenceRecord::new(phase, at_wall_ms, self.generation.current(), privacy);
         record
             .detail
             .push(("contract_hash".into(), request.contract_hash.clone()));
@@ -476,6 +472,7 @@ impl Authority {
             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
         Ok((
             MissionApproval::confirmed(request.contract_hash.clone(), request.request.clone(), seq),
+            at_wall_ms,
             reserved,
         ))
     }
@@ -498,7 +495,7 @@ impl Authority {
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionResumeApproval, AuthorityError> {
         self.confirm_held_mission_as(request, confirmer, Privacy::Owner, || Ok(()))
-            .map(|(approval, ())| approval)
+            .map(|(approval, _, ())| approval)
     }
 
     /// [`Self::confirm_held_mission`], its record of class `privacy`. An
@@ -513,7 +510,7 @@ impl Authority {
         confirmer: &dyn ControlConfirmer,
         privacy: Privacy,
         before_ask: impl FnOnce() -> Result<T, AuthorityError>,
-    ) -> Result<(MissionResumeApproval, T), AuthorityError> {
+    ) -> Result<(MissionResumeApproval, u64, T), AuthorityError> {
         mission_text(&request.contract_hash, &request.request, &request.summary)?;
         for label in [&request.mission, &request.held_reason] {
             if label.is_empty() || label.chars().count() > MAX_MISSION_REQUEST || !is_plain(label) {
@@ -543,12 +540,8 @@ impl Authority {
         } else {
             EvidencePhase::MissionResumeDeclined
         };
-        let mut record = EvidenceRecord::new(
-            phase,
-            self.clock.wall_ms(),
-            self.generation.current(),
-            privacy,
-        );
+        let at_wall_ms = self.clock.wall_ms();
+        let mut record = EvidenceRecord::new(phase, at_wall_ms, self.generation.current(), privacy);
         record
             .detail
             .push(("mission".into(), request.mission.clone()));
@@ -583,6 +576,7 @@ impl Authority {
                 request.request.clone(),
                 seq,
             ),
+            at_wall_ms,
             reserved,
         ))
     }

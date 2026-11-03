@@ -259,13 +259,39 @@ fn refused(why: &'static str) -> AuthorityError {
     AuthorityError::InvalidAction(why)
 }
 
-/// `path` and its canonical spelling, if it has one.
-fn spellings(path: &Path) -> Vec<PathBuf> {
-    let mut all = vec![path.to_path_buf()];
-    if let Ok(canonical) = std::fs::canonicalize(path) {
-        all.push(canonical);
+/// Where `path` really is (Codex review 1 of PR #57): its longest existing
+/// ancestor resolved canonically (links included), with the components
+/// below it appended, none of which exists yet. `None` when that cannot be
+/// established: a relative path; the first missing component present after
+/// all (a dangling or looping link, an entry that cannot be read); or a `.`
+/// or `..` below the existing part. A caller refuses on `None`.
+fn established(path: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+    if !path.is_absolute() {
+        return None;
     }
-    all
+    let mut missing = Vec::new();
+    let mut existing = path;
+    loop {
+        if let Ok(canonical) = std::fs::canonicalize(existing) {
+            if let Some(first) = missing.last() {
+                match std::fs::symlink_metadata(canonical.join(first)) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    _ => return None,
+                }
+            }
+            let mut real = canonical;
+            for part in missing.iter().rev() {
+                real.push(part);
+            }
+            return Some(real);
+        }
+        match existing.components().next_back()? {
+            Component::Normal(part) => missing.push(part),
+            _ => return None,
+        }
+        existing = existing.parent()?;
+    }
 }
 
 /// The identity of the directory `root` names now: it must still be a real
@@ -292,9 +318,10 @@ fn identity_of(_root: &Path) -> Result<Digest, AuthorityError> {
 
 /// §6.2: the broker's checks of the Owner's selection, in order: absolute,
 /// its own canonical path (no link), a directory, not exactly `/`, `$HOME`
-/// or the identity home (in either spelling), no overlap in either
-/// direction with a reserved tree (in either spelling), the current user's,
-/// empty. Returns the identity of the directory it checked.
+/// or the identity home (as given, or where it really is), no overlap in
+/// either direction with a reserved tree (as given, or where it really is,
+/// [`established`]; one that cannot be established refuses), the current
+/// user's, empty. Returns the identity of the directory it checked.
 #[cfg(target_os = "linux")]
 fn selectable(
     path: &Path,
@@ -317,28 +344,31 @@ fn selectable(
     if !meta.is_dir() {
         return Err(refused("the workspace is not a folder"));
     }
+    let unresolved = || refused("a protected or reserved location cannot be resolved");
     let exact = [
         Path::new("/"),
         exclusions.home.as_path(),
         exclusions.identity_home.as_path(),
     ];
-    if exact
-        .into_iter()
-        .flat_map(spellings)
-        .any(|forbidden| forbidden == path)
-    {
-        return Err(refused("this folder cannot be the workspace"));
+    for forbidden in exact {
+        let real = established(forbidden).ok_or_else(unresolved)?;
+        if forbidden == path || real == path {
+            return Err(refused("this folder cannot be the workspace"));
+        }
     }
     let reserved = exclusions
         .reserved
         .iter()
         .map(PathBuf::as_path)
         .chain(std::iter::once(runtime_root));
-    if reserved
-        .flat_map(spellings)
-        .any(|tree| path.starts_with(&tree) || tree.starts_with(path))
-    {
-        return Err(refused("the workspace overlaps a reserved location"));
+    for tree in reserved {
+        let real = established(tree).ok_or_else(unresolved)?;
+        if [tree, real.as_path()]
+            .iter()
+            .any(|tree| path.starts_with(tree) || tree.starts_with(path))
+        {
+            return Err(refused("the workspace overlaps a reserved location"));
+        }
     }
     if meta.uid() != exclusions.uid {
         return Err(refused("the workspace folder is not the current user's"));

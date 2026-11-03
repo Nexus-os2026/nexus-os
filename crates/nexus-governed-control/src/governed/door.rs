@@ -243,7 +243,7 @@ impl AgentDoor {
         // The door's holder supplies the labels: only controlled ones, and
         // the record is Restricted (P0-C). M2d-B1: a slot in this door's
         // consent table is reserved just before the Owner is asked.
-        let (approval, slot) =
+        let (approval, recorded_ms, slot) =
             authority.confirm_mission_as(request, &*self.confirmer, Privacy::Restricted, || {
                 runs.consent_slot(self.core.group, &self.core.agent)
             })?;
@@ -259,24 +259,23 @@ impl AgentDoor {
             slot,
             approval.contract_hash(),
             approval.request(),
-            approval.evidence_seq(),
+            (approval.evidence_seq(), recorded_ms),
             ConsentKind::Mission,
         )?;
         Ok(approval)
     }
 
     /// M2d-B1 (H1′): cache the Owner's recorded yes in this door's table,
-    /// only if the lifetime it was asked in still holds; otherwise no
-    /// approval exists.
+    /// with its record's sequence number and own time, only if the lifetime
+    /// it was asked in still holds; otherwise no approval exists.
     fn cache(
         &self,
         slot: crate::authority::run::ConsentSlot<'_>,
         contract_hash: &str,
         request: &str,
-        evidence_seq: u64,
+        (evidence_seq, at_wall_ms): (u64, u64),
         kind: ConsentKind,
     ) -> Result<(), AuthorityError> {
-        let at_wall_ms = self.control.authority().clock().wall_ms();
         #[cfg(test)]
         self.control
             .hooks()
@@ -336,7 +335,7 @@ impl AgentDoor {
     ) -> Result<MissionResumeApproval, AuthorityError> {
         self.not_halted()?;
         let runs = self.control.authority().runs();
-        let (approval, slot) = self.control.authority().confirm_held_mission_as(
+        let (approval, recorded_ms, slot) = self.control.authority().confirm_held_mission_as(
             request,
             &*self.confirmer,
             Privacy::Restricted,
@@ -352,7 +351,7 @@ impl AgentDoor {
             slot,
             approval.contract_hash(),
             approval.request(),
-            approval.evidence_seq(),
+            (approval.evidence_seq(), recorded_ms),
             ConsentKind::Resume,
         )?;
         Ok(approval)
