@@ -43,6 +43,8 @@ mod review3;
 mod review4;
 #[path = "files_exec_review5_tests.rs"]
 mod review5;
+#[path = "files_exec_s1a_d_tests.rs"]
+mod s1a_d;
 
 const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const LABEL: &str = "msn-000001/1/1";
@@ -254,6 +256,7 @@ impl Fx {
             contract_hash: HASH.into(),
             request: LABEL.into(),
             summary: vec!["A one-page site for Rosa's bakery".into()],
+            page_facts: None,
         })
         .expect("the Owner consents");
         let run = door.open_run().unwrap();

@@ -116,6 +116,10 @@ fn every_authority_class_and_halt_reason_is_a_registered_reason() {
         ChangeTooLargeToShow,
         UnsupportedMountTopology,
         RecoveryRequired,
+        FactsInvalid(""),
+        FileTypeNotAllowed,
+        PageNotInert(""),
+        PageFactMissing(""),
         Closed(""),
         InvalidAction(""),
         Unavailable(""),
@@ -163,6 +167,10 @@ fn every_authority_class_and_halt_reason_is_a_registered_reason() {
             | ChangeTooLargeToShow
             | UnsupportedMountTopology
             | RecoveryRequired
+            | FactsInvalid(_)
+            | FileTypeNotAllowed
+            | PageNotInert(_)
+            | PageFactMissing(_)
             | Closed(_)
             | InvalidAction(_)
             | Unavailable(_)

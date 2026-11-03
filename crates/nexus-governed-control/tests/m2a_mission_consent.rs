@@ -113,6 +113,7 @@ fn request(hash: &str, request: &str) -> MissionConfirmation {
             "│ Make me a small website for my bakery.".into(),
             "Budget: 30 minutes, 20 lane calls, money 0".into(),
         ],
+        page_facts: None,
     }
 }
 
