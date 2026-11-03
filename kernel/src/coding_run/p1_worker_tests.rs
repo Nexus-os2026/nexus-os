@@ -459,8 +459,9 @@ fn p1_w_nc_08_cloud_fallback_is_not_selectable_and_failure_fails_closed() {
     assert_eq!(
         loopback_endpoint("http://localhost:11434")
             .unwrap()
-            .as_str(),
-        "http://127.0.0.1:11434/"
+            .addr()
+            .to_string(),
+        "127.0.0.1:11434"
     );
     assert!(loopback_endpoint("http://[::1]:11434").is_ok());
     assert!(loopback_endpoint("http://127.0.0.1:11434").is_ok());
