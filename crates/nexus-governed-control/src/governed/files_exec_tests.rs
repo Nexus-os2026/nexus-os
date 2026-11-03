@@ -726,9 +726,11 @@ fn m2d_b2_concurrent_executions_at_most_one_crosses() {
 }
 
 /// Codex D2 condition 5: a Stop that ends a staged, unexecuted create does
-/// no staging cleanup itself (dropping its effect only hands the run over);
-/// the cleanup is owned and done by the next Files call, recorded, and the
-/// report then lists nothing for it.
+/// no staging cleanup itself (dropping its effect only hands the run over).
+/// Amended (Codex review 1 of PR #64, M2): the recovery report deletes and
+/// records nothing either; it lists the staging. The cleanup is owned and
+/// done only by the next Files call or settle (or the Owner's retry),
+/// recorded, and the report then lists nothing for it.
 #[test]
 fn m2d_b2_stop_defers_staging_cleanup() {
     let f = Fx::new();
@@ -738,8 +740,21 @@ fn m2d_b2_stop_defers_staging_cleanup() {
     assert_eq!(f.staged().len(), 1, "Stop removed nothing itself");
     assert!(f.execute(&view).is_err());
     let report = f.gov.files_recovery_report().unwrap();
-    assert!(f.staged().is_empty(), "the next Files call cleaned it");
+    assert_eq!(f.staged().len(), 1, "the report deletes nothing");
+    assert!(
+        !f.events().iter().any(|e| e == "staging.discarded"),
+        "nor records a cleanup"
+    );
+    assert!(
+        report.iter().any(|entry| entry
+            .findings
+            .contains(&RecoveryFinding::StagingAwaitingApproval)),
+        "it lists the staging"
+    );
+    f.gov.settle();
+    assert!(f.staged().is_empty(), "the next settle cleaned it");
     assert!(f.events().iter().any(|e| e == "staging.discarded"));
+    let report = f.gov.files_recovery_report().unwrap();
     assert!(report.iter().all(|entry| entry.findings.is_empty()));
     assert_eq!(f.entries(), Vec::<String>::new());
 }
