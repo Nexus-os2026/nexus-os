@@ -5,7 +5,9 @@
 
 use super::status_of;
 use crate::effect::ApprovalStatus;
-use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::commitment::{
+    CommitmentState, CommitmentView, PublicationClass,
+};
 use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 
@@ -30,6 +32,7 @@ fn view(state: CommitmentState) -> CommitmentView {
         binding_short: "0000".into(),
         interrupted: vec![],
         recovery_required: false,
+        publication: PublicationClass::Pending,
     }
 }
 

@@ -19,7 +19,9 @@ use crate::effect::{ApprovalStatus, EffectOutcome};
 use crate::evidence::BlockReason;
 use crate::journal::{Event, MissionId};
 use crate::state::{MissionState, Trigger};
-use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::commitment::{
+    CommitmentState, CommitmentView, PublicationClass,
+};
 use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use std::time::Duration;
@@ -205,8 +207,12 @@ fn m2d_c_r1_the_port_reads_recovery_and_the_codes_round_trip() {
         created_wall_ms: 1_000,
         expires_wall_ms: 601_000,
         binding_short: "0000".into(),
-        interrupted,
+        interrupted: interrupted.clone(),
         recovery_required,
+        publication: PublicationClass::Published {
+            recovery_required,
+            interrupted,
+        },
     };
     for interrupted in [vec![], vec!["revoked"]] {
         assert_eq!(

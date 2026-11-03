@@ -19,7 +19,9 @@ use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
     ResumeConfirmation,
 };
-use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::commitment::{
+    CommitmentState, CommitmentView, PublicationClass,
+};
 use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
@@ -585,8 +587,12 @@ fn m2d_c_the_port_reads_an_interrupted_success_as_overtaken() {
         created_wall_ms: 1_000,
         expires_wall_ms: 601_000,
         binding_short: "0000".into(),
-        interrupted,
+        interrupted: interrupted.clone(),
         recovery_required: false,
+        publication: PublicationClass::Published {
+            recovery_required: false,
+            interrupted,
+        },
     };
     assert_eq!(
         status_of(&view(vec![]), 2_000, 2_000, 600_000),
