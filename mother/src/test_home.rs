@@ -7,7 +7,7 @@
 
 use crate::adapter::{create_private, FileJournal, FilePrivate};
 use crate::journal::JournalError;
-use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::clock::{Clock, SystemClock};
 use nexus_governed_control::authority::evidence::{
     EvidenceProjection, EvidenceRecord, MemoryEvidence,
 };
@@ -29,6 +29,9 @@ pub(crate) struct TestHome {
     /// M2c-B: a projection of every record the broker writes, inert until
     /// a test arms it (it then holds the writer of a matching record).
     pub gate: Arc<GatedProjection>,
+    /// M2d-C: the broker's clock, the system's until a test moves it or
+    /// arms it.
+    pub clock: Arc<TestClock>,
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -47,17 +50,14 @@ impl TestHome {
             vec![Arc::new(MemoryEvidence::new(256)), gate.clone()],
         )
         .map_err(|e| format!("evidence store: {}", e.as_str()))?;
-        let control = GovernedControl::new(
-            &broker,
-            Vault::Disabled,
-            evidence,
-            Arc::new(SystemClock::default()),
-        )
-        .map_err(|e| format!("broker: {e:?}"))?;
+        let clock = Arc::new(TestClock::default());
+        let control = GovernedControl::new(&broker, Vault::Disabled, evidence, clock.clone())
+            .map_err(|e| format!("broker: {e:?}"))?;
         Ok(Self {
             dir: dir.to_path_buf(),
             control: Arc::new(control),
             gate,
+            clock,
         })
     }
 
@@ -90,6 +90,74 @@ impl TestHome {
     /// P0: Mother's private store in this home.
     pub fn private(&self) -> FilePrivate {
         FilePrivate::open(&self.dir.join("private")).expect("the private store opens")
+    }
+}
+
+type Due = (Box<dyn Fn() -> bool + Send>, Box<dyn FnOnce() + Send>);
+
+/// M2d-C: the system's clocks, moved forward by `advance` (both at once,
+/// and never back), with one armed action: the first reading taken once
+/// its condition holds runs it, on the reading thread, before the reading
+/// returns. Mother's tests cannot reach the broker's own hooks (they are
+/// per crate): a reading the broker takes at a step is where they act.
+#[derive(Default)]
+pub(crate) struct TestClock {
+    system: SystemClock,
+    offset_ms: AtomicU64,
+    due: Mutex<Option<Due>>,
+}
+
+impl TestClock {
+    /// Move both clocks forward by `by`.
+    pub fn advance(&self, by: Duration) {
+        let by = u64::try_from(by.as_millis()).unwrap_or(u64::MAX);
+        self.offset_ms.fetch_add(by, Ordering::SeqCst);
+    }
+
+    /// Run `then` at the first reading taken once `when` holds.
+    pub fn arm(
+        &self,
+        when: impl Fn() -> bool + Send + 'static,
+        then: impl FnOnce() + Send + 'static,
+    ) {
+        *self.due.lock().unwrap() = Some((Box::new(when), Box::new(then)));
+    }
+
+    /// Whether the armed action is still waiting (it has not run).
+    pub fn armed(&self) -> bool {
+        self.due.lock().unwrap().is_some()
+    }
+
+    /// Disarm, and say whether the action had still to run.
+    pub fn disarm(&self) -> bool {
+        self.due.lock().unwrap().take().is_some()
+    }
+
+    fn reading(&self) -> u64 {
+        let due = {
+            let mut due = self.due.lock().unwrap();
+            if due.as_ref().is_some_and(|(when, _)| when()) {
+                due.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, then)) = due {
+            then();
+        }
+        self.offset_ms.load(Ordering::SeqCst)
+    }
+}
+
+impl Clock for TestClock {
+    fn monotonic_ms(&self) -> u64 {
+        let offset = self.reading();
+        self.system.monotonic_ms().saturating_add(offset)
+    }
+
+    fn wall_ms(&self) -> u64 {
+        let offset = self.reading();
+        self.system.wall_ms().saturating_add(offset)
     }
 }
 
