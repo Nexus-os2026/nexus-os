@@ -243,9 +243,10 @@ async fn poll(guard: &Guard<'_>, hard: &AbsoluteDeadline) -> ModelError {
 /// select starts) is never notified. A Stop, cancel or expiry that arrives
 /// during the synchronous client construction below may be followed by the
 /// notice and then end the call `Stopped`, `Cancelled` or `Timeout`: that is
-/// an attempted hand-off, as M3 design §8.5 defines it. A panicking
-/// observer cannot prevent the hand-off: its unwinding is caught here and
-/// the request is sent as if it had returned.
+/// an attempted hand-off, as M3 design §8.5 defines it. In an unwinding
+/// build a panicking observer cannot prevent the hand-off: its unwinding is
+/// caught here, its panic payload is forgotten (never dropped on this
+/// path), and the request is sent as if it had returned.
 async fn request(
     local: IpAddr,
     url: String,
@@ -274,9 +275,15 @@ async fn request(
             // A notice claims an attempted send, so the observer's unwinding
             // must not stop the send. Nothing of the transport's is touched
             // by the observer or after its panic but the send itself.
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 observer.dispatched(sent_mono_ms);
             }));
+            if let Err(payload) = caught {
+                // The payload's destructor is the observer's code and could
+                // panic again before the send: it is never run here. A buggy
+                // observer leaks at most one payload per call.
+                std::mem::forget(payload);
+            }
         }
     }
     let mut response = request.send().await.map_err(request_error)?;

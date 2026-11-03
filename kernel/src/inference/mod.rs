@@ -201,9 +201,14 @@ pub trait CallDeadline: Send + Sync {
 /// It runs on the request's own thread while the request waits for it, so
 /// it must be fast and must never block: until it returns, the call cannot
 /// be ended by a cancel, a Stop or a deadline. It holds no lock of the
-/// transport's. A panicking observer cannot prevent or fake a send: its
-/// unwinding is caught, the request is handed to the client as if it had
-/// returned, and whatever it recorded is the observer's own affair.
+/// transport's. In an unwinding build a panicking observer cannot prevent or
+/// fake a send: its unwinding is caught, its panic payload is forgotten
+/// rather than dropped (its destructor is the observer's code and never
+/// runs on the transport path; a buggy observer leaks at most one payload
+/// per call), the request is handed to the client as if it had returned,
+/// and whatever it recorded is the observer's own affair. Nothing is
+/// claimed under `panic = "abort"`, or for a panic raised while already
+/// unwinding: both end the process.
 pub trait CallObserver: Send + Sync {
     fn dispatched(&self, sent_mono_ms: u64);
 }
