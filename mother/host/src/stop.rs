@@ -1,6 +1,6 @@
 //! Memory-only host admission and separately owned synchronous Stop workers.
 use nexus_governed_control::authority::file_session::HaltCell;
-use nexus_governed_control::governed::GovernedControl;
+use nexus_governed_control::governed::{GovernedControl, StopSnapshot};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread::JoinHandle;
@@ -136,6 +136,7 @@ struct State {
     finished: u64,
     failed_workers: u64,
     failed: bool,
+    snapshot: Option<StopSnapshot>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Receipt {
@@ -145,6 +146,7 @@ pub(crate) struct Receipt {
     pub finished: u64,
     pub failed_workers: u64,
     pub failed: bool,
+    pub snapshot: Option<StopSnapshot>,
 }
 type Body = Arc<dyn Fn() + Send + Sync>;
 
@@ -196,8 +198,13 @@ impl StopRoute {
             self.gate.fail();
             return false;
         };
+        let route = Arc::downgrade(self);
         *body = Some(Arc::new(move || {
             owner.emergency_stop();
+            let snapshot = owner.stop_snapshot();
+            if let Some(route) = route.upgrade() {
+                route.lock().snapshot = Some(snapshot);
+            }
         }));
         drop(body);
         self.dispatch_pending();
@@ -348,6 +355,7 @@ impl StopRoute {
             finished: state.finished,
             failed_workers: state.failed_workers,
             failed: state.failed,
+            snapshot: state.snapshot,
         }
     }
     pub(crate) fn join_until(&self, deadline: Instant) -> bool {
@@ -382,6 +390,7 @@ pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<Ato
         finished: 0,
         failed_workers: 0,
         failed: false,
+        snapshot: None,
     };
     loop {
         screen.stop.reap();
@@ -394,6 +403,20 @@ pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<Ato
         }
         for _ in last.coalesced..receipt.coalesced {
             screen.emit("STOP COALESCED\n");
+        }
+        // A completed worker captured this memory-only backend observation.
+        // Emit it before its completion receipt; no backend handle is held by
+        // the reporter and no evidence/cleanup can delay ingress reporting.
+        if receipt.finished != last.finished {
+            if let Some(current) = receipt.snapshot {
+                screen.emit(&format!(
+                    "kernel_stopped={} broker_stopped={} stop_number={} generation={}\n",
+                    current.kernel_stopped,
+                    current.broker_stopped,
+                    current.stop_number,
+                    current.policy_generation
+                ));
+            }
         }
         for previous in last.finished..receipt.finished {
             let count = previous + 1;
