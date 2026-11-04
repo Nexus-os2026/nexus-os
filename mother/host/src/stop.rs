@@ -96,7 +96,7 @@ impl Gate {
 struct Worker {
     id: u64,
     spawning: bool,
-    handle: Option<JoinHandle<()>>,
+    handle: Option<JoinHandle<bool>>,
 }
 #[derive(Default)]
 struct State {
@@ -104,6 +104,7 @@ struct State {
     workers: Vec<Worker>,
     coalesced: u64,
     finished: u64,
+    failed_workers: u64,
     failed: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,6 +113,7 @@ pub(crate) struct Receipt {
     pub outstanding: usize,
     pub coalesced: u64,
     pub finished: u64,
+    pub failed_workers: u64,
     pub failed: bool,
 }
 type Body = Arc<dyn Fn() + Send + Sync>;
@@ -226,6 +228,7 @@ impl StopRoute {
                         route.lock().failed = true;
                     }
                     route.changed.notify_all();
+                    ok
                 });
             let mut state = self.lock();
             match handle {
@@ -280,14 +283,19 @@ impl StopRoute {
             handles
         };
         for handle in handles {
-            let ok = handle.join().is_ok();
+            let ok = matches!(handle.join(), Ok(true));
             let mut state = self.lock();
             if !ok {
                 state.failed = true;
                 self.gate.fail();
             }
-            match state.finished.checked_add(1) {
-                Some(n) => state.finished = n,
+            let count = if ok {
+                &mut state.finished
+            } else {
+                &mut state.failed_workers
+            };
+            match count.checked_add(1) {
+                Some(n) => *count = n,
                 None => {
                     state.failed = true;
                     self.gate.fail();
@@ -302,6 +310,7 @@ impl StopRoute {
             outstanding: state.workers.len(),
             coalesced: state.coalesced,
             finished: state.finished,
+            failed_workers: state.failed_workers,
             failed: state.failed,
         }
     }

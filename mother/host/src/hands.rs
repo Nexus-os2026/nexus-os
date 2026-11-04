@@ -767,6 +767,9 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         if receipt.finished != last.finished {
             screen.emit(&format!("STOP RECORDING COMPLETED count={} (durability requires evidence health)\nSTOP WORKERS outstanding={}\n", receipt.finished, receipt.outstanding));
         }
+        if receipt.failed && !last.failed {
+            screen.emit("STOP RECORDING FAILED\n");
+        }
         last = receipt;
         snapshot = current;
         if screen.ended() || screen.stop.gate.failed() || screen.input().quit {
@@ -822,6 +825,14 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let had_work = work.is_some();
     let work_done = join(&mut work, deadline, &screen).is_some() || !had_work;
     let stops_done = screen.stop.join_until(deadline);
+    let final_receipt = screen.stop.receipt();
+    if final_receipt.failed && (!last.failed || final_receipt.failed_workers != last.failed_workers)
+    {
+        screen.emit(&format!(
+            "STOP RECORDING FAILED failed_workers={} outstanding={}\n",
+            final_receipt.failed_workers, final_receipt.outstanding
+        ));
+    }
     let mut clean = false;
     if reader_done && work_done && stops_done && !screen.ended() && !screen.stop.gate.failed() {
         let body = screen.stop.take_body();
