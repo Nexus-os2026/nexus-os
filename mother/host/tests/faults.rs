@@ -237,3 +237,94 @@ fn d_o4_input_error_and_output_failure_end_hands() {
         f.empty();
     }
 }
+
+#[test]
+fn h1_store_already_held_before_stop_ingress_and_eventual_records() {
+    let f = Fixture::new();
+    let fault = Fault::new(&f, "evidence");
+    let mut command = f.command("no approval\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.line("run");
+    let grant = p.code();
+    fault.arm();
+    p.line(&grant);
+    let receipt = fault.reached();
+    assert!(receipt.path.contains("/p3-evidence/evidence.sqlite3"));
+    p.line("stop");
+    p.expect("kernel_stopped=true broker_stopped=true");
+    p.line("stop");
+    p.expect("STOP REQUEST RECEIVED epoch=2");
+    p.line("lift-for-undo");
+    p.expect("REFUSED stop_workers_outstanding\n");
+    receipt.release();
+    p.expect("STOP WORKERS outstanding=0\n");
+    p.line("evidence");
+    p.expect("emergency_stopped");
+    p.expect("EVIDENCE HEALTH\n");
+    f.empty();
+    p.quit();
+}
+
+fn activity(p: &mut Pty) -> String {
+    p.line("status");
+    p.expect("STATUS END\n")
+        .lines()
+        .find(|line| line.starts_with("ADMITTED "))
+        .expect("all seven host admission counters")
+        .to_string()
+}
+
+#[test]
+fn recovery_composed_counts_include_queued_callbacks_after_successful_undo() {
+    let f = Fixture::new();
+    let fault = Fault::new(&f, "after-final-check");
+    let mut command = f.command("one publication\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.mission();
+    fault.arm();
+    p.line("approve");
+    p.yes();
+    let receipt = fault.reached();
+    let before = activity(&mut p);
+    for route in ["mission", "door", "run", "files", "lane"] {
+        assert!(
+            !before.contains(&format!("{route}=0")),
+            "positive {route}: {before}"
+        );
+    }
+    assert!(before.contains("inference=0 model=0"));
+    p.line("run");
+    p.line("approve");
+    p.line("stop");
+    p.expect("STOP RECORDING COMPLETED");
+    receipt.release();
+    p.expect("ACTION FINISHED");
+    assert_eq!(
+        std::fs::read(f.workspace.join("hello.txt")).unwrap(),
+        b"one publication\n"
+    );
+    p.line("lift-for-undo");
+    p.yes();
+    p.expect("LIFTED recovery only; missions remain stopped\n");
+    p.line("undo");
+    p.yes();
+    p.expect("UNDO REMOVED interrupted=none\n");
+    f.empty();
+    assert_eq!(
+        activity(&mut p),
+        before,
+        "no post-emergency admission, including queued callbacks"
+    );
+    p.line("stop");
+    p.expect("STOP RECORDING COMPLETED");
+    assert_eq!(
+        activity(&mut p),
+        before,
+        "restriction survives repeated Stop"
+    );
+    p.quit();
+}

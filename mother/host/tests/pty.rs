@@ -449,3 +449,16 @@ fn d_o21_real_leaks_outside_the_exact_private_payload_are_detected() {
         "staging metadata is not private payload"
     );
 }
+
+#[test]
+fn quit_during_dialogue_cancels_without_waiting_for_an_answer() {
+    let f = Fixture::new();
+    let mut p = Pty::start(f.command("never approved\n"));
+    p.ready();
+    p.line("run");
+    p.code();
+    p.line("quit");
+    assert!(p.finish().success(), "no File session was admitted");
+    assert!(p.output.contains("SESSION CLOSED recorded"));
+    f.empty();
+}
