@@ -453,6 +453,8 @@ impl Runtime {
                     // next action too. Native engagement precedes recording.
                     self.home.owner().emergency_stop();
                     self.screen.emit("Stop received while your confirmed lift was finishing; the native halt is re-engaged.\n");
+                    self.screen
+                        .emit("LIFT REFUSED halted; request fresh consent\n");
                 } else {
                     match result {
                         Ok(()) => self

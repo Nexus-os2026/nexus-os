@@ -608,7 +608,8 @@ impl GovernedControl {
             // No callback, rendering, evidence or other host action precedes
             // this re-engagement when the confirmed lift was overtaken.
             if lifted.is_err() || recovery.check().is_err() {
-                self.kernel_stop.engage();
+                // This existing route engages the original cell and native
+                // halt before any blocking recording or cleanup dependency.
                 self.emergency_stop();
                 return Err(AuthorityError::Halted);
             }
