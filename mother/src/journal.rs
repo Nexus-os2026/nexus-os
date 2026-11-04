@@ -133,6 +133,8 @@ pub enum Event {
     Held { reason: HeldReason },
     /// M2a-S: the Owner resumed a held mission.
     Resumed,
+    /// Sticky File mode, selected before this draft can be submitted.
+    FileModeSelected,
 }
 
 /// One journal entry.

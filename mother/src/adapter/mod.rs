@@ -27,14 +27,19 @@
 //! ([`crate::evidence::BrokerClass`]).
 
 use crate::effect::{
-    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed, PendingAction,
+    Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed,
+    PendingAction,
 };
 use crate::evidence::BrokerClass;
 use crate::journal::{IoKind, JournalError, JournalStore, MissionId, StoreFailure};
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
+use nexus_governed_control::authority::commitment::PublicationClass;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::file_session::{
+    FileAttachment, FilePort, FileSessionError, HaltCause, HaltCell,
+};
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::governed::{
@@ -46,7 +51,8 @@ use std::io::Write;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
+mod lite_port;
 
 #[cfg(test)]
 mod expiry_tests;
@@ -134,12 +140,16 @@ struct Runs {
     /// M2a-S: the runs the fence has still to cancel, last first. A sweep a
     /// panic cut short is completed when the poisoned mutex is taken back.
     unswept: Vec<RunId>,
+    file_admissions: BTreeMap<MissionId, Admission>,
 }
 
 /// The EffectPort over the governed-control broker, through one agent door.
 pub struct GovernedPort {
     /// M2c: the port's only broker handle.
     door: AgentDoor,
+    file_port: Result<FilePort, FileSessionError>,
+    file_session: OnceLock<(Arc<FileAttachment>, HaltCell)>,
+    workspace: Option<String>,
     /// M2a-S: `fenced` and every run registration are under this mutex, so
     /// a run registers either before the fence (which cancels it) or after
     /// (and cancels itself); every broker call checks `fenced` first.
@@ -186,7 +196,11 @@ pub struct GovernedPort {
 impl GovernedPort {
     /// A port over `door`, which the host issued after the Owner's yes.
     pub fn new(door: AgentDoor) -> Self {
+        let file_port = door.file_port();
         Self {
+            file_port,
+            file_session: OnceLock::new(),
+            workspace: None,
             door,
             runs: Mutex::new(Runs::default()),
             performed: AtomicUsize::new(0),
@@ -210,6 +224,12 @@ impl GovernedPort {
             #[cfg(test)]
             after_held_answer: Default::default(),
         }
+    }
+
+    /// A requested registered workspace label, never workspace authority.
+    pub fn with_workspace(mut self, name: String) -> Self {
+        self.workspace = Some(name);
+        self
     }
 
     /// How many effects Mother has handed to this port.
@@ -306,6 +326,9 @@ impl GovernedPort {
     /// run's cancellation token), or on a run it opens afterwards, which
     /// its registration cancels at once (`run_for`).
     fn enter(&self) -> Result<(), EffectRefusal> {
+        if self.file_session.get().is_some() {
+            self.file_enter()?;
+        }
         if self.with_runs(|runs| runs.fenced) {
             return Err(refused(BrokerClass::PortFenced));
         }
@@ -331,7 +354,11 @@ impl GovernedPort {
         }
         #[cfg(test)]
         self.before_open_run.fire();
-        let run = self.door.open_run().map_err(|e| refused_by(e.class()))?;
+        let run = match self.file_session.get() {
+            Some((attachment, _)) => self.door.open_file_run(attachment),
+            None => self.door.open_run(),
+        }
+        .map_err(|e| refused_by(e.class()))?;
         let refusal = self.with_runs(|runs| {
             if runs.fenced {
                 Some(BrokerClass::PortFenced)
@@ -387,6 +414,36 @@ fn refused_by(class: &str) -> EffectRefusal {
 }
 
 impl EffectPort for GovernedPort {
+    fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
+        Ok(Some(Arc::new(
+            self.file_port.as_ref().map_err(|e| *e)?.attach()?,
+        )))
+    }
+    fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
+        let cell = self.door.claim_file_session(&attachment)?;
+        if self.file_session.set((attachment, cell.clone())).is_err() {
+            cell.engage_with(HaltCause::Fence);
+            return Err(FileSessionError::AlreadySelected);
+        }
+        Ok(cell)
+    }
+    fn file_admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
+        self.admit_lite(mission, admission)
+    }
+    fn file_publication(
+        &self,
+        mission: MissionId,
+    ) -> Result<Option<(PendingAction, PublicationClass)>, EffectRefusal> {
+        self.publication_lite(mission)
+    }
+    fn file_ack(&self, pending: &PendingAction) -> Result<(), EffectRefusal> {
+        let id = CommitmentId::parse(&pending.commitment)
+            .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
+        self.door
+            .ack_commitment(id)
+            .map_err(|e| refused_by(e.class()))
+    }
+
     fn perform(
         &self,
         mission: MissionId,
@@ -394,8 +451,19 @@ impl EffectPort for GovernedPort {
     ) -> Result<EffectOutcome, EffectRefusal> {
         #[cfg(test)]
         self.before_perform.fire();
+        if self.file_session.get().is_some() {
+            self.file_enter()?;
+            let runs = self.file_runs()?;
+            if !runs.file_admissions.contains_key(&mission) {
+                return Err(refused(BrokerClass::NotAdmitted));
+            }
+        }
         self.performed.fetch_add(1, Ordering::SeqCst);
         let intent = match effect {
+            EffectRequest::CreateFile(file) if self.file_session.get().is_some() => {
+                Intent::File(file.clone())
+            }
+            EffectRequest::CreateFile(_) => return Err(refused(BrokerClass::NoBrokerRoute)),
             EffectRequest::Network(intent) => Intent::Request(intent.clone()),
             EffectRequest::Process(intent) => Intent::Tool(intent.clone()),
             EffectRequest::ModelTool(intent) => Intent::Connector(intent.clone()),
@@ -442,6 +510,9 @@ impl EffectPort for GovernedPort {
     /// each one, never read from the record's run). Fenced: an error, unless
     /// there was nothing to withdraw.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
+        if self.file_session.get().is_some() {
+            return self.withdraw_lite(mission);
+        }
         let entered = self.enter();
         let run = self.end(mission);
         let handed = self.with_runs(|runs| runs.handed.get(&mission).cloned().unwrap_or_default());
@@ -503,6 +574,9 @@ impl EffectPort for GovernedPort {
     /// mutex, which it poisons; the port stays fenced). A fence is final: a
     /// coordinator opened again after a break needs a new port.
     fn fence(&self) -> Owed {
+        if let Some((_, cell)) = self.file_session.get() {
+            cell.engage_with(HaltCause::Fence);
+        }
         let mut owed = Owed::default();
         {
             let (mut runs, recovered) = self.locked();
@@ -899,5 +973,5 @@ pub fn create_private(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod lite;

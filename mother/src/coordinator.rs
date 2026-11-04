@@ -82,11 +82,14 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
+use nexus_governed_control::authority::file_session::{FileAttachment, FileSessionError};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};
+mod lite;
+pub use lite::FileSession;
 
 /// The most missions one coordinator keeps.
 pub const MAX_MISSIONS: usize = 1024;
@@ -136,6 +139,11 @@ pub enum LaneConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoordinatorError {
     UnknownMission,
+    FileExclusive,
+    FileSession(FileSessionError),
+    Poisoned,
+    Recording,
+    FileUnfinished,
     Contract(ContractError),
     Journal(JournalError),
     Illegal(IllegalTransition),
@@ -295,6 +303,8 @@ struct Mission {
     /// and not held, so the live coordinator holds it before its next
     /// record (recovery aside) and before the session's clean close.
     must_hold: bool,
+    file_mode: bool,
+    consent_request: Option<String>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -337,6 +347,8 @@ impl Mission {
             held: None,
             held_journaled: false,
             must_hold: false,
+            file_mode: false,
+            consent_request: None,
         }
     }
 
@@ -667,7 +679,9 @@ fn mother_refuses(contract: &MissionContract, effect: &EffectRequest) -> Option<
             Some(MotherRefusal::BudgetMoneyZero)
         }
         EffectRequest::Spend { .. } => Some(MotherRefusal::SpendNotSupported),
-        EffectRequest::File { .. } if contract.requested_folder.is_none() => {
+        EffectRequest::File { .. } | EffectRequest::CreateFile(_)
+            if contract.requested_folder.is_none() =>
+        {
             Some(MotherRefusal::NoRequestedFolder)
         }
         EffectRequest::File { relative_path, .. } if !relative_request(relative_path) => {
@@ -711,6 +725,8 @@ pub struct Coordinator<P: EffectPort> {
     /// coordinator lock held.
     private: Arc<dyn PrivateStore>,
     inner: Mutex<Inner>,
+    file_attachment: Option<Arc<FileAttachment>>,
+    file: Option<lite::FileLife>,
     /// M2c PR-B (tests): the call points of the crash and schedule oracles.
     #[cfg(test)]
     pub(crate) hooks: CoordinatorHooks,
@@ -797,6 +813,7 @@ impl<P: EffectPort> Coordinator<P> {
     where
         P: 'static,
     {
+        let file_attachment = port.file_attach().map_err(CoordinatorError::FileSession)?;
         let lines = store.load().map_err(CoordinatorError::Journal)?;
         let entries = verify(&lines).map_err(CoordinatorError::Journal)?;
         let mut missions = BTreeMap::new();
@@ -834,6 +851,8 @@ impl<P: EffectPort> Coordinator<P> {
         #[cfg(test)]
         let hooks = CoordinatorHooks::default();
         let coordinator = Self {
+            file_attachment,
+            file: None,
             port,
             lanes,
             clock,
@@ -998,6 +1017,17 @@ impl<P: EffectPort> Coordinator<P> {
                 return Err(CoordinatorError::Capacity);
             }
             let id = MissionId(inner.next_mission);
+            if let Some(file) = &self.file {
+                file.check_budget(&*self.clock);
+                if file.cell.is_engaged() {
+                    return Err(CoordinatorError::Stopped);
+                }
+                if file.mission.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+                    return Err(CoordinatorError::FileExclusive);
+                }
+                file.mission
+                    .store(id.0, std::sync::atomic::Ordering::SeqCst);
+            }
             inner.append(
                 id,
                 Event::Drafted {
@@ -1008,6 +1038,10 @@ impl<P: EffectPort> Coordinator<P> {
             inner
                 .missions
                 .insert(id, Mission::new(reference, Some(contract)));
+            if self.file.is_some() {
+                inner.append(id, Event::FileModeSelected)?;
+                inner.mission(id)?.file_mode = true;
+            }
             Ok(id)
         })
     }
@@ -1187,7 +1221,18 @@ impl<P: EffectPort> Coordinator<P> {
                         },
                         mono,
                     )?;
-                    inner.mission(id)?.consent = Some(consent);
+                    let mission = inner.mission(id)?;
+                    mission.consent = Some(consent);
+                    if mission.file_mode {
+                        mission.consent_request = Some(asked.request.clone());
+                        if let Some(file) = &self.file {
+                            file.consent_at(
+                                mono,
+                                at_wall_ms,
+                                mission.contract()?.budget.max_duration_ms,
+                            );
+                        }
+                    }
                     Ok(state)
                 }
                 Err(AuthorityError::Declined) => {
@@ -2459,6 +2504,13 @@ fn replay(
         return Ok(());
     }
     let mission = missions.get_mut(&id).ok_or(V::NeverDrafted)?;
+    if matches!(entry.event, Event::FileModeSelected) {
+        if mission.file_mode || mission.state != MissionState::Draft || mission.generation != 0 {
+            return Err(V::HoldOutOfPlace);
+        }
+        mission.file_mode = true;
+        return Ok(());
+    }
     // While held the live coordinator only stops the mission, journals an
     // action closed that the broker no longer holds, or takes the Owner's
     // resume.
@@ -2485,7 +2537,7 @@ fn replay(
         return Err(V::RecordBeforeHold);
     }
     match &entry.event {
-        Event::Drafted { .. } => unreachable!(),
+        Event::Drafted { .. } | Event::FileModeSelected => unreachable!(),
         Event::Transition { trigger } => {
             let to = transition(mission.state, trigger).map_err(|_| V::IllegalTransition)?;
             // While an effect is unsettled the live coordinator only stops,

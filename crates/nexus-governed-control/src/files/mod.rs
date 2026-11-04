@@ -119,6 +119,13 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 use std::time::Instant;
 
+/// Establish the kernel's no-dump invariant before registering a File workspace.
+/// This only narrows process access; it grants no workspace authority.
+#[cfg(target_os = "linux")]
+pub fn make_non_dumpable() -> bool {
+    nexus_kernel::coding_run::make_non_dumpable()
+}
+
 /// The largest file Files creates.
 pub const MAX_FILE_BYTES: usize = 8 * 1024;
 /// The most lines a created file may have.

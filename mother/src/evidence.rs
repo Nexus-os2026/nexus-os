@@ -142,6 +142,19 @@ pub enum BrokerClass {
     Failed,
     Cancelled,
     Revoked,
+    /// M2d: the broker's Files classes.
+    NotAdmitted,
+    NoConsent,
+    AlreadyAdmitted,
+    FileExists,
+    ChangeTooLargeToShow,
+    UnsupportedMountTopology,
+    RecoveryRequired,
+    /// S1a-D+B (merged from main): the broker's page and facts classes.
+    FactsInvalid,
+    FileTypeNotAllowed,
+    PageNotInert,
+    PageFactMissing,
     /// Anything outside this registry.
     Unknown,
 }
@@ -185,6 +198,17 @@ impl BrokerClass {
         BrokerClass::Failed,
         BrokerClass::Cancelled,
         BrokerClass::Revoked,
+        BrokerClass::NotAdmitted,
+        BrokerClass::NoConsent,
+        BrokerClass::AlreadyAdmitted,
+        BrokerClass::FileExists,
+        BrokerClass::ChangeTooLargeToShow,
+        BrokerClass::UnsupportedMountTopology,
+        BrokerClass::RecoveryRequired,
+        BrokerClass::FactsInvalid,
+        BrokerClass::FileTypeNotAllowed,
+        BrokerClass::PageNotInert,
+        BrokerClass::PageFactMissing,
         BrokerClass::Unknown,
     ];
 
@@ -227,6 +251,17 @@ impl BrokerClass {
             BrokerClass::Failed => "failed",
             BrokerClass::Cancelled => "cancelled",
             BrokerClass::Revoked => "revoked",
+            BrokerClass::NotAdmitted => "not_admitted",
+            BrokerClass::NoConsent => "no_consent",
+            BrokerClass::AlreadyAdmitted => "already_admitted",
+            BrokerClass::FileExists => "file_exists",
+            BrokerClass::ChangeTooLargeToShow => "change_too_large_to_show",
+            BrokerClass::UnsupportedMountTopology => "unsupported_mount_topology",
+            BrokerClass::RecoveryRequired => "recovery_required",
+            BrokerClass::FactsInvalid => "facts_invalid",
+            BrokerClass::FileTypeNotAllowed => "file_type_not_allowed",
+            BrokerClass::PageNotInert => "page_not_inert",
+            BrokerClass::PageFactMissing => "page_fact_missing",
             BrokerClass::Unknown => "unknown",
         }
     }
@@ -626,7 +661,8 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
         | Event::SessionOpened
         | Event::SessionClosed
         | Event::Held { .. }
-        | Event::Resumed => true,
+        | Event::Resumed
+        | Event::FileModeSelected => true,
     };
     if ok {
         Ok(())
