@@ -34,8 +34,10 @@ use crate::authority::clock::Clock;
 use crate::authority::commitment::{CommitmentState, CommitmentView, PublicationClass};
 use crate::authority::effect::CapabilityKind;
 use crate::authority::evidence::Privacy;
+#[cfg(test)]
+use crate::authority::file_session::HaltCause;
 use crate::authority::file_session::{
-    FileAttachment, FilePort, FileSessionError, HaltCause, HaltCell,
+    FileAttachment, FilePort, FileSessionError, HaltCell, HaltTag,
 };
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::{ConsentKind, GroupId};
@@ -127,7 +129,7 @@ impl AgentDoor {
             .file_sessions
             .claim(attachment, self.core.group)?;
         if self.core.file_cell.set(cell.clone()).is_err() {
-            cell.engage_with(HaltCause::Fence);
+            cell.engage_tagged(HaltTag::DoorHalted);
             return Err(FileSessionError::AlreadySelected);
         }
         if self
@@ -137,7 +139,7 @@ impl AgentDoor {
             .attach_file_cell(self.core.group, cell.clone())
             .is_err()
         {
-            cell.engage_with(HaltCause::Fence);
+            cell.engage_tagged(HaltTag::DoorHalted);
             return Err(FileSessionError::Poisoned);
         }
         Ok(cell)
@@ -201,7 +203,7 @@ impl AgentDoor {
     /// is held. Idempotent: a later call makes only what is left to make.
     pub fn halt(&self, reason: HaltReason) -> RecordBatch {
         if let Some(cell) = self.core.file_cell.get() {
-            cell.engage_with(HaltCause::Fence);
+            cell.engage_tagged(HaltTag::DoorHalted);
         }
         self.control.halt_door(&self.core, reason)
     }

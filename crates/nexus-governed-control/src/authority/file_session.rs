@@ -41,6 +41,41 @@ impl HaltCause {
     }
 }
 
+/// Exact built-in disposition or a client's immutable, process-local intent.
+/// The four high tags are reserved for broker dispositions. Client tags below
+/// that range identify deny-only data; they never authorize execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HaltTag {
+    OwnerStop,
+    EmergencyStop,
+    TimeBudget,
+    DoorHalted,
+    Client {
+        cause: HaltCause,
+        reason: NonZeroU16,
+    },
+}
+impl HaltTag {
+    fn builtin(cause: HaltCause) -> Self {
+        match cause {
+            HaltCause::Stop => Self::OwnerStop,
+            HaltCause::Emergency => Self::EmergencyStop,
+            HaltCause::TimeBudget => Self::TimeBudget,
+            HaltCause::Fence => Self::DoorHalted,
+        }
+    }
+    fn bits(self) -> u32 {
+        let (cause, tag) = match self {
+            Self::OwnerStop => (HaltCause::Stop, u16::MAX),
+            Self::EmergencyStop => (HaltCause::Emergency, u16::MAX - 1),
+            Self::TimeBudget => (HaltCause::TimeBudget, u16::MAX - 2),
+            Self::DoorHalted => (HaltCause::Fence, u16::MAX - 3),
+            Self::Client { cause, reason } => (cause, reason.get()),
+        };
+        cause.code() | (u32::from(tag) << 8)
+    }
+}
+
 /// Deny-only, immutable identity, never reset or retired before broker drop.
 #[derive(Clone)]
 #[cfg_attr(not(test), derive(Debug))]
@@ -55,26 +90,32 @@ impl std::fmt::Debug for HaltCell {
     }
 }
 impl HaltCell {
+    /// Compatibility shorthand with an exact built-in Owner disposition.
     pub fn engage(&self) {
-        self.engage_with(HaltCause::Stop);
+        self.engage_tagged(HaltTag::OwnerStop);
     }
+    /// Compatibility shorthand; every built-in cause has an explicit tag.
     pub fn engage_with(&self, cause: HaltCause) {
-        self.engage_reason(cause, None);
+        self.engage_tagged(HaltTag::builtin(cause));
     }
-    /// Latch the originating client's exact reason together with engagement.
-    /// The tag is process-local, deny-only data interpreted by that client;
-    /// the broker neither grants authority from it nor persists it. Zero is
-    /// reserved for broker-originated causes without a client reason.
     pub fn engage_reason(&self, cause: HaltCause, reason: Option<NonZeroU16>) {
-        let reason = u32::from(reason.map_or(0, NonZeroU16::get)) << 8;
+        self.engage_tagged(match reason {
+            Some(reason) => HaltTag::Client { cause, reason },
+            None => HaltTag::builtin(cause),
+        });
+    }
+    /// Cause and exact intent become visible in the same atomic write. There
+    /// is no intermediate engaged state with a missing disposition.
+    pub fn engage_tagged(&self, intent: HaltTag) {
+        self.latch(intent, false);
+    }
+    fn latch(&self, intent: HaltTag, emergency: bool) {
+        let bits = intent.bits();
+        let history = if emergency { EMERGENCY } else { 0 };
         let _ = self
             .0
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                Some(if old & CAUSE == 0 {
-                    old | cause.code() | reason
-                } else {
-                    old
-                })
+                Some(old | history | if old & CAUSE == 0 { bits } else { 0 })
             });
         #[cfg(test)]
         self.1.fire("file.engaged");
@@ -140,27 +181,13 @@ impl Default for FileSessions {
 impl FileSessions {
     fn lock(&self) -> Result<MutexGuard<'_, History>, FileSessionError> {
         self.history.lock().map_err(|_| {
-            self.state.engage_with(HaltCause::Fence);
+            self.state.engage_tagged(HaltTag::DoorHalted);
             FileSessionError::Poisoned
         })
     }
     /// First instruction at broker emergency ingress, before any lock or I/O.
     pub(crate) fn emergency(&self) {
-        let _ = self
-            .state
-            .0
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                Some(
-                    old | EMERGENCY
-                        | if old & CAUSE == 0 {
-                            HaltCause::Emergency.code()
-                        } else {
-                            0
-                        },
-                )
-            });
-        #[cfg(test)]
-        self.state.1.fire("file.engaged");
+        self.state.latch(HaltTag::EmergencyStop, true);
     }
     fn fresh(&self) -> Result<(), FileSessionError> {
         if self.state.0.load(Ordering::SeqCst) & EMERGENCY != 0 {
@@ -174,7 +201,7 @@ impl FileSessions {
     pub(crate) fn port(self: &Arc<Self>, group: GroupId) -> Result<FilePort, FileSessionError> {
         let mut h = self.lock()?;
         if h.selected {
-            self.state.engage_with(HaltCause::Fence);
+            self.state.engage_tagged(HaltTag::DoorHalted);
             return Err(FileSessionError::Reopened);
         }
         h.ports = h.ports.checked_add(1).ok_or(FileSessionError::Capacity)?;
@@ -246,7 +273,7 @@ impl FilePort {
     pub fn attach(&self) -> Result<FileAttachment, FileSessionError> {
         let mut h = self.sessions.lock()?;
         if h.selected {
-            self.sessions.state.engage_with(HaltCause::Fence);
+            self.sessions.state.engage_tagged(HaltTag::DoorHalted);
             return Err(FileSessionError::Reopened);
         }
         h.attachments = h
