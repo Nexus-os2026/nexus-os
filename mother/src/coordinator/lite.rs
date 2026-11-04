@@ -2,7 +2,8 @@
 //! to the count-only legacy Stop API is exposed.
 use super::*;
 use crate::effect::Admission;
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 use nexus_governed_control::authority::file_session::HaltCause;
 use nexus_governed_control::authority::file_session::{HaltCell, HaltTag};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -40,19 +41,23 @@ pub struct FileSession<P: EffectPort> {
 }
 
 #[path = "../adapter/lite_review3.rs"]
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod review3;
 
 #[path = "../adapter/lite_review4.rs"]
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod review4;
 
 #[path = "../adapter/lite_review5.rs"]
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod review5;
 
 #[path = "../adapter/lite_review6.rs"]
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod review6;
 
 impl<P: EffectPort> Coordinator<P> {
