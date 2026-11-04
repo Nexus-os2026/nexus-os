@@ -139,8 +139,14 @@ impl Owed {
         }
         let mut failed = false;
         for batch in self.0 {
-            let outcome = batch.write();
-            failed |= outcome.owed != 0 || outcome.uncertain != 0;
+            // The batch owns its records. On unwind its Drop counts the
+            // in-flight record uncertain and the remainder lost. Preserve
+            // that native accounting, try the other owned batches, and return
+            // the recording failure through the typed File lifecycle.
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| batch.write())) {
+                Ok(outcome) => failed |= outcome.owed != 0 || outcome.uncertain != 0,
+                Err(_) => failed = true,
+            }
         }
         if failed {
             Err(AuthorityError::EvidenceUnavailable)
