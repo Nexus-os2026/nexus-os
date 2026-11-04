@@ -786,6 +786,9 @@ impl EffectPort for GovernedPort {
     /// Final at the broker, or not held there at all. An action that is
     /// not Mother's, or that runs (approved, executing), is not settled.
     fn settled(&self, pending: &PendingAction) -> bool {
+        if self.file_session.get().is_some() {
+            return self.non_file_settled_lite(pending);
+        }
         // Fenced: not confirmed (the action stays open in the journal and is
         // withdrawn again on the next open).
         let Ok(()) = self.enter() else {

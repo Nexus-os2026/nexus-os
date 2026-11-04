@@ -82,7 +82,9 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
-use nexus_governed_control::authority::file_session::{FileAttachment, FileSessionError};
+use nexus_governed_control::authority::file_session::{
+    FileAttachment, FileSessionError, HaltCause,
+};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, VecDeque};
@@ -275,6 +277,9 @@ struct Mission {
     model_calls: u32,
     next_effect: u64,
     unsettled: Option<u64>,
+    /// Kind of the last journaled dispatch, kept through approval retirement.
+    /// No later effect is dispatched while its open action remains.
+    dispatched_kind: Option<EffectKind>,
     /// An effect was dispatched since the last transition: re-running the
     /// phase after a restart could repeat it.
     dispatched_in_phase: bool,
@@ -342,6 +347,7 @@ impl Mission {
             model_calls: 0,
             next_effect: 0,
             unsettled: None,
+            dispatched_kind: None,
             dispatched_in_phase: false,
             pending_lane: None,
             prior_outputs: Vec::new(),
@@ -1515,7 +1521,18 @@ impl<P: EffectPort> Coordinator<P> {
         mut report: Advance,
     ) -> Result<Advance, CoordinatorError> {
         self.file_boundary(id)?;
-        let status = if self.file.is_some() {
+        let file_approval = if self.file.is_some() {
+            self.step(|inner| {
+                let m = inner.mission(id)?;
+                if m.generation != generation {
+                    return Err(CoordinatorError::Stopped);
+                }
+                Ok(m.dispatched_kind.ok_or(CoordinatorError::Stopped)? == EffectKind::File)
+            })?
+        } else {
+            false
+        };
+        let status = if file_approval {
             match self.file_approval(id, generation)? {
                 lite_settle::FileDecision::Status(status) => status,
                 lite_settle::FileDecision::Ended(state) => {
@@ -1564,10 +1581,10 @@ impl<P: EffectPort> Coordinator<P> {
             }
         };
         if let Some(trigger) = end {
-            report.to = if self.file.is_some() {
+            report.to = if file_approval {
                 self.file_nonpublication_end(id, generation, trigger)?
             } else {
-                self.end_with(id, trigger)?
+                self.end_non_file_with(id, trigger)?
             };
             report.reason = self.reason(id);
             return Ok(report);
@@ -1861,6 +1878,7 @@ impl<P: EffectPort> Coordinator<P> {
                 let mission = inner.mission(id)?;
                 mission.next_effect += 1;
                 mission.unsettled = Some(number);
+                mission.dispatched_kind = Some(effect.kind());
                 if mission.file_mode && effect.kind() == EffectKind::File {
                     mission.unresolved_file = Some(number);
                 }
@@ -2069,6 +2087,23 @@ impl<P: EffectPort> Coordinator<P> {
             };
             return self.end(id, reason);
         }
+        self.end_non_file_with(id, trigger)
+    }
+
+    /// The existing non-File terminal path also serves non-File approvals in
+    /// a File session. Keep the denial/lapse trigger and any older File acks.
+    fn end_non_file_with(
+        &self,
+        id: MissionId,
+        trigger: Trigger,
+    ) -> Result<MissionState, CoordinatorError> {
+        if let Some(file) = &self.file {
+            file.cell.engage_with(HaltCause::Fence);
+            // A Stop that won first must still settle an unresolved File.
+            if file.cell.cause() != Some(HaltCause::Fence) {
+                self.file_boundary(id)?;
+            }
+        }
         let mono = self.clock.monotonic_ms();
         let result = self.step(|inner| {
             let from = inner.mission(id)?.state;
@@ -2092,16 +2127,25 @@ impl<P: EffectPort> Coordinator<P> {
         let state = result?;
         withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
         closed?;
+        if self.file.is_some() {
+            self.file_ack_all(id)?;
+        }
         Ok(state)
     }
 
     /// Journal the mission's open action closed, once the port confirms
     /// the broker no longer holds it open. `Ok(false)`: not confirmed.
     fn close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
-        if self.peek(|inner| inner.missions.get(&id).is_some_and(|m| m.file_mode)) {
+        let (open, file_action) = self.step(|inner| {
+            let m = inner.mission(id)?;
+            Ok((
+                m.open_action.clone(),
+                m.file_mode && m.dispatched_kind == Some(EffectKind::File),
+            ))
+        })?;
+        if file_action {
             return self.file_close_action(id);
         }
-        let open = self.step(|inner| inner.mission(id).map(|m| m.open_action.clone()))?;
         let Some((effect, pending)) = open else {
             return Ok(true);
         };
@@ -2928,6 +2972,7 @@ fn replay(
             }
             mission.next_effect += 1;
             mission.unsettled = Some(*effect);
+            mission.dispatched_kind = Some(*kind);
             if mission.file_mode && *kind == EffectKind::File {
                 mission.unresolved_file = Some(*effect);
             }

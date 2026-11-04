@@ -180,8 +180,12 @@ impl<P: EffectPort> Coordinator<P> {
                     .port
                     .withdraw(id)
                     .map_err(|r| CoordinatorError::Withdrawal(r.class));
+                let closed = self.close_action(id);
+                let acked = self.file_ack_all(id);
                 let state = result?;
                 withdrawn?;
+                closed?;
+                acked?;
                 Ok(state)
             }
             Ok(Step::Settle(effect, pending, started)) => {

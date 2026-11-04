@@ -2,6 +2,34 @@
 use super::*;
 
 impl GovernedPort {
+    /// Non-File retirement retains the legacy final-state rules. Unlike
+    /// admission, this read must work after the File session's halt engages.
+    /// Files themselves still require publication proof and exact ack.
+    pub(super) fn non_file_settled_lite(&self, pending: &PendingAction) -> bool {
+        if !self.file_runs().is_ok_and(|runs| !runs.fenced) {
+            return false;
+        }
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.door.file_observation(commitment) {
+            Ok(Lookup::Unknown) => true,
+            Ok(Lookup::NotMine { settled }) => settled,
+            Ok(Lookup::Mine((view, _))) => {
+                view.kind != nexus_governed_control::authority::effect::CapabilityKind::Files
+                    && RunId::parse(&pending.run) == Some(view.run)
+                    && view.agent == mother_agent()
+                    && !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+            Err(_) => false,
+        }
+    }
+
     pub(super) fn file_runs(&self) -> Result<std::sync::MutexGuard<'_, Runs>, EffectRefusal> {
         self.runs.lock().map_err(|_| {
             if let Some((_, cell)) = self.file_session.get() {
