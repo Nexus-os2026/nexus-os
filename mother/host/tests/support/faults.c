@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 static atomic_int held;
+static atomic_int recording;
 
 static int mode(const char *wanted) {
     const char *value = getenv("M2DD_FAULT");
@@ -32,8 +33,7 @@ static int path_of(int fd, char *path, size_t capacity) {
     return 1;
 }
 
-static void boundary(const char *kind, const char *path, const void *data, size_t n) {
-    if (atomic_exchange(&held, 1)) return;
+static void receipt(const char *kind, const char *path, const void *data, size_t n) {
     const char *name = getenv("M2DD_SOCKET");
     if (!name || strlen(name) > 90) _exit(120);
     struct sockaddr_un addr = { .sun_family = AF_UNIX };
@@ -50,6 +50,11 @@ static void boundary(const char *kind, const char *path, const void *data, size_
     char release = 0;
     if (poll(&ready, 1, 15000) != 1 || read(fd, &release, 1) != 1 || release != 'R') _exit(122);
     close(fd);
+}
+
+static void boundary(const char *kind, const char *path, const void *data, size_t n) {
+    if (atomic_exchange(&held, 1)) return;
+    receipt(kind, path, data, n);
 }
 
 int fsync(int fd) {
@@ -87,6 +92,11 @@ ssize_t pwrite64(int fd, const void *data, size_t size, off64_t offset) {
     char path[4096];
     if (mode("evidence") && path_of(fd, path, sizeof(path)) &&
         strstr(path, "/p3-evidence/evidence.sqlite3")) boundary("evidence", path, NULL, 0);
+    /* Execute is held before its final check. Only emergency recording can
+     * reach this evidence write until that owned execution is released. */
+    if (mode("before-publication") && atomic_load(&held) &&
+        path_of(fd, path, sizeof(path)) && strstr(path, "/p3-evidence/evidence.sqlite3") &&
+        !atomic_exchange(&recording, 1)) receipt("stop-recording", path, NULL, 0);
     return real(fd, data, size, offset);
 }
 

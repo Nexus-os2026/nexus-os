@@ -86,6 +86,12 @@ pub struct Pty {
 impl Pty {
     pub fn start(mut command: Command) -> Self {
         let pty = openpty(None, None).unwrap();
+        // std's duplicate is close-on-exec; the raw openpty master is not.
+        // Drop that original before spawn so the child cannot keep its own
+        // master alive and defeat the master-close EOF oracle.
+        let original = File::from(pty.master);
+        let master = original.try_clone().unwrap();
+        drop(original);
         let input: OwnedFd = pty.slave.try_clone().unwrap();
         let output: OwnedFd = pty.slave.try_clone().unwrap();
         let child = command
@@ -96,7 +102,7 @@ impl Pty {
             .unwrap();
         Self {
             child,
-            master: Some(File::from(pty.master)),
+            master: Some(master),
             output: String::new(),
             cursor: 0,
         }

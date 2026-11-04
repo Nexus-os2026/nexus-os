@@ -70,6 +70,9 @@ fn d_o20_stop_ctrl_d_and_master_close_before_publication() {
                 p.master.take();
             }
         }
+        let stopped = fault.reached_kind("stop-recording");
+        assert!(stopped.path.contains("/p3-evidence/evidence.sqlite3"));
+        stopped.release();
         receipt.release();
         if ingress == "stop" {
             p.expect("STOP RECORDING COMPLETED");

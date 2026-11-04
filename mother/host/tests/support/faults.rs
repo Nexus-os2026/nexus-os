@@ -67,6 +67,9 @@ impl Fault {
         std::fs::write(&self.arm, b"armed").unwrap();
     }
     pub fn reached(&self) -> Receipt {
+        self.reached_kind(self.kind)
+    }
+    pub fn reached_kind(&self, expected: &str) -> Receipt {
         let mut fds = [PollFd::new(self.listener.as_fd(), PollFlags::POLLIN)];
         assert_eq!(
             poll(&mut fds, DEADLINE.as_millis() as u16).unwrap(),
@@ -84,7 +87,7 @@ impl Fault {
         stream.read_line(&mut path).unwrap();
         let mut n = String::new();
         stream.read_line(&mut n).unwrap();
-        assert_eq!(kind.trim_end(), self.kind);
+        assert_eq!(kind.trim_end(), expected);
         let n: usize = n.trim_end().parse().unwrap();
         assert!(n <= 1_000_000);
         let mut bytes = vec![0; n];
