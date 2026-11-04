@@ -129,3 +129,48 @@ fn lite_review5_broker_engagement_sites() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn lite_review5_compatibility_engagements_are_always_tagged() {
+    for method in ["owner", "cause", "optional-cause", "client"] {
+        for cause in [
+            HaltCause::Stop,
+            HaltCause::Emergency,
+            HaltCause::TimeBudget,
+            HaltCause::Fence,
+        ] {
+            let sessions = crate::authority::file_session::FileSessions::default();
+            let cell = sessions.review5_cell();
+            let tag = match cause {
+                HaltCause::Stop => u16::MAX,
+                HaltCause::Emergency => u16::MAX - 1,
+                HaltCause::TimeBudget => u16::MAX - 2,
+                HaltCause::Fence => u16::MAX - 3,
+            };
+            let expected = match method {
+                "owner" => {
+                    cell.engage();
+                    (HaltCause::Stop, u16::MAX)
+                }
+                "cause" => {
+                    cell.engage_with(cause);
+                    (cause, tag)
+                }
+                "optional-cause" => {
+                    cell.engage_reason(cause, None);
+                    (cause, tag)
+                }
+                "client" => {
+                    cell.engage_reason(cause, std::num::NonZeroU16::new(7));
+                    (cause, 7)
+                }
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                cell.reason(),
+                Some((expected.0, std::num::NonZeroU16::new(expected.1))),
+                "{method}/{cause:?}: no alias can create an untagged engagement"
+            );
+        }
+    }
+}

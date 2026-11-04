@@ -90,6 +90,7 @@ impl Fixture {
 }
 
 const SITES: &[&str] = &[
+    "unknown-cause",
     "denied",
     "expired",
     "cancelled",
@@ -189,6 +190,7 @@ fn run_case(case: &str) {
     let prefile = matches!(
         site,
         "callback-panic"
+            | "unknown-cause"
             | "port-poison"
             | "lock-poison"
             | "owed-failure"
@@ -361,6 +363,16 @@ fn run_case(case: &str) {
         let gate = f.home.gate.clone();
         std::thread::spawn(move || {
             match site.as_str() {
+                "unknown-cause" => {
+                    m.coordinator
+                        .hooks
+                        .file_missing_cause
+                        .store(true, Ordering::SeqCst);
+                    assert!(m
+                        .coordinator
+                        .file_stop(id, SettleCause::Ended(BlockReason::BudgetModelCalls))
+                        .is_err());
+                }
                 "public-stop" => {
                     let _ = m.stop(id);
                 }
@@ -552,6 +564,7 @@ fn run_case(case: &str) {
 fn hook_site_static(site: &str) -> &'static str {
     [
         "file-stop",
+        "unknown-cause",
         "deadline",
         "nonpublication",
         "publication",

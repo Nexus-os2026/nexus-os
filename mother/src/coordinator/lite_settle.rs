@@ -162,7 +162,18 @@ impl<P: EffectPort> Coordinator<P> {
         asked: SettleCause,
     ) -> Result<MissionState, CoordinatorError> {
         let cause = if let Some(file) = &self.file {
-            let Some(tag) = cause_tag(asked) else {
+            let tag = cause_tag(asked);
+            #[cfg(test)]
+            let tag = if self
+                .hooks
+                .file_missing_cause
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                None
+            } else {
+                tag
+            };
+            let Some(tag) = tag else {
                 file.cell.engage_with(HaltCause::Fence);
                 #[cfg(test)]
                 self.hooks.file_engagement.fire("unknown-cause");

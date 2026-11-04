@@ -861,6 +861,7 @@ pub struct Coordinator<P: EffectPort> {
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct CoordinatorHooks {
+    pub(crate) file_missing_cause: std::sync::atomic::AtomicBool,
     pub(crate) file_selection_poison: std::sync::atomic::AtomicBool,
     pub(crate) file_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     pub(crate) file_after_halt: crate::oracles::m2as_hooks::HookSlot,
