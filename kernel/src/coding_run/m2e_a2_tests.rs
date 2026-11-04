@@ -1319,6 +1319,9 @@ fn pr81_r1_one_per_call_deadline_of_180_s_covers_the_metadata_and_the_chat() {
     let model = Arc::new(
         bind(&transport, meter.clone(), hour(), private_watch()).with_call_clock(clock.clone()),
     );
+    // Registration's own requests are answered: forget their events, so
+    // each wait below is for the call's own request.
+    while runtime.fake.events.try_recv().is_ok() {}
     runtime.gate.store(true, Ordering::SeqCst);
     let (tx, rx) = mpsc::channel();
     {
