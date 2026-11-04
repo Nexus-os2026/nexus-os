@@ -540,6 +540,11 @@ impl RunRegistry {
         }
         #[cfg(test)]
         self.review2_hooks.fire("run.before_insert");
+        // Decision 6: final cell read is the admission linearization point,
+        // under the same hold as insertion, after all validation/pruning.
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) {
+            return Err(AuthorityError::Halted);
+        }
         runs.insert(id, entry);
         if let Some(door) = group.and_then(|group| runs.doors.get_mut(&group)) {
             door.members.insert(id);
@@ -1197,6 +1202,14 @@ impl RunRegistry {
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
         #[cfg(test)]
         self.review2_hooks.fire("files.before_install");
+        if table
+            .runs
+            .get(&run)
+            .and_then(|entry| entry.file_cell.as_ref())
+            .is_some_and(HaltCell::is_engaged)
+        {
+            return Err(AuthorityError::Halted);
+        }
         let admission = FilesAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1247,6 +1260,14 @@ impl RunRegistry {
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
         #[cfg(test)]
         self.review2_hooks.fire("inference.before_install");
+        if table
+            .runs
+            .get(&run)
+            .and_then(|entry| entry.file_cell.as_ref())
+            .is_some_and(HaltCell::is_engaged)
+        {
+            return Err(AuthorityError::Halted);
+        }
         let admission = InferenceAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1314,6 +1335,9 @@ impl RunRegistry {
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         #[cfg(test)]
         self.review2_hooks.fire("model.before_attempt");
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) {
+            return Err(AuthorityError::Halted);
+        }
         entry.model_attempts += 1;
         Ok(CallTicket {
             token: CancelToken(entry.cancelled.clone(), entry.file_cell.clone()),

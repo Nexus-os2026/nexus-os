@@ -514,6 +514,13 @@ impl GovernedControl {
         self.control.finish_run(run);
     }
 
+    /// Owner host ingress handle for the existing File-session halt. It can
+    /// only deny; it cannot select, reopen, resume or grant a File session.
+    /// Available before File selection so startup Stop cannot lose its latch.
+    pub fn file_session_halt(&self) -> crate::authority::file_session::HaltCell {
+        self.file_sessions.halt_cell()
+    }
+
     /// The owner's emergency stop: every run cancelled, every unconsumed
     /// commitment ended, the policy generation moved, the agent display
     /// stopped; no new run until the owner resumes natively.

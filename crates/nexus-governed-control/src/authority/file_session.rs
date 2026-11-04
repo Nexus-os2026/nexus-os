@@ -109,6 +109,11 @@ impl HaltCell {
     pub fn engage_tagged(&self, intent: HaltTag) {
         self.latch(intent, false);
     }
+    /// Owner ingress: engage this original deny-only cell and its monotone
+    /// emergency history in one atomic update, without locks or I/O.
+    pub fn engage_emergency(&self) {
+        self.latch(HaltTag::EmergencyStop, true);
+    }
     fn latch(&self, intent: HaltTag, emergency: bool) {
         let bits = intent.bits();
         let history = if emergency { EMERGENCY } else { 0 };
@@ -187,7 +192,10 @@ impl FileSessions {
     }
     /// First instruction at broker emergency ingress, before any lock or I/O.
     pub(crate) fn emergency(&self) {
-        self.state.latch(HaltTag::EmergencyStop, true);
+        self.state.engage_emergency();
+    }
+    pub(crate) fn halt_cell(&self) -> HaltCell {
+        self.state.clone()
     }
     fn fresh(&self) -> Result<(), FileSessionError> {
         if self.state.0.load(Ordering::SeqCst) & EMERGENCY != 0 {
