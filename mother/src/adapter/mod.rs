@@ -1009,6 +1009,27 @@ impl FileJournal {
             }
             Err(e) => return Err(store_error(e)),
         }
+        // M2d-D V8: another handle may have created this entry without
+        // syncing it. Establish both the file and its directory entry on
+        // every open, not only when this handle was the creator. No record
+        // can be acknowledged through this handle before both succeed.
+        OpenOptions::new()
+            .append(true)
+            .open(path)
+            .and_then(|file| file.sync_all())
+            .map_err(store_error)?;
+        #[cfg(unix)]
+        {
+            let parent =
+                path.parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .ok_or(JournalError::Store(StoreFailure::Io(IoKind::of(
+                        std::io::ErrorKind::InvalidInput,
+                    ))))?;
+            std::fs::File::open(parent)
+                .and_then(|dir| dir.sync_all())
+                .map_err(store_error)?;
+        }
         Ok(Self {
             path: path.to_path_buf(),
         })
