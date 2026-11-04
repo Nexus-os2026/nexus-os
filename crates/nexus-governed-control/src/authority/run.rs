@@ -342,6 +342,8 @@ pub struct RunRegistry {
     exhausted: AtomicBool,
     /// The number of the last stop a resume lifted (0: none).
     last_lifted: AtomicU64,
+    #[cfg(test)]
+    capacity: AtomicUsize,
 }
 
 /// Most runs kept (ended ones are pruned first).
@@ -409,6 +411,27 @@ pub(crate) enum Refusal {
 }
 
 impl RunRegistry {
+    fn capacity(&self) -> usize {
+        #[cfg(test)]
+        {
+            let set = self.capacity.load(Ordering::SeqCst);
+            if set > 0 {
+                return set;
+            }
+        }
+        RUN_CAPACITY
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_capacity_for_test(&self, capacity: usize) {
+        self.capacity.store(capacity, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len_for_test(&self) -> usize {
+        self.runs.lock().expect("runs").len()
+    }
+
     /// Open a run in no door's group (tests).
     #[cfg(test)]
     pub(crate) fn open(
@@ -469,9 +492,9 @@ impl RunRegistry {
                 _ => return Err(AuthorityError::NotMember),
             }
         }
-        if runs.len() >= RUN_CAPACITY {
+        if runs.len() >= self.capacity() {
             runs.prune_ended();
-            if runs.len() >= RUN_CAPACITY {
+            if runs.len() >= self.capacity() {
                 return Err(AuthorityError::Capacity);
             }
         }

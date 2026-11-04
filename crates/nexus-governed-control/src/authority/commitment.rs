@@ -410,6 +410,8 @@ pub(crate) struct Inner {
     /// The broker's test hooks (tests).
     #[cfg(test)]
     hooks: Arc<crate::test_hooks::Hooks>,
+    #[cfg(test)]
+    capacity: AtomicU64,
 }
 
 /// Where revocation records go: an unwritten list (the emergency stop), or
@@ -517,6 +519,8 @@ impl CommitmentRegistry {
             transitions: AtomicU64::new(0),
             #[cfg(test)]
             hooks: Arc::default(),
+            #[cfg(test)]
+            capacity: AtomicU64::new(0),
         }))
     }
 
@@ -560,6 +564,28 @@ impl CommitmentRegistry {
     /// Install the credential broker's lease table.
     pub(crate) fn set_lease_end(&self, leases: Arc<dyn LeaseEnd>) {
         *self.0.leases.lock().expect("leases") = leases;
+    }
+
+    /// The most entries kept ([`CAPACITY`]; tests may lower it).
+    fn capacity(&self) -> usize {
+        #[cfg(test)]
+        {
+            let set = self.0.capacity.load(Ordering::SeqCst);
+            if set > 0 {
+                return set as usize;
+            }
+        }
+        CAPACITY
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_capacity_for_test(&self, capacity: usize) {
+        self.0.capacity.store(capacity as u64, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len_for_test(&self) -> usize {
+        self.entries().len()
     }
 
     fn entries(&self) -> MutexGuard<'_, HashMap<CommitmentId, Entry>> {
@@ -823,13 +849,13 @@ impl CommitmentRegistry {
         let now = self.now();
         let refused = {
             let mut entries = self.entries();
-            if entries.len() >= CAPACITY {
+            if entries.len() >= self.capacity() {
                 entries.retain(|_, e| !e.state.is_final());
             }
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
-            let refused = if entries.len() >= CAPACITY {
+            let refused = if entries.len() >= self.capacity() {
                 Some(AuthorityError::Capacity)
             } else {
                 self.0.runs.check(run, agent).err()
