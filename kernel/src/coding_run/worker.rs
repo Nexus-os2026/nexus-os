@@ -276,9 +276,8 @@ fn drive(
         budget.turns += 1;
         let answer = match model.complete(&messages, remaining, limits.max_response_bytes) {
             Ok(answer) => answer,
-            Err(ModelError::Timeout) if budget.remaining().is_none() => {
-                return Err(stop(run, WorkerError::Deadline))
-            }
+            // A model error, a Timeout included, keeps its exact code (N1
+            // spec §2.6); Deadline is only the worker's own checks.
             Err(ModelError::Stopped) => {
                 run.halt_if_stopped().map_err(WorkerError::Run)?;
                 return Err(stop(run, WorkerError::Model(ModelError::Stopped)));
