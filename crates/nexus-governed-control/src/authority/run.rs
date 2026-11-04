@@ -25,6 +25,7 @@
 //! Nothing here reads evidence: consent is never reconstructed from it.
 
 use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
+use super::file_session::HaltCell;
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
@@ -39,11 +40,11 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 /// A run's cancellation flag, observed by actuators between bounded steps.
 #[derive(Clone, Debug)]
-pub struct CancelToken(Arc<AtomicBool>);
+pub struct CancelToken(Arc<AtomicBool>, Option<HaltCell>);
 
 impl CancelToken {
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.0.load(Ordering::SeqCst) || self.1.as_ref().is_some_and(HaltCell::is_engaged)
     }
 }
 
@@ -95,6 +96,7 @@ struct RunEntry {
     /// changed (door membership, which can be reclaimed, plays no part).
     privacy: Privacy,
     cancelled: Arc<AtomicBool>,
+    file_cell: Option<HaltCell>,
     /// M2c: the door groups the run belongs to (at most
     /// `MAX_GROUPS_PER_RUN` live ones).
     groups: Vec<GroupId>,
@@ -233,6 +235,7 @@ struct DoorEntry {
     active: bool,
     /// M2c PR-B: halted (final): its runs refuse every admission.
     halted: bool,
+    file_cell: Option<HaltCell>,
     /// M2e-B: `halted`, readable without the lock by an admitted model
     /// call (set in the same hold that sets `halted`).
     halt_flag: Arc<AtomicBool>,
@@ -450,6 +453,7 @@ impl RunRegistry {
 
     /// Open a run; with `group` (M2c), it joins that door's group at
     /// insertion, in the same hold of the lock.
+    #[cfg(test)]
     pub(crate) fn open_in(
         &self,
         agent: AgentId,
@@ -457,6 +461,18 @@ impl RunRegistry {
         class: RunClass,
         now_wall_ms: u64,
         group: Option<GroupId>,
+    ) -> Result<RunId, AuthorityError> {
+        self.open_with_cell(agent, origin, class, now_wall_ms, group, None)
+    }
+
+    pub(crate) fn open_with_cell(
+        &self,
+        agent: AgentId,
+        origin: RunOrigin,
+        class: RunClass,
+        now_wall_ms: u64,
+        group: Option<GroupId>,
+        file_cell: Option<HaltCell>,
     ) -> Result<RunId, AuthorityError> {
         let id = RunId::fresh();
         let entry = RunEntry {
@@ -471,6 +487,7 @@ impl RunRegistry {
             class,
             privacy: class.privacy(),
             cancelled: Arc::new(AtomicBool::new(false)),
+            file_cell,
             groups: group.into_iter().collect(),
             opened_by: group,
             retained: 0,
@@ -478,7 +495,13 @@ impl RunRegistry {
             inference_admission: None,
             model_attempts: 0,
         };
-        let mut runs = self.runs.lock().expect("runs");
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) {
+            return Err(AuthorityError::Halted);
+        }
         // Checked under the lock an emergency stop takes to cancel every
         // run: a run cannot slip in between the stop and its sweep.
         if self.stopped.load(Ordering::SeqCst) {
@@ -489,8 +512,17 @@ impl RunRegistry {
         }
         if let Some(group) = group {
             match runs.doors.get(&group) {
-                Some(door) if door.halted => return Err(AuthorityError::Halted),
+                Some(door)
+                    if door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged) =>
+                {
+                    return Err(AuthorityError::Halted)
+                }
                 Some(door) if door.active && door.alive() => {
+                    match (&door.file_cell, &entry.file_cell) {
+                        (None, None) => {}
+                        (Some(a), Some(b)) if a.same(b) && !a.is_engaged() => {}
+                        _ => return Err(AuthorityError::Halted),
+                    }
                     if door.agent != entry.view.agent {
                         return Err(AuthorityError::WrongAgent);
                     }
@@ -537,6 +569,7 @@ impl RunRegistry {
                 agent: agent.clone(),
                 active: false,
                 halted: false,
+                file_cell: None,
                 halt_flag: Arc::new(AtomicBool::new(false)),
                 members: BTreeSet::new(),
                 consents: Vec::new(),
@@ -583,7 +616,10 @@ impl RunRegistry {
         group: GroupId,
         halted_too: bool,
     ) -> Result<(), AuthorityError> {
-        let runs = self.runs.lock().expect("runs");
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         if !halted_too && runs.doors.get(&group).is_some_and(|door| door.halted) {
             return Err(AuthorityError::Halted);
         }
@@ -597,18 +633,53 @@ impl RunRegistry {
         if !entry.groups.contains(&group) {
             return Err(AuthorityError::NotMember);
         }
+        if !halted_too
+            && runs
+                .doors
+                .get(&group)
+                .and_then(|d| d.file_cell.as_ref())
+                .is_some_and(|cell| {
+                    !entry
+                        .file_cell
+                        .as_ref()
+                        .is_some_and(|run_cell| run_cell.same(cell))
+                })
+        {
+            return Err(AuthorityError::NotMember);
+        }
+        if !halted_too && entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) {
+            return Err(AuthorityError::Halted);
+        }
         Ok(())
     }
 
-    /// M2c PR-B: whether `group` is halted (read under the lock: a door's
-    /// precheck before anything it would settle or ask).
-    pub(crate) fn door_halted(&self, group: GroupId) -> bool {
-        self.runs
+    pub(crate) fn attach_file_cell(
+        &self,
+        group: GroupId,
+        cell: HaltCell,
+    ) -> Result<(), AuthorityError> {
+        let mut runs = self
+            .runs
             .lock()
-            .expect("runs")
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        let door = runs
             .doors
-            .get(&group)
-            .is_some_and(|door| door.halted)
+            .get_mut(&group)
+            .ok_or(AuthorityError::NotMember)?;
+        if door.file_cell.is_some() {
+            return Err(AuthorityError::Halted);
+        }
+        door.file_cell = Some(cell);
+        Ok(())
+    }
+
+    pub(crate) fn try_door_halted(&self, group: GroupId) -> Result<bool, AuthorityError> {
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        let door = runs.doors.get(&group).ok_or(AuthorityError::NotMember)?;
+        Ok(door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged))
     }
 
     /// M2c PR-B, the halt's first step, in one hold of the runs lock, taken
@@ -703,7 +774,11 @@ impl RunRegistry {
         let table = &mut *guard;
         table.prune_doors();
         match table.doors.get(&group) {
-            Some(door) if door.halted => return Err(AuthorityError::Halted),
+            Some(door)
+                if door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged) =>
+            {
+                return Err(AuthorityError::Halted)
+            }
             Some(door) if door.active && door.alive() && &door.agent == agent => {}
             _ => return Err(AuthorityError::NotMember),
         }
@@ -722,6 +797,9 @@ impl RunRegistry {
         }
         if entry.groups.contains(&group) {
             return Ok(());
+        }
+        if entry.file_cell.is_some() {
+            return Err(AuthorityError::NotMember);
         }
         if entry.groups.len() >= MAX_GROUPS_PER_RUN {
             return Err(AuthorityError::Capacity);
@@ -771,7 +849,8 @@ impl RunRegistry {
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        if runs.in_halted_group(entry) {
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) || runs.in_halted_group(entry)
+        {
             return Err(AuthorityError::Halted);
         }
         if entry.view.finished {
@@ -781,7 +860,7 @@ impl RunRegistry {
             return Err(AuthorityError::RunCancelled);
         }
         let owner = entry.opened_by;
-        let token = CancelToken(entry.cancelled.clone());
+        let token = CancelToken(entry.cancelled.clone(), entry.file_cell.clone());
         if retain {
             owner.ok_or(AuthorityError::NotMember)?;
             let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
@@ -1017,7 +1096,10 @@ impl RunRegistry {
         group: GroupId,
         agent: &AgentId,
     ) -> Result<ConsentSlot<'_>, AuthorityError> {
-        let mut runs = self.runs.lock().expect("runs");
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -1103,7 +1185,10 @@ impl RunRegistry {
         request: &str,
         workspace: AdmittedWorkspace,
     ) -> Result<FilesAdmission, AuthorityError> {
-        let mut guard = self.runs.lock().expect("runs");
+        let mut guard = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
         let admission = FilesAdmission {
@@ -1148,7 +1233,10 @@ impl RunRegistry {
         request: &str,
         identity: [u8; 32],
     ) -> Result<InferenceAdmission, AuthorityError> {
-        let mut guard = self.runs.lock().expect("runs");
+        let mut guard = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
         let admission = InferenceAdmission {
@@ -1191,7 +1279,10 @@ impl RunRegistry {
         group: GroupId,
         identity: &[u8; 32],
     ) -> Result<CallTicket, AuthorityError> {
-        let mut guard = self.runs.lock().expect("runs");
+        let mut guard = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
@@ -1215,7 +1306,7 @@ impl RunRegistry {
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         entry.model_attempts += 1;
         Ok(CallTicket {
-            token: CancelToken(entry.cancelled.clone()),
+            token: CancelToken(entry.cancelled.clone(), entry.file_cell.clone()),
             door_halted,
         })
     }
@@ -1296,7 +1387,9 @@ fn live_door<'a>(
     agent: &AgentId,
 ) -> Result<&'a mut DoorEntry, AuthorityError> {
     match doors.get_mut(&group) {
-        Some(door) if door.halted => Err(AuthorityError::Halted),
+        Some(door) if door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged) => {
+            Err(AuthorityError::Halted)
+        }
         Some(door) if door.active && door.alive() && &door.agent == agent => Ok(door),
         _ => Err(AuthorityError::NotMember),
     }
@@ -1319,7 +1412,16 @@ fn live_member(
     if !entry.groups.contains(&group) {
         return Err(AuthorityError::NotMember);
     }
-    if table.in_halted_group(entry) {
+    if let Some(door_cell) = table.doors.get(&group).and_then(|d| d.file_cell.as_ref()) {
+        if !entry
+            .file_cell
+            .as_ref()
+            .is_some_and(|cell| cell.same(door_cell))
+        {
+            return Err(AuthorityError::NotMember);
+        }
+    }
+    if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) || table.in_halted_group(entry) {
         return Err(AuthorityError::Halted);
     }
     if entry.view.finished {
@@ -1358,7 +1460,10 @@ impl ConsentSlot<'_> {
         page_facts: Option<ApprovedFacts>,
     ) -> Result<(), AuthorityError> {
         let registry = self.registry;
-        let mut runs = registry.runs.lock().expect("runs");
+        let mut runs = registry
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         self.held = false;
         let door = runs.doors.get_mut(&self.group);
         if let Some(door) = door {
@@ -1371,7 +1476,11 @@ impl ConsentSlot<'_> {
             return Err(AuthorityError::Closed("the desktop is quitting"));
         }
         let door = match runs.doors.get_mut(&self.group) {
-            Some(door) if door.halted => return Err(AuthorityError::Halted),
+            Some(door)
+                if door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged) =>
+            {
+                return Err(AuthorityError::Halted)
+            }
             Some(door) if door.active && door.alive() => door,
             _ => return Err(AuthorityError::NotMember),
         };

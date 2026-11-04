@@ -135,6 +135,7 @@ pub const MAX_GRANT: Duration = Duration::from_secs(24 * 3600);
 /// The governed control.
 pub struct GovernedControl {
     control: Arc<Control>,
+    file_sessions: Arc<crate::authority::file_session::FileSessions>,
     /// M2c PR-B: the credential broker the connectors use, kept so that a
     /// door halt ends its runs' leases.
     credentials: Arc<CredentialBroker>,
@@ -276,6 +277,7 @@ impl GovernedControl {
         let egress = Arc::new(Egress::system());
         let broker = CredentialBroker::new(control.authority(), secrets);
         let governed = Self {
+            file_sessions: Arc::default(),
             connectors: Connectors::production(egress.clone(), broker.clone()),
             credentials: broker,
             doors_halted: AtomicU64::new(0),
@@ -540,6 +542,7 @@ impl GovernedControl {
     /// which may stop the display's processes (cleanup that follows the
     /// engagement), and then write the records.
     fn stop_for(&self, reason: Option<&'static str>) -> usize {
+        self.file_sessions.emergency();
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
         self.kernel_stop.engage();
@@ -603,6 +606,7 @@ impl GovernedControl {
             id: hex::encode(crate::authority::ids::random16()),
             agent: agent.clone(),
             group: runs.next_group(),
+            file_cell: std::sync::OnceLock::new(),
         });
         let life: Arc<dyn std::any::Any + Send + Sync> = core.clone();
         runs.reserve_door(core.group, &agent, Arc::downgrade(&life))?;

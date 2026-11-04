@@ -34,6 +34,9 @@ use crate::authority::clock::Clock;
 use crate::authority::commitment::{CommitmentState, CommitmentView, PublicationClass};
 use crate::authority::effect::CapabilityKind;
 use crate::authority::evidence::Privacy;
+use crate::authority::file_session::{
+    FileAttachment, FilePort, FileSessionError, HaltCause, HaltCell,
+};
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
@@ -52,6 +55,7 @@ pub(crate) struct DoorCore {
     pub(crate) id: String,
     pub(crate) agent: AgentId,
     pub(crate) group: GroupId,
+    pub(crate) file_cell: std::sync::OnceLock<HaltCell>,
 }
 
 /// What a door may say about a commitment.
@@ -107,9 +111,56 @@ impl AgentDoor {
         &self.core.agent
     }
 
-    /// Open an agent run for this door's agent; it joins this door's group
-    /// as it is inserted.
+    /// Register a port before any coordinator attachment or replay.
+    /// Its history survives dropping every caller handle.
+    pub fn file_port(&self) -> Result<FilePort, FileSessionError> {
+        self.control.file_sessions.port(self.core.group)
+    }
+
+    /// Select the original File session once, with its broker-owned cell.
+    pub fn claim_file_session(
+        &self,
+        attachment: &FileAttachment,
+    ) -> Result<HaltCell, FileSessionError> {
+        let cell = self
+            .control
+            .file_sessions
+            .claim(attachment, self.core.group)?;
+        if self.core.file_cell.set(cell.clone()).is_err() {
+            cell.engage_with(HaltCause::Fence);
+            return Err(FileSessionError::AlreadySelected);
+        }
+        if self
+            .control
+            .authority()
+            .runs()
+            .attach_file_cell(self.core.group, cell.clone())
+            .is_err()
+        {
+            cell.engage_with(HaltCause::Fence);
+            return Err(FileSessionError::Poisoned);
+        }
+        Ok(cell)
+    }
+
+    /// Open a File run with its immutable deny-only cell at insertion.
+    pub fn open_file_run(&self, attachment: &FileAttachment) -> Result<RunId, AuthorityError> {
+        let cell = self
+            .control
+            .file_sessions
+            .cell(attachment, self.core.group)
+            .map_err(|_| AuthorityError::Halted)?;
+        self.not_halted()?;
+        self.control
+            .authority()
+            .open_file_run_in(self.core.agent.clone(), self.core.group, cell)
+    }
+
+    /// Open a legacy agent run in this door. File mode requires `open_file_run`.
     pub fn open_run(&self) -> Result<RunId, AuthorityError> {
+        if self.core.file_cell.get().is_some() {
+            return Err(AuthorityError::Halted);
+        }
         // A halted door settles nothing (settling may write).
         self.not_halted()?;
         self.control.settle();
@@ -130,7 +181,13 @@ impl AgentDoor {
 
     /// PR-B: refused once this door is halted (read under the runs lock).
     fn not_halted(&self) -> Result<(), AuthorityError> {
-        if self.control.authority().runs().door_halted(self.core.group) {
+        if self.core.file_cell.get().is_some_and(HaltCell::is_engaged)
+            || self
+                .control
+                .authority()
+                .runs()
+                .try_door_halted(self.core.group)?
+        {
             return Err(AuthorityError::Halted);
         }
         Ok(())
@@ -143,6 +200,9 @@ impl AgentDoor {
     /// The records of what this call did are returned, to write once no lock
     /// is held. Idempotent: a later call makes only what is left to make.
     pub fn halt(&self, reason: HaltReason) -> RecordBatch {
+        if let Some(cell) = self.core.file_cell.get() {
+            cell.engage_with(HaltCause::Fence);
+        }
         self.control.halt_door(&self.core, reason)
     }
 
@@ -200,6 +260,9 @@ impl AgentDoor {
         run: RunId,
         commitment: CommitmentId,
     ) -> Result<CommitmentView, AuthorityError> {
+        if self.core.file_cell.get().is_some() {
+            return Err(AuthorityError::Halted);
+        }
         let authority = self.control.authority();
         authority.commitments().holding_view(commitment, |view| {
             let view = view.ok_or(AuthorityError::UnknownCommitment)?;
