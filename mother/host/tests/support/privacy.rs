@@ -192,3 +192,42 @@ pub(crate) fn scan_dir(dir: &Path, skip: Option<&Path>, canaries: &Canaries) -> 
         })
         .collect()
 }
+
+/// Scan all Home files except Mother's private blobs and the single exact
+/// candidate retained by the broker for same-session undo. Never exempt the
+/// staging directory: metadata, extra files, WAL and SHM remain covered.
+pub(crate) fn scan_home(
+    home: &Path,
+    candidate: &str,
+    content: &[u8],
+    canaries: &Canaries,
+) -> Vec<String> {
+    let mut retained = 0;
+    files_under(home, Some(&home.join("private")))
+        .into_iter()
+        .flat_map(|(path, bytes)| {
+            let relative = path.strip_prefix(home).unwrap();
+            let parts: Vec<_> = relative.iter().collect();
+            let candidate_payload = parts.len() == 5
+                && parts[0] == "broker"
+                && parts[1] == "files"
+                && parts[2] == "coding-runs"
+                && parts[3]
+                    .to_str()
+                    .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok_and(|id| id.to_string() == s))
+                && parts[4] == candidate
+                && std::fs::symlink_metadata(&path)
+                    .unwrap()
+                    .file_type()
+                    .is_file()
+                && bytes == content;
+            if candidate_payload {
+                retained += 1;
+                assert!(retained <= 1, "only one legitimate retained candidate");
+                vec![]
+            } else {
+                hits_in(&bytes, &relative.display().to_string(), canaries)
+            }
+        })
+        .collect()
+}

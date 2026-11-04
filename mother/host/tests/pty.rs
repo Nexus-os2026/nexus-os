@@ -259,7 +259,7 @@ fn close_refuses_unfinished_file_work() {
 
 #[test]
 fn d_o21_privacy_canaries_absent_from_durable_stores_and_sqlite_values() {
-    use support::privacy::{hits_in, needles, scan_dir, Canaries};
+    use support::privacy::{hits_in, needles, scan_home, Canaries};
     let cs = Canaries {
         c: format!("NXCANARY-{}", uuid::Uuid::new_v4().simple()),
         cl: format!(
@@ -293,10 +293,24 @@ fn d_o21_privacy_canaries_absent_from_durable_stores_and_sqlite_values() {
         p.output.contains(&cs.c),
         "Owner saw the real canary content"
     );
-    let hits = scan_dir(&f.home, Some(&f.home.join("private")), &cs);
+    let echo_start = p.output.len();
+    p.line(&cs.c);
+    p.expect("REFUSED unknown_command\n");
+    assert!(hits_in(p.output[echo_start..].as_bytes(), "terminal echo", &cs).is_empty());
+    let hits = scan_home(
+        &f.home,
+        &format!("{}.txt", cs.cl),
+        format!("{} {}\n", cs.c, cs.cl).as_bytes(),
+        &cs,
+    );
     assert!(hits.is_empty(), "live main/WAL/SHM privacy: {hits:?}");
     p.quit();
-    let hits = scan_dir(&f.home, Some(&f.home.join("private")), &cs);
+    let hits = scan_home(
+        &f.home,
+        &format!("{}.txt", cs.cl),
+        format!("{} {}\n", cs.c, cs.cl).as_bytes(),
+        &cs,
+    );
     assert!(hits.is_empty(), "closed-store privacy: {hits:?}");
     // Read SQLite's logical values too, independent of page encoding.
     let output = std::process::Command::new("python3").arg("-c").arg(r#"
@@ -397,4 +411,41 @@ fn recovery_repeated_stop_invalidates_lift_and_undo_consents() {
     p.expect("UNDO REMOVED interrupted=none\n");
     f.empty();
     p.quit();
+}
+
+#[test]
+fn d_o21_real_leaks_outside_the_exact_private_payload_are_detected() {
+    use support::privacy::{scan_home, Canaries};
+    let f = Fixture::new();
+    let cs = Canaries {
+        c: format!("NXCANARY-{}", uuid::Uuid::new_v4().simple()),
+        cl: format!("nxsecret_{}", uuid::Uuid::new_v4().simple()),
+    };
+    let staging = f
+        .home
+        .join("broker/files/coding-runs")
+        .join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&staging).unwrap();
+    std::fs::write(staging.join("candidate.txt"), &cs.c).unwrap();
+    assert!(scan_home(&f.home, "candidate.txt", cs.c.as_bytes(), &cs).is_empty());
+    for relative in [
+        "log.txt",
+        "mother-journal.jsonl",
+        "ledger.sqlite3-wal",
+        "evidence.sqlite3-shm",
+        "broker/files/leak.txt",
+    ] {
+        let path = f.home.join(relative);
+        std::fs::write(&path, &cs.c).unwrap();
+        assert!(
+            !scan_home(&f.home, "candidate.txt", cs.c.as_bytes(), &cs).is_empty(),
+            "real leak: {relative}"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+    std::fs::write(staging.join("metadata"), &cs.cl).unwrap();
+    assert!(
+        !scan_home(&f.home, "candidate.txt", cs.c.as_bytes(), &cs).is_empty(),
+        "staging metadata is not private payload"
+    );
 }
