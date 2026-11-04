@@ -156,6 +156,10 @@ pub struct GovernedPort {
     runs: Mutex<Runs>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
+    #[cfg(test)]
+    file_acks_tried: AtomicUsize,
+    #[cfg(test)]
+    pub(crate) before_file_ack: crate::oracles::m2as_hooks::HookSlot,
     /// M2a-S (tests): run just before an effect is performed, and before
     /// the broker is asked about an approval (deterministic interleavings).
     #[cfg(test)]
@@ -206,6 +210,10 @@ impl GovernedPort {
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
             #[cfg(test)]
+            file_acks_tried: AtomicUsize::new(0),
+            #[cfg(test)]
+            before_file_ack: Default::default(),
+            #[cfg(test)]
             before_perform: Default::default(),
             #[cfg(test)]
             before_approval: Default::default(),
@@ -230,6 +238,11 @@ impl GovernedPort {
     pub fn with_workspace(mut self, name: String) -> Self {
         self.workspace = Some(name);
         self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn acks_tried(&self) -> usize {
+        self.file_acks_tried.load(Ordering::SeqCst)
     }
 
     /// How many effects Mother has handed to this port.
@@ -437,6 +450,10 @@ impl EffectPort for GovernedPort {
         self.publication_lite(mission)
     }
     fn file_ack(&self, pending: &PendingAction) -> Result<(), EffectRefusal> {
+        #[cfg(test)]
+        self.file_acks_tried.fetch_add(1, Ordering::SeqCst);
+        #[cfg(test)]
+        self.before_file_ack.fire();
         let id = CommitmentId::parse(&pending.commitment)
             .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
         self.door
@@ -975,3 +992,8 @@ pub fn create_private(dir: &Path) -> std::io::Result<()> {
 
 #[cfg(all(test, target_os = "linux"))]
 mod lite;
+
+#[cfg(all(test, target_os = "linux"))]
+mod lite_clock;
+#[cfg(all(test, target_os = "linux"))]
+mod lite_crash;

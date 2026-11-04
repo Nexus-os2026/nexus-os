@@ -738,6 +738,10 @@ pub struct Coordinator<P: EffectPort> {
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct CoordinatorHooks {
+    pub(crate) file_after_halt: crate::oracles::m2as_hooks::HookSlot,
+    pub(crate) file_invocations: std::sync::atomic::AtomicUsize,
+    pub(crate) file_before_ack: crate::oracles::m2as_hooks::HookSlot,
+    pub(crate) file_before_lane: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) before_owed_write: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) after_owed_write: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) fence_to_marker: crate::oracles::m2as_hooks::HookSlot,

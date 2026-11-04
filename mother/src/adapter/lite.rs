@@ -311,3 +311,6 @@ fn lite_real_session_child() {
     assert!(!SettlementOutcome::Uncertain.conclusive());
     println!("lite-receipt:{scenario}");
 }
+
+#[path = "lite_settlement.rs"]
+mod settlement;

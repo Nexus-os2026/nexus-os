@@ -87,6 +87,27 @@ impl<P: EffectPort> Coordinator<P> {
 }
 
 impl<P: EffectPort> FileSession<P> {
+    #[cfg(test)]
+    pub(crate) fn hooks_for_test(&self) -> &CoordinatorHooks {
+        &self.coordinator.hooks
+    }
+    #[cfg(test)]
+    pub(crate) fn invocations_for_test(&self) -> usize {
+        self.coordinator
+            .hooks
+            .file_invocations
+            .load(Ordering::SeqCst)
+    }
+    #[cfg(test)]
+    pub(crate) fn cell_for_test(&self) -> HaltCell {
+        self.life().cell.clone()
+    }
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(&self) {
+        let _held = self.coordinator.inner.lock().unwrap();
+        panic!("lite coordinator poison");
+    }
+
     fn life(&self) -> &FileLife {
         self.coordinator
             .file
