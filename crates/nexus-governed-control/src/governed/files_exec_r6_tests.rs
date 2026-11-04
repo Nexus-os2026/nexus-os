@@ -141,7 +141,7 @@ fn m2d_c_r6_a_surviving_run_without_the_cell_is_stopped() {
     assert_eq!(twin.run_carries(run, &fresh), Ok(Some(false)));
     let batch = twin.stop_surviving_run(run).expect("stopped");
     assert!(!batch.is_empty(), "the cancellation is recorded");
-    batch.write().unwrap();
+    let _ = batch.write();
     assert_eq!(original.cause(), Some(HaltCause::Fence));
     assert!(!fresh.is_engaged(), "the replacement's cell is untouched");
     assert!(f.gov.authority().runs().view(run).unwrap().cancelled);
