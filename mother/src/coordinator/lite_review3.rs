@@ -17,6 +17,7 @@ use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::GrantRequest;
 use std::io::ErrorKind;
 use std::net::TcpListener;
+use std::sync::mpsc;
 use std::time::Duration;
 
 const CASE: &str = "NEXUS_LITE_REVIEW3_PAIR";
@@ -31,6 +32,8 @@ const STATES: &[(&str, MissionState)] = &[
     ("explaining", MissionState::Explaining),
     ("file-wait", MissionState::AwaitingApproval),
     ("post-wait", MissionState::AwaitingApproval),
+    ("file-dispatch", MissionState::Building),
+    ("post-dispatch", MissionState::Building),
 ];
 const CAUSES: &[&str] = &[
     "owner",
@@ -41,6 +44,8 @@ const CAUSES: &[&str] = &[
     "stop-all",
     "typed",
     "internal-end",
+    "journal-failure",
+    "terminal-record-failure",
 ];
 
 struct MixedBuilder(String);
@@ -70,6 +75,18 @@ impl Lane for MixedBuilder {
     }
 }
 
+struct PostBuilder(String);
+impl Lane for PostBuilder {
+    fn identity(&self) -> LaneIdentity {
+        MixedBuilder(self.0.clone()).identity()
+    }
+    fn invoke(&self, input: &LaneInput) -> LaneOutput {
+        let mut output = MixedBuilder(self.0.clone()).invoke(input);
+        output.effects.remove(0);
+        output
+    }
+}
+
 #[test]
 fn lite_terminal_state_cause_matrix() {
     let Ok(pair) = std::env::var(CASE) else {
@@ -77,6 +94,11 @@ fn lite_terminal_state_cause_matrix() {
         let mut count = 0;
         for (state, _) in STATES {
             for held in [false, true] {
+                // Recovery cannot hold a still-unsettled dispatch: it must
+                // terminate it first. Test that live reservation separately.
+                if held && state.ends_with("dispatch") {
+                    continue;
+                }
                 for cause in CAUSES {
                     let pair = format!("{state}/{held}/{cause}");
                     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -136,20 +158,25 @@ fn lite_terminal_state_cause_matrix() {
     if stage == "post-wait" {
         lanes.retain(|l| l.identity().role != LaneRole::Builder);
         lanes.push(Arc::new(MixedBuilder(origin)));
+    } else if stage == "post-dispatch" {
+        lanes.retain(|l| l.identity().role != LaneRole::Builder);
+        lanes.push(Arc::new(PostBuilder(origin)));
     }
     let clock = Arc::new(ManualClock::default());
     let journal = MemoryJournal::default();
-    let m = Coordinator::open(
-        journal.clone(),
-        port.clone(),
-        Lanes::new(lanes).unwrap(),
-        clock.clone(),
-        home.private(),
-    )
-    .unwrap()
-    .into_file_session()
-    .unwrap();
-    let mut contract = contract_with(if stage == "file-wait" {
+    let m = Arc::new(
+        Coordinator::open(
+            journal.clone(),
+            port.clone(),
+            Lanes::new(lanes).unwrap(),
+            clock.clone(),
+            home.private(),
+        )
+        .unwrap()
+        .into_file_session()
+        .unwrap(),
+    );
+    let mut contract = contract_with(if matches!(stage, "file-wait" | "file-dispatch") {
         "MKFILE:a.txt MKFILE:b.txt"
     } else {
         "terminal matrix"
@@ -212,6 +239,25 @@ fn lite_terminal_state_cause_matrix() {
         m.coordinator.hold_unfinished();
         assert!(m.coordinator.held(id).is_some());
     }
+    let dispatch = if stage.ends_with("dispatch") {
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        m.hooks_for_test().file_after_perform_check.arm(0, move || {
+            entered_tx.send(()).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        });
+        let worker = {
+            let m = m.clone();
+            std::thread::spawn(move || m.advance(id))
+        };
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(m.coordinator.inner.lock().unwrap().missions[&id]
+            .unsettled
+            .is_some());
+        Some((release_tx, worker))
+    } else {
+        None
+    };
     let pending = port.pending(id);
     let before = journal.lines().len();
     let invocations = m.invocations_for_test();
@@ -245,8 +291,83 @@ fn lite_terminal_state_cause_matrix() {
         "internal-end" => m
             .end_for_test(id, BlockReason::PhaseInterrupted)
             .map(|_| ()),
+        "journal-failure" | "terminal-record-failure" => {
+            // A failed journal cannot truthfully certify a clean close. Keep
+            // the lite failure contract, including failure AFTER a durable
+            // File settlement start, separately from healthy fence recording.
+            let prefix = if cause == "terminal-record-failure" {
+                usize::from(held) + usize::from(matches!(stage, "file-wait" | "file-dispatch"))
+            } else {
+                0
+            };
+            journal.fail_after(prefix);
+            m.end_for_test(id, BlockReason::JournalFailed).map(|_| ())
+        }
         _ => unreachable!(),
     };
+    if matches!(cause, "journal-failure" | "terminal-record-failure") {
+        assert!(
+            matches!(result, Err(CoordinatorError::Journal(_))),
+            "{pair}: report the actual recording error, never an illegal transition: {result:?}"
+        );
+        assert!(journal.is_poisoned());
+        assert_eq!(m.cell_for_test().cause(), Some(first));
+        if let Some((release, worker)) = dispatch {
+            release.send(()).unwrap();
+            assert!(worker.join().unwrap().is_err());
+        }
+        let failed = journal.lines();
+        home.control.emergency_stop();
+        assert!(m.stop(id).is_err());
+        assert!(m.stop_all().is_err());
+        assert!(m.advance(id).is_err());
+        assert!(
+            m.close().is_err(),
+            "unfinished recording forbids clean close"
+        );
+        assert_eq!(m.cell_for_test().cause(), Some(first));
+        assert_eq!(m.invocations_for_test(), invocations);
+        assert_eq!(
+            journal.lines(),
+            failed,
+            "no false durable completion on a broken store"
+        );
+        let entries = verify(&failed).unwrap();
+        assert!(!entries[before..].iter().any(|e| matches!(
+            e.event,
+            Event::Transition { .. }
+                | Event::SessionClosed
+                | Event::LaneInvoked { .. }
+                | Event::EffectDispatched { .. }
+        )));
+        if cause == "terminal-record-failure" && matches!(stage, "file-wait" | "file-dispatch") {
+            assert!(
+                entries[before..].iter().any(|e| matches!(
+                    e.event,
+                    Event::SettlementStarted {
+                        cause: SettleCause::Ended(BlockReason::JournalFailed),
+                        ..
+                    }
+                )),
+                "failed terminal follows a durable File settlement start"
+            );
+        }
+        if let Some(pending) = pending {
+            assert!(home
+                .control
+                .authorize(
+                    CommitmentId::parse(&pending.commitment).unwrap(),
+                    &mother_agent(),
+                    RunId::parse(&pending.run).unwrap(),
+                    &owner,
+                )
+                .is_err());
+        }
+        assert!(!workspace.join("b.txt").exists());
+        assert_eq!(listener.accept().unwrap_err().kind(), ErrorKind::WouldBlock);
+        println!("review3-pair:{pair}");
+        return;
+    }
     assert_eq!(
         result,
         Ok(()),
@@ -258,6 +379,10 @@ fn lite_terminal_state_cause_matrix() {
         "{pair}: latched cause must terminate"
     );
     assert_eq!(m.cell_for_test().cause(), Some(first));
+    if let Some((release, worker)) = dispatch {
+        release.send(()).unwrap();
+        assert_eq!(worker.join().unwrap(), Err(CoordinatorError::Stopped));
+    }
     // Later ingresses cannot replace the first cause or append another end.
     home.control.emergency_stop();
     assert_eq!(m.stop(id), Ok(terminal));
@@ -348,7 +473,7 @@ fn lite_terminal_state_cause_matrix() {
             _ => None,
         })
         .collect();
-    if stage == "file-wait" {
+    if matches!(stage, "file-wait" | "file-dispatch") {
         assert_eq!(settlements.len(), 1);
         assert_eq!(settlements[0].0, 0);
         assert_eq!(settlements[0].1, &SettlementOutcome::NotPublished);
