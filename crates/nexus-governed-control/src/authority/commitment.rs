@@ -39,7 +39,7 @@ use super::evidence::{
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
-use super::run::{CancelToken, RunRegistry};
+use super::run::{CancelToken, GroupId, RunRegistry};
 use super::AuthorityError;
 use super::{write_end, write_record};
 use std::collections::{BTreeSet, HashMap};
@@ -255,6 +255,9 @@ struct Entry {
     finished_started: bool,
     failure: Option<FailureClass>,
     handoff: u8,
+    pinned: bool,
+    /// Immutable original door ownership; duplicate ack never needs a live run.
+    pin_owner: Option<GroupId>,
 }
 
 impl Entry {
@@ -588,6 +591,51 @@ impl CommitmentRegistry {
         self.entries().len()
     }
 
+    #[cfg(test)]
+    pub(crate) fn pinned_for_test(&self, id: CommitmentId) -> bool {
+        self.entries().get(&id).is_some_and(|entry| entry.pinned)
+    }
+
+    /// Exact, original-door-scoped acknowledgement. Only a conclusive File
+    /// outcome releases its pin. A duplicate changes no retention count;
+    /// ownership is checked even after release and run pruning. Missing ids
+    /// release nothing (including a repeat after the released entry was pruned).
+    pub(crate) fn ack(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        owner: GroupId,
+    ) -> Result<(), AuthorityError> {
+        let mut entries = self
+            .0
+            .entries
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
+        let Some(entry) = entries.get_mut(&id) else {
+            return Ok(());
+        };
+        if &entry.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.pin_owner != Some(owner) {
+            return Err(AuthorityError::NotMember);
+        }
+        if !entry.pinned {
+            return Ok(());
+        }
+        match entry.publication() {
+            PublicationClass::Published { .. } | PublicationClass::ConfirmedNotPublished => {}
+            PublicationClass::Pending | PublicationClass::Uncertain => {
+                return Err(AuthorityError::Unavailable(
+                    "the commitment's outcome is not conclusive",
+                ));
+            }
+        }
+        self.0.runs.release(entry.run)?;
+        entry.pinned = false;
+        Ok(())
+    }
+
     fn entries(&self) -> MutexGuard<'_, HashMap<CommitmentId, Entry>> {
         self.0.entries.lock().expect("commitments")
     }
@@ -834,6 +882,8 @@ impl CommitmentRegistry {
             finished_started: false,
             failure: None,
             handoff: NOT_HANDED_OFF,
+            pinned: false,
+            pin_owner: None,
         };
         // Evidence first: an unrecorded commitment is never created. It is
         // not in the registry yet, so nothing can act on it meanwhile.
@@ -850,18 +900,19 @@ impl CommitmentRegistry {
         let refused = {
             let mut entries = self.entries();
             if entries.len() >= self.capacity() {
-                entries.retain(|_, e| !e.state.is_final());
+                entries.retain(|_, e| !e.state.is_final() || e.pinned);
             }
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
-            let refused = if entries.len() >= self.capacity() {
-                Some(AuthorityError::Capacity)
+            let files = entry.prepared.kind == CapabilityKind::Files;
+            let retained = if entries.len() >= self.capacity() {
+                Err(AuthorityError::Capacity)
             } else {
-                self.0.runs.check(run, agent).err()
+                self.0.runs.check_retaining(run, agent, files)
             };
-            match refused {
-                Some(error) => {
+            match retained {
+                Err(error) => {
                     let mut entry = entry;
                     self.end_unconsumed(
                         id,
@@ -873,7 +924,10 @@ impl CommitmentRegistry {
                     );
                     Some(error)
                 }
-                None => {
+                Ok((_, owner)) => {
+                    let mut entry = entry;
+                    entry.pinned = files;
+                    entry.pin_owner = owner;
                     entries.insert(id, entry);
                     None
                 }

@@ -98,6 +98,10 @@ struct RunEntry {
     /// M2c: the door groups the run belongs to (at most
     /// `MAX_GROUPS_PER_RUN` live ones).
     groups: Vec<GroupId>,
+    /// Immutable original door, retained even when live membership is pruned.
+    opened_by: Option<GroupId>,
+    /// Unacknowledged File commitments. An ended run with any stays retained.
+    retained: usize,
     /// M2d-B1: the run's Files admission, set once and never changed.
     files_admission: Option<FilesAdmission>,
     /// M2e-B: the run's inference admission, set once and never changed.
@@ -299,7 +303,7 @@ impl Table {
         let ended: Vec<RunId> = self
             .runs
             .iter()
-            .filter(|(_, e)| e.view.cancelled || e.view.finished)
+            .filter(|(_, e)| (e.view.cancelled || e.view.finished) && e.retained == 0)
             .map(|(id, _)| *id)
             .collect();
         for run in ended {
@@ -468,6 +472,8 @@ impl RunRegistry {
             privacy: class.privacy(),
             cancelled: Arc::new(AtomicBool::new(false)),
             groups: group.into_iter().collect(),
+            opened_by: group,
+            retained: 0,
             files_admission: None,
             inference_admission: None,
             model_attempts: 0,
@@ -742,15 +748,29 @@ impl RunRegistry {
     /// The run exists, belongs to `agent`, is not cancelled or finished, and
     /// no emergency stop is in force.
     pub(crate) fn check(&self, run: RunId, agent: &AgentId) -> Result<CancelToken, AuthorityError> {
+        self.check_retaining(run, agent, false)
+            .map(|(token, _)| token)
+    }
+
+    /// Check and retain in the SAME run-registry hold. Called under the
+    /// commitment registry's lock: insertion cannot race a run's pruning.
+    pub(crate) fn check_retaining(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        retain: bool,
+    ) -> Result<(CancelToken, Option<GroupId>), AuthorityError> {
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
         }
-        let runs = self.runs.lock().expect("runs");
         let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        // M2c PR-B: a run of a halted door's group says so.
         if runs.in_halted_group(entry) {
             return Err(AuthorityError::Halted);
         }
@@ -760,7 +780,34 @@ impl RunRegistry {
         if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
             return Err(AuthorityError::RunCancelled);
         }
-        Ok(CancelToken(entry.cancelled.clone()))
+        let owner = entry.opened_by;
+        let token = CancelToken(entry.cancelled.clone());
+        if retain {
+            owner.ok_or(AuthorityError::NotMember)?;
+            let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+            entry.retained = entry
+                .retained
+                .checked_add(1)
+                .ok_or(AuthorityError::Capacity)?;
+        }
+        Ok((token, owner))
+    }
+
+    /// Release precisely one retained obligation. Only the commitment
+    /// registry, after validating its exact pinned entry, may call this.
+    pub(crate) fn release(&self, run: RunId) -> Result<(), AuthorityError> {
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        entry.retained = entry
+            .retained
+            .checked_sub(1)
+            .ok_or(AuthorityError::Unavailable(
+                "the run has no retained obligation",
+            ))?;
+        Ok(())
     }
 
     /// Cancel one run: set its token. Returns whether the run was active.

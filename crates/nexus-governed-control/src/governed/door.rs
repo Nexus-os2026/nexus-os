@@ -226,6 +226,17 @@ impl AgentDoor {
         }
     }
 
+    /// Acknowledge exactly this File commitment's conclusive outcome. This
+    /// releases no other obligation and gives no execution or disclosure rights.
+    pub fn ack_commitment(&self, id: CommitmentId) -> Result<(), AuthorityError> {
+        #[cfg(test)]
+        self.control.hooks().fire("lite.before_ack");
+        self.control
+            .authority()
+            .commitments()
+            .ack(id, &self.core.agent, self.core.group)
+    }
+
     /// Publication proof for one of this door's commitments. This separate
     /// typed interface keeps the legacy display view and its callers intact.
     /// Unknown and unreadable are never proof of nonpublication.
