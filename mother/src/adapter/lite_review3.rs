@@ -22,19 +22,12 @@ use std::time::Duration;
 
 const CASE: &str = "NEXUS_LITE_REVIEW3_PAIR";
 const TEST: &str = "coordinator::lite::review3::lite_terminal_state_cause_matrix";
-const STATES: &[(&str, MissionState)] = &[
-    ("draft", MissionState::Draft),
-    ("consent", MissionState::AwaitingConsent),
-    ("approved", MissionState::Approved),
-    ("investigating", MissionState::Investigating),
-    ("building", MissionState::Building),
-    ("verifying", MissionState::Verifying),
-    ("explaining", MissionState::Explaining),
-    ("file-wait", MissionState::AwaitingApproval),
-    ("post-wait", MissionState::AwaitingApproval),
-    ("file-dispatch", MissionState::Building),
-    ("post-dispatch", MissionState::Building),
-];
+fn states() -> Vec<(&'static str, MissionState)> {
+    MissionState::ALL
+        .into_iter()
+        .flat_map(super::review4::rows_for_state)
+        .collect()
+}
 const CAUSES: &[&str] = &[
     "owner",
     "mission",
@@ -92,11 +85,11 @@ fn lite_terminal_state_cause_matrix() {
     let Ok(pair) = std::env::var(CASE) else {
         let mut failures = Vec::new();
         let mut count = 0;
-        for (state, _) in STATES {
+        for (state, reached) in states() {
             for held in [false, true] {
                 // Recovery cannot hold a still-unsettled dispatch: it must
                 // terminate it first. Test that live reservation separately.
-                if held && state.ends_with("dispatch") {
+                if held && (state.ends_with("dispatch") || reached.is_terminal()) {
                     continue;
                 }
                 for cause in CAUSES {
@@ -125,7 +118,13 @@ fn lite_terminal_state_cause_matrix() {
     let parts: Vec<_> = pair.split('/').collect();
     let (stage, held, cause) = (parts[0], parts[1] == "true", parts[2]);
     assert!(CAUSES.contains(&cause));
-    let expected_state = STATES.iter().find(|(s, _)| *s == stage).unwrap().1;
+    let expected_state = states().iter().find(|(s, _)| *s == stage).unwrap().1;
+    if expected_state.is_terminal() {
+        assert!(!held, "terminal states have no recovery hold");
+        super::review4::terminal_pair(&format!("{stage}/{cause}"));
+        println!("review3-pair:{pair}");
+        return;
+    }
     assert!(nexus_governed_control::files::make_non_dumpable());
     let home = Home::fresh_temp("review3").unwrap();
     let workspace = home.dir.join("workspace");
@@ -506,7 +505,7 @@ fn lite_complete_state_inventory() {
     for state in MissionState::ALL {
         for row in super::review4::rows_for_state(state) {
             assert!(
-                STATES.contains(&row),
+                states().contains(&row),
                 "missing state-machine row: {state:?} / {}",
                 row.0
             );
