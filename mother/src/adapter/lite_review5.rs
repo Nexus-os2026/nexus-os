@@ -575,34 +575,113 @@ fn lite_no_untagged_engagement_source_guard() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
-    let files = [
-        "mother/src/coordinator.rs",
-        "mother/src/coordinator/lite.rs",
-        "mother/src/coordinator/lite_settle.rs",
-        "mother/src/adapter/mod.rs",
-        "mother/src/adapter/lite_port.rs",
-        "crates/nexus-governed-control/src/authority/file_session.rs",
-        "crates/nexus-governed-control/src/governed/door.rs",
-    ];
+    let mut files = std::collections::BTreeSet::new();
+    production_modules(&root.join("mother/src/lib.rs"), &mut files);
+    production_modules(
+        &root.join("crates/nexus-governed-control/src/lib.rs"),
+        &mut files,
+    );
+    assert!(files.len() > 50, "production module walk is not vacuous");
     let mut bad = Vec::new();
+    let mut kernel_calls = 0;
     for file in files {
-        let source = std::fs::read_to_string(root.join(file)).unwrap();
+        let source = std::fs::read_to_string(&file).unwrap();
+        if file.ends_with("authority/file_session.rs") {
+            assert_eq!(
+                source.matches(".fetch_update(").count(),
+                1,
+                "one tagged atomic latch, including emergency"
+            );
+            for raw_write in [".store(", ".swap(", ".compare_exchange(", ".fetch_or("] {
+                assert!(
+                    !source.contains(raw_write),
+                    "no alternate untagged atomic writer: {raw_write}"
+                );
+            }
+        }
         for (line, text) in source.lines().enumerate() {
-            // Compatibility method definitions may remain for frozen tests;
-            // their implementation must also call the tagged primitive.
+            let text = text.trim();
+            // These are kernel StopController calls, not File HaltCells. The
+            // exact three existing calls are retained; no broad file exemption.
+            if file.ends_with("src/governed.rs")
+                && matches!(text, "controller.engage();" | "self.kernel_stop.engage();")
+            {
+                kernel_calls += 1;
+                continue;
+            }
             if text.contains(".engage_with(")
                 || text.contains(".engage_reason(")
                 || text.contains(".engage()")
             {
-                bad.push(format!("{file}:{}:{}", line + 1, text.trim()));
+                bad.push(format!("{}:{}:{}", file.display(), line + 1, text));
             }
         }
     }
+    assert_eq!(kernel_calls, 3);
     assert!(
         bad.is_empty(),
         "untagged File engagement calls:\n{}",
         bad.join("\n")
     );
+}
+
+// Walk production module declarations, including platform-gated modules. A
+// new module is covered automatically. Test-only external modules are excluded
+// because frozen oracles intentionally exercise the compatibility shorthands.
+fn production_modules(
+    file: &std::path::Path,
+    seen: &mut std::collections::BTreeSet<std::path::PathBuf>,
+) {
+    let file = file.canonicalize().unwrap();
+    if !seen.insert(file.clone()) {
+        return;
+    }
+    let source = std::fs::read_to_string(&file).unwrap();
+    let parent = file.parent().unwrap();
+    let directory = if matches!(
+        file.file_name().unwrap().to_str().unwrap(),
+        "mod.rs" | "lib.rs"
+    ) {
+        parent.to_owned()
+    } else {
+        parent.join(file.file_stem().unwrap())
+    };
+    let mut test_only = false;
+    let mut path = None;
+    for line in source.lines().map(str::trim) {
+        if line.starts_with("//") || line.is_empty() {
+            continue;
+        }
+        if line.starts_with("#[") {
+            test_only |= line == "#[cfg(test)]" || line.starts_with("#[cfg(all(test,");
+            if line.starts_with("#[path = ") {
+                path = Some(line.split('"').nth(1).unwrap().to_owned());
+            }
+            continue;
+        }
+        let declaration = line
+            .strip_prefix("mod ")
+            .or_else(|| line.strip_prefix("pub mod "))
+            .or_else(|| line.strip_prefix("pub(crate) mod "));
+        if let Some(name) = declaration.and_then(|text| text.strip_suffix(';')) {
+            if !test_only {
+                let child = match path.take() {
+                    Some(path) => parent.join(path),
+                    None => {
+                        let flat = directory.join(format!("{name}.rs"));
+                        if flat.is_file() {
+                            flat
+                        } else {
+                            directory.join(name).join("mod.rs")
+                        }
+                    }
+                };
+                production_modules(&child, seen);
+            }
+        }
+        test_only = false;
+        path = None;
+    }
 }
 
 // These defensive selection branches precede FileSession creation and have no
