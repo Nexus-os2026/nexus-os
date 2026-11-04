@@ -624,18 +624,6 @@ impl Cells {
         }
         cohort.into_iter().map(|(m, _)| MissionId(m)).collect()
     }
-
-    /// R6-3 / X1: the missions of this journal whose cells carry `cause`
-    /// (the emergency's cohort: the cells the broker's ingress engaged),
-    /// in order.
-    fn caused_by(&self, cause: HaltCause) -> Vec<MissionId> {
-        self.table
-            .cohort(&self.journal)
-            .into_iter()
-            .filter(|(_, cell)| cell.cause() == Some(cause))
-            .map(|(m, _)| MissionId(m))
-            .collect()
-    }
 }
 
 struct Inner {
@@ -3456,31 +3444,20 @@ impl<P: EffectPort> Coordinator<P> {
     }
 
     /// Round 5 (C2, C4) and round 6 (R6-3, X1): the Owner's emergency stop,
-    /// found by `id`'s call. The broker's ingress engaged every cell with
-    /// cause Emergency before anything was recorded (X1); the cohort is
-    /// exactly those cells, read back (no second snapshot), plus `id`'s own
-    /// (engaged here if the ingress is not the broker's: a port without a
-    /// door), and the door's memory stop; each is recorded through the
-    /// barrier. A recording this call cannot finish leaves the rest
-    /// non-runnable, recorded on their first touch.
+    /// found by `id`'s call: the broker's ingress engaged every cell with
+    /// cause Emergency before anything was recorded (X1), and that is the
+    /// emergency's one cohort; here `id`'s own cell is engaged (the ingress
+    /// is not the broker's for a port without a door), the door's memory
+    /// stop is set, and `id`'s terminal is recorded as the cause's (the
+    /// first recording-capable touch). No cohort snapshot: every other
+    /// mission of the cohort is non-runnable and records its terminal on
+    /// its own first touch, or at the next open or clean close.
     fn emergency(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         self.cells.engage_with(id, HaltCause::Emergency);
         self.port.emergency_halt();
         #[cfg(test)]
         self.hooks.after_halt.fire();
-        let mut targets: Vec<(MissionId, SettleCause)> = self
-            .cells
-            .caused_by(HaltCause::Emergency)
-            .into_iter()
-            .map(|m| (m, SettleCause::Stop(StopReason::EmergencyStop)))
-            .collect();
-        if !targets.iter().any(|(m, _)| *m == id) {
-            targets.push((id, SettleCause::Stop(StopReason::EmergencyStop)));
-        }
-        self.barrier(targets)
-            .into_iter()
-            .find(|(mission, _)| *mission == id)
-            .map_or(Err(CoordinatorError::UnknownMission), |(_, state)| state)
+        self.record_for(id, HaltCause::Emergency)
     }
 
     /// M2d-C round 4 (addendum 5): what the Owner is told of a mission whose
