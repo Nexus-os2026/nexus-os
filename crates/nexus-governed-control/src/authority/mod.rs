@@ -8,6 +8,7 @@ pub mod clock;
 pub mod commitment;
 pub mod effect;
 pub mod evidence;
+pub mod file_session;
 pub mod halt;
 pub mod ids;
 pub mod policy;
@@ -827,7 +828,7 @@ impl Authority {
         agent: AgentId,
         origin: RunOrigin,
     ) -> Result<RunId, AuthorityError> {
-        self.open_classed(agent, origin, RunClass::Agent, None)
+        self.open_classed(agent, origin, RunClass::Agent, None, None)
     }
 
     /// Open an agent's run that joins a door's group at its insertion, in
@@ -837,7 +838,28 @@ impl Authority {
         agent: AgentId,
         group: GroupId,
     ) -> Result<RunId, AuthorityError> {
-        self.open_classed(agent, RunOrigin::AgentGoal, RunClass::Agent, Some(group))
+        self.open_classed(
+            agent,
+            RunOrigin::AgentGoal,
+            RunClass::Agent,
+            Some(group),
+            None,
+        )
+    }
+
+    pub(crate) fn open_file_run_in(
+        &self,
+        agent: AgentId,
+        group: GroupId,
+        cell: file_session::HaltCell,
+    ) -> Result<RunId, AuthorityError> {
+        self.open_classed(
+            agent,
+            RunOrigin::AgentGoal,
+            RunClass::Agent,
+            Some(group),
+            Some(cell),
+        )
     }
 
     /// Open the run of one of the owner's own commands (the unified front
@@ -854,6 +876,7 @@ impl Authority {
             RunOrigin::Command { modalities },
             RunClass::Owner,
             None,
+            None,
         )?;
         Ok((agent, run))
     }
@@ -864,6 +887,7 @@ impl Authority {
         origin: RunOrigin,
         class: RunClass,
         group: Option<GroupId>,
+        cell: Option<file_session::HaltCell>,
     ) -> Result<RunId, AuthorityError> {
         if self.runs.is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
@@ -878,9 +902,14 @@ impl Authority {
         if class == RunClass::Owner {
             record.detail.push(("class".into(), "owner".into()));
         }
-        let run = self
-            .runs
-            .open_in(agent, origin, class, self.clock.wall_ms(), group)?;
+        let run = self.runs.open_with_cell(
+            agent,
+            origin,
+            class,
+            self.clock.wall_ms(),
+            group,
+            cell.clone(),
+        )?;
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::OPEN_INSERTED);
         record.run = Some(run.to_string());
@@ -891,7 +920,11 @@ impl Authority {
         // M2c PR-B, after the record: a door's run its halt cancelled meanwhile
         // is refused (an earlier opening may still return one, cancelled for
         // good: every call on it refuses).
-        if group.is_some() && self.runs.view(run).is_some_and(|view| view.cancelled) {
+        if cell
+            .as_ref()
+            .is_some_and(file_session::HaltCell::is_engaged)
+            || (group.is_some() && self.runs.view(run).is_some_and(|view| view.cancelled))
+        {
             return Err(AuthorityError::Halted);
         }
         Ok(run)

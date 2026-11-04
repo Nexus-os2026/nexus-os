@@ -34,11 +34,12 @@ use super::clock::Clock;
 use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::{
     bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy,
+    INTERRUPTIONS,
 };
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
-use super::run::{CancelToken, RunRegistry};
+use super::run::{CancelToken, GroupId, RunRegistry};
 use super::AuthorityError;
 use super::{write_end, write_record};
 use std::collections::{BTreeSet, HashMap};
@@ -172,6 +173,34 @@ pub enum Outcome {
     },
 }
 
+/// M2d-C round 4 (settlement design v2, rule 1): what a door may conclude
+/// of a commitment's publication. Only `ConfirmedNotPublished` says that
+/// nothing was written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PublicationClass {
+    /// It succeeded: published, with the codes of a cause that ended its
+    /// authority after its final check, and whether recovery is required.
+    Published {
+        recovery_required: bool,
+        interrupted: Vec<&'static str>,
+    },
+    /// Never handed to the kernel's apply (denied, expired, revoked or
+    /// failed before it), or refused at or before the final check with the
+    /// kernel's proof.
+    ConfirmedNotPublished,
+    /// Not final: prepared, authorized or executing.
+    Pending,
+    /// An uncertain outcome, or one ended after its handoff with no proof
+    /// either way.
+    Uncertain,
+}
+
+/// M2d-C round 4: how far an execution got towards the kernel's apply, as
+/// its effect reported it (`ExecutionGuard::handing_off`).
+const NOT_HANDED_OFF: u8 = 0;
+const HANDED_OFF: u8 = 1;
+const PROVEN_NOT_PUBLISHED: u8 = 2;
+
 /// The most summary lines an action may show; one that needs more is
 /// refused rather than shortened.
 pub const MAX_SUMMARY_LINES: usize = 192;
@@ -217,9 +246,49 @@ struct Entry {
     /// written): while it is, no other transition starts, and it completes
     /// only with its own token.
     reserved: Option<Reservation>,
+    /// M2d-C: what a success reported as interrupting it (its view's).
+    interrupted: Vec<&'static str>,
+    /// M2d-C: a success reported recovery required (its view's).
+    recovery_required: bool,
+    /// M2d-C round 4: ended by `finish` (it had started), with this failure
+    /// class, and how far it got towards the apply.
+    finished_started: bool,
+    failure: Option<FailureClass>,
+    handoff: u8,
+    pinned: bool,
+    /// Immutable original door ownership; duplicate ack never needs a live run.
+    pin_owner: Option<GroupId>,
 }
 
 impl Entry {
+    /// Rule 1: the publication class (see [`PublicationClass`]).
+    fn publication(&self) -> PublicationClass {
+        match self.state {
+            CommitmentState::Prepared
+            | CommitmentState::Authorized
+            | CommitmentState::Executing => PublicationClass::Pending,
+            CommitmentState::Succeeded => PublicationClass::Published {
+                recovery_required: self.recovery_required,
+                interrupted: self.interrupted.clone(),
+            },
+            CommitmentState::Denied | CommitmentState::Expired | CommitmentState::Revoked => {
+                PublicationClass::ConfirmedNotPublished
+            }
+            CommitmentState::Failed | CommitmentState::Cancelled => {
+                if !self.finished_started {
+                    PublicationClass::ConfirmedNotPublished
+                } else if self.failure == Some(FailureClass::Uncertain) {
+                    PublicationClass::Uncertain
+                } else if self.prepared.kind == CapabilityKind::Files && self.handoff != HANDED_OFF
+                {
+                    PublicationClass::ConfirmedNotPublished
+                } else {
+                    PublicationClass::Uncertain
+                }
+            }
+        }
+    }
+
     fn view(&self, id: CommitmentId) -> CommitmentView {
         CommitmentView {
             id,
@@ -344,6 +413,8 @@ pub(crate) struct Inner {
     /// The broker's test hooks (tests).
     #[cfg(test)]
     hooks: Arc<crate::test_hooks::Hooks>,
+    #[cfg(test)]
+    capacity: AtomicU64,
 }
 
 /// Where revocation records go: an unwritten list (the emergency stop), or
@@ -451,6 +522,8 @@ impl CommitmentRegistry {
             transitions: AtomicU64::new(0),
             #[cfg(test)]
             hooks: Arc::default(),
+            #[cfg(test)]
+            capacity: AtomicU64::new(0),
         }))
     }
 
@@ -494,6 +567,73 @@ impl CommitmentRegistry {
     /// Install the credential broker's lease table.
     pub(crate) fn set_lease_end(&self, leases: Arc<dyn LeaseEnd>) {
         *self.0.leases.lock().expect("leases") = leases;
+    }
+
+    /// The most entries kept ([`CAPACITY`]; tests may lower it).
+    fn capacity(&self) -> usize {
+        #[cfg(test)]
+        {
+            let set = self.0.capacity.load(Ordering::SeqCst);
+            if set > 0 {
+                return set as usize;
+            }
+        }
+        CAPACITY
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_capacity_for_test(&self, capacity: usize) {
+        self.0.capacity.store(capacity as u64, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len_for_test(&self) -> usize {
+        self.entries().len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pinned_for_test(&self, id: CommitmentId) -> bool {
+        self.entries().get(&id).is_some_and(|entry| entry.pinned)
+    }
+
+    /// Exact, original-door-scoped acknowledgement. Only a conclusive File
+    /// outcome releases its pin. A duplicate changes no retention count;
+    /// ownership is checked even after release and run pruning. Missing ids
+    /// release nothing (including a repeat after the released entry was pruned).
+    pub(crate) fn ack(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        owner: GroupId,
+    ) -> Result<(), AuthorityError> {
+        let mut entries = self
+            .0
+            .entries
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
+        let Some(entry) = entries.get_mut(&id) else {
+            return Ok(());
+        };
+        if &entry.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.pin_owner != Some(owner) {
+            return Err(AuthorityError::NotMember);
+        }
+        if !entry.pinned {
+            return Ok(());
+        }
+        match entry.publication() {
+            PublicationClass::Published { .. } | PublicationClass::ConfirmedNotPublished => {}
+            PublicationClass::Pending | PublicationClass::Uncertain => {
+                return Err(AuthorityError::Unavailable(
+                    "the commitment's outcome is not conclusive",
+                ));
+            }
+        }
+        self.0.runs.release(entry.run)?;
+        entry.pinned = false;
+        Ok(())
     }
 
     fn entries(&self) -> MutexGuard<'_, HashMap<CommitmentId, Entry>> {
@@ -737,6 +877,13 @@ impl CommitmentRegistry {
             state: CommitmentState::Prepared,
             approval: None,
             reserved: None,
+            interrupted: Vec::new(),
+            recovery_required: false,
+            finished_started: false,
+            failure: None,
+            handoff: NOT_HANDED_OFF,
+            pinned: false,
+            pin_owner: None,
         };
         // Evidence first: an unrecorded commitment is never created. It is
         // not in the registry yet, so nothing can act on it meanwhile.
@@ -752,19 +899,20 @@ impl CommitmentRegistry {
         let now = self.now();
         let refused = {
             let mut entries = self.entries();
-            if entries.len() >= CAPACITY {
-                entries.retain(|_, e| !e.state.is_final());
+            if entries.len() >= self.capacity() {
+                entries.retain(|_, e| !e.state.is_final() || e.pinned);
             }
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
-            let refused = if entries.len() >= CAPACITY {
-                Some(AuthorityError::Capacity)
+            let files = entry.prepared.kind == CapabilityKind::Files;
+            let retained = if entries.len() >= self.capacity() {
+                Err(AuthorityError::Capacity)
             } else {
-                self.0.runs.check(run, agent).err()
+                self.0.runs.check_retaining(run, agent, files)
             };
-            match refused {
-                Some(error) => {
+            match retained {
+                Err(error) => {
                     let mut entry = entry;
                     self.end_unconsumed(
                         id,
@@ -776,7 +924,10 @@ impl CommitmentRegistry {
                     );
                     Some(error)
                 }
-                None => {
+                Ok((_, owner)) => {
+                    let mut entry = entry;
+                    entry.pinned = files;
+                    entry.pin_owner = owner;
                     entries.insert(id, entry);
                     None
                 }
@@ -1121,6 +1272,7 @@ impl CommitmentRegistry {
             started_wall_ms,
             start,
             finished: false,
+            handoff: std::sync::atomic::AtomicU8::new(NOT_HANDED_OFF),
         })
     }
 
@@ -1177,6 +1329,7 @@ impl CommitmentRegistry {
         started_wall_ms: u64,
         outcome: Outcome,
         cancelled: bool,
+        handoff: u8,
     ) -> EndStatus {
         let mut deferred = Deferred::default();
         let now = self.now();
@@ -1208,6 +1361,30 @@ impl CommitmentRegistry {
                 }
                 Outcome::Cancelled { .. } => (CommitmentState::Cancelled, "cancelled", None),
             };
+            // M2d-C round 4 (rule 1): what its publication class reads.
+            entry.finished_started = true;
+            entry.handoff = handoff;
+            entry.failure = match &outcome {
+                Outcome::Failed { class, .. } => Some(*class),
+                _ => None,
+            };
+            // M2d-C: the codes the record's detail keeps (its first 16
+            // entries), of the registry only, in its order.
+            if let Outcome::Succeeded { meta } = &outcome {
+                let meta = &meta[..meta.len().min(16)];
+                // M2d-C (HIGH 2 of Codex review 1 of PR #78).
+                entry.recovery_required = meta
+                    .iter()
+                    .any(|(k, v)| k == "reason" && v == "recovery_required");
+                entry.interrupted = INTERRUPTIONS
+                    .iter()
+                    .copied()
+                    .filter(|code| {
+                        meta.iter()
+                            .any(|(k, v)| k == "interrupted" && v.as_str() == *code)
+                    })
+                    .collect();
+            }
             self.end_entry(
                 id,
                 entry,
@@ -1516,6 +1693,22 @@ impl CommitmentRegistry {
         result
     }
 
+    /// Read publication proof and its identity in one registry hold. Poison is
+    /// an error, never evidence that no publication occurred.
+    pub(crate) fn publication(
+        &self,
+        id: CommitmentId,
+    ) -> Result<Option<(CommitmentView, PublicationClass)>, AuthorityError> {
+        let entries = self
+            .0
+            .entries
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
+        Ok(entries
+            .get(&id)
+            .map(|entry| (entry.view(id), entry.publication())))
+    }
+
     pub fn views_of_run(&self, run: RunId) -> Vec<CommitmentView> {
         let mut views: Vec<CommitmentView> = self
             .entries()
@@ -1608,6 +1801,7 @@ pub struct ExecutionGuard {
     /// The sequence number of its start record.
     start: u64,
     finished: bool,
+    handoff: std::sync::atomic::AtomicU8,
 }
 
 impl std::fmt::Debug for ExecutionGuard {
@@ -1632,6 +1826,19 @@ impl ExecutionGuard {
 
     pub fn is_cancelled(&self) -> bool {
         self.cancel.is_cancelled()
+    }
+
+    /// M2d-C round 4 (rule 1): the effect is about to hand its change to
+    /// the kernel's apply. From here on, an end without proof either way
+    /// is uncertain.
+    pub(crate) fn handing_off(&self) {
+        self.handoff.store(HANDED_OFF, Ordering::SeqCst);
+    }
+
+    /// M2d-C round 4: the kernel proved the handed-off change was not
+    /// published (refused at or before its final check).
+    pub(crate) fn proven_not_published(&self) {
+        self.handoff.store(PROVEN_NOT_PUBLISHED, Ordering::SeqCst);
     }
 
     /// Whether the commitment is still covered (see
@@ -1674,8 +1881,9 @@ impl ExecutionGuard {
     pub fn finish(mut self, outcome: Outcome) -> EndStatus {
         self.finished = true;
         let cancelled = self.cancel.is_cancelled();
+        let handoff = self.handoff.load(Ordering::SeqCst);
         self.registry
-            .finish(self.id, self.started_wall_ms, outcome, cancelled)
+            .finish(self.id, self.started_wall_ms, outcome, cancelled, handoff)
     }
 }
 
@@ -1692,6 +1900,7 @@ impl Drop for ExecutionGuard {
                     detail: "the execution ended without a result".into(),
                 },
                 self.cancel.is_cancelled(),
+                self.handoff.load(Ordering::SeqCst),
             );
         }
     }

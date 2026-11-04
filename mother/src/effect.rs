@@ -21,12 +21,15 @@ use crate::journal::MissionId;
 use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
+use nexus_governed_control::authority::commitment::PublicationClass;
+use nexus_governed_control::authority::file_session::{FileAttachment, FileSessionError, HaltCell};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::RecordBatch;
 use nexus_governed_control::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// An effect a lane asks for.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -34,6 +37,8 @@ use serde::{Deserialize, Serialize};
 pub enum EffectRequest {
     /// A path relative to the requested folder: a request, never a path.
     File { relative_path: String, write: bool },
+    /// Explicit lite File create. Legacy File requests retain their refusal.
+    CreateFile(nexus_governed_control::files::FileCreate),
     /// A network request (the broker's egress route).
     Network(EgressIntent),
     /// A governed process (the broker's tool route).
@@ -47,13 +52,28 @@ pub enum EffectRequest {
 impl EffectRequest {
     pub fn kind(&self) -> EffectKind {
         match self {
-            EffectRequest::File { .. } => EffectKind::File,
+            EffectRequest::File { .. } | EffectRequest::CreateFile(_) => EffectKind::File,
             EffectRequest::Network(_) => EffectKind::Network,
             EffectRequest::Process(_) => EffectKind::Process,
             EffectRequest::ModelTool(_) => EffectKind::ModelTool,
             EffectRequest::Spend { .. } => EffectKind::Spend,
         }
     }
+}
+
+/// Exact consent binding for this process, never reconstructed from replay.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Admission {
+    pub contract_hash: String,
+    pub consent_request: String,
+    pub folder: String,
+}
+
+/// One broker read: publication proof and the corresponding display state.
+pub struct FileSnapshot {
+    pub action: PendingAction,
+    pub publication: PublicationClass,
+    pub state: Option<nexus_governed_control::authority::commitment::CommitmentState>,
 }
 
 /// What a performed effect came to.
@@ -110,6 +130,31 @@ pub struct EffectRefusal {
 pub struct Owed(Vec<RecordBatch>);
 
 impl Owed {
+    /// Typed File lifecycle record result. Try every batch; an owed or
+    /// uncertain record remains observable to the caller.
+    pub(crate) fn write_checked(self) -> Result<(), AuthorityError> {
+        #[cfg(test)]
+        if !self.is_empty() {
+            held::assert_none();
+        }
+        let mut failed = false;
+        for batch in self.0 {
+            // The batch owns its records. On unwind its Drop counts the
+            // in-flight record uncertain and the remainder lost. Preserve
+            // that native accounting, try the other owned batches, and return
+            // the recording failure through the typed File lifecycle.
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| batch.write())) {
+                Ok(outcome) => failed |= outcome.owed != 0 || outcome.uncertain != 0,
+                Err(_) => failed = true,
+            }
+        }
+        if failed {
+            Err(AuthorityError::EvidenceUnavailable)
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.iter().all(RecordBatch::is_empty)
     }
@@ -193,6 +238,55 @@ mod sealed {
 
 /// The calls Mother makes to reach the world.
 pub trait EffectPort: Send + Sync + sealed::Sealed {
+    /// Register before replay. The default port has no File eligibility.
+    fn file_workspace(&self) -> Option<&str> {
+        None
+    }
+    fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
+        Ok(None)
+    }
+    fn file_claim(&self, _: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
+        Err(FileSessionError::WrongOwner)
+    }
+    fn file_admit(&self, _: MissionId, _: &Admission) -> Result<(), EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NoBrokerRoute,
+        })
+    }
+    /// File dispatch identity is supplied by the coordinator, before proposal.
+    fn perform_file(
+        &self,
+        _: MissionId,
+        _: u64,
+        _: &EffectRequest,
+    ) -> Result<EffectOutcome, EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NotAdmitted,
+        })
+    }
+    /// Read only the commitment belonging to this exact File effect. None
+    /// proves this port has not begun that effect; an in-flight proposal errors.
+    fn file_publication_for(
+        &self,
+        _: MissionId,
+        _: u64,
+    ) -> Result<Option<FileSnapshot>, EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NotAdmitted,
+        })
+    }
+    fn file_publication(&self, _: MissionId) -> Result<Option<FileSnapshot>, EffectRefusal> {
+        Ok(None)
+    }
+    fn file_deadline_elapsed(&self, _: &PendingAction) -> bool {
+        false
+    }
+    fn file_ack(&self, _: &PendingAction) -> Result<(), EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NoBrokerRoute,
+        })
+    }
+
     /// Perform one effect for `mission`.
     fn perform(
         &self,
