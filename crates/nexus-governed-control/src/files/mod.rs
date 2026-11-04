@@ -2290,6 +2290,28 @@ impl Files {
         }
     }
 
+    /// Preserve undo's inherited deferred cleanup, but carry its fresh
+    /// recovery lifetime to every kernel handoff under the caller's Busy
+    /// ownership. A refused tail stays deferred; nothing drops it into cleanup.
+    #[cfg(target_os = "linux")]
+    fn drain_recovery(&self, recovery: &RecoveryCheck) -> Result<(), AuthorityError> {
+        recovery.check()?;
+        let runs = std::mem::take(&mut *self.shared.deferred.lock().expect("files deferred"));
+        let mut remaining = runs.into_iter();
+        while let Some(run) = remaining.next() {
+            #[cfg(test)]
+            self.shared.fire(crate::test_hooks::at::FILE_CLEANUP);
+            if let Err(error) = recovery.check() {
+                let mut deferred = self.shared.deferred.lock().expect("files deferred");
+                deferred.push(run);
+                deferred.extend(remaining);
+                return Err(error);
+            }
+            let _kept = self.shared.retire(run);
+        }
+        Ok(())
+    }
+
     /// §6.6 and H2′: undo the last create of this process, once, with the
     /// Owner's dialog and fresh authority (see
     /// `GovernedControl::files_undo`). Its lifetime (the broker's kernel
@@ -2309,14 +2331,17 @@ impl Files {
         cell: Option<&HaltCell>,
     ) -> Result<UndoReport, AuthorityError> {
         let lifetime = UndoLifetime::take(authority, stop, cell)?;
-        // A host undo never retries unrelated deferred cleanup as a side
-        // effect. Legacy callers keep their existing drain behavior.
+        // Preserve the legacy drain order. The host's inherited drain is
+        // guarded below under Busy, with this request's original lifetime.
         if cell.is_none() {
             self.drain();
         }
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
             "another Files operation is under way",
         ))?;
+        if cell.is_some() {
+            self.drain_recovery(&lifetime.recovery)?;
+        }
         let taken = self.shared.slot.lock().expect("files slot").take();
         let mut applied = taken.ok_or(AuthorityError::Unavailable(
             "there is no file to undo in this session",
