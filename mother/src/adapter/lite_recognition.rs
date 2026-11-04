@@ -109,36 +109,9 @@ fn lite_recognition_child() {
             assert_eq!(m.state(id).unwrap(), Some(MissionState::AwaitingApproval));
         }
         "denied" => {
-            struct No;
-            impl nexus_governed_control::authority::approval::ControlConfirmer for No {
-                fn confirm_action(
-                    &self,
-                    _: &nexus_governed_control::authority::approval::ActionConfirmation,
-                ) -> bool {
-                    false
-                }
-                fn confirm_grant(
-                    &self,
-                    _: &nexus_governed_control::authority::approval::GrantConfirmation,
-                ) -> bool {
-                    false
-                }
-                fn confirm_acknowledgement(
-                    &self,
-                    _: &nexus_governed_control::authority::approval::AcknowledgementConfirmation,
-                ) -> bool {
-                    false
-                }
-                fn confirm_resume(
-                    &self,
-                    _: &nexus_governed_control::authority::approval::ResumeConfirmation,
-                ) -> bool {
-                    false
-                }
-            }
             assert!(home
                 .control
-                .authorize(commitment, &mother_agent(), run, &No)
+                .authorize(commitment, &mother_agent(), run, &crate::oracles::No)
                 .is_err());
             assert_eq!(
                 port.file_publication(id).unwrap().unwrap().publication,
