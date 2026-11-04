@@ -1,25 +1,7 @@
 //! A host-gated port has no replay-adoption route, even before File selection.
 use super::*;
-use nexus_governed_control::authority::approval::{
-    AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
-    ResumeConfirmation,
-};
+use crate::oracles::m2c_owner::OwnerGrants as Grants;
 use nexus_governed_control::authority::run::RunOrigin;
-struct Grants;
-impl ControlConfirmer for Grants {
-    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
-        false
-    }
-    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
-        true
-    }
-    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
-        false
-    }
-    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
-        false
-    }
-}
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::{AgentOutcome, Intent};
 
