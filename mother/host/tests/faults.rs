@@ -440,3 +440,42 @@ fn d_o20_read_error_during_held_execution_engages_stop_before_exit() {
     assert!(!p.finish().success());
     f.empty();
 }
+
+#[test]
+fn review1_real_cr_lf_crlf_stop_during_publish_hold() {
+    for end in [b"\r".as_slice(), b"\n", b"\r\n"] {
+        let f = Fixture::new();
+        let fault = Fault::new(&f, "before-publication");
+        let mut command = f.command("must never publish\n");
+        command.args(["--hold-before-publish", "20"]);
+        fault.attach(&f, &mut command);
+        let mut p = Pty::start(command);
+        p.ready();
+        p.mission();
+        fault.arm();
+        p.line("approve");
+        p.yes();
+        let before_hold = fault.reached();
+        assert!(before_hold.path.contains("(deleted)"));
+        // Release the real pre-final-check boundary into the configured hold.
+        before_hold.release();
+        p.send(b"stop");
+        p.send(end);
+        p.expect("STOP REQUEST RECEIVED epoch=1");
+        p.expect("kernel_stopped=true broker_stopped=true");
+        fault.reached_kind("stop-recording").release();
+        p.expect("STOP RECORDING COMPLETED");
+        p.expect("ACTION FINISHED");
+        p.line("status");
+        p.expect("STATUS END\n");
+        assert_eq!(p.output.matches("STOP REQUEST RECEIVED").count(), 1);
+        assert!(
+            !p.output.contains("unknown_command"),
+            "CRLF must not submit an empty command"
+        );
+        f.empty();
+        p.line("quit");
+        p.finish();
+        f.empty();
+    }
+}

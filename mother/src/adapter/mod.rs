@@ -264,6 +264,12 @@ impl GovernedPort {
         self.performed.load(Ordering::SeqCst)
     }
 
+    /// Successful File bindings retained by this port, for host diagnostics.
+    /// Observation only: this exposes no admission or broker authority.
+    pub fn file_binding_count(&self) -> usize {
+        self.with_runs(|runs| runs.file_admissions.len())
+    }
+
     /// How many run cancellations the broker refused.
     pub fn cancel_failures(&self) -> usize {
         self.cancel_failures.load(Ordering::SeqCst)

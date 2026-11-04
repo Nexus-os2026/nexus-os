@@ -481,3 +481,55 @@ fn terminal_modes_are_owned_then_restored_on_clean_quit() {
         "exact terminal modes restored"
     );
 }
+
+fn terminated(p: &mut Pty, text: &str, end: &[u8]) {
+    p.send(text.as_bytes());
+    p.send(end);
+}
+
+#[test]
+fn review1_real_cr_lf_crlf_commands_and_answers() {
+    for end in [b"\r".as_slice(), b"\n", b"\r\n"] {
+        let f = Fixture::new();
+        let mut p = Pty::start(f.command("line ending oracle\n"));
+        p.ready();
+        terminated(&mut p, "run", end);
+        for _ in 0..3 {
+            let code = p.code();
+            terminated(&mut p, &code, end);
+        }
+        p.expect("FILE PENDING\n");
+        terminated(&mut p, "approve", end);
+        let code = p.code();
+        terminated(&mut p, &code, end);
+        p.expect("MISSION done\n");
+        assert_eq!(
+            std::fs::read(f.workspace.join("hello.txt")).unwrap(),
+            b"line ending oracle\n"
+        );
+        terminated(&mut p, "quit", end);
+        p.expect("SESSION CLOSED recorded\n");
+        assert!(p.finish().success());
+        assert!(
+            !p.output.contains("unknown_command"),
+            "CRLF must not submit an extra empty command"
+        );
+        assert_eq!(
+            p.output.matches("Answer code:").count(),
+            4,
+            "one answer per dialogue"
+        );
+    }
+}
+
+#[test]
+fn review1_walk_reaches_first_dialogue_under_pty() {
+    // Cargo builds examples for cargo test; use this workspace's matching artifact.
+    let walk = support::binary().parent().unwrap().join("examples/walk");
+    assert!(walk.is_file(), "build --example walk before this oracle");
+    let mut p = Pty::start(std::process::Command::new(walk));
+    let code = p.code();
+    assert_eq!(code.len(), 8);
+    p.line("no");
+    assert!(p.finish().success(), "denied first door exits the walk");
+}

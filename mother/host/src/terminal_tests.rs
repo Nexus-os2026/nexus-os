@@ -345,3 +345,55 @@ fn m2dd_missing_output_or_boundary_acknowledgement_ends_hands() {
         );
     }
 }
+
+#[test]
+fn review1_line_endings_submit_once_and_preserve_freshness() {
+    for end in [b"\r".as_slice(), b"\n", b"\r\n"] {
+        let mut buffer = LineBuffer::default();
+        for (text, expected) in [
+            ("run", Line::Answer(Some("run".into()))),
+            ("deadbeef", Line::Answer(Some("deadbeef".into()))),
+            ("stop", Line::Stop),
+            ("quit", Line::Quit),
+        ] {
+            assert!(feed(&mut buffer, text.as_bytes()).is_empty());
+            assert_eq!(
+                feed(&mut buffer, end),
+                vec![expected],
+                "one submission for {end:?}"
+            );
+        }
+        feed(&mut buffer, b"dead");
+        buffer.invalidate();
+        feed(&mut buffer, b"beef");
+        assert!(feed(&mut buffer, end).is_empty(), "stale partial answer");
+        feed(&mut buffer, b"st");
+        buffer.invalidate();
+        feed(&mut buffer, b"op");
+        assert_eq!(feed(&mut buffer, end), vec![Line::Stop]);
+    }
+}
+
+#[test]
+fn review1_walk_readme_uses_the_displayed_random_code() {
+    let readme = include_str!("../../README.md");
+    let walk = readme
+        .split("## Run the walk")
+        .nth(1)
+        .unwrap()
+        .split("## Run Hands")
+        .next()
+        .unwrap();
+    assert!(
+        !walk.contains("first 8 characters"),
+        "walk must not prescribe door/hash prefixes"
+    );
+    assert!(
+        walk.contains("Answer code:") && walk.contains("fresh random"),
+        "walk must name the fresh random displayed answer"
+    );
+    assert!(
+        walk.contains("INPUT READY"),
+        "wait for the acknowledged input boundary"
+    );
+}

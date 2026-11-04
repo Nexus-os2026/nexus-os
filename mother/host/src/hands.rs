@@ -22,6 +22,10 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+#[path = "hands_tests.rs"]
+mod hands_tests;
+
 fn mother_code(error: &CoordinatorError) -> &'static str {
     match error {
         CoordinatorError::UnknownMission => "unknown_mission",
@@ -116,7 +120,10 @@ impl Lane for GatedLane {
                 },
             };
         }
-        self.lane.invoke(input)
+        let output = self.lane.invoke(input);
+        #[cfg(test)]
+        hands_tests::before_internal_dispatch(&self.gate, self.lane.identity().role);
+        output
     }
 }
 
@@ -281,7 +288,12 @@ impl Runtime {
             let Some(id) = mission.id else {
                 return;
             };
-            match mission.session.advance(id) {
+            #[cfg(test)]
+            hands_tests::before_internal_admission(self);
+            let advanced = mission.session.advance(id);
+            #[cfg(test)]
+            hands_tests::after_internal_admission(self);
+            match advanced {
                 Ok(report) => {
                     for lane in &report.lanes {
                         self.screen.emit(&format!(
@@ -633,12 +645,14 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let mut startup = match std::thread::Builder::new()
         .name("hands-startup".into())
         .spawn(move || {
-            let opened = Home::open(&config.home, confirmer.clone())
-                .map(Arc::new)
-                .map_err(|e| {
-                    startup_screen.emit(&format!("Home unavailable: {}\n", e.0));
-                    "home_unavailable"
-                });
+            #[cfg(test)]
+            let opened = hands_tests::open_home(&config.home, confirmer.clone());
+            #[cfg(not(test))]
+            let opened = Home::open(&config.home, confirmer.clone());
+            let opened = opened.map(Arc::new).map_err(|e| {
+                startup_screen.emit(&format!("Home unavailable: {}\n", e.0));
+                "home_unavailable"
+            });
             let runtime = opened.and_then(|home| {
                 if !startup_screen.stop.bind(home.owner().clone()) {
                     return Err("stop_binding_failed");
