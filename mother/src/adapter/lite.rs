@@ -314,3 +314,6 @@ fn lite_real_session_child() {
 
 #[path = "lite_settlement.rs"]
 mod settlement;
+
+#[path = "lite_recognition.rs"]
+mod recognition;
