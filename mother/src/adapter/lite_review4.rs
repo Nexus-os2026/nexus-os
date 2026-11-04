@@ -468,10 +468,7 @@ pub(super) fn terminal_pair(case: &str) {
                 }
                 m.advance(id).unwrap();
             }
-            assert_eq!(
-                m.coordinator.reason(id).as_deref(),
-                Some("verifier_fail")
-            );
+            assert_eq!(m.coordinator.reason(id).as_deref(), Some("verifier_fail"));
             MissionState::Failed
         };
     }

@@ -1105,5 +1105,5 @@ pub(crate) mod lite_clock;
 #[cfg(test)]
 mod lite_crash;
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod lite_review5_port;
