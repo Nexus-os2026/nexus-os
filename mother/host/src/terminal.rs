@@ -271,7 +271,12 @@ impl TerminalConfirmer {
         let deadline = received + Duration::from_secs(seconds);
         let gate = &self.shared.stop.gate;
         let epoch = gate.epoch();
-        if seconds == 0 || gate.closing() || gate.failed() || (!recovery && gate.recovery()) {
+        if seconds == 0
+            || Instant::now() >= deadline
+            || gate.closing()
+            || gate.failed()
+            || (!recovery && gate.recovery())
+        {
             return false;
         }
         // try_lock denies overlapping dialogue rather than queuing a request
@@ -300,6 +305,24 @@ impl TerminalConfirmer {
             && !gate.closing()
             && !gate.failed()
             && (recovery || !gate.recovery())
+    }
+    fn protocol_valid(
+        &self,
+        deadline: Instant,
+        epoch: u64,
+        recovery: bool,
+        failure: Failure,
+    ) -> bool {
+        if self.valid(deadline, epoch, recovery) {
+            return true;
+        }
+        let gate = &self.shared.stop.gate;
+        // An interrupted dialogue is normal denial. A terminal protocol that
+        // cannot acknowledge within the original lifetime is a host failure.
+        if Instant::now() >= deadline && gate.epoch() == epoch && !gate.closing() {
+            self.shared.fail(failure);
+        }
+        false
     }
     fn ask_inner(
         &self,
@@ -335,7 +358,7 @@ impl TerminalConfirmer {
             return false;
         };
         loop {
-            if !self.valid(deadline, epoch, recovery) {
+            if !self.protocol_valid(deadline, epoch, recovery, Failure::Output) {
                 return false;
             }
             match ack.recv_timeout(SLICE.min(deadline.saturating_duration_since(Instant::now()))) {
@@ -363,7 +386,7 @@ impl TerminalConfirmer {
             next
         };
         loop {
-            if !self.valid(deadline, epoch, recovery) {
+            if !self.protocol_valid(deadline, epoch, recovery, Failure::Boundary) {
                 return false;
             }
             if self.shared.input().acknowledged == boundary {
