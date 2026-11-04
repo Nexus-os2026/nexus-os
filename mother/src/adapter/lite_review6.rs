@@ -233,7 +233,7 @@ fn lite_failure_after_recognised_file() {
                 .filter(|e| matches!(
                     e.event,
                     Event::Transition {
-                        trigger: Trigger::ActionApproved { effect: 0 }
+                        trigger: Trigger::ActionApproved { effect: 0, .. }
                     }
                 ))
                 .count(),
