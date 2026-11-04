@@ -27,8 +27,8 @@
 //! ([`crate::evidence::BrokerClass`]).
 
 use crate::effect::{
-    Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, Owed,
-    PendingAction,
+    Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest,
+    FileSnapshot, Owed, PendingAction,
 };
 use crate::evidence::BrokerClass;
 use crate::journal::{IoKind, JournalError, JournalStore, MissionId, StoreFailure};
@@ -159,6 +159,8 @@ pub struct GovernedPort {
     #[cfg(test)]
     file_acks_tried: AtomicUsize,
     #[cfg(test)]
+    fail_file_ack_once: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
     pub(crate) before_file_ack: crate::oracles::m2as_hooks::HookSlot,
     /// M2a-S (tests): run just before an effect is performed, and before
     /// the broker is asked about an approval (deterministic interleavings).
@@ -211,6 +213,8 @@ impl GovernedPort {
             cancel_failures: AtomicUsize::new(0),
             #[cfg(test)]
             file_acks_tried: AtomicUsize::new(0),
+            #[cfg(test)]
+            fail_file_ack_once: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]
             before_file_ack: Default::default(),
             #[cfg(test)]
@@ -427,6 +431,9 @@ fn refused_by(class: &str) -> EffectRefusal {
 }
 
 impl EffectPort for GovernedPort {
+    fn file_workspace(&self) -> Option<&str> {
+        self.workspace.as_deref()
+    }
     fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
         Ok(Some(Arc::new(
             self.file_port.as_ref().map_err(|e| *e)?.attach()?,
@@ -443,17 +450,21 @@ impl EffectPort for GovernedPort {
     fn file_admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
         self.admit_lite(mission, admission)
     }
-    fn file_publication(
-        &self,
-        mission: MissionId,
-    ) -> Result<Option<(PendingAction, PublicationClass)>, EffectRefusal> {
+    fn file_publication(&self, mission: MissionId) -> Result<Option<FileSnapshot>, EffectRefusal> {
         self.publication_lite(mission)
+    }
+    fn file_deadline_elapsed(&self, pending: &PendingAction) -> bool {
+        self.door.clock().monotonic_ms() >= pending.deadline_mono_ms
     }
     fn file_ack(&self, pending: &PendingAction) -> Result<(), EffectRefusal> {
         #[cfg(test)]
         self.file_acks_tried.fetch_add(1, Ordering::SeqCst);
         #[cfg(test)]
         self.before_file_ack.fire();
+        #[cfg(test)]
+        if self.fail_file_ack_once.swap(false, Ordering::SeqCst) {
+            return Err(refused(BrokerClass::ActionNotHeld));
+        }
         let id = CommitmentId::parse(&pending.commitment)
             .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
         self.door
@@ -990,10 +1001,13 @@ pub fn create_private(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod lite;
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod lite_clock;
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod lite_crash;

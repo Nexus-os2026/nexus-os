@@ -295,6 +295,9 @@ codes! {
         EmergencyStop => "emergency_stop",
         /// P0: its private content is missing or does not verify.
         PrivateContentUnavailable => "private_content_unavailable",
+        /// M2d-C round 4 (addendum 1, shutdown scope): another mission's
+        /// Stop halted the broker door this mission shares.
+        DoorHalted => "door_halted",
     }
 }
 
@@ -302,6 +305,29 @@ codes! {
     /// Why a mission is held.
     HeldReason {
         UncleanShutdown => "unclean_shutdown",
+    }
+}
+
+codes! {
+    /// M2d (§11 M4′): what ended a Files publication's authority after the
+    /// broker's final check (the broker's registry; anything else is
+    /// `unknown`).
+    PublicationCause {
+        EmergencyStop => "emergency_stop",
+        Cancelled => "cancelled",
+        Revoked => "revoked",
+        Expired => "expired",
+        CommitmentExpired => "commitment_expired",
+        WriteGrantRevoked => "write_grant_revoked",
+        WriteGrantExpired => "write_grant_expired",
+        Unknown => "unknown",
+    }
+}
+
+impl PublicationCause {
+    /// The broker's code, as a cause: outside the registry, `Unknown`.
+    pub fn of(code: &str) -> Self {
+        Self::parse(code).unwrap_or(PublicationCause::Unknown)
     }
 }
 
@@ -323,7 +349,28 @@ pub enum MotherRefusal {
     SpendNotSupported,
     NoRequestedFolder,
     FileRequestNotRelative,
+    /// M2d: not one top-level name of the allowed characters.
+    FileNameInvalid,
+    /// M2d: the content holds a NUL.
+    FileNotText,
+    /// M2d: more than 8 KiB.
+    FileTooLarge,
+    /// M2d: more than 150 lines.
+    FileTooManyLines,
+    /// M2d: the requested folder is not the workspace the host gave.
+    FileFolderNotWorkspace,
 }
+
+const FILE_REFUSALS: [(MotherRefusal, &str); 5] = [
+    (MotherRefusal::FileNameInvalid, "file_name_invalid"),
+    (MotherRefusal::FileNotText, "file_not_text"),
+    (MotherRefusal::FileTooLarge, "file_too_large"),
+    (MotherRefusal::FileTooManyLines, "file_too_many_lines"),
+    (
+        MotherRefusal::FileFolderNotWorkspace,
+        "file_folder_not_workspace",
+    ),
+];
 
 impl MotherRefusal {
     pub fn as_str(&self) -> String {
@@ -333,6 +380,10 @@ impl MotherRefusal {
             MotherRefusal::SpendNotSupported => "spend_not_supported".into(),
             MotherRefusal::NoRequestedFolder => "no_requested_folder".into(),
             MotherRefusal::FileRequestNotRelative => "file_request_not_relative".into(),
+            file => FILE_REFUSALS
+                .iter()
+                .find(|(refusal, _)| refusal == file)
+                .map_or_else(String::new, |(_, code)| (*code).to_string()),
         }
     }
 
@@ -345,7 +396,10 @@ impl MotherRefusal {
             "spend_not_supported" => Some(MotherRefusal::SpendNotSupported),
             "no_requested_folder" => Some(MotherRefusal::NoRequestedFolder),
             "file_request_not_relative" => Some(MotherRefusal::FileRequestNotRelative),
-            _ => None,
+            _ => FILE_REFUSALS
+                .iter()
+                .find(|(_, code)| *code == text)
+                .map(|(refusal, _)| *refusal),
         }
     }
 
@@ -360,6 +414,7 @@ impl MotherRefusal {
             MotherRefusal::NoRequestedFolder,
             MotherRefusal::FileRequestNotRelative,
         ]);
+        every.extend(FILE_REFUSALS.iter().map(|(refusal, _)| *refusal));
         every
     }
 }
@@ -386,9 +441,33 @@ pub enum BlockReason {
     Refused(MotherRefusal),
     /// The port or the broker refused an effect.
     BrokerRefused(BrokerClass),
+    /// M2d: no consent of this process binds the mission's Files (after a
+    /// clean restart, or the door holds no such yes).
+    FilesConsentUnverifiable,
+    /// M2d (§11 M4′): a File was published, and its authority ended after
+    /// the broker's final check.
+    FilePublicationInterrupted(PublicationCause),
+    /// M2d (Codex review 1 of PR #78, HIGH 1): a File the mission waited on
+    /// ran, and Mother then ended the mission for its time budget, or for
+    /// the Owner's Stop (an emergency Stop is the broker registry's own
+    /// `emergency_stop`).
+    FilePublicationTimeBudget,
+    FilePublicationOwnerStop,
+    /// M2d (HIGH 2): a File was published with recovery required.
+    FilePublicationRecoveryRequired,
+    /// M2d (Codex review 2 of PR #78, decision C): a Stop or the time
+    /// budget ended a mission waiting on a File the broker could not say
+    /// anything of: a file may exist.
+    FilePublicationUncertain,
+    /// M2d-C round 4 (addendum 1): a File was published, and another
+    /// mission's Stop then halted the door this mission shares.
+    FilePublicationDoorHalted,
+    /// M2d-C round 5 (D3): a File was published while Mother's own
+    /// deadline for its approval had passed (read after the withdrawal).
+    FilePublicationApprovalDeadline,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 11] = [
+const BLOCK_CODES: [(BlockReason, &str); 18] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -403,7 +482,190 @@ const BLOCK_CODES: [(BlockReason, &str); 11] = [
     ),
     (BlockReason::EffectOutcomeUnknown, "effect_outcome_unknown"),
     (BlockReason::PhaseInterrupted, "phase_interrupted"),
+    (
+        BlockReason::FilesConsentUnverifiable,
+        "files_consent_unverifiable",
+    ),
+    (
+        BlockReason::FilePublicationTimeBudget,
+        "file_publication_interrupted:time_budget",
+    ),
+    (
+        BlockReason::FilePublicationOwnerStop,
+        "file_publication_interrupted:owner_stop",
+    ),
+    (
+        BlockReason::FilePublicationRecoveryRequired,
+        "file_publication_recovery_required",
+    ),
+    (
+        BlockReason::FilePublicationUncertain,
+        "file_publication_uncertain",
+    ),
+    (
+        BlockReason::FilePublicationDoorHalted,
+        "file_publication_interrupted:door_halted",
+    ),
+    (
+        BlockReason::FilePublicationApprovalDeadline,
+        "file_publication_interrupted:approval_deadline",
+    ),
 ];
+
+/// M2d-C round 4 (addendum 5): what the Owner is told of a mission ended
+/// `file_publication_uncertain`, exactly.
+pub const FILE_UNCERTAIN_NOTICE: &str = "A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.";
+
+/// M2d-C round 4 (settlement design v2, rule 4): why a File's settlement
+/// began, kept as its first cause: a Stop, the time budget, or another end
+/// of the mission (a block's reason).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SettleCause {
+    Stop(StopReason),
+    TimeBudget,
+    Ended(BlockReason),
+}
+
+impl SettleCause {
+    pub fn as_str(&self) -> String {
+        match self {
+            SettleCause::Stop(reason) => format!("stop:{}", reason.code()),
+            SettleCause::TimeBudget => "time_budget".into(),
+            SettleCause::Ended(reason) => format!("ended:{}", reason.as_str()),
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        if text == "time_budget" {
+            return Some(SettleCause::TimeBudget);
+        }
+        if let Some(reason) = text.strip_prefix("stop:") {
+            return StopReason::parse(reason).map(SettleCause::Stop);
+        }
+        BlockReason::parse(text.strip_prefix("ended:")?).map(SettleCause::Ended)
+    }
+
+    pub fn every() -> Vec<Self> {
+        let mut every: Vec<Self> = StopReason::every()
+            .into_iter()
+            .map(SettleCause::Stop)
+            .collect();
+        every.push(SettleCause::TimeBudget);
+        every.extend(BlockReason::every().into_iter().map(SettleCause::Ended));
+        every
+    }
+
+    /// How a settlement with this first cause ends, given its outcome (rule
+    /// 5): a published File blocks with the cause's interruption code (or
+    /// recovery required); one confirmed not published ends as the cause
+    /// would have; an uncertain one blocks `file_publication_uncertain`.
+    pub fn end(&self, outcome: &SettlementOutcome) -> SettlementEnd {
+        match outcome {
+            SettlementOutcome::Uncertain => {
+                SettlementEnd::Block(BlockReason::FilePublicationUncertain)
+            }
+            SettlementOutcome::Published {
+                recovery_required: true,
+                ..
+            } => SettlementEnd::Block(BlockReason::FilePublicationRecoveryRequired),
+            SettlementOutcome::Published { .. } => SettlementEnd::Block(match self {
+                SettleCause::Stop(StopReason::Owner) => BlockReason::FilePublicationOwnerStop,
+                SettleCause::Stop(StopReason::EmergencyStop) => {
+                    BlockReason::FilePublicationInterrupted(PublicationCause::EmergencyStop)
+                }
+                SettleCause::Stop(StopReason::DoorHalted) => BlockReason::FilePublicationDoorHalted,
+                SettleCause::Stop(StopReason::PrivateContentUnavailable) => {
+                    BlockReason::FilePublicationInterrupted(PublicationCause::Unknown)
+                }
+                SettleCause::TimeBudget => BlockReason::FilePublicationTimeBudget,
+                SettleCause::Ended(reason) => *reason,
+            }),
+            SettlementOutcome::NotPublished => match self {
+                SettleCause::Stop(reason) => SettlementEnd::Stop(*reason),
+                SettleCause::TimeBudget => SettlementEnd::Block(BlockReason::BudgetTime),
+                SettleCause::Ended(reason) => SettlementEnd::Block(*reason),
+            },
+        }
+    }
+}
+
+by_code!(SettleCause);
+
+/// M2d-C round 4 (rule 5): what a File's settlement found, journaled in the
+/// same line as the mission's end. `Published` is the truthful success
+/// record (it never makes the mission runnable).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SettlementOutcome {
+    Published {
+        recovery_required: bool,
+        interrupted: Vec<PublicationCause>,
+    },
+    NotPublished,
+    Uncertain,
+}
+
+impl SettlementOutcome {
+    /// Published, or confirmed not published: the broker may drop it.
+    pub fn conclusive(&self) -> bool {
+        !matches!(self, SettlementOutcome::Uncertain)
+    }
+
+    /// On the ordinary path (no Stop: the broker's own answer), how a File
+    /// that may not simply continue ends: recovery required, its first
+    /// interruption, or uncertain. `None`: a clean publication (the
+    /// ordinary approval) or one not published (the ordinary denial or
+    /// lapse) take no settlement.
+    pub fn ordinary_end(&self) -> Option<SettlementEnd> {
+        match self {
+            SettlementOutcome::Uncertain => {
+                Some(SettlementEnd::Block(BlockReason::FilePublicationUncertain))
+            }
+            SettlementOutcome::Published {
+                recovery_required: true,
+                ..
+            } => Some(SettlementEnd::Block(
+                BlockReason::FilePublicationRecoveryRequired,
+            )),
+            SettlementOutcome::Published { interrupted, .. } => interrupted
+                .first()
+                .map(|cause| SettlementEnd::Block(BlockReason::FilePublicationInterrupted(*cause))),
+            SettlementOutcome::NotPublished => None,
+        }
+    }
+
+    /// D3: how a File read after a denial, expiry or lapse ends when it is
+    /// not confirmed not published: as on the ordinary path, a clean
+    /// publication `approval_deadline`.
+    pub fn deadline_end(&self) -> Option<SettlementEnd> {
+        match self {
+            SettlementOutcome::Published {
+                recovery_required: false,
+                interrupted,
+            } if interrupted.is_empty() => Some(SettlementEnd::Block(
+                BlockReason::FilePublicationApprovalDeadline,
+            )),
+            other => other.ordinary_end(),
+        }
+    }
+}
+
+/// M2d-C round 4: the mission's end in a settlement's terminal line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum SettlementEnd {
+    Block(BlockReason),
+    Stop(StopReason),
+}
+
+impl SettlementEnd {
+    pub fn as_str(&self) -> String {
+        match self {
+            SettlementEnd::Block(reason) => reason.as_str(),
+            SettlementEnd::Stop(reason) => reason.as_str(),
+        }
+    }
+}
 
 impl BlockReason {
     pub fn as_str(&self) -> String {
@@ -411,6 +673,9 @@ impl BlockReason {
             BlockReason::LaneHalt(role) => format!("lane_halt:{}", role.as_str()),
             BlockReason::Refused(refusal) => refusal.as_str(),
             BlockReason::BrokerRefused(class) => format!("broker_refused:{}", class.code()),
+            BlockReason::FilePublicationInterrupted(cause) => {
+                format!("file_publication_interrupted:{}", cause.code())
+            }
             simple => BLOCK_CODES
                 .iter()
                 .find(|(reason, _)| reason == simple)
@@ -428,6 +693,9 @@ impl BlockReason {
         if let Some(class) = text.strip_prefix("broker_refused:") {
             return BrokerClass::parse(class).map(BlockReason::BrokerRefused);
         }
+        if let Some(cause) = text.strip_prefix("file_publication_interrupted:") {
+            return PublicationCause::parse(cause).map(BlockReason::FilePublicationInterrupted);
+        }
         MotherRefusal::parse(text).map(BlockReason::Refused)
     }
 
@@ -439,6 +707,11 @@ impl BlockReason {
             BrokerClass::ALL
                 .iter()
                 .map(|c| BlockReason::BrokerRefused(*c)),
+        );
+        every.extend(
+            PublicationCause::ALL
+                .iter()
+                .map(|c| BlockReason::FilePublicationInterrupted(*c)),
         );
         every
     }
@@ -641,6 +914,10 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
             | Trigger::ActionApproved { .. }
             | Trigger::ActionDenied { .. }
             | Trigger::ApprovalLapsed { .. } => true,
+            Trigger::Settled { action, .. } => action.as_ref().is_none_or(|pending| {
+                RunId::parse(&pending.run).is_some()
+                    && CommitmentId::parse(&pending.commitment).is_some()
+            }),
         },
         Event::LaneInvoked {
             identity_sha256,
@@ -662,6 +939,7 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
         | Event::SessionClosed
         | Event::Held { .. }
         | Event::Resumed
+        | Event::SettlementStarted { .. }
         | Event::FileModeSelected => true,
     };
     if ok {

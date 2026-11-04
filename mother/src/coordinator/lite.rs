@@ -52,6 +52,13 @@ impl<P: EffectPort> Coordinator<P> {
             .port
             .file_claim(attachment)
             .map_err(CoordinatorError::FileSession)?;
+        match self.inner.lock() {
+            Ok(mut inner) => inner.file_cell = Some(cell.clone()),
+            Err(_) => {
+                cell.engage_with(HaltCause::Fence);
+                return Err(CoordinatorError::Poisoned);
+            }
+        }
         self.file = Some(FileLife {
             cell,
             mission: AtomicU64::new(0),
@@ -62,7 +69,7 @@ impl<P: EffectPort> Coordinator<P> {
     }
 
     pub(super) fn file_admit(&self, id: MissionId) -> Result<(), CoordinatorError> {
-        let admission = self.with_lock(|inner| {
+        let admission = self.step(|inner| {
             let m = inner.mission(id)?;
             if !m.file_mode || !m.consented() {
                 return Err(CoordinatorError::NoConsent);
@@ -131,19 +138,11 @@ impl<P: EffectPort> FileSession<P> {
     }
     fn touch(&self) -> Result<(), CoordinatorError> {
         self.life().check_budget(&*self.coordinator.clock);
-        if self.life().cell.is_engaged() {
-            let id = self.life().mission.load(Ordering::SeqCst);
-            if id != 0 {
-                self.call(|c| {
-                    c.stop_for(
-                        MissionId(id),
-                        match self.life().cell.cause() {
-                            Some(HaltCause::Emergency) => StopReason::EmergencyStop,
-                            _ => StopReason::Owner,
-                        },
-                    )
-                })?;
-            }
+        let id = self.life().mission.load(Ordering::SeqCst);
+        if self.life().cell.is_engaged() && id != 0 {
+            #[cfg(test)]
+            self.coordinator.hooks.file_after_halt.fire();
+            self.call(|c| c.file_stop(MissionId(id), SettleCause::Stop(StopReason::Owner)))?;
         }
         Ok(())
     }
@@ -183,10 +182,14 @@ impl<P: EffectPort> FileSession<P> {
     }
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         self.life().cell.engage();
+        #[cfg(test)]
+        self.coordinator.hooks.file_after_halt.fire();
         self.call(|c| c.stop(id))
     }
     pub fn stop_all(&self) -> Result<usize, CoordinatorError> {
         self.life().cell.engage();
+        #[cfg(test)]
+        self.coordinator.hooks.file_after_halt.fire();
         let id = self.life().mission.load(Ordering::SeqCst);
         if id == 0 {
             return Ok(0);
@@ -209,10 +212,15 @@ impl<P: EffectPort> FileSession<P> {
         self.touch()?;
         self.call(|c| Ok(c.reason(id)))
     }
+    /// The exact Owner notice persists for uncertain terminal work.
+    pub fn notice(&self, id: MissionId) -> Result<Option<&'static str>, CoordinatorError> {
+        self.touch()?;
+        self.call(|c| c.file_notice(id))
+    }
     pub fn close(&self) -> Result<(), CoordinatorError> {
         self.touch()?;
         self.call(|c| {
-            c.with_lock(|inner| {
+            c.step(|inner| {
                 if inner
                     .missions
                     .values()
@@ -222,6 +230,10 @@ impl<P: EffectPort> FileSession<P> {
                 }
                 Ok(())
             })?;
+            let id = self.life().mission.load(Ordering::SeqCst);
+            if id != 0 {
+                c.file_ack_all(MissionId(id))?;
+            }
             c.close_ref()
         })
     }

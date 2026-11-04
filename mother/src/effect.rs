@@ -69,6 +69,13 @@ pub struct Admission {
     pub folder: String,
 }
 
+/// One broker read: publication proof and the corresponding display state.
+pub struct FileSnapshot {
+    pub action: PendingAction,
+    pub publication: PublicationClass,
+    pub state: Option<nexus_governed_control::authority::commitment::CommitmentState>,
+}
+
 /// What a performed effect came to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EffectOutcome {
@@ -226,6 +233,9 @@ mod sealed {
 /// The calls Mother makes to reach the world.
 pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// Register before replay. The default port has no File eligibility.
+    fn file_workspace(&self) -> Option<&str> {
+        None
+    }
     fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
         Ok(None)
     }
@@ -237,11 +247,11 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
             class: BrokerClass::NoBrokerRoute,
         })
     }
-    fn file_publication(
-        &self,
-        _: MissionId,
-    ) -> Result<Option<(PendingAction, PublicationClass)>, EffectRefusal> {
+    fn file_publication(&self, _: MissionId) -> Result<Option<FileSnapshot>, EffectRefusal> {
         Ok(None)
+    }
+    fn file_deadline_elapsed(&self, _: &PendingAction) -> bool {
+        false
     }
     fn file_ack(&self, _: &PendingAction) -> Result<(), EffectRefusal> {
         Err(EffectRefusal {

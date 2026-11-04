@@ -312,13 +312,25 @@ impl AgentDoor {
         &self,
         id: CommitmentId,
     ) -> Result<Lookup<PublicationClass>, AuthorityError> {
+        Ok(match self.file_observation(id)? {
+            Lookup::Mine((_, publication)) => Lookup::Mine(publication),
+            Lookup::NotMine { settled } => Lookup::NotMine { settled },
+            Lookup::Unknown => Lookup::Unknown,
+        })
+    }
+
+    /// Atomic state and publication proof, for truthful File recognition.
+    pub fn file_observation(
+        &self,
+        id: CommitmentId,
+    ) -> Result<Lookup<(CommitmentView, PublicationClass)>, AuthorityError> {
         let authority = self.control.authority();
         let Some((view, publication)) = authority.commitments().publication(id)? else {
             return Ok(Lookup::Unknown);
         };
         let agents = view.agent == self.core.agent;
         if agents && authority.runs().try_is_member(view.run, self.core.group)? {
-            return Ok(Lookup::Mine(publication));
+            return Ok(Lookup::Mine((view, publication)));
         }
         Ok(Lookup::NotMine {
             settled: agents && view.state.is_final(),

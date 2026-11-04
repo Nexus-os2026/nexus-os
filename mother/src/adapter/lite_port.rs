@@ -61,7 +61,7 @@ impl GovernedPort {
     pub(super) fn publication_lite(
         &self,
         mission: MissionId,
-    ) -> Result<Option<(PendingAction, PublicationClass)>, EffectRefusal> {
+    ) -> Result<Option<FileSnapshot>, EffectRefusal> {
         let pending = {
             let runs = self.file_runs()?;
             match (runs.open.get(&mission), runs.waiting.get(&mission)) {
@@ -75,15 +75,21 @@ impl GovernedPort {
         };
         let id = CommitmentId::parse(&pending.commitment)
             .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
-        let publication = match self
+        let (publication, state) = match self
             .door
-            .publication(id)
+            .file_observation(id)
             .map_err(|e| refused_by(e.class()))?
         {
-            Lookup::Mine(read) => read,
-            Lookup::NotMine { .. } | Lookup::Unknown => PublicationClass::Uncertain,
+            Lookup::Mine((view, read)) if view.run.to_string() == pending.run => {
+                (read, Some(view.state))
+            }
+            _ => (PublicationClass::Uncertain, None),
         };
-        Ok(Some((pending, publication)))
+        Ok(Some(FileSnapshot {
+            action: pending,
+            publication,
+            state,
+        }))
     }
 
     /// Narrowing cancellation works after cell engagement. All record outcomes

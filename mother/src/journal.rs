@@ -24,7 +24,9 @@
 
 use crate::contract::{sha256, ContractHash, EffectKind};
 use crate::effect::PendingAction;
-use crate::evidence::{ConsentRefusedReason, HeldReason, MotherRefusal, SettledOutcome};
+use crate::evidence::{
+    ConsentRefusedReason, HeldReason, MotherRefusal, SettleCause, SettledOutcome,
+};
 use crate::lane::{InvocationId, LaneRole};
 use crate::private::ContentId;
 use crate::state::Trigger;
@@ -135,6 +137,8 @@ pub enum Event {
     Resumed,
     /// Sticky File mode, selected before this draft can be submitted.
     FileModeSelected,
+    /// First cause, durably recorded before reconciliation.
+    SettlementStarted { effect: u64, cause: SettleCause },
 }
 
 /// One journal entry.
@@ -239,6 +243,8 @@ pub enum ReplayViolation {
     ClosureOfNoAction,
     HoldOutOfPlace,
     ResumeNotHeld,
+    SettlementOutOfPlace,
+    SettlementConflict,
 }
 
 /// Why a journal cannot be read or written: closed codes and line numbers

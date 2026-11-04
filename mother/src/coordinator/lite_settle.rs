@@ -1,0 +1,475 @@
+//! File-only recognition, settlement and replay. Every uncertain outcome is
+//! terminal and keeps its broker pin. A terminal outcome is ONE journal line.
+use super::*;
+use crate::effect::FileSnapshot;
+use nexus_governed_control::authority::commitment::{CommitmentState, PublicationClass};
+use nexus_governed_control::authority::file_session::HaltCause;
+
+pub(super) enum FileDecision {
+    Status(ApprovalStatus),
+    Ended(MissionState),
+}
+
+fn halt_cause(cause: SettleCause) -> HaltCause {
+    match cause {
+        SettleCause::Stop(StopReason::Owner) => HaltCause::Stop,
+        SettleCause::Stop(StopReason::EmergencyStop) => HaltCause::Emergency,
+        SettleCause::TimeBudget | SettleCause::Ended(BlockReason::BudgetTime) => {
+            HaltCause::TimeBudget
+        }
+        _ => HaltCause::Fence,
+    }
+}
+fn first_cause(first: HaltCause, asked: SettleCause) -> SettleCause {
+    if first == halt_cause(asked) {
+        return asked;
+    }
+    match first {
+        HaltCause::Stop => SettleCause::Stop(StopReason::Owner),
+        HaltCause::Emergency => SettleCause::Stop(StopReason::EmergencyStop),
+        HaltCause::TimeBudget => SettleCause::TimeBudget,
+        HaltCause::Fence => SettleCause::Stop(StopReason::DoorHalted),
+    }
+}
+pub(super) fn outcome(publication: PublicationClass) -> SettlementOutcome {
+    match publication {
+        PublicationClass::Published {
+            recovery_required,
+            interrupted,
+        } => SettlementOutcome::Published {
+            recovery_required,
+            interrupted: interrupted
+                .into_iter()
+                .map(crate::evidence::PublicationCause::of)
+                .collect(),
+        },
+        PublicationClass::ConfirmedNotPublished => SettlementOutcome::NotPublished,
+        PublicationClass::Pending | PublicationClass::Uncertain => SettlementOutcome::Uncertain,
+    }
+}
+
+impl<P: EffectPort> Coordinator<P> {
+    /// Existing legacy calls retain their record behavior. File calls have a
+    /// typed poison/recording result across the entire lock/owed-write chain.
+    pub(super) fn step<T>(
+        &self,
+        body: impl FnOnce(&mut Inner) -> Result<T, CoordinatorError>,
+    ) -> Result<T, CoordinatorError> {
+        if self.file.is_some() {
+            self.try_with_lock(body)
+        } else {
+            self.with_lock(body)
+        }
+    }
+    pub(super) fn try_with_lock<T>(
+        &self,
+        body: impl FnOnce(&mut Inner) -> Result<T, CoordinatorError>,
+    ) -> Result<T, CoordinatorError> {
+        let (result, owed) = {
+            let mut inner = self.inner.lock().map_err(|_| {
+                if let Some(file) = &self.file {
+                    file.cell.engage_with(HaltCause::Fence);
+                }
+                CoordinatorError::Poisoned
+            })?;
+            #[cfg(test)]
+            let _held = crate::effect::held::Held::coordinator();
+            let result = body(&mut inner);
+            (result, std::mem::take(&mut inner.owed))
+        };
+        #[cfg(test)]
+        self.hooks.before_owed_write.fire();
+        let written = owed.write_checked();
+        #[cfg(test)]
+        self.hooks.after_owed_write.fire();
+        if written.is_err() {
+            if let Some(file) = &self.file {
+                file.cell.engage_with(HaltCause::Fence);
+            }
+        }
+        let result = result?;
+        written.map_err(|_| CoordinatorError::Recording)?;
+        Ok(result)
+    }
+
+    /// Called before blocking preparation and immediately before invocation or
+    /// dispatch. The budget and cell reads precede the coordinator lock.
+    pub(super) fn file_boundary(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        let Some(file) = &self.file else {
+            return Ok(());
+        };
+        file.check_budget(&*self.clock);
+        if let Some(first) = file.cell.cause() {
+            #[cfg(test)]
+            self.hooks.file_after_halt.fire();
+            self.file_stop(id, first_cause(first, SettleCause::Stop(StopReason::Owner)))?;
+            return Err(CoordinatorError::Stopped);
+        }
+        Ok(())
+    }
+
+    pub(super) fn file_stop(
+        &self,
+        id: MissionId,
+        asked: SettleCause,
+    ) -> Result<MissionState, CoordinatorError> {
+        let cause = if let Some(file) = &self.file {
+            file.cell.engage_with(halt_cause(asked));
+            #[cfg(test)]
+            self.hooks.file_after_halt.fire();
+            first_cause(file.cell.cause().expect("engaged cell"), asked)
+        } else {
+            asked
+        };
+        enum Step {
+            Done(MissionState),
+            Plain(Result<MissionState, CoordinatorError>),
+            Settle(Result<(), CoordinatorError>),
+        }
+        let step = self.try_with_lock(|inner| {
+            inner.usable()?;
+            let m = inner.mission(id)?;
+            if m.state.is_terminal() {
+                return Ok(Step::Done(m.state));
+            }
+            if m.settlement.is_some() {
+                return Ok(Step::Settle(Ok(())));
+            }
+            if let Some(effect) = m.unresolved_file {
+                let started = inner
+                    .append(id, Event::SettlementStarted { effect, cause })
+                    .map(|_| ());
+                let m = inner.mission(id)?;
+                m.settlement = Some((effect, cause));
+                m.generation += 1;
+                return Ok(Step::Settle(started));
+            }
+            let trigger = match cause {
+                SettleCause::Stop(reason) => Trigger::Stop { reason },
+                SettleCause::TimeBudget => Trigger::Block {
+                    reason: BlockReason::BudgetTime,
+                },
+                SettleCause::Ended(reason) => Trigger::Block { reason },
+            };
+            let result = inner.fire(id, trigger.clone(), self.clock.monotonic_ms());
+            if result.is_err() {
+                let m = inner.mission(id)?;
+                if let Ok(to) = transition(m.state, &trigger) {
+                    m.apply(&trigger, to, self.clock.monotonic_ms());
+                }
+            }
+            Ok(Step::Plain(result))
+        });
+        match step {
+            Ok(Step::Done(state)) => {
+                self.file_ack_all(id)?;
+                Ok(state)
+            }
+            Ok(Step::Plain(result)) => {
+                let withdrawn = self
+                    .port
+                    .withdraw(id)
+                    .map_err(|r| CoordinatorError::Withdrawal(r.class));
+                let state = result?;
+                withdrawn?;
+                Ok(state)
+            }
+            Ok(Step::Settle(started)) => {
+                let withdrawn = self
+                    .port
+                    .withdraw(id)
+                    .map_err(|r| CoordinatorError::Withdrawal(r.class));
+                // Exactly one snapshot after withdrawal, including when it failed.
+                let snapshot = self.port.file_publication(id).ok().flatten();
+                let (action, read) = snapshot.map_or((None, SettlementOutcome::Uncertain), |s| {
+                    (Some(s.action), outcome(s.publication))
+                });
+                let ended = self.file_terminal(id, action, read, None);
+                started?;
+                let state = ended?;
+                withdrawn?;
+                Ok(state)
+            }
+            Err(error) => {
+                // The original cell already stopped admission, even if the
+                // registry or journal cannot be read. Narrowing cleanup is tried.
+                let _withdrawal = self.port.withdraw(id);
+                Err(error)
+            }
+        }
+    }
+
+    /// One terminal envelope after a durable start, or the ordinary poll's
+    /// truthful terminal classification. No conclusive ack precedes durability.
+    fn file_terminal(
+        &self,
+        id: MissionId,
+        action: Option<PendingAction>,
+        read: SettlementOutcome,
+        reserved: Option<u64>,
+    ) -> Result<MissionState, CoordinatorError> {
+        if let Some(file) = &self.file {
+            file.cell.engage_with(HaltCause::Fence);
+            if reserved.is_some() {
+                if let Some(first) = file.cell.cause().filter(|c| *c != HaltCause::Fence) {
+                    return self
+                        .file_stop(id, first_cause(first, SettleCause::Stop(StopReason::Owner)));
+                }
+            }
+        }
+        let result = self.try_with_lock(|inner| {
+            inner.usable()?;
+            let m = inner.mission(id)?;
+            if m.state.is_terminal() {
+                return Ok(m.state);
+            }
+            let (effect, end) = match (m.settlement, reserved) {
+                (Some((effect, cause)), None) => (effect, cause.end(&read)),
+                (None, Some(generation)) if m.generation == generation => {
+                    let effect = m
+                        .waiting
+                        .as_ref()
+                        .map(|w| w.effect)
+                        .filter(|e| m.unresolved_file == Some(*e))
+                        .ok_or(CoordinatorError::Stopped)?;
+                    let end = read
+                        .ordinary_end()
+                        .or_else(|| read.deadline_end())
+                        .ok_or(CoordinatorError::Stopped)?;
+                    (effect, end)
+                }
+                _ => return Err(CoordinatorError::Stopped),
+            };
+            let action = match &m.open_action {
+                Some((e, pending)) if *e == effect => Some(pending.clone()),
+                _ => action,
+            };
+            let trigger = Trigger::Settled {
+                effect,
+                action,
+                outcome: read.clone(),
+                end,
+            };
+            inner.fire_settling(id, trigger, self.clock.monotonic_ms())
+        });
+        // No ack after a failed terminal append. An uncertainty never enters acks.
+        let state = result?;
+        let withdrawn = if reserved.is_some() {
+            self.port
+                .withdraw(id)
+                .map_err(|r| CoordinatorError::Withdrawal(r.class))
+        } else {
+            Ok(())
+        };
+        let closed = self.file_close_action(id);
+        let acked = self.file_ack_all(id);
+        closed?;
+        acked?;
+        withdrawn?;
+        Ok(state)
+    }
+
+    pub(super) fn file_notice(
+        &self,
+        id: MissionId,
+    ) -> Result<Option<&'static str>, CoordinatorError> {
+        self.try_with_lock(|inner| {
+            Ok(inner
+                .mission(id)?
+                .terminal_uncertain
+                .then_some(FILE_UNCERTAIN_NOTICE))
+        })
+    }
+
+    /// This path is reachable only from a ConfirmedNotPublished snapshot.
+    /// The proof survives cancellation; first-cause Stop still takes precedence.
+    pub(super) fn file_nonpublication_end(
+        &self,
+        id: MissionId,
+        generation: u64,
+        trigger: Trigger,
+    ) -> Result<MissionState, CoordinatorError> {
+        if let Some(file) = &self.file {
+            file.cell.engage_with(HaltCause::Fence);
+            if let Some(first) = file.cell.cause().filter(|c| *c != HaltCause::Fence) {
+                return self
+                    .file_stop(id, first_cause(first, SettleCause::Stop(StopReason::Owner)));
+            }
+        }
+        let state = self.try_with_lock(|inner| {
+            inner.usable()?;
+            let m = inner.mission(id)?;
+            if m.generation != generation || m.settlement.is_some() {
+                return Err(CoordinatorError::Stopped);
+            }
+            inner.fire(id, trigger, self.clock.monotonic_ms())
+        })?;
+        let withdrawn = self
+            .port
+            .withdraw(id)
+            .map_err(|r| CoordinatorError::Withdrawal(r.class));
+        let closed = self.file_close_action(id);
+        let acked = self.file_ack_all(id);
+        closed?;
+        acked?;
+        withdrawn?;
+        Ok(state)
+    }
+
+    pub(super) fn file_ack_all(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        let acks = self.try_with_lock(|inner| {
+            inner.usable()?;
+            Ok(inner.mission(id)?.acks.clone())
+        })?;
+        let mut first = None;
+        for action in acks {
+            #[cfg(test)]
+            self.hooks.file_before_ack.fire();
+            match self.port.file_ack(&action) {
+                Err(refusal) => {
+                    first.get_or_insert(CoordinatorError::Broker(refusal.class));
+                }
+                Ok(()) => {
+                    // Retire only this successfully acknowledged obligation in
+                    // memory. Replay reconstructs it from the durable outcome,
+                    // so a crash here repeats an exact, idempotent ack.
+                    self.try_with_lock(|inner| {
+                        inner.mission(id)?.acks.retain(|pending| pending != &action);
+                        Ok(())
+                    })?;
+                }
+            }
+        }
+        first.map_or(Ok(()), Err)
+    }
+
+    pub(super) fn file_close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
+        self.try_with_lock(|inner| {
+            inner.usable()?;
+            let m = inner.mission(id)?;
+            if m.terminal_uncertain || m.unresolved_file.is_some() {
+                return Ok(false);
+            }
+            let Some((effect, pending)) = m.open_action.clone() else {
+                return Ok(true);
+            };
+            if !m.acks.contains(&pending) {
+                return Ok(false);
+            }
+            inner.append(id, Event::ApprovalClosed { effect })?;
+            inner.mission(id)?.open_action = None;
+            Ok(true)
+        })
+    }
+
+    pub(super) fn file_approval(
+        &self,
+        id: MissionId,
+        generation: u64,
+    ) -> Result<FileDecision, CoordinatorError> {
+        let pending = self.try_with_lock(|inner| {
+            Ok(inner
+                .mission(id)?
+                .open_action
+                .as_ref()
+                .map(|(_, p)| p.clone()))
+        })?;
+        let elapsed = pending
+            .as_ref()
+            .is_some_and(|p| self.port.file_deadline_elapsed(p));
+        let withdrawal = if elapsed {
+            if let Some(file) = &self.file {
+                file.cell.engage_with(HaltCause::Fence);
+            }
+            self.port
+                .withdraw(id)
+                .map_err(|r| CoordinatorError::Withdrawal(r.class))
+        } else {
+            Ok(())
+        };
+        // D3: never read the publication before withdrawing an elapsed wait.
+        let snapshot = self.port.file_publication(id).ok().flatten();
+        let FileSnapshot {
+            action,
+            publication,
+            state,
+        } = snapshot.unwrap_or(FileSnapshot {
+            action: pending.unwrap_or(PendingAction {
+                run: String::new(),
+                commitment: String::new(),
+                deadline_mono_ms: 0,
+            }),
+            publication: PublicationClass::Uncertain,
+            state: None,
+        });
+        let status = match &publication {
+            PublicationClass::Pending if !elapsed => Some(ApprovalStatus::Waiting),
+            PublicationClass::Published {
+                recovery_required: false,
+                interrupted,
+            } if interrupted.is_empty() && !elapsed => Some(ApprovalStatus::Approved),
+            PublicationClass::ConfirmedNotPublished => Some(match state {
+                Some(CommitmentState::Denied) => ApprovalStatus::Denied,
+                Some(CommitmentState::Expired) => ApprovalStatus::Expired,
+                _ if elapsed => ApprovalStatus::Expired,
+                _ => ApprovalStatus::Lapsed {
+                    class: "cancelled".into(),
+                },
+            }),
+            _ => None,
+        };
+        if let Some(status) = status {
+            withdrawal?;
+            return Ok(FileDecision::Status(status));
+        }
+        let action = (!action.commitment.is_empty()).then_some(action);
+        let state = self.file_terminal(id, action, outcome(publication), Some(generation))?;
+        withdrawal?;
+        Ok(FileDecision::Ended(state))
+    }
+
+    /// A new broker cannot restore the lost File execution state. Settle every
+    /// unresolved journaled File before any generic adoption or held resume.
+    pub(super) fn recover_files(&self) -> Result<(), CoordinatorError> {
+        let ids = self.try_with_lock(|inner| {
+            Ok(inner
+                .missions
+                .iter()
+                .filter(|(_, m)| m.file_mode)
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>())
+        })?;
+        for id in ids {
+            let unresolved = self.try_with_lock(|inner| {
+                let m = inner.mission(id)?;
+                if m.state.is_terminal() {
+                    return Ok(false);
+                }
+                if let Some(effect) = m.unresolved_file {
+                    if m.settlement.is_none() {
+                        let cause = SettleCause::Stop(StopReason::DoorHalted);
+                        inner.append(id, Event::SettlementStarted { effect, cause })?;
+                        inner.mission(id)?.settlement = Some((effect, cause));
+                    }
+                    Ok(true)
+                } else {
+                    inner.fire(
+                        id,
+                        Trigger::Stop {
+                            reason: StopReason::DoorHalted,
+                        },
+                        self.clock.monotonic_ms(),
+                    )?;
+                    Ok(false)
+                }
+            })?;
+            if unresolved {
+                self.file_terminal(id, None, SettlementOutcome::Uncertain, None)?;
+            } else {
+                self.file_close_action(id)?;
+                self.file_ack_all(id)?;
+            }
+        }
+        Ok(())
+    }
+}
