@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 const EMERGENCY: u64 = 0x80;
-const CAUSE: u64 = 0x7f;
+const CAUSE: u64 = 0x07;
 // Low 24 bits keep the immutable cause/tag and emergency history. The high
 // 40 bits count EVERY ingress, including repeated engagements. One atomic
 // publishes both; saturation permanently refuses restorative requests.
@@ -87,6 +87,7 @@ impl HaltTag {
 pub struct HaltCell(
     Arc<AtomicU64>,
     #[cfg(test)] pub(crate) Arc<crate::test_hooks::Hooks>,
+    bool,
 );
 pub(crate) fn check_halt(cell: Option<&HaltCell>) -> Result<(), super::AuthorityError> {
     if cell.is_some_and(HaltCell::is_engaged) {
@@ -103,6 +104,33 @@ impl std::fmt::Debug for HaltCell {
     }
 }
 impl HaltCell {
+    fn host(&self) -> bool {
+        #[cfg(test)]
+        {
+            self.2
+        }
+        #[cfg(not(test))]
+        {
+            self.1
+        }
+    }
+
+    pub(crate) fn new_host() -> Self {
+        Self(
+            Arc::new(AtomicU64::new(0)),
+            #[cfg(test)]
+            Arc::default(),
+            true,
+        )
+    }
+    pub(crate) fn session_word(&self) -> u64 {
+        self.0.load(Ordering::SeqCst)
+    }
+    pub(crate) fn session_compare(&self, old: u64, new: u64) -> Result<(), u64> {
+        self.0
+            .compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst)
+            .map(|_| ())
+    }
     /// Compatibility shorthand with an exact built-in Owner disposition.
     pub fn engage(&self) {
         self.engage_tagged(HaltTag::OwnerStop);
@@ -133,7 +161,16 @@ impl HaltCell {
         let _ = self
             .0
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                let epoch = (old & EPOCH_MASK).saturating_add(EPOCH_STEP) & EPOCH_MASK;
+                if self.host() && old & crate::host_session::SEALED != 0 {
+                    return None;
+                }
+                // Host terminal settlement preserves ingress generation. A
+                // mission's cause remains distinct from a new input event.
+                let epoch = if self.host() && !emergency {
+                    old & EPOCH_MASK
+                } else {
+                    (old & EPOCH_MASK).saturating_add(EPOCH_STEP) & EPOCH_MASK
+                };
                 Some(
                     epoch | (old & !EPOCH_MASK) | history | if old & CAUSE == 0 { bits } else { 0 },
                 )
@@ -146,7 +183,15 @@ impl HaltCell {
         self.0.load(Ordering::SeqCst) / EPOCH_STEP
     }
     pub fn is_engaged(&self) -> bool {
-        self.cause().is_some()
+        let word = self.0.load(Ordering::SeqCst);
+        HaltCause::of(word).is_some()
+            || (self.host()
+                && word
+                    & (crate::host_session::CLOSING
+                        | crate::host_session::FAILED
+                        | crate::host_session::SEALED
+                        | EMERGENCY)
+                    != 0)
     }
     pub fn cause(&self) -> Option<HaltCause> {
         self.reason().map(|(cause, _)| cause)
@@ -226,6 +271,7 @@ impl Default for FileSessions {
                 Arc::new(AtomicU64::new(0)),
                 #[cfg(test)]
                 Arc::default(),
+                false,
             ),
             history: Mutex::default(),
         }
