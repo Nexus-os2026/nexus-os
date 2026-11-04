@@ -127,9 +127,25 @@ fn lite_recognition_child() {
             assert_eq!(port.acks_tried(), 1);
         }
         "withdrawal-failure" => {
-            let _ = home.evidence.close_session();
+            assert!(!home.evidence.health().latched);
+            let uncertain = home.control.status().halt_records.uncertain;
+            let seen = home.gate.count("run_cancelled");
+            home.gate.arm_with("run_cancelled", Some(run), || {
+                panic!("withdrawal record projection interrupted")
+            });
+            let result = m.stop(id);
             assert_eq!(
-                m.stop(id),
+                home.gate.count("run_cancelled"),
+                seen + 1,
+                "real withdrawal write reached the forced boundary"
+            );
+            assert_eq!(
+                home.control.status().halt_records.uncertain,
+                uncertain + 1,
+                "native batch counts the interrupted record as uncertain"
+            );
+            assert_eq!(
+                result,
                 Err(CoordinatorError::Withdrawal(
                     crate::evidence::BrokerClass::EvidenceUnavailable
                 )),
