@@ -124,6 +124,8 @@ pub(crate) struct StopRoute {
     bound: AtomicBool,
     state: Mutex<State>,
     changed: Condvar,
+    #[cfg(test)]
+    pub(crate) hold_dispatch: AtomicBool,
 }
 impl StopRoute {
     pub(crate) fn new(gate: Arc<Gate>) -> Arc<Self> {
@@ -133,6 +135,8 @@ impl StopRoute {
             bound: AtomicBool::new(false),
             state: Mutex::default(),
             changed: Condvar::new(),
+            #[cfg(test)]
+            hold_dispatch: AtomicBool::new(false),
         })
     }
     #[cfg(test)]
@@ -195,7 +199,11 @@ impl StopRoute {
         }
         self.dispatch_pending();
     }
-    fn dispatch_pending(self: &Arc<Self>) {
+    pub(crate) fn dispatch_pending(self: &Arc<Self>) {
+        #[cfg(test)]
+        if self.hold_dispatch.load(Ordering::SeqCst) {
+            return;
+        }
         let body = match self.body.lock() {
             Ok(body) => body.clone(),
             Err(_) => {

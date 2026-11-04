@@ -138,3 +138,25 @@ workspace tests with no fail-fast, all 23 desktop live named receipts, diff
 check, and the exact host-dependencies-only lockfile diff. The Architect owns
 push/CI/PR; installed Stop/Ctrl-D acceptance is Owner-performed and OBSERVED,
 not CI. C-11, portable support and capability acceptance remain unclaimed.
+
+## Review 2 — Decision 6 (registered on 6ba3d000)
+
+The worker-unscheduled ingress schedules use the real terminal Stop route
+before draft and between draft/submit. Both must refuse, with zero backend
+runs or model calls. Broker schedules engage the original memory-only File
+cell while workspace validation is held, between validation and acquiring the
+binding hold, and immediately before File/inference binding, run insertion,
+and model-attempt admission inside the hold. No recording worker runs. The
+broker's own table counts must be unchanged; no Files preparation or
+commitment is allowed. Positive controls increment every backend count.
+
+Startup is held at Home opening and recovery reporting. Two ingress events
+and two worker outcomes each get exactly one receipt, including two recording
+panics before startup finishes. Receipts must appear before releasing startup.
+The renderer oracle interprets wire CR/LF cursor movement and requires column
+zero for every row, with an LF-only negative control.
+
+Plants (one at a time, uncommitted): backend engagement delayed to the worker;
+after-validation re-check removed; host-only gate; startup-dependent receipt
+reporting/event absorption; LF-only renderer. Broker checks already present
+before this repair remain covered by the validation schedules and legacy tests.

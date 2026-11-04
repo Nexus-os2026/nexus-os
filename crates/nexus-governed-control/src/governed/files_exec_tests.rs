@@ -1284,3 +1284,6 @@ fn m2d_b2_d_o11_b_no_report_call_sweeps_anything() {
         .expect("the waiting create still executes");
     assert!(f.ws.join("waiting.txt").exists());
 }
+
+#[path = "files_host_review2_tests.rs"]
+mod host_review2;

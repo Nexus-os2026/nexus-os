@@ -397,3 +397,41 @@ fn review1_walk_readme_uses_the_displayed_random_code() {
         "wait for the acknowledged input boundary"
     );
 }
+
+#[test]
+fn review2_rendered_cursor_columns_start_at_zero() {
+    // OPOST is off. Interpret the renderer's actual wire bytes as a terminal
+    // does: LF moves the row only; CR resets the column. Use short ASCII facts
+    // so Unicode width and wrapping cannot mask a missing carriage return.
+    let mut wire = Vec::new();
+    crate::terminal::write_frame(&mut wire, "Title\nBinding: full\nContent\nPrompt\n").unwrap();
+    fn starts(wire: &[u8]) -> Vec<usize> {
+        let mut col = 0;
+        let mut new_line = true;
+        let mut starts = Vec::new();
+        for b in wire {
+            match b {
+                b'\r' => col = 0,
+                b'\n' => new_line = true,
+                _ => {
+                    if new_line {
+                        starts.push(col);
+                        new_line = false;
+                    }
+                    col += 1;
+                }
+            }
+        }
+        starts
+    }
+    assert_eq!(
+        starts(&wire),
+        vec![0, 0, 0, 0],
+        "every rendered terminal row begins in column zero"
+    );
+    assert_ne!(
+        starts(b"Title\nBinding: full\nContent\nPrompt\n"),
+        vec![0, 0, 0, 0],
+        "LF-only negative control"
+    );
+}

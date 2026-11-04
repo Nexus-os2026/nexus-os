@@ -266,9 +266,19 @@ impl Runtime {
         };
         let mission = self.mission.as_mut().expect("installed typed session");
         let result = (|| {
-            let id = mission.session.draft(contract)?;
+            #[cfg(test)]
+            hands_tests::review2_before_step(&self.screen, &self.home, "draft");
+            let drafted = mission.session.draft(contract);
+            #[cfg(test)]
+            hands_tests::review2_after_step(&self.screen, &self.home, "draft", drafted.is_err());
+            let id = drafted?;
             mission.id = Some(id);
-            mission.session.submit(id)?;
+            #[cfg(test)]
+            hands_tests::review2_before_step(&self.screen, &self.home, "submit");
+            let submitted = mission.session.submit(id);
+            #[cfg(test)]
+            hands_tests::review2_after_step(&self.screen, &self.home, "submit", submitted.is_err());
+            submitted?;
             mission.session.request_consent(id)?;
             Ok::<(), CoordinatorError>(())
         })();
@@ -649,6 +659,8 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         .name("hands-startup".into())
         .spawn(move || {
             #[cfg(test)]
+            hands_tests::review2_startup("home");
+            #[cfg(test)]
             let opened = hands_tests::open_home(&config.home, confirmer.clone());
             #[cfg(not(test))]
             let opened = Home::open(&config.home, confirmer.clone());
@@ -660,6 +672,8 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                 if !startup_screen.stop.bind(home.owner().clone()) {
                     return Err("stop_binding_failed");
                 }
+                #[cfg(test)]
+                hands_tests::review2_startup("recovery");
                 show_recovery(&home, &startup_screen)?;
                 if startup_screen.stop.gate.admit(Route::Files) {
                     home.owner()

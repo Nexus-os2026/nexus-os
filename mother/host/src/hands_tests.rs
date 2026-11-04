@@ -228,3 +228,205 @@ fn review1_internal_dispatch_after_lane_reservation() {
     assert!(p.finish().success());
     f.empty();
 }
+
+// Decision 6: Stop uses the actual reader ingress with its worker unscheduled.
+const REVIEW2: &str = "M2DD_REVIEW2_CHILD";
+pub(crate) fn review2_before_step(screen: &Shared, home: &Home, step: &str) {
+    if std::env::var(REVIEW2).as_deref() != Ok(step) {
+        return;
+    }
+    screen.stop.hold_dispatch.store(true, Ordering::SeqCst);
+    screen.receive(crate::terminal::Line::Stop, false);
+    assert_eq!(screen.stop.receipt().outstanding, 1);
+    assert!(!home.owner().stop_snapshot().broker_stopped);
+    assert!(!home.owner().stop_snapshot().kernel_stopped);
+}
+pub(crate) fn review2_after_step(screen: &Shared, home: &Home, step: &str, refused: bool) {
+    if std::env::var(REVIEW2).as_deref() != Ok(step) {
+        return;
+    }
+    assert!(
+        refused,
+        "{step}: Stop ingress must refuse mission admission before any worker runs"
+    );
+    assert!(
+        home.owner().authority().runs().views().is_empty(),
+        "zero backend runs"
+    );
+    assert!(
+        !home
+            .recent_evidence()
+            .iter()
+            .any(|r| r.phase == EvidencePhase::ModelCall),
+        "zero model calls"
+    );
+    screen.emit(&format!("REVIEW2 {step} REFUSED; ZERO BACKEND RUNS\n"));
+    screen.stop.hold_dispatch.store(false, Ordering::SeqCst);
+    screen.stop.dispatch_pending();
+}
+
+fn review2_child(f: &Fixture, scenario: &str, test: &str) -> std::process::Command {
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--exact", &format!("hands_tests::{test}"), "--nocapture"])
+        .env(REVIEW2, scenario)
+        .env(
+            "M2DD_REVIEW2_ARGS",
+            format!(
+                "--home\n{}\n--workspace\n{}\n--name\nhello.txt\n--text\noracle",
+                f.home.display(),
+                f.workspace.display()
+            ),
+        );
+    command
+}
+fn review2_run_child() -> bool {
+    if std::env::var(REVIEW2).is_err() {
+        return false;
+    }
+    let args = std::env::var("M2DD_REVIEW2_ARGS").unwrap();
+    let _clean = run(args.split('\n').map(str::to_owned));
+    true
+}
+fn review2_mission(scenario: &str, test: &str) {
+    if review2_run_child() {
+        return;
+    }
+    let f = Fixture::new();
+    let mut p = Pty::start(review2_child(&f, scenario, test));
+    p.ready();
+    p.line("run");
+    p.yes();
+    p.yes();
+    p.expect(&format!("REVIEW2 {scenario} REFUSED; ZERO BACKEND RUNS"));
+    p.expect("STOP RECORDING COMPLETED");
+    p.line("quit");
+    assert!(
+        p.finish().success(),
+        "all child assertions passed: {}",
+        p.output
+    );
+    f.empty();
+}
+#[test]
+fn review2_stop_before_draft_worker_unscheduled() {
+    review2_mission("draft", "review2_stop_before_draft_worker_unscheduled");
+}
+#[test]
+fn review2_stop_between_draft_and_submit_worker_unscheduled() {
+    review2_mission(
+        "submit",
+        "review2_stop_between_draft_and_submit_worker_unscheduled",
+    );
+}
+
+// Test-only held startup, with a parent/child readiness handshake and deadline.
+// No production environment seam; no sleeps establish any ordering.
+pub(crate) fn review2_startup(stage: &str) {
+    use std::io::{Read, Write};
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::{SocketAddr, UnixStream};
+    let scenario = std::env::var(REVIEW2).unwrap_or_default();
+    if scenario != stage && !(stage == "recovery" && scenario == "panic-startup") {
+        return;
+    }
+    let socket = std::env::var("M2DD_REVIEW2_SOCKET").unwrap();
+    let mut stream =
+        UnixStream::connect_addr(&SocketAddr::from_abstract_name(socket.as_bytes()).unwrap())
+            .unwrap();
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .unwrap();
+    stream.write_all(b"H").unwrap();
+    let mut release = [0];
+    stream.read_exact(&mut release).unwrap();
+    assert_eq!(release, [b'R']);
+}
+fn review2_startup_receipts(scenario: &str, test: &str) {
+    use std::io::{Read, Write};
+    use std::os::fd::AsFd;
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::{SocketAddr, UnixListener};
+    if review2_run_child() {
+        return;
+    }
+    let f = Fixture::new();
+    let socket = format!("m2dd.review2.{}.{}", std::process::id(), scenario);
+    let listener =
+        UnixListener::bind_addr(&SocketAddr::from_abstract_name(socket.as_bytes()).unwrap())
+            .unwrap();
+    let mut cmd = review2_child(&f, scenario, test);
+    cmd.env("M2DD_REVIEW2_SOCKET", socket);
+    if scenario == "panic-startup" {
+        cmd.env(CHILD, "panic");
+    }
+    let mut p = Pty::start(cmd);
+    let mut fds = [nix::poll::PollFd::new(
+        listener.as_fd(),
+        nix::poll::PollFlags::POLLIN,
+    )];
+    assert_eq!(nix::poll::poll(&mut fds, 10000u16).unwrap(), 1);
+    let (mut held, _) = listener.accept().unwrap();
+    held.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .unwrap();
+    let mut ready = [0];
+    held.read_exact(&mut ready).unwrap();
+    assert_eq!(ready, [b'H']);
+    p.send(b"stop\nstop\n");
+    p.expect("STOP REQUEST RECEIVED epoch=1");
+    p.expect("STOP REQUEST RECEIVED epoch=2");
+    if scenario == "panic-startup" {
+        p.expect("STOP RECORDING FAILED");
+    } else if scenario == "recovery" {
+        p.expect("STOP RECORDING COMPLETED count=1");
+        p.expect("STOP RECORDING COMPLETED count=2");
+    }
+    held.write_all(b"R").unwrap();
+    if scenario != "panic-startup" {
+        p.ready();
+        if scenario == "home" {
+            // Completion may precede HANDS READY, so inspect the whole transcript.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while !p.output.contains("STOP RECORDING COMPLETED count=2") {
+                assert!(p.read_once(deadline));
+            }
+        }
+        p.line("quit");
+    }
+    assert!(p.finish().success(), "child assertions: {}", p.output);
+    assert_eq!(
+        p.output.matches("STOP REQUEST RECEIVED epoch=").count(),
+        2,
+        "one receipt for EVERY ingress"
+    );
+    let expected = if scenario == "panic-startup" {
+        "STOP RECORDING FAILED"
+    } else {
+        "STOP RECORDING COMPLETED count="
+    };
+    assert_eq!(
+        p.output.matches(expected).count(),
+        2,
+        "one receipt for EVERY worker outcome: {}",
+        p.output
+    );
+    f.empty();
+}
+#[test]
+fn review2_receipts_while_home_opening_is_held() {
+    review2_startup_receipts("home", "review2_receipts_while_home_opening_is_held");
+}
+#[test]
+fn review2_receipts_while_recovery_reporting_is_held() {
+    review2_startup_receipts(
+        "recovery",
+        "review2_receipts_while_recovery_reporting_is_held",
+    );
+}
+#[test]
+fn review2_recording_panics_before_startup_finishes_are_receipted() {
+    review2_startup_receipts(
+        "panic-startup",
+        "review2_recording_panics_before_startup_finishes_are_receipted",
+    );
+}

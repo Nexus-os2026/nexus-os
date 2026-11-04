@@ -332,6 +332,8 @@ impl Table {
 /// refusal or a status.
 #[derive(Default)]
 pub struct RunRegistry {
+    #[cfg(test)]
+    pub(crate) review2_hooks: crate::test_hooks::Hooks,
     runs: Mutex<Table>,
     /// M2c: the next door group's number. It never wraps in practice and
     /// is never reused.
@@ -536,6 +538,8 @@ impl RunRegistry {
                 return Err(AuthorityError::Capacity);
             }
         }
+        #[cfg(test)]
+        self.review2_hooks.fire("run.before_insert");
         runs.insert(id, entry);
         if let Some(door) = group.and_then(|group| runs.doors.get_mut(&group)) {
             door.members.insert(id);
@@ -1191,6 +1195,8 @@ impl RunRegistry {
             .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("files.before_install");
         let admission = FilesAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1239,6 +1245,8 @@ impl RunRegistry {
             .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("inference.before_install");
         let admission = InferenceAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1304,6 +1312,8 @@ impl RunRegistry {
             return Err(AuthorityError::ModelCall(ModelError::OverBudget));
         }
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("model.before_attempt");
         entry.model_attempts += 1;
         Ok(CallTicket {
             token: CancelToken(entry.cancelled.clone(), entry.file_cell.clone()),
@@ -1535,5 +1545,27 @@ fn cancel_one(entry: &mut RunEntry, wall_ms: u64, generation: u64, batch: &mut R
         record.agent = Some(entry.view.agent.to_string());
         record.cancelled = true;
         batch.push(record);
+    }
+}
+
+// Decision 6: observation of real backend state, never an adapter map.
+#[cfg(test)]
+impl RunRegistry {
+    pub(crate) fn review2_counts(&self) -> [usize; 4] {
+        let table = self.runs.lock().unwrap();
+        [
+            table.runs.len(),
+            table
+                .runs
+                .values()
+                .filter(|r| r.files_admission.is_some())
+                .count(),
+            table
+                .runs
+                .values()
+                .filter(|r| r.inference_admission.is_some())
+                .count(),
+            table.runs.values().map(|r| r.model_attempts as usize).sum(),
+        ]
     }
 }

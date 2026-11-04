@@ -2642,6 +2642,8 @@ impl Files {
         let workspace = self
             .current()
             .ok_or(AuthorityError::Unavailable("no workspace is registered"))?;
+        #[cfg(test)]
+        self.hooks().fire("files.validation");
         if identity_of(&workspace.root)? != workspace.identity {
             return Err(AuthorityError::TargetChanged);
         }
