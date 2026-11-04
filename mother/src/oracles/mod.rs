@@ -889,3 +889,5 @@ impl World {
         id
     }
 }
+
+pub(crate) mod lite_support;

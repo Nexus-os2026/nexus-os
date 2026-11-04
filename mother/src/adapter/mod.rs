@@ -898,3 +898,6 @@ pub fn create_private(dir: &Path) -> std::io::Result<()> {
 pub fn create_private(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)
 }
+
+#[cfg(test)]
+mod lite;
