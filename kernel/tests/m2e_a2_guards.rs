@@ -134,6 +134,8 @@ fn spec() -> ModelPinSpec {
 // ── E-O65: the route is shut in the shipped build ───────────────────────────
 
 #[test]
+// The N1_QUALIFIED pin is the point: a constant until the Q-R-N1 commit flips it.
+#[allow(clippy::assertions_on_constants)]
 fn e_o65_in_a_non_test_build_bind_and_a_conversation_call_refuse_before_any_charge_or_connection() {
     assert!(!N1_QUALIFIED, "the route is shut until the Q-R-N1 commit");
     let (base, connections, paths) = fake_runtime();

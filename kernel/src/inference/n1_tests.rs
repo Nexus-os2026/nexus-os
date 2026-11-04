@@ -693,6 +693,8 @@ fn e_o64_control_project_text_that_is_no_delimiter_is_accepted() {
 // ── E-O65: the route stays shut until Q-R-N1 ────────────────────────────────
 
 #[test]
+// The N1_QUALIFIED pin is the point: a constant until the Q-R-N1 commit flips it.
+#[allow(clippy::assertions_on_constants)]
 fn e_o65_with_the_route_shut_a_conversation_call_refuses_before_any_charge_or_connection() {
     assert!(!N1_QUALIFIED, "the route is shut until the Q-R-N1 commit");
     let fake = Fake::healthy();
