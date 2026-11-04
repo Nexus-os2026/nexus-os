@@ -45,7 +45,7 @@ fn lite_e_history_before_selection_and_emergency_lift_refuse() {
         let port = f.door.file_port().unwrap();
         let attached = port.attach().unwrap();
         if emergency {
-            f.gov.stop();
+            f.gov.emergency_stop();
             f.gov.resume(&*f.owner).unwrap();
             assert!(!f.door.emergency_stopped());
         } else {
@@ -108,7 +108,7 @@ fn lite_h_emergency_ingress_engages_without_mother_and_keeps_first_cause() {
                 "cell engages before broker Stop work"
             );
         }));
-        f.gov.stop();
+        f.gov.emergency_stop();
         f.gov.resume(&*f.owner).unwrap();
         assert_eq!(cell.cause(), Some(first.unwrap_or(HaltCause::Emergency)));
         assert!(f.door.open_run().is_err());
