@@ -2417,6 +2417,7 @@ dependencies = [
  "nexus-governed-control",
  "nexus-mother",
  "nix",
+ "uuid",
 ]
 
 [[package]]

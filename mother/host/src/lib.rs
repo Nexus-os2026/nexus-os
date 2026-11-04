@@ -14,6 +14,19 @@
 
 #![deny(unsafe_code)]
 
+#[cfg(target_os = "linux")]
+pub mod hands;
+#[cfg(target_os = "linux")]
+mod stop;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod stop_tests;
+#[cfg(target_os = "linux")]
+pub mod terminal;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod terminal_tests;
+
 use nexus_governed_control::authority::approval::ControlConfirmer;
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::evidence::{EndStatus, EvidenceRecord, MemoryEvidence};

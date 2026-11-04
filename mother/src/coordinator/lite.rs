@@ -274,10 +274,7 @@ impl<P: EffectPort> FileSession<P> {
     }
     /// Owner-only, take-once, memory-only detail through the typed lifecycle.
     /// Settlement and poison errors stay observable; no coordinator escapes.
-    pub fn working_detail(
-        &self,
-        id: MissionId,
-    ) -> Result<Option<WorkingDetail>, CoordinatorError> {
+    pub fn working_detail(&self, id: MissionId) -> Result<Option<WorkingDetail>, CoordinatorError> {
         self.touch()?;
         self.call(|c| Ok(c.working_detail(id)))
     }
