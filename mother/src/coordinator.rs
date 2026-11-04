@@ -753,7 +753,7 @@ impl Inner {
     /// nothing is journaled for it.
     fn kept(&mut self, id: MissionId) -> Result<(), CoordinatorError> {
         self.usable()?;
-        self.mission(id)?.not_held()
+        self.admitted(id)?.not_held()
     }
 
     fn write_record(
@@ -804,6 +804,18 @@ impl Inner {
         self.missions
             .get_mut(&id)
             .ok_or(CoordinatorError::UnknownMission)
+    }
+
+    /// R6-1: [`Inner::mission`] for the work paths: a mission whose cell is
+    /// engaged is admitted to nothing (every reservation, keep, consent,
+    /// resume and transition reads the cell here, under the lock, before
+    /// it writes). The caller records its terminal once the lock is
+    /// released ([`Coordinator::record_for`]).
+    fn admitted(&mut self, id: MissionId) -> Result<&mut Mission, CoordinatorError> {
+        if self.cells.cause(id).is_some() {
+            return Err(CoordinatorError::Stopped);
+        }
+        self.mission(id)
     }
 
     /// Journal a trigger, then take it. A mission whose File settlement
@@ -1486,8 +1498,16 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         contract: MissionContract,
     ) -> Result<MissionState, CoordinatorError> {
+        self.touching(id, || self.revise_admitted(id, contract))
+    }
+
+    fn revise_admitted(
+        &self,
+        id: MissionId,
+        contract: MissionContract,
+    ) -> Result<MissionState, CoordinatorError> {
         let may_revise = |inner: &mut Inner| {
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             mission.not_held()?;
             let state = mission.state;
             if !matches!(
@@ -1523,9 +1543,13 @@ impl<P: EffectPort> Coordinator<P> {
     /// an unanswered question is named by its index; its id is the Owner's
     /// working detail.
     pub fn submit(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        self.touching(id, || self.submit_admitted(id))
+    }
+
+    fn submit_admitted(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         self.with_lock(|inner| {
             inner.clear_detail(id);
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             mission.not_held()?;
             if mission.state != MissionState::Draft {
                 return Err(illegal(mission.state, "submit"));
@@ -1567,9 +1591,54 @@ impl<P: EffectPort> Coordinator<P> {
     /// mission still awaits consent to that hash; the broker's no denies
     /// the mission.
     pub fn request_consent(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        let (request, generation) = self.consent_request(id)?;
-        let answer = self.port.confirm_mission(&request);
-        self.take_answer(id, generation, answer)
+        self.touching(id, || {
+            let (request, generation) = self.consent_request(id)?;
+            let answer = self.port.confirm_mission(&request);
+            self.take_answer(id, generation, answer)
+        })
+    }
+
+    /// R6-1 / R6-3: an entry point of the work paths: a mission whose cell
+    /// is engaged, before or during the call, is admitted to nothing, and
+    /// its terminal is recorded for the cell's cause (once) by this call if
+    /// no Stop path did.
+    fn touching<T>(
+        &self,
+        id: MissionId,
+        body: impl FnOnce() -> Result<T, CoordinatorError>,
+    ) -> Result<T, CoordinatorError> {
+        if let Some(cause) = self.engaged(id) {
+            // While the broker's emergency stop is in force, the Owner's
+            // dialogs are refused by the broker before they are raised and
+            // a held mission stays held (M2c-A's A6-f): such a touch is not
+            // recording-capable and records nothing; the mission stays
+            // non-runnable, and `advance`, a Stop, the drains or the first
+            // touch after the lift record its terminal.
+            if cause == HaltCause::Emergency && self.port.emergency_stopped() {
+                return Err(CoordinatorError::Broker(BrokerClass::EmergencyStopped));
+            }
+            self.record_for(id, cause)?;
+            return Err(CoordinatorError::Stopped);
+        }
+        let result = body();
+        if matches!(result, Err(CoordinatorError::Stopped)) {
+            if let Some(cause) = self.engaged(id) {
+                let _ = self.record_for(id, cause);
+            }
+        }
+        result
+    }
+
+    /// Round 6 (tests): the request of the Owner's yes the mission works
+    /// under, in this process.
+    #[cfg(test)]
+    pub(crate) fn consent_request_of(&self, id: MissionId) -> Option<String> {
+        self.peek(|inner| {
+            inner
+                .missions
+                .get(&id)
+                .and_then(|m| m.consent_request.clone())
+        })
     }
 
     /// Reserve a consent request: the broker's confirmation for the
@@ -1585,7 +1654,7 @@ impl<P: EffectPort> Coordinator<P> {
             inner.clear_detail(id);
             let (seq, number) = (inner.next_seq, inner.next_request);
             inner.next_request += 1;
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             mission.not_held()?;
             if mission.state != MissionState::AwaitingConsent {
                 return Err(illegal(mission.state, "consent"));
@@ -1700,12 +1769,33 @@ impl<P: EffectPort> Coordinator<P> {
         }
         #[cfg(test)]
         self.hooks.after_precheck.fire();
+        // R6-1 / R6-3: the engaged cell first, before any lock and before
+        // the hold: the only legal next record of such a mission is its
+        // terminal for the cell's cause, recorded now if it was not.
+        if let Some(cause) = self.engaged(id) {
+            return self.halted_advance(id, cause);
+        }
+        let advanced = self.advance_admitted(id, emergency);
+        // A cell engaged while this call was out of the lock (the broker's
+        // emergency, another path's Stop) refused a later step: its
+        // terminal is recorded here if no Stop path did (idempotent).
+        if matches!(advanced, Err(CoordinatorError::Stopped)) {
+            if let Some(cause) = self.engaged(id) {
+                let _ = self.record_for(id, cause);
+            }
+        }
+        advanced
+    }
+
+    /// [`Self::advance`] once the engaged cell was read: every later step
+    /// reads it again under the lock ([`Inner::admitted`]).
+    fn advance_admitted(&self, id: MissionId, emergency: bool) -> Result<Advance, CoordinatorError> {
         // A poisoned lock is a typed error here (the cells are engaged).
         let start = self.try_with_lock(|inner| -> Result<Start, CoordinatorError> {
             // A broken coordinator starts nothing and asks the broker nothing.
             inner.usable()?;
             inner.clear_detail(id);
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             mission.not_held()?;
             // Rule 6: a mission whose File settlement began never runs again.
             if mission.settlement.is_some() {
@@ -1820,7 +1910,7 @@ impl<P: EffectPort> Coordinator<P> {
         phase: MissionState,
     ) -> Result<MissionState, CoordinatorError> {
         self.with_lock(|inner| {
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             if mission.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
@@ -1971,9 +2061,12 @@ impl<P: EffectPort> Coordinator<P> {
             return Ok(report);
         }
 
-        // Approved, and it ran at the broker: the phase goes on.
+        // Approved, and it ran at the broker: the phase goes on. R6-1: the
+        // cell is read here, where the clean publication is consumed as
+        // `ActionApproved`: engaged, it is never consumed (the mission's
+        // settlement records the publication truthfully instead).
         let generation = self.with_lock(|inner| {
-            if inner.mission(id)?.generation != generation {
+            if inner.admitted(id)?.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
             let mono = self.clock.monotonic_ms();
@@ -2044,7 +2137,7 @@ impl<P: EffectPort> Coordinator<P> {
             // Reserve the call.
             let step = self.with_lock(|inner| {
                 let seq = inner.next_seq;
-                let mission = inner.mission(id)?;
+                let mission = inner.admitted(id)?;
                 if mission.generation != generation {
                     return Err(CoordinatorError::Stopped);
                 }
@@ -2232,7 +2325,7 @@ impl<P: EffectPort> Coordinator<P> {
                 }
             }
             let step = self.with_lock(|inner| {
-                let mission = inner.mission(id)?;
+                let mission = inner.admitted(id)?;
                 if mission.generation != generation {
                     return Err(CoordinatorError::Stopped);
                 }
@@ -2344,7 +2437,7 @@ impl<P: EffectPort> Coordinator<P> {
     /// wait, in a later phase) are not admitted again.
     fn admit_files(&self, id: MissionId, generation: u64) -> Result<Ended, CoordinatorError> {
         let step = self.with_lock(|inner| {
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             if mission.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
@@ -2427,7 +2520,7 @@ impl<P: EffectPort> Coordinator<P> {
                 if let Err(e) = inner.kept(id) {
                     return Ok(Then::EndFail(BlockReason::AwaitingOwnerApproval, e));
                 }
-                if inner.mission(id)?.generation != generation {
+                if inner.admitted(id)?.generation != generation {
                     return Err(CoordinatorError::Stopped);
                 }
                 let journaled = inner.append(
@@ -2449,7 +2542,7 @@ impl<P: EffectPort> Coordinator<P> {
         }
         let mono = self.clock.monotonic_ms();
         let waited = self.with_lock(|inner| {
-            if inner.mission(id)?.generation != generation {
+            if inner.admitted(id)?.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
             let state = inner.fire(id, trigger, mono)?;
@@ -3446,9 +3539,11 @@ impl<P: EffectPort> Coordinator<P> {
     /// ([`CoordinatorError::ResumeStale`]), a Stop meanwhile or a broker
     /// refusal journal nothing, and the mission stays held (or stopped).
     pub fn resume(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        let (request, generation) = self.resume_request(id)?;
-        let answer = self.port.confirm_held_mission(&request);
-        self.take_resume(id, generation, answer)
+        self.touching(id, || {
+            let (request, generation) = self.resume_request(id)?;
+            let answer = self.port.confirm_held_mission(&request);
+            self.take_resume(id, generation, answer)
+        })
     }
 
     /// M2c, a resume's reservation: the held mission's request, under a
@@ -3461,7 +3556,8 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<(MissionResumeConfirmation, u64), CoordinatorError> {
         self.with_lock(|inner| {
             inner.clear_detail(id);
-            let mission = inner.mission(id)?;
+            // R6-1 / R6-3: the cell first, before the hold.
+            let mission = inner.admitted(id)?;
             if mission.held.is_none() {
                 return Err(illegal(mission.state, "resume"));
             }
@@ -3502,7 +3598,7 @@ impl<P: EffectPort> Coordinator<P> {
         self.with_lock(|inner| {
             // An answer that comes after the break is discarded.
             inner.usable()?;
-            let mission = inner.mission(id)?;
+            let mission = inner.admitted(id)?;
             let current = mission.generation == generation
                 && mission.held.is_some()
                 && mission.resume_asking.is_some();
