@@ -17,6 +17,9 @@
 #[cfg(target_os = "linux")]
 pub mod hands;
 #[cfg(target_os = "linux")]
+#[cfg(test)]
+mod hands_tests;
+#[cfg(target_os = "linux")]
 mod stop;
 #[cfg(target_os = "linux")]
 #[cfg(test)]

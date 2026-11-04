@@ -23,8 +23,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
-#[path = "hands_tests.rs"]
-mod hands_tests;
+use crate::hands_tests;
 
 fn mother_code(error: &CoordinatorError) -> &'static str {
     match error {
@@ -293,10 +292,10 @@ impl Runtime {
                 return;
             };
             #[cfg(test)]
-            hands_tests::before_internal_admission(self);
+            hands_tests::before_internal_admission(&self.screen, &self.home);
             let advanced = mission.session.advance(id);
             #[cfg(test)]
-            hands_tests::after_internal_admission(self);
+            hands_tests::after_internal_admission(&mission.port, &self.home, id);
             match advanced {
                 Ok(report) => {
                     for lane in &report.lanes {

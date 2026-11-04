@@ -1,24 +1,35 @@
 //! Review 1: deterministic production-path schedules, test-only child hooks.
-use super::*;
+use crate::hands::run;
+use crate::stop::Gate;
 use crate::stop_tests::support::{Fixture, Pty};
+use crate::terminal::Shared;
+use crate::Home;
+use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::evidence::EvidencePhase;
 use nexus_governed_control::authority::evidence::{EvidenceProjection, EvidenceRecord};
+use nexus_governed_control::files::FileCreate;
+use nexus_mother::adapter::GovernedPort;
+use nexus_mother::effect::{EffectPort, EffectRequest};
+use nexus_mother::journal::MissionId;
+use nexus_mother::lane::LaneRole;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 const CHILD: &str = "M2DD_REVIEW1_CHILD";
 static ENGAGED: AtomicBool = AtomicBool::new(false);
 
-pub(super) fn before_internal_admission(runtime: &Runtime) {
+pub(crate) fn before_internal_admission(screen: &Shared, home: &Home) {
     if std::env::var(CHILD).as_deref() == Ok("admission") && !ENGAGED.swap(true, Ordering::SeqCst) {
-        assert!(!runtime.screen.stop.gate.recovery());
+        assert!(!screen.stop.gate.recovery());
         // The outer Mission check has succeeded. Perform exactly the first
         // memory-only step of Stop ingress; its worker has not been scheduled.
-        runtime.screen.stop.gate.emergency();
-        assert!(!runtime.home.owner().stop_snapshot().broker_stopped);
-        assert_eq!(runtime.screen.stop.receipt().outstanding, 0);
+        screen.stop.gate.emergency();
+        assert!(!home.owner().stop_snapshot().broker_stopped);
+        assert_eq!(screen.stop.receipt().outstanding, 0);
     }
 }
 
-pub(super) fn before_internal_dispatch(gate: &Gate, role: LaneRole) {
+pub(crate) fn before_internal_dispatch(gate: &Gate, role: LaneRole) {
     if std::env::var(CHILD).as_deref() == Ok("dispatch") && role == LaneRole::Builder {
         // Lane was admitted and returned its request, but the coordinator has
         // not handed that request to the real port yet.
@@ -27,17 +38,15 @@ pub(super) fn before_internal_dispatch(gate: &Gate, role: LaneRole) {
     }
 }
 
-pub(super) fn after_internal_admission(runtime: &Runtime) {
+pub(crate) fn after_internal_admission(port: &GovernedPort, home: &Home, id: MissionId) {
     let scenario = std::env::var(CHILD).unwrap_or_default();
     if scenario != "admission" && !(scenario == "dispatch" && ENGAGED.load(Ordering::SeqCst)) {
         return;
     }
-    let port = &runtime.mission.as_ref().unwrap().port;
-    let runs = runtime.home.owner().authority().runs().views().len();
+    let runs = home.owner().authority().runs().views().len();
     let bindings = port.file_binding_count();
     let dispatches = port.performed();
-    let models = runtime
-        .home
+    let models = home
         .recent_evidence()
         .iter()
         .filter(|e| e.phase == EvidencePhase::ModelCall)
@@ -58,8 +67,6 @@ pub(super) fn after_internal_admission(runtime: &Runtime) {
         "Stop between outer check and internal File admission"
     );
     // A retained port must also refuse direct effect dispatch in recovery.
-    let mission = runtime.mission.as_ref().unwrap();
-    let id = mission.id.unwrap();
     let result = port.perform_file(
         id,
         1,
@@ -85,7 +92,7 @@ impl EvidenceProjection for PanicRecording {
     }
 }
 
-pub(super) fn open_home(
+pub(crate) fn open_home(
     path: &std::path::Path,
     confirmer: crate::Confirmer,
 ) -> Result<Home, crate::HomeError> {
@@ -185,11 +192,7 @@ fn review1_backend_recording_panic_is_failed_never_completed() {
 fn child(f: &Fixture, scenario: &str, test: &str) -> Pty {
     let mut command = std::process::Command::new(std::env::current_exe().unwrap());
     command
-        .args([
-            "--exact",
-            &format!("hands::hands_tests::{test}"),
-            "--nocapture",
-        ])
+        .args(["--exact", &format!("hands_tests::{test}"), "--nocapture"])
         .env(CHILD, scenario)
         .env(
             "M2DD_REVIEW1_ARGS",
