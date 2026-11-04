@@ -78,10 +78,16 @@ fn lite_h_captured_token_reads_original_cell_after_registry_poison() {
 fn lite_h_final_check_after_engagement_refuses_real_publication() {
     let (f, _, cell) = tagged();
     let view = f.ready(NAME, CONTENT);
+    let observed = cell.clone();
     f.gov
+        .files()
         .hooks()
         .arm(at::FILE_BEFORE_FINAL, move || cell.engage());
     let _ = f.execute(&view);
+    assert!(
+        observed.is_engaged(),
+        "the Files final-check hook must have fired"
+    );
     assert!(
         !f.ws.join(NAME).exists(),
         "the final check must read the File cell"
