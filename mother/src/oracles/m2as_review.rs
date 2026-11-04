@@ -65,7 +65,7 @@ fn m2as_review_a_broken_coordinator_never_acknowledges_a_lost_stop_or_denial() {
             w.mother.stop(id).is_err(),
             "{state:?}: a retried Stop said Ok"
         );
-        assert_eq!(w.mother.stop_all(), 0, "{state:?}");
+        assert_eq!(w.mother.stop_all(), Ok(0), "{state:?}");
         let w = crash(&w);
         assert_eq!(w.mother.held(id).as_deref(), Some("unclean_shutdown"));
     }
@@ -81,7 +81,7 @@ fn m2as_review_a_broken_coordinator_never_acknowledges_a_lost_stop_or_denial() {
         w.mother.stop(id).is_err(),
         "a Stop after a lost denial said Ok"
     );
-    assert_eq!(w.mother.stop_all(), 0);
+    assert_eq!(w.mother.stop_all(), Ok(0));
 
     // A mission that ended durably before the failure: Stop does not claim
     // anything on a broken coordinator either.

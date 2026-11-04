@@ -194,7 +194,7 @@ fn executing_at_a_stop(home: &Home) {
         entered
             .recv_timeout(BOUND)
             .expect("held at its final check");
-        assert_eq!(s.mother.stop_all(), 2);
+        assert_eq!(s.mother.stop_all(), Ok(2));
         assert_eq!(s.mother.state(a), Some(MissionState::Blocked));
         assert_eq!(
             s.mother.reason(a).as_deref(),

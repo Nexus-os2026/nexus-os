@@ -147,7 +147,7 @@ fn m2d_c_r4_1_an_unreadable_broker_ends_every_mission() {
     let id = waiting(&w);
     let other = w.approved(contract_with(""));
     w.port.fail_publication();
-    assert_eq!(w.mother.stop_all(), 2);
+    assert_eq!(w.mother.stop_all(), Ok(2));
     assert_eq!(w.mother.state(id), Some(MissionState::Blocked));
     assert_eq!(
         w.mother.reason(id).as_deref(),
@@ -232,7 +232,7 @@ fn m2d_c_r4_4_every_mission_is_stopped_before_any_snapshot() {
     assert!(w.port.wait_publication_entered());
     assert_eq!(w.mother.state(other), Some(MissionState::Stopped));
     w.port.release_publication();
-    assert_eq!(stopping.join().unwrap(), 2);
+    assert_eq!(stopping.join().unwrap(), Ok(2));
     assert_eq!(
         w.mother.reason(id).as_deref(),
         Some("file_publication_interrupted:owner_stop")

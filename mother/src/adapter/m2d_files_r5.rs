@@ -273,7 +273,7 @@ fn stop_paths_engage_before_any_lock(home: &Home) {
                 };
                 let stopping = scope.spawn(|| match path {
                     Path::Stop => s.mother.stop(b).map(|_| ()),
-                    Path::StopAll => s.mother.stop_everything().map(|_| ()),
+                    Path::StopAll => s.mother.stop_all().map(|_| ()),
                     Path::Budget => s.mother.advance(b).map(|_| ()),
                     Path::Emergency => {
                         s.home.control.emergency_stop();
@@ -312,7 +312,7 @@ fn a_poisoned_coordinator_still_engages(home: &Home) {
         s.mother.poison_for_test();
         let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match path {
             Path::Stop => s.mother.stop(b).map(|_| ()),
-            Path::StopAll => s.mother.stop_everything().map(|_| ()),
+            Path::StopAll => s.mother.stop_all().map(|_| ()),
             _ => s.mother.advance(b).map(|_| ()),
         }));
         assert_eq!(
@@ -413,7 +413,7 @@ fn the_stop_all_cohort_is_one_snapshot(home: &Home) {
         halted.recv_timeout(BOUND).expect("the cohort engaged");
         *later.lock().unwrap() = Some(s.mother.draft(contract_with("")).unwrap());
         go.send(()).unwrap();
-        assert_eq!(stopping.join().unwrap(), 1);
+        assert_eq!(stopping.join().unwrap(), Ok(1));
     });
     let later = later.lock().unwrap().unwrap();
     assert_eq!(s.mother.state(a), Some(MissionState::Stopped));

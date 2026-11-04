@@ -193,7 +193,7 @@ fn m2d_c_r2_an_unreadable_broker_ends_the_mission_uncertain() {
     let id = waiting(&w);
     let calls = w.keyed_calls();
     w.port.fail_publication();
-    assert_eq!(w.mother.stop_all(), 1);
+    assert_eq!(w.mother.stop_all(), Ok(1));
     assert_eq!(w.mother.state(id), Some(MissionState::Blocked));
     assert_eq!(
         w.mother.reason(id).as_deref(),

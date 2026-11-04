@@ -176,12 +176,12 @@ fn stop_all_stops_every_mission_that_has_not_ended() {
     let building = w.mission_in(MissionState::Building);
     let done = w.mission_in(MissionState::Done);
     let effects = w.port.effects().len();
-    assert_eq!(w.mother.stop_all(), 3);
+    assert_eq!(w.mother.stop_all(), Ok(3));
     for id in [draft, approved, building] {
         assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
     }
     assert_eq!(w.mother.state(done), Some(MissionState::Done));
-    assert_eq!(w.mother.stop_all(), 0);
+    assert_eq!(w.mother.stop_all(), Ok(0));
     let w = w.restart();
     for id in [draft, approved, building] {
         assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
