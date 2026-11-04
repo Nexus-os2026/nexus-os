@@ -51,6 +51,10 @@ mod review4;
 #[cfg(test)]
 mod review5;
 
+#[path = "../adapter/lite_review6.rs"]
+#[cfg(all(test, target_os = "linux"))]
+mod review6;
+
 impl<P: EffectPort> Coordinator<P> {
     /// Consume the legacy interface before selecting File mode. This cannot
     /// race a call through another shared coordinator reference: ownership is
