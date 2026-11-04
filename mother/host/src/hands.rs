@@ -748,7 +748,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     screen.emit("One File mission per fresh process. Emergency ends mission work.\nHANDS READY\n");
     let mut work: Option<JoinHandle<()>> = None;
     let mut queued = std::collections::VecDeque::new();
-    let mut last = screen.stop.receipt();
+    let mut last_epoch = 0;
     let mut snapshot = owner.stop_snapshot();
     loop {
         screen.stop.reap();
@@ -758,17 +758,8 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             screen.stop.gate.fail();
         }
         let receipt = screen.stop.receipt();
-        if receipt.epoch != last.epoch {
-            screen.emit(&format!(
-                "STOP REQUEST RECEIVED epoch={}\nRECOVERY ONLY\n",
-                receipt.epoch
-            ));
-        }
-        if receipt.coalesced != last.coalesced {
-            screen.emit("STOP COALESCED\n");
-        }
         let current = owner.stop_snapshot();
-        if current != snapshot || receipt.epoch != last.epoch {
+        if current != snapshot || receipt.epoch != last_epoch {
             screen.emit(&format!(
                 "kernel_stopped={} broker_stopped={} stop_number={} generation={}\n",
                 current.kernel_stopped,
@@ -777,13 +768,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                 current.policy_generation
             ));
         }
-        if receipt.finished != last.finished {
-            screen.emit(&format!("STOP RECORDING COMPLETED count={} (durability requires evidence health)\nSTOP WORKERS outstanding={}\n", receipt.finished, receipt.outstanding));
-        }
-        if receipt.failed && !last.failed {
-            screen.emit("STOP RECORDING FAILED\n");
-        }
-        last = receipt;
+        last_epoch = receipt.epoch;
         snapshot = current;
         if screen.ended() || screen.stop.gate.failed() || screen.input().quit {
             break;
@@ -830,7 +815,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         screen.wait();
     }
     screen.stop.gate.close();
-    if screen.ended() || screen.stop.gate.failed() {
+    if (screen.ended() || screen.stop.gate.failed()) && !screen.stop.gate.recovery() {
         screen.stop.press();
     }
     let deadline = Instant::now() + Duration::from_secs(3);
@@ -838,14 +823,6 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let had_work = work.is_some();
     let work_done = join(&mut work, deadline, &screen).is_some() || !had_work;
     let stops_done = screen.stop.join_until(deadline);
-    let final_receipt = screen.stop.receipt();
-    if final_receipt.failed && (!last.failed || final_receipt.failed_workers != last.failed_workers)
-    {
-        screen.emit(&format!(
-            "STOP RECORDING FAILED failed_workers={} outstanding={}\n",
-            final_receipt.failed_workers, final_receipt.outstanding
-        ));
-    }
     let mut clean = false;
     if reader_done && work_done && stops_done && !screen.ended() && !screen.stop.gate.failed() {
         let body = screen.stop.take_body();

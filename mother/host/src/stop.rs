@@ -1,7 +1,8 @@
 //! Memory-only host admission and separately owned synchronous Stop workers.
+use nexus_governed_control::authority::file_session::HaltCell;
 use nexus_governed_control::governed::GovernedControl;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -32,6 +33,7 @@ impl Route {
 #[derive(Default)]
 pub(crate) struct Gate {
     pub(crate) port: Arc<nexus_mother::adapter::AdmissionGate>,
+    backend: OnceLock<HaltCell>,
     recovery: AtomicBool,
     closing: AtomicBool,
     failed: AtomicBool,
@@ -40,7 +42,12 @@ pub(crate) struct Gate {
 }
 impl Gate {
     pub(crate) fn admit(&self, route: Route) -> bool {
-        if self.port.is_closed() || self.recovery() || self.closing() || self.failed() {
+        if self.backend_halted()
+            || self.port.is_closed()
+            || self.recovery()
+            || self.closing()
+            || self.failed()
+        {
             return false;
         }
         // Counts successful host admission boundaries, not backend success.
@@ -52,6 +59,26 @@ impl Gate {
         {
             self.fail();
             return false;
+        }
+        true
+    }
+    pub(crate) fn backend_halted(&self) -> bool {
+        self.backend.get().is_some_and(HaltCell::is_engaged)
+    }
+    fn engage_backend(&self) {
+        if let Some(cell) = self.backend.get() {
+            cell.engage_emergency();
+        }
+    }
+    fn bind_backend(&self, cell: HaltCell) -> bool {
+        if self.backend.set(cell).is_err() {
+            self.fail();
+            return false;
+        }
+        // No admission is offered before bind returns. Together with the
+        // second read in emergency(), this covers ingress during startup bind.
+        if self.recovery() {
+            self.engage_backend();
         }
         true
     }
@@ -79,10 +106,13 @@ impl Gate {
         self.close();
     }
     pub(crate) fn emergency(&self) {
-        // This monotone restriction precedes every later lock and spawn,
-        // including calls made internally through the retained coordinator port.
+        // The backend is the authority; the host flags only mirror it.
+        // This atomic ingress precedes every lock and worker reservation.
+        self.engage_backend();
         self.port.close();
         self.recovery.store(true, Ordering::SeqCst);
+        // An ingress before/during bind must reach the newly installed cell.
+        self.engage_backend();
         if self
             .epoch
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
@@ -157,6 +187,9 @@ impl StopRoute {
     pub(crate) fn bind(self: &Arc<Self>, owner: Arc<GovernedControl>) -> bool {
         if self.bound.swap(true, Ordering::SeqCst) {
             self.gate.fail();
+            return false;
+        }
+        if !self.gate.bind_backend(owner.file_session_halt()) {
             return false;
         }
         let Ok(mut body) = self.body.lock() else {
@@ -252,6 +285,7 @@ impl StopRoute {
                 }
                 Err(_) => {
                     state.workers.retain(|w| w.id != id);
+                    state.failed_workers = state.failed_workers.saturating_add(1);
                     state.failed = true;
                     self.gate.fail();
                 }
@@ -271,28 +305,22 @@ impl StopRoute {
         }
     }
     pub(crate) fn reap(&self) {
-        let handles = {
-            let mut state = self.lock();
-            let mut handles = Vec::new();
-            let mut at = 0;
-            while at < state.workers.len() {
-                if state.workers[at]
-                    .handle
-                    .as_ref()
-                    .is_some_and(|h| h.is_finished())
-                {
-                    if let Some(handle) = state.workers.remove(at).handle {
-                        handles.push(handle);
-                    }
-                } else {
-                    at += 1;
-                }
+        // Finished handles join without waiting for work. Retain the small
+        // memory hold through accounting so no observer sees an empty worker
+        // table before its last failure/completion is accounted for.
+        let mut state = self.lock();
+        let mut at = 0;
+        while at < state.workers.len() {
+            if !state.workers[at]
+                .handle
+                .as_ref()
+                .is_some_and(|h| h.is_finished())
+            {
+                at += 1;
+                continue;
             }
-            handles
-        };
-        for handle in handles {
-            let ok = matches!(handle.join(), Ok(true));
-            let mut state = self.lock();
+            let worker = state.workers.remove(at);
+            let ok = worker.handle.is_some_and(|h| matches!(h.join(), Ok(true)));
             if !ok {
                 state.failed = true;
                 self.gate.fail();
@@ -341,5 +369,50 @@ impl StopRoute {
     #[cfg(test)]
     pub(crate) fn retained_handles(&self) -> usize {
         self.lock().workers.len()
+    }
+}
+
+/// Owns the receipt cursor from process start. Cumulative counters are replayed
+/// individually, never sampled away when startup completes or events coalesce.
+pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<AtomicBool>) {
+    let mut last = Receipt {
+        epoch: 0,
+        outstanding: 0,
+        coalesced: 0,
+        finished: 0,
+        failed_workers: 0,
+        failed: false,
+    };
+    loop {
+        screen.stop.reap();
+        let receipt = screen.stop.receipt();
+        for previous in last.epoch..receipt.epoch {
+            let epoch = previous + 1;
+            screen.emit(&format!(
+                "STOP REQUEST RECEIVED epoch={epoch}\nRECOVERY ONLY\n"
+            ));
+        }
+        for _ in last.coalesced..receipt.coalesced {
+            screen.emit("STOP COALESCED\n");
+        }
+        for previous in last.finished..receipt.finished {
+            let count = previous + 1;
+            screen.emit(&format!("STOP RECORDING COMPLETED count={count} (durability requires evidence health)\nSTOP WORKERS outstanding={}\n", receipt.outstanding));
+        }
+        for previous in last.failed_workers..receipt.failed_workers {
+            let count = previous + 1;
+            screen.emit(&format!(
+                "STOP RECORDING FAILED failed_workers={count} outstanding={}\n",
+                receipt.outstanding
+            ));
+        }
+        if receipt.failed && !last.failed && receipt.failed_workers == 0 {
+            screen.emit("STOP ROUTE FAILED\n");
+        }
+        last = receipt;
+        if end.load(Ordering::SeqCst) {
+            break;
+        }
+        screen.wait();
     }
 }

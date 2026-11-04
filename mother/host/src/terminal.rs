@@ -1,5 +1,5 @@
 //! Linux terminal protocol: one reader, one renderer and one active dialogue.
-//! The reader owns freshness acknowledgement and never calls the backend.
+//! The reader owns freshness acknowledgement; backend ingress is atomic only.
 use crate::stop::{Gate, StopRoute};
 use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ConfirmationText,
@@ -282,7 +282,7 @@ impl TerminalConfirmer {
             || Instant::now() >= deadline
             || gate.closing()
             || gate.failed()
-            || (!recovery && gate.recovery())
+            || (!recovery && (gate.backend_halted() || gate.recovery()))
         {
             return false;
         }
@@ -311,7 +311,7 @@ impl TerminalConfirmer {
             && epoch == gate.epoch()
             && !gate.closing()
             && !gate.failed()
-            && (recovery || !gate.recovery())
+            && (recovery || (!gate.backend_halted() && !gate.recovery()))
     }
     fn protocol_valid(
         &self,
@@ -483,6 +483,8 @@ pub struct Terminal {
     pub confirmer: Arc<TerminalConfirmer>,
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
+    reporter: Option<JoinHandle<()>>,
+    reporter_end: Arc<AtomicBool>,
     modes: Option<(Termios, Termios)>,
     finish_deadline: Option<Instant>,
 }
@@ -539,6 +541,8 @@ impl Terminal {
             shared,
             reader: None,
             writer: None,
+            reporter: None,
+            reporter_end: Arc::new(AtomicBool::new(false)),
             modes: Some((before_in, before_out)),
             finish_deadline: None,
         };
@@ -569,6 +573,14 @@ impl Terminal {
                 .map_err(|_| Failure::Thread)?,
         );
         let s = terminal.shared.clone();
+        let end = terminal.reporter_end.clone();
+        terminal.reporter = Some(
+            std::thread::Builder::new()
+                .name("hands-stop-receipts".into())
+                .spawn(move || crate::stop::report_receipts(s, end))
+                .map_err(|_| Failure::Thread)?,
+        );
+        let s = terminal.shared.clone();
         terminal.reader = Some(
             std::thread::Builder::new()
                 .name("hands-input".into())
@@ -583,10 +595,17 @@ impl Terminal {
     pub fn finish(&mut self, deadline: Instant) -> bool {
         let deadline = *self.finish_deadline.get_or_insert(deadline);
         let reader_ok = self.stop_reader(deadline);
+        // Drain the final receipt snapshot before allowing the renderer to end.
+        self.reporter_end.store(true, Ordering::SeqCst);
+        self.shared.changed.notify_all();
+        while self.reporter.as_ref().is_some_and(|h| !h.is_finished()) && Instant::now() < deadline
+        {
+            self.shared.wait();
+        }
         self.shared.end.store(true, Ordering::SeqCst);
         self.shared.changed.notify_all();
         loop {
-            let done = [&self.reader, &self.writer]
+            let done = [&self.reader, &self.reporter, &self.writer]
                 .iter()
                 .all(|h| h.as_ref().is_none_or(|h| h.is_finished()));
             if done || Instant::now() >= deadline {
@@ -595,7 +614,7 @@ impl Terminal {
             self.shared.wait();
         }
         let mut ok = reader_ok;
-        for worker in [&mut self.reader, &mut self.writer] {
+        for worker in [&mut self.reader, &mut self.reporter, &mut self.writer] {
             if worker.as_ref().is_some_and(|h| h.is_finished()) {
                 if let Some(handle) = worker.take() {
                     ok &= handle.join().is_ok();
