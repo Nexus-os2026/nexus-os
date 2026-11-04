@@ -165,12 +165,13 @@ impl Runtime {
         if !self.allowed(Route::Files) {
             return;
         }
-        if let Err(e) = self.home.owner().request_grant(
+        if let Err(e) = self.home.owner().request_grant_with_halt(
             &GrantRequest::Files {
                 workspace: workspace.id,
             },
             Duration::from_secs(300),
             &*self.confirmer,
+            Some(&self.home.owner().file_session_halt()),
         ) {
             self.screen.emit(&format!("GRANT REFUSED {}\n", e.class()));
             return;
@@ -178,7 +179,7 @@ impl Runtime {
         if !self.allowed(Route::Door) {
             return;
         }
-        let door = match self.home.door() {
+        let door = match self.home.door_with_halt() {
             Ok(d) => d,
             Err(e) => {
                 self.screen.emit(&format!("DOOR REFUSED {}\n", e.class()));
@@ -680,7 +681,11 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                         .hold_files_before_publish(config.hold)
                         .map_err(|_| "hold_refused")?;
                     home.owner()
-                        .register_workspace(&config.workspace, &[home.dir()])
+                        .register_workspace_with_halt(
+                            &config.workspace,
+                            &[home.dir()],
+                            Some(&home.owner().file_session_halt()),
+                        )
                         .map_err(|_| "workspace_refused")?;
                 }
                 Ok(Runtime {

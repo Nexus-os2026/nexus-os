@@ -202,6 +202,16 @@ impl Home {
             .issue_agent_door(mother_agent(), self.confirmer.clone())
     }
 
+    /// A door narrowed by the terminal session's original deny-only cell.
+    /// The desktop and legacy callers keep `door` and native resume semantics.
+    pub fn door_with_halt(&self) -> Result<AgentDoor, AuthorityError> {
+        self.control.issue_agent_door_with_halt(
+            mother_agent(),
+            self.confirmer.clone(),
+            Some(self.control.file_session_halt()),
+        )
+    }
+
     /// A clean shutdown's last step (M2b-A decision 2): the evidence store
     /// records this session's `session_closed`. Call it once, after the
     /// broker shut down. Only `Recorded` means the session is closed; the
