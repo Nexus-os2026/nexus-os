@@ -116,11 +116,16 @@ fn lite_settlement_child() {
             let m = f.file();
             let id = f.waiting(&m, "MKFILE:one.txt MKFILE:two.txt");
             f.publish(id);
-            f.port.fail_file_ack_once.store(true, std::sync::atomic::Ordering::SeqCst);
+            f.port
+                .fail_file_ack_once
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             m.advance(id).unwrap();
             assert_eq!(m.state(id).unwrap(), Some(MissionState::AwaitingApproval));
             assert_eq!(f.port.acks_tried(), 1);
-            assert_eq!(std::fs::read_to_string(f.ws.join("one.txt")).unwrap(), content_of("MKFILE", "one.txt").unwrap());
+            assert_eq!(
+                std::fs::read_to_string(f.ws.join("one.txt")).unwrap(),
+                content_of("MKFILE", "one.txt").unwrap()
+            );
             m.stop(id).unwrap();
             assert_eq!(f.port.acks_tried(), 3, "failed A stays owed while B occupies the current wait; Stop acknowledges A and B exactly");
             assert!(!f.ws.join("two.txt").exists());
