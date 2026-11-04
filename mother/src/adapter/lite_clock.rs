@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-pub(super) struct LiteHome {
+pub(crate) struct LiteHome {
     pub dir: PathBuf,
     pub control: Arc<GovernedControl>,
     pub gate: Arc<GatedProjection>,
@@ -54,7 +54,7 @@ impl LiteHome {
 }
 
 /// Clock boundary after the kernel's apply.prepared record, before publication.
-pub(super) fn past_the_start(
+pub(crate) fn past_the_start(
     home: &LiteHome,
     run: nexus_governed_control::authority::ids::RunId,
 ) -> impl Fn() -> bool + Send + 'static {

@@ -500,3 +500,16 @@ fn lite_terminal_state_cause_matrix() {
     }
     println!("review3-pair:{pair}");
 }
+
+#[test]
+fn lite_complete_state_inventory() {
+    for state in MissionState::ALL {
+        for row in super::review4::rows_for_state(state) {
+            assert!(
+                STATES.contains(&row),
+                "missing state-machine row: {state:?} / {}",
+                row.0
+            );
+        }
+    }
+}

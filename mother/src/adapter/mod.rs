@@ -1081,7 +1081,7 @@ mod lite;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
-mod lite_clock;
+pub(crate) mod lite_clock;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod lite_crash;

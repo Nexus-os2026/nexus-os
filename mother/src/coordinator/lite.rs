@@ -36,6 +36,10 @@ pub struct FileSession<P: EffectPort> {
 #[cfg(test)]
 mod review3;
 
+#[path = "../adapter/lite_review4.rs"]
+#[cfg(test)]
+mod review4;
+
 impl<P: EffectPort> Coordinator<P> {
     /// Consume the legacy interface before selecting File mode. This cannot
     /// race a call through another shared coordinator reference: ownership is
