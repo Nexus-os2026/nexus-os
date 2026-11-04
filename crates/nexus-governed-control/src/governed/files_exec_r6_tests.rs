@@ -167,6 +167,88 @@ fn m2d_c_r6_a_surviving_run_without_the_cell_is_stopped() {
     assert!(f.door.run_survives(run).is_err(), "unreadable");
 }
 
+/// Execute `view` of `run` on another thread, held at `point` by a gate.
+fn held_on(
+    f: &Fx,
+    run: RunId,
+    view: &CommitmentView,
+    point: &'static str,
+) -> (Gate, std::thread::JoinHandle<bool>) {
+    let gate = Gate::new();
+    let holding = gate.clone();
+    f.gov.files().hooks().arm(point, move || holding.hold());
+    let (gov, id) = (f.gov.clone(), view.id);
+    let worker = std::thread::spawn(move || gov.execute(id, &mother(), run).is_ok());
+    gate.reached();
+    (gate, worker)
+}
+
+/// A File of `run` proposed through `door` and authorized by the Owner.
+fn authorized(f: &Fx, door: &AgentDoor, run: RunId, name: &str) -> CommitmentView {
+    let AgentOutcome::AwaitingApproval(view) = door
+        .agent_action(
+            run,
+            &Intent::File(FileCreate {
+                name: name.into(),
+                content: CONTENT.into(),
+            }),
+        )
+        .unwrap()
+    else {
+        panic!("a Files create waits for the Owner");
+    };
+    f.gov
+        .authorize(view.id, &mother(), run, &*f.owner)
+        .unwrap();
+    view
+}
+
+/// C5 (review 5, MEDIUM 5), at the broker: a token captured before its
+/// final check is reached (1) through a replacement: a twin door of the
+/// same agent finds the same cell by the same key and engages it; (3)
+/// through X2″'s stop of a surviving run whose adoption D4(a) refused. In
+/// each the held execution's final check refuses and nothing is published.
+/// (A permitted adoption never carries a Files token: D4(a) refuses the
+/// adoption of any run with a pinned Files obligation, from its proposal
+/// on; the cell an adoption attaches is covered by the round-5 adoption
+/// oracles.)
+#[test]
+fn m2d_c_r6_a_token_held_before_its_final_check_sees_the_cell_engaged_later() {
+    // (1) Replacement: the same key names the same cell.
+    let f = Fx::new();
+    let cells = f.door.halt_cells();
+    let original = cells.cell("journal", 1).unwrap();
+    let run = f.door.open_run_with_halt(&original).unwrap();
+    f.door.admit_files(run, HASH, LABEL).unwrap();
+    let view = authorized(&f, &f.door, run, "replaced.txt");
+    let (gate, worker) = held_on(&f, run, &view, at::FILE_BEFORE_FINAL);
+    let twin = f.gov.issue_agent_door(mother(), f.owner.clone()).unwrap();
+    let found = twin.halt_cells().cell("journal", 1).unwrap();
+    assert!(found.same(&original), "the original cell, by its key");
+    found.engage_with(HaltCause::Stop);
+    gate.open();
+    assert!(!worker.join().unwrap(), "(1) refused at the final check");
+    assert!(!f.ws.join("replaced.txt").exists());
+
+    // (3) The adoption refused (authorized, D4(a)): the replacement's cell
+    // never reaches the run; X2″ stops the run itself.
+    let f = Fx::new();
+    let original = f.door.halt_cells().cell("journal", 3).unwrap();
+    let run = f.door.open_run_with_halt(&original).unwrap();
+    f.door.admit_files(run, HASH, LABEL).unwrap();
+    let view = authorized(&f, &f.door, run, "surviving.txt");
+    let (gate, worker) = held_on(&f, run, &view, at::FILE_BEFORE_FINAL);
+    let twin = f.gov.issue_agent_door(mother(), f.owner.clone()).unwrap();
+    let fresh = twin.halt_cells().cell("copied", 3).unwrap();
+    assert_eq!(class(twin.adopt_with_halt(run, view.id, &fresh)), "halted");
+    assert_eq!(twin.run_carries(run, &fresh), Ok(Some(false)));
+    let _ = twin.stop_surviving_run(run).unwrap().write();
+    gate.open();
+    assert!(!worker.join().unwrap(), "(3) refused at the final check");
+    assert!(!f.ws.join("surviving.txt").exists());
+    assert_eq!(original.cause(), Some(HaltCause::Fence));
+}
+
 /// The body of `fn name` in `source` (to its closing brace at the
 /// item's indentation).
 fn body<'s>(source: &'s str, name: &str) -> &'s str {
