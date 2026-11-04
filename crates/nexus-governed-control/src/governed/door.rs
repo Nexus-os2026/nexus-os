@@ -34,7 +34,7 @@ use crate::authority::clock::Clock;
 use crate::authority::commitment::{CommitmentState, CommitmentView};
 use crate::authority::effect::CapabilityKind;
 use crate::authority::evidence::Privacy;
-use crate::authority::halt_cell::{HaltCell, HaltCells};
+use crate::authority::halt_cell::{HaltCause, HaltCell, HaltCells};
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
 use crate::authority::run::{ConsentKind, GroupId};
 use crate::authority::AuthorityError;
@@ -163,6 +163,38 @@ impl AgentDoor {
             .authority()
             .runs()
             .run_carries(run, &self.core.agent, cell)
+    }
+
+    /// M2d-C round 6 (X2″): whether this agent's `run` survives at the
+    /// broker (held, neither cancelled nor finished); `false` for a run it
+    /// does not hold. Never panics.
+    pub fn run_survives(&self, run: RunId) -> Result<bool, AuthorityError> {
+        self.control
+            .authority()
+            .runs()
+            .survives(run, &self.core.agent)
+    }
+
+    /// M2d-C round 6 (X2″): stop this agent's surviving `run`, which a
+    /// replayed journal names but which does not carry that journal's cell
+    /// (its adoption was refused, or it was opened by another coordinator):
+    /// every halt cell it carries is engaged with cause `Fence` (a first
+    /// cause is kept; the cells are cloned out under one hold and engaged
+    /// with none), then the run is cancelled in memory, as a member of this
+    /// door's would be. Deny-only: it adopts nothing and shows nothing.
+    /// Its records are returned, to write once no lock is held. Typed for
+    /// an unknown run, another agent's, an owner run or an unreadable
+    /// registry; never panics.
+    pub fn stop_surviving_run(&self, run: RunId) -> Result<RecordBatch, AuthorityError> {
+        let cells = self
+            .control
+            .authority()
+            .runs()
+            .halts_of(run, &self.core.agent)?;
+        for cell in cells {
+            cell.engage_with(HaltCause::Fence);
+        }
+        Ok(self.control.cancel_member(run))
     }
 
     /// Tests: this door's group.

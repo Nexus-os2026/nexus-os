@@ -782,6 +782,37 @@ impl RunRegistry {
         Ok(Some(entry.halts.iter().any(|h| h.same(cell))))
     }
 
+    /// M2d-C round 6 (X2″): the halt cells `agent`'s run `run` carries,
+    /// cloned out under one hold of the runs lock, for a caller that stops
+    /// surviving work its journal names but whose cells it does not hold.
+    /// An unknown run, another agent's or an owner run is typed; an
+    /// unreadable registry is an error. Never panics.
+    pub(crate) fn halts_of(&self, run: RunId, agent: &AgentId) -> Result<Vec<HaltCell>, AuthorityError> {
+        let runs = self.runs.lock().map_err(|_| unreadable())?;
+        let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        Ok(entry.halts.clone())
+    }
+
+    /// M2d-C round 6 (X2″): whether `agent`'s run `run` survives: held
+    /// here, `agent`'s agent run, neither cancelled nor finished (`false`
+    /// for a run this registry does not hold). Never panics.
+    pub(crate) fn survives(&self, run: RunId, agent: &AgentId) -> Result<bool, AuthorityError> {
+        let runs = self.runs.lock().map_err(|_| unreadable())?;
+        Ok(runs.get(&run).is_some_and(|entry| {
+            &entry.view.agent == agent
+                && entry.class == RunClass::Agent
+                && !entry.view.cancelled
+                && !entry.view.finished
+                && !entry.cancelled.load(Ordering::SeqCst)
+        }))
+    }
+
     /// Tests: poison the registry's lock (a panic while it was held).
     #[cfg(test)]
     pub(crate) fn poison_for_test(&self) {
