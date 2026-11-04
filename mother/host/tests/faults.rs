@@ -465,7 +465,16 @@ fn review1_real_cr_lf_crlf_stop_during_publish_hold() {
         p.expect("kernel_stopped=true broker_stopped=true");
         fault.reached_kind("stop-recording").release();
         p.expect("STOP RECORDING COMPLETED");
-        p.expect("ACTION FINISHED");
+        // Execution and recording are independent workers. Require both
+        // receipts within the deadline without inventing their relative order.
+        let deadline = std::time::Instant::now() + support::DEADLINE;
+        while !p.output.contains("ACTION FINISHED") {
+            assert!(
+                std::time::Instant::now() < deadline && p.read_once(deadline),
+                "execution finished: {}",
+                p.output
+            );
+        }
         p.line("status");
         p.expect("STATUS END\n");
         assert_eq!(p.output.matches("STOP REQUEST RECEIVED").count(), 1);
