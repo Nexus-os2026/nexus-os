@@ -203,3 +203,13 @@ must append their closed route code after earlier evidence. Five additional
 oracles are red with fa8fa1f5 enforcement plus only the registered test hooks
 (`decision8/red-fresh-fa8fa1f5.log`); implementation files were temporarily
 replaced from the oracle checkpoint for that run and restored byte-for-byte.
+
+The complete sweep additionally covers replay adoption before File selection
+and pending-effect installation after commitment preparation. Adoption uses
+independent live/refusal controls, ingress after the commitment view and at
+final membership insertion, and a retained token after a successful adoption.
+Pending installation uses `PLACE_BEFORE_FILL` and the post-validation hook in
+the pending-table hold, with real `pending_held`/`pending_places` counters.
+Baseline enforcement gives 3 adoption failures and 2 pending-install failures
+(`red-adoption-fa8fa1f5.log`, `red-pending-fa8fa1f5.log`). These are the same
+optional-cell propagation/final-check rule; legacy no-cell routes stay intact.

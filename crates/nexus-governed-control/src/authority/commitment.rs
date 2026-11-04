@@ -1690,6 +1690,8 @@ impl CommitmentRegistry {
     ) -> T {
         let entries = self.entries();
         let view = entries.get(&id).map(|e| e.view(id));
+        #[cfg(test)]
+        self.fire("decision8.adopt_view");
         let result = f(view);
         drop(entries);
         result

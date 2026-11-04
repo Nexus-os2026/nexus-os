@@ -813,6 +813,8 @@ impl RunRegistry {
         if entry.groups.len() >= MAX_GROUPS_PER_RUN {
             return Err(AuthorityError::Capacity);
         }
+        #[cfg(test)]
+        self.review2_hooks.fire("run.before_join");
         entry.groups.push(group);
         if let Some(door) = table.doors.get_mut(&group) {
             door.members.insert(run);

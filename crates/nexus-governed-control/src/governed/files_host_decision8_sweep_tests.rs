@@ -116,3 +116,138 @@ fn decision8_authorization_refusal_after_record_is_evidenced() {
     );
     assert_refusal(&f, "authorization_refused_halted");
 }
+
+#[test]
+fn decision8_adoption_after_view_before_membership() {
+    // Replay can reach adoption before File selection. The source run is a
+    // legacy run (no cell); only the adopting host door supplies the deny cell.
+    let control = Fx::new();
+    let pending = control.propose(NAME, CONTENT).unwrap();
+    let live = control
+        .gov
+        .issue_agent_door_with_halt(
+            mother(),
+            control.owner.clone(),
+            Some(control.gov.file_session_halt()),
+        )
+        .unwrap();
+    live.adopt(control.run, pending.id).unwrap();
+    assert!(control
+        .gov
+        .authority()
+        .runs()
+        .try_is_member(control.run, live.group_for_test())
+        .unwrap());
+    let f = Fx::new();
+    let pending = f.propose(NAME, CONTENT).unwrap();
+    let door = f
+        .gov
+        .issue_agent_door_with_halt(mother(), f.owner.clone(), Some(f.gov.file_session_halt()))
+        .unwrap();
+    let cell = f.gov.file_session_halt();
+    f.gov
+        .authority()
+        .commitments()
+        .hooks()
+        .arm("decision8.adopt_view", move || cell.engage_emergency());
+    let result = door.adopt(f.run, pending.id);
+    no_worker(&f);
+    assert!(
+        !f.gov
+            .authority()
+            .runs()
+            .try_is_member(f.run, door.group_for_test())
+            .unwrap(),
+        "no membership added after view-validation ingress"
+    );
+    assert!(matches!(result, Err(AuthorityError::Halted)));
+}
+
+#[test]
+fn decision8_adopted_run_carries_session_cell() {
+    let f = Fx::new();
+    let pending = f.propose(NAME, CONTENT).unwrap();
+    let door = f
+        .gov
+        .issue_agent_door_with_halt(mother(), f.owner.clone(), Some(f.gov.file_session_halt()))
+        .unwrap();
+    door.adopt(f.run, pending.id).unwrap();
+    let token = f.gov.authority().runs().check(f.run, &mother()).unwrap();
+    f.gov.file_session_halt().engage_emergency();
+    no_worker(&f);
+    assert!(
+        token.is_cancelled(),
+        "an adopted host run must retain the deny-only cell"
+    );
+    assert!(matches!(f.authorize(&pending), Err(AuthorityError::Halted)));
+    assert_ne!(
+        f.gov
+            .authority()
+            .commitments()
+            .view(pending.id)
+            .unwrap()
+            .state,
+        CommitmentState::Authorized
+    );
+}
+
+#[test]
+fn decision8_adoption_final_membership_hold() {
+    let f = Fx::new();
+    let pending = f.propose(NAME, CONTENT).unwrap();
+    let door = f
+        .gov
+        .issue_agent_door_with_halt(mother(), f.owner.clone(), Some(f.gov.file_session_halt()))
+        .unwrap();
+    let cell = f.gov.file_session_halt();
+    f.gov
+        .authority()
+        .runs()
+        .review2_hooks
+        .arm("run.before_join", move || cell.engage_emergency());
+    let result = door.adopt(f.run, pending.id);
+    no_worker(&f);
+    assert!(
+        !f.gov
+            .authority()
+            .runs()
+            .try_is_member(f.run, door.group_for_test())
+            .unwrap(),
+        "no membership added after final validation ingress"
+    );
+    assert!(matches!(result, Err(AuthorityError::Halted)));
+}
+
+fn pending_install(point: &'static str) {
+    let (f, _) = selected();
+    let cell = f.gov.file_session_halt();
+    f.gov
+        .authority()
+        .hooks()
+        .arm(point, move || cell.engage_emergency());
+    let result = f.propose(NAME, CONTENT);
+    no_worker(&f);
+    assert_eq!(
+        f.gov.control.pending_held(f.run),
+        0,
+        "no pending effect installed after ingress"
+    );
+    assert_eq!(f.gov.control.pending_places(), 0, "reservation returned");
+    assert!(matches!(result, Err(AuthorityError::Halted)));
+    assert!(f
+        .gov
+        .authority()
+        .commitments()
+        .views_of_run(f.run)
+        .iter()
+        .all(|v| v.state == CommitmentState::Revoked));
+    assert_refusal(&f, "pending_effect_refused_halted");
+}
+#[test]
+fn decision8_pending_effect_after_prepare() {
+    pending_install(at::PLACE_BEFORE_FILL);
+}
+#[test]
+fn decision8_pending_effect_after_validation() {
+    pending_install("decision8.pending_validated");
+}

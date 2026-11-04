@@ -133,7 +133,13 @@ impl Place<'_> {
             let mut table = self.control.pending();
             table.give_back(self.run);
             self.held = false;
-            if self.control.authority.commitments().is_unconsumed(id) {
+            let unconsumed = self.control.authority.commitments().is_unconsumed(id);
+            #[cfg(test)]
+            self.control
+                .authority
+                .hooks()
+                .fire("decision8.pending_validated");
+            if unconsumed {
                 table.held.insert(id, pending);
                 None
             } else {
