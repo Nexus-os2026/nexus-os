@@ -206,9 +206,8 @@ fn recovery_before_file_selection_never_rearms_host() {
     p.line("run");
     p.expect("REFUSED recovery_only\n");
     p.line("lift-for-undo");
-    p.yes();
-    p.expect("LIFTED recovery only; missions remain stopped\n");
-    for command in ["run", "approve"] {
+    p.expect("REFUSED unavailable\n");
+    for command in ["run", "approve", "undo", "cleanup", "detail"] {
         p.line(command);
         p.expect("REFUSED recovery_only\n");
     }
@@ -378,39 +377,33 @@ fn d_o4_eof_during_approval_never_approves() {
 }
 
 #[test]
-fn recovery_repeated_stop_invalidates_lift_and_undo_consents() {
+fn first_emergency_invalidates_normal_undo_and_repeated_stop_never_rearms() {
     let f = Fixture::new();
-    let mut p = Pty::start(f.command("recover once\n"));
+    let mut p = Pty::start(f.command("normal undo only\n"));
     p.ready();
     p.create();
-    p.line("stop");
-    p.expect("STOP RECORDING COMPLETED");
-    p.line("lift-for-undo");
-    let old = p.code();
-    p.line("stop");
-    p.expect("LIFT REFUSED");
-    p.expect("STOP RECORDING COMPLETED");
-    p.line("lift-for-undo");
-    let fresh = p.code();
-    assert_ne!(fresh, old);
-    p.line(&fresh);
-    p.expect("LIFTED recovery only; missions remain stopped\n");
     p.line("undo");
     let old = p.code();
     p.line("stop");
     p.expect("UNDO REFUSED");
     p.expect("STOP RECORDING COMPLETED");
     assert!(f.workspace.join("hello.txt").exists());
-    p.line("lift-for-undo");
-    p.yes();
-    p.expect("LIFTED recovery only; missions remain stopped\n");
-    p.line("undo");
-    let fresh = p.code();
-    assert_ne!(fresh, old);
-    p.line(&fresh);
-    p.expect("UNDO REMOVED interrupted=none\n");
-    f.empty();
-    p.quit();
+    p.line(&old);
+    p.expect("REFUSED");
+    p.line("stop");
+    p.expect("STOP RECORDING COMPLETED");
+    for command in ["lift-for-undo", "undo", "cleanup"] {
+        let before = p.output.matches("Answer code:").count();
+        p.line(command);
+        p.expect("REFUSED");
+        assert_eq!(p.output.matches("Answer code:").count(), before);
+    }
+    assert_eq!(
+        std::fs::read(f.workspace.join("hello.txt")).unwrap(),
+        b"normal undo only\n"
+    );
+    p.line("quit");
+    p.finish();
 }
 
 #[test]

@@ -1,5 +1,23 @@
 # M2d-D host protocol and oracle registration
 
+> Session refactor amendment (oracle-first at `03e07b1a`): the frozen
+> [session specification](m2d-d-session-spec.md), including both amendments,
+> replaces the emergency-resume expectations below. The original protocol is
+> retained here as historical evidence, not an executable host permission.
+>
+> Hands permits normal undo before emergency. After emergency it accepts
+> status, evidence and Quit; repeated Stop still ingresses. Lift is unavailable
+> in every state. No new undo, cleanup, detail, work or dialogue is admitted.
+> A pre-admitted call may finish only its documented internal work. Restart
+> reports surviving evidence and uncertainty without cleanup or authority.
+>
+> [Exact old/new host assertions](m2d-d-session-oracle-amendments.md) accompany
+> the replacement PTY schedules. The independent literal model and generated
+> schedule keys live in `mother/host/tests/session/` and `session_oracles.rs`.
+> Model-only trace counts are never claimed as real-route coverage.
+> Complete close requires conserved resource/record/ack obligations, quiesced
+> producers, atomic sealing, both durable end results and final delivery.
+
 Base: `d20bc1f6ebe5e61561b85544633355f5db9891ce`. The Architect's
 2026-11-04 decision 4 and its complete conflict inventory govern this slice.
 This registration precedes implementation. Earlier tests remain frozen except

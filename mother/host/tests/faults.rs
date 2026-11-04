@@ -87,7 +87,7 @@ fn d_o20_stop_ctrl_d_and_master_close_before_publication() {
 }
 
 #[test]
-fn recovery_ordering_b_publication_then_separate_lift_and_undo() {
+fn emergency_ordering_b_preserves_publication_and_refuses_restoration() {
     let f = Fixture::new();
     let fault = Fault::new(&f, "after-final-check");
     let mut command = f.command("one handed-off publication\n");
@@ -113,23 +113,29 @@ fn recovery_ordering_b_publication_then_separate_lift_and_undo() {
     p.line("status");
     p.expect("STATUS END\n");
     let before = p.output.matches("LANE invoked").count();
-    p.line("lift-for-undo");
-    p.yes();
-    p.expect("LIFTED recovery only; missions remain stopped\n");
-    p.line("undo");
-    p.yes();
-    p.expect("UNDO REMOVED interrupted=none\n");
-    f.empty();
-    for command in ["run", "approve"] {
+    for command in [
+        "lift-for-undo",
+        "undo",
+        "cleanup",
+        "run",
+        "approve",
+        "detail",
+    ] {
+        let dialogues = p.output.matches("Answer code:").count();
         p.line(command);
-        p.expect("REFUSED recovery_only\n");
+        p.expect("REFUSED");
+        assert_eq!(p.output.matches("Answer code:").count(), dialogues);
     }
     assert_eq!(p.output.matches("LANE invoked").count(), before);
+    assert_eq!(
+        std::fs::read(f.workspace.join("hello.txt")).unwrap(),
+        b"one handed-off publication\n"
+    );
     p.line("status");
-    p.expect("host_recovery_only=true");
-    p.expect("kernel_stopped=false broker_stopped=false");
+    p.expect("kernel_stopped=true broker_stopped=true");
     p.expect("STATUS END\n");
-    p.quit();
+    p.line("quit");
+    p.finish();
 }
 
 #[test]
@@ -151,7 +157,7 @@ fn h1_four_storage_blocked_workers_fifth_ingress_and_resume_refusal() {
     }
     p.expect("STOP COALESCED");
     p.line("lift-for-undo");
-    p.expect("REFUSED stop_workers_outstanding\n");
+    p.expect("REFUSED unavailable\n");
     receipt.release();
     p.expect("STOP WORKERS outstanding=0\n");
     p.line("evidence");
@@ -257,7 +263,7 @@ fn h1_store_already_held_before_stop_ingress_and_eventual_records() {
     p.line("stop");
     p.expect("STOP REQUEST RECEIVED epoch=2");
     p.line("lift-for-undo");
-    p.expect("REFUSED stop_workers_outstanding\n");
+    p.expect("REFUSED unavailable\n");
     receipt.release();
     p.expect("STOP WORKERS outstanding=0\n");
     p.line("evidence");
@@ -267,17 +273,8 @@ fn h1_store_already_held_before_stop_ingress_and_eventual_records() {
     p.quit();
 }
 
-fn activity(p: &mut Pty) -> String {
-    p.line("status");
-    p.expect("STATUS END\n")
-        .lines()
-        .find(|line| line.starts_with("ADMITTED "))
-        .expect("all seven host admission counters")
-        .to_string()
-}
-
 #[test]
-fn recovery_composed_counts_include_queued_callbacks_after_successful_undo() {
+fn emergency_composition_preserves_file_and_rejects_queued_commands() {
     let f = Fixture::new();
     let fault = Fault::new(&f, "after-final-check");
     let mut command = f.command("one publication\n");
@@ -289,44 +286,28 @@ fn recovery_composed_counts_include_queued_callbacks_after_successful_undo() {
     p.line("approve");
     p.yes();
     let receipt = fault.reached();
-    let before = activity(&mut p);
-    for route in ["mission", "door", "run", "files", "lane"] {
-        assert!(
-            !before.contains(&format!("{route}=0")),
-            "positive {route}: {before}"
-        );
-    }
-    assert!(before.contains("inference=0 model=0"));
+    let before = p.output.matches("LANE invoked").count();
     p.line("run");
     p.line("approve");
     p.line("stop");
     p.expect("STOP RECORDING COMPLETED");
     receipt.release();
     p.expect("ACTION FINISHED");
-    assert_eq!(
-        std::fs::read(f.workspace.join("hello.txt")).unwrap(),
-        b"one publication\n"
-    );
-    p.line("lift-for-undo");
-    p.yes();
-    p.expect("LIFTED recovery only; missions remain stopped\n");
-    p.line("undo");
-    p.yes();
-    p.expect("UNDO REMOVED interrupted=none\n");
-    f.empty();
-    assert_eq!(
-        activity(&mut p),
-        before,
-        "no post-emergency admission, including queued callbacks"
-    );
-    p.line("stop");
-    p.expect("STOP RECORDING COMPLETED");
-    assert_eq!(
-        activity(&mut p),
-        before,
-        "restriction survives repeated Stop"
-    );
-    p.quit();
+    for _ in 0..2 {
+        p.line("stop");
+        p.expect("STOP RECORDING COMPLETED");
+        for command in ["lift-for-undo", "undo", "cleanup", "run", "approve"] {
+            p.line(command);
+            p.expect("REFUSED");
+        }
+        assert_eq!(p.output.matches("LANE invoked").count(), before);
+        assert_eq!(
+            std::fs::read(f.workspace.join("hello.txt")).unwrap(),
+            b"one publication\n"
+        );
+    }
+    p.line("quit");
+    p.finish();
 }
 
 #[test]
@@ -338,26 +319,28 @@ fn h1_cleanup_stall_does_not_hold_reader_or_repeated_stop() {
     let mut p = Pty::start(command);
     p.ready();
     p.mission();
+    // Denial retires the preparation without removing its owned staging.
+    p.line("approve");
+    p.code();
+    p.line("no");
+    p.expect("ACTION DENIED\n");
     fault.arm();
-    p.line("stop");
-    p.expect("STOP RECORDING COMPLETED");
-    p.line("lift-for-undo");
-    p.yes();
-    p.expect("LIFTED recovery only; missions remain stopped\n");
-    // No undo slot exists, but this Owner call first drains the candidate
-    // transferred by Stop. Hold actual unlink of that candidate.
-    p.line("undo");
+    p.line("cleanup");
     let receipt = fault.reached();
     assert!(receipt.path.contains("/coding-runs/"));
-    p.line("stop");
-    p.expect("kernel_stopped=true broker_stopped=true");
-    p.expect("STOP RECORDING COMPLETED");
+    for _ in 0..2 {
+        p.line("stop");
+        p.expect("STOP RECORDING COMPLETED");
+    }
     p.line("status");
     p.expect("STATUS END\n");
     receipt.release();
-    p.expect("UNDO REFUSED");
+    p.expect("CLEANUP");
+    p.line("cleanup");
+    p.expect("REFUSED");
     f.empty();
-    p.quit();
+    p.line("quit");
+    p.finish();
 }
 
 #[test]
@@ -369,14 +352,13 @@ fn owner_cleanup_route_retries_real_retained_staging() {
     let mut p = Pty::start(command);
     p.ready();
     p.mission();
+    p.line("approve");
+    p.code();
+    p.line("no");
+    p.expect("ACTION DENIED\n");
     fault.arm();
-    p.line("stop");
-    p.expect("STOP RECORDING COMPLETED");
-    p.line("lift-for-undo");
-    p.yes();
-    p.expect("LIFTED recovery only; missions remain stopped\n");
-    p.line("undo");
-    p.expect("UNDO REFUSED");
+    p.line("cleanup");
+    p.expect("CLEANUP");
     p.line("cleanup");
     p.expect("CLEANUP settled=1 still_owed=0\n");
     f.empty();
