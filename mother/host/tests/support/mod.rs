@@ -80,7 +80,9 @@ impl Drop for Fixture {
 pub struct Pty {
     pub child: Child,
     pub master: Option<File>,
+    /// Logical lines; only paired CRLF transport newlines are decoded.
     pub output: String,
+    pub wire_output: String,
     pending_utf8: Vec<u8>,
     cursor: usize,
 }
@@ -112,6 +114,7 @@ impl Pty {
                 child,
                 master: Some(master),
                 output: String::new(),
+                wire_output: String::new(),
                 pending_utf8: Vec::new(),
                 cursor: 0,
             },
@@ -151,17 +154,18 @@ impl Pty {
                 self.pending_utf8.extend_from_slice(&bytes[..n]);
                 match std::str::from_utf8(&self.pending_utf8) {
                     Ok(text) => {
-                        self.output.push_str(text);
+                        self.wire_output.push_str(text);
                         self.pending_utf8.clear();
                     }
                     Err(error) => {
                         assert!(error.error_len().is_none(), "invalid UTF-8 in PTY output");
                         let valid = error.valid_up_to();
-                        self.output
+                        self.wire_output
                             .push_str(std::str::from_utf8(&self.pending_utf8[..valid]).unwrap());
                         self.pending_utf8.drain(..valid);
                     }
                 }
+                self.output = logical_lines(&self.wire_output);
                 true
             }
         }
@@ -249,4 +253,10 @@ impl Drop for Pty {
         }
         let _ = self.child.wait();
     }
+}
+
+// No trimming or general control stripping: a lone CR and every hostile
+// control survive for the frozen safety assertions to reject.
+pub fn logical_lines(wire: &str) -> String {
+    wire.replace("\r\n", "\n")
 }

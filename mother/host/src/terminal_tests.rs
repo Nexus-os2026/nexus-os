@@ -435,3 +435,14 @@ fn review2_rendered_cursor_columns_start_at_zero() {
         "LF-only negative control"
     );
 }
+
+#[test]
+fn review2_crlf_transport_decoding_keeps_hostile_controls() {
+    use crate::stop_tests::support::logical_lines;
+    assert_eq!(logical_lines("safe\r\nnext\r\n"), "safe\nnext\n");
+    let hostile = "bad\rvalue\u{1b}[31m\u{7}";
+    assert_eq!(logical_lines(hostile), hostile);
+    assert!(logical_lines(hostile)
+        .chars()
+        .any(|c| c != '\n' && !shown(c)));
+}
