@@ -425,10 +425,7 @@ impl Runtime {
                 }
             }
             "undo" => match self.home.owner().files_undo(&*self.confirmer) {
-                Ok(report) => self.screen.emit(&format!(
-                    "UNDO REMOVED interrupted={}\n",
-                    report.interrupted.unwrap_or("none")
-                )),
+                Ok(report) => show_undo(&self.screen, report),
                 Err(e) => self.screen.emit(&format!("UNDO REFUSED {}\n", e.class())),
             },
             "cleanup" => match self.home.owner().files_retry_cleanup() {
@@ -844,4 +841,12 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     }
     let terminal_done = terminal.finish(deadline);
     clean && terminal_done && !screen.stop.gate.failed()
+}
+
+/// Keep successful removal and its possible grant interruption distinct.
+pub(crate) fn show_undo(screen: &Shared, report: nexus_governed_control::files::UndoReport) {
+    screen.emit(&format!(
+        "UNDO REMOVED interrupted={}\n",
+        report.interrupted.unwrap_or("none")
+    ));
 }
