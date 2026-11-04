@@ -344,7 +344,6 @@ impl Runtime {
             // Deny only this retained mission action. Revoked/stopped actions
             // remain ended; a failed deny is not reported as successful.
             let denied = owner.deny(id, &mother_agent(), run);
-            self.screen.emit("ACTION DENIED\n");
             if let Err(e) = denied {
                 self.screen.emit(&format!(
                     "DENIAL RECORD {} original={}\n",
@@ -357,6 +356,9 @@ impl Runtime {
             } else {
                 self.observe();
             }
+            // This receipt promises Mother has consumed the denial. Quit may
+            // close admission immediately after the Owner sees it.
+            self.screen.emit("ACTION DENIED\n");
             return;
         }
         if !self.allowed(Route::Files) {
@@ -478,6 +480,10 @@ impl Runtime {
         owner: Arc<nexus_governed_control::governed::GovernedControl>,
         stop_body: Option<Arc<dyn Fn() + Send + Sync>>,
     ) -> bool {
+        if self.screen.stop.gate.failed() {
+            self.screen.emit("UNCLEAN host_failure\n");
+            return false;
+        }
         if let Some(mission) = &self.mission {
             if let Err(e) = mission.session.close() {
                 self.screen
@@ -679,7 +685,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             }
             Err(mpsc::TryRecvError::Empty) => {}
         }
-        if screen.ended() || screen.stop.gate.failed() {
+        if screen.ended() || screen.stop.gate.failed() || screen.input().quit {
             break None;
         }
         screen.wait();
@@ -687,8 +693,21 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let Some(runtime) = runtime else {
         screen.stop.gate.close();
         let deadline = Instant::now() + Duration::from_secs(3);
-        let _startup = join(&mut startup, deadline, &screen);
-        let _stop = screen.stop.join_until(deadline);
+        let started = join(&mut startup, deadline, &screen).is_some();
+        let stopped = screen.stop.join_until(deadline);
+        if started && stopped {
+            // A late startup result and the Stop callback may own the final
+            // backend reference. Their destruction can perform cleanup too.
+            let owned = std::mem::ManuallyDrop::new((rx, screen.stop.take_body()));
+            let mut dispose = std::thread::Builder::new()
+                .name("hands-startup-close".into())
+                .spawn(move || drop(std::mem::ManuallyDrop::into_inner(owned)))
+                .ok();
+            let _disposed = join(&mut dispose, deadline, &screen);
+        } else {
+            std::mem::forget(rx);
+            std::mem::forget(screen.stop.clone());
+        }
         let _terminal = terminal.finish(deadline);
         return false;
     };
@@ -705,10 +724,10 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let mut snapshot = owner.stop_snapshot();
     loop {
         screen.stop.reap();
-        if work.as_ref().is_some_and(|w| w.is_finished()) {
-            if join(&mut work, Instant::now(), &screen).is_none() {
-                screen.stop.gate.fail();
-            }
+        if work.as_ref().is_some_and(|w| w.is_finished())
+            && join(&mut work, Instant::now(), &screen).is_none()
+        {
+            screen.stop.gate.fail();
         }
         let receipt = screen.stop.receipt();
         if receipt.epoch != last.epoch {
@@ -735,7 +754,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         }
         last = receipt;
         snapshot = current;
-        if screen.ended() || screen.stop.gate.failed() {
+        if screen.ended() || screen.stop.gate.failed() || screen.input().quit {
             break;
         }
         let command = if work.is_none() && !queued.is_empty() {
@@ -750,6 +769,9 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             if command == "status" {
                 screen.emit(&format!("host_recovery_only={}\nkernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP WORKERS outstanding={}\n", screen.stop.gate.recovery(), current.kernel_stopped, current.broker_stopped, current.stop_number, current.policy_generation, receipt.outstanding));
                 screen.emit("Mother lifecycle is the last worker receipt; status does not wait for journal I/O\n");
+                let [mission, door, run, files, lane, inference, model] =
+                    screen.stop.gate.admitted();
+                screen.emit(&format!("ADMITTED mission={mission} door={door} run={run} files={files} lane={lane} inference={inference} model={model}\n"));
                 screen.emit("STATUS END\n");
             } else if command == "lift-for-undo" && receipt.outstanding > 0 {
                 screen.emit("REFUSED stop_workers_outstanding\n");
@@ -821,5 +843,5 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         std::mem::forget(owner);
     }
     let terminal_done = terminal.finish(deadline);
-    clean && terminal_done
+    clean && terminal_done && !screen.stop.gate.failed()
 }

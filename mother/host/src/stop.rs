@@ -35,10 +35,27 @@ pub(crate) struct Gate {
     closing: AtomicBool,
     failed: AtomicBool,
     epoch: AtomicU64,
+    admitted: [AtomicU64; 7],
 }
 impl Gate {
-    pub(crate) fn admit(&self, _route: Route) -> bool {
-        !self.recovery() && !self.closing() && !self.failed()
+    pub(crate) fn admit(&self, route: Route) -> bool {
+        if self.recovery() || self.closing() || self.failed() {
+            return false;
+        }
+        // Counts successful host admission boundaries, not backend success.
+        // A dispatch admitted before emergency may finish after it; the
+        // backend's native final checks still govern publication.
+        if self.admitted[route as usize]
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
+            .is_err()
+        {
+            self.fail();
+            return false;
+        }
+        true
+    }
+    pub(crate) fn admitted(&self) -> [u64; 7] {
+        std::array::from_fn(|i| self.admitted[i].load(Ordering::SeqCst))
     }
     pub(crate) fn recovery(&self) -> bool {
         self.recovery.load(Ordering::SeqCst)
@@ -173,7 +190,14 @@ impl StopRoute {
         self.dispatch_pending();
     }
     fn dispatch_pending(self: &Arc<Self>) {
-        let body = self.body.lock().ok().and_then(|body| body.clone());
+        let body = match self.body.lock() {
+            Ok(body) => body.clone(),
+            Err(_) => {
+                self.gate.fail();
+                self.lock().failed = true;
+                return;
+            }
+        };
         let Some(body) = body else {
             return;
         };
@@ -223,7 +247,13 @@ impl StopRoute {
     /// Only after stdin and every Stop worker have joined. Transfer the
     /// backend reference into the owned cleanup worker before process exit.
     pub(crate) fn take_body(&self) -> Option<Body> {
-        self.body.lock().ok().and_then(|mut body| body.take())
+        match self.body.lock() {
+            Ok(mut body) => body.take(),
+            Err(p) => {
+                self.gate.fail();
+                p.into_inner().take()
+            }
+        }
     }
     pub(crate) fn reap(&self) {
         let handles = {

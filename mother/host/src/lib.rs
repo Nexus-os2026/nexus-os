@@ -224,3 +224,16 @@ impl Home {
         &self.control
     }
 }
+
+/// Startup refusal on targets without the acknowledged terminal protocol.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HandsStartupFailure {
+    UnsupportedPlatform,
+}
+impl HandsStartupFailure {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::UnsupportedPlatform => "hands_unavailable: unsupported_platform",
+        }
+    }
+}

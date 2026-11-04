@@ -55,6 +55,7 @@ impl Failure {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Line {
     Stop,
+    Quit,
     Eof,
     Answer(Option<String>),
 }
@@ -81,6 +82,8 @@ impl LineBuffer {
         if byte == b'\n' {
             let answer = if !self.overflow && self.bytes == b"stop" {
                 Some(Line::Stop)
+            } else if !self.overflow && self.bytes == b"quit" {
+                Some(Line::Quit)
             } else if self.stale {
                 None
             } else if self.overflow {
@@ -148,6 +151,7 @@ pub(crate) struct Input {
     pub(crate) active: bool,
     pub(crate) fatal: Option<Failure>,
     pub(crate) eof: bool,
+    pub(crate) quit: bool,
 }
 pub(crate) struct Frame {
     pub(crate) text: String,
@@ -215,6 +219,11 @@ impl Shared {
         match line {
             Line::Stop => {
                 self.stop.press();
+                self.changed.notify_all();
+            }
+            Line::Quit => {
+                self.stop.gate.close();
+                self.input().quit = true;
                 self.changed.notify_all();
             }
             Line::Eof => {
@@ -445,6 +454,7 @@ pub struct Terminal {
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
     modes: Option<(Termios, Termios)>,
+    finish_deadline: Option<Instant>,
 }
 impl Terminal {
     pub fn open() -> Result<Self, Failure> {
@@ -500,6 +510,7 @@ impl Terminal {
             reader: None,
             writer: None,
             modes: Some((before_in, before_out)),
+            finish_deadline: None,
         };
         let s = terminal.shared.clone();
         terminal.writer = Some(
@@ -539,6 +550,7 @@ impl Terminal {
         self.shared.stop.bind(owner)
     }
     pub fn finish(&mut self, deadline: Instant) -> bool {
+        let deadline = *self.finish_deadline.get_or_insert(deadline);
         let reader_ok = self.stop_reader(deadline);
         self.shared.end.store(true, Ordering::SeqCst);
         self.shared.changed.notify_all();

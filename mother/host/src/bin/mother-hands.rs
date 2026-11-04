@@ -6,7 +6,10 @@ fn main() -> ExitCode {
     let ok = nexus_mother_host::hands::run(std::env::args().skip(1));
     #[cfg(not(target_os = "linux"))]
     let ok = {
-        eprintln!("hands_unavailable: unsupported_platform");
+        eprintln!(
+            "{}",
+            nexus_mother_host::HandsStartupFailure::UnsupportedPlatform.code()
+        );
         false
     };
     if ok {
