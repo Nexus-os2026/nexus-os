@@ -9,3 +9,6 @@ description = "Mother Nexus M2c: Mother's host shim; it alone builds the governe
 [dependencies]
 nexus-mother = { path = ".." }
 nexus-governed-control = { path = "../../crates/nexus-governed-control" }
+
+[dev-dependencies]
+nix = { version = "0.29", features = ["term", "poll"] }
