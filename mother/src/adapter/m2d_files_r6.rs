@@ -17,7 +17,6 @@
 
 use super::m2as_support::Disk;
 use super::m2c_support::{consent, port_for, Home};
-use super::m2d_files::past_the_start;
 use super::{mother_agent, FileJournal, GovernedPort};
 use crate::coordinator::{Coordinator, CoordinatorError, IdentityRefusal, Lanes};
 use crate::effect::EffectPort;
@@ -265,31 +264,6 @@ fn held_at(slot: &HookSlot, skip: usize) -> (mpsc::Receiver<()>, mpsc::Sender<()
     (entered, release)
 }
 
-/// An execution of `action` on a worker, held at its final check (the
-/// broker's clock hook), and its release. The worker's result is whether
-/// the File was published.
-fn execute_held<'s>(
-    scope: &'s std::thread::Scope<'s, '_>,
-    home: &'s Home,
-    action: (RunId, CommitmentId),
-) -> (std::thread::ScopedJoinHandle<'s, bool>, mpsc::Sender<()>) {
-    let (entered_tx, entered) = mpsc::channel();
-    let (release, release_rx) = mpsc::channel::<()>();
-    home.clock.arm(past_the_start(home, action.0), move || {
-        entered_tx.send(()).unwrap();
-        let _ = release_rx.recv_timeout(BOUND);
-    });
-    let worker = scope.spawn(move || {
-        home.control
-            .execute(action.1, &mother_agent(), action.0)
-            .is_ok()
-    });
-    entered
-        .recv_timeout(BOUND)
-        .expect("held at its final check");
-    (worker, release)
-}
-
 pub(super) fn on_the_real_broker(home: &Home) {
     a_captured_token_is_reached_through_every_alias_of_the_journal(home);
     an_identity_less_store_binds_its_replayed_runs_or_stops_them(home);
@@ -314,12 +288,15 @@ fn relative_to_cwd(path: &Path) -> PathBuf {
     relative.join(path.strip_prefix("/").unwrap())
 }
 
-/// R6-2 / X2 / X4: an execution's token, captured under the original
-/// coordinator and port and held before its final check, is reached by a
-/// Stop through a replacement opened over the surviving broker through
-/// `./journal`, a relative path and a parent-directory symlink: the file's
-/// own identity names the same cell; nothing is published; the settlement
-/// is truthful. (The frozen final-component symlink refusal stays.)
+/// R6-2 / X2 / X4: a poised execution (authorized under the original
+/// coordinator and port) is reached by a Stop through a replacement opened
+/// over the surviving broker through `./journal`, a relative path and a
+/// parent-directory symlink: the file's own identity names the same cell
+/// (the adoption is refused: D4(a)); with the replacement's
+/// `SettlementStarted` append held, the execution's final check refuses,
+/// nothing is published and the settlement is truthful. (The frozen
+/// final-component symlink refusal stays. A token held before its final
+/// check is the broker's `m2d_c_r6_a_token_held_before_its_final_check_sees_the_cell_engaged_later`.)
 fn a_captured_token_is_reached_through_every_alias_of_the_journal(home: &Home) {
     let canonical = home.dir.join("m2d-c-r6-alias.jsonl");
     let link = std::env::temp_dir().join(format!(
@@ -337,44 +314,40 @@ fn a_captured_token_is_reached_through_every_alias_of_the_journal(home: &Home) {
         let s = Rig::at(home, &canonical);
         let tag = format!("r6-alias-{name}");
         let a = s.waiting(&tag);
-        let action = s.approve(a);
+        let poised = s.approve(a);
         let identity = s.mother.journal_identity().to_string();
-        std::thread::scope(|scope| {
-            let (worker, release_execution) = execute_held(scope, home, action);
-            drop(s);
-            let again = Rig::at(home, &alias);
-            assert_eq!(
-                again.mother.journal_identity(),
-                identity,
-                "{name}: the same file, the same identity"
-            );
-            assert!(!again.engaged(a), "{name}: the original cell, not engaged");
-            assert_eq!(again.port.run_of(a), None, "{name}: the adoption was refused");
-            let (entered, release_append) = again.hold_next_append();
-            let state = std::thread::scope(|inner| {
-                let stopping = inner.spawn(|| again.mother.stop(a));
-                entered.recv_timeout(BOUND).expect("SettlementStarted held");
-                assert!(again.engaged(a), "{name}: engaged through the replacement");
-                release_execution.send(()).unwrap();
-                assert!(!worker.join().unwrap(), "{name}: the final check refused");
-                release_append.send(()).unwrap();
-                stopping.join().unwrap()
-            });
-            assert!(
-                state.as_ref().is_ok_and(|s| s.is_terminal()),
-                "{name}: the settlement ended the mission: {state:?}"
-            );
-            let terminal = again.terminal(a);
-            assert_eq!(terminal.len(), 1, "{name}: one terminal line");
-            assert!(
-                !matches!(terminal[0], SettlementOutcome::Published { .. }),
-                "{name}: truthful: {terminal:?}"
-            );
-            assert!(
-                !again.ws.join(format!("{tag}-a.txt")).exists(),
-                "{name}: nothing published"
-            );
+        drop(s);
+        let again = Rig::at(home, &alias);
+        assert_eq!(
+            again.mother.journal_identity(),
+            identity,
+            "{name}: the same file, the same identity"
+        );
+        assert!(!again.engaged(a), "{name}: the original cell, not engaged");
+        assert_eq!(again.port.run_of(a), None, "{name}: the adoption was refused");
+        let (entered, release_append) = again.hold_next_append();
+        let state = std::thread::scope(|scope| {
+            let stopping = scope.spawn(|| again.mother.stop(a));
+            entered.recv_timeout(BOUND).expect("SettlementStarted held");
+            assert!(again.engaged(a), "{name}: engaged through the replacement");
+            assert!(!again.execute(poised), "{name}: the final check refused");
+            release_append.send(()).unwrap();
+            stopping.join().unwrap()
         });
+        assert!(
+            state.as_ref().is_ok_and(|s| s.is_terminal()),
+            "{name}: the settlement ended the mission: {state:?}"
+        );
+        let terminal = again.terminal(a);
+        assert_eq!(terminal.len(), 1, "{name}: one terminal line");
+        assert!(
+            !matches!(terminal[0], SettlementOutcome::Published { .. }),
+            "{name}: truthful: {terminal:?}"
+        );
+        assert!(
+            !again.ws.join(format!("{tag}-a.txt")).exists(),
+            "{name}: nothing published"
+        );
     }
     let _ = std::fs::remove_file(&link);
 }
@@ -404,36 +377,36 @@ fn an_identity_less_store_binds_its_replayed_runs_or_stops_them(home: &Home) {
     let (s, port) = anonymous(home, disk.clone()).expect("a test build's fallback");
     assert!(!port.fenced());
     let a = s.waiting("r6-anon-bound");
-    let action = s.approve(a);
+    let poised = s.approve(a);
     let cell = port.halt_cells().get(s.mother.journal_identity(), a.0).unwrap();
     drop(s);
     // The same lines, a new coordinator: its cell for A is fresh; A's run
     // survives with the original cell only, and D4(a) refuses the adoption.
-    std::thread::scope(|scope| {
-        let (worker, release_execution) = execute_held(scope, home, action);
-        let refused = anonymous(home, disk.clone()).err();
-        assert_eq!(
-            refused,
-            Some(CoordinatorError::Identity(
-                IdentityRefusal::SurvivingRunMismatch
-            ))
-        );
-        assert_eq!(cell.cause(), Some(HaltCause::Fence), "its original cell");
-        let view = home.control.authority().runs().view(action.0).unwrap();
-        assert!(view.cancelled, "the surviving run is stopped");
-        release_execution.send(()).unwrap();
-        assert!(!worker.join().unwrap(), "its final check refused");
-    });
+    let refused = anonymous(home, disk.clone()).err();
+    assert_eq!(
+        refused,
+        Some(CoordinatorError::Identity(
+            IdentityRefusal::SurvivingRunMismatch
+        ))
+    );
+    assert_eq!(cell.cause(), Some(HaltCause::Fence), "its original cell");
+    let view = home.control.authority().runs().view(poised.0).unwrap();
+    assert!(view.cancelled, "the surviving run is stopped");
+    assert!(!other.execute(poised), "its final check refuses");
     assert!(!other.ws.join("r6-anon-bound-a.txt").exists());
     // The unrelated run is untouched: its mission goes on.
     assert!(other.execute(other.approve(unrelated)), "not this journal's work");
     assert!(other.ws.join("r6-anon-other-a.txt").exists());
 }
 
-/// C5 (review 5, MEDIUM 5): a waiting, unauthorized action is adopted by a
-/// replacement, then authorized, then executing with its token held before
-/// its final check; the Stop through the replacement reaches it: nothing is
-/// published. (A control: the adoption attaches the cell to the run.)
+/// C5 (review 5, MEDIUM 5), the adoption case as the product has it: a
+/// waiting File's run is never adopted by a replacement (D4(a): a pinned
+/// Files obligation refuses any adoption, from the proposal on; the
+/// replacement tries and is refused), so no Files token ever rests on an
+/// adopted run; the replacement reaches the poised File by identity, and
+/// after its Stop the execution's final check refuses. (The cell an
+/// adoption attaches, and a token held before its final check, are the
+/// broker's oracles.)
 fn a_captured_token_is_reached_through_a_permitted_adoption(home: &Home) {
     let journal = "m2d-c-r6-adopt.jsonl";
     let s = Rig::new(home, journal);
@@ -445,21 +418,20 @@ fn a_captured_token_is_reached_through_a_permitted_adoption(home: &Home) {
     );
     drop(s);
     let again = Rig::new(home, journal);
-    assert_eq!(again.port.run_of(a), Some(action.0), "adopted");
+    assert_eq!(again.port.adopts_tried(), 1, "the adoption was tried");
+    assert_eq!(again.port.run_of(a), None, "and refused: a pinned File");
     again.authorize(action);
+    let (entered, release_append) = again.hold_next_append();
     std::thread::scope(|scope| {
-        let (worker, release_execution) = execute_held(scope, home, action);
-        let (entered, release_append) = again.hold_next_append();
         let stopping = scope.spawn(|| again.mother.stop(a));
         entered.recv_timeout(BOUND).expect("SettlementStarted held");
         assert!(again.engaged(a));
-        release_execution.send(()).unwrap();
-        assert!(!worker.join().unwrap(), "the final check refused");
+        assert!(!again.execute(action), "the final check refused");
         release_append.send(()).unwrap();
         let _ = stopping.join().unwrap();
     });
     assert!(!again.ws.join("r6-adopt-a.txt").exists(), "nothing published");
-    assert_eq!(again.terminal(a), vec![SettlementOutcome::NotPublished]);
+    assert_eq!(again.terminal(a).len(), 1, "one truthful terminal line");
 }
 
 /// C5 (review 5, MEDIUM 5): a cell's retirement races the `stop_all`
@@ -529,8 +501,11 @@ fn the_emergency_cohort_is_the_cells_the_ingress_engaged(home: &Home) {
         s.terminal(b).as_slice(),
         [SettlementOutcome::Published { .. }]
     ));
-    assert!(s.mother.state(a).is_some_and(MissionState::is_terminal), "A too");
-    assert_eq!(s.terminal(a), vec![SettlementOutcome::NotPublished]);
+    // A too: its waiting File is a predecessor's (a pinned File is never
+    // adopted: D4(a)), so its settlement is truthfully uncertain.
+    assert_eq!(s.mother.state(a), Some(MissionState::Blocked), "A too");
+    assert_eq!(s.terminal(a), vec![SettlementOutcome::Uncertain]);
+    assert_eq!(s.mother.reason(a).as_deref(), Some("file_publication_uncertain"));
 
     // (2) No coordinator call between the emergency and the lift.
     let s = Rig::new(home, "m2d-c-r6-emergency-lift.jsonl");
@@ -606,14 +581,15 @@ fn with_the_stop_append_held_no_admission_passes(home: &Home) {
     let b = s.waiting("r6-admissions");
     let run = s.port.run_of(b).unwrap();
     let views_before = home.control.authority().commitments().views_of_run(run).len();
+    // Read before the Stop holds the coordinator lock with its append.
+    let hash = s.mother.consented_hash(b).unwrap().to_hex();
+    let request = s.mother.consent_request_of(b).unwrap();
     let (entered, release) = s.hold_next_append();
     std::thread::scope(|scope| {
         let stopping = scope.spawn(|| s.mother.stop(b));
         entered.recv_timeout(BOUND).expect("SettlementStarted held");
         assert!(s.engaged(b));
         let door = &s.port.door;
-        let hash = s.mother.consented_hash(b).unwrap().to_hex();
-        let request = s.mother.consent_request_of(b).unwrap();
         assert_eq!(
             door.admit_files(run, &hash, &request).unwrap_err().class(),
             "halted",
@@ -664,11 +640,6 @@ fn with_the_stop_append_held_no_admission_passes(home: &Home) {
 /// typed (`Poisoned`), none panics, the cells are engaged and nothing is
 /// published.
 fn every_stop_path_is_typed_on_poison_end_to_end(home: &Home) {
-    let poison_at = |s: &Rig<'_>, skip: usize| {
-        let (tx, rx) = mpsc::channel();
-        s.mother.hooks.before_owed_write.arm(skip, move || tx.send(()).unwrap());
-        rx
-    };
     // (a) Stop with a File: poisoned after SettlementStarted.
     let s = Rig::new(home, "m2d-c-r6-poison-settle.jsonl");
     let b = s.waiting("r6-poison-settle");
@@ -747,7 +718,6 @@ fn every_stop_path_is_typed_on_poison_end_to_end(home: &Home) {
         );
     });
     assert_eq!(s.cause(a), Some(HaltCause::TimeBudget), "(c)");
-    drop(poison_at);
 
     // (d) `stop_all` on poison.
     let s = Rig::new(home, "m2d-c-r6-poison-all.jsonl");
@@ -773,34 +743,29 @@ fn a_journal_copied_to_another_inode_stops_the_surviving_run(home: &Home) {
     let copy = home.dir.join("m2d-c-r6-copied-twin.jsonl");
     let s = Rig::at(home, &original);
     let a = s.waiting("r6-copied");
-    let action = s.approve(a);
-    std::thread::scope(|scope| {
-        let (worker, release_execution) = execute_held(scope, home, action);
-        drop(s);
-        std::fs::copy(&original, &copy).unwrap();
-        let port = Arc::new(port_for(&home.control, true).with_workspace(folder_of(home)));
-        let hold: Hold = Arc::default();
-        let store = Gated {
-            inner: FileJournal::open(&copy).unwrap(),
-            hold,
-        };
-        let refused = Rig::over(home, port.clone(), store, Arc::default()).err();
-        assert_eq!(
-            refused,
-            Some(CoordinatorError::Identity(
-                IdentityRefusal::SurvivingRunMismatch
-            ))
-        );
-        assert_eq!(port.run_of(a), None, "nothing adopted");
-        let view = home.control.authority().runs().view(action.0).unwrap();
-        assert!(view.cancelled, "the surviving run is stopped");
-        release_execution.send(()).unwrap();
-        assert!(!worker.join().unwrap(), "its final check refused");
-    });
-    assert!(!home.dir.join("r6-copied-a.txt").exists());
-    assert!(!std::fs::canonicalize(std::env::temp_dir())
-        .unwrap()
-        .join(folder_of(home))
-        .join("r6-copied-a.txt")
-        .exists());
+    let poised = s.approve(a);
+    let original_cell = s.port.halt_cells().get(s.mother.journal_identity(), a.0).unwrap();
+    drop(s);
+    std::fs::copy(&original, &copy).unwrap();
+    let port = Arc::new(port_for(&home.control, true).with_workspace(folder_of(home)));
+    let hold: Hold = Arc::default();
+    let store = Gated {
+        inner: FileJournal::open(&copy).unwrap(),
+        hold,
+    };
+    let refused = Rig::over(home, port.clone(), store, Arc::default()).err();
+    assert_eq!(
+        refused,
+        Some(CoordinatorError::Identity(
+            IdentityRefusal::SurvivingRunMismatch
+        ))
+    );
+    assert_eq!(port.run_of(a), None, "nothing adopted");
+    assert!(port.fenced(), "fenced");
+    assert_eq!(original_cell.cause(), Some(HaltCause::Fence));
+    let view = home.control.authority().runs().view(poised.0).unwrap();
+    assert!(view.cancelled, "the surviving run is stopped");
+    let s = Rig::at(home, &original);
+    assert!(!s.execute(poised), "its final check refuses");
+    assert!(!s.ws.join("r6-copied-a.txt").exists());
 }
