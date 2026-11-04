@@ -33,6 +33,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[path = "files_lite_tests.rs"]
+mod lite;
 #[path = "files_exec_review1_tests.rs"]
 mod review1;
 #[path = "files_exec_review2_tests.rs"]
