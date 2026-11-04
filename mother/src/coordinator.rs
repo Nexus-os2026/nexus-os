@@ -1889,6 +1889,16 @@ impl<P: EffectPort> Coordinator<P> {
                 if let Err(e) = inner.kept(id) {
                     return Ok(Then::EndFail(BlockReason::JournalFailed, e));
                 }
+                // Stop can win after the out-of-lock halt check. Validate the
+                // exact reservation under this lock before writing any outcome.
+                let mission = inner.mission(id)?;
+                if mission.generation != generation
+                    || mission.unsettled != Some(number)
+                    || mission.settlement.is_some()
+                    || mission.state.is_terminal()
+                {
+                    return Err(CoordinatorError::Stopped);
+                }
                 let journaled = inner.append(
                     id,
                     Event::EffectSettled {
@@ -1906,9 +1916,6 @@ impl<P: EffectPort> Coordinator<P> {
                 mission.unsettled = None;
                 if matches!(settled, SettledOutcome::Refused(_)) && mission.settlement.is_none() {
                     mission.unresolved_file = None;
-                }
-                if mission.generation != generation {
-                    return Err(CoordinatorError::Stopped);
                 }
                 Ok(Then::Go(()))
             })?;
