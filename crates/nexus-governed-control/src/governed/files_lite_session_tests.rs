@@ -196,3 +196,28 @@ fn lite_h_cell_is_attached_before_opened_run_is_exposed() {
     f.gov.hooks().arm(at::OPEN_INSERTED, move || cell.engage());
     assert!(f.door.open_file_run(&attached).is_err());
 }
+
+#[test]
+fn lite_o_adopted_non_file_action_cannot_be_promoted_after_selection() {
+    use crate::authority::commitment::{PreparedAction, TargetIdentity};
+    use crate::authority::effect::{CapabilityKind, EffectClass};
+    let f = Fx::new();
+    let grant = f.gov.request_grant(&GrantRequest::Egress {
+        origin: "https://example.invalid".into(), methods: vec!["POST".into()], allow_private: false,
+    }, LONG, &*f.owner).unwrap();
+    // Backend-prepared non-File commitment; no network is contacted.
+    let view = f.gov.authority().commitments().prepare(&mother(), f.run, PreparedAction {
+        kind: CapabilityKind::Egress, class: EffectClass::R2, operation: "egress.fetch",
+        target: TargetIdentity { display: "https://example.invalid/".into(), digest: [42; 32] },
+        parameters: [24; 32], grants: vec![grant], leases: vec![], summary: vec!["POST".into()],
+    }, LONG).unwrap();
+    let other = f.gov.issue_agent_door(mother(), f.owner.clone()).unwrap();
+    other.adopt(f.run, view.id).unwrap();
+    other.confirm_mission(&MissionConfirmation { contract_hash: HASH.into(), request: LABEL.into(), summary: vec!["File consent".into()], page_facts: None }).unwrap();
+    let port = other.file_port().unwrap();
+    let attachment = port.attach().unwrap();
+    other.claim_file_session(&attachment).unwrap();
+    assert!(other.admit_files(f.run, HASH, LABEL).is_err(), "a real adopted non-File action cannot acquire the File origin");
+    let own = other.open_file_run(&attachment).unwrap();
+    other.admit_files(own, HASH, LABEL).unwrap();
+}
