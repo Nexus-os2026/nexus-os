@@ -316,3 +316,32 @@ fn m2dd_undo_success_keeps_the_backends_interruption_code() {
         );
     }
 }
+
+#[test]
+fn m2dd_missing_output_or_boundary_acknowledgement_ends_hands() {
+    use std::time::{Duration, Instant};
+    for display_ack in [false, true] {
+        let (c, frames) = scripted();
+        let worker_c = c.clone();
+        let worker = std::thread::spawn(move || {
+            worker_c.ask(Instant::now(), "ack failure", facts(), 1, false)
+        });
+        let frame = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+        if display_ack {
+            frame.ack.send(Ok(())).unwrap();
+        }
+        assert!(!worker.join().unwrap());
+        assert!(
+            c.shared.stop.gate.failed(),
+            "failed protocol acknowledgement ends Hands"
+        );
+        assert_eq!(
+            c.shared.input().fatal,
+            Some(if display_ack {
+                crate::terminal::Failure::Boundary
+            } else {
+                crate::terminal::Failure::Output
+            })
+        );
+    }
+}
