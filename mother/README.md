@@ -417,17 +417,20 @@ cargo run -p nexus-mother-host --example walk
 
 The walk opens a fresh home under the system's temporary directory and
 prints its path. It stands in, at the terminal, for the broker's three
-dialogs, showing what the broker would show; anything but the code is a no:
+dialogs, showing what the broker would show. Each dialogue shows a fresh random
+8-character code on its `Answer code:` line. Wait for `INPUT READY`, then type
+that exact code and press Return to approve. Every dialogue needs its own code;
+anything else is a no.
 
-- **The door** ("Let this agent act?"): the agent, the door id and any
-  advisory lines. Type the first 8 characters of the door id. It is asked
-  every time Mother starts: at the start of each run and at every restart.
-- **A mission's consent** ("Start this mission?"): type the first 8
-  characters of the contract hash. In run 2, answer no when the Deny step
-  asks.
-- **A held mission's resume** ("Resume this held mission?"): the mission,
-  its contract hash, the request, why it is held and its summary. Type the
-  first 8 characters of the contract hash.
+- **The door** ("Let this agent act?") shows the agent, the door id and any
+  advisory lines. Use its displayed answer code. It is asked every time
+  Mother starts: at the start of each run and at every restart.
+- **A mission's consent** ("Start this mission?") shows the full contract
+  hash, request and summary. Use its displayed answer code. In run 2,
+  answer no when the Deny step asks.
+- **A held mission's resume** ("Resume this held mission?") shows the mission,
+  its contract hash, the request, why it is held and its summary. Use this
+  dialogue's newly displayed answer code.
 
 Run 3 consents to a mission, advances it once, and exits without shutting
 down. On restart the mission is held; a yes to the resume dialog lets it
