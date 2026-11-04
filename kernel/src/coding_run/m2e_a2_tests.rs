@@ -14,7 +14,7 @@ use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -1169,4 +1169,185 @@ fn e_o66_installed_the_retained_worker_reads_edits_and_finishes_through_bind() {
         swapped_in_pages().saturating_sub(swap_before) * 4096 < 1024 * 1024 * 1024,
         "the swap-in guard"
     );
+}
+
+// ── PR #81 Codex review 1 (pre-registered before their fixes) ───────────────
+
+/// Two manual clocks, advanced together by the test.
+#[derive(Default)]
+struct Manual(AtomicU64, AtomicU64);
+
+impl Manual {
+    fn advance(&self, ms: u64) {
+        self.0.fetch_add(ms, Ordering::SeqCst);
+        self.1.fetch_add(ms, Ordering::SeqCst);
+    }
+}
+
+impl DeadlineClock for Manual {
+    fn wall_ms(&self) -> u64 {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    fn monotonic_ms(&self) -> u64 {
+        self.1.load(Ordering::SeqCst)
+    }
+}
+
+/// A runtime whose metadata requests, once `gate` is set, are each held
+/// until the test releases that path (or the client closes).
+struct Gated {
+    fake: Fake,
+    gate: Arc<AtomicBool>,
+    released: Arc<Mutex<Vec<String>>>,
+}
+
+impl Gated {
+    fn start() -> Self {
+        let fake = Fake::answering(&[finish()]);
+        // A second listener in front of the fake: it holds gated metadata
+        // requests, then forwards each request to the fake unchanged.
+        let gate = Arc::new(AtomicBool::new(false));
+        let released: Arc<Mutex<Vec<String>>> = Arc::default();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let front = listener.local_addr().unwrap();
+        let (back, events) = (fake.addr, mpsc::channel::<Event>());
+        let (tx, rx) = events;
+        {
+            let (gate, released) = (gate.clone(), released.clone());
+            std::thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let Ok(stream) = stream else { return };
+                    let (gate, released, tx) = (gate.clone(), released.clone(), tx.clone());
+                    std::thread::spawn(move || {
+                        hold_then_forward(stream, back, &gate, &released, &tx)
+                    });
+                }
+            });
+        }
+        let mut fake = fake;
+        fake.addr = front;
+        fake.events = rx;
+        Self {
+            fake,
+            gate,
+            released,
+        }
+    }
+
+    fn release(&self, path: &str) {
+        self.released.lock().unwrap().push(path.to_string());
+    }
+}
+
+fn hold_then_forward(
+    mut stream: TcpStream,
+    back: SocketAddr,
+    gate: &AtomicBool,
+    released: &Mutex<Vec<String>>,
+    tx: &Sender<Event>,
+) {
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        match stream.read(&mut byte) {
+            Ok(1) => head.push(byte[0]),
+            _ => return,
+        }
+    }
+    let text = String::from_utf8_lossy(&head).to_string();
+    let path = text
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_default()
+        .to_string();
+    let length: usize = text
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse().ok())
+                .flatten()
+        })
+        .unwrap_or(0);
+    let mut body = vec![0u8; length];
+    if stream.read_exact(&mut body).is_err() {
+        return;
+    }
+    let _ = tx.send(Event::Request(path.clone()));
+    let metadata = matches!(path.as_str(), "/api/version" | "/api/status" | "/api/tags");
+    if gate.load(Ordering::SeqCst) && metadata {
+        stream
+            .set_read_timeout(Some(Duration::from_millis(10)))
+            .unwrap();
+        let mut sink = [0u8; 64];
+        loop {
+            if released.lock().unwrap().contains(&path) {
+                break;
+            }
+            match stream.read(&mut sink) {
+                Ok(0) => {
+                    let _ = tx.send(Event::Closed(path));
+                    return;
+                }
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        }
+        stream.set_read_timeout(None).unwrap();
+    }
+    let Ok(mut upstream) = TcpStream::connect(back) else {
+        return;
+    };
+    let _ = upstream.write_all(&head);
+    let _ = upstream.write_all(&body);
+    let mut reply = Vec::new();
+    let _ = upstream.read_to_end(&mut reply);
+    let _ = stream.write_all(&reply);
+}
+
+/// Codex review 1 of PR #81, MEDIUM 1: one absolute per-call deadline,
+/// at most 180 s, covers the metadata and the chat together. Three
+/// metadata requests held 70 s each (on a manual clock) end the call
+/// `Timeout` within the third, before any charge or chat.
+#[test]
+fn pr81_r1_one_per_call_deadline_of_180_s_covers_the_metadata_and_the_chat() {
+    let runtime = Gated::start();
+    let transport = register(&runtime.fake, &spec());
+    let meter = Meter::new(&runtime.fake, None);
+    let clock = Arc::new(Manual::default());
+    let model = Arc::new(
+        bind(&transport, meter.clone(), hour(), private_watch()).with_call_clock(clock.clone()),
+    );
+    runtime.gate.store(true, Ordering::SeqCst);
+    let (tx, rx) = mpsc::channel();
+    {
+        let model = model.clone();
+        std::thread::spawn(move || {
+            // The worker's whole remaining time: 15 minutes.
+            let result = qualification_seam::open(|| {
+                model.complete(&opening_messages(), Duration::from_secs(15 * 60), 4096)
+            });
+            let _ = tx.send(result);
+        });
+    }
+    for path in ["/api/version", "/api/status"] {
+        runtime.fake.wait_for(Event::Request(path.into()), PATIENCE);
+        clock.advance(70_000);
+        runtime.release(path);
+    }
+    runtime
+        .fake
+        .wait_for(Event::Request("/api/tags".into()), PATIENCE);
+    clock.advance(70_000); // 210 s since the call began
+    assert_eq!(
+        rx.recv_timeout(BOUND)
+            .expect("the call ended at its 180 s deadline"),
+        Err(ModelError::Timeout)
+    );
+    runtime
+        .fake
+        .wait_for(Event::Closed("/api/tags".into()), BOUND);
+    assert_eq!(runtime.fake.chats(), 0, "no chat after the deadline");
+    assert!(meter.charges().is_empty(), "nothing charged");
 }
