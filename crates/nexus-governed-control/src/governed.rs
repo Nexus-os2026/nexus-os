@@ -1024,6 +1024,18 @@ impl GovernedControl {
         }
     }
 
+    /// M2d-D A8: actual backend observations only, without evidence access.
+    /// This is not an atomic pair or an ingress acknowledgement. Hosts show
+    /// both observations and sample again after concurrent Stop/resume.
+    pub fn stop_snapshot(&self) -> StopSnapshot {
+        StopSnapshot {
+            kernel_stopped: self.kernel_stop.authority().is_stopped(),
+            stop_number: self.kernel_stop.authority().stop_number(),
+            broker_stopped: self.authority().runs().is_stopped(),
+            policy_generation: self.authority().policy_generation(),
+        }
+    }
+
     pub fn status(&self) -> ControlStatus {
         ControlStatus {
             platform_supported: cfg!(target_os = "linux"),
@@ -1051,6 +1063,16 @@ impl GovernedControl {
             halt_records: self.authority().halt_records(),
         }
     }
+}
+
+/// Read-only, memory-only Stop observations for Owner hosts. No controller,
+/// watch, authority handle, evidence access or mutable state is exposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StopSnapshot {
+    pub kernel_stopped: bool,
+    pub stop_number: u64,
+    pub broker_stopped: bool,
+    pub policy_generation: u64,
 }
 
 /// Declines everything: R0 and R1 authorization never asks, and nothing on
