@@ -430,3 +430,122 @@ fn review2_recording_panics_before_startup_finishes_are_receipted() {
         "review2_recording_panics_before_startup_finishes_are_receipted",
     );
 }
+
+// Decision 11: inject reader ingress immediately after a real Owner route
+// returns. The Stop worker is held until the command has reported its result.
+const REVIEW4: &str = "M2DD_REVIEW4_CHILD";
+pub(crate) fn review4_returned(screen: &Shared, home: &Home, route: &str) {
+    let scenario = std::env::var(REVIEW4).unwrap_or_default();
+    if scenario.split('-').next() != Some(route) {
+        return;
+    }
+    screen.stop.hold_dispatch.store(true, Ordering::SeqCst);
+    screen.receive(crate::terminal::Line::Stop, false);
+    assert!(home.owner().file_session_halt().is_engaged());
+    assert_eq!(screen.stop.receipt().outstanding, 1);
+}
+
+pub(crate) fn review4_reported(screen: &Shared, home: &Home, route: &str) {
+    let scenario = std::env::var(REVIEW4).unwrap_or_default();
+    if scenario.split('-').next() != Some(route) {
+        return;
+    }
+    if route == "lift" {
+        assert!(
+            home.owner().stop_snapshot().kernel_stopped,
+            "native halt must be re-engaged before the next host action"
+        );
+    }
+    for entry in crate::stop::Route::ALL {
+        assert!(!screen.stop.gate.admit(entry));
+    }
+    screen.stop.hold_dispatch.store(false, Ordering::SeqCst);
+    screen.stop.dispatch_pending();
+    screen.emit("REVIEW4 NO LATER WORK\n");
+}
+
+fn review4_outcome(scenario: &str, test: &str) {
+    if std::env::var(REVIEW4).is_ok() {
+        let args = std::env::var("M2DD_REVIEW4_ARGS").unwrap();
+        assert!(run(args.split('\n').map(str::to_owned)));
+        return;
+    }
+    let f = Fixture::new();
+    let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+    cmd.args(["--exact", &format!("hands_tests::{test}"), "--nocapture"])
+        .env(REVIEW4, scenario)
+        .env(
+            "M2DD_REVIEW4_ARGS",
+            format!(
+                "--home\n{}\n--workspace\n{}\n--name\nhello.txt\n--text\noracle",
+                f.home.display(),
+                f.workspace.display()
+            ),
+        );
+    let mut p = Pty::start(cmd);
+    p.ready();
+    if scenario.starts_with("undo") {
+        p.create();
+    }
+    if scenario == "lift" {
+        p.line("stop");
+        p.expect("STOP RECORDING COMPLETED");
+        p.line("lift-for-undo");
+        p.yes();
+        p.expect(
+            "Stop received while your confirmed lift was finishing; the native halt is re-engaged.",
+        );
+    } else if scenario.starts_with("undo") {
+        p.line("undo");
+        if scenario == "undo-completed" {
+            p.yes();
+        } else {
+            let code = p.code();
+            std::fs::write(f.workspace.join("hello.txt"), b"Owner edited").unwrap();
+            p.line(&code);
+        }
+        let outcome = if scenario == "undo-completed" {
+            "completed"
+        } else {
+            "was refused"
+        };
+        p.expect(&format!(
+            "Stop received while your confirmed undo was finishing; the undo {outcome}."
+        ));
+        assert_eq!(
+            f.workspace.join("hello.txt").exists(),
+            scenario == "undo-refused"
+        );
+    } else {
+        p.line("cleanup");
+        p.expect("Stop received while your confirmed cleanup was finishing; cleanup settled=0 still_owed=0.");
+    }
+    p.expect("REVIEW4 NO LATER WORK");
+    // The reporter may have emitted the receipt earlier; inspect full output.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !p.output.contains("STOP RECORDING COMPLETED") {
+        assert!(p.read_once(deadline));
+    }
+    p.line("evidence");
+    p.expect("phase=emergency_stopped");
+    p.expect("EVIDENCE HEALTH");
+    p.line("run");
+    p.expect("REFUSED recovery_only");
+    p.quit();
+}
+#[test]
+fn decision11_host_undo_completed_is_honest() {
+    review4_outcome("undo-completed", "decision11_host_undo_completed_is_honest");
+}
+#[test]
+fn decision11_host_undo_refused_is_honest() {
+    review4_outcome("undo-refused", "decision11_host_undo_refused_is_honest");
+}
+#[test]
+fn decision11_host_cleanup_is_honest() {
+    review4_outcome("cleanup", "decision11_host_cleanup_is_honest");
+}
+#[test]
+fn decision11_host_lift_reengages_before_next_action() {
+    review4_outcome("lift", "decision11_host_lift_reengages_before_next_action");
+}

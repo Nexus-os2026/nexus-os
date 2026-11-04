@@ -440,7 +440,10 @@ impl Runtime {
                     self.screen.emit("REFUSED stop_workers_outstanding\n");
                     return;
                 }
-                match self.home.owner().resume(&*self.confirmer) {
+                let result = self.home.owner().resume(&*self.confirmer);
+                #[cfg(test)]
+                crate::hands_tests::review4_returned(&self.screen, &self.home, "lift");
+                match result {
                     Ok(()) => self
                         .screen
                         .emit("LIFTED recovery only; missions remain stopped\n"),
@@ -450,17 +453,27 @@ impl Runtime {
                     )),
                 }
             }
-            "undo" => match self.home.owner().files_undo(&*self.confirmer) {
-                Ok(report) => show_undo(&self.screen, report),
-                Err(e) => self.screen.emit(&format!("UNDO REFUSED {}\n", e.class())),
-            },
-            "cleanup" => match self.home.owner().files_retry_cleanup() {
-                Ok(report) => self.screen.emit(&format!(
-                    "CLEANUP settled={} still_owed={}\n",
-                    report.settled, report.still_owed
-                )),
-                Err(e) => self.screen.emit(&format!("CLEANUP FAILED {}\n", e.class())),
-            },
+            "undo" => {
+                let result = self.home.owner().files_undo(&*self.confirmer);
+                #[cfg(test)]
+                crate::hands_tests::review4_returned(&self.screen, &self.home, "undo");
+                match result {
+                    Ok(report) => show_undo(&self.screen, report),
+                    Err(e) => self.screen.emit(&format!("UNDO REFUSED {}\n", e.class())),
+                }
+            }
+            "cleanup" => {
+                let result = self.home.owner().files_retry_cleanup();
+                #[cfg(test)]
+                crate::hands_tests::review4_returned(&self.screen, &self.home, "cleanup");
+                match result {
+                    Ok(report) => self.screen.emit(&format!(
+                        "CLEANUP settled={} still_owed={}\n",
+                        report.settled, report.still_owed
+                    )),
+                    Err(e) => self.screen.emit(&format!("CLEANUP FAILED {}\n", e.class())),
+                }
+            }
             "evidence" => {
                 self.screen.emit("RECENT EVIDENCE bounded\n");
                 for record in self.home.recent_evidence() {
@@ -497,6 +510,16 @@ impl Runtime {
             }
             _ => self.screen.emit("REFUSED unknown_command\n"),
         }
+        #[cfg(test)]
+        crate::hands_tests::review4_reported(
+            &self.screen,
+            &self.home,
+            if command == "lift-for-undo" {
+                "lift"
+            } else {
+                command
+            },
+        );
     }
     fn close(
         self,

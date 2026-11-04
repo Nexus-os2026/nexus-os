@@ -2384,6 +2384,8 @@ impl Files {
         }
         #[cfg(test)]
         self.shared.fire(crate::test_hooks::at::FILE_UNDO_RESTORE);
+        #[cfg(test)]
+        self.shared.fire("files.undo_kernel_boundary");
         let restored = applied.run.restore(approval, write);
         // Re-check 3: closed again (idempotent) and confirmed, whatever the
         // restore answered; not established is recovery required, reported.
@@ -2465,6 +2467,8 @@ impl Files {
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
             "another Files operation is under way",
         ))?;
+        #[cfg(test)]
+        self.shared.fire("files.retry_before_effect");
         let runs = std::mem::take(&mut *self.shared.kept.lock().expect("files kept"));
         let mut retry = CleanupRetry::default();
         let mut still = Vec::new();

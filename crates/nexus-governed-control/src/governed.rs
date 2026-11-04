@@ -580,7 +580,11 @@ impl GovernedControl {
         let confirmed = self.kernel_stop.authority().stop_number();
         self.authority().resume(confirmer)?;
         if !self.authority().runs().is_stopped() {
+            #[cfg(test)]
+            self.authority().hooks().fire("resume.kernel_boundary");
             self.kernel_stop.lift_if(confirmed);
+            #[cfg(test)]
+            self.authority().hooks().fire("resume.kernel_returned");
         }
         Ok(())
     }

@@ -1129,6 +1129,8 @@ impl Authority {
         ));
         // Evidence first: an unrecorded resume does not happen.
         self.record(&record)?;
+        #[cfg(test)]
+        self.hooks().fire("resume.before_lift");
         self.runs.lift(request.stop_number).map_err(refused)?;
         Ok(())
     }

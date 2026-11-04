@@ -1293,3 +1293,6 @@ mod decision8;
 
 #[path = "files_host_decision9_tests.rs"]
 mod host_decision9;
+
+#[path = "files_host_decision10_tests.rs"]
+mod host_decision10;
