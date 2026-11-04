@@ -19,6 +19,7 @@
 use super::{contract_with, world, World};
 use crate::coordinator::CoordinatorError;
 use crate::effect::EffectPort;
+use crate::lane::Lane;
 use crate::journal::{Event, MissionId};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::halt_cell::HaltCause;
@@ -261,7 +262,7 @@ fn m2d_c_r6_a_cell_engaged_mid_call_refuses_the_next_boundary() {
     let lanes: Vec<std::sync::Arc<dyn crate::lane::Lane>> = keyed
         .iter()
         .map(|lane| {
-            if lane.identity().role == crate::lane::LaneRole::Sentinel {
+            if Lane::identity(&**lane).role == crate::lane::LaneRole::Sentinel {
                 std::sync::Arc::new(Hooked {
                     inner: lane.clone(),
                     hook: hook.clone(),
