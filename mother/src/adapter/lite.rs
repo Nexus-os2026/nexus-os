@@ -320,3 +320,6 @@ mod recognition;
 
 #[path = "lite_review1_dispatch.rs"]
 mod review1_dispatch;
+
+#[path = "lite_review1_sequential.rs"]
+mod review1_sequential;
