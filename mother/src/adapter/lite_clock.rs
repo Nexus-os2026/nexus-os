@@ -16,6 +16,7 @@ pub(super) struct LiteHome {
     pub control: Arc<GovernedControl>,
     pub gate: Arc<GatedProjection>,
     pub clock: Arc<TestClock>,
+    pub evidence: Arc<PrimaryEvidence>,
 }
 impl LiteHome {
     pub fn open(dir: &Path) -> Result<Self, String> {
@@ -30,7 +31,7 @@ impl LiteHome {
         .map_err(|e| e.as_str().to_string())?;
         let clock = Arc::new(TestClock::default());
         let control = Arc::new(
-            GovernedControl::new(&broker, Vault::Disabled, evidence, clock.clone())
+            GovernedControl::new(&broker, Vault::Disabled, evidence.clone(), clock.clone())
                 .map_err(|e| format!("{e:?}"))?,
         );
         Ok(Self {
@@ -38,6 +39,7 @@ impl LiteHome {
             control,
             gate,
             clock,
+            evidence,
         })
     }
     pub fn journal_path(&self) -> PathBuf {

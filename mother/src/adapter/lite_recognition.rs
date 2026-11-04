@@ -14,6 +14,7 @@ fn lite_recognition_scenarios() {
         "pending",
         "denied",
         "unknown",
+        "withdrawal-failure",
         "interrupted",
         "deadline-empty",
         "deadline-published",
@@ -124,6 +125,18 @@ fn lite_recognition_child() {
                 "proved native denial remains Denied"
             );
             assert_eq!(port.acks_tried(), 1);
+        }
+        "withdrawal-failure" => {
+            let _ = home.evidence.close_session();
+            assert_eq!(
+                m.stop(id),
+                Err(CoordinatorError::Withdrawal(
+                    crate::evidence::BrokerClass::EvidenceUnavailable
+                )),
+                "failed native withdrawal recording reaches the typed File caller"
+            );
+            assert!(m.cell_for_test().is_engaged());
+            assert!(!ws.join("one.txt").exists());
         }
         "unknown" => {
             port.runs.lock().unwrap().waiting.remove(&id);
