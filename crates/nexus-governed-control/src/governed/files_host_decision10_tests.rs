@@ -365,3 +365,41 @@ fn decision10_cancelled_session_run_retained_before_commitment_pin() {
         "cancelled session run refuses staging even before emergency ingress"
     );
 }
+
+#[test]
+fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
+    let f = Fx::new();
+    f.propose(NAME, CONTENT).unwrap();
+    let staging = f.state().join("coding-runs").join(&f.staged()[0]);
+    f.gov.emergency_stop();
+    let cell = f.gov.file_session_halt();
+    f.gov.resume_with_halt(&*f.owner, Some(&cell)).unwrap();
+    assert_eq!(f.gov.files().deferred_for_test(), 1);
+    let ingress = cell.clone();
+    f.gov
+        .files()
+        .hooks()
+        .arm(at::FILE_CLEANUP, move || ingress.engage_emergency());
+    let result = f.gov.files_undo_with_halt(&*f.owner, Some(&cell));
+    assert!(
+        matches!(result, Err(AuthorityError::Halted)),
+        "ingress at deferred cleanup must refuse the recovery request: {result:?}"
+    );
+    assert!(
+        staging.exists(),
+        "unattempted deferred staging remains owned"
+    );
+    assert_eq!(f.gov.files().deferred_for_test(), 1);
+    assert!(
+        !f.gov.stop_snapshot().kernel_stopped,
+        "no recording worker ran"
+    );
+    // A fresh request still performs the inherited deferred drain, even
+    // though there is no published file eligible for undo.
+    assert!(matches!(
+        f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
+        Err(AuthorityError::Unavailable(_))
+    ));
+    assert!(!staging.exists());
+    assert_eq!(f.gov.files().deferred_for_test(), 0);
+}
