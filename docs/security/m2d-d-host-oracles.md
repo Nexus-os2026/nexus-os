@@ -213,3 +213,23 @@ the pending-table hold, with real `pending_held`/`pending_places` counters.
 Baseline enforcement gives 3 adoption failures and 2 pending-install failures
 (`red-adoption-fa8fa1f5.log`, `red-pending-fa8fa1f5.log`). These are the same
 optional-cell propagation/final-check rule; legacy no-cell routes stay intact.
+
+## Review 3 / Decision 9 (registered on 01643b19)
+
+- Hold legacy File execution at `FILE_EXECUTE_START`, after its guard captured
+  `None`; attempt host adoption; engage only the session cell, no worker.
+- Start B on a legacy run with commitment A; at `PREPARE_BEFORE_INSERT` adopt
+  through A; at `PLACE_BEFORE_FILL` engage only the session cell, no worker.
+- Both schedules require typed `NotMember`, unchanged membership/cell, and no
+  continuation of the refused takeover. The fixture's original legacy owner
+  cancels its own work after refusal to drain the held operation. This cleanup
+  is explicit: the host cell is NOT claimed to stop an unrelated legacy run.
+  On the vulnerable baseline adoption succeeds, so this cleanup is not taken:
+  the actual publication and late pending installation remain observable.
+- Legacy adoption and publication remain live; original door/same cell join is
+  idempotent; original door with a newly attached cell refuses an old run;
+  other doors refuse even with the same cell, and with a different cell.
+- Plants: allow host adoption of a cell-less run; allow a different-cell join.
+- Real walk PTY wire: before and after its first dialogue, every progress row
+  starts in column zero under the renderer's CR/LF cursor model. LF-only walk
+  output is the negative plant.

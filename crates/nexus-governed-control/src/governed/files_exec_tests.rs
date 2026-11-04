@@ -1290,3 +1290,6 @@ mod host_review2;
 
 #[path = "files_host_decision8_tests.rs"]
 mod decision8;
+
+#[path = "files_host_decision9_tests.rs"]
+mod host_decision9;

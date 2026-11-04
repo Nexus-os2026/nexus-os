@@ -533,3 +533,29 @@ fn review1_walk_reaches_first_dialogue_under_pty() {
     p.line("no");
     assert!(p.finish().success(), "denied first door exits the walk");
 }
+
+#[test]
+fn decision9_walk_progress_cursor_columns_start_at_zero() {
+    let walk = support::binary().parent().unwrap().join("examples/walk");
+    let mut p = Pty::start(std::process::Command::new(walk));
+    p.code();
+    p.line("no");
+    assert!(p.finish().success());
+    assert!(p.output.contains("No grants are given"));
+    assert!(p.output.contains("Every time Mother starts"));
+    assert!(p.output.contains("You said no to the door"));
+    // Same LF/CR cursor model as review2_rendered_cursor_columns_start_at_zero.
+    // Inspect the real walk's wire, including progress before/after dialogue.
+    // Wrapping is disabled in this model so it cannot hide a missing CR.
+    let mut column = 0;
+    for line in p.wire_output.split_inclusive('\n') {
+        assert_eq!(column, 0, "walk row starts in a retained column: {line:?}");
+        for c in line.chars() {
+            match c {
+                '\r' => column = 0,
+                '\n' => {}
+                _ => column += 1,
+            }
+        }
+    }
+}
