@@ -431,7 +431,7 @@ fn run_case(case: &str) {
                     let _ = m.state(id);
                 }
                 "replacement-port" => {
-                    let _ = port.review5_reopen();
+                    port.review5_reopen();
                     let _ = m.state(id);
                 }
                 "replacement-attachment" => {
