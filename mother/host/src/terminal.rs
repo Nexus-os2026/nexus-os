@@ -548,11 +548,12 @@ impl Terminal {
                 .name("hands-screen".into())
                 .spawn(move || {
                     let stdout = std::io::stdout();
-                    let mut out = stdout.lock();
                     loop {
                         match rx.recv_timeout(SLICE) {
                             Ok(frame) => {
-                                let result = write_frame(&mut out, &frame.text);
+                                // Release stdout before waiting for another frame;
+                                // the walk also writes ordinary progress lines.
+                                let result = write_frame(&mut stdout.lock(), &frame.text);
                                 let _ack = frame.ack.send(result);
                                 if let Err(e) = result {
                                     s.fail(e);
