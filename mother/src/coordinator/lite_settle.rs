@@ -14,11 +14,40 @@ fn halt_cause(cause: SettleCause) -> HaltCause {
     match cause {
         SettleCause::Stop(StopReason::Owner) => HaltCause::Stop,
         SettleCause::Stop(StopReason::EmergencyStop) => HaltCause::Emergency,
-        SettleCause::TimeBudget | SettleCause::Ended(BlockReason::BudgetTime) => {
-            HaltCause::TimeBudget
-        }
+        SettleCause::TimeBudget
+        | SettleCause::Ended(BlockReason::BudgetTime)
+        | SettleCause::Stop(StopReason::Ended(BlockReason::BudgetTime)) => HaltCause::TimeBudget,
         _ => HaltCause::Fence,
     }
+}
+
+/// Preserve the end reason through a transition legal both live and on replay.
+/// Held and unsettled missions accept Stop, not an ordinary Block/lapse. An
+/// unresolved File takes the separate settlement path before this is called.
+fn plain_terminal(mission: &Mission, cause: SettleCause) -> Trigger {
+    let reason = match cause {
+        SettleCause::Stop(reason) => return Trigger::Stop { reason },
+        SettleCause::TimeBudget => BlockReason::BudgetTime,
+        SettleCause::Ended(reason) => reason,
+    };
+    if mission.held.is_some()
+        || mission.unsettled.is_some()
+        || matches!(
+            mission.state,
+            MissionState::Draft | MissionState::AwaitingConsent
+        )
+    {
+        return Trigger::Stop {
+            reason: StopReason::Ended(reason),
+        };
+    }
+    if let (MissionState::AwaitingApproval, Some(waiting)) = (mission.state, &mission.waiting) {
+        return Trigger::ApprovalLapsed {
+            effect: waiting.effect,
+            reason: LapseReason::Ended(reason),
+        };
+    }
+    Trigger::Block { reason }
 }
 fn first_cause(first: HaltCause, asked: SettleCause) -> SettleCause {
     if first == halt_cause(asked) {
@@ -154,13 +183,7 @@ impl<P: EffectPort> Coordinator<P> {
                     .map(|(_, p)| p.clone());
                 return Ok(Step::Settle(effect, pending, started));
             }
-            let trigger = match cause {
-                SettleCause::Stop(reason) => Trigger::Stop { reason },
-                SettleCause::TimeBudget => Trigger::Block {
-                    reason: BlockReason::BudgetTime,
-                },
-                SettleCause::Ended(reason) => Trigger::Block { reason },
-            };
+            let trigger = plain_terminal(m, cause);
             let result = inner.fire(id, trigger.clone(), self.clock.monotonic_ms());
             if result.is_err() {
                 let m = inner.mission(id)?;

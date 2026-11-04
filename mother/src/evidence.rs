@@ -288,18 +288,58 @@ impl BrokerClass {
 
 by_code!(BrokerClass);
 
-codes! {
-    /// Why a mission was stopped.
-    StopReason {
-        Owner => "owner",
-        EmergencyStop => "emergency_stop",
-        /// P0: its private content is missing or does not verify.
-        PrivateContentUnavailable => "private_content_unavailable",
-        /// M2d-C round 4 (addendum 1, shutdown scope): another mission's
-        /// Stop halted the broker door this mission shares.
-        DoorHalted => "door_halted",
+/// Why a mission was stopped. A File end in a pre-consent or held state
+/// uses the universally legal Stop, retaining the exact closed end reason.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StopReason {
+    Owner,
+    EmergencyStop,
+    PrivateContentUnavailable,
+    DoorHalted,
+    Ended(BlockReason),
+}
+
+impl StopReason {
+    /// The unparameterized reasons; `every` also enumerates Ended's registry.
+    pub const ALL: &'static [Self] = &[
+        Self::Owner,
+        Self::EmergencyStop,
+        Self::PrivateContentUnavailable,
+        Self::DoorHalted,
+    ];
+
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::EmergencyStop => "emergency_stop",
+            Self::PrivateContentUnavailable => "private_content_unavailable",
+            Self::DoorHalted => "door_halted",
+            Self::Ended(_) => "ended",
+        }
+    }
+
+    pub fn as_str(&self) -> String {
+        match self {
+            Self::Ended(reason) => format!("ended:{reason}"),
+            reason => reason.code().into(),
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        if let Some(reason) = text.strip_prefix("ended:") {
+            return BlockReason::parse(reason).map(Self::Ended);
+        }
+        Self::ALL.iter().copied().find(|value| value.code() == text)
+    }
+
+    pub fn every() -> Vec<Self> {
+        let mut reasons = Self::ALL.to_vec();
+        reasons.extend(BlockReason::every().into_iter().map(Self::Ended));
+        reasons
     }
 }
+
+by_code!(StopReason);
 
 codes! {
     /// Why a mission is held.
@@ -529,7 +569,7 @@ pub enum SettleCause {
 impl SettleCause {
     pub fn as_str(&self) -> String {
         match self {
-            SettleCause::Stop(reason) => format!("stop:{}", reason.code()),
+            SettleCause::Stop(reason) => format!("stop:{reason}"),
             SettleCause::TimeBudget => "time_budget".into(),
             SettleCause::Ended(reason) => format!("ended:{}", reason.as_str()),
         }
@@ -577,8 +617,13 @@ impl SettleCause {
                 SettleCause::Stop(StopReason::PrivateContentUnavailable) => {
                     BlockReason::FilePublicationInterrupted(PublicationCause::Unknown)
                 }
-                SettleCause::TimeBudget => BlockReason::FilePublicationTimeBudget,
-                SettleCause::Ended(reason) => *reason,
+                SettleCause::TimeBudget
+                | SettleCause::Stop(StopReason::Ended(BlockReason::BudgetTime)) => {
+                    BlockReason::FilePublicationTimeBudget
+                }
+                SettleCause::Ended(reason) | SettleCause::Stop(StopReason::Ended(reason)) => {
+                    *reason
+                }
             }),
             SettlementOutcome::NotPublished => match self {
                 SettleCause::Stop(reason) => SettlementEnd::Stop(*reason),
