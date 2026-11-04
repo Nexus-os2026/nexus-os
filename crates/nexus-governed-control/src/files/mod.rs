@@ -79,6 +79,9 @@ use crate::authority::effect::CapabilityKind;
 #[cfg(target_os = "linux")]
 use crate::authority::effect::EffectClass;
 use crate::authority::evidence::{hint, is_plain, quoted, wrapped};
+use crate::authority::file_session::HaltCell;
+#[cfg(target_os = "linux")]
+use crate::authority::file_session::RecoveryCheck;
 use crate::authority::ids::{random16, CommitmentId, Digest, GrantId, RunId};
 use crate::authority::policy::GrantScope;
 use crate::authority::run::{AdmittedWorkspace, FilesAdmission};
@@ -1448,24 +1451,32 @@ impl Drop for IssuedGrant<'_> {
 /// (even one already resumed) or any policy change; checks are memory only.
 #[cfg(target_os = "linux")]
 struct UndoLifetime {
+    recovery: RecoveryCheck,
     watch: StopWatch,
     generation: u64,
 }
 
 #[cfg(target_os = "linux")]
 impl UndoLifetime {
-    fn take(authority: &Authority, stop: &Arc<StopAuthority>) -> Result<Self, AuthorityError> {
+    fn take(
+        authority: &Authority,
+        stop: &Arc<StopAuthority>,
+        cell: Option<&HaltCell>,
+    ) -> Result<Self, AuthorityError> {
+        let recovery = RecoveryCheck::take(cell)?;
         let watch = stop.admit().map_err(|_| AuthorityError::EmergencyStopped)?;
         if authority.runs().is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
         }
         Ok(Self {
+            recovery,
             watch,
             generation: authority.policy_generation(),
         })
     }
 
     fn check(&self, authority: &Authority) -> Result<(), AuthorityError> {
+        self.recovery.check()?;
         if self.watch.halted()
             || self.watch.authority().is_stopped()
             || authority.runs().is_stopped()
@@ -2295,9 +2306,14 @@ impl Files {
         authority: &Authority,
         stop: &Arc<StopAuthority>,
         confirmer: &dyn ControlConfirmer,
+        cell: Option<&HaltCell>,
     ) -> Result<UndoReport, AuthorityError> {
-        let lifetime = UndoLifetime::take(authority, stop)?;
-        self.drain();
+        let lifetime = UndoLifetime::take(authority, stop, cell)?;
+        // A host undo never retries unrelated deferred cleanup as a side
+        // effect. Legacy callers keep their existing drain behavior.
+        if cell.is_none() {
+            self.drain();
+        }
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
             "another Files operation is under way",
         ))?;
@@ -2320,7 +2336,8 @@ impl Files {
         }
         // M4′ for an undo: its write grant's lapse after U1, read only now
         // that the restore completed; it ends Files for the creating run.
-        let interrupted = write_grant_lapse(&applied.run);
+        let interrupted = write_grant_lapse(&applied.run)
+            .or_else(|| lifetime.recovery.check().err().map(|_| "emergency_stop"));
         if interrupted.is_some() {
             self.shared
                 .closed
@@ -2384,6 +2401,15 @@ impl Files {
         }
         #[cfg(test)]
         self.shared.fire(crate::test_hooks::at::FILE_UNDO_RESTORE);
+        // Busy still owns the whole attempt. This is the last broker check;
+        // kernel preflight/U1 cannot observe the cell (Decision 11, M2d-K3).
+        if let Err(error) = lifetime.check(authority) {
+            return Err(if issued.close() {
+                error
+            } else {
+                AuthorityError::RecoveryRequired
+            });
+        }
         #[cfg(test)]
         self.shared.fire("files.undo_kernel_boundary");
         let restored = applied.run.restore(approval, write);
@@ -2401,6 +2427,7 @@ impl Files {
         _authority: &Authority,
         _stop: &Arc<StopAuthority>,
         _confirmer: &dyn ControlConfirmer,
+        _cell: Option<&HaltCell>,
     ) -> Result<UndoReport, AuthorityError> {
         Err(AuthorityError::Unavailable(
             "Files are available on Linux only",
@@ -2463,20 +2490,46 @@ impl Files {
     /// whose cleanup is then established is released; any other stays
     /// owned and reported. One Files operation at a time.
     #[cfg(target_os = "linux")]
-    pub(crate) fn retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
+    pub(crate) fn retry_cleanup(
+        &self,
+        cell: Option<&HaltCell>,
+    ) -> Result<CleanupRetry, AuthorityError> {
+        let recovery = RecoveryCheck::take(cell)?;
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
             "another Files operation is under way",
         ))?;
         #[cfg(test)]
         self.shared.fire("files.retry_before_effect");
+        recovery.check()?;
         let runs = std::mem::take(&mut *self.shared.kept.lock().expect("files kept"));
         let mut retry = CleanupRetry::default();
         let mut still = Vec::new();
-        for mut run in runs {
-            if !run.cleanup_owed().is_empty() {
-                let _ = run.retry_cleanup();
-            }
-            if !owes(&run) && discard(&mut run, &self.shared) {
+        let mut remaining = runs.into_iter();
+        while let Some(mut run) = remaining.next() {
+            let result = (|| {
+                // Each kernel call has its own last check under Busy. On a
+                // refusal, return this run AND every unattempted obligation.
+                recovery.check()?;
+                if !run.cleanup_owed().is_empty() {
+                    let _ = run.retry_cleanup();
+                }
+                if !owes(&run) {
+                    recovery.check()?;
+                    Ok(discard(&mut run, &self.shared))
+                } else {
+                    Ok(false)
+                }
+            })();
+            let discarded = match result {
+                Ok(discarded) => discarded,
+                Err(error) => {
+                    still.push(run);
+                    still.extend(remaining);
+                    self.shared.kept.lock().expect("files kept").extend(still);
+                    return Err(error);
+                }
+            };
+            if discarded {
                 retry.settled += 1;
             } else {
                 retry.still_owed += 1;
@@ -2488,7 +2541,10 @@ impl Files {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
+    pub(crate) fn retry_cleanup(
+        &self,
+        _cell: Option<&HaltCell>,
+    ) -> Result<CleanupRetry, AuthorityError> {
         Err(AuthorityError::Unavailable(
             "Files are available on Linux only",
         ))

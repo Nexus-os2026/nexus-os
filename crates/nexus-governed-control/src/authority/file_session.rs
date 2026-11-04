@@ -7,11 +7,16 @@
 //! contains counters and handles only; no I/O, callback or nested lock.
 use super::run::GroupId;
 use std::num::NonZeroU16;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-const EMERGENCY: u32 = 0x80;
-const CAUSE: u32 = 0x7f;
+const EMERGENCY: u64 = 0x80;
+const CAUSE: u64 = 0x7f;
+// Low 24 bits keep the immutable cause/tag and emergency history. The high
+// 40 bits count EVERY ingress, including repeated engagements. One atomic
+// publishes both; saturation permanently refuses restorative requests.
+const EPOCH_STEP: u64 = 1 << 24;
+const EPOCH_MASK: u64 = !(EPOCH_STEP - 1);
 
 /// First reason this File session stopped. A cell grants no authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,7 +27,7 @@ pub enum HaltCause {
     Fence,
 }
 impl HaltCause {
-    fn code(self) -> u32 {
+    fn code(self) -> u64 {
         match self {
             Self::Stop => 1,
             Self::Emergency => 2,
@@ -30,7 +35,7 @@ impl HaltCause {
             Self::Fence => 4,
         }
     }
-    fn of(code: u32) -> Option<Self> {
+    fn of(code: u64) -> Option<Self> {
         match code & CAUSE {
             1 => Some(Self::Stop),
             2 => Some(Self::Emergency),
@@ -64,7 +69,7 @@ impl HaltTag {
             HaltCause::Fence => Self::DoorHalted,
         }
     }
-    fn bits(self) -> u32 {
+    fn bits(self) -> u64 {
         let (cause, tag) = match self {
             Self::OwnerStop => (HaltCause::Stop, u16::MAX),
             Self::EmergencyStop => (HaltCause::Emergency, u16::MAX - 1),
@@ -72,7 +77,7 @@ impl HaltTag {
             Self::DoorHalted => (HaltCause::Fence, u16::MAX - 3),
             Self::Client { cause, reason } => (cause, reason.get()),
         };
-        cause.code() | (u32::from(tag) << 8)
+        cause.code() | (u64::from(tag) << 8)
     }
 }
 
@@ -80,7 +85,7 @@ impl HaltTag {
 #[derive(Clone)]
 #[cfg_attr(not(test), derive(Debug))]
 pub struct HaltCell(
-    Arc<AtomicU32>,
+    Arc<AtomicU64>,
     #[cfg(test)] pub(crate) Arc<crate::test_hooks::Hooks>,
 );
 pub(crate) fn check_halt(cell: Option<&HaltCell>) -> Result<(), super::AuthorityError> {
@@ -128,10 +133,17 @@ impl HaltCell {
         let _ = self
             .0
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                Some(old | history | if old & CAUSE == 0 { bits } else { 0 })
+                let epoch = (old & EPOCH_MASK).saturating_add(EPOCH_STEP) & EPOCH_MASK;
+                Some(
+                    epoch | (old & !EPOCH_MASK) | history | if old & CAUSE == 0 { bits } else { 0 },
+                )
             });
         #[cfg(test)]
         self.1.fire("file.engaged");
+    }
+    /// Monotone, memory-only ingress observation; it grants no authority.
+    pub fn ingress_epoch(&self) -> u64 {
+        self.0.load(Ordering::SeqCst) / EPOCH_STEP
     }
     pub fn is_engaged(&self) -> bool {
         self.cause().is_some()
@@ -147,6 +159,34 @@ impl HaltCell {
     }
     pub(crate) fn same(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// Request-local deny-only lifetime for Owner recovery. A permanently engaged
+/// session may confirm a NEW undo/cleanup/lift, but no request survives another
+/// ingress. The original cell and its complete atomic snapshot are retained.
+pub(crate) struct RecoveryCheck {
+    cell: Option<HaltCell>,
+    snapshot: u64,
+}
+impl RecoveryCheck {
+    pub(crate) fn take(cell: Option<&HaltCell>) -> Result<Self, super::AuthorityError> {
+        let check = Self {
+            cell: cell.cloned(),
+            snapshot: cell.map_or(0, |c| c.0.load(Ordering::SeqCst)),
+        };
+        check.check()?;
+        Ok(check)
+    }
+    pub(crate) fn check(&self) -> Result<(), super::AuthorityError> {
+        if self.cell.as_ref().is_some_and(|cell| {
+            self.snapshot & EPOCH_MASK == EPOCH_MASK
+                || cell.0.load(Ordering::SeqCst) != self.snapshot
+        }) {
+            Err(super::AuthorityError::Halted)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -183,7 +223,7 @@ impl Default for FileSessions {
     fn default() -> Self {
         Self {
             state: HaltCell(
-                Arc::new(AtomicU32::new(0)),
+                Arc::new(AtomicU64::new(0)),
                 #[cfg(test)]
                 Arc::default(),
             ),

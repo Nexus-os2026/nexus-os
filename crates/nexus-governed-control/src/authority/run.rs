@@ -25,7 +25,7 @@
 //! Nothing here reads evidence: consent is never reconstructed from it.
 
 use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
-use super::file_session::HaltCell;
+use super::file_session::{HaltCell, RecoveryCheck};
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
@@ -310,7 +310,14 @@ impl Table {
         let ended: Vec<RunId> = self
             .runs
             .iter()
-            .filter(|(_, e)| (e.view.cancelled || e.view.finished) && e.retained == 0)
+            .filter(|(_, e)| {
+                (e.view.cancelled || e.view.finished)
+                    && e.retained == 0
+                    // Keep an admitted session's provenance even before its
+                    // first commitment pin. Bounded by RUN_CAPACITY; capacity
+                    // pressure refuses new runs, never erases the cell.
+                    && !(e.file_cell.is_some() && e.files_admission.is_some())
+            })
             .map(|(id, _)| *id)
             .collect();
         for run in ended {
@@ -413,6 +420,8 @@ pub(crate) enum Lift {
 /// Why the registry refuses a resume. Only a lift changes anything.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Refusal {
+    /// A session ingress invalidated the Owner recovery request.
+    Halted,
     /// A newer emergency stop came after the stop the owner confirmed.
     Superseded,
     /// The stop number is exhausted: the registry stays stopped.
@@ -883,30 +892,48 @@ impl RunRegistry {
             .runs
             .lock()
             .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
-        Ok(runs.get(&run).and_then(|entry| entry.file_cell.clone()))
+        Ok(runs
+            .get(&run)
+            .ok_or(AuthorityError::Halted)?
+            .file_cell
+            .clone())
     }
 
-    /// Evidence-only observation: a missing or unreadable run cannot add a
-    /// cell-specific reason, and never turns the existing refusal into success.
+    /// Missing, pruned and poisoned authority are halted, never cell-less.
     pub(crate) fn session_halted(&self, run: RunId) -> bool {
-        self.runs.lock().is_ok_and(|runs| {
-            runs.get(&run)
-                .and_then(|entry| entry.file_cell.as_ref())
-                .is_some_and(HaltCell::is_engaged)
-        })
+        self.session_cell(run)
+            .map_or(true, |cell| cell.as_ref().is_some_and(HaltCell::is_engaged))
     }
 
-    /// Decision 8: the optional session-cell check at Files entry/dispatch.
-    /// The final call after filesystem validation linearizes dispatch in
-    /// this hold. Kernel work follows outside the table; it grants no new
-    /// broker admission and keeps its own publication checks.
+    /// Final staging admission, under the same table hold as the lookup.
+    /// Session runs retain provenance through the pre-commitment interval.
     pub(crate) fn admit_file_stage(&self, run: RunId) -> Result<(), AuthorityError> {
-        let runs = self
-            .runs
-            .lock()
-            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
-        let cell = runs.get(&run).and_then(|entry| entry.file_cell.as_ref());
-        super::file_session::check_halt(cell)
+        let runs = self.runs.lock().map_err(|_| AuthorityError::Halted)?;
+        let entry = runs.get(&run).ok_or(AuthorityError::Halted)?;
+        if entry.file_cell.is_some()
+            && (entry.view.cancelled
+                || entry.view.finished
+                || entry.cancelled.load(Ordering::SeqCst)
+                || runs.in_halted_group(entry)
+                || self.stopped.load(Ordering::SeqCst)
+                || self.closed.load(Ordering::SeqCst))
+        {
+            return Err(AuthorityError::Halted);
+        }
+        super::file_session::check_halt(entry.file_cell.as_ref())
+    }
+
+    /// Memory-only native-lift handoff. No I/O or evidence callback is allowed
+    /// in `lift`; the native kernel mutex is acquired only after this check.
+    pub(crate) fn recovery_boundary(
+        &self,
+        recovery: &RecoveryCheck,
+        lift: impl FnOnce(),
+    ) -> Result<(), AuthorityError> {
+        let _runs = self.runs.lock().map_err(|_| AuthorityError::Halted)?;
+        recovery.check()?;
+        lift();
+        Ok(())
     }
 
     /// The run exists, belongs to `agent`, is not cancelled or finished, and
@@ -1123,6 +1150,33 @@ impl RunRegistry {
         if !self.stopped.load(Ordering::SeqCst) {
             return Ok(Lift::AlreadyLifted);
         }
+        self.stopped.store(false, Ordering::SeqCst);
+        self.last_lifted.store(number, Ordering::SeqCst);
+        self.cancelled_by_stop.store(0, Ordering::SeqCst);
+        Ok(Lift::Lifted)
+    }
+
+    pub(crate) fn lift_with_recovery(
+        &self,
+        number: u64,
+        recovery: &RecoveryCheck,
+    ) -> Result<Lift, Refusal> {
+        let Ok(_runs) = self.runs.lock() else {
+            return Err(Refusal::Unavailable);
+        };
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(Refusal::TooLate);
+        }
+        if self.exhausted.load(Ordering::SeqCst) {
+            return Err(Refusal::Exhausted);
+        }
+        if self.stop_number.load(Ordering::SeqCst) != number {
+            return Err(Refusal::Superseded);
+        }
+        if !self.stopped.load(Ordering::SeqCst) {
+            return Ok(Lift::AlreadyLifted);
+        }
+        recovery.check().map_err(|_| Refusal::Halted)?;
         self.stopped.store(false, Ordering::SeqCst);
         self.last_lifted.store(number, Ordering::SeqCst);
         self.cancelled_by_stop.store(0, Ordering::SeqCst);

@@ -574,17 +574,44 @@ impl GovernedControl {
     /// kernel's stop is lifted only once the broker's stop is lifted too;
     /// work either stop ended stays ended.
     pub fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
-        // The kernel stop this resume may lift: the one in force before the
-        // owner is asked. A Stop pressed meanwhile (from any door) engages
-        // a newer kernel stop first, and that one is not lifted here.
+        self.resume_with_halt(confirmer, None)
+    }
+
+    /// Recovery-only host lift: a fresh confirmation may lift the native
+    /// halt, never the permanent session cell. Ingress at the kernel handoff
+    /// is observed on return and re-engages native Stop before any action.
+    pub fn resume_with_halt(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+        cell: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<(), AuthorityError> {
+        let recovery = crate::authority::file_session::RecoveryCheck::take(cell)?;
         let confirmed = self.kernel_stop.authority().stop_number();
-        self.authority().resume(confirmer)?;
+        if cell.is_none() {
+            // Preserve the legacy route, including its lock ordering.
+            self.authority().resume(confirmer)?;
+            if !self.authority().runs().is_stopped() {
+                self.kernel_stop.lift_if(confirmed);
+            }
+            return Ok(());
+        }
+        self.authority()
+            .resume_with_recovery(confirmer, Some(&recovery))?;
         if !self.authority().runs().is_stopped() {
-            #[cfg(test)]
-            self.authority().hooks().fire("resume.kernel_boundary");
-            self.kernel_stop.lift_if(confirmed);
-            #[cfg(test)]
-            self.authority().hooks().fire("resume.kernel_returned");
+            let lifted = self.authority().runs().recovery_boundary(&recovery, || {
+                #[cfg(test)]
+                self.authority().hooks().fire("resume.kernel_boundary");
+                self.kernel_stop.lift_if(confirmed);
+                #[cfg(test)]
+                self.authority().hooks().fire("resume.kernel_returned");
+            });
+            // No callback, rendering, evidence or other host action precedes
+            // this re-engagement when the confirmed lift was overtaken.
+            if lifted.is_err() || recovery.check().is_err() {
+                self.kernel_stop.engage();
+                self.emergency_stop();
+                return Err(AuthorityError::Halted);
+            }
         }
         Ok(())
     }
@@ -895,8 +922,22 @@ impl GovernedControl {
         &self,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<UndoReport, AuthorityError> {
-        self.files
-            .undo(self.authority(), self.kernel_stop.authority(), confirmer)
+        self.files_undo_with_halt(confirmer, None)
+    }
+
+    /// Owner-only undo with the host's original cell and a fresh ingress
+    /// snapshot, captured before its dialogue and never refreshed.
+    pub fn files_undo_with_halt(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+        cell: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<UndoReport, AuthorityError> {
+        self.files.undo(
+            self.authority(),
+            self.kernel_stop.authority(),
+            confirmer,
+            cell,
+        )
     }
 
     /// M2d (§6.7): the startup recovery report: what the Files ledger says
@@ -929,7 +970,17 @@ impl GovernedControl {
     /// established is released, the rest stays owned and in the recovery
     /// report. The Owner's only: no door route.
     pub fn files_retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
-        self.files.retry_cleanup()
+        self.files_retry_cleanup_with_halt(None)
+    }
+
+    /// Owner retry with a request-local ingress snapshot. A refusal retains
+    /// every unattempted cleanup obligation; already handed-off cleanup may
+    /// finish (Decision 11).
+    pub fn files_retry_cleanup_with_halt(
+        &self,
+        cell: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<CleanupRetry, AuthorityError> {
+        self.files.retry_cleanup(cell)
     }
 
     /// M2e-B (design v2 §8): register the process's one local model, the

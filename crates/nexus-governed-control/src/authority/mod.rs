@@ -73,6 +73,7 @@ pub(crate) const REASONS: &[&str] = &[
     "approval_refused_halted",
     "authorization_refused_halted",
     "execution_dispatch_refused_halted",
+    "recovery_lift_refused_halted",
     "commitment_prepare_refused_halted",
     "mission_consent_refused_halted",
     "held_consent_refused_halted",
@@ -1087,6 +1088,17 @@ impl Authority {
     /// stop. A Resumed record is therefore not proof that the stop was
     /// lifted.
     pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        self.resume_with_recovery(confirmer, None)
+    }
+
+    pub(crate) fn resume_with_recovery(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+        recovery: Option<&file_session::RecoveryCheck>,
+    ) -> Result<(), AuthorityError> {
+        if let Some(check) = recovery {
+            check.check()?;
+        }
         // A latched store can record nothing in this process: refused before
         // any dialog, and nothing changes (C-6).
         if self
@@ -1107,7 +1119,11 @@ impl Authority {
             stop_number: stop.number,
             runs_cancelled_by_the_stop: stop.cancelled,
         };
-        if !confirmer.confirm_resume(&request) {
+        let confirmed = confirmer.confirm_resume(&request);
+        if let Some(check) = recovery {
+            check.check()?;
+        }
+        if !confirmed {
             return Err(AuthorityError::Declined);
         }
         if self.runs.check_lift(request.stop_number).map_err(refused)? == Lift::AlreadyLifted {
@@ -1131,8 +1147,22 @@ impl Authority {
         self.record(&record)?;
         #[cfg(test)]
         self.hooks().fire("resume.before_lift");
-        self.runs.lift(request.stop_number).map_err(refused)?;
-        Ok(())
+        let result = match recovery {
+            Some(check) => self.runs.lift_with_recovery(request.stop_number, check),
+            None => self.runs.lift(request.stop_number),
+        }
+        .map_err(refused);
+        if matches!(result, Err(AuthorityError::Halted)) {
+            // The earlier Resumed record is the confirmation, not proof of a
+            // lift. Append the refusal; never rewrite that earlier evidence.
+            record.phase = EvidencePhase::Denied;
+            record.failure = Some("halted");
+            record
+                .detail
+                .push(("reason".into(), "recovery_lift_refused_halted".into()));
+            self.record_end(&record);
+        }
+        result.map(|_| ())
     }
 }
 
@@ -1205,6 +1235,7 @@ fn summary_digest(summary: &[String]) -> String {
 /// What a resume the run registry refused returns.
 fn refused(refusal: Refusal) -> AuthorityError {
     match refusal {
+        Refusal::Halted => AuthorityError::Halted,
         Refusal::Superseded => AuthorityError::ResumeSuperseded,
         Refusal::Exhausted => AuthorityError::EmergencyStopped,
         Refusal::TooLate => AuthorityError::Closed("the desktop is quitting"),
