@@ -509,16 +509,22 @@ fn review4_outcome(scenario: &str, test: &str) {
         } else {
             "was refused"
         };
-        p.expect(&format!(
-            "Stop received while your confirmed undo was finishing; the undo {outcome}."
-        ));
+        p.expect(&if outcome == "completed" {
+            "Stop received after undo handoff. The restore completed; remaining obligations are reported separately.".to_owned()
+        } else {
+            "Stop received after undo handoff. The restore was refused.".to_owned()
+        });
         assert_eq!(
             f.workspace.join("hello.txt").exists(),
             scenario == "undo-refused"
         );
     } else {
         p.line("cleanup");
-        p.expect("Stop received while your confirmed cleanup was finishing; cleanup settled=0 still_owed=0.");
+        p.expect("CLEANUP");
+        assert!(
+            !p.output.contains("confirmed cleanup"),
+            "cleanup is requested, never natively confirmed"
+        );
     }
     p.expect("REVIEW4 NO LATER WORK");
     // The reporter may have emitted the receipt earlier; inspect full output.
@@ -546,6 +552,40 @@ fn decision11_host_cleanup_is_honest() {
     review4_outcome("cleanup", "decision11_host_cleanup_is_honest");
 }
 #[test]
-fn decision11_host_lift_reengages_before_next_action() {
-    review4_outcome("lift", "decision11_host_lift_reengages_before_next_action");
+fn session_lift_is_unavailable_before_and_after_emergency_without_dialogue() {
+    const CHILD: &str = "M2DD_SESSION_LIFT_CHILD";
+    if let Ok(args) = std::env::var(CHILD) {
+        assert!(run(args.split('\n').map(str::to_owned)));
+        return;
+    }
+    let f = Fixture::new();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "hands_tests::session_lift_is_unavailable_before_and_after_emergency_without_dialogue",
+            "--nocapture",
+        ])
+        .env(
+            CHILD,
+            format!(
+                "--home\n{}\n--workspace\n{}\n--name\nhello.txt\n--text\nno lift authority",
+                f.home.display(),
+                f.workspace.display()
+            ),
+        );
+    let mut p = Pty::start(command);
+    p.ready();
+    for emergency in [false, true] {
+        if emergency {
+            p.line("stop");
+            p.expect("STOP RECORDING COMPLETED");
+        }
+        let before = p.output.matches("Answer code:").count();
+        p.line("lift-for-undo");
+        p.expect("REFUSED unavailable\n");
+        assert_eq!(p.output.matches("Answer code:").count(), before);
+    }
+    f.empty();
+    p.quit();
 }

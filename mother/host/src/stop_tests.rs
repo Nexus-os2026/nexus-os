@@ -1,10 +1,13 @@
 //! Registered before the Stop implementation. All waits use readiness.
+//! Session-spec §5 amendment: the two Gate tests below check presentation
+//! projections only. They establish no backend authority or sink coverage.
+//! Session-sink schedules and real-route controls are separately required.
 use crate::stop::{Gate, Route, StopRoute};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 #[test]
-fn m2dd_recovery_gate_covers_each_route_and_reserved_callbacks() {
+fn m2dd_presentation_gate_projects_each_route_and_reserved_callbacks() {
     let gate = Gate::default();
     for route in Route::ALL {
         assert!(gate.admit(route));
@@ -65,7 +68,7 @@ fn m2dd_stop_cap_timeout_release_join_and_reaping() {
 }
 
 #[test]
-fn m2dd_admission_counters_have_positive_controls_for_all_routes() {
+fn m2dd_presentation_counters_have_positive_controls_for_all_labels() {
     let gate = Gate::default();
     for route in Route::ALL {
         assert!(gate.admit(route));

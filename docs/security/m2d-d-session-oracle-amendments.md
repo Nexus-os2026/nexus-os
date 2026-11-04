@@ -316,3 +316,122 @@ capacity/poison/death fixtures and per-transfer plants; migrate the listed
 Decision 10/11 host-only assertions and synthetic gate claims. Legacy controls
 and frozen C-lite tests remain unchanged. This checkpoint is not completion of
 the oracle-first exit gate.
+
+## Decision 11 outcome notices and synthetic Gate authority claims
+
+Session spec §5 and B A12 replace unconditional confirmation language. Gate-only
+tests retain their presentation checks and establish no backend authority.
+The new lift test first had an unavailable integration-binary fixture in the
+unit-test target. It now uses the existing self-reexecuting unit-test pattern;
+expected answers did not change. On the real route it fails at support/mod.rs:182:
+expected `REFUSED unavailable`, observed `REFUSED recovery_only_lift`.
+This is distinct from the emergency-dialogue behavioral red above.
+
+### mother/host/src/stop_tests.rs
+
+```diff
+--- 03e07b1a/mother/host/src/stop_tests.rs
++++ session/mother/host/src/stop_tests.rs
+@@ -1,10 +1,13 @@
+ //! Registered before the Stop implementation. All waits use readiness.
++//! Session-spec §5 amendment: the two Gate tests below check presentation
++//! projections only. They establish no backend authority or sink coverage.
++//! Session-sink schedules and real-route controls are separately required.
+ use crate::stop::{Gate, Route, StopRoute};
+ use std::sync::{Arc, Condvar, Mutex};
+ use std::time::{Duration, Instant};
+
+ #[test]
+-fn m2dd_recovery_gate_covers_each_route_and_reserved_callbacks() {
++fn m2dd_presentation_gate_projects_each_route_and_reserved_callbacks() {
+     let gate = Gate::default();
+     for route in Route::ALL {
+         assert!(gate.admit(route));
+@@ -65,7 +68,7 @@
+ }
+
+ #[test]
+-fn m2dd_admission_counters_have_positive_controls_for_all_routes() {
++fn m2dd_presentation_counters_have_positive_controls_for_all_labels() {
+     let gate = Gate::default();
+     for route in Route::ALL {
+         assert!(gate.admit(route));
+```
+
+### mother/host/src/hands_tests.rs
+
+```diff
+--- 03e07b1a/mother/host/src/hands_tests.rs
++++ session/mother/host/src/hands_tests.rs
+@@ -509,16 +509,22 @@
+         } else {
+             "was refused"
+         };
+-        p.expect(&format!(
+-            "Stop received while your confirmed undo was finishing; the undo {outcome}."
+-        ));
++        p.expect(&if outcome == "completed" {
++            "Stop received after undo handoff. The restore completed; remaining obligations are reported separately.".to_owned()
++        } else {
++            "Stop received after undo handoff. The restore was refused.".to_owned()
++        });
+         assert_eq!(
+             f.workspace.join("hello.txt").exists(),
+             scenario == "undo-refused"
+         );
+     } else {
+         p.line("cleanup");
+-        p.expect("Stop received while your confirmed cleanup was finishing; cleanup settled=0 still_owed=0.");
++        p.expect("CLEANUP");
++        assert!(
++            !p.output.contains("confirmed cleanup"),
++            "cleanup is requested, never natively confirmed"
++        );
+     }
+     p.expect("REVIEW4 NO LATER WORK");
+     // The reporter may have emitted the receipt earlier; inspect full output.
+@@ -546,6 +552,40 @@
+     review4_outcome("cleanup", "decision11_host_cleanup_is_honest");
+ }
+ #[test]
+-fn decision11_host_lift_reengages_before_next_action() {
+-    review4_outcome("lift", "decision11_host_lift_reengages_before_next_action");
+-}
++fn session_lift_is_unavailable_before_and_after_emergency_without_dialogue() {
++    const CHILD: &str = "M2DD_SESSION_LIFT_CHILD";
++    if let Ok(args) = std::env::var(CHILD) {
++        assert!(run(args.split('\n').map(str::to_owned)));
++        return;
++    }
++    let f = Fixture::new();
++    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
++    command
++        .args([
++            "--exact",
++            "hands_tests::session_lift_is_unavailable_before_and_after_emergency_without_dialogue",
++            "--nocapture",
++        ])
++        .env(
++            CHILD,
++            format!(
++                "--home\n{}\n--workspace\n{}\n--name\nhello.txt\n--text\nno lift authority",
++                f.home.display(),
++                f.workspace.display()
++            ),
++        );
++    let mut p = Pty::start(command);
++    p.ready();
++    for emergency in [false, true] {
++        if emergency {
++            p.line("stop");
++            p.expect("STOP RECORDING COMPLETED");
++        }
++        let before = p.output.matches("Answer code:").count();
++        p.line("lift-for-undo");
++        p.expect("REFUSED unavailable\n");
++        assert_eq!(p.output.matches("Answer code:").count(), before);
++    }
++    f.empty();
++    p.quit();
++}
+```
