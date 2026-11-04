@@ -298,6 +298,25 @@ fn child_two(dir: &Path) {
         |r| format!("ok:{}", r.len()),
     );
     let receipt = std::fs::read_to_string(dir.join("receipt")).unwrap_or_default();
+    let inflight = receipt
+        .lines()
+        .any(|line| line == "inflight:apply_prepared");
+    assert_eq!(
+        home.control.authority().recovery_required(),
+        inflight,
+        "only the killed executing action requires native acknowledgement"
+    );
+    if inflight {
+        assert!(
+            super::m2c_support::try_port_for(&home.control, true).is_none(),
+            "a new door must refuse before recovery acknowledgement"
+        );
+        let owner = crate::oracles::m2c_owner::OwnerRecovers::default();
+        home.control
+            .resume(&owner)
+            .expect("the Owner acknowledges the lost action");
+        assert_eq!(owner.unsettled.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
     let port = Arc::new(port_for(&home.control, true));
     let mut obs = serde_json::Map::new();
     obs.insert("recovery".into(), json!(recovery));
