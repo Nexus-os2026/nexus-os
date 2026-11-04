@@ -19,8 +19,8 @@
 use super::{contract_with, world, World};
 use crate::coordinator::CoordinatorError;
 use crate::effect::EffectPort;
-use crate::lane::Lane;
 use crate::journal::{Event, MissionId};
+use crate::lane::Lane;
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::halt_cell::HaltCause;
 
@@ -66,7 +66,11 @@ fn m2d_c_r6_the_first_touch_records_the_cell_s_cause_once() {
     let id = w.mission_in(MissionState::Building);
     let calls = w.keyed_calls();
     engage(&w, id, HaltCause::Emergency);
-    assert_eq!(w.mother.state(id), Some(MissionState::Building), "not terminal");
+    assert_eq!(
+        w.mother.state(id),
+        Some(MissionState::Building),
+        "not terminal"
+    );
     assert_eq!(stops(&w, id), Vec::<String>::new(), "not recorded yet");
     assert_eq!(w.mother.advance(id), Err(CoordinatorError::Stopped));
     assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
@@ -195,7 +199,10 @@ fn m2d_c_r6_a_replayed_settlement_engages_its_cell_with_its_cause() {
     assert!(opened.is_err(), "the open's first append fails");
     let identity = failing.identity().unwrap();
     assert_eq!(
-        fresh.halt_cells().get(&identity, id.0).and_then(|c| c.cause()),
+        fresh
+            .halt_cells()
+            .get(&identity, id.0)
+            .and_then(|c| c.cause()),
         Some(HaltCause::Stop),
         "engaged with the journaled first cause before anything was exposed"
     );
@@ -204,9 +211,15 @@ fn m2d_c_r6_a_replayed_settlement_engages_its_cell_with_its_cause() {
     let (fresh, opened) = open(healthy.clone());
     let again = opened.unwrap();
     assert_eq!(again.state(id), Some(MissionState::Blocked));
-    assert_eq!(again.reason(id).as_deref(), Some("file_publication_uncertain"));
+    assert_eq!(
+        again.reason(id).as_deref(),
+        Some("file_publication_uncertain")
+    );
     assert!(
-        fresh.halt_cells().get(&healthy.identity().unwrap(), id.0).is_none(),
+        fresh
+            .halt_cells()
+            .get(&healthy.identity().unwrap(), id.0)
+            .is_none(),
         "retired once terminal"
     );
 }
@@ -225,7 +238,10 @@ fn m2d_c_r6_stop_all_is_typed_on_poison() {
     let id = w.mission_in(MissionState::Approved);
     w.mother.poison_for_test();
     let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| w.mother.stop_all()));
-    assert_eq!(answer.expect("never a panic"), Err(CoordinatorError::Poisoned));
+    assert_eq!(
+        answer.expect("never a panic"),
+        Err(CoordinatorError::Poisoned)
+    );
     assert_eq!(cause(&w, id), Some(HaltCause::Stop), "engaged all the same");
 }
 
@@ -296,13 +312,20 @@ fn m2d_c_r6_a_cell_engaged_mid_call_refuses_the_next_boundary() {
             Event::Transition {
                 trigger: Trigger::Stop { reason },
             } => format!("stop:{}", reason.code()),
-            other => format!("{other:?}").split(' ').next().unwrap_or("").to_string(),
+            other => format!("{other:?}")
+                .split(' ')
+                .next()
+                .unwrap_or("")
+                .to_string(),
         })
         .collect();
     let invoked = events.iter().position(|e| e == "invoked:sentinel").unwrap();
     assert_eq!(
         &events[invoked..],
-        &["invoked:sentinel".to_string(), "stop:emergency_stop".to_string()],
+        &[
+            "invoked:sentinel".to_string(),
+            "stop:emergency_stop".to_string()
+        ],
         "the answer is not kept; the terminal follows: {events:?}"
     );
     assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
@@ -365,10 +388,7 @@ fn m2d_c_r6_no_stop_path_takes_a_panicking_lock() {
         for forbidden in ["with_lock(", ".expect(", ".unwrap(", ".lock().expect"] {
             let hits = text
                 .match_indices(forbidden)
-                .filter(|(at, _)| {
-                    forbidden != "with_lock("
-                        || !text[..*at].ends_with("try_")
-                })
+                .filter(|(at, _)| forbidden != "with_lock(" || !text[..*at].ends_with("try_"))
                 .count();
             assert_eq!(hits, 0, "{name} takes a panicking route: {forbidden}");
         }
@@ -401,7 +421,9 @@ fn m2d_c_r6_production_refuses_an_identity_less_store() {
         .expect("the test fallback");
     let before = &open[..fallback];
     let guarded = before.rfind("#[cfg(test)]").expect("a cfg(test) guard");
-    let refused = before.rfind("#[cfg(not(test))]").expect("the production arm");
+    let refused = before
+        .rfind("#[cfg(not(test))]")
+        .expect("the production arm");
     assert!(
         open[refused..].contains("IdentityRefusal::NoIdentity"),
         "the production arm refuses, typed"

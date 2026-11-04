@@ -30,8 +30,8 @@ use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::clock::{Clock, ManualClock};
 use nexus_governed_control::authority::halt_cell::HaltCause;
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
-use nexus_governed_control::governed::{AgentOutcome, Intent};
 use nexus_governed_control::files::FileCreate;
+use nexus_governed_control::governed::{AgentOutcome, Intent};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -324,7 +324,11 @@ fn a_captured_token_is_reached_through_every_alias_of_the_journal(home: &Home) {
             "{name}: the same file, the same identity"
         );
         assert!(!again.engaged(a), "{name}: the original cell, not engaged");
-        assert_eq!(again.port.run_of(a), None, "{name}: the adoption was refused");
+        assert_eq!(
+            again.port.run_of(a),
+            None,
+            "{name}: the adoption was refused"
+        );
         let (entered, release_append) = again.hold_next_append();
         let state = std::thread::scope(|scope| {
             let stopping = scope.spawn(|| again.mother.stop(a));
@@ -378,7 +382,10 @@ fn an_identity_less_store_binds_its_replayed_runs_or_stops_them(home: &Home) {
     assert!(!port.fenced());
     let a = s.waiting("r6-anon-bound");
     let poised = s.approve(a);
-    let cell = port.halt_cells().get(s.mother.journal_identity(), a.0).unwrap();
+    let cell = port
+        .halt_cells()
+        .get(s.mother.journal_identity(), a.0)
+        .unwrap();
     drop(s);
     // The same lines, a new coordinator: its cell for A is fresh; A's run
     // survives with the original cell only, and D4(a) refuses the adoption.
@@ -395,7 +402,10 @@ fn an_identity_less_store_binds_its_replayed_runs_or_stops_them(home: &Home) {
     assert!(!other.execute(poised), "its final check refuses");
     assert!(!other.ws.join("r6-anon-bound-a.txt").exists());
     // The unrelated run is untouched: its mission goes on.
-    assert!(other.execute(other.approve(unrelated)), "not this journal's work");
+    assert!(
+        other.execute(other.approve(unrelated)),
+        "not this journal's work"
+    );
     assert!(other.ws.join("r6-anon-other-a.txt").exists());
 }
 
@@ -430,7 +440,10 @@ fn a_captured_token_is_reached_through_a_permitted_adoption(home: &Home) {
         release_append.send(()).unwrap();
         let _ = stopping.join().unwrap();
     });
-    assert!(!again.ws.join("r6-adopt-a.txt").exists(), "nothing published");
+    assert!(
+        !again.ws.join("r6-adopt-a.txt").exists(),
+        "nothing published"
+    );
     assert_eq!(again.terminal(a).len(), 1, "one truthful terminal line");
 }
 
@@ -447,7 +460,9 @@ fn retirement_racing_the_stop_all_snapshot(home: &Home) {
     std::thread::scope(|scope| {
         let (snapshotted, go) = held_at(&s.mother.hooks.after_snapshot, 0);
         let stopping = scope.spawn(|| s.mother.stop_all());
-        snapshotted.recv_timeout(BOUND).expect("the cohort snapshotted");
+        snapshotted
+            .recv_timeout(BOUND)
+            .expect("the cohort snapshotted");
         // B's own Stop retires its cell while the snapshot holds it.
         assert_eq!(s.mother.stop(b), Ok(MissionState::Stopped));
         *later.lock().unwrap() = Some(s.mother.draft(contract_with("")).unwrap());
@@ -480,7 +495,11 @@ fn the_emergency_cohort_is_the_cells_the_ingress_engaged(home: &Home) {
     assert!(s.execute(s.approve(b)), "B's File is published");
     let performed = s.port.performed();
     home.control.emergency_stop();
-    assert_eq!(s.cause(a), Some(HaltCause::Emergency), "engaged at the ingress");
+    assert_eq!(
+        s.cause(a),
+        Some(HaltCause::Emergency),
+        "engaged at the ingress"
+    );
     assert_eq!(s.cause(b), Some(HaltCause::Emergency));
     let touched = s.mother.advance(a);
     assert_ne!(touched, Err(CoordinatorError::Held), "the cell comes first");
@@ -505,7 +524,10 @@ fn the_emergency_cohort_is_the_cells_the_ingress_engaged(home: &Home) {
     // adopted: D4(a)), so its settlement is truthfully uncertain.
     assert_eq!(s.mother.state(a), Some(MissionState::Blocked), "A too");
     assert_eq!(s.terminal(a), vec![SettlementOutcome::Uncertain]);
-    assert_eq!(s.mother.reason(a).as_deref(), Some("file_publication_uncertain"));
+    assert_eq!(
+        s.mother.reason(a).as_deref(),
+        Some("file_publication_uncertain")
+    );
 
     // (2) No coordinator call between the emergency and the lift.
     let s = Rig::new(home, "m2d-c-r6-emergency-lift.jsonl");
@@ -514,7 +536,11 @@ fn the_emergency_cohort_is_the_cells_the_ingress_engaged(home: &Home) {
     home.control.emergency_stop();
     home.control.resume(&OwnerLiftsTheStop).unwrap();
     assert!(!home.control.authority().runs().is_stopped());
-    assert_eq!(s.cause(b), Some(HaltCause::Emergency), "kept across the lift");
+    assert_eq!(
+        s.cause(b),
+        Some(HaltCause::Emergency),
+        "kept across the lift"
+    );
     // A mission created after the lift is not of the cohort: the first
     // touch records the cells the ingress engaged, and takes no second
     // snapshot.
@@ -554,21 +580,38 @@ fn an_emergency_recording_interrupted_by_poison_is_drained_on_reopen(home: &Home
     home.control.emergency_stop();
     s.mother.poison_for_test();
     let touched = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.advance(a)));
-    assert_eq!(touched.expect("never a panic").err(), Some(CoordinatorError::Poisoned));
+    assert_eq!(
+        touched.expect("never a panic").err(),
+        Some(CoordinatorError::Poisoned)
+    );
     assert!(!s.execute(poised), "refused");
-    assert_eq!(s.mother.stop_all(), Err(CoordinatorError::Poisoned), "never Ok(0)");
+    assert_eq!(
+        s.mother.stop_all(),
+        Err(CoordinatorError::Poisoned),
+        "never Ok(0)"
+    );
     home.control.resume(&OwnerLiftsTheStop).unwrap();
     drop(s);
     let again = Rig::new(home, journal);
     for id in [a, b] {
-        assert_eq!(again.mother.held(id), None, "drained at the open, never held");
+        assert_eq!(
+            again.mother.held(id),
+            None,
+            "drained at the open, never held"
+        );
         assert!(
-            again.mother.state(id).is_some_and(MissionState::is_terminal),
+            again
+                .mother
+                .state(id)
+                .is_some_and(MissionState::is_terminal),
             "{id}: recorded"
         );
     }
     assert_eq!(again.mother.state(a), Some(MissionState::Stopped));
-    assert_eq!(again.mother.reason(b).as_deref(), Some("file_publication_uncertain"));
+    assert_eq!(
+        again.mother.reason(b).as_deref(),
+        Some("file_publication_uncertain")
+    );
     assert!(!again.ws.join("r6-poison-b-a.txt").exists());
 }
 
@@ -580,7 +623,12 @@ fn with_the_stop_append_held_no_admission_passes(home: &Home) {
     let s = Rig::new(home, "m2d-c-r6-admissions.jsonl");
     let b = s.waiting("r6-admissions");
     let run = s.port.run_of(b).unwrap();
-    let views_before = home.control.authority().commitments().views_of_run(run).len();
+    let views_before = home
+        .control
+        .authority()
+        .commitments()
+        .views_of_run(run)
+        .len();
     // Read before the Stop holds the coordinator lock with its append.
     let hash = s.mother.consented_hash(b).unwrap().to_hex();
     let request = s.mother.consent_request_of(b).unwrap();
@@ -626,7 +674,11 @@ fn with_the_stop_append_held_no_admission_passes(home: &Home) {
         let _ = stopping.join().unwrap();
     });
     assert_eq!(
-        home.control.authority().commitments().views_of_run(run).len(),
+        home.control
+            .authority()
+            .commitments()
+            .views_of_run(run)
+            .len(),
         views_before,
         "nothing proposed"
     );
@@ -651,10 +703,11 @@ fn every_stop_path_is_typed_on_poison_end_to_end(home: &Home) {
         let _ = rx.recv_timeout(BOUND);
     });
     std::thread::scope(|scope| {
-        let stopping = scope.spawn(|| {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.stop(b)))
-        });
-        stopped.recv_timeout(BOUND).expect("after SettlementStarted");
+        let stopping = scope
+            .spawn(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.stop(b))));
+        stopped
+            .recv_timeout(BOUND)
+            .expect("after SettlementStarted");
         s.mother.poison_for_test();
         tx.send(()).unwrap();
         let result = stopping.join().unwrap();
@@ -678,10 +731,11 @@ fn every_stop_path_is_typed_on_poison_end_to_end(home: &Home) {
         let _ = rx.recv_timeout(BOUND);
     });
     std::thread::scope(|scope| {
-        let stopping = scope.spawn(|| {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.stop(a)))
-        });
-        stopped.recv_timeout(BOUND).expect("after the Stop's first step");
+        let stopping = scope
+            .spawn(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.stop(a))));
+        stopped
+            .recv_timeout(BOUND)
+            .expect("after the Stop's first step");
         s.mother.poison_for_test();
         tx.send(()).unwrap();
         let result = stopping.join().unwrap();
@@ -707,7 +761,9 @@ fn every_stop_path_is_typed_on_poison_end_to_end(home: &Home) {
         let advancing = scope.spawn(|| {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.advance(a)))
         });
-        stopped.recv_timeout(BOUND).expect("after the budget's first step");
+        stopped
+            .recv_timeout(BOUND)
+            .expect("after the budget's first step");
         s.mother.poison_for_test();
         tx.send(()).unwrap();
         let result = advancing.join().unwrap();
@@ -723,8 +779,7 @@ fn every_stop_path_is_typed_on_poison_end_to_end(home: &Home) {
     let s = Rig::new(home, "m2d-c-r6-poison-all.jsonl");
     let _a = s.approved("r6-poison-all");
     s.mother.poison_for_test();
-    let result =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.stop_all()));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.mother.stop_all()));
     assert_eq!(
         result.expect("never a panic"),
         Err(CoordinatorError::Poisoned),
@@ -744,7 +799,11 @@ fn a_journal_copied_to_another_inode_stops_the_surviving_run(home: &Home) {
     let s = Rig::at(home, &original);
     let a = s.waiting("r6-copied");
     let poised = s.approve(a);
-    let original_cell = s.port.halt_cells().get(s.mother.journal_identity(), a.0).unwrap();
+    let original_cell = s
+        .port
+        .halt_cells()
+        .get(s.mother.journal_identity(), a.0)
+        .unwrap();
     drop(s);
     std::fs::copy(&original, &copy).unwrap();
     let port = Arc::new(port_for(&home.control, true).with_workspace(folder_of(home)));

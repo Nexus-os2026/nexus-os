@@ -146,10 +146,16 @@ fn m2d_c_r6_a_surviving_run_without_the_cell_is_stopped() {
     assert!(!fresh.is_engaged(), "the replacement's cell is untouched");
     assert!(f.gov.authority().runs().view(run).unwrap().cancelled);
     assert_eq!(f.door.run_survives(run), Ok(false));
-    assert_eq!(class(f.door.agent_action(run, &Intent::File(FileCreate {
-        name: "x.txt".into(),
-        content: "x\n".into(),
-    }))), "halted");
+    assert_eq!(
+        class(f.door.agent_action(
+            run,
+            &Intent::File(FileCreate {
+                name: "x.txt".into(),
+                content: "x\n".into(),
+            })
+        )),
+        "halted"
+    );
     let stopped = cells.cell("old", 2).unwrap();
     stopped.engage_with(HaltCause::Stop);
     let other = f.door.open_run_with_halt(&stopped);
@@ -197,9 +203,7 @@ fn authorized(f: &Fx, door: &AgentDoor, run: RunId, name: &str) -> CommitmentVie
     else {
         panic!("a Files create waits for the Owner");
     };
-    f.gov
-        .authorize(view.id, &mother(), run, &*f.owner)
-        .unwrap();
+    f.gov.authorize(view.id, &mother(), run, &*f.owner).unwrap();
     view
 }
 
