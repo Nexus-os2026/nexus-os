@@ -1362,9 +1362,11 @@ impl<P: EffectPort> Coordinator<P> {
     }
 
     /// Read-only, under the coordinator lock: it cannot journal, so it
-    /// makes no batch.
+    /// makes no batch. R6-4: a poisoned lock is read all the same (a read
+    /// changes nothing; every Stop-path write after it is `try_with_lock`,
+    /// typed), never a panic.
     fn peek<T>(&self, body: impl FnOnce(&Inner) -> T) -> T {
-        let inner = self.inner.lock().expect("mother coordinator");
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         body(&inner)
     }
 
@@ -2575,7 +2577,7 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         reason: BlockReason,
     ) -> Result<MissionState, CoordinatorError> {
-        let trigger = self.with_lock(|inner| {
+        let trigger = self.try_with_lock(|inner| {
             let mission = inner.mission(id)?;
             Ok::<_, CoordinatorError>(match (&mission.waiting, mission.state) {
                 (Some(waiting), MissionState::AwaitingApproval) => Trigger::ApprovalLapsed {
@@ -2641,7 +2643,7 @@ impl<P: EffectPort> Coordinator<P> {
         ack: Option<PendingAction>,
     ) -> Result<MissionState, CoordinatorError> {
         let mono = self.clock.monotonic_ms();
-        let result = self.with_lock(|inner| {
+        let result = self.try_with_lock(|inner| {
             let from = inner.mission(id)?.state;
             let result = inner.fire(id, trigger.clone(), mono);
             if let (Err(CoordinatorError::Journal(_)), Ok(to)) =
@@ -2672,14 +2674,14 @@ impl<P: EffectPort> Coordinator<P> {
     /// Journal the mission's open action closed, once the port confirms
     /// the broker no longer holds it open. `Ok(false)`: not confirmed.
     fn close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
-        let open = self.with_lock(|inner| inner.mission(id).map(|m| m.open_action.clone()))?;
+        let open = self.try_with_lock(|inner| inner.mission(id).map(|m| m.open_action.clone()))?;
         let Some((effect, pending)) = open else {
             return Ok(true);
         };
         if !self.port.settled(&pending) {
             return Ok(false);
         }
-        self.with_lock(|inner| {
+        self.try_with_lock(|inner| {
             if inner.mission(id)?.open_action.as_ref().map(|(e, _)| *e) == Some(effect) {
                 inner.append(id, Event::ApprovalClosed { effect })?;
                 inner.mission(id)?.open_action = None;
@@ -3338,7 +3340,7 @@ impl<P: EffectPort> Coordinator<P> {
         reserved: Option<u64>,
     ) -> Result<MissionState, CoordinatorError> {
         let mono = self.clock.monotonic_ms();
-        let (result, owed) = self.with_lock(|inner| {
+        let (result, owed) = self.try_with_lock(|inner| {
             let mission = inner.mission(id)?;
             if mission.state.is_terminal() {
                 return Err(CoordinatorError::Stopped);
@@ -3411,19 +3413,15 @@ impl<P: EffectPort> Coordinator<P> {
         Ok(state)
     }
 
-    /// Stop every mission that has not ended, through one barrier. Returns
-    /// how many it stopped or (a File's settlement) blocked.
-    pub fn stop_all(&self) -> usize {
-        self.stop_everything().unwrap_or(0)
-    }
-
-    /// Round 5 (C2, D1): [`Self::stop_all`] with its typed error. ONE
-    /// snapshot of this journal's cells (the cohort) is taken under the halt
-    /// table's lock, engaged once it is released, and exactly that cohort
-    /// is then stopped: a mission registered after the snapshot is ordered
-    /// after this call and is not stopped. A poisoned coordinator lock is
-    /// `Poisoned` once the cells are engaged, never a panic.
-    pub fn stop_everything(&self) -> Result<usize, CoordinatorError> {
+    /// Stop every mission that has not ended, through one barrier: how
+    /// many it stopped or (a File's settlement) blocked. Round 5 (C2, D1)
+    /// and round 6 (R6-4): ONE snapshot of this journal's cells (the
+    /// cohort) is taken under the halt table's lock, engaged once it is
+    /// released, and exactly that cohort is then stopped: a mission
+    /// registered after the snapshot is ordered after this call and is not
+    /// stopped. A poisoned coordinator lock is `Poisoned` once the cells
+    /// are engaged, never a panic and never `Ok(0)`.
+    pub fn stop_all(&self) -> Result<usize, CoordinatorError> {
         let cohort = self.cells.engage_cohort(HaltCause::Stop, || {
             #[cfg(test)]
             self.hooks.after_snapshot.fire();
@@ -3434,15 +3432,18 @@ impl<P: EffectPort> Coordinator<P> {
             .into_iter()
             .map(|id| (id, SettleCause::Stop(StopReason::Owner)))
             .collect();
-        let results = self.barrier(targets);
+        let (results, left) = self.barrier_counting(targets);
         if results
             .iter()
             .any(|(_, r)| matches!(r, Err(CoordinatorError::Poisoned)))
         {
             return Err(CoordinatorError::Poisoned);
         }
+        // Counted: what this call ended (a mission of the cohort ended by
+        // its own Stop meanwhile is left as it was, not counted twice).
         Ok(results
             .into_iter()
+            .filter(|(id, _)| !left.contains(id))
             .filter(|(_, state)| matches!(state, Ok(MissionState::Stopped | MissionState::Blocked)))
             .count())
     }
@@ -3497,7 +3498,7 @@ impl<P: EffectPort> Coordinator<P> {
     pub(crate) fn close_ref(&self) -> Result<(), CoordinatorError> {
         // X3: nothing engaged crosses the clean close unrecorded.
         self.drain_pending()?;
-        self.with_lock(|inner| {
+        self.try_with_lock(|inner| {
             if inner.closed {
                 return Err(CoordinatorError::Closed);
             }
