@@ -113,6 +113,8 @@ mod m2d_files_r4;
 mod m2d_files_r5;
 #[cfg(test)]
 mod m2d_files_r5b;
+#[cfg(test)]
+mod m2d_files_r6;
 mod private_file;
 pub use private_file::FilePrivate;
 

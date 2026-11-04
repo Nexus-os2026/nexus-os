@@ -693,6 +693,8 @@ fn real_broker_m1_oracles() {
     super::m2d_files_r4::on_the_real_broker(&w.home);
     super::m2d_files_r5::on_the_real_broker(&w.home);
     super::m2d_files_r5b::on_the_real_broker(&w.home);
+    // M2d-C round 6 (R6-1 to R6-4, X1-X5, X2″; oracles first).
+    super::m2d_files_r6::on_the_real_broker(&w.home);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
