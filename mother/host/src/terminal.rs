@@ -705,7 +705,9 @@ fn read_input(shared: Arc<Shared>) {
 
 /// Acknowledgement follows both complete write and flush.
 pub(crate) fn write_frame(out: &mut impl Write, text: &str) -> Result<(), Failure> {
-    out.write_all(text.as_bytes())
+    // OPOST is disabled; trusted frame separators alone become CRLF.
+    // Untrusted CR has already been escaped by the renderer.
+    out.write_all(text.replace('\n', "\r\n").as_bytes())
         .and_then(|()| out.flush())
         .map_err(|_| Failure::Output)
 }
