@@ -166,3 +166,25 @@ fn lite_file_input_checks_precede_port() {
         Some(MotherRefusal::FileFolderNotWorkspace)
     );
 }
+
+#[test]
+fn lite_replay_cannot_bypass_an_unresolved_file_with_stop_or_close() {
+    let contract = crate::oracles::contract();
+    let reference = crate::oracles::contract_ref_in(&crate::oracles::test_private(), &contract);
+    let id = MissionId(1);
+    for event in [
+        Event::Transition { trigger: Trigger::Stop { reason: StopReason::Owner } },
+        Event::ApprovalClosed { effect: 0 },
+        Event::SessionClosed,
+    ] {
+        let mut m = Mission::new(reference.clone(), Some(contract.clone()));
+        m.file_mode = true;
+        m.state = MissionState::AwaitingApproval;
+        m.unresolved_file = Some(0);
+        m.open_action = Some((0, PendingAction { run: "r".into(), commitment: "c".into(), deadline_mono_ms: 2 }));
+        let mut missions = BTreeMap::from([(id, m)]);
+        let session_event = matches!(event, Event::SessionClosed);
+        let entry = Entry::chained(0, crate::journal::GENESIS, if session_event { SESSION } else { id }, event);
+        assert!(replay(&mut missions, &mut 2, &mut Session::Open, &entry).is_err(), "unresolved File must have a settlement, never a plain Stop or close");
+    }
+}
