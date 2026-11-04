@@ -64,6 +64,7 @@ pub(crate) struct LineBuffer {
     bytes: Vec<u8>,
     overflow: bool,
     stale: bool,
+    after_cr: bool,
 }
 impl LineBuffer {
     #[cfg(test)]
@@ -79,7 +80,13 @@ impl LineBuffer {
         if byte == 4 {
             return Some(Line::Eof);
         }
-        if byte == b'\n' {
+        // Return is CR in our untranslated terminal mode. A following LF
+        // belongs to that same terminator, even across reads or boundaries.
+        let after_cr = std::mem::replace(&mut self.after_cr, byte == b'\r');
+        if byte == b'\n' && after_cr {
+            return None;
+        }
+        if byte == b'\r' || byte == b'\n' {
             let answer = if !self.overflow && self.bytes == b"stop" {
                 Some(Line::Stop)
             } else if !self.overflow && self.bytes == b"quit" {
