@@ -49,16 +49,31 @@ fn plain_terminal(mission: &Mission, cause: SettleCause) -> Trigger {
     }
     Trigger::Block { reason }
 }
-fn first_cause(first: HaltCause, asked: SettleCause) -> SettleCause {
-    if first == halt_cause(asked) {
-        return asked;
+// The closed cause registry is shared by all callers in this process. Its
+// one-based index is kept ONLY in the deny-only cell, never in a journal or
+// across a restart. Journal records still use the existing stable codes.
+fn cause_tag(cause: SettleCause) -> Option<std::num::NonZeroU16> {
+    let index = SettleCause::every()
+        .iter()
+        .position(|known| *known == cause)?;
+    std::num::NonZeroU16::new(u16::try_from(index.checked_add(1)?).ok()?)
+}
+fn first_cause(
+    (first, tag): (HaltCause, Option<std::num::NonZeroU16>),
+) -> Result<SettleCause, CoordinatorError> {
+    if let Some(tag) = tag {
+        // An unrecognized tag must never turn into a different terminal cause.
+        return SettleCause::every()
+            .get(usize::from(tag.get()) - 1)
+            .copied()
+            .ok_or(CoordinatorError::Stopped);
     }
-    match first {
+    Ok(match first {
         HaltCause::Stop => SettleCause::Stop(StopReason::Owner),
         HaltCause::Emergency => SettleCause::Stop(StopReason::EmergencyStop),
         HaltCause::TimeBudget => SettleCause::TimeBudget,
         HaltCause::Fence => SettleCause::Stop(StopReason::DoorHalted),
-    }
+    })
 }
 pub(super) fn outcome(publication: PublicationClass) -> SettlementOutcome {
     match publication {
@@ -128,10 +143,10 @@ impl<P: EffectPort> Coordinator<P> {
             return Ok(());
         };
         file.check_budget(&*self.clock);
-        if let Some(first) = file.cell.cause() {
+        if let Some(first) = file.cell.reason() {
             #[cfg(test)]
             self.hooks.file_after_halt.fire();
-            self.file_stop(id, first_cause(first, SettleCause::Stop(StopReason::Owner)))?;
+            self.file_stop(id, first_cause(first)?)?;
             return Err(CoordinatorError::Stopped);
         }
         Ok(())
@@ -143,10 +158,14 @@ impl<P: EffectPort> Coordinator<P> {
         asked: SettleCause,
     ) -> Result<MissionState, CoordinatorError> {
         let cause = if let Some(file) = &self.file {
-            file.cell.engage_with(halt_cause(asked));
+            let Some(tag) = cause_tag(asked) else {
+                file.cell.engage_with(HaltCause::Fence);
+                return Err(CoordinatorError::Stopped);
+            };
+            file.cell.engage_reason(halt_cause(asked), Some(tag));
             #[cfg(test)]
             self.hooks.file_after_halt.fire();
-            first_cause(file.cell.cause().expect("engaged cell"), asked)
+            first_cause(file.cell.reason().expect("engaged cell"))?
         } else {
             asked
         };
@@ -255,9 +274,12 @@ impl<P: EffectPort> Coordinator<P> {
         if let Some(file) = &self.file {
             file.cell.engage_with(HaltCause::Fence);
             if reserved.is_some() {
-                if let Some(first) = file.cell.cause().filter(|c| *c != HaltCause::Fence) {
-                    return self
-                        .file_stop(id, first_cause(first, SettleCause::Stop(StopReason::Owner)));
+                if let Some(first) = file
+                    .cell
+                    .reason()
+                    .filter(|(cause, tag)| *cause != HaltCause::Fence || tag.is_some())
+                {
+                    return self.file_stop(id, first_cause(first)?);
                 }
             }
         }
@@ -348,9 +370,12 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<MissionState, CoordinatorError> {
         if let Some(file) = &self.file {
             file.cell.engage_with(HaltCause::Fence);
-            if let Some(first) = file.cell.cause().filter(|c| *c != HaltCause::Fence) {
-                return self
-                    .file_stop(id, first_cause(first, SettleCause::Stop(StopReason::Owner)));
+            if let Some(first) = file
+                .cell
+                .reason()
+                .filter(|(cause, tag)| *cause != HaltCause::Fence || tag.is_some())
+            {
+                return self.file_stop(id, first_cause(first)?);
             }
         }
         let state = self.try_with_lock(|inner| {

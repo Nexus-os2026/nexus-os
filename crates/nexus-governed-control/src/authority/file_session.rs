@@ -6,11 +6,12 @@
 //! ingress cannot block, and resume cannot clear either. The history mutex
 //! contains counters and handles only; no I/O, callback or nested lock.
 use super::run::GroupId;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::num::NonZeroU16;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-const EMERGENCY: u8 = 0x80;
-const CAUSE: u8 = 0x7f;
+const EMERGENCY: u32 = 0x80;
+const CAUSE: u32 = 0x7f;
 
 /// First reason this File session stopped. A cell grants no authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +22,7 @@ pub enum HaltCause {
     Fence,
 }
 impl HaltCause {
-    fn code(self) -> u8 {
+    fn code(self) -> u32 {
         match self {
             Self::Stop => 1,
             Self::Emergency => 2,
@@ -29,7 +30,7 @@ impl HaltCause {
             Self::Fence => 4,
         }
     }
-    fn of(code: u8) -> Option<Self> {
+    fn of(code: u32) -> Option<Self> {
         match code & CAUSE {
             1 => Some(Self::Stop),
             2 => Some(Self::Emergency),
@@ -42,17 +43,25 @@ impl HaltCause {
 
 /// Deny-only, immutable identity, never reset or retired before broker drop.
 #[derive(Clone, Debug)]
-pub struct HaltCell(Arc<AtomicU8>);
+pub struct HaltCell(Arc<AtomicU32>);
 impl HaltCell {
     pub fn engage(&self) {
         self.engage_with(HaltCause::Stop);
     }
     pub fn engage_with(&self, cause: HaltCause) {
+        self.engage_reason(cause, None);
+    }
+    /// Latch the originating client's exact reason together with engagement.
+    /// The tag is process-local, deny-only data interpreted by that client;
+    /// the broker neither grants authority from it nor persists it. Zero is
+    /// reserved for broker-originated causes without a client reason.
+    pub fn engage_reason(&self, cause: HaltCause, reason: Option<NonZeroU16>) {
+        let reason = u32::from(reason.map_or(0, NonZeroU16::get)) << 8;
         let _ = self
             .0
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
                 Some(if old & CAUSE == 0 {
-                    old | cause.code()
+                    old | cause.code() | reason
                 } else {
                     old
                 })
@@ -62,7 +71,13 @@ impl HaltCell {
         self.cause().is_some()
     }
     pub fn cause(&self) -> Option<HaltCause> {
-        HaltCause::of(self.0.load(Ordering::SeqCst))
+        self.reason().map(|(cause, _)| cause)
+    }
+    /// Both fields come from the same atomic snapshot and never change after
+    /// engagement. Emergency ingress may only add its separate history bit.
+    pub fn reason(&self) -> Option<(HaltCause, Option<NonZeroU16>)> {
+        let value = self.0.load(Ordering::SeqCst);
+        HaltCause::of(value).map(|cause| (cause, NonZeroU16::new((value >> 8) as u16)))
     }
     pub(crate) fn same(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
@@ -101,7 +116,7 @@ pub(crate) struct FileSessions {
 impl Default for FileSessions {
     fn default() -> Self {
         Self {
-            state: HaltCell(Arc::new(AtomicU8::new(0))),
+            state: HaltCell(Arc::new(AtomicU32::new(0))),
             history: Mutex::default(),
         }
     }

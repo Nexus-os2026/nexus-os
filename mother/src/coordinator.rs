@@ -2100,7 +2100,7 @@ impl<P: EffectPort> Coordinator<P> {
         if let Some(file) = &self.file {
             file.cell.engage_with(HaltCause::Fence);
             // A Stop that won first must still settle an unresolved File.
-            if file.cell.cause() != Some(HaltCause::Fence) {
+            if file.cell.reason() != Some((HaltCause::Fence, None)) {
                 self.file_boundary(id)?;
             }
         }
