@@ -32,8 +32,8 @@ pub struct FileSession<P: EffectPort> {
     coordinator: Coordinator<P>,
 }
 
+#[path = "../adapter/lite_review3.rs"]
 #[cfg(test)]
-#[path = "lite_review3.rs"]
 mod review3;
 
 impl<P: EffectPort> Coordinator<P> {
