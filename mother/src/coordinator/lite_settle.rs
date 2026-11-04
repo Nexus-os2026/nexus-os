@@ -3,7 +3,7 @@
 use super::*;
 use crate::effect::FileSnapshot;
 use nexus_governed_control::authority::commitment::{CommitmentState, PublicationClass};
-use nexus_governed_control::authority::file_session::HaltCause;
+use nexus_governed_control::authority::file_session::{HaltCause, HaltTag};
 
 pub(super) enum FileDecision {
     Status(ApprovalStatus),
@@ -61,20 +61,26 @@ fn cause_tag(cause: SettleCause) -> Option<std::num::NonZeroU16> {
 fn first_cause(
     (first, tag): (HaltCause, Option<std::num::NonZeroU16>),
 ) -> Result<SettleCause, CoordinatorError> {
-    if let Some(tag) = tag {
-        // An unrecognized tag must never turn into a different terminal cause.
-        return SettleCause::every()
-            .get(usize::from(tag.get()) - 1)
+    let tag = tag.ok_or(CoordinatorError::Stopped)?.get();
+    // Broker tags have fixed, exact meanings. Unknown or inconsistent tags
+    // fail closed; no engaged cell can be guessed to mean DoorHalted.
+    match (first, tag) {
+        (HaltCause::Stop, u16::MAX) => Ok(SettleCause::Stop(StopReason::Owner)),
+        (HaltCause::Emergency, tag) if tag == u16::MAX - 1 => {
+            Ok(SettleCause::Stop(StopReason::EmergencyStop))
+        }
+        (HaltCause::TimeBudget, tag) if tag == u16::MAX - 2 => Ok(SettleCause::TimeBudget),
+        (HaltCause::Fence, tag) if tag == u16::MAX - 3 => {
+            Ok(SettleCause::Stop(StopReason::DoorHalted))
+        }
+        (_, tag) => SettleCause::every()
+            .get(usize::from(tag) - 1)
             .copied()
-            .ok_or(CoordinatorError::Stopped);
+            .filter(|cause| halt_cause(*cause) == first)
+            .ok_or(CoordinatorError::Stopped),
     }
-    Ok(match first {
-        HaltCause::Stop => SettleCause::Stop(StopReason::Owner),
-        HaltCause::Emergency => SettleCause::Stop(StopReason::EmergencyStop),
-        HaltCause::TimeBudget => SettleCause::TimeBudget,
-        HaltCause::Fence => SettleCause::Stop(StopReason::DoorHalted),
-    })
 }
+
 pub(super) fn outcome(publication: PublicationClass) -> SettlementOutcome {
     match publication {
         PublicationClass::Published {
@@ -110,9 +116,10 @@ impl<P: EffectPort> Coordinator<P> {
         body: impl FnOnce(&mut Inner) -> Result<T, CoordinatorError>,
     ) -> Result<T, CoordinatorError> {
         let (result, owed) = {
-            let mut inner = self.inner.lock().map_err(|_| {
+            let mut inner = self.inner.lock().map_err(|poison| {
+                drop(poison);
                 if let Some(file) = &self.file {
-                    file.cell.engage_with(HaltCause::Fence);
+                    file.cell.engage_tagged(HaltTag::DoorHalted);
                     #[cfg(test)]
                     self.hooks.file_engagement.fire("lock-poison");
                 }
@@ -130,7 +137,7 @@ impl<P: EffectPort> Coordinator<P> {
         self.hooks.after_owed_write.fire();
         if written.is_err() {
             if let Some(file) = &self.file {
-                file.cell.engage_with(HaltCause::Fence);
+                file.cell.engage_tagged(HaltTag::DoorHalted);
                 #[cfg(test)]
                 self.hooks.file_engagement.fire("owed-failure");
             }
@@ -147,10 +154,10 @@ impl<P: EffectPort> Coordinator<P> {
             return Ok(());
         };
         file.check_budget(&*self.clock);
-        if let Some(first) = file.cell.reason() {
+        if file.cell.is_engaged() {
             #[cfg(test)]
             self.hooks.file_after_halt.fire();
-            self.file_stop(id, first_cause(first)?)?;
+            self.file_stop(id, SettleCause::Stop(StopReason::Owner))?;
             return Err(CoordinatorError::Stopped);
         }
         Ok(())
@@ -174,17 +181,24 @@ impl<P: EffectPort> Coordinator<P> {
                 tag
             };
             let Some(tag) = tag else {
-                file.cell.engage_with(HaltCause::Fence);
+                file.cell.engage_tagged(HaltTag::DoorHalted);
                 #[cfg(test)]
                 self.hooks.file_engagement.fire("unknown-cause");
                 return Err(CoordinatorError::Stopped);
             };
-            file.cell.engage_reason(halt_cause(asked), Some(tag));
+            file.cell.engage_tagged(HaltTag::Client {
+                cause: halt_cause(asked),
+                reason: tag,
+            });
             #[cfg(test)]
             self.hooks.file_engagement.fire("file-stop");
             #[cfg(test)]
             self.hooks.file_after_halt.fire();
-            first_cause(file.cell.reason().expect("engaged cell"))?
+            let first = file.cell.reason().ok_or(CoordinatorError::Stopped)?;
+            if super::lite_intent::is_terminal_intent(first) {
+                return self.file_finish_intent(id);
+            }
+            first_cause(first)?
         } else {
             asked
         };
@@ -290,20 +304,31 @@ impl<P: EffectPort> Coordinator<P> {
         read: SettlementOutcome,
         reserved: Option<u64>,
     ) -> Result<MissionState, CoordinatorError> {
-        if let Some(file) = &self.file {
-            file.cell.engage_with(HaltCause::Fence);
+        if let Some(generation) = reserved.filter(|_| self.file.is_some()) {
+            self.file_latch_terminal(super::lite_intent::FileTerminal::Publication {
+                id,
+                effect: observed_effect,
+                action,
+                read,
+                generation,
+            })?;
             #[cfg(test)]
             self.hooks.file_engagement.fire("publication");
-            if reserved.is_some() {
-                if let Some(first) = file
-                    .cell
-                    .reason()
-                    .filter(|(cause, tag)| *cause != HaltCause::Fence || tag.is_some())
-                {
-                    return self.file_stop(id, first_cause(first)?);
-                }
-            }
+            return self.file_stop(id, SettleCause::Stop(StopReason::Owner));
         }
+        // file_stop already engaged its exact cause before its first lock.
+        // Recovery has no live File cell; it uses the durable settlement cause.
+        self.file_record_terminal(id, observed_effect, action, read, reserved)
+    }
+
+    pub(super) fn file_record_terminal(
+        &self,
+        id: MissionId,
+        observed_effect: u64,
+        action: Option<PendingAction>,
+        read: SettlementOutcome,
+        reserved: Option<u64>,
+    ) -> Result<MissionState, CoordinatorError> {
         let result = self.try_with_lock(|inner| {
             inner.usable()?;
             let m = inner.mission(id)?;
@@ -389,21 +414,28 @@ impl<P: EffectPort> Coordinator<P> {
         generation: u64,
         trigger: Trigger,
     ) -> Result<MissionState, CoordinatorError> {
-        if let Some(file) = &self.file {
-            file.cell.engage_with(HaltCause::Fence);
-            #[cfg(test)]
-            self.hooks.file_engagement.fire("nonpublication");
-            if let Some(first) = file
-                .cell
-                .reason()
-                .filter(|(cause, tag)| *cause != HaltCause::Fence || tag.is_some())
-            {
-                return self.file_stop(id, first_cause(first)?);
-            }
-        }
+        self.file_latch_terminal(super::lite_intent::FileTerminal::Nonpublication {
+            id,
+            generation,
+            trigger,
+        })?;
+        #[cfg(test)]
+        self.hooks.file_engagement.fire("nonpublication");
+        self.file_stop(id, SettleCause::Stop(StopReason::Owner))
+    }
+
+    pub(super) fn file_record_nonpublication(
+        &self,
+        id: MissionId,
+        generation: u64,
+        trigger: Trigger,
+    ) -> Result<MissionState, CoordinatorError> {
         let state = self.try_with_lock(|inner| {
             inner.usable()?;
             let m = inner.mission(id)?;
+            if m.state.is_terminal() {
+                return Ok(m.state);
+            }
             if m.generation != generation || m.settlement.is_some() {
                 return Err(CoordinatorError::Stopped);
             }
@@ -484,18 +516,20 @@ impl<P: EffectPort> Coordinator<P> {
             Ok((effect, pending))
         })?;
         let elapsed = self.port.file_deadline_elapsed(&pending);
-        let withdrawal = if elapsed {
-            if let Some(file) = &self.file {
-                file.cell.engage_with(HaltCause::Fence);
-                #[cfg(test)]
-                self.hooks.file_engagement.fire("deadline");
-            }
-            self.port
-                .withdraw(id)
-                .map_err(|r| CoordinatorError::Withdrawal(r.class))
-        } else {
-            Ok(())
-        };
+        if elapsed {
+            self.file_latch_terminal(super::lite_intent::FileTerminal::Deadline {
+                id,
+                effect,
+                pending,
+                generation,
+                resolved: std::sync::OnceLock::new(),
+            })?;
+            #[cfg(test)]
+            self.hooks.file_engagement.fire("deadline");
+            return self
+                .file_stop(id, SettleCause::Stop(StopReason::Owner))
+                .map(FileDecision::Ended);
+        }
         // D3: never read the publication before withdrawing an elapsed wait.
         let snapshot = self
             .port
@@ -529,13 +563,11 @@ impl<P: EffectPort> Coordinator<P> {
             _ => None,
         };
         if let Some(status) = status {
-            withdrawal?;
             return Ok(FileDecision::Status(status));
         }
         let action = (!action.commitment.is_empty()).then_some(action);
         let state =
             self.file_terminal(id, effect, action, outcome(publication), Some(generation))?;
-        withdrawal?;
         Ok(FileDecision::Ended(state))
     }
 

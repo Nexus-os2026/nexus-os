@@ -31,9 +31,10 @@ impl GovernedPort {
     }
 
     pub(super) fn file_runs(&self) -> Result<std::sync::MutexGuard<'_, Runs>, EffectRefusal> {
-        self.runs.lock().map_err(|_| {
+        self.runs.lock().map_err(|poison| {
+            drop(poison);
             if let Some((_, cell)) = self.file_session.get() {
-                cell.engage_with(HaltCause::Fence);
+                cell.engage_tagged(HaltTag::DoorHalted);
                 #[cfg(test)]
                 self.file_engagement.fire("port-poison");
             }

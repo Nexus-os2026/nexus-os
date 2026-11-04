@@ -2,11 +2,14 @@
 //! to the count-only legacy Stop API is exposed.
 use super::*;
 use crate::effect::Admission;
-use nexus_governed_control::authority::file_session::{HaltCause, HaltCell};
+#[cfg(test)]
+use nexus_governed_control::authority::file_session::HaltCause;
+use nexus_governed_control::authority::file_session::{HaltCell, HaltTag};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(super) struct FileLife {
     pub(super) cell: HaltCell,
+    pub(super) terminal: std::sync::OnceLock<super::lite_intent::FileTerminal>,
     #[cfg(test)]
     after_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     pub(super) mission: AtomicU64,
@@ -24,7 +27,7 @@ impl FileLife {
         if clock.monotonic_ms() >= self.mono_deadline.load(Ordering::SeqCst)
             || clock.wall_ms() >= self.wall_deadline.load(Ordering::SeqCst)
         {
-            self.cell.engage_with(HaltCause::TimeBudget);
+            self.cell.engage_tagged(HaltTag::TimeBudget);
             #[cfg(test)]
             self.after_engagement.fire("budget");
         }
@@ -78,13 +81,14 @@ impl<P: EffectPort> Coordinator<P> {
         match self.inner.lock() {
             Ok(mut inner) => inner.file_cell = Some(cell.clone()),
             Err(_) => {
-                cell.engage_with(HaltCause::Fence);
+                cell.engage_tagged(HaltTag::DoorHalted);
                 #[cfg(test)]
                 self.hooks.file_engagement.fire("selection-poison");
                 return Err(CoordinatorError::Poisoned);
             }
         }
         self.file = Some(FileLife {
+            terminal: std::sync::OnceLock::new(),
             #[cfg(test)]
             after_engagement: self.hooks.file_engagement.clone(),
             cell,
@@ -166,7 +170,7 @@ impl<P: EffectPort> FileSession<P> {
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(&self.coordinator))) {
             Ok(result) => result,
             Err(_) => {
-                self.life().cell.engage_with(HaltCause::Fence);
+                self.life().cell.engage_tagged(HaltTag::DoorHalted);
                 #[cfg(test)]
                 self.coordinator
                     .hooks
@@ -221,7 +225,7 @@ impl<P: EffectPort> FileSession<P> {
         })
     }
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        self.life().cell.engage();
+        self.life().cell.engage_tagged(HaltTag::OwnerStop);
         #[cfg(test)]
         self.coordinator.hooks.file_engagement.fire("public-stop");
         #[cfg(test)]
@@ -229,7 +233,7 @@ impl<P: EffectPort> FileSession<P> {
         self.call(|c| c.stop(id))
     }
     pub fn stop_all(&self) -> Result<usize, CoordinatorError> {
-        self.life().cell.engage();
+        self.life().cell.engage_tagged(HaltTag::OwnerStop);
         #[cfg(test)]
         self.coordinator
             .hooks

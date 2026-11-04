@@ -38,7 +38,7 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::commitment::PublicationClass;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::file_session::{
-    FileAttachment, FilePort, FileSessionError, HaltCause, HaltCell,
+    FileAttachment, FilePort, FileSessionError, HaltCell, HaltTag,
 };
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
@@ -509,7 +509,7 @@ impl EffectPort for GovernedPort {
                 .is_ok());
         }
         if self.file_session.set((attachment, cell.clone())).is_err() {
-            cell.engage_with(HaltCause::Fence);
+            cell.engage_tagged(HaltTag::DoorHalted);
             #[cfg(test)]
             self.file_engagement.fire("port-claim");
             return Err(FileSessionError::AlreadySelected);
@@ -691,7 +691,7 @@ impl EffectPort for GovernedPort {
     /// coordinator opened again after a break needs a new port.
     fn fence(&self) -> Owed {
         if let Some((_, cell)) = self.file_session.get() {
-            cell.engage_with(HaltCause::Fence);
+            cell.engage_tagged(HaltTag::DoorHalted);
             #[cfg(test)]
             self.file_engagement.fire("port-fence");
         }

@@ -82,15 +82,14 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
-use nexus_governed_control::authority::file_session::{
-    FileAttachment, FileSessionError, HaltCause,
-};
+use nexus_governed_control::authority::file_session::{FileAttachment, FileSessionError};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 mod lite;
+mod lite_intent;
 #[cfg(test)]
 mod lite_oracles;
 mod lite_settle;
@@ -2100,18 +2099,26 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         trigger: Trigger,
     ) -> Result<MissionState, CoordinatorError> {
-        if let Some(file) = &self.file {
-            file.cell.engage_with(HaltCause::Fence);
+        if self.file.is_some() {
+            self.file_latch_terminal(lite_intent::FileTerminal::NonFile { id, trigger })?;
             #[cfg(test)]
             self.hooks.file_engagement.fire("non-file-terminal");
-            // A Stop that won first must still settle an unresolved File.
-            if file.cell.reason() != Some((HaltCause::Fence, None)) {
-                self.file_boundary(id)?;
-            }
+            return self.file_stop(id, SettleCause::Stop(StopReason::Owner));
         }
+        self.record_non_file_end(id, trigger)
+    }
+
+    fn record_non_file_end(
+        &self,
+        id: MissionId,
+        trigger: Trigger,
+    ) -> Result<MissionState, CoordinatorError> {
         let mono = self.clock.monotonic_ms();
         let result = self.step(|inner| {
             let from = inner.mission(id)?.state;
+            if self.file.is_some() && from.is_terminal() {
+                return Ok(Ok(from));
+            }
             let result = inner.fire(id, trigger.clone(), mono);
             if let (Err(CoordinatorError::Journal(_)), Ok(to)) =
                 (&result, transition(from, &trigger))
