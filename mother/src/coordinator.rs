@@ -2021,6 +2021,17 @@ impl<P: EffectPort> Coordinator<P> {
     /// the port; a waiting mission's wait lapses (which withdraws the
     /// pending action).
     fn end(&self, id: MissionId, reason: BlockReason) -> Result<MissionState, CoordinatorError> {
+        if self.file.is_some() {
+            // This is also an ingress: a caller may have just discovered its
+            // budget expired. Engage before the first lock, and keep that
+            // cause rather than converting the wait to a generic lapse.
+            let cause = if reason == BlockReason::BudgetTime {
+                SettleCause::TimeBudget
+            } else {
+                SettleCause::Ended(reason)
+            };
+            return self.file_stop(id, cause);
+        }
         let trigger = self.step(|inner| {
             let mission = inner.mission(id)?;
             Ok::<_, CoordinatorError>(match (&mission.waiting, mission.state) {
@@ -2042,7 +2053,7 @@ impl<P: EffectPort> Coordinator<P> {
                 Trigger::Block { reason } => reason,
                 _ => BlockReason::PhaseInterrupted,
             };
-            return self.file_stop(id, SettleCause::Ended(reason));
+            return self.end(id, reason);
         }
         let mono = self.clock.monotonic_ms();
         let result = self.step(|inner| {
