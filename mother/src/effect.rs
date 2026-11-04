@@ -253,6 +253,28 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
             class: BrokerClass::NoBrokerRoute,
         })
     }
+    /// File dispatch identity is supplied by the coordinator, before proposal.
+    fn perform_file(
+        &self,
+        _: MissionId,
+        _: u64,
+        _: &EffectRequest,
+    ) -> Result<EffectOutcome, EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NotAdmitted,
+        })
+    }
+    /// Read only the commitment belonging to this exact File effect. None
+    /// proves this port has not begun that effect; an in-flight proposal errors.
+    fn file_publication_for(
+        &self,
+        _: MissionId,
+        _: u64,
+    ) -> Result<Option<FileSnapshot>, EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NotAdmitted,
+        })
+    }
     fn file_publication(&self, _: MissionId) -> Result<Option<FileSnapshot>, EffectRefusal> {
         Ok(None)
     }

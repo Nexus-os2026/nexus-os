@@ -61,16 +61,25 @@ impl GovernedPort {
     pub(super) fn publication_lite(
         &self,
         mission: MissionId,
+        effect: u64,
     ) -> Result<Option<FileSnapshot>, EffectRefusal> {
         let pending = {
             let runs = self.file_runs()?;
+            match runs.file_effects.get(&mission) {
+                None => return Ok(None),
+                Some(known) if *known < effect => return Ok(None),
+                Some(known) if *known != effect => return Err(refused(BrokerClass::ActionNotHeld)),
+                Some(_) => {}
+            }
             match (runs.open.get(&mission), runs.waiting.get(&mission)) {
                 (Some(run), Some((id, deadline))) => PendingAction {
                     run: run.to_string(),
                     commitment: id.to_string(),
                     deadline_mono_ms: *deadline,
                 },
-                _ => return Ok(None),
+                // The proposal began but has not yielded an exact commitment,
+                // or its evidence was lost: absence is not nonpublication.
+                _ => return Err(refused(BrokerClass::ActionNotHeld)),
             }
         };
         let id = CommitmentId::parse(&pending.commitment)

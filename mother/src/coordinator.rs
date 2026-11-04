@@ -1873,7 +1873,11 @@ impl<P: EffectPort> Coordinator<P> {
             };
 
             self.file_boundary(id)?;
-            let outcome = self.port.perform(id, effect);
+            let outcome = if self.file.is_some() && effect.kind() == EffectKind::File {
+                self.port.perform_file(id, number, effect)
+            } else {
+                self.port.perform(id, effect)
+            };
             self.file_boundary(id)?;
             #[cfg(test)]
             self.hooks.file_after_perform_check.fire();

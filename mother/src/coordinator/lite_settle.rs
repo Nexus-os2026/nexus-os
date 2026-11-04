@@ -124,7 +124,7 @@ impl<P: EffectPort> Coordinator<P> {
         enum Step {
             Done(MissionState),
             Plain(Result<MissionState, CoordinatorError>),
-            Settle(Result<(), CoordinatorError>),
+            Settle(u64, Option<PendingAction>, Result<(), CoordinatorError>),
         }
         let step = self.try_with_lock(|inner| {
             inner.usable()?;
@@ -132,8 +132,13 @@ impl<P: EffectPort> Coordinator<P> {
             if m.state.is_terminal() {
                 return Ok(Step::Done(m.state));
             }
-            if m.settlement.is_some() {
-                return Ok(Step::Settle(Ok(())));
+            if let Some((effect, _)) = m.settlement {
+                let pending = m
+                    .open_action
+                    .as_ref()
+                    .filter(|(e, _)| *e == effect)
+                    .map(|(_, p)| p.clone());
+                return Ok(Step::Settle(effect, pending, Ok(())));
             }
             if let Some(effect) = m.unresolved_file {
                 let started = inner
@@ -142,7 +147,12 @@ impl<P: EffectPort> Coordinator<P> {
                 let m = inner.mission(id)?;
                 m.settlement = Some((effect, cause));
                 m.generation += 1;
-                return Ok(Step::Settle(started));
+                let pending = m
+                    .open_action
+                    .as_ref()
+                    .filter(|(e, _)| *e == effect)
+                    .map(|(_, p)| p.clone());
+                return Ok(Step::Settle(effect, pending, started));
             }
             let trigger = match cause {
                 SettleCause::Stop(reason) => Trigger::Stop { reason },
@@ -174,17 +184,23 @@ impl<P: EffectPort> Coordinator<P> {
                 withdrawn?;
                 Ok(state)
             }
-            Ok(Step::Settle(started)) => {
+            Ok(Step::Settle(effect, pending, started)) => {
                 let withdrawn = self
                     .port
                     .withdraw(id)
                     .map_err(|r| CoordinatorError::Withdrawal(r.class));
                 // Exactly one snapshot after withdrawal, including when it failed.
-                let snapshot = self.port.file_publication(id).ok().flatten();
-                let (action, read) = snapshot.map_or((None, SettlementOutcome::Uncertain), |s| {
-                    (Some(s.action), outcome(s.publication))
-                });
-                let ended = self.file_terminal(id, action, read, None);
+                let snapshot = self.port.file_publication_for(id, effect);
+                let (action, read) = match snapshot {
+                    Ok(Some(s)) if pending.as_ref().is_none_or(|p| p == &s.action) => {
+                        (Some(s.action), outcome(s.publication))
+                    }
+                    // The engaged cell prevents this not-yet-proposed effect
+                    // from entering the broker when its dispatch resumes.
+                    Ok(None) if pending.is_none() => (None, SettlementOutcome::NotPublished),
+                    _ => (pending, SettlementOutcome::Uncertain),
+                };
+                let ended = self.file_terminal(id, effect, action, read, None);
                 started?;
                 let state = ended?;
                 withdrawn?;
@@ -204,6 +220,7 @@ impl<P: EffectPort> Coordinator<P> {
     fn file_terminal(
         &self,
         id: MissionId,
+        observed_effect: u64,
         action: Option<PendingAction>,
         read: SettlementOutcome,
         reserved: Option<u64>,
@@ -240,9 +257,22 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 _ => return Err(CoordinatorError::Stopped),
             };
+            if effect != observed_effect || m.unresolved_file != Some(effect) {
+                return Err(CoordinatorError::Stopped);
+            }
             let action = match &m.open_action {
-                Some((e, pending)) if *e == effect => Some(pending.clone()),
-                _ => action,
+                Some((e, pending)) if *e == effect => {
+                    // A snapshot's outcome may never be relabelled with a
+                    // different commitment. Lost crash evidence is uncertain.
+                    if action.as_ref() != Some(pending)
+                        && !(action.is_none() && read == SettlementOutcome::Uncertain)
+                    {
+                        return Err(CoordinatorError::Stopped);
+                    }
+                    Some(pending.clone())
+                }
+                Some(_) => return Err(CoordinatorError::Stopped),
+                None => action,
             };
             let trigger = Trigger::Settled {
                 effect,
@@ -367,16 +397,18 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         generation: u64,
     ) -> Result<FileDecision, CoordinatorError> {
-        let pending = self.try_with_lock(|inner| {
-            Ok(inner
-                .mission(id)?
-                .open_action
-                .as_ref()
-                .map(|(_, p)| p.clone()))
+        let (effect, pending) = self.try_with_lock(|inner| {
+            let m = inner.mission(id)?;
+            let (effect, pending) = m.open_action.clone().ok_or(CoordinatorError::Stopped)?;
+            if m.generation != generation
+                || m.unresolved_file != Some(effect)
+                || m.waiting.as_ref().is_none_or(|w| w.effect != effect)
+            {
+                return Err(CoordinatorError::Stopped);
+            }
+            Ok((effect, pending))
         })?;
-        let elapsed = pending
-            .as_ref()
-            .is_some_and(|p| self.port.file_deadline_elapsed(p));
+        let elapsed = self.port.file_deadline_elapsed(&pending);
         let withdrawal = if elapsed {
             if let Some(file) = &self.file {
                 file.cell.engage_with(HaltCause::Fence);
@@ -388,17 +420,18 @@ impl<P: EffectPort> Coordinator<P> {
             Ok(())
         };
         // D3: never read the publication before withdrawing an elapsed wait.
-        let snapshot = self.port.file_publication(id).ok().flatten();
+        let snapshot = self
+            .port
+            .file_publication_for(id, effect)
+            .ok()
+            .flatten()
+            .filter(|s| s.action == pending);
         let FileSnapshot {
             action,
             publication,
             state,
         } = snapshot.unwrap_or(FileSnapshot {
-            action: pending.unwrap_or(PendingAction {
-                run: String::new(),
-                commitment: String::new(),
-                deadline_mono_ms: 0,
-            }),
+            action: pending,
             publication: PublicationClass::Uncertain,
             state: None,
         });
@@ -423,7 +456,8 @@ impl<P: EffectPort> Coordinator<P> {
             return Ok(FileDecision::Status(status));
         }
         let action = (!action.commitment.is_empty()).then_some(action);
-        let state = self.file_terminal(id, action, outcome(publication), Some(generation))?;
+        let state =
+            self.file_terminal(id, effect, action, outcome(publication), Some(generation))?;
         withdrawal?;
         Ok(FileDecision::Ended(state))
     }
@@ -464,7 +498,13 @@ impl<P: EffectPort> Coordinator<P> {
                 }
             })?;
             if unresolved {
-                self.file_terminal(id, None, SettlementOutcome::Uncertain, None)?;
+                let effect = self.try_with_lock(|inner| {
+                    inner
+                        .mission(id)?
+                        .unresolved_file
+                        .ok_or(CoordinatorError::Stopped)
+                })?;
+                self.file_terminal(id, effect, None, SettlementOutcome::Uncertain, None)?;
             } else {
                 self.file_close_action(id)?;
                 self.file_ack_all(id)?;

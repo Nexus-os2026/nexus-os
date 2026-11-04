@@ -129,6 +129,8 @@ struct Runs {
     /// The action each mission waits on at the broker, and the port's
     /// monotonic deadline for it.
     waiting: BTreeMap<MissionId, (CommitmentId, u64)>,
+    /// The exact File effect owning the current proposal/wait slot.
+    file_effects: BTreeMap<MissionId, u64>,
     /// M2a-S: the coordinator broke. Every run registered then was
     /// cancelled at the broker; a run opened later is cancelled as it
     /// registers, and no broker call starts.
@@ -430,55 +432,12 @@ fn refused_by(class: &str) -> EffectRefusal {
     refused(BrokerClass::of(class))
 }
 
-impl EffectPort for GovernedPort {
-    fn file_workspace(&self) -> Option<&str> {
-        self.workspace.as_deref()
-    }
-    fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
-        Ok(Some(Arc::new(
-            self.file_port.as_ref().map_err(|e| *e)?.attach()?,
-        )))
-    }
-    fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
-        let cell = self.door.claim_file_session(&attachment)?;
-        if self.file_session.set((attachment, cell.clone())).is_err() {
-            cell.engage_with(HaltCause::Fence);
-            return Err(FileSessionError::AlreadySelected);
-        }
-        Ok(cell)
-    }
-    fn file_admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
-        self.admit_lite(mission, admission)
-    }
-    fn file_publication(&self, mission: MissionId) -> Result<Option<FileSnapshot>, EffectRefusal> {
-        self.publication_lite(mission)
-    }
-    fn file_deadline_elapsed(&self, pending: &PendingAction) -> bool {
-        self.door.clock().monotonic_ms() >= pending.deadline_mono_ms
-    }
-    fn file_ack(&self, pending: &PendingAction) -> Result<(), EffectRefusal> {
-        #[cfg(test)]
-        self.file_acks_tried.fetch_add(1, Ordering::SeqCst);
-        #[cfg(test)]
-        self.before_file_ack.fire();
-        #[cfg(test)]
-        if self.fail_file_ack_once.swap(false, Ordering::SeqCst) {
-            return Err(refused(BrokerClass::ActionNotHeld));
-        }
-        let id = CommitmentId::parse(&pending.commitment)
-            .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
-        self.door
-            .ack_commitment(id)
-            .map_err(|e| refused_by(e.class()))
-    }
-
-    fn perform(
+impl GovernedPort {
+    fn perform_inner(
         &self,
         mission: MissionId,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
-        #[cfg(test)]
-        self.before_perform.fire();
         if self.file_session.get().is_some() {
             self.file_enter()?;
             let runs = self.file_runs()?;
@@ -520,6 +479,118 @@ impl EffectPort for GovernedPort {
             }
             Err(e) => Err(refused_by(e.class())),
         }
+    }
+}
+
+impl EffectPort for GovernedPort {
+    fn file_workspace(&self) -> Option<&str> {
+        self.workspace.as_deref()
+    }
+    fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
+        Ok(Some(Arc::new(
+            self.file_port.as_ref().map_err(|e| *e)?.attach()?,
+        )))
+    }
+    fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
+        let cell = self.door.claim_file_session(&attachment)?;
+        if self.file_session.set((attachment, cell.clone())).is_err() {
+            cell.engage_with(HaltCause::Fence);
+            return Err(FileSessionError::AlreadySelected);
+        }
+        Ok(cell)
+    }
+    fn file_admit(&self, mission: MissionId, admission: &Admission) -> Result<(), EffectRefusal> {
+        self.admit_lite(mission, admission)
+    }
+    fn file_publication(&self, mission: MissionId) -> Result<Option<FileSnapshot>, EffectRefusal> {
+        let effect = self.file_runs()?.file_effects.get(&mission).copied();
+        match effect {
+            Some(effect) => self.publication_lite(mission, effect),
+            None => Ok(None),
+        }
+    }
+    fn file_publication_for(
+        &self,
+        mission: MissionId,
+        effect: u64,
+    ) -> Result<Option<FileSnapshot>, EffectRefusal> {
+        self.publication_lite(mission, effect)
+    }
+    fn perform_file(
+        &self,
+        mission: MissionId,
+        number: u64,
+        effect: &EffectRequest,
+    ) -> Result<EffectOutcome, EffectRefusal> {
+        #[cfg(test)]
+        self.before_perform.fire();
+        if !matches!(effect, EffectRequest::CreateFile(_)) {
+            return Err(refused(BrokerClass::NotAdmitted));
+        }
+        self.file_enter()?;
+        {
+            let mut runs = self.file_runs()?;
+            let (_, cell) = self
+                .file_session
+                .get()
+                .ok_or_else(|| refused(BrokerClass::NotAdmitted))?;
+            if cell.is_engaged() || runs.ended.contains(&mission) {
+                return Err(refused(BrokerClass::Halted));
+            }
+            if runs
+                .file_effects
+                .get(&mission)
+                .is_some_and(|prior| *prior >= number)
+            {
+                return Err(refused(BrokerClass::ActionNotHeld));
+            }
+            // Reserve before entering the broker. A read during proposal is
+            // uncertain, never proof that the effect was not published.
+            runs.file_effects.insert(mission, number);
+            runs.waiting.remove(&mission);
+        }
+        self.perform_inner(mission, effect)
+    }
+    fn file_deadline_elapsed(&self, pending: &PendingAction) -> bool {
+        self.door.clock().monotonic_ms() >= pending.deadline_mono_ms
+    }
+    fn file_ack(&self, pending: &PendingAction) -> Result<(), EffectRefusal> {
+        #[cfg(test)]
+        self.file_acks_tried.fetch_add(1, Ordering::SeqCst);
+        #[cfg(test)]
+        self.before_file_ack.fire();
+        #[cfg(test)]
+        if self.fail_file_ack_once.swap(false, Ordering::SeqCst) {
+            return Err(refused(BrokerClass::ActionNotHeld));
+        }
+        let id = CommitmentId::parse(&pending.commitment)
+            .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
+        self.door
+            .ack_commitment(id)
+            .map_err(|e| refused_by(e.class()))?;
+        let mut runs = self.file_runs()?;
+        let mission = runs.open.iter().find_map(|(mission, run)| {
+            (run.to_string() == pending.run
+                && runs.waiting.get(mission) == Some(&(id, pending.deadline_mono_ms)))
+            .then_some(*mission)
+        });
+        if let Some(mission) = mission {
+            runs.waiting.remove(&mission);
+        }
+        Ok(())
+    }
+
+    fn perform(
+        &self,
+        mission: MissionId,
+        effect: &EffectRequest,
+    ) -> Result<EffectOutcome, EffectRefusal> {
+        #[cfg(test)]
+        self.before_perform.fire();
+        if self.file_session.get().is_some() && effect.kind() == crate::contract::EffectKind::File {
+            return Err(refused(BrokerClass::NotAdmitted));
+        }
+        self.perform_inner(mission, effect)
     }
 
     fn cancel(&self, mission: MissionId) {
