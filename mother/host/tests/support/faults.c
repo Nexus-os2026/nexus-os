@@ -66,7 +66,7 @@ int fsync(int fd) {
             errno = EIO; return -1;
         }
         const char *workspace = getenv("M2DD_WORKSPACE");
-        if (mode("before-publication") && workspace &&
+        if ((mode("before-publication") || mode("held-read-error")) && workspace &&
             !strncmp(path, workspace, strlen(workspace)) && strstr(path, "(deleted)")) {
             int result = real(fd);
             if (!result) boundary("before-publication", path, NULL, 0);
@@ -94,7 +94,7 @@ ssize_t pwrite64(int fd, const void *data, size_t size, off64_t offset) {
         strstr(path, "/p3-evidence/evidence.sqlite3")) boundary("evidence", path, NULL, 0);
     /* Execute is held before its final check. Only emergency recording can
      * reach this evidence write until that owned execution is released. */
-    if (mode("before-publication") && atomic_load(&held) &&
+    if ((mode("before-publication") || mode("held-read-error")) && atomic_load(&held) &&
         path_of(fd, path, sizeof(path)) && strstr(path, "/p3-evidence/evidence.sqlite3") &&
         !atomic_exchange(&recording, 1)) receipt("stop-recording", path, NULL, 0);
     return real(fd, data, size, offset);
@@ -109,7 +109,8 @@ ssize_t write(int fd, const void *data, size_t size) {
 
 ssize_t read(int fd, void *data, size_t size) {
     ssize_t (*real)(int,void *,size_t) = dlsym(RTLD_NEXT, "read");
-    if (fd == STDIN_FILENO && mode("read-fail")) { errno = EIO; return -1; }
+    if (fd == STDIN_FILENO && (mode("read-fail") ||
+        (mode("held-read-error") && atomic_load(&held)))) { errno = EIO; return -1; }
     return real(fd, data, size);
 }
 

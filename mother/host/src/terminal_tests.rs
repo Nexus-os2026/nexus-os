@@ -294,3 +294,25 @@ fn m2dd_real_terminal_sink_renders_hostile_values_without_controls() {
     assert!(!output.lines().any(|line| line == "Binding: forged"));
     assert!(p.finish().success());
 }
+
+#[test]
+fn m2dd_undo_success_keeps_the_backends_interruption_code() {
+    use nexus_governed_control::files::UndoReport;
+    use std::time::Duration;
+    for interrupted in [
+        None,
+        Some("write_grant_expired"),
+        Some("write_grant_revoked"),
+    ] {
+        let (c, frames) = scripted();
+        crate::hands::show_undo(&c.shared, UndoReport { interrupted });
+        let frame = frames.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            frame.text,
+            format!(
+                "UNDO REMOVED interrupted={}\n",
+                interrupted.unwrap_or("none")
+            )
+        );
+    }
+}

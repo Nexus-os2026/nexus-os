@@ -418,3 +418,25 @@ fn recovery_restart_reports_crashed_preparation_without_sweeping_staging() {
     restarted.finish();
     f.empty();
 }
+
+#[test]
+fn d_o20_read_error_during_held_execution_engages_stop_before_exit() {
+    let f = Fixture::new();
+    let fault = Fault::new(&f, "held-read-error");
+    let mut command = f.command("must not publish\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.mission();
+    fault.arm();
+    p.line("approve");
+    p.yes();
+    let held = fault.reached_kind("before-publication");
+    p.line("status");
+    let stop = fault.reached_kind("stop-recording");
+    assert!(stop.path.contains("/p3-evidence/evidence.sqlite3"));
+    stop.release();
+    held.release();
+    assert!(!p.finish().success());
+    f.empty();
+}

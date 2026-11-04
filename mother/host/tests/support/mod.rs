@@ -86,14 +86,19 @@ pub struct Pty {
 }
 
 impl Pty {
-    pub fn start(mut command: Command) -> Self {
+    pub fn start(command: Command) -> Self {
+        Self::start_observing(command).0
+    }
+    pub fn start_observing(mut command: Command) -> (Self, File, nix::sys::termios::Termios) {
         let pty = openpty(None, None).unwrap();
+        let original_modes = nix::sys::termios::tcgetattr(&pty.slave).unwrap();
         // std's duplicate is close-on-exec; the raw openpty master is not.
         // Drop that original before spawn so the child cannot keep its own
         // master alive and defeat the master-close EOF oracle.
         let original = File::from(pty.master);
         let master = original.try_clone().unwrap();
         drop(original);
+        let observer = File::from(pty.slave.try_clone().unwrap());
         let input: OwnedFd = pty.slave.try_clone().unwrap();
         let output: OwnedFd = pty.slave.try_clone().unwrap();
         let child = command
@@ -102,13 +107,17 @@ impl Pty {
             .stderr(Stdio::from(pty.slave))
             .spawn()
             .unwrap();
-        Self {
-            child,
-            master: Some(master),
-            output: String::new(),
-            pending_utf8: Vec::new(),
-            cursor: 0,
-        }
+        (
+            Self {
+                child,
+                master: Some(master),
+                output: String::new(),
+                pending_utf8: Vec::new(),
+                cursor: 0,
+            },
+            observer,
+            original_modes,
+        )
     }
     pub fn send(&mut self, bytes: &[u8]) {
         let file = self.master.as_mut().unwrap();

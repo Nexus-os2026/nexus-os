@@ -462,3 +462,22 @@ fn quit_during_dialogue_cancels_without_waiting_for_an_answer() {
     assert!(p.output.contains("SESSION CLOSED recorded"));
     f.empty();
 }
+
+#[test]
+fn terminal_modes_are_owned_then_restored_on_clean_quit() {
+    use nix::sys::termios::{tcgetattr, LocalFlags, OutputFlags};
+    let f = Fixture::new();
+    let (mut p, observer, original) = Pty::start_observing(f.command("mode ownership"));
+    p.ready();
+    let active = tcgetattr(&observer).unwrap();
+    assert!(!active
+        .local_flags
+        .intersects(LocalFlags::ICANON | LocalFlags::ECHO | LocalFlags::ECHONL));
+    assert!(!active.output_flags.contains(OutputFlags::OPOST));
+    p.quit();
+    assert_eq!(
+        tcgetattr(&observer).unwrap(),
+        original,
+        "exact terminal modes restored"
+    );
+}
