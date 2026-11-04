@@ -296,7 +296,7 @@ fn d_o21_privacy_canaries_absent_from_durable_stores_and_sqlite_values() {
     let echo_start = p.output.len();
     p.line(&cs.c);
     p.expect("REFUSED unknown_command\n");
-    assert!(hits_in(p.output[echo_start..].as_bytes(), "terminal echo", &cs).is_empty());
+    assert!(hits_in(&p.output.as_bytes()[echo_start..], "terminal echo", &cs).is_empty());
     let hits = scan_home(
         &f.home,
         &format!("{}.txt", cs.cl),

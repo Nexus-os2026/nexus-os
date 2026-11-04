@@ -129,7 +129,7 @@ impl Pty {
             return false;
         }
         let mut fds = [PollFd::new(file.as_fd(), PollFlags::POLLIN)];
-        let ms = left.as_millis().min(1000).max(1) as u16;
+        let ms = left.as_millis().clamp(1, 1000) as u16;
         if poll(&mut fds, ms).unwrap() == 0 {
             return true;
         }
