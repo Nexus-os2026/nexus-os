@@ -1,11 +1,12 @@
 # Mother Nexus M1 + M2a: mission contract, coordinator core, broker consent
 
-Status: M1 and M2a (mission consent in the broker; Mother waits for broker
-approval) are on `main`. M2a-S (Stop and denial durability across
-restarts) is a candidate on `mother/m2a-s-stop-durability`.
-Headless Rust library only: no UI, no real research, no website building,
-no model calls. It is not a passed gate. Every capability here is PLANNED
-until its physical test passes on the installed build (`MOTHER.md` §1).
+Mother includes the coordinator, the separate desktop host, and this branch's
+Linux terminal Hands candidate. Hands uses deterministic lanes and calls no
+model. M2d-D is implementation and automated-test evidence, not an accepted
+capability. Every capability remains PLANNED until the Owner tests the
+installed build (`MOTHER.md` §1). The historical sections below describe the
+layered M1–M2c interfaces; the File-only limits in **Run Hands** take precedence
+for this terminal process.
 
 ## What M1 is
 
@@ -249,10 +250,10 @@ Coordinator rules the oracles pin:
 - M2a-S: the clean close is a record in the unkeyed chain. Someone with
   write access who cuts the journal back to a clean close (dropping a
   later Stop) is not detected; that is the existing truncation non-claim.
-- **Consent is the broker's, the dialog is not built yet.** No desktop
-  dialog implements `confirm_mission` in this mission (no UI): the walk
-  example stands in for it at the terminal, and only test code fakes one.
-  A confirmer that does not implement it declines every mission.
+- **Consent is the broker's.** The desktop still denies every dialogue.
+  Hands and the walk use the shared terminal confirmer with fresh codes;
+  the walk retains its three original dialogue categories. A confirmer
+  that does not implement a category declines it.
 - The broker shows Mother's summary beside the hash; it does not check the
   summary against the hash (Mother builds both). It binds the Owner's
   answer to the hash and the request label.
@@ -436,3 +437,132 @@ M2c: Mother's own crate builds no broker. The host crate
 (`mother/host`, `nexus-mother-host`, not published) holds `Home`: the broker,
 the journal, the Owner's confirmer, `door()` (asks every time) and the
 Owner's side, `owner()`, which is never handed to Mother.
+
+## Run Hands (M2d-D candidate; Linux only)
+
+Hands creates one approved top-level `.txt` or checked `.html` file in an
+empty, canonical folder you select. It never replaces a file, runs a shell,
+opens a browser or calls a model. The broker validates size, content, extension,
+mount topology, ownership and reserved directories; Linux alone does not make
+storage supported. Home and its contents are reserved, as are the broker and
+identity stores. Symlink selection and a nonempty folder refuse. Choose private
+locations beneath your own home, outside this repository.
+
+Build in this worktree, using the mission's Cargo slot:
+
+```bash
+slot=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh
+"$slot" cargo build -p nexus-mother-host --bin mother-hands --locked --target-dir target
+install -d -m 700 "$HOME/.local/share/mother-hands-demo" "$HOME/mother-hands-empty"
+target/debug/mother-hands \
+  --home "$HOME/.local/share/mother-hands-demo" \
+  --workspace "$HOME/mother-hands-empty" \
+  --name hello.txt --text $'Hello from Mother.\n'
+```
+
+Both input and output must be real terminals; do not pipe or redirect them.
+All four named arguments are required. `--text` is the exact UTF-8 argument,
+including its final newline; it is visible in the launching command line and
+may be retained by your shell history. Journal, ledger and evidence keep codes,
+counts and digests; working content belongs in the private store and broker
+candidate staging. This is not encryption or a disk-forensics guarantee.
+
+Type `run`, then answer each Files grant, Mother door and mission-consent
+dialogue with its own eight-character lowercase hexadecimal code. The grant
+lasts 300 seconds. When `FILE PENDING` appears, type `approve`; inspect all
+facts and the complete fenced content before typing the new code. Every answer
+is exact: whitespace, an empty line, `no`, a wrong code and an overlong line
+all deny. A code inside content is data. Codes are random, checked against the
+fixed display for collisions, and regenerated per dialogue.
+
+Wait for `INPUT READY` before typing. The reader invalidates complete queued
+answers and partial lines after the entire display is written and flushed.
+A stale partial line is discarded through its newline. Stop, Quit and Ctrl-D
+remain active across that boundary. There is one dialogue at a time; display,
+flush, input and boundary failures deny and end the host. Door, grant, undo and
+lift dialogues allow 120 seconds; mission dialogues allow 300; File approval
+is bounded by the lesser of 300 seconds and its remaining commitment lifetime,
+including display time. Input accumulation and queues are bounded. Terminal
+echo, canonical input and newline translation are disabled while Hands owns
+the terminal; orderly exit restores the prior modes. Ctrl-C is not intercepted.
+
+| Command | Meaning |
+|---|---|
+| `run` | Start the one File mission allowed in this process. |
+| `approve` | Ask for approval of this mission's exact pending action, then execute only if authorized. |
+| `status` | Show the permanent host restriction separately from actual kernel/broker Stop and worker receipts. Admission counts are in-memory boundary receipts, not proof of backend success. |
+| `evidence` | Show bounded recent evidence and durable-store health. This is not a complete verified chain export. |
+| `detail` | Consume the Owner-only in-memory working detail. |
+| `stop` | Permanently enter recovery-only mode and dispatch an owned Stop worker. |
+| `lift-for-undo` | With no Stop workers outstanding, separately consent to lift the native halt for Owner undo only. |
+| `undo` | Separately approve removal of the last eligible file created in this process, once. Full bytes, SHA-256 and inode identity are shown. An Owner edit refuses without removing it. |
+| `cleanup` | Make one bounded `files_retry_cleanup` attempt; report settled and still-owed work. Never lifts Stop. |
+| `quit` | Cancel the dialogue and close within one three-second shutdown deadline. |
+
+There is one File mission per fresh process, no replacement coordinator or
+recycled eligibility. Emergency never resumes or advances the mission. Queued
+work is also subject to the permanent host gate. Lifting native Stop never
+clears that restriction or the broker's File-session emergency latch. A second
+Stop invalidates an in-progress lift or undo; request fresh consent afterward.
+Recovery acknowledgement is unsupported, so evidence recovery may prevent a
+lift altogether. Nothing is lifted automatically or for status or cleanup.
+
+The reader performs memory-only Stop ingress and never waits on broker,
+coordinator, output or cleanup. Up to four owned workers perform synchronous
+Stop recording; additional presses still perform ingress and coalesce.
+`STOP REQUEST RECEIVED`, corroborated kernel/broker halt, and
+`STOP RECORDING COMPLETED` are different receipts. Worker return alone does
+not establish durable recording; inspect health for owed/uncertain records.
+
+A write already past the final native authorization check may publish once.
+The host reports it honestly and permits separate Owner undo when available.
+The exact uncertainty notice is:
+
+> A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.
+
+Startup reports recovery without sweeping staging or restoring workspace
+permission or undo. Restart is not workspace restoration or permission to
+retry an uncertain write. Same-session undo remains the last-file slot only.
+
+Clean Quit requires joined workers, successful typed File-session close,
+broker shutdown and confirmed durable evidence close, in that order.
+`SESSION CLOSED recorded` accompanies a successful exit. Active File work,
+owed recording/cleanup, terminal failure or timeout produces an unclean,
+nonzero exit. EOF/read error first performs emergency ingress. An exited
+process promises no eventual completion of blocked writes. FileJournal opens
+sync both the journal and its parent directory, including existing entries;
+a sync failure is returned, never silently acknowledged.
+
+### Install and record the exact build (Owner procedure)
+
+This procedure is documented for the Owner; the builder does not install or
+claim a physical test. Build the reviewed commit from a clean worktree. An
+explicit target directory prevents confusion with `CARGO_TARGET_DIR`.
+
+```bash
+"$slot" cargo build --release -p nexus-mother-host --bin mother-hands --locked \
+  --target-dir target/mother-hands-release
+git rev-parse HEAD
+sha256sum target/mother-hands-release/release/mother-hands
+install -d -m 700 "$HOME/.local/bin" "$HOME/.local/share/mother-hands-receipts"
+install -m 755 target/mother-hands-release/release/mother-hands "$HOME/.local/bin/mother-hands"
+sha256sum "$HOME/.local/bin/mother-hands"
+```
+
+Keep the commit SHA, both matching hashes, build command, date, OS/filesystem,
+selected Home/workspace paths and observed exit status in a receipt under
+`$HOME/.local/share/mother-hands-receipts`. Do not capture approval codes or
+private content in shared logs. The installed binary is separate from the
+desktop; launching another process cannot control this process's broker.
+
+For D-O20 physical acceptance, use two separate fresh, private Home/workspace
+pairs and the **installed** binary with `--hold-before-publish 20` (integer
+0–30 only, configured at startup). In each session consent, approve, and while
+execution is held, first test `stop`, then in the second session test Ctrl-D.
+Confirm no file or named temporary file appears. For Stop, confirm actual
+kernel/broker halt, worker completion and evidence health, then Quit. Ctrl-D
+must exit unclean/nonzero after emergency ingress. Save the observed receipts
+and independently inspect the workspace. Record these as **OBSERVED** Owner
+results; automated PTY tests are separate evidence. No installed physical
+acceptance, H1 acceptance, C-11 closure, cross-session undo, Windows/macOS
+terminal support, sandboxing or phase advancement is claimed by this document.

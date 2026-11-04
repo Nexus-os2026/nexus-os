@@ -21,9 +21,11 @@ documents) is preserved, unchanged, at the tag
 [`archive/nexus-before-mother`](https://github.com/Nexus-os2026/nexus-os/tree/archive/nexus-before-mother)
 (commit `12eec16c`).
 
-There is **no desktop app in this repository right now**. The new Mother screen
-is the next step. Builds of Nexus OS already installed keep working; they came
-from the archived code.
+The separate Mother desktop lives in `mother/desktop`; it still declines
+capability dialogues. This branch also includes the Linux terminal Hands
+candidate, described in [Run Hands](mother/README.md#run-hands-m2d-d-candidate-linux-only).
+Its automated tests do not replace Owner acceptance on the installed build.
+Older installed Nexus OS builds came from the archived code.
 
 | Crate | What it is | Mother system |
 |---|---|---|
