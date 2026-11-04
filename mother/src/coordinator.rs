@@ -1077,6 +1077,9 @@ impl<P: EffectPort> Drop for Busy<'_, P> {
     }
 }
 
+/// What a barrier came to: each target's state, or its typed error.
+type Barred = Vec<(MissionId, Result<MissionState, CoordinatorError>)>;
+
 /// M2d-C round 4: what one mission's first Stop step did (rule 4).
 enum Stepped {
     /// Terminal already, or its settlement under way (the first cause
@@ -3196,22 +3199,13 @@ impl<P: EffectPort> Coordinator<P> {
     ///
     /// Only `targets` are stopped (C4): other missions stay runnable. A
     /// poisoned coordinator lock is a typed error for each, never a panic.
-    fn barrier(
-        &self,
-        targets: Vec<(MissionId, SettleCause)>,
-    ) -> Vec<(MissionId, Result<MissionState, CoordinatorError>)> {
+    fn barrier(&self, targets: Vec<(MissionId, SettleCause)>) -> Barred {
         self.barrier_counting(targets).0
     }
 
     /// [`Self::barrier`], and the missions it left as they were (terminal
     /// already, or settling: not ended by this call).
-    fn barrier_counting(
-        &self,
-        targets: Vec<(MissionId, SettleCause)>,
-    ) -> (
-        Vec<(MissionId, Result<MissionState, CoordinatorError>)>,
-        Vec<MissionId>,
-    ) {
+    fn barrier_counting(&self, targets: Vec<(MissionId, SettleCause)>) -> (Barred, Vec<MissionId>) {
         // R6-3: each cell engaged with the cause asked for (its first cause
         // kept), and the terminal recorded for the cell's first cause: a
         // cell another path engaged first (the broker's emergency, the
