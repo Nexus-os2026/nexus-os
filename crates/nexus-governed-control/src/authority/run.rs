@@ -804,7 +804,8 @@ impl RunRegistry {
     ) -> Result<(), AuthorityError> {
         let mut guard = self.runs.lock().expect("runs");
         let table = &mut *guard;
-        table.prune_doors();
+        #[cfg(test)]
+        self.review2_hooks.fire("run.before_join");
         match table.doors.get(&group) {
             Some(door)
                 if door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged) =>
@@ -818,6 +819,21 @@ impl RunRegistry {
             .doors
             .get(&group)
             .and_then(|door| door.file_cell.clone());
+        // A session constraint must exist at run/token issuance. Never retrofit
+        // it through adoption: existing guards and preparation may hold None.
+        // Check immutable origin AND cell identity before even pruning state.
+        if let Some(cell) = &session_cell {
+            let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+            if entry.opened_by != Some(group)
+                || !entry
+                    .file_cell
+                    .as_ref()
+                    .is_some_and(|bound| bound.same(cell))
+            {
+                return Err(AuthorityError::NotMember);
+            }
+        }
+        table.prune_doors();
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
@@ -840,12 +856,7 @@ impl RunRegistry {
         if entry.groups.len() >= MAX_GROUPS_PER_RUN {
             return Err(AuthorityError::Capacity);
         }
-        #[cfg(test)]
-        self.review2_hooks.fire("run.before_join");
         super::file_session::check_halt(session_cell.as_ref())?;
-        // Adoption narrows this run too, but never changes its original
-        // owner or makes it eligible for File-session selection.
-        entry.file_cell = session_cell;
         entry.groups.push(group);
         if let Some(door) = table.doors.get_mut(&group) {
             door.members.insert(run);

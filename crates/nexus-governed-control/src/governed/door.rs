@@ -264,8 +264,9 @@ impl AgentDoor {
     /// Take back a waiting action of this agent's: the commitment must be
     /// this agent's and `run`'s, and `run` a live agent run of this agent
     /// in this registry, with room for one more group. Then `run` joins
-    /// this door's group (membership only grows). It never cancels
-    /// anything, and any refusal changes nothing.
+    /// this door's group (membership only grows). A session-cell door only
+    /// accepts runs it originally opened with that same cell; it never takes
+    /// over another run. It never cancels anything, and any refusal changes nothing.
     pub fn adopt(
         &self,
         run: RunId,

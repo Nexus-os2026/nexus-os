@@ -268,6 +268,7 @@ impl GovernedPort {
 
     /// Install a narrowing gate before sharing this port with a coordinator.
     /// There is no setter on a shared port and no way to reopen the gate.
+    /// A host-gated port never adopts replayed work from a surviving broker.
     pub fn with_admission_gate(mut self, gate: Arc<AdmissionGate>) -> Self {
         self.admission_gate = Some(gate);
         self
@@ -894,7 +895,10 @@ impl EffectPort for GovernedPort {
         let Ok(()) = self.enter() else {
             return;
         };
-        if self.admit_host().is_ok() {
+        // Hands has no surviving-broker replacement or replay adoption. Keep
+        // the handed-back obligation above so withdrawal never fakes success;
+        // only legacy ports may recover membership through this route.
+        if self.admission_gate.is_none() {
             self.adopt_inside(mission, pending);
         }
     }
