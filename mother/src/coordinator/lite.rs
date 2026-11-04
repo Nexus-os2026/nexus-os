@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(super) struct FileLife {
     pub(super) cell: HaltCell,
+    #[cfg(test)]
+    after_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     pub(super) mission: AtomicU64,
     mono_deadline: AtomicU64,
     wall_deadline: AtomicU64,
@@ -23,6 +25,8 @@ impl FileLife {
             || clock.wall_ms() >= self.wall_deadline.load(Ordering::SeqCst)
         {
             self.cell.engage_with(HaltCause::TimeBudget);
+            #[cfg(test)]
+            self.after_engagement.fire("budget");
         }
     }
 }
@@ -39,6 +43,10 @@ mod review3;
 #[path = "../adapter/lite_review4.rs"]
 #[cfg(test)]
 mod review4;
+
+#[path = "../adapter/lite_review5.rs"]
+#[cfg(test)]
+mod review5;
 
 impl<P: EffectPort> Coordinator<P> {
     /// Consume the legacy interface before selecting File mode. This cannot
@@ -60,14 +68,25 @@ impl<P: EffectPort> Coordinator<P> {
             .port
             .file_claim(attachment)
             .map_err(CoordinatorError::FileSession)?;
+        #[cfg(test)]
+        if self.hooks.file_selection_poison.load(Ordering::SeqCst) {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _held = self.inner.lock().unwrap();
+                panic!("selection lock poison");
+            }));
+        }
         match self.inner.lock() {
             Ok(mut inner) => inner.file_cell = Some(cell.clone()),
             Err(_) => {
                 cell.engage_with(HaltCause::Fence);
+                #[cfg(test)]
+                self.hooks.file_engagement.fire("selection-poison");
                 return Err(CoordinatorError::Poisoned);
             }
         }
         self.file = Some(FileLife {
+            #[cfg(test)]
+            after_engagement: self.hooks.file_engagement.clone(),
             cell,
             mission: AtomicU64::new(0),
             mono_deadline: AtomicU64::new(u64::MAX),
@@ -148,6 +167,11 @@ impl<P: EffectPort> FileSession<P> {
             Ok(result) => result,
             Err(_) => {
                 self.life().cell.engage_with(HaltCause::Fence);
+                #[cfg(test)]
+                self.coordinator
+                    .hooks
+                    .file_engagement
+                    .fire("callback-panic");
                 Err(CoordinatorError::Poisoned)
             }
         }
@@ -199,11 +223,18 @@ impl<P: EffectPort> FileSession<P> {
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         self.life().cell.engage();
         #[cfg(test)]
+        self.coordinator.hooks.file_engagement.fire("public-stop");
+        #[cfg(test)]
         self.coordinator.hooks.file_after_halt.fire();
         self.call(|c| c.stop(id))
     }
     pub fn stop_all(&self) -> Result<usize, CoordinatorError> {
         self.life().cell.engage();
+        #[cfg(test)]
+        self.coordinator
+            .hooks
+            .file_engagement
+            .fire("public-stop-all");
         #[cfg(test)]
         self.coordinator.hooks.file_after_halt.fire();
         let id = self.life().mission.load(Ordering::SeqCst);

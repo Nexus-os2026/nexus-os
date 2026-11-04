@@ -113,6 +113,8 @@ impl<P: EffectPort> Coordinator<P> {
             let mut inner = self.inner.lock().map_err(|_| {
                 if let Some(file) = &self.file {
                     file.cell.engage_with(HaltCause::Fence);
+                    #[cfg(test)]
+                    self.hooks.file_engagement.fire("lock-poison");
                 }
                 CoordinatorError::Poisoned
             })?;
@@ -129,6 +131,8 @@ impl<P: EffectPort> Coordinator<P> {
         if written.is_err() {
             if let Some(file) = &self.file {
                 file.cell.engage_with(HaltCause::Fence);
+                #[cfg(test)]
+                self.hooks.file_engagement.fire("owed-failure");
             }
         }
         let result = result?;
@@ -160,9 +164,13 @@ impl<P: EffectPort> Coordinator<P> {
         let cause = if let Some(file) = &self.file {
             let Some(tag) = cause_tag(asked) else {
                 file.cell.engage_with(HaltCause::Fence);
+                #[cfg(test)]
+                self.hooks.file_engagement.fire("unknown-cause");
                 return Err(CoordinatorError::Stopped);
             };
             file.cell.engage_reason(halt_cause(asked), Some(tag));
+            #[cfg(test)]
+            self.hooks.file_engagement.fire("file-stop");
             #[cfg(test)]
             self.hooks.file_after_halt.fire();
             first_cause(file.cell.reason().expect("engaged cell"))?
@@ -273,6 +281,8 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<MissionState, CoordinatorError> {
         if let Some(file) = &self.file {
             file.cell.engage_with(HaltCause::Fence);
+            #[cfg(test)]
+            self.hooks.file_engagement.fire("publication");
             if reserved.is_some() {
                 if let Some(first) = file
                     .cell
@@ -370,6 +380,8 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<MissionState, CoordinatorError> {
         if let Some(file) = &self.file {
             file.cell.engage_with(HaltCause::Fence);
+            #[cfg(test)]
+            self.hooks.file_engagement.fire("nonpublication");
             if let Some(first) = file
                 .cell
                 .reason()
@@ -464,6 +476,8 @@ impl<P: EffectPort> Coordinator<P> {
         let withdrawal = if elapsed {
             if let Some(file) = &self.file {
                 file.cell.engage_with(HaltCause::Fence);
+                #[cfg(test)]
+                self.hooks.file_engagement.fire("deadline");
             }
             self.port
                 .withdraw(id)

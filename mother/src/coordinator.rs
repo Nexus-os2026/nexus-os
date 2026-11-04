@@ -861,6 +861,8 @@ pub struct Coordinator<P: EffectPort> {
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct CoordinatorHooks {
+    pub(crate) file_selection_poison: std::sync::atomic::AtomicBool,
+    pub(crate) file_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     pub(crate) file_after_halt: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_invocations: std::sync::atomic::AtomicUsize,
     pub(crate) file_before_ack: crate::oracles::m2as_hooks::HookSlot,
@@ -2099,6 +2101,8 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<MissionState, CoordinatorError> {
         if let Some(file) = &self.file {
             file.cell.engage_with(HaltCause::Fence);
+            #[cfg(test)]
+            self.hooks.file_engagement.fire("non-file-terminal");
             // A Stop that won first must still settle an unresolved File.
             if file.cell.reason() != Some((HaltCause::Fence, None)) {
                 self.file_boundary(id)?;

@@ -34,6 +34,8 @@ impl GovernedPort {
         self.runs.lock().map_err(|_| {
             if let Some((_, cell)) = self.file_session.get() {
                 cell.engage_with(HaltCause::Fence);
+                #[cfg(test)]
+                self.file_engagement.fire("port-poison");
             }
             refused(BrokerClass::PortFenced)
         })

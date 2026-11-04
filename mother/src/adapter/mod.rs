@@ -147,6 +147,10 @@ struct Runs {
 
 /// The EffectPort over the governed-control broker, through one agent door.
 pub struct GovernedPort {
+    #[cfg(test)]
+    pub(crate) file_duplicate_claim: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    pub(crate) file_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     /// M2c: the port's only broker handle.
     door: AgentDoor,
     file_port: Result<FilePort, FileSessionError>,
@@ -207,6 +211,10 @@ impl GovernedPort {
         let file_port = door.file_port();
         Self {
             file_port,
+            #[cfg(test)]
+            file_duplicate_claim: Default::default(),
+            #[cfg(test)]
+            file_engagement: Default::default(),
             file_session: OnceLock::new(),
             workspace: None,
             door,
@@ -493,8 +501,17 @@ impl EffectPort for GovernedPort {
     }
     fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
         let cell = self.door.claim_file_session(&attachment)?;
+        #[cfg(test)]
+        if self.file_duplicate_claim.load(Ordering::SeqCst) {
+            assert!(self
+                .file_session
+                .set((attachment.clone(), cell.clone()))
+                .is_ok());
+        }
         if self.file_session.set((attachment, cell.clone())).is_err() {
             cell.engage_with(HaltCause::Fence);
+            #[cfg(test)]
+            self.file_engagement.fire("port-claim");
             return Err(FileSessionError::AlreadySelected);
         }
         Ok(cell)
@@ -675,6 +692,8 @@ impl EffectPort for GovernedPort {
     fn fence(&self) -> Owed {
         if let Some((_, cell)) = self.file_session.get() {
             cell.engage_with(HaltCause::Fence);
+            #[cfg(test)]
+            self.file_engagement.fire("port-fence");
         }
         let mut owed = Owed::default();
         {
@@ -1085,3 +1104,6 @@ pub(crate) mod lite_clock;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod lite_crash;
+
+#[cfg(test)]
+mod lite_review5_port;

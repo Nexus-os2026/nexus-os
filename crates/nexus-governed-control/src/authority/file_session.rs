@@ -42,8 +42,18 @@ impl HaltCause {
 }
 
 /// Deny-only, immutable identity, never reset or retired before broker drop.
-#[derive(Clone, Debug)]
-pub struct HaltCell(Arc<AtomicU32>);
+#[derive(Clone)]
+#[cfg_attr(not(test), derive(Debug))]
+pub struct HaltCell(
+    Arc<AtomicU32>,
+    #[cfg(test)] pub(crate) Arc<crate::test_hooks::Hooks>,
+);
+#[cfg(test)]
+impl std::fmt::Debug for HaltCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 impl HaltCell {
     pub fn engage(&self) {
         self.engage_with(HaltCause::Stop);
@@ -66,6 +76,8 @@ impl HaltCell {
                     old
                 })
             });
+        #[cfg(test)]
+        self.1.fire("file.engaged");
     }
     pub fn is_engaged(&self) -> bool {
         self.cause().is_some()
@@ -116,7 +128,11 @@ pub(crate) struct FileSessions {
 impl Default for FileSessions {
     fn default() -> Self {
         Self {
-            state: HaltCell(Arc::new(AtomicU32::new(0))),
+            state: HaltCell(
+                Arc::new(AtomicU32::new(0)),
+                #[cfg(test)]
+                Arc::default(),
+            ),
             history: Mutex::default(),
         }
     }
@@ -143,6 +159,8 @@ impl FileSessions {
                         },
                 )
             });
+        #[cfg(test)]
+        self.state.1.fire("file.engaged");
     }
     fn fresh(&self) -> Result<(), FileSessionError> {
         if self.state.0.load(Ordering::SeqCst) & EMERGENCY != 0 {
@@ -251,4 +269,17 @@ pub struct FileAttachment {
     group: GroupId,
     port: u64,
     number: u64,
+}
+
+#[cfg(test)]
+impl FileSessions {
+    pub(crate) fn review5_cell(&self) -> HaltCell {
+        self.state.clone()
+    }
+    pub(crate) fn review5_poison(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = self.history.lock().unwrap();
+            panic!("File history poison");
+        }));
+    }
 }
