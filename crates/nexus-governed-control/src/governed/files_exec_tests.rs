@@ -35,6 +35,8 @@ use std::time::{Duration, Instant};
 
 #[path = "files_lite_tests.rs"]
 mod lite;
+#[path = "files_lite_publication_tests.rs"]
+mod lite_publication;
 #[path = "files_exec_review1_tests.rs"]
 mod review1;
 #[path = "files_exec_review2_tests.rs"]
