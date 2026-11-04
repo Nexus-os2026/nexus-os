@@ -506,7 +506,16 @@ There is one File mission per fresh process, no replacement coordinator or
 recycled eligibility. Emergency never resumes or advances the mission. Queued
 work is also subject to the permanent host gate. Lifting native Stop never
 clears that restriction or the broker's File-session emergency latch. A second
-Stop invalidates an in-progress lift or undo; request fresh consent afterward.
+Stop invalidates an in-progress lift, undo or cleanup through the last broker
+check immediately before its kernel call; request fresh consent afterward.
+After that boundary, an already-confirmed undo or cleanup may still finish.
+The terminal reports the actual outcome, including uncertainty and remaining
+cleanup obligations. Stop still blocks all later mission work and is recorded.
+If ingress overtakes a lift, native Stop is re-engaged immediately on return,
+before another host action; the permanent host restriction stays engaged.
+This kernel-boundary window is an explicit non-claim. Closing it is future
+**M2d-K3, a deny-only cell or watch at the kernel's undo, cleanup and lift final
+steps**. M2d-D changes no kernel code and makes no stronger cancellation claim.
 Recovery acknowledgement is unsupported, so evidence recovery may prevent a
 lift altogether. Nothing is lifted automatically or for status or cleanup.
 
