@@ -975,6 +975,8 @@ impl CommitmentRegistry {
             } else if self.0.generation.current() != entry.generation {
                 Some((CommitmentState::Revoked, AuthorityError::Stale))
             } else if entry.prepared.grants.iter().any(|grant| {
+                #[cfg(test)]
+                self.fire("decision7.grant_validation");
                 self.0
                     .grants
                     .live_at(*grant, now.monotonic_ms, now.wall_ms)

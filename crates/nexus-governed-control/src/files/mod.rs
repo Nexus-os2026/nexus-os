@@ -2626,6 +2626,8 @@ impl Files {
             id: format!("wsp-{}", hex::encode(random16())),
             name,
         };
+        #[cfg(test)]
+        self.hooks().fire("files.before_register");
         *self.workspace.lock().expect("files") = Some(Arc::new(Workspace {
             info: info.clone(),
             root: path.to_path_buf(),
@@ -2719,6 +2721,8 @@ impl Files {
         if class == FileClass::Refused {
             return Err(AuthorityError::FileTypeNotAllowed);
         }
+        #[cfg(test)]
+        self.hooks().fire("files.before_stage");
         #[cfg(target_os = "linux")]
         return self.stage(
             run,

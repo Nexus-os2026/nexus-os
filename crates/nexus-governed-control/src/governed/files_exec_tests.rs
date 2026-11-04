@@ -1287,3 +1287,6 @@ fn m2d_b2_d_o11_b_no_report_call_sweeps_anything() {
 
 #[path = "files_host_review2_tests.rs"]
 mod host_review2;
+
+#[path = "files_host_decision8_tests.rs"]
+mod decision8;

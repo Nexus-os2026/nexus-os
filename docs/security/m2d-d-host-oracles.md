@@ -160,3 +160,38 @@ Plants (one at a time, uncommitted): backend engagement delayed to the worker;
 after-validation re-check removed; host-only gate; startup-dependent receipt
 reporting/event absorption; LF-only renderer. Broker checks already present
 before this repair remain covered by the validation schedules and legacy tests.
+
+### Decisions 7–8: session cell on every host admission (fa8fa1f5)
+
+`files_host_decision8_tests.rs` freezes the saved baseline-sweep schedules.
+No Stop worker runs: each test observes the engaged backend cell with both
+native Stop snapshots still unset. Counts come from real door/run/grant and
+commitment registries and the actual Files staging/execution hooks.
+
+- Door: ingress at `ISSUE_RECORDED`, before dialogue, and ordinary run insertion
+  before File selection. Every host door and its runs carry the original cell.
+- Workspace: ingress at entry and after validation before installation.
+- Files grant: ingress at entry, in the native answer and in `GrantIssued`
+  evidence before insertion.
+- Files preparation: ingress after membership and after filesystem validation
+  before staging; after `Prepared` before commitment insertion.
+- Approval/authorization/dispatch: final grant validation after the initial run
+  check; retain the existing `AUTHORIZE_RECORDED` control.
+- Mission/held consent: `CONSENT_BEFORE_FILL`; File topology/selected routes;
+  Decision 6 run, File/inference binding and model-attempt counters unchanged.
+- Controls: live host-cell door → File selection → create; legacy no-cell
+  registration/grant and legacy new door after native resume. Frozen halt tests
+  are not amended.
+
+Decision 8 supersedes the uncommitted probe's retroactive evidence expectation:
+`AgentDoorOpened` already written before `ISSUE_RECORDED` stays; refusal appends
+`AgentDoorDeclined` with `door_activation_refused_halted`. Grant insertion,
+authorization and execution refusal also require route-specific closed codes.
+No refusal record claims the effect succeeded.
+
+Baseline API adapters are temporary test-only forwarding shims to the unchanged
+legacy APIs, dropping the new optional argument solely to run these probes on
+fa8fa1f5; they are never committed. Red: 14 failures, 10 passing controls,
+`decision8/red-fa8fa1f5.log`. The production changes follow this oracle commit.
+Plants remove each route's final re-check, drop the door cell, and retain only
+the pre-dialogue door check. All plants must be red and never committed.
