@@ -25,7 +25,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::apply::{ApplyError, InterruptCause, Refusal, REMOVALS};
-use super::local_model::{ModelPin, LOCAL_PROVIDER};
+use super::local_model::{ModelError, ModelPin, LOCAL_PROVIDER};
 use super::manifest::put_bytes;
 use super::review::ChangeKind;
 use super::scope::{ScopeError, ScopeSet};
@@ -596,7 +596,11 @@ const STRUCTURAL: Schema = &[
 ];
 const RUN_CANCELLED: Schema = &[("reason", Class::Code(&["cancelled"]))];
 const RUN_REVOKED: Schema = &[("reason", Class::Code(RevocationReason::CODES))];
-const RUN_FAILED: Schema = &[("reason", Class::Code(FailureReason::CODES))];
+const RUN_FAILED: Schema = &[
+    ("reason", Class::Code(FailureReason::CODES)),
+    // M2e N1 §2.6: a model failure's own code.
+    ("model", Class::Code(&ModelError::CODES)),
+];
 const RUN_RECOVERY: Schema = &[("reason", Class::Code(RecoveryReason::CODES))];
 const STAGING_DISCARDED: Schema = &[("status", Class::Code(CleanupStatus::CODES))];
 const MODEL_PINNED: Schema = &[
@@ -604,6 +608,11 @@ const MODEL_PINNED: Schema = &[
     ("endpoint_sha256", DIGEST),
     ("endpoint_loopback", BOOL),
     ("model_sha256", DIGEST),
+    // M2e-A2 (I-E7): the rest of the identity. The model's manifest digest
+    // is public; the runtime version and the configuration by digest.
+    ("digest", DIGEST),
+    ("runtime_sha256", DIGEST),
+    ("config_sha256", DIGEST),
 ];
 const WORKER_STARTED: Schema = &[
     ("task_sha256", DIGEST),
@@ -888,7 +897,8 @@ pub(crate) fn scope_facts(scope: &ScopeSet) -> Value {
 }
 
 /// A model pin: its provider, the digests of its endpoint and model name,
-/// and whether the endpoint's host is a loopback address.
+/// whether the endpoint's host is a loopback address, the model's manifest
+/// digest, and the digests of the runtime version and the configuration.
 pub(crate) fn pin_facts(pin: &ModelPin) -> Value {
     let loopback = url::Url::parse(pin.endpoint())
         .ok()
@@ -902,6 +912,9 @@ pub(crate) fn pin_facts(pin: &ModelPin) -> Value {
         "endpoint_sha256": digest_in(TEXT_DOMAIN, pin.endpoint().as_bytes()),
         "endpoint_loopback": loopback,
         "model_sha256": digest_in(TEXT_DOMAIN, pin.model().as_bytes()),
+        "digest": pin.digest(),
+        "runtime_sha256": digest_in(TEXT_DOMAIN, pin.runtime().as_bytes()),
+        "config_sha256": hex::encode(pin.config_digest()),
     })
 }
 

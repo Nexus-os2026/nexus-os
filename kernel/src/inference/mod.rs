@@ -63,20 +63,17 @@ pub const N1_QUALIFIED: bool = false;
 
 /// Whether the conversation route may be used: [`N1_QUALIFIED`], or, in
 /// this crate's own tests only, the private qualification seam.
-#[allow(dead_code)] // M2e-A2 stub: consulted from the implementation commit
 pub(crate) fn conversation_route_open() -> bool {
     N1_QUALIFIED || qualification_override()
 }
 
 /// No override exists outside this crate's own tests.
 #[cfg(not(test))]
-#[allow(dead_code)] // M2e-A2 stub: consulted from the implementation commit
 const fn qualification_override() -> bool {
     false
 }
 
 #[cfg(test)]
-#[allow(dead_code)] // M2e-A2 stub: consulted from the implementation commit
 fn qualification_override() -> bool {
     qualification_seam::is_open()
 }

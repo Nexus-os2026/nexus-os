@@ -275,25 +275,14 @@ pub fn local_only_ollama_base(base: &str) -> Result<String, AgentError> {
     Ok(format!("{}://{host}{port}", url.scheme()))
 }
 
-/// Whether an Ollama model name is one of the runtime's cloud models (for
-/// example `gpt-oss:120b-cloud`), which the runtime relays to a remote
-/// service. Any name with a `cloud` component counts.
-pub fn ollama_model_name_is_cloud(model: &str) -> bool {
-    model
-        .to_ascii_lowercase()
-        .split([':', '-', '/', '.', '_'])
-        .any(|part| part == "cloud")
-}
-
-/// Whether an Ollama `/api/show` reply says the model runs elsewhere: it
-/// names a remote host or a remote model.
-pub fn ollama_show_names_remote(show: &serde_json::Value) -> bool {
-    ["remote_host", "remote_model"].iter().any(|field| {
-        show.get(field).is_some_and(|value| {
-            !value.is_null() && value.as_str().is_none_or(|text| !text.trim().is_empty())
-        })
-    })
-}
+/// The local-only predicates are the kernel transport's (M2e-A2, design v2
+/// §2): whether an Ollama model name is one of the runtime's cloud models
+/// (any name with a `cloud` component, for example `gpt-oss:120b-cloud`),
+/// and whether an Ollama `/api/show` reply (or `/api/tags` entry) says the
+/// model runs elsewhere (it names a remote host or a remote model).
+pub use nexus_kernel::inference::ollama::{
+    name_is_cloud as ollama_model_name_is_cloud, show_names_remote as ollama_show_names_remote,
+};
 
 /// Asks the Ollama runtime at the loopback address `base` about `model`
 /// before any prompt is sent: it must be installed there and the runtime

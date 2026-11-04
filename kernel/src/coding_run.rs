@@ -744,6 +744,9 @@ pub struct CodingRun {
     generation_valid: bool,
     next_op: u64,
     model_pin: Option<ModelPin>,
+    /// The model failure that ended the worker, named in `run.failed`
+    /// (M2e N1 spec §2.6).
+    failed_model: Option<ModelError>,
     created: BTreeSet<RelPath>,
     verification: Option<StructuralVerification>,
     /// The project and its directory identity at selection, for runs
@@ -913,6 +916,7 @@ impl CodingRun {
             generation_valid: true,
             next_op: 0,
             model_pin: None,
+            failed_model: None,
             created: BTreeSet::new(),
             verification: None,
             project_id: selected.map(|(id, _)| id),
@@ -1099,13 +1103,14 @@ impl CodingRun {
         let Some((event, reason)) = terminal_event(state) else {
             return false;
         };
-        record(
-            self.ledger.as_ref(),
-            self.id.0,
-            event,
-            &json!({ "reason": reason }),
-        )
-        .is_ok()
+        let mut facts = json!({ "reason": reason });
+        // A model failure's receipt names the model's own code.
+        if let (RunState::Failed(FailureReason::ModelUnavailable), Some(model)) =
+            (state, self.failed_model)
+        {
+            facts["model"] = json!(model.code());
+        }
+        record(self.ledger.as_ref(), self.id.0, event, &facts).is_ok()
     }
 
     /// Enter RecoveryRequired even if the ledger cannot record it. The
@@ -2119,6 +2124,15 @@ impl CodingRun {
     pub(crate) fn fail_worker(&mut self, reason: FailureReason) {
         if !self.state.is_terminal() {
             self.enter_terminal(RunState::Failed(reason));
+        }
+    }
+
+    /// End a non-terminal run because its model failed: `ModelUnavailable`,
+    /// with the model's exact code in the `run.failed` receipt.
+    pub(crate) fn fail_worker_model(&mut self, error: ModelError) {
+        if !self.state.is_terminal() {
+            self.failed_model = Some(error);
+            self.enter_terminal(RunState::Failed(FailureReason::ModelUnavailable));
         }
     }
 

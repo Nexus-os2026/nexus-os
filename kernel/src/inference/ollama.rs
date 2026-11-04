@@ -9,10 +9,14 @@ use serde_json::Value;
 use super::endpoint::LoopbackEndpoint;
 use super::exchange::{exchange, Guard, Reply};
 use super::identity::ModelIdentity;
-use super::request::{json_string, ModelReply, ModelRequest, SCAFFOLD_FLOOR};
+use super::request::{
+    check_bound, json_string, prompt_upper_bound, refuse_delimiters, Rendered, FRAME_CLOSE,
+    FRAME_OPEN,
+};
+use super::request::{ModelReply, ModelRequest, SCAFFOLD_FLOOR};
 use super::{
-    CallCancel, CallContext, CallDeadline, CallMeter, ModelError, ModelPinSpec, ModelTransport,
-    Think,
+    CallCancel, CallContext, CallDeadline, CallMeter, MessageRole, ModelError, ModelPinSpec,
+    ModelTransport, Think, CONVERSATION_CONFIG,
 };
 use crate::emergency_stop::StopWatch;
 
@@ -111,15 +115,24 @@ impl ModelTransport for VerifiedOllama {
         &self.identity
     }
 
-    /// One call: the request's bound; the runtime's version, cloud status
-    /// and the model's digest again; the charge; the chat; the late check;
-    /// the reply's refusals. Settled on every path after the charge.
+    /// One call: the route guard (a conversation is refused while N1's
+    /// route is shut); the request's bound, and a conversation's own
+    /// pre-send check; the runtime's version, cloud status and the model's
+    /// digest again; the charge; the chat; the late check; the reply's
+    /// refusals, and a conversation's continuity. Settled on every path
+    /// after the charge.
     fn call(
         &self,
         request: &ModelRequest,
         ctx: &CallContext<'_>,
     ) -> Result<ModelReply, ModelError> {
+        if request.is_conversation() && !super::conversation_route_open() {
+            return Err(ModelError::ConfigMismatch);
+        }
         request.check()?;
+        if let Some(rendered) = request.rendered() {
+            check_conversation(&self.identity, rendered)?;
+        }
         let guard = Guard::of(ctx);
         check_runtime(&self.endpoint, &self.identity, &guard)?;
         let charged = ctx.meter.charge().map_err(|_| ModelError::OverBudget)?;
@@ -149,10 +162,69 @@ impl ModelTransport for VerifiedOllama {
         }
         let reply = read_chat(&self.identity, reply, latency_ms)?;
         Ok(match request.rendered() {
-            Some(rendered) => reply.answering(rendered.answered),
+            Some(rendered) => {
+                check_continuity(rendered, &reply)?;
+                reply.answering(rendered.answered)
+            }
             None => reply,
         })
     }
+}
+
+/// The transport's own check of a conversation request just before it is
+/// sent (N1 spec §2.3), independent of the construction checks: the
+/// qualified conversation configuration and context, at most eight
+/// messages, the order (system, user, then alternating assistant and user,
+/// ending on a user), every user message framed, no delimiter of the pinned
+/// template in any message, and the pre-charge bound.
+fn check_conversation(identity: &ModelIdentity, rendered: &Rendered) -> Result<(), ModelError> {
+    CONVERSATION_CONFIG.check()?;
+    if identity.config().num_ctx != CONVERSATION_CONFIG.num_ctx {
+        return Err(ModelError::ConfigMismatch);
+    }
+    let messages = &rendered.messages;
+    if messages.len() > CONVERSATION_CONFIG.max_messages {
+        return Err(ModelError::RequestTooLarge);
+    }
+    let ordered = messages.len() >= 2
+        && messages.len().is_multiple_of(2)
+        && messages.iter().enumerate().all(|(index, (role, _))| {
+            *role
+                == match index {
+                    0 => MessageRole::System,
+                    odd if odd % 2 == 1 => MessageRole::User,
+                    _ => MessageRole::Assistant,
+                }
+        });
+    if !ordered {
+        return Err(ModelError::Malformed);
+    }
+    for (role, content) in messages {
+        if *role == MessageRole::User
+            && !(content.starts_with(FRAME_OPEN) && content.ends_with(FRAME_CLOSE))
+        {
+            return Err(ModelError::Malformed);
+        }
+        refuse_delimiters(content)?;
+    }
+    check_bound(messages, &CONVERSATION_CONFIG)
+}
+
+/// A conversation reply's continuity (N1 spec §2.4; defence in depth, each
+/// `Truncated`, never retried): the output within the answer cap, the
+/// prompt count within the sent upper bound, and above the conversation's
+/// last accepted count.
+fn check_continuity(rendered: &Rendered, reply: &ModelReply) -> Result<(), ModelError> {
+    let prompt = u64::from(reply.prompt_tokens());
+    if reply.output_tokens() > CONVERSATION_CONFIG.num_predict
+        || prompt > prompt_upper_bound(&rendered.messages, &CONVERSATION_CONFIG)
+        || rendered
+            .previous_prompt
+            .is_some_and(|previous| prompt <= u64::from(previous))
+    {
+        return Err(ModelError::Truncated);
+    }
+    Ok(())
 }
 
 /// Settles a charged call on every path, unwinding included.
@@ -284,6 +356,12 @@ fn chat_body(identity: &ModelIdentity, request: &ModelRequest) -> Vec<u8> {
     let think = match config.think {
         Think::Off => "false",
     };
+    // A conversation request carries the answer cap (N1 spec §2.3).
+    let num_predict = if request.is_conversation() {
+        format!(",\"num_predict\":{}", CONVERSATION_CONFIG.num_predict)
+    } else {
+        String::new()
+    };
     let messages: Vec<String> = request
         .messages()
         .iter()
@@ -297,7 +375,7 @@ fn chat_body(identity: &ModelIdentity, request: &ModelRequest) -> Vec<u8> {
         .collect();
     format!(
         "{{\"model\":{},\"stream\":false,\"think\":{think},\"truncate\":{},\"format\":{},\
-         \"options\":{{\"temperature\":{},\"num_ctx\":{},\"seed\":{}}},\
+         \"options\":{{\"temperature\":{},\"num_ctx\":{},\"seed\":{}{num_predict}}},\
          \"messages\":[{}]}}",
         json_string(identity.name()),
         config.truncate,

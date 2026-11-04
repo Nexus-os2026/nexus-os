@@ -104,7 +104,6 @@ pub(super) struct Rendered {
     /// The conversation and its length when the request was built.
     pub(super) answered: Answered,
     /// The prompt count of the conversation's last accepted reply.
-    #[allow(dead_code)] // M2e-A2 stub: read from the implementation commit
     pub(super) previous_prompt: Option<u32>,
 }
 
@@ -125,13 +124,22 @@ impl ModelRequest {
         Ok(request)
     }
 
-    /// A request carrying `conversation`'s complete ordered history (N1).
+    /// A request carrying `conversation`'s complete ordered history (N1):
+    /// it must end on a user message ([`ModelError::Malformed`]), and every
+    /// message as sent, with the capped answer, must fit the qualified
+    /// context ([`ModelError::RequestTooLarge`]; N1 spec §2.3). The
+    /// transport checks both again, independently, before it sends.
     pub fn conversation(
         conversation: &Conversation,
         format: ResponseSchema,
     ) -> Result<Self, ModelError> {
+        if conversation.messages.last().map(|(role, _)| *role) != Some(MessageRole::User) {
+            return Err(ModelError::Malformed);
+        }
+        let rendered = conversation.render();
+        check_bound(&rendered.messages, &CONVERSATION_CONFIG)?;
         Ok(Self {
-            body: Body::Conversation(conversation.render()),
+            body: Body::Conversation(rendered),
             format,
         })
     }
@@ -281,6 +289,11 @@ impl ModelReply {
         self
     }
 
+    /// The conversation request this reply answered, if any.
+    pub(super) fn answered(&self) -> Option<Answered> {
+        self.answered
+    }
+
     pub fn content(&self) -> &str {
         &self.content
     }
@@ -337,6 +350,37 @@ impl Node {
         }
     }
 
+    /// The compact text of `retained-answer-v1`: as [`Node::write`], with
+    /// `<`, `>` and `[` escaped inside every string literal.
+    fn write_retained(&self, out: &mut String) {
+        match self {
+            Node::String(text) => out.push_str(&retained_string(text)),
+            Node::Array(items) => {
+                out.push('[');
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    item.write_retained(out);
+                }
+                out.push(']');
+            }
+            Node::Object(entries) => {
+                out.push('{');
+                for (index, (key, value)) in entries.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    out.push_str(&retained_string(key));
+                    out.push(':');
+                    value.write_retained(out);
+                }
+                out.push('}');
+            }
+            scalar => scalar.write(out),
+        }
+    }
+
     fn write(&self, out: &mut String) {
         match self {
             Node::Null => out.push_str("null"),
@@ -372,6 +416,16 @@ impl Node {
 /// A JSON string literal.
 pub(super) fn json_string(text: &str) -> String {
     serde_json::Value::from(text).to_string()
+}
+
+/// A JSON string literal with `<`, `>` and `[` escaped (`retained-answer-v1`).
+/// In a literal from [`json_string`] each of them is a character of the
+/// string itself, never part of an escape.
+fn retained_string(text: &str) -> String {
+    json_string(text)
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('[', "\\u005b")
 }
 
 impl<'de> Deserialize<'de> for Node {
@@ -783,11 +837,26 @@ pub struct RetainedAnswer {
 }
 
 impl RetainedAnswer {
-    /// The retained form of an answer.
+    /// The retained form of an answer that is exactly one JSON object
+    /// (surrounding whitespace ignored; a duplicate key, anything else or
+    /// anything more is [`ModelError::Malformed`]): its compact
+    /// re-serialization in the answer's own key order, with every `<`, `>`
+    /// and `[` inside a string literal written as the six-character escape
+    /// `\u003c`, `\u003e` or `\u005b`. The decoded values are unchanged;
+    /// outside strings none of the three can spell a delimiter (`<` and `>`
+    /// cannot occur, and a structural `[` is never followed by a letter), so
+    /// no spelling of [`DELIMITER_INVENTORY`] can occur in it.
     pub fn of(answer: &str) -> Result<Self, ModelError> {
-        Ok(Self {
-            text: answer.to_string(),
-        })
+        let node: Node = serde_json::from_str(answer.trim()).map_err(|_| ModelError::Malformed)?;
+        if !matches!(node, Node::Object(_)) {
+            return Err(ModelError::Malformed);
+        }
+        let mut text = String::new();
+        node.write_retained(&mut text);
+        if text.contains(['<', '>']) || DELIMITER_INVENTORY.iter().any(|d| text.contains(d)) {
+            return Err(ModelError::Malformed);
+        }
+        Ok(Self { text })
     }
 
     pub fn as_str(&self) -> &str {
@@ -824,7 +893,16 @@ static NEXT_CONVERSATION: std::sync::atomic::AtomicU64 = std::sync::atomic::Atom
 
 impl Conversation {
     /// A conversation of the system message and the opening user message.
+    /// A system message with leading or trailing whitespace (which the
+    /// pinned renderer would trim) is [`ModelError::Malformed`]; a delimiter
+    /// of the pinned template in either is
+    /// [`ModelError::UnsafeDelimiter`].
     pub fn new(system: String, opening: String) -> Result<Self, ModelError> {
+        if system.trim() != system {
+            return Err(ModelError::Malformed);
+        }
+        refuse_delimiters(&system)?;
+        refuse_delimiters(&opening)?;
         Ok(Self {
             id: NEXT_CONVERSATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             messages: vec![(MessageRole::System, system), (MessageRole::User, opening)],
@@ -832,16 +910,40 @@ impl Conversation {
         })
     }
 
-    /// Append the retained answer to the last user message.
+    /// Append the retained answer to the last user message. After an
+    /// answer it is [`ModelError::Malformed`]; as a ninth message it is
+    /// [`ModelError::RequestTooLarge`].
     pub fn push_answer(&mut self, answer: RetainedAnswer) -> Result<(), ModelError> {
+        if self.last_role() != MessageRole::User {
+            return Err(ModelError::Malformed);
+        }
+        if self.messages.len() >= CONVERSATION_CONFIG.max_messages {
+            return Err(ModelError::RequestTooLarge);
+        }
         self.messages.push((MessageRole::Assistant, answer.text));
         Ok(())
     }
 
-    /// Append backend feedback to the last answer.
+    /// Append backend feedback to the last answer. Before any answer, or
+    /// after a user message, it is [`ModelError::Malformed`]; as a ninth
+    /// message it is [`ModelError::RequestTooLarge`]; with a delimiter of
+    /// the pinned template it is [`ModelError::UnsafeDelimiter`].
     pub fn push_feedback(&mut self, feedback: String) -> Result<(), ModelError> {
+        if self.last_role() != MessageRole::Assistant {
+            return Err(ModelError::Malformed);
+        }
+        if self.messages.len() >= CONVERSATION_CONFIG.max_messages {
+            return Err(ModelError::RequestTooLarge);
+        }
+        refuse_delimiters(&feedback)?;
         self.messages.push((MessageRole::User, feedback));
         Ok(())
+    }
+
+    fn last_role(&self) -> MessageRole {
+        self.messages
+            .last()
+            .map_or(MessageRole::System, |(role, _)| *role)
     }
 
     /// The number of messages.
@@ -862,16 +964,37 @@ impl Conversation {
             .map(|(role, content)| (*role, content.as_str()))
     }
 
-    /// Record an accepted reply to this conversation's current history.
+    /// Record an accepted reply to this conversation's current history:
+    /// the continuity state the next request is checked against (N1 spec
+    /// §2.4). A reply to another conversation, to another length of this
+    /// one, or to a two-message request is [`ModelError::Malformed`] and
+    /// changes nothing.
     pub fn accept(&mut self, reply: &ModelReply) -> Result<(), ModelError> {
-        let _ = reply;
+        let current = Answered {
+            conversation: self.id,
+            length: self.messages.len(),
+        };
+        if reply.answered() != Some(current) {
+            return Err(ModelError::Malformed);
+        }
+        self.last_prompt = Some(reply.prompt_tokens());
         Ok(())
     }
 
-    /// The history as sent.
+    /// The history as sent: every user message framed (`user-frame-v1`).
     fn render(&self) -> Rendered {
         Rendered {
-            messages: self.messages.clone(),
+            messages: self
+                .messages
+                .iter()
+                .map(|(role, content)| {
+                    let sent = match role {
+                        MessageRole::User => format!("{FRAME_OPEN}{content}{FRAME_CLOSE}"),
+                        MessageRole::System | MessageRole::Assistant => content.clone(),
+                    };
+                    (*role, sent)
+                })
+                .collect(),
             answered: Answered {
                 conversation: self.id,
                 length: self.messages.len(),
@@ -969,8 +1092,74 @@ impl ConversationConfig {
         hash.finalize().into()
     }
 
-    /// The configuration is the qualified one.
+    /// The configuration is the qualified one: its digest is
+    /// [`QUALIFIED_CONVERSATION_CONFIG_SHA256`], and its inventory digest is
+    /// that of [`DELIMITER_INVENTORY`] as compiled. Otherwise
+    /// [`ModelError::ConfigMismatch`].
     pub fn check(&self) -> Result<(), ModelError> {
+        if hex::encode(self.digest()) != QUALIFIED_CONVERSATION_CONFIG_SHA256
+            || inventory_sha256() != self.inventory_sha256
+        {
+            return Err(ModelError::ConfigMismatch);
+        }
         Ok(())
     }
+}
+
+/// SHA-256 of the compiled inventory's canonical text, as hex.
+fn inventory_sha256() -> &'static str {
+    static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DIGEST.get_or_init(|| {
+        let mut hash = Sha256::new();
+        for entry in DELIMITER_INVENTORY {
+            hash.update(entry.as_bytes());
+            hash.update(b"\n");
+        }
+        hex::encode(hash.finalize())
+    })
+}
+
+/// A message holding any spelling of the inventory is
+/// [`ModelError::UnsafeDelimiter`] (exact substring, case-sensitive).
+pub(super) fn refuse_delimiters(content: &str) -> Result<(), ModelError> {
+    if DELIMITER_INVENTORY
+        .iter()
+        .any(|delimiter| content.contains(delimiter))
+    {
+        return Err(ModelError::UnsafeDelimiter);
+    }
+    Ok(())
+}
+
+/// The pre-charge bound (N1 spec §2.3) on these messages as sent:
+/// `B + 96 + 16n + 16 + 64 + 2048 <= 8192`, and at most eight messages.
+/// Otherwise [`ModelError::RequestTooLarge`].
+pub(super) fn check_bound(
+    messages: &[(MessageRole, String)],
+    config: &ConversationConfig,
+) -> Result<(), ModelError> {
+    let n = messages.len();
+    let needed = content_bytes(messages)
+        .saturating_add(config.template_allowance)
+        .saturating_add(config.per_message_allowance.saturating_mul(n))
+        .saturating_add(config.suffix_allowance)
+        .saturating_add(config.margin)
+        .saturating_add(config.num_predict as usize);
+    if n > config.max_messages || needed > config.num_ctx as usize {
+        return Err(ModelError::RequestTooLarge);
+    }
+    Ok(())
+}
+
+/// The most prompt tokens a conversation request may report (N1 spec
+/// §2.4): `B + 96 + 16n + 16`.
+pub(super) fn prompt_upper_bound(
+    messages: &[(MessageRole, String)],
+    config: &ConversationConfig,
+) -> u64 {
+    let n = messages.len();
+    content_bytes(messages)
+        .saturating_add(config.template_allowance)
+        .saturating_add(config.per_message_allowance.saturating_mul(n))
+        .saturating_add(config.suffix_allowance) as u64
 }
