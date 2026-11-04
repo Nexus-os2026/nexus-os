@@ -245,10 +245,13 @@ fn m2d_c_r6_stop_all_is_typed_on_poison() {
     assert_eq!(cause(&w, id), Some(HaltCause::Stop), "engaged all the same");
 }
 
+/// A hook a lane runs once, inside its call.
+type LaneHook = std::sync::Arc<std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>>;
+
 /// A lane that runs a hook once, inside its call, before it answers.
 struct Hooked {
     inner: std::sync::Arc<dyn crate::lane::Lane>,
-    hook: std::sync::Arc<std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>>,
+    hook: LaneHook,
 }
 
 impl crate::lane::Lane for Hooked {
@@ -269,8 +272,7 @@ impl crate::lane::Lane for Hooked {
 /// and the call records the cause's terminal.
 #[test]
 fn m2d_c_r6_a_cell_engaged_mid_call_refuses_the_next_boundary() {
-    let hook: std::sync::Arc<std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>> =
-        Default::default();
+    let hook: LaneHook = Default::default();
     let keyed: Vec<std::sync::Arc<super::KeyedLane>> = crate::lane::LaneRole::ALL
         .iter()
         .map(|role| std::sync::Arc::new(super::KeyedLane::new(*role)))
