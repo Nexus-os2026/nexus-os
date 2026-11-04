@@ -94,3 +94,120 @@ fn m2dd_every_rendered_character_is_safe_and_facts_are_complete() {
         "non-plain backend detail denies instead of silently changing facts"
     );
 }
+
+fn scripted() -> (
+    std::sync::Arc<crate::terminal::TerminalConfirmer>,
+    std::sync::mpsc::Receiver<crate::terminal::Frame>,
+) {
+    use crate::terminal::{Input, Shared, TerminalConfirmer};
+    use std::sync::{atomic::AtomicBool, mpsc, Arc, Condvar, Mutex};
+    let (output, frames) = mpsc::sync_channel(64);
+    let shared = Arc::new(Shared {
+        stop: crate::stop::StopRoute::new(Arc::default()),
+        input: Mutex::new(Input::default()),
+        changed: Condvar::new(),
+        output,
+        end: AtomicBool::new(false),
+        input_end: AtomicBool::new(false),
+        dialogue: Mutex::new(()),
+    });
+    (Arc::new(TerminalConfirmer { shared }), frames)
+}
+fn facts() -> ConfirmationText {
+    ConfirmationText {
+        header: vec![],
+        details: vec!["complete facts".into()],
+    }
+}
+
+#[test]
+fn m2dd_deadline_includes_display_and_concurrent_dialogue_denies() {
+    use std::time::{Duration, Instant};
+    let (c, frames) = scripted();
+    assert!(!c.ask(
+        Instant::now() - Duration::from_secs(2),
+        "expired",
+        facts(),
+        1,
+        false
+    ));
+    // An expired request never reaches the answer boundary, even if rendering
+    // has queued a frame. Drain that isolated fixture before the next case.
+    drop(frames);
+    let (c, frames) = scripted();
+    let worker_c = c.clone();
+    let worker =
+        std::thread::spawn(move || worker_c.ask(Instant::now(), "held display", facts(), 1, false));
+    let frame = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(!c.ask(Instant::now(), "overlap", facts(), 1, false));
+    assert!(frames.try_recv().is_err(), "second dialogue did not render");
+    // No flush acknowledgement: the original deadline must still finish.
+    assert!(!worker.join().unwrap());
+    drop(frame);
+}
+
+#[test]
+fn m2dd_queue_sequence_and_boundary_overflow_fail_closed() {
+    use std::time::{Duration, Instant};
+    let (c, _) = scripted();
+    for _ in 0..65 {
+        c.shared.receive(Line::Answer(Some("x".into())), false);
+    }
+    assert!(c.shared.stop.gate.failed());
+    c.shared.receive(Line::Stop, false);
+    assert_eq!(
+        c.shared.stop.gate.epoch(),
+        1,
+        "ordinary overflow cannot block ingress"
+    );
+    let (c, _) = scripted();
+    c.shared.input().sequence = u64::MAX;
+    c.shared.receive(Line::Answer(None), false);
+    assert!(c.shared.stop.gate.failed());
+    let (c, frames) = scripted();
+    c.shared.input().boundary = u64::MAX;
+    let worker_c = c.clone();
+    let worker =
+        std::thread::spawn(move || worker_c.ask(Instant::now(), "overflow", facts(), 1, false));
+    frames
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap()
+        .ack
+        .send(Ok(()))
+        .unwrap();
+    assert!(!worker.join().unwrap());
+    assert!(c.shared.stop.gate.failed());
+}
+
+#[test]
+fn m2dd_write_and_flush_failures_never_acknowledge_a_display() {
+    use std::io::{self, Write};
+    struct Output {
+        write_fails: bool,
+        flushed: bool,
+    }
+    impl Write for Output {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.write_fails {
+                Err(io::Error::other("write"))
+            } else {
+                Ok(bytes.len())
+            }
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushed = true;
+            Err(io::Error::other("flush"))
+        }
+    }
+    for write_fails in [true, false] {
+        let mut out = Output {
+            write_fails,
+            flushed: false,
+        };
+        assert_eq!(
+            crate::terminal::write_frame(&mut out, "facts\n"),
+            Err(crate::terminal::Failure::Output)
+        );
+        assert_eq!(out.flushed, !write_fails);
+    }
+}

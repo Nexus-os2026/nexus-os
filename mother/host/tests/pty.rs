@@ -256,3 +256,145 @@ fn close_refuses_unfinished_file_work() {
     assert!(!p.output.contains("SESSION CLOSED recorded"));
     f.empty();
 }
+
+#[test]
+fn d_o21_privacy_canaries_absent_from_durable_stores_and_sqlite_values() {
+    use support::privacy::{hits_in, needles, scan_dir, Canaries};
+    let cs = Canaries {
+        c: format!("NXCANARY-{}", uuid::Uuid::new_v4().simple()),
+        cl: format!(
+            "nxsecret_{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..16]
+        ),
+    };
+    // Nonvacuous scanner controls cover every encoding and fragment.
+    for (_, c) in cs.both() {
+        for (_, needle) in needles(c) {
+            assert!(!hits_in(needle.as_bytes(), "plant", &cs).is_empty());
+        }
+    }
+    let f = Fixture::new();
+    let mut command = std::process::Command::new(support::binary());
+    command
+        .arg("--home")
+        .arg(&f.home)
+        .arg("--workspace")
+        .arg(&f.workspace)
+        .args([
+            "--name",
+            &format!("{}.txt", cs.cl),
+            "--text",
+            &format!("{} {}\n", cs.c, cs.cl),
+        ]);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.create();
+    assert!(
+        p.output.contains(&cs.c),
+        "Owner saw the real canary content"
+    );
+    let hits = scan_dir(&f.home, Some(&f.home.join("private")), &cs);
+    assert!(hits.is_empty(), "live main/WAL/SHM privacy: {hits:?}");
+    p.quit();
+    let hits = scan_dir(&f.home, Some(&f.home.join("private")), &cs);
+    assert!(hits.is_empty(), "closed-store privacy: {hits:?}");
+    // Read SQLite's logical values too, independent of page encoding.
+    let output = std::process::Command::new("python3").arg("-c").arg(r#"
+import pathlib, sqlite3, sys
+root = pathlib.Path(sys.argv[1])
+count = 0
+for p in root.rglob('*'):
+    if p.is_file() and 'private' not in p.relative_to(root).parts and p.read_bytes().startswith(b'SQLite format 3'):
+        con = sqlite3.connect(p.as_uri() + '?mode=ro', uri=True)
+        print('\n'.join(con.iterdump()))
+        con.close(); count += 1
+assert count >= 2, 'ledger and primary evidence both read'
+"#).arg(&f.home).output().unwrap();
+    assert!(
+        output.status.success(),
+        "logical store scan: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(hits_in(&output.stdout, "logical SQLite", &cs).is_empty());
+}
+
+#[test]
+fn d_o18_home_reserved_and_symlink_selection_refused_without_sweep() {
+    for linked in [false, true] {
+        let f = Fixture::new();
+        let selected = if linked {
+            f.root.join("link")
+        } else {
+            f.home.join("selected")
+        };
+        if linked {
+            std::os::unix::fs::symlink(&f.workspace, &selected).unwrap();
+        } else {
+            nexus_mother::adapter::create_private(&f.home).unwrap();
+            std::fs::create_dir(&selected).unwrap();
+        }
+        let mut command = std::process::Command::new(support::binary());
+        command
+            .arg("--home")
+            .arg(&f.home)
+            .arg("--workspace")
+            .arg(&selected)
+            .args(["--name", "hello.txt", "--text", "data"]);
+        let mut p = Pty::start(command);
+        assert!(!p.finish().success());
+        assert!(p.output.contains("RECOVERY REPORT only; no sweep"));
+        assert!(p.output.contains("workspace_refused"));
+        assert!(selected.exists(), "selection was not swept");
+        f.empty();
+    }
+}
+
+#[test]
+fn d_o4_eof_during_approval_never_approves() {
+    let f = Fixture::new();
+    let mut p = Pty::start(f.command("must remain absent\n"));
+    p.ready();
+    p.mission();
+    p.line("approve");
+    p.code();
+    p.send(&[4]);
+    assert!(!p.finish().success());
+    f.empty();
+    assert!(!p.output.contains("ACTION FINISHED evidence:"));
+}
+
+#[test]
+fn recovery_repeated_stop_invalidates_lift_and_undo_consents() {
+    let f = Fixture::new();
+    let mut p = Pty::start(f.command("recover once\n"));
+    p.ready();
+    p.create();
+    p.line("stop");
+    p.expect("STOP RECORDING COMPLETED");
+    p.line("lift-for-undo");
+    let old = p.code();
+    p.line("stop");
+    p.expect("LIFT REFUSED");
+    p.expect("STOP RECORDING COMPLETED");
+    p.line("lift-for-undo");
+    let fresh = p.code();
+    assert_ne!(fresh, old);
+    p.line(&fresh);
+    p.expect("LIFTED recovery only; missions remain stopped\n");
+    p.line("undo");
+    let old = p.code();
+    p.line("stop");
+    p.expect("UNDO REFUSED");
+    p.expect("STOP RECORDING COMPLETED");
+    assert!(f.workspace.join("hello.txt").exists());
+    p.line("lift-for-undo");
+    p.yes();
+    p.expect("LIFTED recovery only; missions remain stopped\n");
+    p.line("undo");
+    let fresh = p.code();
+    assert_ne!(fresh, old);
+    p.line(&fresh);
+    p.expect("UNDO REMOVED interrupted=none\n");
+    f.empty();
+    p.quit();
+}

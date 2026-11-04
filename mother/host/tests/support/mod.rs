@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod faults;
+pub mod privacy;
 
 use nix::poll::{poll, PollFd, PollFlags};
 use nix::pty::openpty;
