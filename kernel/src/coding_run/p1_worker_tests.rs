@@ -758,8 +758,14 @@ fn p1_w_nc_16_the_worker_modules_hold_no_privileged_surface() {
     let worker = std::fs::read_to_string(root.join("worker.rs")).unwrap();
     assert!(!worker.contains("reqwest"), "the worker reaches no network");
     let model = std::fs::read_to_string(root.join("local_model.rs")).unwrap();
-    assert!(model.contains(".no_proxy()"));
-    assert!(model.contains("Policy::none()"));
+    assert!(
+        !model.contains("reqwest"),
+        "the coding run's model holds no HTTP client of its own"
+    );
+    // M2e-A2: the one HTTP client is the kernel transport's.
+    let client = std::fs::read_to_string(root.join("../inference/exchange.rs")).unwrap();
+    assert!(client.contains(".no_proxy()"));
+    assert!(client.contains("Policy::none()"));
 }
 
 #[test]
