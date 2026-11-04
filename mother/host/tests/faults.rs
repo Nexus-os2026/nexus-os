@@ -328,3 +328,93 @@ fn recovery_composed_counts_include_queued_callbacks_after_successful_undo() {
     );
     p.quit();
 }
+
+#[test]
+fn h1_cleanup_stall_does_not_hold_reader_or_repeated_stop() {
+    let f = Fixture::new();
+    let fault = Fault::new(&f, "cleanup");
+    let mut command = f.command("pending candidate\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.mission();
+    fault.arm();
+    p.line("stop");
+    p.expect("STOP RECORDING COMPLETED");
+    p.line("lift-for-undo");
+    p.yes();
+    p.expect("LIFTED recovery only; missions remain stopped\n");
+    // No undo slot exists, but this Owner call first drains the candidate
+    // transferred by Stop. Hold actual unlink of that candidate.
+    p.line("undo");
+    let receipt = fault.reached();
+    assert!(receipt.path.contains("/coding-runs/"));
+    p.line("stop");
+    p.expect("kernel_stopped=true broker_stopped=true");
+    p.expect("STOP RECORDING COMPLETED");
+    p.line("status");
+    p.expect("STATUS END\n");
+    receipt.release();
+    p.expect("UNDO REFUSED");
+    f.empty();
+    p.quit();
+}
+
+#[test]
+fn owner_cleanup_route_retries_real_retained_staging() {
+    let f = Fixture::new();
+    let fault = Fault::new(&f, "cleanup-fail");
+    let mut command = f.command("pending candidate\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.mission();
+    fault.arm();
+    p.line("stop");
+    p.expect("STOP RECORDING COMPLETED");
+    p.line("lift-for-undo");
+    p.yes();
+    p.expect("LIFTED recovery only; missions remain stopped\n");
+    p.line("undo");
+    p.expect("UNDO REFUSED");
+    p.line("cleanup");
+    p.expect("CLEANUP settled=1 still_owed=0\n");
+    f.empty();
+    p.quit();
+}
+
+#[test]
+fn recovery_restart_reports_crashed_preparation_without_sweeping_staging() {
+    let f = Fixture::new();
+    let fault = Fault::new(&f, "before-publication");
+    let mut command = f.command("retained crash candidate\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.mission();
+    fault.arm();
+    p.line("approve");
+    p.yes();
+    let _receipt = fault.reached();
+    p.child.kill().unwrap();
+    assert!(!p.finish().success());
+    f.empty();
+    let staging = f.home.join("broker/files/coding-runs");
+    let before = support::privacy::files_under(&staging, None);
+    assert!(!before.is_empty(), "real retained staging");
+    let mut restarted = Pty::start(f.command("no restoration\n"));
+    restarted.ready();
+    assert!(restarted
+        .output
+        .contains("prepared; publication or temp status unknown"));
+    assert_eq!(
+        support::privacy::files_under(&staging, None),
+        before,
+        "startup never sweeps"
+    );
+    restarted.line("undo");
+    restarted.expect("UNDO REFUSED");
+    restarted.line("quit");
+    restarted.finish();
+    f.empty();
+}

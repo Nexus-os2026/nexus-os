@@ -63,3 +63,90 @@ fn m2dd_stop_cap_timeout_release_join_and_reaping() {
     assert_eq!(route.receipt().finished, 4);
     assert_eq!(route.retained_handles(), 0);
 }
+
+#[test]
+fn m2dd_admission_counters_have_positive_controls_for_all_routes() {
+    let gate = Gate::default();
+    for route in Route::ALL {
+        assert!(gate.admit(route));
+    }
+    assert_eq!(gate.admitted(), [1; 7]);
+    let reserved = || {
+        for route in Route::ALL {
+            assert!(!gate.admit(route), "reserved callback {route:?}");
+        }
+    };
+    gate.emergency();
+    reserved();
+    gate.emergency();
+    reserved();
+    assert_eq!(gate.admitted(), [1; 7]);
+}
+
+#[path = "../tests/support/mod.rs"]
+pub(super) mod support;
+
+#[test]
+fn m2dd_real_store_timeout_then_release_joins_and_records() {
+    use nexus_governed_control::authority::approval::*;
+    use nexus_governed_control::authority::evidence::{EndStatus, EvidencePhase};
+    struct NoDialogs;
+    impl ControlConfirmer for NoDialogs {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            false
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            false
+        }
+        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+            false
+        }
+    }
+    if let Some(home) = std::env::var_os("M2DD_STOP_CHILD_HOME") {
+        let home = crate::Home::open(std::path::Path::new(&home), Arc::new(NoDialogs)).unwrap();
+        let route = StopRoute::new(Arc::default());
+        assert!(route.bind(home.owner().clone()));
+        std::fs::write(std::env::var_os("M2DD_ARM").unwrap(), b"armed").unwrap();
+        route.press();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !home.owner().stop_snapshot().broker_stopped {
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert!(home.owner().stop_snapshot().kernel_stopped);
+        assert!(!route.join_until(Instant::now()));
+        assert_eq!(route.receipt().finished, 0);
+        println!("TIMED OUT WITH REAL STORAGE HELD");
+        assert!(route.join_until(Instant::now() + Duration::from_secs(5)));
+        assert_eq!(route.receipt().finished, 1);
+        assert_eq!(route.retained_handles(), 0);
+        assert!(home
+            .recent_evidence()
+            .iter()
+            .any(|r| r.phase == EvidencePhase::EmergencyStop));
+        assert_eq!(home.evidence_health().owed, 0);
+        home.owner().shut_down();
+        assert!(matches!(home.close_session(), EndStatus::Recorded { .. }));
+        return;
+    }
+    let f = support::Fixture::new();
+    let fault = support::faults::Fault::new(&f, "evidence");
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "stop_tests::m2dd_real_store_timeout_then_release_joins_and_records",
+            "--nocapture",
+        ])
+        .env("M2DD_STOP_CHILD_HOME", &f.home);
+    fault.attach(&f, &mut command);
+    let mut child = support::Pty::start(command);
+    let receipt = fault.reached();
+    assert!(receipt.path.contains("/p3-evidence/evidence.sqlite3"));
+    child.expect("TIMED OUT WITH REAL STORAGE HELD");
+    receipt.release();
+    assert!(child.finish().success());
+}

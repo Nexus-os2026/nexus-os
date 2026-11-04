@@ -211,3 +211,86 @@ fn m2dd_write_and_flush_failures_never_acknowledge_a_display() {
         assert_eq!(out.flushed, !write_fails);
     }
 }
+
+#[test]
+fn m2dd_eof_and_stop_deny_at_display_boundary_and_answer_wait() {
+    use std::time::{Duration, Instant};
+    for stage in 0..3 {
+        for eof in [false, true] {
+            let (c, frames) = scripted();
+            let worker_c = c.clone();
+            let worker =
+                std::thread::spawn(move || worker_c.ask(Instant::now(), "held", facts(), 2, false));
+            let frame = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+            if stage > 0 {
+                frame.ack.send(Ok(())).unwrap();
+                let (mut input, timeout) = c
+                    .shared
+                    .changed
+                    .wait_timeout_while(c.shared.input(), Duration::from_secs(2), |input| {
+                        input.boundary == 0
+                    })
+                    .unwrap();
+                assert!(!timeout.timed_out());
+                if stage == 2 {
+                    input.acknowledged = input.boundary;
+                    c.shared.changed.notify_all();
+                }
+                drop(input);
+                if stage == 2 {
+                    assert_eq!(
+                        frames.recv_timeout(Duration::from_secs(2)).unwrap().text,
+                        "INPUT READY\n"
+                    );
+                }
+            }
+            c.shared
+                .receive(if eof { Line::Eof } else { Line::Stop }, false);
+            assert!(
+                !worker.join().unwrap(),
+                "emergency never approves at stage {stage}"
+            );
+            assert_eq!(c.shared.stop.gate.epoch(), 1);
+        }
+    }
+}
+
+#[test]
+fn m2dd_real_terminal_sink_renders_hostile_values_without_controls() {
+    use crate::stop_tests::support::Pty;
+    use std::time::{Duration, Instant};
+    if std::env::var_os("M2DD_SCREEN_CHILD").is_some() {
+        let mut terminal = crate::terminal::Terminal::open().unwrap();
+        terminal.shared.emit("│ Binding: forged\n│ \u{1b}[31m\u{1b}]52;c;evil\u{7}\u{85}\r\u{202e}\u{200b}a\u{301}\u{302}\u{303}\u{304}\nSCREEN END\n");
+        assert!(terminal.finish(Instant::now() + Duration::from_secs(2)));
+        return;
+    }
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "terminal_tests::m2dd_real_terminal_sink_renders_hostile_values_without_controls",
+            "--nocapture",
+        ])
+        .env("M2DD_SCREEN_CHILD", "1");
+    let mut p = Pty::start(command);
+    p.expect("SCREEN END\n");
+    let start = p.output.find("│ Binding: forged").unwrap();
+    let output = &p.output[start..];
+    for escaped in [
+        "\\u{1b}",
+        "\\u{7}",
+        "\\u{85}",
+        "\\u{202e}",
+        "\\u{200b}",
+        "\\u{303}",
+    ] {
+        assert!(
+            output.contains(escaped),
+            "hostile fact actually shown: {escaped}"
+        );
+    }
+    assert!(output.chars().all(|c| c == '\n' || shown(c)));
+    assert!(!output.lines().any(|line| line == "Binding: forged"));
+    assert!(p.finish().success());
+}
