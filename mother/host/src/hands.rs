@@ -440,32 +440,71 @@ impl Runtime {
                     self.screen.emit("REFUSED stop_workers_outstanding\n");
                     return;
                 }
-                let result = self.home.owner().resume(&*self.confirmer);
+                let cell = self.home.owner().file_session_halt();
+                let epoch = cell.ingress_epoch();
+                let result = self
+                    .home
+                    .owner()
+                    .resume_with_halt(&*self.confirmer, Some(&cell));
                 #[cfg(test)]
                 crate::hands_tests::review4_returned(&self.screen, &self.home, "lift");
-                match result {
-                    Ok(()) => self
-                        .screen
-                        .emit("LIFTED recovery only; missions remain stopped\n"),
-                    Err(e) => self.screen.emit(&format!(
-                        "LIFT REFUSED {} (recovery acknowledgement unsupported)\n",
-                        e.class()
-                    )),
+                if cell.ingress_epoch() != epoch {
+                    // Cover ingress between the broker's return and the host's
+                    // next action too. Native engagement precedes recording.
+                    self.home.owner().emergency_stop();
+                    self.screen.emit("Stop received while your confirmed lift was finishing; the native halt is re-engaged.\n");
+                } else {
+                    match result {
+                        Ok(()) => self
+                            .screen
+                            .emit("LIFTED recovery only; missions remain stopped\n"),
+                        Err(e) => self.screen.emit(&format!(
+                            "LIFT REFUSED {} (recovery acknowledgement unsupported)\n",
+                            e.class()
+                        )),
+                    }
                 }
             }
             "undo" => {
-                let result = self.home.owner().files_undo(&*self.confirmer);
+                let cell = self.home.owner().file_session_halt();
+                let epoch = cell.ingress_epoch();
+                let result = self
+                    .home
+                    .owner()
+                    .files_undo_with_halt(&*self.confirmer, Some(&cell));
                 #[cfg(test)]
                 crate::hands_tests::review4_returned(&self.screen, &self.home, "undo");
+                if cell.ingress_epoch() != epoch {
+                    let outcome = match &result {
+                        Ok(_) => "completed",
+                        Err(
+                            nexus_governed_control::authority::AuthorityError::RecoveryRequired,
+                        ) => "outcome is uncertain; recovery is required",
+                        Err(_) => "was refused",
+                    };
+                    self.screen.emit(&format!("Stop received while your confirmed undo was finishing; the undo {outcome}.\n"));
+                }
                 match result {
                     Ok(report) => show_undo(&self.screen, report),
+                    Err(nexus_governed_control::authority::AuthorityError::RecoveryRequired) => {
+                        self.screen
+                            .emit("UNDO OUTCOME UNCERTAIN recovery_required\n")
+                    }
                     Err(e) => self.screen.emit(&format!("UNDO REFUSED {}\n", e.class())),
                 }
             }
             "cleanup" => {
-                let result = self.home.owner().files_retry_cleanup();
+                let cell = self.home.owner().file_session_halt();
+                let epoch = cell.ingress_epoch();
+                let result = self.home.owner().files_retry_cleanup_with_halt(Some(&cell));
                 #[cfg(test)]
                 crate::hands_tests::review4_returned(&self.screen, &self.home, "cleanup");
+                if cell.ingress_epoch() != epoch {
+                    match &result {
+                        Ok(report) => self.screen.emit(&format!("Stop received while your confirmed cleanup was finishing; cleanup settled={} still_owed={}.\n", report.settled, report.still_owed)),
+                        Err(_) => self.screen.emit("Stop received while your confirmed cleanup was finishing; cleanup was refused or failed. Earlier confirmed removals may have finished; remaining obligations are retained.\n"),
+                    }
+                }
                 match result {
                     Ok(report) => self.screen.emit(&format!(
                         "CLEANUP settled={} still_owed={}\n",
@@ -538,7 +577,11 @@ impl Runtime {
             }
         }
         self.home.owner().shut_down();
-        match self.home.owner().files_retry_cleanup() {
+        match self
+            .home
+            .owner()
+            .files_retry_cleanup_with_halt(Some(&self.home.owner().file_session_halt()))
+        {
             Ok(report) if report.still_owed == 0 => {}
             _ => {
                 self.screen.emit("UNCLEAN cleanup_owed\n");
