@@ -1,7 +1,10 @@
 //! Lite real-broker oracle helpers; reused from the audited #78 fixtures.
 use crate::effect::EffectRequest;
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
-use nexus_governed_control::authority::approval::{ActionConfirmation, ControlConfirmer, GrantConfirmation, ResumeConfirmation, AcknowledgementConfirmation};
+use nexus_governed_control::authority::approval::{
+    AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
+    ResumeConfirmation,
+};
 use nexus_governed_control::files::FileCreate;
 use std::sync::{Arc, Mutex};
 /// The Owner at the broker: yes to every action (each one's dialog kept)
@@ -98,4 +101,3 @@ pub(crate) fn file(name: &str, content: &str) -> EffectRequest {
         content: content.into(),
     })
 }
-
