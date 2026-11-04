@@ -153,7 +153,7 @@ const RUN_CLASSES: &[&str] = &["owner"];
 const OPERATIONS: &[&str] = &["create", "model_call"];
 /// What interrupted a Files publication after its final check (Codex
 /// review 1 of PR #64, H3; the kernel's interruption causes).
-const INTERRUPTIONS: &[&str] = &[
+pub(crate) const INTERRUPTIONS: &[&str] = &[
     "emergency_stop",
     "cancelled",
     "revoked",

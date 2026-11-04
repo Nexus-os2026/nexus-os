@@ -704,6 +704,18 @@ impl RunRegistry {
         Ok(())
     }
 
+    /// Membership read for File lifecycle evidence. Cancellation does not
+    /// remove ownership; an unreadable registry must remain an error.
+    pub(crate) fn try_is_member(&self, run: RunId, group: GroupId) -> Result<bool, AuthorityError> {
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        Ok(runs
+            .get(&run)
+            .is_some_and(|entry| entry.groups.contains(&group)))
+    }
+
     /// The run exists, belongs to `agent`, is not cancelled or finished, and
     /// no emergency stop is in force.
     pub(crate) fn check(&self, run: RunId, agent: &AgentId) -> Result<CancelToken, AuthorityError> {

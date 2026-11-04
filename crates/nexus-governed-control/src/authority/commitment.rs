@@ -34,6 +34,7 @@ use super::clock::Clock;
 use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::{
     bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy,
+    INTERRUPTIONS,
 };
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
@@ -172,6 +173,34 @@ pub enum Outcome {
     },
 }
 
+/// M2d-C round 4 (settlement design v2, rule 1): what a door may conclude
+/// of a commitment's publication. Only `ConfirmedNotPublished` says that
+/// nothing was written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PublicationClass {
+    /// It succeeded: published, with the codes of a cause that ended its
+    /// authority after its final check, and whether recovery is required.
+    Published {
+        recovery_required: bool,
+        interrupted: Vec<&'static str>,
+    },
+    /// Never handed to the kernel's apply (denied, expired, revoked or
+    /// failed before it), or refused at or before the final check with the
+    /// kernel's proof.
+    ConfirmedNotPublished,
+    /// Not final: prepared, authorized or executing.
+    Pending,
+    /// An uncertain outcome, or one ended after its handoff with no proof
+    /// either way.
+    Uncertain,
+}
+
+/// M2d-C round 4: how far an execution got towards the kernel's apply, as
+/// its effect reported it (`ExecutionGuard::handing_off`).
+const NOT_HANDED_OFF: u8 = 0;
+const HANDED_OFF: u8 = 1;
+const PROVEN_NOT_PUBLISHED: u8 = 2;
+
 /// The most summary lines an action may show; one that needs more is
 /// refused rather than shortened.
 pub const MAX_SUMMARY_LINES: usize = 192;
@@ -217,9 +246,46 @@ struct Entry {
     /// written): while it is, no other transition starts, and it completes
     /// only with its own token.
     reserved: Option<Reservation>,
+    /// M2d-C: what a success reported as interrupting it (its view's).
+    interrupted: Vec<&'static str>,
+    /// M2d-C: a success reported recovery required (its view's).
+    recovery_required: bool,
+    /// M2d-C round 4: ended by `finish` (it had started), with this failure
+    /// class, and how far it got towards the apply.
+    finished_started: bool,
+    failure: Option<FailureClass>,
+    handoff: u8,
 }
 
 impl Entry {
+    /// Rule 1: the publication class (see [`PublicationClass`]).
+    fn publication(&self) -> PublicationClass {
+        match self.state {
+            CommitmentState::Prepared
+            | CommitmentState::Authorized
+            | CommitmentState::Executing => PublicationClass::Pending,
+            CommitmentState::Succeeded => PublicationClass::Published {
+                recovery_required: self.recovery_required,
+                interrupted: self.interrupted.clone(),
+            },
+            CommitmentState::Denied | CommitmentState::Expired | CommitmentState::Revoked => {
+                PublicationClass::ConfirmedNotPublished
+            }
+            CommitmentState::Failed | CommitmentState::Cancelled => {
+                if !self.finished_started {
+                    PublicationClass::ConfirmedNotPublished
+                } else if self.failure == Some(FailureClass::Uncertain) {
+                    PublicationClass::Uncertain
+                } else if self.prepared.kind == CapabilityKind::Files && self.handoff != HANDED_OFF
+                {
+                    PublicationClass::ConfirmedNotPublished
+                } else {
+                    PublicationClass::Uncertain
+                }
+            }
+        }
+    }
+
     fn view(&self, id: CommitmentId) -> CommitmentView {
         CommitmentView {
             id,
@@ -737,6 +803,11 @@ impl CommitmentRegistry {
             state: CommitmentState::Prepared,
             approval: None,
             reserved: None,
+            interrupted: Vec::new(),
+            recovery_required: false,
+            finished_started: false,
+            failure: None,
+            handoff: NOT_HANDED_OFF,
         };
         // Evidence first: an unrecorded commitment is never created. It is
         // not in the registry yet, so nothing can act on it meanwhile.
@@ -1121,6 +1192,7 @@ impl CommitmentRegistry {
             started_wall_ms,
             start,
             finished: false,
+            handoff: std::sync::atomic::AtomicU8::new(NOT_HANDED_OFF),
         })
     }
 
@@ -1177,6 +1249,7 @@ impl CommitmentRegistry {
         started_wall_ms: u64,
         outcome: Outcome,
         cancelled: bool,
+        handoff: u8,
     ) -> EndStatus {
         let mut deferred = Deferred::default();
         let now = self.now();
@@ -1208,6 +1281,30 @@ impl CommitmentRegistry {
                 }
                 Outcome::Cancelled { .. } => (CommitmentState::Cancelled, "cancelled", None),
             };
+            // M2d-C round 4 (rule 1): what its publication class reads.
+            entry.finished_started = true;
+            entry.handoff = handoff;
+            entry.failure = match &outcome {
+                Outcome::Failed { class, .. } => Some(*class),
+                _ => None,
+            };
+            // M2d-C: the codes the record's detail keeps (its first 16
+            // entries), of the registry only, in its order.
+            if let Outcome::Succeeded { meta } = &outcome {
+                let meta = &meta[..meta.len().min(16)];
+                // M2d-C (HIGH 2 of Codex review 1 of PR #78).
+                entry.recovery_required = meta
+                    .iter()
+                    .any(|(k, v)| k == "reason" && v == "recovery_required");
+                entry.interrupted = INTERRUPTIONS
+                    .iter()
+                    .copied()
+                    .filter(|code| {
+                        meta.iter()
+                            .any(|(k, v)| k == "interrupted" && v.as_str() == *code)
+                    })
+                    .collect();
+            }
             self.end_entry(
                 id,
                 entry,
@@ -1516,6 +1613,22 @@ impl CommitmentRegistry {
         result
     }
 
+    /// Read publication proof and its identity in one registry hold. Poison is
+    /// an error, never evidence that no publication occurred.
+    pub(crate) fn publication(
+        &self,
+        id: CommitmentId,
+    ) -> Result<Option<(CommitmentView, PublicationClass)>, AuthorityError> {
+        let entries = self
+            .0
+            .entries
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its records"))?;
+        Ok(entries
+            .get(&id)
+            .map(|entry| (entry.view(id), entry.publication())))
+    }
+
     pub fn views_of_run(&self, run: RunId) -> Vec<CommitmentView> {
         let mut views: Vec<CommitmentView> = self
             .entries()
@@ -1608,6 +1721,7 @@ pub struct ExecutionGuard {
     /// The sequence number of its start record.
     start: u64,
     finished: bool,
+    handoff: std::sync::atomic::AtomicU8,
 }
 
 impl std::fmt::Debug for ExecutionGuard {
@@ -1632,6 +1746,19 @@ impl ExecutionGuard {
 
     pub fn is_cancelled(&self) -> bool {
         self.cancel.is_cancelled()
+    }
+
+    /// M2d-C round 4 (rule 1): the effect is about to hand its change to
+    /// the kernel's apply. From here on, an end without proof either way
+    /// is uncertain.
+    pub(crate) fn handing_off(&self) {
+        self.handoff.store(HANDED_OFF, Ordering::SeqCst);
+    }
+
+    /// M2d-C round 4: the kernel proved the handed-off change was not
+    /// published (refused at or before its final check).
+    pub(crate) fn proven_not_published(&self) {
+        self.handoff.store(PROVEN_NOT_PUBLISHED, Ordering::SeqCst);
     }
 
     /// Whether the commitment is still covered (see
@@ -1674,8 +1801,9 @@ impl ExecutionGuard {
     pub fn finish(mut self, outcome: Outcome) -> EndStatus {
         self.finished = true;
         let cancelled = self.cancel.is_cancelled();
+        let handoff = self.handoff.load(Ordering::SeqCst);
         self.registry
-            .finish(self.id, self.started_wall_ms, outcome, cancelled)
+            .finish(self.id, self.started_wall_ms, outcome, cancelled, handoff)
     }
 }
 
@@ -1692,6 +1820,7 @@ impl Drop for ExecutionGuard {
                     detail: "the execution ended without a result".into(),
                 },
                 self.cancel.is_cancelled(),
+                self.handoff.load(Ordering::SeqCst),
             );
         }
     }

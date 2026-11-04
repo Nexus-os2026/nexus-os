@@ -31,7 +31,7 @@ use crate::authority::approval::{
     MissionResumeConfirmation,
 };
 use crate::authority::clock::Clock;
-use crate::authority::commitment::{CommitmentState, CommitmentView};
+use crate::authority::commitment::{CommitmentState, CommitmentView, PublicationClass};
 use crate::authority::effect::CapabilityKind;
 use crate::authority::evidence::Privacy;
 use crate::authority::ids::{AgentId, CommitmentId, RunId};
@@ -224,6 +224,26 @@ impl AgentDoor {
         Lookup::NotMine {
             settled: agents && view.state.is_final(),
         }
+    }
+
+    /// Publication proof for one of this door's commitments. This separate
+    /// typed interface keeps the legacy display view and its callers intact.
+    /// Unknown and unreadable are never proof of nonpublication.
+    pub fn publication(
+        &self,
+        id: CommitmentId,
+    ) -> Result<Lookup<PublicationClass>, AuthorityError> {
+        let authority = self.control.authority();
+        let Some((view, publication)) = authority.commitments().publication(id)? else {
+            return Ok(Lookup::Unknown);
+        };
+        let agents = view.agent == self.core.agent;
+        if agents && authority.runs().try_is_member(view.run, self.core.group)? {
+            return Ok(Lookup::Mine(publication));
+        }
+        Ok(Lookup::NotMine {
+            settled: agents && view.state.is_final(),
+        })
     }
 
     /// Whether the owner's emergency stop holds.
