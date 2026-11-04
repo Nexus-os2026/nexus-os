@@ -11,10 +11,20 @@
 //!   written and synced;
 //! - `fence`: the `SettlementStarted` append fails and the fence has run;
 //! - `poison`: the same failure, inside the poisoning;
-//! - `before_ack`: after the terminal step, before its acknowledgement.
+//! - `before_ack`: after the terminal step, before its acknowledgement;
+//! - round 6 (D8 completed): `fence_terminal` and `poison_terminal`: the
+//!   `Settled` append fails after a durable `SettlementStarted`; the fence
+//!   child dies inside the fence (at its first cancellation, before the
+//!   fence returns), the poison child inside the poisoning.
 //!
-//! Child 2 reopens the home in a new process: a fresh broker (the kernel's
-//! recovery report read through it) and Mother on the same journal. A
+//! Every child writes a receipt naming the boundary it dies at (and that
+//! `SettlementStarted` was durable, where it was), which the parent reads
+//! back exactly. Child 2 reopens the home in a new process: a fresh broker,
+//! the kernel's recovery read through the product's own report path
+//! (`GovernedControl::files_recovery_report`, which reopens the Files
+//! ledger and runs the kernel's analysis with no workspace registration:
+//! its findings are exactly none, `ok:0`, because the one publication
+//! finished before every crash point) and Mother on the same journal. A
 //! commitment the new broker does not know is uncertain, never "not
 //! published"; only a conclusive outcome is acknowledged again; a torn
 //! terminal line is refused; a held mission's Stop goes through the
@@ -39,7 +49,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-const POINTS: [&str; 7] = [
+const POINTS: [&str; 9] = [
     "started",
     "before_write",
     "torn",
@@ -47,7 +57,21 @@ const POINTS: [&str; 7] = [
     "fence",
     "poison",
     "before_ack",
+    "fence_terminal",
+    "poison_terminal",
 ];
+
+/// Round 6: the child's receipt of the boundary it dies at, appended and
+/// synced before it dies (read back exactly by the parent).
+fn receipt(dir: &Path, line: &str) {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("receipt"))
+        .unwrap();
+    file.write_all(format!("{line}\n").as_bytes()).unwrap();
+    file.sync_all().unwrap();
+}
 
 /// The journal child 1 writes: it dies inside the `Settled` append, or
 /// fails the `SettlementStarted` append, as its point says.
@@ -55,6 +79,8 @@ struct Dying {
     file: FileJournal,
     path: PathBuf,
     point: String,
+    /// The home: where the receipt goes.
+    dir: PathBuf,
 }
 
 impl JournalStore for Dying {
@@ -65,7 +91,10 @@ impl JournalStore for Dying {
         let settled = line.contains("\"trigger\":\"settled\"");
         let started = line.contains("\"event\":\"settlement_started\"");
         match self.point.as_str() {
-            "before_write" if settled => std::process::abort(),
+            "before_write" if settled => {
+                receipt(&self.dir, "terminal_append:before_write");
+                std::process::abort()
+            }
             "torn" if settled => {
                 let mut file = std::fs::OpenOptions::new()
                     .append(true)
@@ -73,21 +102,34 @@ impl JournalStore for Dying {
                     .unwrap();
                 file.write_all(&line.as_bytes()[..line.len() / 2]).unwrap();
                 file.sync_all().unwrap();
+                receipt(&self.dir, "terminal_append:torn");
                 std::process::abort();
             }
             "after_sync" if settled => {
                 self.file.append(line).unwrap();
+                receipt(&self.dir, "terminal_append:after_sync");
                 std::process::abort();
             }
             "fence" | "poison" if started => {
-                return Err(JournalError::Store(crate::journal::StoreFailure::Injected))
+                receipt(&self.dir, "started_append:refused");
+                return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
+            }
+            // Round 6: the terminal append fails after the durable start.
+            "fence_terminal" | "poison_terminal" if settled => {
+                receipt(&self.dir, "terminal_append:refused");
+                return Err(JournalError::Store(crate::journal::StoreFailure::Injected));
             }
             _ => {}
         }
-        self.file.append(line)
+        self.file.append(line)?;
+        if started {
+            receipt(&self.dir, "started_durable");
+        }
+        Ok(())
     }
     fn poison(&mut self) -> Result<(), JournalError> {
-        if self.point == "poison" {
+        if self.point == "poison" || self.point == "poison_terminal" {
+            receipt(&self.dir, "inside_poison");
             std::process::abort();
         }
         self.file.poison()
@@ -95,10 +137,6 @@ impl JournalStore for Dying {
     fn identity(&self) -> Option<String> {
         self.file.identity()
     }
-}
-
-fn workspace_path(dir: &Path) -> PathBuf {
-    PathBuf::from(std::fs::read_to_string(dir.join("workspace.path")).unwrap())
 }
 
 fn mother(
@@ -144,6 +182,7 @@ fn child_one(point: &str, dir: &Path) -> ! {
         file: home.journal().unwrap(),
         path: home.journal_path(),
         point: point.to_string(),
+        dir: dir.to_path_buf(),
     };
     let mother = mother(&home, &port, journal).unwrap();
     let mut contract = contract_with("MKFILE:crash-a.txt MKFILE:crash-b.txt VFILE:crash-c.txt");
@@ -166,22 +205,29 @@ fn child_one(point: &str, dir: &Path) -> ! {
         .execute(commitment, &mother_agent(), run)
         .expect("published");
     std::fs::write(dir.join("mission.id"), id.0.to_string()).unwrap();
+    let home_dir = dir.to_path_buf();
     match point {
         // The Stop's first step journals the start; its owed write follows.
-        "started" => mother
-            .hooks
-            .before_owed_write
-            .arm(0, || std::process::abort()),
+        "started" => mother.hooks.before_owed_write.arm(0, move || {
+            receipt(&home_dir, "after_first_step");
+            std::process::abort()
+        }),
         // The fence ran, before the poison marker.
-        "fence" => mother
-            .hooks
-            .fence_to_marker
-            .arm(0, || std::process::abort()),
+        "fence" => mother.hooks.fence_to_marker.arm(0, move || {
+            receipt(&home_dir, "after_fence_before_marker");
+            std::process::abort()
+        }),
+        // Round 6: inside the fence, at its first cancellation, before it
+        // returns (under the port's mutex and the coordinator lock).
+        "fence_terminal" => port.first_fence_cancel.arm(move |fenced| {
+            receipt(&home_dir, &format!("inside_fence:fenced={fenced}"));
+            std::process::abort()
+        }),
         // The terminal step's owed write, before the acknowledgement.
-        "before_ack" => mother
-            .hooks
-            .before_owed_write
-            .arm(1, || std::process::abort()),
+        "before_ack" => mother.hooks.before_owed_write.arm(1, move || {
+            receipt(&home_dir, "after_terminal_before_ack");
+            std::process::abort()
+        }),
         _ => {}
     }
     let _ = mother.stop(id);
@@ -200,20 +246,23 @@ fn child_two(dir: &Path) {
             .parse()
             .unwrap(),
     );
-    // The Owner's workspace registered again with the fresh broker (the
-    // kernel's recovery reads it).
-    let registered = home
-        .control
-        .register_workspace(&workspace_path(dir), &[home.dir.as_path()])
-        .map_or_else(|e| format!("err:{}", e.class()), |_| "ok".to_string());
+    // Round 6 (D8 completed): the product's own recovery path for an
+    // already-registered, non-empty folder: the fresh broker reopens the
+    // Files ledger and runs the kernel's analysis; no workspace is
+    // registered again (registration refuses a non-empty folder, and the
+    // report needs none).
     let recovery = home.control.files_recovery_report().map_or_else(
         |e| format!("err:{}", e.class()),
         |r| format!("ok:{}", r.len()),
     );
+    let receipt = std::fs::read_to_string(dir.join("receipt")).unwrap_or_default();
     let port = Arc::new(port_for(&home.control, true));
     let mut obs = serde_json::Map::new();
-    obs.insert("registered".into(), json!(registered));
     obs.insert("recovery".into(), json!(recovery));
+    obs.insert(
+        "receipt".into(),
+        json!(receipt.lines().map(str::to_string).collect::<Vec<_>>()),
+    );
     match mother(&home, &port, home.journal().unwrap()) {
         Err(e) => {
             obs.insert("open".into(), json!(format!("{e:?}")));
@@ -344,6 +393,32 @@ fn crash(point: &str) -> Value {
     serde_json::from_str(line).unwrap()
 }
 
+/// The receipt each child must leave: the boundary it died at, exactly,
+/// after a durable `SettlementStarted` where the point is past it.
+fn receipt_of(point: &str) -> Value {
+    let lines: Vec<&str> = match point {
+        "started" => vec!["started_durable", "after_first_step"],
+        "before_write" => vec!["started_durable", "terminal_append:before_write"],
+        "torn" => vec!["started_durable", "terminal_append:torn"],
+        "after_sync" => vec!["started_durable", "terminal_append:after_sync"],
+        "fence" => vec!["started_append:refused", "after_fence_before_marker"],
+        "poison" => vec!["started_append:refused", "inside_poison"],
+        "before_ack" => vec!["started_durable", "after_terminal_before_ack"],
+        "fence_terminal" => vec![
+            "started_durable",
+            "terminal_append:refused",
+            "inside_fence:fenced=true",
+        ],
+        "poison_terminal" => vec![
+            "started_durable",
+            "terminal_append:refused",
+            "inside_poison",
+        ],
+        other => panic!("no receipt for {other}"),
+    };
+    json!(lines)
+}
+
 /// D8: every settlement boundary, a real crash, a fresh broker.
 #[cfg(target_os = "linux")]
 #[test]
@@ -356,10 +431,14 @@ fn m2d_c_r5_d8_a_crash_at_every_settlement_boundary() {
                 obs["open"].as_str().is_some_and(|o| o != "ok"),
                 "torn: refused: {text}"
             );
+            assert_eq!(obs["receipt"], receipt_of(point), "torn: the boundary");
             continue;
         }
         assert_eq!(obs["open"], "ok", "{point}: {text}");
-        assert!(obs["recovery"].as_str().is_some(), "{point}: {text}");
+        // The real kernel recovery, through the product's report path:
+        // exactly no finding (the one publication finished before every
+        // crash point), never an error and never any string.
+        assert_eq!(obs["recovery"], "ok:0", "{point}: {text}");
         let outcomes: Vec<String> = obs["outcomes"]
             .as_array()
             .unwrap()
@@ -370,6 +449,7 @@ fn m2d_c_r5_d8_a_crash_at_every_settlement_boundary() {
             obs["state"], "blocked",
             "{point}: never an ordinary Stop: {text}"
         );
+        assert_eq!(obs["receipt"], receipt_of(point), "{point}: the boundary");
         match point {
             "after_sync" | "before_ack" => {
                 assert!(
