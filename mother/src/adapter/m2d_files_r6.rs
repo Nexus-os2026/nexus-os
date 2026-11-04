@@ -351,15 +351,17 @@ fn a_captured_token_is_reached_through_every_alias_of_the_journal(home: &Home) {
             assert!(!again.engaged(a), "{name}: the original cell, not engaged");
             assert_eq!(again.port.run_of(a), None, "{name}: the adoption was refused");
             let (entered, release_append) = again.hold_next_append();
-            let stopping = scope.spawn(|| again.mother.stop(a));
-            entered.recv_timeout(BOUND).expect("SettlementStarted held");
-            assert!(again.engaged(a), "{name}: engaged through the replacement");
-            release_execution.send(()).unwrap();
-            assert!(!worker.join().unwrap(), "{name}: the final check refused");
-            release_append.send(()).unwrap();
-            let state = stopping.join().unwrap();
+            let state = std::thread::scope(|inner| {
+                let stopping = inner.spawn(|| again.mother.stop(a));
+                entered.recv_timeout(BOUND).expect("SettlementStarted held");
+                assert!(again.engaged(a), "{name}: engaged through the replacement");
+                release_execution.send(()).unwrap();
+                assert!(!worker.join().unwrap(), "{name}: the final check refused");
+                release_append.send(()).unwrap();
+                stopping.join().unwrap()
+            });
             assert!(
-                state.is_ok_and(MissionState::is_terminal),
+                state.as_ref().is_ok_and(|s| s.is_terminal()),
                 "{name}: the settlement ended the mission: {state:?}"
             );
             let terminal = again.terminal(a);
@@ -387,10 +389,13 @@ fn a_captured_token_is_reached_through_every_alias_of_the_journal(home: &Home) {
 /// final check then refuses. (Production refuses an identity-less store:
 /// the guard in `oracles/m2d_c_r6.rs`.)
 fn an_identity_less_store_binds_its_replayed_runs_or_stops_them(home: &Home) {
-    let anonymous = |home: &Home, disk: Disk| -> Result<(Rig<'_>, Arc<GovernedPort>), CoordinatorError> {
+    fn anonymous(
+        home: &Home,
+        disk: Disk,
+    ) -> Result<(Rig<'_>, Arc<GovernedPort>), CoordinatorError> {
         let port = Arc::new(port_for(&home.control, true).with_workspace(folder_of(home)));
         Rig::over(home, port.clone(), disk, Arc::default()).map(|rig| (rig, port))
-    };
+    }
     // Another scenario's live run of an unhalted door: not this journal's.
     let other = Rig::new(home, "m2d-c-r6-anon-other.jsonl");
     let unrelated = other.waiting("r6-anon-other");
@@ -535,6 +540,10 @@ fn the_emergency_cohort_is_the_cells_the_ingress_engaged(home: &Home) {
     home.control.resume(&OwnerLiftsTheStop).unwrap();
     assert!(!home.control.authority().runs().is_stopped());
     assert_eq!(s.cause(b), Some(HaltCause::Emergency), "kept across the lift");
+    // A mission created after the lift is not of the cohort: the first
+    // touch records the cells the ingress engaged, and takes no second
+    // snapshot.
+    let c = s.approved("r6-lift-c");
     let after = s.mother.advance(b);
     assert!(
         !matches!(&after, Ok(step) if step.to == MissionState::Verifying),
@@ -548,6 +557,12 @@ fn the_emergency_cohort_is_the_cells_the_ingress_engaged(home: &Home) {
     // Touched again: idempotent, the one terminal line.
     assert!(s.mother.advance(b).is_err());
     assert_eq!(s.terminal(b).len(), 1);
+    assert!(!s.engaged(c), "not of the cohort");
+    assert_eq!(
+        s.mother.advance(c).map(|step| step.to),
+        Ok(MissionState::Investigating),
+        "runnable"
+    );
 }
 
 /// R6-3 / X3: an emergency whose recording is interrupted by poison: the

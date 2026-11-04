@@ -18,6 +18,7 @@
 
 use super::{contract_with, world, World};
 use crate::coordinator::CoordinatorError;
+use crate::effect::EffectPort;
 use crate::journal::{Event, MissionId};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::halt_cell::HaltCause;
@@ -225,6 +226,85 @@ fn m2d_c_r6_stop_all_is_typed_on_poison() {
     let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| w.mother.stop_all()));
     assert_eq!(answer.expect("never a panic"), Err(CoordinatorError::Poisoned));
     assert_eq!(cause(&w, id), Some(HaltCause::Stop), "engaged all the same");
+}
+
+/// A lane that runs a hook once, inside its call, before it answers.
+struct Hooked {
+    inner: std::sync::Arc<dyn crate::lane::Lane>,
+    hook: std::sync::Arc<std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>>,
+}
+
+impl crate::lane::Lane for Hooked {
+    fn identity(&self) -> crate::lane::LaneIdentity {
+        self.inner.identity()
+    }
+    fn invoke(&self, input: &crate::lane::LaneInput) -> crate::lane::LaneOutput {
+        if let Some(hook) = self.hook.lock().unwrap().take() {
+            hook();
+        }
+        self.inner.invoke(input)
+    }
+}
+
+/// R6-1 / X5: the entry check alone is not enough: a cell engaged while
+/// the call is out of the lock (inside a lane's call) refuses the next
+/// boundary: the lane's answer is not kept, no later lane or effect runs,
+/// and the call records the cause's terminal.
+#[test]
+fn m2d_c_r6_a_cell_engaged_mid_call_refuses_the_next_boundary() {
+    let hook: std::sync::Arc<std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>> =
+        Default::default();
+    let keyed: Vec<std::sync::Arc<super::KeyedLane>> = crate::lane::LaneRole::ALL
+        .iter()
+        .map(|role| std::sync::Arc::new(super::KeyedLane::new(*role)))
+        .collect();
+    let lanes: Vec<std::sync::Arc<dyn crate::lane::Lane>> = keyed
+        .iter()
+        .map(|lane| {
+            if lane.identity().role == crate::lane::LaneRole::Sentinel {
+                std::sync::Arc::new(Hooked {
+                    inner: lane.clone(),
+                    hook: hook.clone(),
+                }) as std::sync::Arc<dyn crate::lane::Lane>
+            } else {
+                lane.clone() as std::sync::Arc<dyn crate::lane::Lane>
+            }
+        })
+        .collect();
+    let mut w = super::world_with(lanes);
+    w.keyed = keyed;
+    let id = w.mission_in(MissionState::Investigating);
+    let cell = w
+        .port
+        .halt_cells()
+        .get(w.mother.journal_identity(), id.0)
+        .unwrap();
+    *hook.lock().unwrap() = Some(Box::new(move || cell.engage_with(HaltCause::Emergency)));
+    let calls = w.keyed_calls();
+    assert_eq!(w.mother.advance(id), Err(CoordinatorError::Stopped));
+    assert_eq!(w.keyed_calls(), calls + 1, "the Sentinel alone ran");
+    let events: Vec<String> = w
+        .mother
+        .journal()
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.mission == id)
+        .map(|e| match e.event {
+            Event::LaneInvoked { role, .. } => format!("invoked:{}", role.as_str()),
+            Event::LaneReturned { .. } => "returned".into(),
+            Event::Transition {
+                trigger: Trigger::Stop { reason },
+            } => format!("stop:{}", reason.code()),
+            other => format!("{other:?}").split(' ').next().unwrap_or("").to_string(),
+        })
+        .collect();
+    let invoked = events.iter().position(|e| e == "invoked:sentinel").unwrap();
+    assert_eq!(
+        &events[invoked..],
+        &["invoked:sentinel".to_string(), "stop:emergency_stop".to_string()],
+        "the answer is not kept; the terminal follows: {events:?}"
+    );
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
 }
 
 /// The body of `fn name` in `source` (to its closing brace at the item's
