@@ -22,6 +22,7 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::halt_cell::{HaltCell, HaltCells};
+use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
@@ -299,6 +300,17 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// M2d-C round 5 (C2, C4): the emergency's door-wide memory stop
     /// (lock-free, no I/O, no panic), with its cohort's cells.
     fn emergency_halt(&self);
+    /// M2d-C round 6 (X2″): whether the broker's `run` of Mother's agent
+    /// carries `cell` (`None`: the broker holds no such run). Read from the
+    /// broker, never from a record; an error if it cannot be read.
+    fn run_carries(&self, run: RunId, cell: &HaltCell) -> Result<Option<bool>, EffectRefusal>;
+    /// X2″: whether the broker's `run` of Mother's agent survives (held,
+    /// neither cancelled nor finished).
+    fn run_survives(&self, run: RunId) -> Result<bool, EffectRefusal>;
+    /// X2″: stop a surviving run the journal names but whose cell this
+    /// coordinator does not hold: its cells are engaged `Fence` and the run
+    /// cancelled at the broker. Deny only; adopts nothing.
+    fn stop_surviving(&self, run: RunId) -> Result<(), EffectRefusal>;
     /// The identity of the action `mission` waits on, if the port knows it.
     fn pending(&self, mission: MissionId) -> Option<PendingAction>;
     /// A reopened coordinator hands back the journaled action of a mission

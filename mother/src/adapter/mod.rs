@@ -643,6 +643,30 @@ impl EffectPort for GovernedPort {
         self.with_runs(|runs| runs.cells.insert(mission, cell));
     }
 
+    /// X2″: the broker's answer, never the record's; typed if unreadable.
+    fn run_carries(&self, run: RunId, cell: &HaltCell) -> Result<Option<bool>, EffectRefusal> {
+        self.door
+            .run_carries(run, cell)
+            .map_err(|e| refused_by(e.class()))
+    }
+
+    fn run_survives(&self, run: RunId) -> Result<bool, EffectRefusal> {
+        self.door
+            .run_survives(run)
+            .map_err(|e| refused_by(e.class()))
+    }
+
+    /// X2″: through the door (its cells engaged `Fence`, the run cancelled
+    /// in memory); the records written here, with no lock held.
+    fn stop_surviving(&self, run: RunId) -> Result<(), EffectRefusal> {
+        let batch = self
+            .door
+            .stop_surviving_run(run)
+            .map_err(|e| refused_by(e.class()))?;
+        written(batch);
+        Ok(())
+    }
+
     /// C4: the door's memory stop (lock-free).
     fn emergency_halt(&self) {
         self.door.stop_now();
@@ -1127,9 +1151,15 @@ pub(crate) fn status_of(
     }
 }
 
-/// The journal in a file: one entry per line, appended and synced.
+/// The journal in a file: one entry per line, appended and synced. M2d-C
+/// round 6 (R6-2, X2): the file is opened once and kept: its identity is
+/// the opened file's own (`fstat`: the device and inode), never the text
+/// of its path, and the same descriptor is read for replay and written
+/// for every append; a duplicate of it is the broker's anchor while any
+/// of the journal's halt cells lives.
 pub struct FileJournal {
     path: PathBuf,
+    file: std::fs::File,
 }
 
 fn store_error(e: std::io::Error) -> JournalError {
@@ -1137,25 +1167,30 @@ fn store_error(e: std::io::Error) -> JournalError {
 }
 
 impl FileJournal {
-    /// The journal at `path` (created empty if absent). `path` must be a
-    /// regular file, not a link.
+    /// The journal at `path` (created empty if absent). `path`'s final
+    /// component must be a regular file, not a link (a directory above it
+    /// may be reached through a link: the identity is the file's).
     pub fn open(path: &Path) -> Result<Self, JournalError> {
+        let mut options = OpenOptions::new();
+        options.read(true).append(true);
         match std::fs::symlink_metadata(path) {
             Ok(meta) if !meta.file_type().is_file() => {
                 return Err(JournalError::Store(StoreFailure::NotRegularFile))
             }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                OpenOptions::new()
-                    .create_new(true)
-                    .append(true)
-                    .open(path)
-                    .map_err(store_error)?;
+                options.create_new(true);
             }
             Err(e) => return Err(store_error(e)),
         }
+        let file = options.open(path).map_err(store_error)?;
+        // The opened file itself, not the path looked at a moment ago.
+        if !file.metadata().map_err(store_error)?.file_type().is_file() {
+            return Err(JournalError::Store(StoreFailure::NotRegularFile));
+        }
         Ok(Self {
             path: path.to_path_buf(),
+            file,
         })
     }
 
@@ -1172,26 +1207,42 @@ impl FileJournal {
 }
 
 impl JournalStore for FileJournal {
-    /// Round 5 (C1): the digest of its path (stable across reopening it,
-    /// distinct between journals at different paths).
+    /// R6-2: the opened file's device and inode (`fstat` on the journal's
+    /// own descriptor): the same through `./`, a relative path or a
+    /// parent-directory link, distinct for another file. Only on Unix; a
+    /// journal with no identity opens no coordinator in production.
     fn identity(&self) -> Option<String> {
-        let path = self.path.to_string_lossy();
-        Some(format!(
-            "file:{}",
-            hex::encode(crate::contract::sha256(
-                b"nexus-mother-journal-identity\n",
-                &[path.as_bytes()]
-            ))
-        ))
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let meta = self.file.metadata().ok()?;
+            Some(format!("file:{}:{}", meta.dev(), meta.ino()))
+        }
+        #[cfg(not(unix))]
+        {
+            None
+        }
+    }
+
+    /// X2: a duplicate of the open descriptor.
+    fn anchor(&self) -> Option<Box<dyn std::any::Any + Send + Sync>> {
+        self.file
+            .try_clone()
+            .ok()
+            .map(|file| Box::new(file) as Box<dyn std::any::Any + Send + Sync>)
     }
 
     fn load(&self) -> Result<Vec<String>, JournalError> {
+        use std::io::{Read, Seek, SeekFrom};
         match std::fs::symlink_metadata(self.marker()) {
             Ok(_) => return Err(JournalError::Poisoned),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(store_error(e)),
         }
-        let text = std::fs::read_to_string(&self.path).map_err(store_error)?;
+        let mut file = &self.file;
+        file.seek(SeekFrom::Start(0)).map_err(store_error)?;
+        let mut text = String::new();
+        file.read_to_string(&mut text).map_err(store_error)?;
         if text.is_empty() {
             return Ok(Vec::new());
         }
@@ -1207,13 +1258,10 @@ impl JournalStore for FileJournal {
         if line.contains('\n') {
             return Err(JournalError::Store(StoreFailure::LineHasNewline));
         }
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(&self.path)
-            .map_err(store_error)?;
+        let mut file = &self.file;
         file.write_all(format!("{line}\n").as_bytes())
             .map_err(store_error)?;
-        file.sync_data().map_err(store_error)
+        self.file.sync_data().map_err(store_error)
     }
 
     fn poison(&mut self) -> Result<(), JournalError> {

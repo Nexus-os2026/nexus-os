@@ -356,6 +356,13 @@ pub trait JournalStore: Send {
     fn identity(&self) -> Option<String> {
         None
     }
+    /// M2d-C round 6 (X2): an opaque handle the broker keeps while any
+    /// halt cell of this journal lives (a duplicate of the journal's open
+    /// file), so that the identity cannot be reused by another file while
+    /// surviving work still depends on it. `None`: nothing to anchor.
+    fn anchor(&self) -> Option<Box<dyn std::any::Any + Send + Sync>> {
+        None
+    }
 }
 
 /// M2d-C round 5: identities for journals that have none of their own.

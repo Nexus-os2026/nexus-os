@@ -83,7 +83,7 @@ use nexus_governed_control::authority::approval::{
     MissionApproval, MissionConfirmation, MissionResumeApproval, MissionResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
-use nexus_governed_control::authority::halt_cell::HaltCells;
+use nexus_governed_control::authority::halt_cell::{HaltCause, HaltCells};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -174,6 +174,51 @@ pub enum CoordinatorError {
     Held,
     /// M2a-S: the coordinator was closed.
     Closed,
+    /// M2d-C round 6 (R6-2, X2″): the journal's identity, or the binding
+    /// of its replayed references to surviving work, could not be
+    /// established at the open.
+    Identity(IdentityRefusal),
+}
+
+/// M2d-C round 6 (R6-2, X2″): why an open could not bind its journal to the
+/// broker's halt cells (fail closed: the port is fenced where anything of
+/// it was reached).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdentityRefusal {
+    /// The store has no identity of its own: no coordinator opens over it
+    /// (a test build takes a local one instead).
+    NoIdentity,
+    /// A replayed reference to a surviving run does not carry this
+    /// journal's cell for its mission: that run is stopped, and nothing of
+    /// the journal is exposed.
+    SurvivingRunMismatch,
+    /// A replayed settlement's first cause is not its cell's.
+    CauseMismatch,
+    /// The broker's run state could not be read.
+    Unreadable,
+}
+
+/// R6-3: the cell's cause a settlement's first cause engages it with.
+fn halt_cause_of(cause: SettleCause) -> HaltCause {
+    match cause {
+        SettleCause::Stop(StopReason::EmergencyStop) => HaltCause::Emergency,
+        SettleCause::Stop(StopReason::DoorHalted) => HaltCause::Fence,
+        SettleCause::TimeBudget | SettleCause::Ended(BlockReason::BudgetTime) => {
+            HaltCause::TimeBudget
+        }
+        SettleCause::Stop(_) | SettleCause::Ended(_) => HaltCause::Stop,
+    }
+}
+
+/// R6-3: the settlement cause an engaged cell's first cause stands for: the
+/// terminal of a mission touched first after its cell was engaged elsewhere.
+fn settle_cause_of(cause: HaltCause) -> SettleCause {
+    match cause {
+        HaltCause::Stop => SettleCause::Stop(StopReason::Owner),
+        HaltCause::Emergency => SettleCause::Stop(StopReason::EmergencyStop),
+        HaltCause::TimeBudget => SettleCause::TimeBudget,
+        HaltCause::Fence => SettleCause::Stop(StopReason::DoorHalted),
+    }
 }
 
 /// One lane call, as reported. Its `Debug` shows no lane text or reason
@@ -1091,12 +1136,30 @@ impl<P: EffectPort> Coordinator<P> {
             }
         }
         let fencer = port.clone();
-        // Round 5 (C1): this journal's identity and the agent's halt table.
+        // Round 5 (C1) and round 6 (R6-2, X2″): this journal's identity (the
+        // store's own: a file's device and inode, a memory journal's
+        // instance) and the agent's halt table. A store with no identity
+        // opens nothing in production; a test build gives its test
+        // wrappers (`Disk`, `Gated`) an identity local to this coordinator.
+        let journal = match store.identity() {
+            Some(identity) => identity,
+            None => {
+                #[cfg(not(test))]
+                {
+                    return Err(CoordinatorError::Identity(IdentityRefusal::NoIdentity));
+                }
+                #[cfg(test)]
+                {
+                    crate::journal::fresh_identity("anonymous")
+                }
+            }
+        };
+        // X2: the anchor the broker keeps while any cell of this journal
+        // lives: the identity cannot be reused meanwhile.
+        let anchor = store.anchor();
         let cells = Cells {
             table: port.halt_cells(),
-            journal: store
-                .identity()
-                .unwrap_or_else(|| crate::journal::fresh_identity("anonymous")),
+            journal,
         };
         let budgets = Arc::new(Budgets::default());
         #[cfg(test)]
@@ -1143,17 +1206,43 @@ impl<P: EffectPort> Coordinator<P> {
                 .map(|(id, _)| *id)
                 .collect()
         });
-        for id in unfinished {
+        for id in &unfinished {
             match coordinator
                 .cells
                 .table
                 .cell(&coordinator.cells.journal, id.0)
             {
-                Ok(cell) => coordinator.port.bind_halt(id, cell),
+                Ok(cell) => coordinator.port.bind_halt(*id, cell),
                 Err(_) => {
                     coordinator.port.fence().write();
                     return Err(CoordinatorError::Capacity);
                 }
+            }
+        }
+        if let Some(anchor) = anchor {
+            coordinator
+                .cells
+                .table
+                .anchor(&coordinator.cells.journal, anchor);
+        }
+        // X3: a replayed settlement's first cause is its cell's: a fresh
+        // cell is engaged with it, an engaged one must agree.
+        let settling: Vec<(MissionId, SettleCause)> = coordinator.peek(|inner| {
+            inner
+                .missions
+                .iter()
+                .filter(|(_, m)| !m.state.is_terminal())
+                .filter_map(|(id, m)| m.settlement.map(|(_, cause)| (*id, cause)))
+                .collect()
+        });
+        for (id, cause) in settling {
+            let Some(cell) = coordinator.cells.table.get(&coordinator.cells.journal, id.0) else {
+                continue;
+            };
+            cell.engage_with(halt_cause_of(cause));
+            if cell.cause() != Some(halt_cause_of(cause)) {
+                coordinator.port.fence().write();
+                return Err(CoordinatorError::Identity(IdentityRefusal::CauseMismatch));
             }
         }
         // If opening fails from here on (the journal is then poisoned and
@@ -1163,6 +1252,21 @@ impl<P: EffectPort> Coordinator<P> {
         if let Err(e) = coordinator.recover(closed_cleanly, clean) {
             coordinator.withdraw_open_actions();
             return Err(e);
+        }
+        // R6-2: a cell of this identity that belongs to no replayed
+        // unfinished mission (a replaced file whose identity was reused,
+        // unknown surviving work, a terminal mission's leftover) is engaged
+        // and retired: it can never run. After recovery, which adopts and
+        // withdraws the journaled actions of terminal missions first (an
+        // engaged cell admits no adoption); before anything is exposed.
+        for (mission, cell) in coordinator.cells.table.cohort(&coordinator.cells.journal) {
+            if !unfinished.contains(&MissionId(mission)) {
+                cell.engage_with(HaltCause::Fence);
+                coordinator
+                    .cells
+                    .table
+                    .retire(&coordinator.cells.journal, mission);
+            }
         }
         // D1: the budgets of the missions recovery kept (their contracts are
         // loaded now).
@@ -2526,6 +2630,55 @@ impl<P: EffectPort> Coordinator<P> {
         }
     }
 
+    /// M2d-C round 6 (X2″), right after the adoptions: every replayed
+    /// reference to a run that survives at the broker must carry this
+    /// journal's cell for its mission (the adoption attached it, or the run
+    /// was opened with it); numeric mission ids prove nothing. One that
+    /// does not (its adoption refused by D4(a): a surviving execution of
+    /// this journal's mission under a replacement's fresh cell, review 5
+    /// HIGH 1) is stopped at the broker (its own cells engaged `Fence`, the
+    /// run cancelled), and the open fails closed: the port's fence, then a
+    /// typed error, adopting nothing more. An unreadable broker fails the
+    /// same way.
+    fn bind_surviving(&self) -> Result<(), CoordinatorError> {
+        let references: Vec<(MissionId, RunId)> = self.peek(|inner| {
+            inner
+                .missions
+                .iter()
+                .filter(|(_, m)| !m.state.is_terminal())
+                .filter_map(|(id, m)| {
+                    let (_, pending) = m.open_action.as_ref()?;
+                    RunId::parse(&pending.run).map(|run| (*id, run))
+                })
+                .collect()
+        });
+        for (id, run) in references {
+            let Some(cell) = self.cells.table.get(&self.cells.journal, id.0) else {
+                continue;
+            };
+            let bound = match self.port.run_survives(run) {
+                Ok(false) => continue,
+                Ok(true) => self.port.run_carries(run, &cell),
+                Err(e) => Err(e),
+            };
+            match bound {
+                Ok(Some(true)) | Ok(None) => {}
+                Ok(Some(false)) => {
+                    let _ = self.port.stop_surviving(run);
+                    self.port.fence().write();
+                    return Err(CoordinatorError::Identity(
+                        IdentityRefusal::SurvivingRunMismatch,
+                    ));
+                }
+                Err(_) => {
+                    self.port.fence().write();
+                    return Err(CoordinatorError::Identity(IdentityRefusal::Unreadable));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// On open: every journaled action not journaled closed (handed back
     /// already) whose mission does not wait is withdrawn (the mission's run
     /// is cancelled) and, once the port confirms it, journaled closed.
@@ -2566,6 +2719,7 @@ impl<P: EffectPort> Coordinator<P> {
     /// never approves it, and the Owner's Stop withdraws it.
     fn recover(&self, closed_cleanly: bool, clean: bool) -> Result<(), CoordinatorError> {
         self.adopt_actions();
+        self.bind_surviving()?;
         if closed_cleanly {
             self.with_lock(|inner| inner.open_session_at_once())?;
         }

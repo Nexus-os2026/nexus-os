@@ -54,6 +54,7 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::authority::evidence::MemoryEvidence;
 use nexus_governed_control::authority::halt_cell::{HaltCell, HaltCells};
+use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::authority::{Authority, AuthorityError};
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
@@ -470,6 +471,19 @@ impl EffectPort for RecordingPort {
 
     /// Has no door.
     fn emergency_halt(&self) {}
+
+    /// Opens no broker run: a replayed reference names none it holds.
+    fn run_carries(&self, _: RunId, _: &HaltCell) -> Result<Option<bool>, EffectRefusal> {
+        Ok(None)
+    }
+
+    fn run_survives(&self, _: RunId) -> Result<bool, EffectRefusal> {
+        Ok(false)
+    }
+
+    fn stop_surviving(&self, _: RunId) -> Result<(), EffectRefusal> {
+        Ok(())
+    }
 
     fn workspace(&self) -> Option<String> {
         match &self.lock().workspace {
