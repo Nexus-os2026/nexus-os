@@ -281,8 +281,8 @@ const STOP_CAUSES: &[&str] = &[
 
 // Exhaustive over the state machine, not a second manually selected inventory.
 // Review 3 exercises the nonterminal rows (including held/dispatch variants).
-// Failed is not a live File outcome: end_with converts Fail/VerifyFail to
-// PhaseInterrupted. Its row exercises that route and requires Blocked.
+// File mode preserves ordinary lane/verifier failures and their exact codes.
+// Failed remains Failed through every later terminal touch and replay.
 fn terminal_rows(state: MissionState) -> &'static [&'static str] {
     match state {
         MissionState::Draft
@@ -470,9 +470,9 @@ pub(super) fn terminal_pair(case: &str) {
             }
             assert_eq!(
                 m.coordinator.reason(id).as_deref(),
-                Some("phase_interrupted")
+                Some("verifier_fail")
             );
-            MissionState::Blocked
+            MissionState::Failed
         };
     }
     // Finish the owned execution before assertions that might panic. The
@@ -621,10 +621,5 @@ pub(super) fn rows_for_state(state: MissionState) -> Vec<(&'static str, MissionS
         | MissionState::Blocked
         | MissionState::Failed => terminal_rows(state),
     };
-    let reached = if state == MissionState::Failed {
-        MissionState::Blocked
-    } else {
-        state
-    };
-    names.iter().map(|name| (*name, reached)).collect()
+    names.iter().map(|name| (*name, state)).collect()
 }
