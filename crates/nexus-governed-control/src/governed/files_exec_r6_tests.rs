@@ -124,6 +124,49 @@ fn m2d_c_r6_the_anchor_lives_with_the_cells_and_runs_name_theirs() {
     assert_eq!(f.door.run_carries(unknown, &carried), Ok(None));
 }
 
+/// X2″: a replayed reference to a surviving run that does not carry this
+/// journal's cell is stopped through the door: every cell the run carries
+/// is engaged with cause `Fence` (a first cause kept), the run is
+/// cancelled and recorded; another agent's run, an unknown run and an
+/// unreadable registry are typed; a run says whether it survives.
+#[test]
+fn m2d_c_r6_a_surviving_run_without_the_cell_is_stopped() {
+    let f = Fx::new();
+    let cells = f.door.halt_cells();
+    let original = cells.cell("old", 1).unwrap();
+    let run = f.door.open_run_with_halt(&original).unwrap();
+    assert_eq!(f.door.run_survives(run), Ok(true));
+    let twin = f.gov.issue_agent_door(mother(), f.owner.clone()).unwrap();
+    let fresh = twin.halt_cells().cell("new", 1).unwrap();
+    assert_eq!(twin.run_carries(run, &fresh), Ok(Some(false)));
+    let batch = twin.stop_surviving_run(run).expect("stopped");
+    assert!(!batch.is_empty(), "the cancellation is recorded");
+    batch.write().unwrap();
+    assert_eq!(original.cause(), Some(HaltCause::Fence));
+    assert!(!fresh.is_engaged(), "the replacement's cell is untouched");
+    assert!(f.gov.authority().runs().view(run).unwrap().cancelled);
+    assert_eq!(f.door.run_survives(run), Ok(false));
+    assert_eq!(class(f.door.agent_action(run, &Intent::File(FileCreate {
+        name: "x.txt".into(),
+        content: "x\n".into(),
+    }))), "halted");
+    let stopped = cells.cell("old", 2).unwrap();
+    stopped.engage_with(HaltCause::Stop);
+    let other = f.door.open_run_with_halt(&stopped);
+    assert_eq!(class(other), "halted", "an engaged cell opens no run");
+    let unknown = RunId::parse("run-00000000000000000000000000000042").unwrap();
+    assert_eq!(class(twin.stop_surviving_run(unknown)), "unknown_run");
+    assert_eq!(f.door.run_survives(unknown), Ok(false));
+    let lonely = f
+        .gov
+        .issue_agent_door(AgentId::new("lonely").unwrap(), f.owner.clone())
+        .unwrap();
+    assert_eq!(class(lonely.stop_surviving_run(run)), "wrong_agent");
+    f.gov.authority().runs().poison_for_test();
+    assert!(twin.stop_surviving_run(run).is_err(), "unreadable");
+    assert!(f.door.run_survives(run).is_err(), "unreadable");
+}
+
 /// The body of `fn name` in `source` (to its closing brace at the
 /// item's indentation).
 fn body<'s>(source: &'s str, name: &str) -> &'s str {
