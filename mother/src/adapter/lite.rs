@@ -327,3 +327,6 @@ mod review1_sequential;
 #[cfg(target_os = "linux")]
 #[path = "lite_review1_recovery.rs"]
 mod review1_recovery;
+
+#[path = "lite_review2_mixed.rs"]
+mod review2_mixed;
