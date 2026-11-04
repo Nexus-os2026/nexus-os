@@ -189,7 +189,11 @@ impl Runtime {
         if !self.allowed(Route::Run) {
             return;
         }
-        let port = Arc::new(GovernedPort::new(door).with_workspace(workspace.name.clone()));
+        let port = Arc::new(
+            GovernedPort::new(door)
+                .with_admission_gate(self.screen.stop.gate.port.clone())
+                .with_workspace(workspace.name.clone()),
+        );
         let lanes: Vec<Arc<dyn Lane>> = LaneRole::ALL
             .into_iter()
             .map(|role| {

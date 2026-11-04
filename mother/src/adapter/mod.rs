@@ -50,7 +50,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 mod lite_port;
 
@@ -145,6 +145,22 @@ struct Runs {
     file_admissions: BTreeMap<MissionId, Admission>,
 }
 
+/// An optional host restriction shared with the actual coordinator port.
+/// Closing is memory-only and irreversible. This can only deny authority;
+/// it neither replaces nor lifts any broker or File-session halt.
+#[derive(Default)]
+pub struct AdmissionGate {
+    closed: AtomicBool,
+}
+impl AdmissionGate {
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+    }
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
+}
+
 /// The EffectPort over the governed-control broker, through one agent door.
 pub struct GovernedPort {
     #[cfg(test)]
@@ -156,6 +172,7 @@ pub struct GovernedPort {
     file_port: Result<FilePort, FileSessionError>,
     file_session: OnceLock<(Arc<FileAttachment>, HaltCell)>,
     workspace: Option<String>,
+    admission_gate: Option<Arc<AdmissionGate>>,
     /// M2a-S: `fenced` and every run registration are under this mutex, so
     /// a run registers either before the fence (which cancels it) or after
     /// (and cancels itself); every broker call checks `fenced` first.
@@ -217,6 +234,7 @@ impl GovernedPort {
             file_engagement: Default::default(),
             file_session: OnceLock::new(),
             workspace: None,
+            admission_gate: None,
             door,
             runs: Mutex::new(Runs::default()),
             performed: AtomicUsize::new(0),
@@ -246,6 +264,24 @@ impl GovernedPort {
             #[cfg(test)]
             after_held_answer: Default::default(),
         }
+    }
+
+    /// Install a narrowing gate before sharing this port with a coordinator.
+    /// There is no setter on a shared port and no way to reopen the gate.
+    pub fn with_admission_gate(mut self, gate: Arc<AdmissionGate>) -> Self {
+        self.admission_gate = Some(gate);
+        self
+    }
+
+    fn admit_host(&self) -> Result<(), EffectRefusal> {
+        if self
+            .admission_gate
+            .as_ref()
+            .is_some_and(|gate| gate.is_closed())
+        {
+            return Err(refused(BrokerClass::Halted));
+        }
+        Ok(())
     }
 
     /// A requested registered workspace label, never workspace authority.
@@ -375,6 +411,7 @@ impl GovernedPort {
     /// ended meanwhile gets no run either (the one just opened is
     /// cancelled).
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
+        self.admit_host()?;
         self.enter()?;
         let known = self.with_runs(|runs| {
             if runs.ended.contains(&mission) {
@@ -387,6 +424,7 @@ impl GovernedPort {
         }
         #[cfg(test)]
         self.before_open_run.fire();
+        self.admit_host()?;
         let run = match self.file_session.get() {
             Some((attachment, _)) => self.door.open_file_run(attachment),
             None => self.door.open_run(),
@@ -452,6 +490,7 @@ impl GovernedPort {
         mission: MissionId,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
+        self.admit_host()?;
         if self.file_session.get().is_some() {
             self.file_enter()?;
             let runs = self.file_runs()?;
@@ -479,6 +518,7 @@ impl GovernedPort {
         self.enter()?;
         #[cfg(test)]
         self.in_broker_action.fire();
+        self.admit_host()?;
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
@@ -501,11 +541,15 @@ impl EffectPort for GovernedPort {
         self.workspace.as_deref()
     }
     fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
+        self.admit_host()
+            .map_err(|_| FileSessionError::EmergencyHistory)?;
         Ok(Some(Arc::new(
             self.file_port.as_ref().map_err(|e| *e)?.attach()?,
         )))
     }
     fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
+        self.admit_host()
+            .map_err(|_| FileSessionError::EmergencyHistory)?;
         let cell = self.door.claim_file_session(&attachment)?;
         #[cfg(test)]
         if self.file_duplicate_claim.load(Ordering::SeqCst) {
@@ -753,7 +797,10 @@ impl EffectPort for GovernedPort {
         &self,
         request: &MissionConfirmation,
     ) -> Result<MissionApproval, AuthorityError> {
-        self.door.confirm_mission(request)
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
+        let answer = self.door.confirm_mission(request)?;
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
+        Ok(answer)
     }
 
     /// Asked through the door, as [`EffectPort::confirm_mission`].
@@ -761,9 +808,11 @@ impl EffectPort for GovernedPort {
         &self,
         request: &MissionResumeConfirmation,
     ) -> Result<MissionResumeApproval, AuthorityError> {
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
         let answer = self.door.confirm_held_mission(request);
         #[cfg(test)]
         self.after_held_answer.fire();
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
         answer
     }
 
@@ -845,7 +894,9 @@ impl EffectPort for GovernedPort {
         let Ok(()) = self.enter() else {
             return;
         };
-        self.adopt_inside(mission, pending);
+        if self.admit_host().is_ok() {
+            self.adopt_inside(mission, pending);
+        }
     }
 }
 

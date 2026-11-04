@@ -43,6 +43,7 @@ impl GovernedPort {
     }
 
     pub(super) fn file_enter(&self) -> Result<(), EffectRefusal> {
+        self.admit_host()?;
         let Some((_, cell)) = self.file_session.get() else {
             return Err(refused(BrokerClass::NotAdmitted));
         };
@@ -78,6 +79,7 @@ impl GovernedPort {
             }
         }
         let run = self.run_for(mission)?;
+        self.admit_host()?;
         self.door
             .admit_files(run, &admission.contract_hash, &admission.consent_request)
             .map_err(|e| refused_by(e.class()))?;

@@ -31,6 +31,7 @@ impl Route {
 
 #[derive(Default)]
 pub(crate) struct Gate {
+    pub(crate) port: Arc<nexus_mother::adapter::AdmissionGate>,
     recovery: AtomicBool,
     closing: AtomicBool,
     failed: AtomicBool,
@@ -39,7 +40,7 @@ pub(crate) struct Gate {
 }
 impl Gate {
     pub(crate) fn admit(&self, route: Route) -> bool {
-        if self.recovery() || self.closing() || self.failed() {
+        if self.port.is_closed() || self.recovery() || self.closing() || self.failed() {
             return false;
         }
         // Counts successful host admission boundaries, not backend success.
@@ -70,6 +71,7 @@ impl Gate {
         self.epoch.load(Ordering::SeqCst)
     }
     pub(crate) fn close(&self) {
+        self.port.close();
         self.closing.store(true, Ordering::SeqCst);
     }
     pub(crate) fn fail(&self) {
@@ -77,7 +79,9 @@ impl Gate {
         self.close();
     }
     pub(crate) fn emergency(&self) {
-        // This monotone restriction precedes every later lock and spawn.
+        // This monotone restriction precedes every later lock and spawn,
+        // including calls made internally through the retained coordinator port.
+        self.port.close();
         self.recovery.store(true, Ordering::SeqCst);
         if self
             .epoch
