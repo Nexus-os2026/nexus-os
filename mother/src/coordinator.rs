@@ -1272,7 +1272,11 @@ impl<P: EffectPort> Coordinator<P> {
                 .collect()
         });
         for (id, cause) in settling {
-            let Some(cell) = coordinator.cells.table.get(&coordinator.cells.journal, id.0) else {
+            let Some(cell) = coordinator
+                .cells
+                .table
+                .get(&coordinator.cells.journal, id.0)
+            else {
                 continue;
             };
             cell.engage_with(halt_cause_of(cause));
@@ -1791,7 +1795,11 @@ impl<P: EffectPort> Coordinator<P> {
 
     /// [`Self::advance`] once the engaged cell was read: every later step
     /// reads it again under the lock ([`Inner::admitted`]).
-    fn advance_admitted(&self, id: MissionId, emergency: bool) -> Result<Advance, CoordinatorError> {
+    fn advance_admitted(
+        &self,
+        id: MissionId,
+        emergency: bool,
+    ) -> Result<Advance, CoordinatorError> {
         // A poisoned lock is a typed error here (the cells are engaged).
         let start = self.try_with_lock(|inner| -> Result<Start, CoordinatorError> {
             // A broken coordinator starts nothing and asks the broker nothing.
@@ -3104,7 +3112,8 @@ impl<P: EffectPort> Coordinator<P> {
         reason: StopReason,
     ) -> Result<MissionState, CoordinatorError> {
         // D1 / H3: the mission's cell first, before any lock or write.
-        self.cells.engage_with(id, halt_cause_of(SettleCause::Stop(reason)));
+        self.cells
+            .engage_with(id, halt_cause_of(SettleCause::Stop(reason)));
         #[cfg(test)]
         self.hooks.after_halt.fire();
         self.barrier(vec![(id, SettleCause::Stop(reason))])
@@ -3124,7 +3133,11 @@ impl<P: EffectPort> Coordinator<P> {
     /// the cause's Stop, or, with an unresolved File, its settlement.
     /// Idempotent: a mission recorded already, or settling, is left as it
     /// is. Typed on poison.
-    fn record_for(&self, id: MissionId, cause: HaltCause) -> Result<MissionState, CoordinatorError> {
+    fn record_for(
+        &self,
+        id: MissionId,
+        cause: HaltCause,
+    ) -> Result<MissionState, CoordinatorError> {
         self.barrier(vec![(id, settle_cause_of(cause))])
             .into_iter()
             .find(|(mission, _)| *mission == id)

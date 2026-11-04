@@ -787,7 +787,11 @@ impl RunRegistry {
     /// surviving work its journal names but whose cells it does not hold.
     /// An unknown run, another agent's or an owner run is typed; an
     /// unreadable registry is an error. Never panics.
-    pub(crate) fn halts_of(&self, run: RunId, agent: &AgentId) -> Result<Vec<HaltCell>, AuthorityError> {
+    pub(crate) fn halts_of(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+    ) -> Result<Vec<HaltCell>, AuthorityError> {
         let runs = self.runs.lock().map_err(|_| unreadable())?;
         let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
