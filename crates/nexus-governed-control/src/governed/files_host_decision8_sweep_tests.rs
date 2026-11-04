@@ -125,11 +125,7 @@ fn decision8_adoption_after_view_before_membership() {
     let pending = control.propose(NAME, CONTENT).unwrap();
     let live = control
         .gov
-        .issue_agent_door_with_halt(
-            mother(),
-            control.owner.clone(),
-            Some(control.gov.file_session_halt()),
-        )
+        .issue_agent_door(mother(), control.owner.clone())
         .unwrap();
     live.adopt(control.run, pending.id).unwrap();
     assert!(control
@@ -164,31 +160,40 @@ fn decision8_adoption_after_view_before_membership() {
 }
 
 #[test]
-fn decision8_adopted_run_carries_session_cell() {
+fn decision9_adoption_refuses_instead_of_retrofitting_the_session_cell() {
     let f = Fx::new();
     let pending = f.propose(NAME, CONTENT).unwrap();
     let door = f
         .gov
         .issue_agent_door_with_halt(mother(), f.owner.clone(), Some(f.gov.file_session_halt()))
         .unwrap();
-    door.adopt(f.run, pending.id).unwrap();
     let token = f.gov.authority().runs().check(f.run, &mother()).unwrap();
+    assert!(matches!(
+        door.adopt(f.run, pending.id),
+        Err(AuthorityError::NotMember)
+    ));
+    assert!(!f
+        .gov
+        .authority()
+        .runs()
+        .try_is_member(f.run, door.group_for_test())
+        .unwrap());
+    assert!(f
+        .gov
+        .authority()
+        .runs()
+        .session_cell(f.run)
+        .unwrap()
+        .is_none());
     f.gov.file_session_halt().engage_emergency();
     no_worker(&f);
     assert!(
-        token.is_cancelled(),
-        "an adopted host run must retain the deny-only cell"
+        !token.is_cancelled(),
+        "unrelated legacy run was not changed by refusal"
     );
-    assert!(matches!(f.authorize(&pending), Err(AuthorityError::Halted)));
-    assert_ne!(
-        f.gov
-            .authority()
-            .commitments()
-            .view(pending.id)
-            .unwrap()
-            .state,
-        CommitmentState::Authorized
-    );
+    f.authorize(&pending).unwrap();
+    f.execute(&pending).unwrap();
+    assert_eq!(std::fs::read_to_string(f.ws.join(NAME)).unwrap(), CONTENT);
 }
 
 #[test]
