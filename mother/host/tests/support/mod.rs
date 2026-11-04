@@ -81,6 +81,7 @@ pub struct Pty {
     pub child: Child,
     pub master: Option<File>,
     pub output: String,
+    pending_utf8: Vec<u8>,
     cursor: usize,
 }
 
@@ -105,6 +106,7 @@ impl Pty {
             child,
             master: Some(master),
             output: String::new(),
+            pending_utf8: Vec::new(),
             cursor: 0,
         }
     }
@@ -137,7 +139,20 @@ impl Pty {
         match file.read(&mut bytes) {
             Ok(0) | Err(_) => false,
             Ok(n) => {
-                self.output.push_str(&String::from_utf8_lossy(&bytes[..n]));
+                self.pending_utf8.extend_from_slice(&bytes[..n]);
+                match std::str::from_utf8(&self.pending_utf8) {
+                    Ok(text) => {
+                        self.output.push_str(text);
+                        self.pending_utf8.clear();
+                    }
+                    Err(error) => {
+                        assert!(error.error_len().is_none(), "invalid UTF-8 in PTY output");
+                        let valid = error.valid_up_to();
+                        self.output
+                            .push_str(std::str::from_utf8(&self.pending_utf8[..valid]).unwrap());
+                        self.pending_utf8.drain(..valid);
+                    }
+                }
                 true
             }
         }
