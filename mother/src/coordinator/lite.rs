@@ -95,6 +95,14 @@ impl<P: EffectPort> Coordinator<P> {
 
 impl<P: EffectPort> FileSession<P> {
     #[cfg(test)]
+    pub(crate) fn end_for_test(
+        &self,
+        id: MissionId,
+        reason: BlockReason,
+    ) -> Result<MissionState, CoordinatorError> {
+        self.call(|c| c.end(id, reason))
+    }
+    #[cfg(test)]
     pub(crate) fn hooks_for_test(&self) -> &CoordinatorHooks {
         &self.coordinator.hooks
     }

@@ -13,6 +13,16 @@ const SETTLE_CASE: &str = "NEXUS_LITE_SETTLEMENT_CASE";
 fn lite_settlement_scenarios() {
     for scenario in [
         "published-stop",
+        "budget-end",
+        "append-internal-budget",
+        "own-append-stop",
+        "own-append-all",
+        "own-append-budget",
+        "own-append-emergency",
+        "own-owed-stop",
+        "own-owed-all",
+        "own-owed-budget",
+        "own-owed-emergency",
         "budget",
         "lane-stop",
         "coordinator-poison",
@@ -112,6 +122,107 @@ fn lite_settlement_child() {
     };
     let f = Fx::new();
     match case.as_str() {
+        "budget-end" => {
+            let m = f.file();
+            let id = f.waiting(&m, "MKFILE:one.txt MKFILE:two.txt");
+            f.publish(id);
+            assert_eq!(
+                m.end_for_test(id, crate::evidence::BlockReason::BudgetTime),
+                Ok(MissionState::Blocked)
+            );
+            assert_eq!(
+                m.cell_for_test().cause(),
+                Some(HaltCause::TimeBudget),
+                "internal budget ending uses the original budget cause before any lock"
+            );
+            assert_terminal(&m, id, true);
+            assert_eq!(
+                m.reason(id).unwrap().as_deref(),
+                Some("file_publication_interrupted:time_budget")
+            );
+            assert!(!f.ws.join("two.txt").exists());
+        }
+        case if case.starts_with("own-") => {
+            let hook = HookSlot::default();
+            let clock = Arc::new(ManualClock::default());
+            let m = Arc::new(
+                Coordinator::open(
+                    HookJournal {
+                        memory: f.journal.clone(),
+                        hook: hook.clone(),
+                    },
+                    f.port.clone(),
+                    Lanes::new(files_lanes()).unwrap(),
+                    clock.clone(),
+                    f.home.private(),
+                )
+                .unwrap()
+                .into_file_session()
+                .unwrap(),
+            );
+            let id = f.waiting(&m, "MKFILE:one.txt MKFILE:two.txt");
+            let cause = case.rsplit('-').next().unwrap();
+            if cause == "budget" {
+                clock.advance(Duration::from_secs(86400));
+            }
+            if cause == "emergency" {
+                f.home.control.emergency_stop();
+                assert_eq!(
+                    m.cell_for_test().cause(),
+                    Some(HaltCause::Emergency),
+                    "no Mother observation was required"
+                );
+            }
+            let (held_tx, held_rx) = mpsc::sync_channel(1);
+            let (release_tx, release_rx) = mpsc::sync_channel(1);
+            let hold = move || {
+                held_tx.send(()).unwrap();
+                release_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+            };
+            if case.starts_with("own-append-") {
+                hook.arm(0, hold);
+            } else {
+                m.hooks_for_test().before_owed_write.arm(0, hold);
+            }
+            let worker = {
+                let m = m.clone();
+                let cause = cause.to_string();
+                std::thread::spawn(move || match cause.as_str() {
+                    "budget" => m.advance(id).map(|_| ()),
+                    "all" => m.stop_all().map(|_| ()),
+                    "emergency" => m.state(id).map(|_| ()),
+                    _ => m.stop(id).map(|_| ()),
+                })
+            };
+            held_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(
+                m.cell_for_test().is_engaged(),
+                "the Stop call's own append/owed write is held AFTER engagement"
+            );
+            let pending = f.port.pending(id).unwrap();
+            assert!(
+                f.home
+                    .control
+                    .authorize(
+                        CommitmentId::parse(&pending.commitment).unwrap(),
+                        &mother_agent(),
+                        RunId::parse(&pending.run).unwrap(),
+                        &f.owner
+                    )
+                    .is_err(),
+                "native admission fails while the Stop caller itself is held"
+            );
+            release_tx.send(()).unwrap();
+            let result = worker.join().unwrap();
+            if cause == "budget" {
+                assert_eq!(result, Err(CoordinatorError::Stopped));
+            } else {
+                result.unwrap();
+            }
+            assert_terminal(&m, id, false);
+            assert!(!f.ws.join("one.txt").exists());
+            assert!(!f.ws.join("two.txt").exists());
+        }
         "ack-a-then-b" => {
             let m = f.file();
             let id = f.waiting(&m, "MKFILE:one.txt MKFILE:two.txt");
@@ -284,6 +395,13 @@ fn lite_settlement_child() {
                     f.home.control.emergency_stop();
                     assert_eq!(m.cell_for_test().cause(), Some(HaltCause::Emergency));
                     None
+                }
+                "internal-budget" => {
+                    let m = m.clone();
+                    Some(std::thread::spawn(move || {
+                        m.end_for_test(id, crate::evidence::BlockReason::BudgetTime)
+                            .map(|_| ())
+                    }))
                 }
                 "budget" => {
                     clock.advance(Duration::from_secs(86400));
