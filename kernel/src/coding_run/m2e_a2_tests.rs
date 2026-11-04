@@ -1354,3 +1354,58 @@ fn pr81_r1_one_per_call_deadline_of_180_s_covers_the_metadata_and_the_chat() {
     assert_eq!(runtime.fake.chats(), 0, "no chat after the deadline");
     assert!(meter.charges().is_empty(), "nothing charged");
 }
+
+/// A model that waits out the timeout it is given, then reports it.
+struct Overrun {
+    pin: ModelPin,
+}
+
+impl LocalModel for Overrun {
+    fn pin(&self) -> &ModelPin {
+        &self.pin
+    }
+
+    fn complete(
+        &self,
+        _messages: &[ModelMessage],
+        timeout: Duration,
+        _max_response_bytes: u64,
+    ) -> Result<String, ModelError> {
+        // Readiness on the worker's own deadline: the call returns only once
+        // the time it was given has passed.
+        let until = std::time::Instant::now() + timeout + Duration::from_millis(5);
+        while std::time::Instant::now() < until {
+            std::thread::yield_now();
+        }
+        Err(ModelError::Timeout)
+    }
+}
+
+/// Codex review 1 of PR #81, MEDIUM 2: a `Timeout` returned by the model
+/// call keeps its exact error and receipt, even when the worker's own
+/// deadline expired during the call.
+#[test]
+fn pr81_r1_a_timeout_returned_by_the_call_keeps_its_exact_error_and_receipt() {
+    let f = project();
+    let model = Overrun {
+        pin: super::local_model::pin_for_test("m:1"),
+    };
+    let mut run = pinned_run(&f, model.pin().clone());
+    let limits = WorkerLimits {
+        deadline: Duration::from_millis(200),
+        ..WORKER_LIMITS
+    };
+    assert_eq!(
+        super::worker::run_worker_with_limits(&mut run, &model, "task", limits),
+        Err(WorkerError::Model(ModelError::Timeout))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::Failed(FailureReason::ModelUnavailable)
+    );
+    assert_eq!(
+        recorded(&f, &run, "run.failed"),
+        [json!({"reason": "ModelUnavailable", "model": "timeout"})],
+        "no WorkerLimitExceeded"
+    );
+}
