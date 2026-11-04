@@ -39,6 +39,8 @@ mod lite;
 mod lite_publication;
 #[path = "files_lite_retention_tests.rs"]
 mod lite_retention;
+#[path = "files_lite_session_tests.rs"]
+mod lite_session;
 #[path = "files_exec_review1_tests.rs"]
 mod review1;
 #[path = "files_exec_review2_tests.rs"]

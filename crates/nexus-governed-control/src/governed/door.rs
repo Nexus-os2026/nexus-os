@@ -97,6 +97,11 @@ impl AgentDoor {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn group_for_test(&self) -> GroupId {
+        self.core.group
+    }
+
     /// The agent this door acts for.
     pub fn agent(&self) -> &AgentId {
         &self.core.agent
