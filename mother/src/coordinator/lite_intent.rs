@@ -12,6 +12,10 @@ use std::sync::OnceLock;
 const TERMINAL_TAG: u16 = u16::MAX - 4;
 
 pub(super) enum FileTerminal {
+    Failure {
+        id: MissionId,
+        trigger: Trigger,
+    },
     NonFile {
         id: MissionId,
         trigger: Trigger,
@@ -65,6 +69,11 @@ impl<P: EffectPort> Coordinator<P> {
             .and_then(|file| file.terminal.get())
             .ok_or(CoordinatorError::Stopped)?;
         match intent {
+            FileTerminal::Failure { id: owner, trigger } if *owner == id => self.file_record_end(
+                id,
+                SettleCause::Ended(BlockReason::PhaseInterrupted),
+                Some(trigger.clone()),
+            ),
             FileTerminal::NonFile { id: owner, trigger } if *owner == id => {
                 self.record_non_file_end(id, trigger.clone())
             }

@@ -202,6 +202,17 @@ impl<P: EffectPort> Coordinator<P> {
         } else {
             asked
         };
+        self.file_record_end(id, cause, None)
+    }
+
+    /// The original cell is already engaged. Unresolved File settlement wins;
+    /// otherwise preserve an ordinary failure exactly, including on replay.
+    pub(super) fn file_record_end(
+        &self,
+        id: MissionId,
+        cause: SettleCause,
+        failure: Option<Trigger>,
+    ) -> Result<MissionState, CoordinatorError> {
         enum Step {
             Done(MissionState),
             Plain(Result<MissionState, CoordinatorError>),
@@ -235,7 +246,7 @@ impl<P: EffectPort> Coordinator<P> {
                     .map(|(_, p)| p.clone());
                 return Ok(Step::Settle(effect, pending, started));
             }
-            let trigger = plain_terminal(m, cause);
+            let trigger = failure.unwrap_or_else(|| plain_terminal(m, cause));
             let result = inner.fire(id, trigger.clone(), self.clock.monotonic_ms());
             if result.is_err() {
                 let m = inner.mission(id)?;

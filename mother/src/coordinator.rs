@@ -699,6 +699,8 @@ impl Inner {
                 trigger,
                 Trigger::Stop { .. }
                     | Trigger::Block { .. }
+                    | Trigger::Fail { .. }
+                    | Trigger::VerifyFail { .. }
                     | Trigger::ActionDenied { .. }
                     | Trigger::ApprovalLapsed { .. }
             )
@@ -2083,6 +2085,13 @@ impl<P: EffectPort> Coordinator<P> {
     /// a wait) and cancel what it opened at the port.
     fn end_with(&self, id: MissionId, trigger: Trigger) -> Result<MissionState, CoordinatorError> {
         if self.file.is_some() {
+            if matches!(trigger, Trigger::Fail { .. } | Trigger::VerifyFail { .. }) {
+                // Keep the exact failure before exposing the halt. A competing
+                // touch completes this same intent; any unresolved File still
+                // takes settlement precedence over the ordinary terminal.
+                self.file_latch_terminal(lite_intent::FileTerminal::Failure { id, trigger })?;
+                return self.file_stop(id, SettleCause::Ended(BlockReason::PhaseInterrupted));
+            }
             let reason = match trigger {
                 Trigger::Block { reason } => reason,
                 _ => BlockReason::PhaseInterrupted,
