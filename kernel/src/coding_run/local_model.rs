@@ -28,7 +28,7 @@ use crate::emergency_stop::StopWatch;
 use crate::inference::{
     grammar, AbsoluteDeadline, CallCancel, CallContext, CallDeadline, CallMeter, Conversation,
     DeadlineClock, LoopbackEndpoint, MessageRole, ModelRequest, ModelTransport, RetainedAnswer,
-    RuntimeConfig, SystemClocks, VerifiedOllama, CONVERSATION_CONFIG,
+    RuntimeConfig, SystemClocks, VerifiedOllama, CALL_HARD_TIMEOUT, CONVERSATION_CONFIG,
 };
 
 /// The local model errors: the kernel transport's codes.
@@ -367,8 +367,9 @@ impl LocalModel for LocalOllama {
         &self.pin
     }
 
-    /// One call carrying the complete history. `timeout` can only shorten
-    /// the bound deadline. A reply longer than `max_response_bytes` is
+    /// One call carrying the complete history, under one absolute
+    /// deadline of at most [`CALL_HARD_TIMEOUT`] (180 s) for all of its
+    /// requests. `timeout` can only shorten it and the bound deadline. A reply longer than `max_response_bytes` is
     /// [`ModelError::ResponseTooLarge`].
     fn complete(
         &self,
@@ -379,9 +380,17 @@ impl LocalModel for LocalOllama {
         let mut conversation = self.checkout(messages)?;
         let outcome = ModelRequest::conversation(&conversation, grammar::worker_schema())
             .and_then(|request| {
+                // One absolute deadline for the whole call, fixed here once on
+                // both clocks: at most 180 s, and never past the caller's
+                // timeout or the bound deadline. The version, status and tags
+                // requests and the chat all share it, so no per-request
+                // backstop can extend the call.
                 let deadline = Shortened {
                     bound: &*self.deadline,
-                    call: AbsoluteDeadline::within(self.clock.clone(), timeout),
+                    call: AbsoluteDeadline::within(
+                        self.clock.clone(),
+                        timeout.min(CALL_HARD_TIMEOUT),
+                    ),
                 };
                 let ctx = CallContext {
                     meter: &*self.meter,
