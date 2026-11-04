@@ -1545,7 +1545,7 @@ fn e_o11_debug_and_display_carry_no_content() {
     let error = call(&transport, &ctx).result.unwrap_err();
     assert!(!format!("{error} {error:?}").contains(CANARY));
 
-    const ALL: [ModelError; 23] = [
+    const ALL: [ModelError; 24] = [
         ModelError::NotLocal,
         ModelError::InvalidAddress,
         ModelError::InvalidModelName,
@@ -1569,6 +1569,7 @@ fn e_o11_debug_and_display_carry_no_content() {
         ModelError::Stopped,
         ModelError::Cancelled,
         ModelError::Late,
+        ModelError::UnsafeDelimiter,
     ];
     assert_eq!(ALL.map(ModelError::code), ModelError::CODES);
     let mut codes = ModelError::CODES.to_vec();
@@ -2275,3 +2276,8 @@ mod dispatch_panic_payload {
         assert_eq!(ctx.meter.events(), [Metered::Charge(1), Metered::Settle(1)]);
     }
 }
+
+// ── M2e-A2: N1's conversation route (pre-registered) ────────────────────────
+
+#[path = "n1_tests.rs"]
+mod n1;

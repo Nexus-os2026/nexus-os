@@ -11,12 +11,13 @@
 //! be:
 //!
 //! - in `kernel/src/inference/ollama.rs`, which names each path exactly
-//!   once (its `ApiPath`);
+//!   once (its `ApiPath`); or
 //! - a classified provider (A-S4's class T transport, and the classified
-//!   vision model of `computer_control.rs`); or
-//! - one of the two sites of the coding-run transport that M2e-A2 replaces
-//!   with the kernel transport (`PENDING_A2`). Each must be present exactly
-//!   once: A2 removes the site and this entry together.
+//!   vision model of `computer_control.rs`).
+//!
+//! M2e-A2 replaced the coding-run transport's two sites with the kernel
+//! transport and removed them, with their `PENDING_A2` entries: any path in
+//! `kernel/src/coding_run/` is now unclassified.
 //!
 //! It is a text guard, not a Rust parser; its scanner first proves on
 //! planted text that it flags what it must.
@@ -57,22 +58,6 @@ const CLASSIFIED: [(&str, &str, &str); 3] = [
         "kernel/src/computer_control.rs",
         "list_ollama_models",
         "04 K10's model listing (names only, no prompt)",
-    ),
-];
-
-/// The coding-run transport's two sites, replaced in M2e-A2 by
-/// `LocalOllama::bind` over the kernel transport: `(file, fn, path)`, each
-/// present exactly once until then.
-const PENDING_A2: [(&str, &str, &str); 2] = [
-    (
-        "kernel/src/coding_run/local_model.rs",
-        "LocalOllama::installed_models",
-        "api/tags",
-    ),
-    (
-        "kernel/src/coding_run/local_model.rs",
-        "LocalOllama::complete",
-        "api/chat",
     ),
 ];
 
@@ -189,16 +174,6 @@ fn m2e_e_o14_ollama_api_paths_appear_only_in_the_transport_and_classified_provid
         "{TRANSPORT}"
     );
     inventory.retain(|(file, _, _), _| file != TRANSPORT);
-
-    // The coding-run transport's sites, until M2e-A2: each exactly once.
-    for (file, function, path) in PENDING_A2 {
-        let key = (file.to_string(), function.to_string(), path.to_string());
-        assert_eq!(
-            inventory.remove(&key),
-            Some(1),
-            "{file} {function} {path}: pending A2 (remove this entry with the site)"
-        );
-    }
 
     let unclassified: Vec<String> = inventory
         .iter()

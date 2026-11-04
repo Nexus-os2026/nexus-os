@@ -1677,25 +1677,45 @@ fn p0b_o16_control_a_failing_model_leaves_only_fixed_codes() {
     );
     let mut run = staged_run(&f);
     run.pin_model(model.pin().clone()).unwrap();
+    // M2e N1 §2.2: the malformed answer ends the run.
     assert_eq!(
         run_worker(&mut run, &model, "task"),
+        Err(WorkerError::Model(ModelError::Malformed))
+    );
+    // A model that fails outright, in a run of its own.
+    let g = fixture();
+    let failing = Script::raw(pin_for_test("m:1"), vec![Err(ModelError::Unavailable)]);
+    let mut other = staged_run(&g);
+    other.pin_model(failing.pin().clone()).unwrap();
+    assert_eq!(
+        run_worker(&mut other, &failing, "task"),
         Err(WorkerError::Model(ModelError::Unavailable))
     );
     verify(
         &canary,
-        &[Lab::fixture(
-            "o16",
-            f,
-            vec![run.id().ledger_key()],
-            vec![
-                any("a malformed answer by code", "worker.turn", |p| {
-                    p["action"] == "malformed"
-                }),
-                any("the model failure by code", "run.failed", |p| {
-                    p["reason"] == "ModelUnavailable"
-                }),
-            ],
-        )],
+        &[
+            Lab::fixture(
+                "o16",
+                f,
+                vec![run.id().ledger_key()],
+                vec![
+                    any("a malformed answer by code", "worker.turn", |p| {
+                        p["action"] == "malformed"
+                    }),
+                    any("the model failure by code", "run.failed", |p| {
+                        p["reason"] == "ModelUnavailable" && p["model"] == "malformed"
+                    }),
+                ],
+            ),
+            Lab::fixture(
+                "o16-unavailable",
+                g,
+                vec![other.id().ledger_key()],
+                vec![any("the model failure by code", "run.failed", |p| {
+                    p["reason"] == "ModelUnavailable" && p["model"] == "unavailable"
+                })],
+            ),
+        ],
     );
 }
 

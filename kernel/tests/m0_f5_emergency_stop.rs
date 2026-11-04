@@ -1,14 +1,25 @@
-//! M0-FIX F5: the owner's emergency stop ends a coding run's in-flight
-//! local-model call (the connection is closed, not merely ignored), refuses
-//! new calls while it is in force, and lets them run again after the
-//! owner's resume. This binary engages the process's own stop authority,
-//! so its tests are serialized and nothing else runs in this process.
+//! M0-FIX F5: the owner's emergency stop ends a local-model call in flight
+//! (the connection is closed, not merely ignored), and refuses new calls
+//! while it is in force. After the owner's resume, work admitted before the
+//! stop never resumes; only work admitted afterwards runs. This binary
+//! engages the process's own stop authority, so its tests are serialized
+//! and nothing else runs in this process.
+//!
+//! M2e-A2 (Architect decision A2-D2): the call is made through the kernel
+//! transport (A1's `VerifiedOllama` and the qualified two-message
+//! `ModelRequest`) under a watch from the process's authority, since the
+//! coding run's `LocalOllama::bind` stays shut until Q-R-N1 (E-O65) and an
+//! integration test cannot reach the test-only seam. The same schedule
+//! through `LocalOllama::bind`, with a private authority, is E-O18 in
+//! `kernel/src/coding_run/m2e_a2_tests.rs`.
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
-use nexus_kernel::coding_run::{
-    loopback_endpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelRole,
+use nexus_kernel::emergency_stop::{StopAuthority, StopWatch};
+use nexus_kernel::inference::{
+    grammar, AbsoluteDeadline, CallCancel, CallContext, CallMeter, CancelCause, Charged,
+    LoopbackEndpoint, MeterRefusal, ModelError, ModelPinSpec, ModelRequest, ModelTransport,
+    RuntimeConfig, SystemClocks, Think, VerifiedOllama,
 };
-use nexus_kernel::emergency_stop::StopAuthority;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -140,18 +151,113 @@ mod hermetic {
 
 use hermetic::{Event, Server};
 
-const TAGS: &str = r#"{"models":[{"name":"f5-model"}]}"#;
+const NAME: &str = "qwen3.6:35b-a3b";
+const DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";
 
-fn finish_reply() -> String {
-    serde_json::json!({"message": {"content": "{\"action\":\"finish\",\"summary\":\"x\"}"}})
-        .to_string()
+/// The runtime's metadata replies (the pinned identity); `chat` answers
+/// `/api/chat` (`None`: held open).
+fn route(chat: Option<String>) -> hermetic::Reply {
+    Arc::new(move |path: &str| match path {
+        "/api/version" => Some((200, r#"{"version":"0.40.13"}"#.to_string())),
+        "/api/status" => Some((
+            200,
+            r#"{"cloud":{"disabled":true,"source":"env"}}"#.to_string(),
+        )),
+        "/api/tags" => Some((
+            200,
+            format!(r#"{{"models":[{{"name":"{NAME}","digest":"{DIGEST}"}}]}}"#),
+        )),
+        "/api/show" => Some((
+            200,
+            r#"{"details":{},"capabilities":["completion","thinking"]}"#.to_string(),
+        )),
+        _ => chat.clone().map(|body| (200, body)),
+    })
 }
 
-fn messages() -> Vec<ModelMessage> {
-    vec![ModelMessage {
-        role: ModelRole::User,
-        content: "task".to_string(),
-    }]
+fn finish_reply() -> String {
+    serde_json::json!({
+        "model": NAME,
+        "message": {"role": "assistant", "content": "{\"action\":\"finish\",\"summary\":\"x\"}"},
+        "done": true,
+        "done_reason": "stop",
+        "prompt_eval_count": 587,
+        "eval_count": 20,
+    })
+    .to_string()
+}
+
+fn spec() -> ModelPinSpec {
+    ModelPinSpec {
+        name: NAME.to_string(),
+        digest: DIGEST.to_string(),
+        runtime_version: "0.40.13".to_string(),
+        config: RuntimeConfig {
+            num_ctx: 8192,
+            temperature_milli: 0,
+            seed: 7,
+            think: Think::Off,
+            truncate: false,
+        },
+    }
+}
+
+/// The qualified two-message request.
+fn request() -> ModelRequest {
+    ModelRequest::new(
+        grammar::WORKER_SYSTEM_INSTRUCTION.to_string(),
+        "Owner task:\ntask\n".to_string(),
+        grammar::worker_schema(),
+    )
+    .unwrap()
+}
+
+#[derive(Default)]
+struct Meter(Mutex<u32>);
+
+impl Meter {
+    fn charges(&self) -> u32 {
+        *self.0.lock().unwrap()
+    }
+}
+
+impl CallMeter for Meter {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        let mut calls = self.0.lock().unwrap();
+        *calls += 1;
+        Ok(Charged { call: *calls })
+    }
+
+    fn settle(&self, _call: u32) {}
+}
+
+struct Never;
+
+impl CallCancel for Never {
+    fn cancelled(&self) -> Option<CancelCause> {
+        None
+    }
+}
+
+/// One call through the transport, charged to `meter`, under `watch` (the
+/// handle the work was admitted with).
+fn call(
+    transport: &VerifiedOllama,
+    meter: &Meter,
+    watch: &StopWatch,
+    secs: u64,
+) -> Result<String, ModelError> {
+    let deadline = AbsoluteDeadline::within(SystemClocks, Duration::from_secs(secs));
+    let ctx = CallContext {
+        meter,
+        cancel: &Never,
+        deadline: &deadline,
+        stop: watch,
+        observer: None,
+    };
+    transport
+        .call(&request(), &ctx)
+        .map(|reply| reply.into_content())
 }
 
 #[test]
@@ -163,29 +269,46 @@ fn m0_f5_stop_ends_an_inflight_local_model_call() {
         StopAuthority::claim_global_controller().expect("the process's stop controller");
     let stop = controller.authority().clone();
     controller.lift_if(stop.stop_number());
-    let server = Server::start(Arc::new(|path: &str| match path {
-        "/api/tags" => Some((200, TAGS.to_string())),
-        _ => None,
-    }));
-    let endpoint = loopback_endpoint(&server.base).unwrap();
-    let model = LocalOllama::select(&endpoint, "f5-model").unwrap();
-    assert_eq!(server.next(10), Event::Request("/api/tags".into()));
+    let server = Server::start(route(None));
+    let handle = stop.admit().expect("work admitted before the stop");
+    let deadline = AbsoluteDeadline::within(SystemClocks, Duration::from_secs(30));
+    let transport = Arc::new(
+        VerifiedOllama::verify(
+            LoopbackEndpoint::parse(&server.base).unwrap(),
+            &spec(),
+            &Never,
+            &deadline,
+            &handle,
+        )
+        .unwrap(),
+    );
+    for path in ["/api/version", "/api/status", "/api/tags", "/api/show"] {
+        assert_eq!(server.next(10), Event::Request(path.into()));
+    }
 
-    let call = {
-        let model = model.clone();
-        std::thread::spawn(move || model.complete(&messages(), Duration::from_secs(120), 4096))
+    // 1. An in-flight call is ended by the stop and its connection closed.
+    let meter = Arc::new(Meter::default());
+    let inflight = {
+        let (transport, meter, handle) = (transport.clone(), meter.clone(), handle.clone());
+        std::thread::spawn(move || call(&transport, &meter, &handle, 120))
     };
-    // Readiness: the request reached the model server and is held there.
+    for path in ["/api/version", "/api/status", "/api/tags"] {
+        assert_eq!(server.next(10), Event::Request(path.into()));
+    }
+    // Readiness: the chat reached the model server and is held there.
     assert_eq!(server.next(30), Event::Request("/api/chat".into()));
     stop.engage();
     // The call ends promptly with the stop, and the connection is closed.
     assert_eq!(server.next(10), Event::Closed("/api/chat".into()));
-    assert_eq!(call.join().unwrap(), Err(ModelError::Stopped));
+    assert_eq!(inflight.join().unwrap(), Err(ModelError::Stopped));
+    assert_eq!(meter.charges(), 1);
 
-    // While the stop is in force no new call is made.
+    // 2. While the stop is in force no new work is admitted and nothing is
+    // sent, not even a metadata request.
     let before = server.connections();
+    assert!(stop.admit().is_err(), "new work admitted while stopped");
     assert_eq!(
-        model.complete(&messages(), Duration::from_secs(5), 4096),
+        call(&transport, &meter, &handle, 5),
         Err(ModelError::Stopped)
     );
     assert_eq!(
@@ -194,14 +317,24 @@ fn m0_f5_stop_ends_an_inflight_local_model_call() {
         "a call was made while stopped"
     );
 
-    // After the owner's resume, calls run again.
+    // 3. After the owner's resume, the handle made before the stop still
+    // refuses, with no connection and no charge.
     assert!(controller.lift_if(stop.stop_number()));
-    server.set_reply(Arc::new(|path: &str| match path {
-        "/api/tags" => Some((200, TAGS.to_string())),
-        _ => Some((200, finish_reply())),
-    }));
-    let answer = model
-        .complete(&messages(), Duration::from_secs(30), 4096)
-        .unwrap();
+    server.set_reply(route(Some(finish_reply())));
+    assert_eq!(
+        call(&transport, &meter, &handle, 5),
+        Err(ModelError::Stopped)
+    );
+    assert_eq!(
+        server.connections(),
+        before,
+        "work admitted before the stop resumed"
+    );
+    assert_eq!(meter.charges(), 1, "a charge after the stop");
+
+    // 4. A fresh handle, admitted after the resume, runs.
+    let fresh = stop.admit().expect("new work after the resume");
+    let answer = call(&transport, &meter, &fresh, 30).unwrap();
     assert!(answer.contains("finish"), "{answer}");
+    assert_eq!(meter.charges(), 2);
 }

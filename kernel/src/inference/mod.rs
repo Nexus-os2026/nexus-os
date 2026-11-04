@@ -45,8 +45,69 @@ pub use exchange::{AbsoluteDeadline, DeadlineClock, SystemClocks, CALL_HARD_TIME
 pub use identity::{ModelIdentity, ModelPinSpec, RuntimeConfig, Think, LOCAL_PROVIDER};
 pub use ollama::VerifiedOllama;
 pub use request::{
-    ModelReply, ModelRequest, ResponseSchema, MAX_RENDERED_CONTENT_BYTES, SCAFFOLD_FLOOR,
+    Conversation, ConversationConfig, MessageRole, ModelReply, ModelRequest, ResponseSchema,
+    RetainedAnswer, ANSWER_CAP, CONVERSATION_CONFIG, DELIMITER_INVENTORY,
+    DELIMITER_INVENTORY_SHA256, FRAME_CLOSE, FRAME_OPEN, MARGIN, MAX_CONVERSATION_MESSAGES,
+    MAX_RENDERED_CONTENT_BYTES, PER_MESSAGE_ALLOWANCE, QUALIFIED_CONVERSATION_CONFIG_SHA256,
+    RETAINED_ANSWER_ENCODING, SCAFFOLD_FLOOR, SUFFIX_ALLOWANCE, TEMPLATE_ALLOWANCE,
+    USER_FRAME_VERSION,
 };
+
+/// Whether N1's conversation route (the retained worker's native ordered
+/// history, M2e N1 spec) has passed its installed re-qualification Q-R-N1.
+/// While it is `false`, every conversation request is refused at
+/// [`ModelTransport::call`] and by the coding run's `LocalOllama::bind`
+/// with [`ModelError::ConfigMismatch`], before any charge or connection.
+/// Only a separate commit carrying the Q-R-N1 evidence may set it.
+pub const N1_QUALIFIED: bool = false;
+
+/// Whether the conversation route may be used: [`N1_QUALIFIED`], or, in
+/// this crate's own tests only, the private qualification seam.
+pub(crate) fn conversation_route_open() -> bool {
+    N1_QUALIFIED || qualification_override()
+}
+
+/// No override exists outside this crate's own tests.
+#[cfg(not(test))]
+const fn qualification_override() -> bool {
+    false
+}
+
+#[cfg(test)]
+fn qualification_override() -> bool {
+    qualification_seam::is_open()
+}
+
+/// The private, test-only qualification seam (N1 spec E-O65): it opens the
+/// conversation route on the calling thread only, for the `#[ignore]`d
+/// E-O66 and the Q-R-N1 harness, which run the same request-building and
+/// validation code as production. No environment variable, feature or
+/// public item reaches it.
+#[cfg(test)]
+pub(crate) mod qualification_seam {
+    use std::cell::Cell;
+
+    thread_local! {
+        static OPEN: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Run `body` with the route open on this thread.
+    pub(crate) fn open<T>(body: impl FnOnce() -> T) -> T {
+        struct Close;
+        impl Drop for Close {
+            fn drop(&mut self) {
+                OPEN.with(|open| open.set(false));
+            }
+        }
+        OPEN.with(|open| open.set(true));
+        let _close = Close;
+        body()
+    }
+
+    pub(crate) fn is_open() -> bool {
+        OPEN.with(Cell::get)
+    }
+}
 
 /// Why a model call or a registration was refused. Each variant is a fixed
 /// code ([`ModelError::code`]) with a fixed phrase: no name, path or body.
@@ -98,11 +159,13 @@ pub enum ModelError {
     Cancelled,
     #[error("the model reply arrived after the call was ended")]
     Late,
+    #[error("the model request contains a delimiter of the pinned template")]
+    UnsafeDelimiter,
 }
 
 impl ModelError {
     /// Every code, in declaration order.
-    pub const CODES: [&'static str; 23] = [
+    pub const CODES: [&'static str; 24] = [
         "not_local",
         "invalid_address",
         "invalid_model_name",
@@ -126,6 +189,7 @@ impl ModelError {
         "stopped",
         "cancelled",
         "late",
+        "unsafe_delimiter",
     ];
 
     /// The fixed code of this error (one of [`ModelError::CODES`]).
