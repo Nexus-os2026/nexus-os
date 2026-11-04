@@ -83,6 +83,14 @@ pub struct HaltCell(
     Arc<AtomicU32>,
     #[cfg(test)] pub(crate) Arc<crate::test_hooks::Hooks>,
 );
+pub(crate) fn check_halt(cell: Option<&HaltCell>) -> Result<(), super::AuthorityError> {
+    if cell.is_some_and(HaltCell::is_engaged) {
+        Err(super::AuthorityError::Halted)
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 impl std::fmt::Debug for HaltCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

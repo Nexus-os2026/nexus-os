@@ -606,7 +606,28 @@ impl GovernedControl {
         agent: AgentId,
         confirmer: Arc<dyn ControlConfirmer + Send + Sync>,
     ) -> Result<AgentDoor, AuthorityError> {
+        self.issue_agent_door_with_halt(agent, confirmer, None)
+    }
+
+    /// Issue a host-session door with an optional, deny-only ingress cell.
+    /// The cell grants nothing and is carried by every run of this door.
+    /// `None` preserves the legacy native-resume policy.
+    pub fn issue_agent_door_with_halt(
+        self: &Arc<Self>,
+        agent: AgentId,
+        confirmer: Arc<dyn ControlConfirmer + Send + Sync>,
+        halt: Option<crate::authority::file_session::HaltCell>,
+    ) -> Result<AgentDoor, AuthorityError> {
         let authority = self.authority();
+        let check = |door| {
+            if halt.as_ref().is_some_and(|cell| cell.is_engaged()) {
+                authority.record_door_halt_refusal(&agent, door);
+                Err(AuthorityError::Halted)
+            } else {
+                Ok(())
+            }
+        };
+        check(None)?;
         authority.door_admissible()?;
         let runs = authority.runs();
         let core = Arc::new(DoorCore {
@@ -614,6 +635,7 @@ impl GovernedControl {
             agent: agent.clone(),
             group: runs.next_group(),
             file_cell: std::sync::OnceLock::new(),
+            session_cell: halt.clone(),
         });
         let life: Arc<dyn std::any::Any + Send + Sync> = core.clone();
         runs.reserve_door(core.group, &agent, Arc::downgrade(&life))?;
@@ -631,6 +653,8 @@ impl GovernedControl {
             door: core.id.clone(),
             advisory,
         };
+        // Reservation/advisory reads can wait; check again before the dialogue.
+        check(Some(&core.id))?;
         let yes = confirmer.confirm_agent_door(&request);
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::ISSUE_ANSWERED);
@@ -639,11 +663,18 @@ impl GovernedControl {
             authority.record_door(false, &agent, &core.id)?;
             return Err(AuthorityError::Declined);
         }
+        check(Some(&core.id))?;
         authority.door_admissible()?;
         authority.record_door(true, &agent, &core.id)?;
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::ISSUE_RECORDED);
-        runs.activate_door(core.group)?;
+        if let Err(error) = runs.activate_door_with_halt(core.group, halt.as_ref()) {
+            if error == AuthorityError::Halted {
+                // The earlier answer is historical evidence, not activation.
+                authority.record_door_halt_refusal(&agent, Some(&core.id));
+            }
+            return Err(error);
+        }
         self.doors_issued.fetch_add(1, Ordering::SeqCst);
         Ok(AgentDoor::new(self.clone(), core, confirmer))
     }
@@ -781,6 +812,17 @@ impl GovernedControl {
         path: &Path,
         reserved: &[&Path],
     ) -> Result<WorkspaceInfo, AuthorityError> {
+        self.register_workspace_with_halt(path, reserved, None)
+    }
+
+    /// Owner registration narrowed by the host session's deny-only cell.
+    pub fn register_workspace_with_halt(
+        &self,
+        path: &Path,
+        reserved: &[&Path],
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         let home = std::env::var_os("HOME")
             .map(std::path::PathBuf::from)
             .filter(|home| home.is_absolute())
@@ -793,7 +835,7 @@ impl GovernedControl {
         let uid = crate::launcher::effective_uid();
         #[cfg(not(target_os = "linux"))]
         let uid = u32::MAX;
-        self.register_workspace_in(
+        self.register_workspace_in_with_halt(
             path,
             &Exclusions {
                 home,
@@ -801,17 +843,28 @@ impl GovernedControl {
                 reserved: trees,
                 uid,
             },
+            halt,
         )
     }
 
     /// [`Self::register_workspace`] with what may not be the workspace
     /// given (tests name their own homes).
+    #[cfg(test)]
     pub(crate) fn register_workspace_in(
         &self,
         path: &Path,
         exclusions: &Exclusions,
     ) -> Result<WorkspaceInfo, AuthorityError> {
         self.files.register(path, exclusions)
+    }
+
+    pub(crate) fn register_workspace_in_with_halt(
+        &self,
+        path: &Path,
+        exclusions: &Exclusions,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        self.files.register_with_halt(path, exclusions, halt)
     }
 
     /// The registered workspace, if any (its id and display name).
@@ -917,9 +970,23 @@ impl GovernedControl {
         ttl: Duration,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<GrantId, AuthorityError> {
+        self.request_grant_with_halt(request, ttl, confirmer, None)
+    }
+
+    /// Owner grant issuance narrowed by the host session's deny-only cell.
+    pub fn request_grant_with_halt(
+        &self,
+        request: &GrantRequest,
+        ttl: Duration,
+        confirmer: &dyn ControlConfirmer,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<GrantId, AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         let scope = self.grant_scope(request)?;
         let ttl = synthetic::capped(&scope, ttl.min(MAX_GRANT));
-        self.authority().grants().request(scope, ttl, confirmer)
+        self.authority()
+            .grants()
+            .request_with_halt(scope, ttl, confirmer, halt)
     }
 
     pub fn revoke_grant(&self, id: GrantId) -> Result<(), AuthorityError> {

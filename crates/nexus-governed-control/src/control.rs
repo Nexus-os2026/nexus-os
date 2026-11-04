@@ -123,13 +123,19 @@ struct Place<'a> {
 impl Place<'_> {
     /// Hold the effect of a prepared commitment; one that ended meanwhile
     /// (its run was cancelled while it was prepared) is not held.
-    fn fill(mut self, id: CommitmentId, pending: Pending) {
+    fn fill(
+        mut self,
+        id: CommitmentId,
+        pending: Pending,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<(), AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         #[cfg(test)]
         self.control
             .authority
             .hooks()
             .fire(crate::test_hooks::at::PLACE_BEFORE_FILL);
-        let unheld = {
+        let (unheld, refused) = {
             let mut table = self.control.pending();
             table.give_back(self.run);
             self.held = false;
@@ -139,15 +145,20 @@ impl Place<'_> {
                 .authority
                 .hooks()
                 .fire("decision8.pending_validated");
-            if unconsumed {
+            let refused = crate::authority::file_session::check_halt(halt).err();
+            if unconsumed && refused.is_none() {
                 table.held.insert(id, pending);
-                None
+                (None, None)
             } else {
-                Some(pending)
+                (Some(pending), refused)
             }
         };
         // An effect not held is dropped outside the lock.
         drop(unheld);
+        match refused {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }
 
@@ -241,6 +252,13 @@ impl Control {
             Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
             None => return refuse(AuthorityError::UnknownRun),
         };
+        let halt = match self.authority.runs().session_cell(run) {
+            Ok(cell) => cell,
+            Err(error) => return refuse(error),
+        };
+        if let Err(error) = crate::authority::file_session::check_halt(halt.as_ref()) {
+            return refuse(error);
+        }
         let place = match self.place(run, limit) {
             Some(place) => place,
             None => {
@@ -257,14 +275,21 @@ impl Control {
             .authority
             .commitments()
             .prepare(agent, run, action, ttl)?;
-        place.fill(
+        if let Err(error) = place.fill(
             view.id,
             Pending {
                 agent: agent.clone(),
                 run,
                 effect,
             },
-        );
+            halt.as_ref(),
+        ) {
+            // No pending effect was installed. End the earlier commitment
+            // truthfully outside the pending-table hold, keeping its pin/ack
+            // bookkeeping under the existing File lifecycle rules.
+            self.authority.commitments().refuse_pending_install(view.id);
+            return Err(error);
+        }
         Ok(view)
     }
 

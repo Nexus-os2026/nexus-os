@@ -2599,11 +2599,22 @@ impl Files {
     /// [`selectable`]; the directory must keep the identity it was checked
     /// with. Its id is backend-random (`wsp-` and 32 hex); its name is the
     /// folder's own, escaped and at most 64 characters.
+    #[cfg(test)]
     pub(crate) fn register(
         &self,
         path: &Path,
         exclusions: &Exclusions,
     ) -> Result<WorkspaceInfo, AuthorityError> {
+        self.register_with_halt(path, exclusions, None)
+    }
+
+    pub(crate) fn register_with_halt(
+        &self,
+        path: &Path,
+        exclusions: &Exclusions,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         let _one = self.registering.lock().expect("files registration");
         if self.current().is_some() {
             return Err(refused("a workspace is already registered in this process"));
@@ -2628,7 +2639,9 @@ impl Files {
         };
         #[cfg(test)]
         self.hooks().fire("files.before_register");
-        *self.workspace.lock().expect("files") = Some(Arc::new(Workspace {
+        let mut workspace = self.workspace.lock().expect("files");
+        crate::authority::file_session::check_halt(halt)?;
+        *workspace = Some(Arc::new(Workspace {
             info: info.clone(),
             root: path.to_path_buf(),
             identity,
@@ -2686,6 +2699,7 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
+        authority.runs().admit_file_stage(run)?;
         // H3 (M4′): a run whose publication a cause interrupted after its
         // final check asks for nothing more.
         if self.shared.is_closed(run) {
@@ -2723,6 +2737,7 @@ impl Files {
         }
         #[cfg(test)]
         self.hooks().fire("files.before_stage");
+        authority.runs().admit_file_stage(run)?;
         #[cfg(target_os = "linux")]
         return self.stage(
             run,

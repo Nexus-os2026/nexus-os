@@ -58,6 +58,7 @@ pub(crate) struct DoorCore {
     pub(crate) agent: AgentId,
     pub(crate) group: GroupId,
     pub(crate) file_cell: std::sync::OnceLock<HaltCell>,
+    pub(crate) session_cell: Option<HaltCell>,
 }
 
 /// What a door may say about a commitment.
@@ -170,10 +171,13 @@ impl AgentDoor {
         self.control
             .hooks()
             .fire(crate::test_hooks::at::OPEN_SETTLED);
-        let run = self
-            .control
-            .authority()
-            .open_run_in(self.core.agent.clone(), self.core.group)?;
+        let authority = self.control.authority();
+        let run = match &self.core.session_cell {
+            Some(cell) => {
+                authority.open_file_run_in(self.core.agent.clone(), self.core.group, cell.clone())
+            }
+            None => authority.open_run_in(self.core.agent.clone(), self.core.group),
+        }?;
         #[cfg(test)]
         self.control
             .hooks()
@@ -183,7 +187,12 @@ impl AgentDoor {
 
     /// PR-B: refused once this door is halted (read under the runs lock).
     fn not_halted(&self) -> Result<(), AuthorityError> {
-        if self.core.file_cell.get().is_some_and(HaltCell::is_engaged)
+        if self
+            .core
+            .session_cell
+            .as_ref()
+            .is_some_and(HaltCell::is_engaged)
+            || self.core.file_cell.get().is_some_and(HaltCell::is_engaged)
             || self
                 .control
                 .authority()
@@ -374,16 +383,41 @@ impl AgentDoor {
             .fire(crate::test_hooks::at::MISSION_RECORDED);
         // After the record: it says the owner said yes; no approval exists
         // if this door was halted, or a stop came, meanwhile.
-        self.not_halted()?;
-        authority.mission_admissible()?;
-        self.cache(
-            slot,
-            approval.contract_hash(),
-            approval.request(),
-            (approval.evidence_seq(), recorded_ms),
-            (ConsentKind::Mission, facts),
-        )?;
+        let cached = (|| {
+            self.not_halted()?;
+            authority.mission_admissible()?;
+            self.cache(
+                slot,
+                approval.contract_hash(),
+                approval.request(),
+                (approval.evidence_seq(), recorded_ms),
+                (ConsentKind::Mission, facts),
+            )
+        })();
+        self.consent_result(cached, ConsentKind::Mission)?;
         Ok(approval)
+    }
+
+    fn consent_result(
+        &self,
+        result: Result<(), AuthorityError>,
+        kind: ConsentKind,
+    ) -> Result<(), AuthorityError> {
+        if matches!(result, Err(AuthorityError::Halted))
+            && (self
+                .core
+                .session_cell
+                .as_ref()
+                .is_some_and(HaltCell::is_engaged)
+                || self.core.file_cell.get().is_some_and(HaltCell::is_engaged))
+        {
+            self.control.authority().record_consent_halt_refusal(
+                &self.core.agent,
+                &self.core.id,
+                kind,
+            );
+        }
+        result
     }
 
     /// M2d-B1 (H1′): cache the Owner's recorded yes in this door's table,
@@ -588,14 +622,17 @@ impl AgentDoor {
             .hooks()
             .fire(crate::test_hooks::at::HELD_RECORDED);
         // After the record (§2.6 step 6): no approval if halted meanwhile.
-        self.not_halted()?;
-        self.cache(
-            slot,
-            approval.contract_hash(),
-            approval.request(),
-            (approval.evidence_seq(), recorded_ms),
-            (ConsentKind::Resume, None),
-        )?;
+        let cached = (|| {
+            self.not_halted()?;
+            self.cache(
+                slot,
+                approval.contract_hash(),
+                approval.request(),
+                (approval.evidence_seq(), recorded_ms),
+                (ConsentKind::Resume, None),
+            )
+        })();
+        self.consent_result(cached, ConsentKind::Resume)?;
         Ok(approval)
     }
 }

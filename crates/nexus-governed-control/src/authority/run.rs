@@ -43,6 +43,10 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 pub struct CancelToken(Arc<AtomicBool>, Option<HaltCell>);
 
 impl CancelToken {
+    pub(crate) fn halt_engaged(&self) -> bool {
+        self.1.as_ref().is_some_and(HaltCell::is_engaged)
+    }
+
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst) || self.1.as_ref().is_some_and(HaltCell::is_engaged)
     }
@@ -590,10 +594,22 @@ impl RunRegistry {
 
     /// M2c, a door issue's registration (after the owner's recorded yes):
     /// the reserved group becomes the issued door's, empty.
+    #[cfg(test)]
     pub(crate) fn activate_door(&self, group: GroupId) -> Result<(), AuthorityError> {
+        self.activate_door_with_halt(group, None)
+    }
+
+    pub(crate) fn activate_door_with_halt(
+        &self,
+        group: GroupId,
+        halt: Option<&HaltCell>,
+    ) -> Result<(), AuthorityError> {
         let mut runs = self.runs.lock().expect("runs");
         match runs.doors.get_mut(&group) {
             Some(door) if door.alive() => {
+                // Decision 8: activation and its final check share this hold.
+                super::file_session::check_halt(halt)?;
+                door.file_cell = halt.cloned();
                 door.active = true;
                 Ok(())
             }
@@ -675,9 +691,16 @@ impl RunRegistry {
             .doors
             .get_mut(&group)
             .ok_or(AuthorityError::NotMember)?;
-        if door.file_cell.is_some() {
+        // A host may already have attached this exact deny-only session
+        // cell at issuance. File selection never replaces another cell.
+        if door
+            .file_cell
+            .as_ref()
+            .is_some_and(|bound| !bound.same(&cell))
+        {
             return Err(AuthorityError::Halted);
         }
+        super::file_session::check_halt(Some(&cell))?;
         door.file_cell = Some(cell);
         Ok(())
     }
@@ -791,6 +814,10 @@ impl RunRegistry {
             Some(door) if door.active && door.alive() && &door.agent == agent => {}
             _ => return Err(AuthorityError::NotMember),
         }
+        let session_cell = table
+            .doors
+            .get(&group)
+            .and_then(|door| door.file_cell.clone());
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
@@ -815,6 +842,10 @@ impl RunRegistry {
         }
         #[cfg(test)]
         self.review2_hooks.fire("run.before_join");
+        super::file_session::check_halt(session_cell.as_ref())?;
+        // Adoption narrows this run too, but never changes its original
+        // owner or makes it eligible for File-session selection.
+        entry.file_cell = session_cell;
         entry.groups.push(group);
         if let Some(door) = table.doors.get_mut(&group) {
             door.members.insert(run);
@@ -832,6 +863,39 @@ impl RunRegistry {
         Ok(runs
             .get(&run)
             .is_some_and(|entry| entry.groups.contains(&group)))
+    }
+
+    /// Copy only the optional deny-only cell, never authority. Used to
+    /// carry the same session constraint through slow commitment preparation.
+    pub(crate) fn session_cell(&self, run: RunId) -> Result<Option<HaltCell>, AuthorityError> {
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        Ok(runs.get(&run).and_then(|entry| entry.file_cell.clone()))
+    }
+
+    /// Evidence-only observation: a missing or unreadable run cannot add a
+    /// cell-specific reason, and never turns the existing refusal into success.
+    pub(crate) fn session_halted(&self, run: RunId) -> bool {
+        self.runs.lock().is_ok_and(|runs| {
+            runs.get(&run)
+                .and_then(|entry| entry.file_cell.as_ref())
+                .is_some_and(HaltCell::is_engaged)
+        })
+    }
+
+    /// Decision 8: the optional session-cell check at Files entry/dispatch.
+    /// The final call after filesystem validation linearizes dispatch in
+    /// this hold. Kernel work follows outside the table; it grants no new
+    /// broker admission and keeps its own publication checks.
+    pub(crate) fn admit_file_stage(&self, run: RunId) -> Result<(), AuthorityError> {
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        let cell = runs.get(&run).and_then(|entry| entry.file_cell.as_ref());
+        super::file_session::check_halt(cell)
     }
 
     /// The run exists, belongs to `agent`, is not cancelled or finished, and

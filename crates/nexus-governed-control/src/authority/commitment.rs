@@ -750,12 +750,36 @@ impl CommitmentRegistry {
                     self.fire(crate::test_hooks::at::COMPLETE_BEFORE_CHECK);
                     // Checked while still reserved: an end it finds records
                     // the transition it interrupted.
-                    let live = self.live_check(id, entry, agent, run, now, &mut deferred);
-                    entry.reserved = None;
+                    let mut live = self.live_check(id, entry, agent, run, now, &mut deferred);
                     #[cfg(test)]
                     if live.is_ok() {
                         self.fire(crate::test_hooks::at::COMPLETE_CHECKED);
                     }
+                    // The run token was read before grant validation. Read
+                    // its optional deny-only cell again in this same hold,
+                    // immediately before approval/authorization/dispatch.
+                    if live.as_ref().is_ok_and(CancelToken::halt_engaged) {
+                        let reason = match entry.reserved.expect("reserved transition").transition {
+                            Transition::Approve => "approval_refused_halted",
+                            Transition::Authorize => "authorization_refused_halted",
+                            Transition::Start => "execution_dispatch_refused_halted",
+                        };
+                        self.end_entry(
+                            id,
+                            entry,
+                            CommitmentState::Revoked,
+                            EvidencePhase::Revoked,
+                            now,
+                            &mut deferred,
+                            |record| {
+                                record.failure = Some("halted");
+                                record.cancelled = true;
+                                record.detail.push(("reason".into(), reason.into()));
+                            },
+                        );
+                        live = Err(AuthorityError::Halted);
+                    }
+                    entry.reserved = None;
                     let finalized = live.map(|cancel| finalize(entry, cancel));
                     #[cfg(test)]
                     if finalized.is_ok() {
@@ -914,14 +938,33 @@ impl CommitmentRegistry {
             match retained {
                 Err(error) => {
                     let mut entry = entry;
-                    self.end_unconsumed(
-                        id,
-                        &mut entry,
-                        CommitmentState::Revoked,
-                        &error,
-                        now,
-                        &mut deferred,
-                    );
+                    if error == AuthorityError::Halted && self.0.runs.session_halted(run) {
+                        self.end_entry(
+                            id,
+                            &mut entry,
+                            CommitmentState::Revoked,
+                            EvidencePhase::Revoked,
+                            now,
+                            &mut deferred,
+                            |record| {
+                                record.failure = Some("halted");
+                                record.cancelled = true;
+                                record.detail.push((
+                                    "reason".into(),
+                                    "commitment_prepare_refused_halted".into(),
+                                ));
+                            },
+                        );
+                    } else {
+                        self.end_unconsumed(
+                            id,
+                            &mut entry,
+                            CommitmentState::Revoked,
+                            &error,
+                            now,
+                            &mut deferred,
+                        );
+                    }
                     Some(error)
                 }
                 Ok((_, owner)) => {
@@ -1009,7 +1052,21 @@ impl CommitmentRegistry {
         } else {
             EvidencePhase::Revoked
         };
+        // Preserve legacy no-cell evidence. Session refusals also identify
+        // the particular admission whose earlier evidence could not take effect.
+        let route = if *reason == AuthorityError::Halted && self.0.runs.session_halted(entry.run) {
+            entry.reserved.map(|r| match r.transition {
+                Transition::Approve => "approval_refused_halted",
+                Transition::Authorize => "authorization_refused_halted",
+                Transition::Start => "execution_dispatch_refused_halted",
+            })
+        } else {
+            None
+        };
         self.end_entry(id, entry, state, phase, now, owed, |record| {
+            if let Some(route) = route {
+                record.detail.push(("reason".into(), route.into()));
+            }
             record.failure = Some(reason.class());
             record.cancelled = matches!(
                 reason,
@@ -1667,6 +1724,34 @@ impl CommitmentRegistry {
 
     /// Whether a commitment can still be authorized or started (it is
     /// prepared or authorized; liveness is checked when it is used).
+    /// A host-session pending installation refused after prepare. The
+    /// commitment may already have ended; no terminal result is overwritten.
+    pub(crate) fn refuse_pending_install(&self, id: CommitmentId) {
+        let mut deferred = Deferred::default();
+        let now = self.now();
+        {
+            let mut entries = self.entries();
+            if let Some(entry) = entries.get_mut(&id).filter(|e| !e.state.is_final()) {
+                self.end_entry(
+                    id,
+                    entry,
+                    CommitmentState::Revoked,
+                    EvidencePhase::Revoked,
+                    now,
+                    &mut deferred,
+                    |record| {
+                        record.failure = Some("halted");
+                        record.cancelled = true;
+                        record
+                            .detail
+                            .push(("reason".into(), "pending_effect_refused_halted".into()));
+                    },
+                );
+            }
+        }
+        self.flush(deferred);
+    }
+
     pub fn is_unconsumed(&self, id: CommitmentId) -> bool {
         self.entries().get(&id).is_some_and(|e| {
             matches!(

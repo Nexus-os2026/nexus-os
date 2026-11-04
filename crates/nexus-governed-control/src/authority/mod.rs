@@ -68,6 +68,15 @@ pub(crate) const REASONS: &[&str] = &[
     "capacity",
     "not_member",
     "halted",
+    "door_activation_refused_halted",
+    "grant_issue_refused_halted",
+    "approval_refused_halted",
+    "authorization_refused_halted",
+    "execution_dispatch_refused_halted",
+    "commitment_prepare_refused_halted",
+    "mission_consent_refused_halted",
+    "held_consent_refused_halted",
+    "pending_effect_refused_halted",
     "closed",
     "invalid_action",
     "unavailable",
@@ -771,6 +780,23 @@ impl Authority {
         } else {
             EvidencePhase::AgentDoorDeclined
         };
+        let record = self.door_record(phase, agent, Some(door));
+        if yes {
+            self.record(&record)
+        } else {
+            self.record_end(&record);
+            Ok(())
+        }
+    }
+
+    // The existing door record builder also constructs session refusals.
+    // Every route still goes through the same privacy-sealing writer.
+    fn door_record(
+        &self,
+        phase: EvidencePhase,
+        agent: &AgentId,
+        door: Option<&str>,
+    ) -> EvidenceRecord {
         let mut record = EvidenceRecord::new(
             phase,
             self.clock.wall_ms(),
@@ -778,13 +804,44 @@ impl Authority {
             Privacy::Restricted,
         );
         record.agent = Some(agent.to_string());
-        record.detail.push(("door".into(), door.to_string()));
-        if yes {
-            self.record(&record)
-        } else {
-            self.record_end(&record);
-            Ok(())
+        if let Some(door) = door {
+            record.detail.push(("door".into(), door.into()));
         }
+        record
+    }
+
+    /// An attempted door activation refused by the host's session cell.
+    /// The earlier native answer, if recorded, is never rewritten.
+    pub(crate) fn record_door_halt_refusal(&self, agent: &AgentId, door: Option<&str>) {
+        let mut record = self.door_record(EvidencePhase::AgentDoorDeclined, agent, door);
+        record.failure = Some("halted");
+        record
+            .detail
+            .push(("reason".into(), "door_activation_refused_halted".into()));
+        self.record_end(&record);
+    }
+
+    /// A recorded yes that could not become a usable host-session consent.
+    pub(crate) fn record_consent_halt_refusal(
+        &self,
+        agent: &AgentId,
+        door: &str,
+        kind: run::ConsentKind,
+    ) {
+        let (phase, reason) = match kind {
+            run::ConsentKind::Mission => (
+                EvidencePhase::MissionDeclined,
+                "mission_consent_refused_halted",
+            ),
+            run::ConsentKind::Resume => (
+                EvidencePhase::MissionResumeDeclined,
+                "held_consent_refused_halted",
+            ),
+        };
+        let mut record = self.door_record(phase, agent, Some(door));
+        record.failure = Some("halted");
+        record.detail.push(("reason".into(), reason.into()));
+        self.record_end(&record);
     }
 
     /// Unclean sessions the evidence store reports (advisory only).
