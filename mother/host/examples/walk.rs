@@ -38,6 +38,15 @@ mod walk {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
+    // Terminal::open disables OPOST. Every progress line owns its CRLF,
+    // including errors after opening; escape data just like the renderer.
+    macro_rules! progress {
+        () => { progress!("") };
+        ($($arg:tt)*) => {
+            print!("{}\r\n", nexus_governed_control::authority::evidence::escaped(&format!($($arg)*)))
+        };
+    }
+
     /// A stand-in for the broker's native dialogs, at this terminal (the walk
     /// only): it asks the Owner about a door, a mission and a held mission, and
     /// declines everything else.
@@ -136,11 +145,11 @@ mod walk {
         match home.door() {
             Ok(door) => Some(Arc::new(GovernedPort::new(door))),
             Err(AuthorityError::Declined) => {
-                println!("  You said no to the door: Mother cannot act, so this part stops here.");
+                progress!("  You said no to the door: Mother cannot act, so this part stops here.");
                 None
             }
             Err(e) => {
-                println!("  The broker issued no door ({e}).");
+                progress!("  The broker issued no door ({e}).");
                 None
             }
         }
@@ -173,13 +182,13 @@ mod walk {
     /// unfinished mission until the Owner resumes or stops it.
     fn shut_down(mother: Coordinator<GovernedPort>) {
         if let Err(e) = mother.close() {
-            println!("  Mother could not shut down cleanly ({e:?}): her next start holds every unfinished mission.");
+            progress!("  Mother could not shut down cleanly ({e:?}): her next start holds every unfinished mission.");
         }
     }
 
     fn say_advance(a: &Advance) {
         for lane in &a.lanes {
-            println!(
+            progress!(
                 "    {} [{} {} {}] in {}… out {}…: {}",
                 lane.identity.role.as_str(),
                 lane.identity.name,
@@ -191,7 +200,7 @@ mod walk {
             );
         }
         for effect in &a.effects {
-            println!(
+            progress!(
                 "    effect {} {}: {}",
                 effect.kind.as_str(),
                 if effect.dispatched {
@@ -202,7 +211,7 @@ mod walk {
                 effect.outcome
             );
         }
-        println!("  {} → {}", a.from.as_str(), a.to.as_str());
+        progress!("  {} → {}", a.from.as_str(), a.to.as_str());
     }
 
     /// Read on the Owner's side of the broker, never through Mother's port.
@@ -218,11 +227,11 @@ mod walk {
 
     fn draft_and_ask(mother: &Coordinator<GovernedPort>, c: MissionContract) -> (MissionId, bool) {
         let id = mother.draft(c).expect("a valid contract");
-        println!("  {id}: {}", mother.state(id).unwrap().as_str());
+        progress!("  {id}: {}", mother.state(id).unwrap().as_str());
         mother.submit(id).expect("every question answered");
-        println!("  {id}: {}", mother.state(id).unwrap().as_str());
+        progress!("  {id}: {}", mother.state(id).unwrap().as_str());
         let consented = mother.request_consent(id).is_ok();
-        println!("  {id}: {}", mother.state(id).unwrap().as_str());
+        progress!("  {id}: {}", mother.state(id).unwrap().as_str());
         (id, consented)
     }
 
@@ -233,9 +242,9 @@ mod walk {
             let a = mother.advance(id).expect("the mission moves");
             say_advance(&a);
             if let Some(text) = &a.explanation {
-                println!();
+                progress!();
                 for line in text.lines() {
-                    println!("  Mother: {line}");
+                    progress!("  Mother: {line}");
                 }
             }
         }
@@ -255,7 +264,7 @@ mod walk {
         ) {
             Ok(home) => home,
             Err(e) => {
-                eprintln!("Could not open Mother's home: {e:?}");
+                progress!("Could not open Mother's home: {e:?}");
                 return;
             }
         };
@@ -263,13 +272,13 @@ mod walk {
             return;
         }
         let journal = home.journal().expect("journal");
-        println!("Mother's home for this walk: {}", home.dir().display());
-        println!("No grants are given in this walk, so the broker allows no effect at all.");
-        println!("Every time Mother starts, the broker asks you for her door.");
+        progress!("Mother's home for this walk: {}", home.dir().display());
+        progress!("No grants are given in this walk, so the broker allows no effect at all.");
+        progress!("Every time Mother starts, the broker asks you for her door.");
 
         // ------------------------------------------------------------ run 1
-        println!();
-        println!("RUN 1 — one mission, every state, test lanes (no model is called)");
+        progress!();
+        progress!("RUN 1 — one mission, every state, test lanes (no model is called)");
         let Some(port1) = door_port(&home) else {
             return;
         };
@@ -281,17 +290,17 @@ mod walk {
         if consented {
             finish(&mother, id);
         } else {
-            println!("  You said no, so nothing ran.");
+            progress!("  You said no, so nothing ran.");
         }
         shut_down(mother);
-        println!();
-        println!("  Mother restarts from her journal: a new door, so the broker asks again.");
+        progress!();
+        progress!("  Mother restarts from her journal: a new door, so the broker asks again.");
         let Some(port) = door_port(&home) else {
             return;
         };
         let restarted = open(&home, &journal, &port, lanes(vec![]));
-        println!("  {id} is {}.", restarted.state(id).unwrap().as_str());
-        println!(
+        progress!("  {id} is {}.", restarted.state(id).unwrap().as_str());
+        progress!(
             "  Effects sent to the broker in run 1: {}. Broker runs Mother opened: {}.",
             port1.performed(),
             mothers_runs(home.owner())
@@ -299,8 +308,8 @@ mod walk {
         shut_down(restarted);
 
         // ------------------------------------------------------------ run 2
-        println!();
-        println!("RUN 2 — Stop and Deny refuse effects");
+        progress!();
+        progress!("RUN 2 — Stop and Deny refuse effects");
         let asks = vec![
             EffectRequest::Network(EgressIntent {
                 method: "GET".into(),
@@ -322,8 +331,8 @@ mod walk {
         let mother = open(&home, &run2, &port2, lanes(asks.clone()));
         let runs_before = mothers_runs(home.owner());
 
-        println!();
-        println!("  Stop: consent to this one; Mother stops it before its Builder may fetch a page and write a file.");
+        progress!();
+        progress!("  Stop: consent to this one; Mother stops it before its Builder may fetch a page and write a file.");
         let (stopped, consented) = draft_and_ask(
             &mother,
             contract("The same site, and fetch an example page to copy its layout."),
@@ -335,43 +344,43 @@ mod walk {
                 say_advance(&mother.advance(stopped).expect("the mission moves"));
             }
         }
-        println!("  Stop → {}", mother.stop(stopped).unwrap().as_str());
+        progress!("  Stop → {}", mother.stop(stopped).unwrap().as_str());
         match mother.advance(stopped) {
             Err(CoordinatorError::Stopped) | Err(CoordinatorError::Illegal(_)) => {
-                println!("  Asked to carry on: refused. Nothing new is dispatched.")
+                progress!("  Asked to carry on: refused. Nothing new is dispatched.")
             }
-            other => println!("  Unexpected: {other:?}"),
+            other => progress!("  Unexpected: {other:?}"),
         }
 
-        println!();
-        println!("  Deny: this time answer no (type anything but the code).");
+        progress!();
+        progress!("  Deny: this time answer no (type anything but the code).");
         let (denied, consented) = draft_and_ask(
             &mother,
             contract("The same site, published to the web for everyone."),
         );
         if consented {
-            println!("  You consented, so this part cannot show a denial; stopping it.");
+            progress!("  You consented, so this part cannot show a denial; stopping it.");
             mother.stop(denied).unwrap();
         } else {
             match mother.advance(denied) {
-                Err(e) => println!("  Asked to carry on: refused ({e:?})."),
-                Ok(_) => println!("  Unexpected: a denied mission moved"),
+                Err(e) => progress!("  Asked to carry on: refused ({e:?})."),
+                Ok(_) => progress!("  Unexpected: a denied mission moved"),
             }
         }
         shut_down(mother);
 
-        println!();
-        println!("  Mother restarts: a new door, so the broker asks again.");
+        progress!();
+        progress!("  Mother restarts: a new door, so the broker asks again.");
         let Some(port) = door_port(&home) else {
             return;
         };
         let restarted = open(&home, &run2, &port, lanes(asks));
-        println!(
+        progress!(
             "  After the restart: {stopped} is {}, {denied} is {}.",
             restarted.state(stopped).unwrap().as_str(),
             restarted.state(denied).unwrap().as_str()
         );
-        println!(
+        progress!(
             "  Effects sent to the broker in run 2: {}. Broker runs Mother opened in run 2: {}.",
             port2.performed(),
             mothers_runs(home.owner()) - runs_before
@@ -379,8 +388,8 @@ mod walk {
         shut_down(restarted);
 
         // ------------------------------------------------------------ run 3
-        println!();
-        println!("RUN 3 — an unclean exit, then resume");
+        progress!();
+        progress!("RUN 3 — an unclean exit, then resume");
         let run3 = FileJournal::open(&home.dir().join("run3-journal.jsonl")).expect("journal");
         let Some(port3) = door_port(&home) else {
             return;
@@ -391,35 +400,35 @@ mod walk {
             contract("A one-page site for Rosa's bakery, with the weekly specials."),
         );
         if !consented {
-            println!("  You said no, so there is nothing to hold.");
+            progress!("  You said no, so there is nothing to hold.");
             return;
         }
         say_advance(&mother.advance(held).expect("the mission moves"));
-        println!("  Mother exits without shutting down (as if the power went out).");
+        progress!("  Mother exits without shutting down (as if the power went out).");
         drop(mother);
         drop(port3);
-        println!();
-        println!("  Mother restarts: a new door, so the broker asks again.");
+        progress!();
+        progress!("  Mother restarts: a new door, so the broker asks again.");
         let Some(port) = door_port(&home) else {
             return;
         };
         let mother = open(&home, &run3, &port, lanes(vec![]));
         match mother.held(held) {
-            Some(reason) => println!(
+            Some(reason) => progress!(
                 "  {held} is {} and held ({reason}): it does nothing until you resume or stop it.",
                 mother.state(held).unwrap().as_str()
             ),
-            None => println!("  Unexpected: {held} is not held."),
+            None => progress!("  Unexpected: {held} is not held."),
         }
         match mother.resume(held) {
             Ok(state) => {
-                println!("  You said yes: {held} resumes from {}.", state.as_str());
+                progress!("  You said yes: {held} resumes from {}.", state.as_str());
                 finish(&mother, held);
             }
             Err(CoordinatorError::Declined) => {
-                println!("  You said no: {held} stays held. Nothing of it runs.")
+                progress!("  You said no: {held} stays held. Nothing of it runs.")
             }
-            Err(e) => println!("  The resume was refused ({e:?}): {held} stays held."),
+            Err(e) => progress!("  The resume was refused ({e:?}): {held} stays held."),
         }
         shut_down(mother);
 
@@ -427,8 +436,8 @@ mod walk {
             .iter()
             .map(|j| j.load().map(|l| l.len()).unwrap_or(0))
             .sum();
-        println!();
-        println!(
+        progress!();
+        progress!(
             "  Journals (hash-chained, verified on every open): {}, {} and {} ({entries} entries).",
             journal.path().display(),
             run2.path().display(),
