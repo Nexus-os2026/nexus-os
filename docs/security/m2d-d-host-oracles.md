@@ -195,3 +195,11 @@ fa8fa1f5; they are never committed. Red: 14 failures, 10 passing controls,
 `decision8/red-fa8fa1f5.log`. The production changes follow this oracle commit.
 Plants remove each route's final re-check, drop the door cell, and retain only
 the pre-dialogue door check. All plants must be red and never committed.
+
+Fresh sweep supplement (registered before the corresponding repairs): native
+approval token issuance is separately counted by its returned token at final
+grant validation. Consent/held-consent cache and prepared-commitment refusals
+must append their closed route code after earlier evidence. Five additional
+oracles are red with fa8fa1f5 enforcement plus only the registered test hooks
+(`decision8/red-fresh-fa8fa1f5.log`); implementation files were temporarily
+replaced from the oracle checkpoint for that run and restored byte-for-byte.

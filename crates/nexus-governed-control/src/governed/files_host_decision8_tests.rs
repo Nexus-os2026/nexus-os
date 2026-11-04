@@ -662,3 +662,6 @@ fn decision8_optional_none_preserves_legacy_registration_and_grant() {
     .unwrap();
     assert_eq!(gov.grants().len(), 1);
 }
+
+#[path = "files_host_decision8_sweep_tests.rs"]
+mod sweep;
