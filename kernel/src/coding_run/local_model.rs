@@ -27,8 +27,8 @@ use sha2::{Digest, Sha256};
 use crate::emergency_stop::StopWatch;
 use crate::inference::{
     grammar, AbsoluteDeadline, CallCancel, CallContext, CallDeadline, CallMeter, Conversation,
-    LoopbackEndpoint, MessageRole, ModelRequest, ModelTransport, RetainedAnswer, RuntimeConfig,
-    SystemClocks, VerifiedOllama, CONVERSATION_CONFIG,
+    DeadlineClock, LoopbackEndpoint, MessageRole, ModelRequest, ModelTransport, RetainedAnswer,
+    RuntimeConfig, SystemClocks, VerifiedOllama, CONVERSATION_CONFIG,
 };
 
 /// The local model errors: the kernel transport's codes.
@@ -180,6 +180,35 @@ pub struct LocalOllama {
     deadline: Arc<dyn CallDeadline>,
     stop: StopWatch,
     slot: Mutex<Slot>,
+    /// The clocks a call's own deadline is kept on.
+    clock: CallClock,
+}
+
+/// The clocks of a call's own deadline: the system's, or in this crate's
+/// tests a manual pair.
+#[derive(Clone)]
+enum CallClock {
+    System,
+    #[cfg(test)]
+    Manual(Arc<dyn DeadlineClock>),
+}
+
+impl DeadlineClock for CallClock {
+    fn wall_ms(&self) -> u64 {
+        match self {
+            CallClock::System => SystemClocks.wall_ms(),
+            #[cfg(test)]
+            CallClock::Manual(clock) => clock.wall_ms(),
+        }
+    }
+
+    fn monotonic_ms(&self) -> u64 {
+        match self {
+            CallClock::System => SystemClocks.monotonic_ms(),
+            #[cfg(test)]
+            CallClock::Manual(clock) => clock.monotonic_ms(),
+        }
+    }
 }
 
 /// The one conversation this bound model carries (N1 spec §2.1: its
@@ -206,7 +235,7 @@ impl std::fmt::Debug for LocalOllama {
 /// The bound deadline, shortened by one call's own timeout.
 struct Shortened<'a> {
     bound: &'a dyn CallDeadline,
-    call: AbsoluteDeadline,
+    call: AbsoluteDeadline<CallClock>,
 }
 
 impl CallDeadline for Shortened<'_> {
@@ -246,7 +275,15 @@ impl LocalOllama {
             deadline,
             stop,
             slot: Mutex::default(),
+            clock: CallClock::System,
         })
+    }
+
+    /// Keep this model's per-call deadlines on `clock` (tests only).
+    #[cfg(test)]
+    pub(crate) fn with_call_clock(mut self, clock: Arc<dyn DeadlineClock>) -> Self {
+        self.clock = CallClock::Manual(clock);
+        self
     }
 
     fn slot(&self) -> std::sync::MutexGuard<'_, Slot> {
@@ -344,7 +381,7 @@ impl LocalModel for LocalOllama {
             .and_then(|request| {
                 let deadline = Shortened {
                     bound: &*self.deadline,
-                    call: AbsoluteDeadline::within(SystemClocks, timeout),
+                    call: AbsoluteDeadline::within(self.clock.clone(), timeout),
                 };
                 let ctx = CallContext {
                     meter: &*self.meter,
