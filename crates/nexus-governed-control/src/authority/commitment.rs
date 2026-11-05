@@ -848,11 +848,6 @@ impl CommitmentRegistry {
                     self.fire(crate::test_hooks::at::COMPLETE_BEFORE_CHECK);
                     // Checked while still reserved: an end it finds records
                     // the transition it interrupted.
-                    let mut live = self.live_check(id, entry, agent, run, now, &mut deferred);
-                    #[cfg(test)]
-                    if live.is_ok() {
-                        self.fire(crate::test_hooks::at::COMPLETE_CHECKED);
-                    }
                     #[cfg(test)]
                     let point = match entry.reserved.expect("reserved transition").transition {
                         Transition::Approve => {
@@ -868,6 +863,11 @@ impl CommitmentRegistry {
                     };
                     #[cfg(test)]
                     let cell = entry.request.clone();
+                    let mut live = self.live_check(id, entry, agent, run, now, &mut deferred);
+                    #[cfg(test)]
+                    if live.is_ok() {
+                        self.fire(crate::test_hooks::at::COMPLETE_CHECKED);
+                    }
                     #[cfg(test)]
                     if live.is_ok() {
                         crate::authority::file_session::probe(cell.as_ref(), point.0);
