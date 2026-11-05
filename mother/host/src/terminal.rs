@@ -380,6 +380,7 @@ pub struct TerminalConfirmer {
     pub(crate) shared: Arc<Shared>,
     facts: Option<RequestFacts>,
     answer: AtomicU8,
+    answers: [AtomicU8; 5],
 }
 impl TerminalConfirmer {
     pub(crate) fn new(shared: Arc<Shared>) -> Self {
@@ -387,6 +388,7 @@ impl TerminalConfirmer {
             shared,
             facts: None,
             answer: AtomicU8::new(AnswerState::NotAsked as u8),
+            answers: std::array::from_fn(|_| AtomicU8::new(AnswerState::NotAsked as u8)),
         }
     }
     pub(crate) fn for_request(&self, request: &SessionRequest) -> Arc<Self> {
@@ -404,10 +406,17 @@ impl TerminalConfirmer {
                 deadline: request.deadline(),
             }),
             answer: AtomicU8::new(AnswerState::NotAsked as u8),
+            answers: std::array::from_fn(|_| AtomicU8::new(AnswerState::NotAsked as u8)),
         })
     }
+    pub(crate) fn answers(&self) -> [AnswerState; 5] {
+        std::array::from_fn(|index| Self::decode_answer(self.answers[index].load(Ordering::SeqCst)))
+    }
     pub(crate) fn answer(&self) -> AnswerState {
-        match self.answer.load(Ordering::SeqCst) {
+        Self::decode_answer(self.answer.load(Ordering::SeqCst))
+    }
+    fn decode_answer(value: u8) -> AnswerState {
+        match value {
             0 => AnswerState::NotAsked,
             1 => AnswerState::Awaiting,
             2 => AnswerState::Declined,
@@ -463,6 +472,7 @@ impl TerminalConfirmer {
                 return false;
             }
             Err(std::sync::TryLockError::Poisoned(_)) => {
+                self.answered(AnswerState::ProtocolFailed);
                 self.shared.fail(Failure::Input);
                 return false;
             }
@@ -617,29 +627,38 @@ impl TerminalConfirmer {
             self.shared.wait();
         }
     }
-    fn confirmed(&self, title: &str, text: ConfirmationText, seconds: u64) -> bool {
+    fn confirmed(
+        &self,
+        question: usize,
+        title: &str,
+        text: ConfirmationText,
+        seconds: u64,
+    ) -> bool {
         if self.facts.is_none() {
             return false;
         }
-        self.ask(Instant::now(), title, text, seconds, false)
+        self.answers[question].store(AnswerState::Awaiting as u8, Ordering::SeqCst);
+        let result = self.ask(Instant::now(), title, text, seconds, false);
+        self.answers[question].store(self.answer() as u8, Ordering::SeqCst);
+        result
     }
     fn action(&self, r: &ActionConfirmation) -> bool {
         r.kind == CapabilityKind::Files
             && r.class == EffectClass::R2
             && r.operation == "create"
-            && self.confirmed(r.title(), r.text(), r.expires_in_secs.min(300))
+            && self.confirmed(3, r.title(), r.text(), r.expires_in_secs.min(300))
     }
     fn grant(&self, r: &GrantConfirmation) -> bool {
-        r.kind == CapabilityKind::Files && self.confirmed(r.title(), r.text(), 120)
+        r.kind == CapabilityKind::Files && self.confirmed(0, r.title(), r.text(), 120)
     }
     fn mission(&self, r: &MissionConfirmation) -> bool {
-        self.confirmed(r.title(), r.text(), 300)
+        self.confirmed(2, r.title(), r.text(), 300)
     }
     fn door(&self, r: &DoorPrompt) -> bool {
-        self.confirmed(r.title(), r.text(), 120)
+        self.confirmed(1, r.title(), r.text(), 120)
     }
     fn undo(&self, r: &UndoConfirmation) -> bool {
-        self.confirmed(r.title(), r.text(), 120)
+        self.confirmed(4, r.title(), r.text(), 120)
     }
 }
 

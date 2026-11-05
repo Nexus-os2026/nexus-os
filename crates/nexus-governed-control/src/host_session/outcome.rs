@@ -121,3 +121,310 @@ impl Drop for UndoClaim {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecordingStatus {
+    NotStarted,
+    Recorded,
+    Owed,
+    Unknown,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Acknowledgement {
+    Pending,
+    Verified,
+}
+#[derive(Clone, Debug)]
+pub struct ActionObservation {
+    pub target: u64,
+    pub run: crate::authority::ids::RunId,
+    pub mission: Option<u64>,
+    pub effect: Option<u64>,
+    pub commitment: Option<crate::authority::ids::CommitmentId>,
+    pub publication: crate::authority::commitment::PublicationClass,
+    pub mother: RecordingStatus,
+    pub mother_sequence: Option<u64>,
+    pub mother_hash: Option<[u8; 32]>,
+    pub acknowledgement: Acknowledgement,
+}
+/// Read-only facts, never a permit or a cleanup/acknowledgement capability.
+/// Missing observations stay unknown. Resources describe the complete session
+/// inventory; action rows are selected by the immutable request/target only.
+#[derive(Clone, Debug)]
+pub struct OperationObservation {
+    pub session: SessionIdentity,
+    pub request: u64,
+    pub target: Option<u64>,
+    pub admitted_steps: u64,
+    pub calls: Vec<CallObservation>,
+    pub primary_health: crate::evidence_store::EvidenceHealth,
+    pub apply_handed_off: bool,
+    pub restore: RestoreObservation,
+    pub ingresses: u64,
+    pub first_restriction: Option<(crate::authority::file_session::HaltCause, Option<u16>)>,
+    pub kernel: RecordingStatus,
+    pub primary: RecordingStatus,
+    pub primary_reference: Option<crate::authority::evidence::ExecutionEvidence>,
+    pub actions: Vec<ActionObservation>,
+    pub inventory: Option<crate::files::SessionInventory>,
+    pub resources: Option<ResourceObligations>,
+}
+#[derive(Debug, Default)]
+pub(super) struct RequestFacts {
+    pub(super) admitted: AtomicU64,
+    apply_entered: std::sync::atomic::AtomicBool,
+    apply_completed: std::sync::atomic::AtomicBool,
+    calls: [CallCounters; 21],
+    pub(super) primary: OnceLock<Option<crate::authority::evidence::ExecutionEvidence>>,
+}
+impl RequestScope {
+    pub(crate) fn apply_entered(&self) {
+        self.facts.apply_entered.store(true, Ordering::SeqCst);
+    }
+    pub(crate) fn apply_returned(&self, completed: bool) {
+        // Native apply Ok includes its required durable completion record.
+        // Errors may still have published: they never prove absent/recorded.
+        self.facts
+            .apply_completed
+            .store(completed, Ordering::SeqCst);
+    }
+}
+impl HostSession {
+    pub fn operation_observation(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<OperationObservation, SessionError> {
+        if !Arc::ptr_eq(&self.core, &request.core) {
+            return Err(SessionError::Restricted);
+        }
+        let retained = self
+            .core
+            .actions
+            .lock()
+            .map_err(|_| {
+                self.ingress().fail();
+                SessionError::Restricted
+            })?
+            .iter()
+            .filter(|action| {
+                if request.kind == CommandKind::Approve {
+                    action.preparation == request.target
+                } else {
+                    action.request == request.sequence
+                }
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let actions = retained
+            .iter()
+            .map(|action| {
+                let publication = action.commitment.and_then(|id| {
+                    self.control
+                        .authority()
+                        .commitments()
+                        .publication(id)
+                        .ok()
+                        .flatten()
+                        .filter(|(view, _)| view.run == action.run && view.id == id)
+                        .map(|(_, publication)| publication)
+                });
+                action.observation(publication)
+            })
+            .collect();
+        let restore = request.restore_observation();
+        let apply_handed_off = request.scope.facts.apply_entered.load(Ordering::SeqCst);
+        let primary_reference = request.scope.facts.primary.get().copied().flatten();
+        use crate::authority::evidence::EndStatus;
+        let primary = match primary_reference.map(|e| e.end) {
+            Some(EndStatus::Recorded { .. }) => RecordingStatus::Recorded,
+            Some(EndStatus::Owed) => RecordingStatus::Owed,
+            Some(EndStatus::Uncertain) => RecordingStatus::Unknown,
+            None if request.scope.facts.admitted.load(Ordering::SeqCst) == 0 => {
+                RecordingStatus::NotStarted
+            }
+            None => RecordingStatus::Unknown,
+        };
+        let inventory = self.inventory().ok();
+        let resources = self.resource_obligations().ok();
+        if inventory.is_none() || resources.is_none() {
+            self.ingress().fail();
+        }
+        Ok(OperationObservation {
+            session: self.identity(),
+            request: request.sequence,
+            target: request.context(),
+            admitted_steps: request.scope.facts.admitted.load(Ordering::SeqCst),
+            calls: request
+                .scope
+                .facts
+                .calls
+                .iter()
+                .enumerate()
+                .filter_map(|(index, counters)| {
+                    let entered = counters.entered.load(Ordering::SeqCst);
+                    (entered > 0).then(|| CallObservation {
+                        call: CALL_NAMES[index],
+                        entered,
+                        returned: counters.returned.load(Ordering::SeqCst),
+                        failed: counters.failed.load(Ordering::SeqCst),
+                    })
+                })
+                .collect(),
+            primary_health: self.evidence.health(),
+            apply_handed_off,
+            restore,
+            ingresses: self.core.cell.session_word() / EPOCH_STEP - request.generation(),
+            first_restriction: self
+                .core
+                .cell
+                .reason()
+                .map(|(cause, reason)| (cause, reason.map(|r| r.get()))),
+            kernel: if request.scope.facts.apply_completed.load(Ordering::SeqCst)
+                || restore.outcome == RestoreOutcome::Completed
+            {
+                RecordingStatus::Recorded
+            } else if request.scope.facts.admitted.load(Ordering::SeqCst) != 0 {
+                RecordingStatus::Unknown
+            } else {
+                RecordingStatus::NotStarted
+            },
+            primary,
+            primary_reference,
+            actions,
+            inventory,
+            resources,
+        })
+    }
+
+    /// The exact retained native action selects its take-once Owner detail.
+    /// No raw broker, caller-selected run, or legacy conversion is exposed.
+    pub fn file_working_detail(
+        &self,
+        request: &SessionRequest,
+        id: crate::authority::ids::CommitmentId,
+    ) -> Result<Option<crate::files::WorkingDetail>, SessionError> {
+        if !Arc::ptr_eq(&self.core, &request.core)
+            || request.kind != CommandKind::Detail
+            || self.state() != SessionState::Normal
+        {
+            return Err(SessionError::Restricted);
+        }
+        let actions = self
+            .core
+            .actions
+            .lock()
+            .map_err(|_| SessionError::Restricted)?;
+        if !actions
+            .iter()
+            .any(|a| a.session == self.identity() && a.commitment == Some(id))
+        {
+            return Err(SessionError::NoTarget);
+        }
+        Ok(self.control.files_working_detail(id))
+    }
+}
+
+/// Closed native call vocabulary. Memory observations grant nothing and do not
+/// turn a returned error or a missing return into durable completion.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum NativeCall {
+    ProjectSelect,
+    ReadGrant,
+    RunConstruct,
+    StagingGrant,
+    Snapshot,
+    Edit,
+    StructuralVerify,
+    PageVerify,
+    Review,
+    RevalidationReview,
+    RequestApproval,
+    PageRecheck,
+    WriteGrant,
+    Apply,
+    RequestRestore,
+    UndoGrant,
+    Restore,
+    RetryCleanup,
+    DiscardStaging,
+    Cancel,
+    FinalizationSync,
+}
+const CALL_NAMES: [&str; 21] = [
+    "project_select",
+    "read_grant",
+    "run_construct",
+    "staging_grant",
+    "snapshot",
+    "edit",
+    "structural_verify",
+    "page_verify",
+    "review",
+    "revalidation_review",
+    "request_approval",
+    "page_recheck",
+    "write_grant",
+    "apply",
+    "request_restore",
+    "undo_grant",
+    "restore",
+    "retry_cleanup",
+    "discard_staging",
+    "cancel",
+    "finalization_sync",
+];
+impl NativeCall {
+    pub(crate) fn from_event(event: &str) -> Option<Self> {
+        match event {
+            "session.entered.project_select" => Some(Self::ProjectSelect),
+            "session.entered.read_grant" => Some(Self::ReadGrant),
+            "session.entered.run_construct" => Some(Self::RunConstruct),
+            "session.entered.staging_grant" => Some(Self::StagingGrant),
+            "session.entered.snapshot" => Some(Self::Snapshot),
+            "session.entered.edit" => Some(Self::Edit),
+            "session.entered.structural_verify" => Some(Self::StructuralVerify),
+            "session.entered.page_verify" => Some(Self::PageVerify),
+            "session.entered.review" => Some(Self::Review),
+            "session.entered.revalidation_review" => Some(Self::RevalidationReview),
+            "session.entered.request_approval" => Some(Self::RequestApproval),
+            "session.entered.page_recheck" => Some(Self::PageRecheck),
+            "session.entered.write_grant" => Some(Self::WriteGrant),
+            "session.entered.apply" => Some(Self::Apply),
+            "session.entered.request_restore" => Some(Self::RequestRestore),
+            "session.entered.undo_grant" => Some(Self::UndoGrant),
+            "session.entered.restore" => Some(Self::Restore),
+            "session.entered.retry_cleanup" => Some(Self::RetryCleanup),
+            "session.entered.discard_staging" => Some(Self::DiscardStaging),
+            "session.entered.cancel" => Some(Self::Cancel),
+            "session.entered.finalization_sync" => Some(Self::FinalizationSync),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub struct CallObservation {
+    pub call: &'static str,
+    pub entered: u64,
+    pub returned: u64,
+    pub failed: u64,
+}
+#[derive(Debug, Default)]
+struct CallCounters {
+    entered: AtomicU64,
+    returned: AtomicU64,
+    failed: AtomicU64,
+}
+impl RequestScope {
+    pub(crate) fn native_entered(&self, call: NativeCall) {
+        self.facts.calls[call as usize]
+            .entered
+            .fetch_add(1, Ordering::SeqCst);
+    }
+    pub(crate) fn native_returned(&self, call: NativeCall, failed: bool) {
+        let fact = &self.facts.calls[call as usize];
+        if failed {
+            fact.failed.fetch_add(1, Ordering::SeqCst);
+        }
+        fact.returned.fetch_add(1, Ordering::SeqCst);
+    }
+}

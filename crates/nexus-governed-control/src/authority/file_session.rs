@@ -154,6 +154,30 @@ impl HaltCell {
             _ => Err(super::AuthorityError::Halted),
         }
     }
+    pub(crate) fn native_entered(&self, call: crate::host_session::outcome::NativeCall) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.native_entered(call);
+        }
+    }
+    pub(crate) fn native_returned(
+        &self,
+        call: crate::host_session::outcome::NativeCall,
+        failed: bool,
+    ) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.native_returned(call, failed);
+        }
+    }
+    pub(crate) fn apply_entered(&self) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.apply_entered();
+        }
+    }
+    pub(crate) fn apply_returned(&self, completed: bool) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.apply_returned(completed);
+        }
+    }
     pub(crate) fn restore_entered(&self) {
         if let CellMode::Host(Some(scope)) = self.mode() {
             scope.restore_entered();

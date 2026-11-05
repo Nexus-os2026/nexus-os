@@ -35,6 +35,7 @@ pub(crate) struct RequestScope {
     deadline: Instant,
     kind: ScopeKind,
     next_step: AtomicU64,
+    facts: outcome::RequestFacts,
     restore: outcome::RestoreFacts,
     // Once a native File run is admitted, Mother sinks retain that original
     // prerequisite. Installing it only narrows the original request.
@@ -107,7 +108,11 @@ impl RequestScope {
             self.snapshot
         };
         cell.session_compare(expected, expected)
-            .map_err(|_| AuthorityError::Halted)
+            .map_err(|_| AuthorityError::Halted)?;
+        // Observation only; acceptance and failed CAS attempts never count.
+        // Bounded by next_step, whose exhaustion permanently fails closed.
+        self.facts.admitted.fetch_add(1, Ordering::SeqCst);
+        Ok(())
     }
 
     pub(crate) fn reserve_resource(
@@ -549,6 +554,7 @@ impl HostSession {
             deadline: seed.core.created + Duration::from_secs(300),
             kind: ScopeKind::Bootstrap,
             next_step: AtomicU64::new(0),
+            facts: outcome::RequestFacts::default(),
             restore: outcome::RestoreFacts::default(),
             mother_run: OnceLock::new(),
         });
@@ -919,6 +925,11 @@ impl HostSession {
         self.control.authorize(commitment, &agent, run, confirmer)?;
         cell.admit()?;
         let result = self.control.execute(commitment, &agent, run);
+        let _observed = request
+            .scope
+            .facts
+            .primary
+            .set(result.as_ref().ok().and_then(|output| output.evidence));
         if result.as_ref().is_ok_and(|output| {
             output.evidence.is_some_and(|evidence| {
                 matches!(
@@ -1443,6 +1454,7 @@ impl SessionIngress {
                     deadline: close.deadline,
                     kind: ScopeKind::CloseCleanup,
                     next_step: AtomicU64::new(0),
+                    facts: outcome::RequestFacts::default(),
                     restore: outcome::RestoreFacts::default(),
                     mother_run: OnceLock::new(),
                 }),
@@ -1481,6 +1493,7 @@ impl SessionIngress {
                     ScopeKind::Work
                 },
                 next_step: AtomicU64::new(0),
+                facts: outcome::RequestFacts::default(),
                 restore: outcome::RestoreFacts::default(),
                 mother_run: OnceLock::new(),
             }),

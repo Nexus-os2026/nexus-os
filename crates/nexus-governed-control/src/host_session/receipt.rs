@@ -383,6 +383,47 @@ pub(super) struct Action {
     receipt: Option<Receipt>,
 }
 impl Action {
+    pub(super) fn observation(
+        &self,
+        native: Option<PublicationClass>,
+    ) -> super::outcome::ActionObservation {
+        use super::outcome::{Acknowledgement, ActionObservation, RecordingStatus};
+        let publication = self
+            .receipt
+            .as_ref()
+            .map(|receipt| match &receipt.outcome {
+                Conclusive::NotPublished => PublicationClass::ConfirmedNotPublished,
+                Conclusive::Published {
+                    recovery,
+                    interrupted,
+                } => PublicationClass::Published {
+                    recovery_required: *recovery,
+                    interrupted: interrupted.iter().copied().flatten().collect(),
+                },
+            })
+            .or(native)
+            .unwrap_or(PublicationClass::Uncertain);
+        ActionObservation {
+            target: self.preparation,
+            run: self.run,
+            mission: self.mission,
+            effect: self.effect,
+            commitment: self.commitment,
+            publication,
+            mother: if self.receipt.is_some() {
+                RecordingStatus::Recorded
+            } else {
+                RecordingStatus::Unknown
+            },
+            mother_sequence: self.receipt.as_ref().map(|r| r.terminal.sequence),
+            mother_hash: self.receipt.as_ref().map(|r| r.terminal.hash),
+            acknowledgement: if self.acknowledged() {
+                Acknowledgement::Verified
+            } else {
+                Acknowledgement::Pending
+            },
+        }
+    }
     pub(super) fn acknowledged(&self) -> bool {
         self.receipt.as_ref().is_some_and(|receipt| {
             receipt.released && receipt.terminal.hash != [0; 32] && receipt.terminal.sequence > 0

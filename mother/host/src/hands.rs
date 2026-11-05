@@ -138,7 +138,11 @@ struct Runtime {
     mission: Option<Mission>,
 }
 impl Runtime {
-    fn run(&mut self, request: &SessionRequest) {
+    fn run(
+        &mut self,
+        request: &SessionRequest,
+        confirmation: Arc<crate::terminal::TerminalConfirmer>,
+    ) {
         if self.used {
             self.screen.emit("REFUSED file_session_used\n");
             return;
@@ -148,7 +152,6 @@ impl Runtime {
             self.screen.emit("REFUSED workspace_unavailable\n");
             return;
         };
-        let confirmation = self.confirmer.for_request(request);
         let door = match self
             .home
             .session
@@ -303,7 +306,11 @@ impl Runtime {
         self.screen.stop.ingress.fail();
         self.screen.emit("REFUSED progress_bound\n");
     }
-    fn approve(&mut self, request: &SessionRequest) {
+    fn approve(
+        &mut self,
+        request: &SessionRequest,
+        confirmation: Arc<crate::terminal::TerminalConfirmer>,
+    ) {
         let Some(mission) = self.mission.as_mut() else {
             self.screen.emit("REFUSED no_mission\n");
             return;
@@ -312,7 +319,6 @@ impl Runtime {
             .id
             .and_then(|id| mission.port.pending(id))
             .and_then(|p| CommitmentId::parse(&p.commitment));
-        let confirmation = self.confirmer.for_request(request);
         let result = self
             .home
             .session
@@ -359,11 +365,31 @@ impl Runtime {
         match result {
             Ok(_) => {}
             Err(_) if consumed_decline => self.screen.emit("ACTION DENIED\n"),
-            Err(e) => self.screen.emit(&format!(
-                "ACTION REFUSED {} affirmative={}\n",
-                e.class(),
-                affirmative
-            )),
+            Err(e) => {
+                use nexus_governed_control::authority::commitment::PublicationClass;
+                let uncertain = self
+                    .home
+                    .session
+                    .operation_observation(request)
+                    .map(|facts| {
+                        facts.actions.iter().any(|a| {
+                            matches!(
+                                a.publication,
+                                PublicationClass::Pending | PublicationClass::Uncertain
+                            )
+                        })
+                    })
+                    .unwrap_or(true);
+                let label = if uncertain {
+                    "ACTION OUTCOME UNCERTAIN"
+                } else {
+                    "ACTION REFUSED"
+                };
+                self.screen.emit(&format!(
+                    "{label} {} affirmative={affirmative}\n",
+                    e.class()
+                ));
+            }
         }
     }
     fn observe(&self) {
@@ -385,12 +411,20 @@ impl Runtime {
         }
     }
     fn command(&mut self, request: SessionRequest) {
+        let confirmation = self.confirmer.for_request(&request);
+        self.command_body(&request, confirmation.clone());
+        self.operation_result(&request, &confirmation);
+    }
+    fn command_body(
+        &mut self,
+        request: &SessionRequest,
+        confirmation: Arc<crate::terminal::TerminalConfirmer>,
+    ) {
         match request.kind() {
-            CommandKind::Run => self.run(&request),
-            CommandKind::Approve => self.approve(&request),
+            CommandKind::Run => self.run(request, confirmation.clone()),
+            CommandKind::Approve => self.approve(request, confirmation.clone()),
             CommandKind::Undo => {
-                let confirmation = self.confirmer.for_request(&request);
-                let result = self.home.session.undo_confirmed(&request, &*confirmation);
+                let result = self.home.session.undo_confirmed(request, &*confirmation);
                 #[cfg(test)]
                 hands_tests::review4_returned(&self.screen, &self.home, "undo");
                 let facts = request.restore_observation();
@@ -423,7 +457,7 @@ impl Runtime {
                 hands_tests::review4_reported(&self.screen, &self.home, "undo");
             }
             CommandKind::Cleanup => {
-                let result = self.home.session.cleanup(&request);
+                let result = self.home.session.cleanup(request);
                 #[cfg(test)]
                 hands_tests::review4_returned(&self.screen, &self.home, "cleanup");
                 match result {
@@ -460,6 +494,13 @@ impl Runtime {
                     return;
                 }
                 let mut view = OwnerScreen(self.screen.clone());
+                if let Some(id) = self.mission.as_ref().and_then(|m| m.last) {
+                    match self.home.session.file_working_detail(request, id) {
+                        Ok(Some(detail)) => detail.show(&mut view),
+                        Err(_) => self.screen.emit("DETAIL FAILED native_observation\n"),
+                        _ => {}
+                    }
+                }
                 if let Some((m, id)) = self.mission.as_ref().and_then(|m| m.id.map(|id| (m, id))) {
                     match m.session.working_detail(id) {
                         Ok(Some(detail)) => detail.show(&mut view),
@@ -472,6 +513,66 @@ impl Runtime {
             }
             _ => self.screen.emit("REFUSED unavailable_command\n"),
         }
+    }
+    fn operation_result(
+        &self,
+        request: &SessionRequest,
+        confirmation: &crate::terminal::TerminalConfirmer,
+    ) {
+        let answer = confirmation.answer();
+        let [grant, door, mission, action, undo] = confirmation.answers();
+        self.screen.emit(&format!(
+            "OPERATION {:?} request={} target={:?} answer={answer:?}\n",
+            request.kind(),
+            request.sequence(),
+            request.context()
+        ));
+        self.screen.emit(&format!("ANSWERS grant={grant:?} door={door:?} mission={mission:?} action={action:?} undo={undo:?}\n"));
+        match self.home.session.operation_observation(request) {
+            Ok(facts) => {
+                self.screen.emit(&format!("ADMISSION steps={} apply_handoff={} restore_handoff={} generation_changes={} first_restriction={:?}\n",
+                    facts.admitted_steps, facts.apply_handed_off, facts.restore.handed_off, facts.ingresses, facts.first_restriction));
+                self.screen.emit(&format!("NATIVE FACTS restore={:?} grant={:?} kernel_recording={:?} primary_recording={:?}\n",
+                    facts.restore.outcome, facts.restore.grant, facts.kernel, facts.primary));
+                for call in facts.calls {
+                    self.screen.emit(&format!(
+                        "CALL {} handed_off={} returned={} failed={}\n",
+                        call.call, call.entered, call.returned, call.failed
+                    ));
+                }
+                self.screen.emit(&format!(
+                    "PRIMARY HEALTH latched={} owed={} recovery_required={} unsettled={}\n",
+                    facts.primary_health.latched,
+                    facts.primary_health.owed,
+                    facts.primary_health.recovery_required,
+                    facts.primary_health.unsettled
+                ));
+                for action in facts.actions {
+                    self.screen.emit(&format!("ACTION FACTS physical={:?} mother={:?} acknowledgement={:?} target={} run={} mission={:?} effect={:?} commitment={:?} mother_sequence={:?}\n",
+                        action.publication, action.mother, action.acknowledgement, action.target, action.run, action.mission, action.effect, action.commitment, action.mother_sequence));
+                }
+                if facts.inventory.is_none() || facts.resources.is_none() {
+                    self.screen.emit("RESOURCE OBSERVATION unknown\n");
+                }
+            }
+            Err(_) => self.screen.emit("OPERATION FACTS unknown\n"),
+        }
+        if let Some((mission, id)) = self.mission.as_ref().and_then(|m| m.id.map(|id| (m, id))) {
+            match mission.session.terminal_facts(id) {
+                Ok(facts) => {
+                    if facts.recording_unknown {
+                        self.screen.stop.ingress.fail();
+                    }
+                    self.screen.emit(&format!("TERMINAL first_intent={} state={:?} settlement={:?} recorded_sequence={:?} recording_unknown={}\n",
+                        facts.first_code(), facts.state, facts.settlement, facts.recorded_sequence, facts.recording_unknown));
+                }
+                Err(_) => self
+                    .screen
+                    .emit("TERMINAL first_intent=unknown recording_unknown=true\n"),
+            }
+        }
+        self.inventory();
+        self.screen.emit("OPERATION END\n");
     }
     fn inventory(&self) {
         match self.home.session.inventory() {

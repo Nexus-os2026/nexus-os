@@ -96,6 +96,8 @@ pub use session_close::PreparedSessionEnd;
 mod lite_oracles;
 mod lite_settle;
 pub use lite::FileSession;
+mod session_result;
+pub use session_result::{TerminalFacts, TerminalIntent};
 
 /// The most missions one coordinator keeps.
 pub const MAX_MISSIONS: usize = 1024;

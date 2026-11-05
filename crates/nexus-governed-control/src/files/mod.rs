@@ -90,6 +90,8 @@ use crate::control::Preparation;
 #[cfg(target_os = "linux")]
 use crate::control::{EffectOutput, PendingEffect};
 #[cfg(target_os = "linux")]
+use crate::host_session::outcome::NativeCall;
+#[cfg(target_os = "linux")]
 use nexus_kernel::coding_run::ProjectGrant;
 #[cfg(target_os = "linux")]
 use nexus_kernel::coding_run::{
@@ -583,9 +585,14 @@ impl Kernel {
         let projects = ProjectRegistry::reserving(Arc::clone(&authority), &trees);
         let picked = Picked(root.to_path_buf());
         crate::authority::file_session::admit_host(halt)?;
-        let project = projects
-            .select(&picked)
-            .map_err(|_| refused("the kernel refused the workspace"))?;
+        if let Some(cell) = halt {
+            cell.native_entered(NativeCall::ProjectSelect);
+        }
+        let selected = projects.select(&picked);
+        if let Some(cell) = halt {
+            cell.native_returned(NativeCall::ProjectSelect, selected.is_err());
+        }
+        let project = selected.map_err(|_| refused("the kernel refused the workspace"))?;
         Ok(Self {
             projects,
             authority,
@@ -889,12 +896,12 @@ impl RunResource {
         #[cfg(test)]
         self.hooks.fire("session.before.finalization_sync");
         self.binding.cell.admit_recovery(Some(request), true)?;
+        request.native_entered(NativeCall::FinalizationSync);
         #[cfg(test)]
         self.hooks.fire("session.entered.finalization_sync");
-        backend
-            .parent
-            .sync_all()
-            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+        let synced = backend.parent.sync_all();
+        request.native_returned(NativeCall::FinalizationSync, synced.is_err());
+        synced.map_err(|_| AuthorityError::EvidenceUnavailable)?;
         backend.verify_parent()?;
         proof.parent_synced = true;
         if !self.finalized.load(Ordering::SeqCst) {
@@ -911,6 +918,23 @@ impl RunResource {
         Ok(true)
     }
 
+    fn observation_cell(&self) -> Result<HaltCell, AuthorityError> {
+        let id = *self.commitment.lock().map_err(|_| {
+            self.binding.cell.fail_session();
+            AuthorityError::Halted
+        })?;
+        match id {
+            Some(id) => self
+                .binding
+                .control
+                .upgrade()
+                .ok_or(AuthorityError::Halted)?
+                .authority()
+                .commitments()
+                .session_request(id, self.binding.run),
+            None => Ok(self.binding.cell.clone()),
+        }
+    }
     fn admit(&self) -> Result<(), AuthorityError> {
         let commitment = self.commitment.lock().map_err(|_| {
             self.binding.cell.fail_session();
@@ -955,7 +979,14 @@ impl RunResource {
         if slot.is_some() {
             return Err(AuthorityError::Halted);
         }
+        let observation = self.observation_cell()?;
+        let call_kind = if write {
+            NativeCall::WriteGrant
+        } else {
+            NativeCall::ReadGrant
+        };
         self.admit()?;
+        observation.native_entered(call_kind);
         #[cfg(test)]
         self.hooks.fire(if write {
             "session.entered.write_grant"
@@ -966,8 +997,9 @@ impl RunResource {
             kernel.projects.grant_for_apply(kernel.project.id, binding)
         } else {
             kernel.projects.grant_for_run(kernel.project.id, binding)
-        }
-        .map_err(project_error)?;
+        };
+        observation.native_returned(call_kind, grant.is_err());
+        let grant = grant.map_err(project_error)?;
         *slot = Some((kernel.authority.clone(), grant.grant_id(), grant.binding()));
         Ok(grant)
     }
@@ -1078,12 +1110,12 @@ impl CodingRun {
         grants.undo.push(reserved.clone());
         let mut slot = reserved.grant.lock().map_err(|_| AuthorityError::Halted)?;
         entry.binding.cell.admit_recovery(Some(request), false)?;
+        request.native_entered(NativeCall::UndoGrant);
         #[cfg(test)]
         _shared.fire("session.entered.undo_grant");
-        let grant = kernel
-            .projects
-            .grant_for_apply(kernel.project.id, binding)
-            .map_err(project_error)?;
+        let grant = kernel.projects.grant_for_apply(kernel.project.id, binding);
+        request.native_returned(NativeCall::UndoGrant, grant.is_err());
+        let grant = grant.map_err(project_error)?;
         *slot = Some((grant.grant_id(), grant.binding()));
         drop(slot);
         Ok((grant, Some(reserved)))
@@ -1139,6 +1171,18 @@ impl CodingRun {
         match self {
             Self::Legacy(run) => call(run),
             Self::Host(entry) => {
+                let call_kind =
+                    NativeCall::from_event(_event).expect("closed native call vocabulary");
+                // Resolve the observation's immutable request before the owning
+                // hold/admission. It never supplies permission to the call.
+                let observation = match mode {
+                    NativeStep::Work => match entry.observation_cell() {
+                        Ok(cell) => Some(cell),
+                        Err(_) => return Err(refused()),
+                    },
+                    NativeStep::Recovery { cell, .. } => cell.cloned(),
+                    NativeStep::Settlement => Some(entry.binding.cell.clone()),
+                };
                 let native = match entry.native.lock() {
                     Ok(native) => native,
                     Err(_) => {
@@ -1171,6 +1215,14 @@ impl CodingRun {
                 if admitted.is_err() {
                     return Err(refused());
                 }
+                if let Some(cell) = &observation {
+                    cell.native_entered(call_kind);
+                    match call_kind {
+                        NativeCall::Apply => cell.apply_entered(),
+                        NativeCall::Restore => cell.restore_entered(),
+                        _ => {}
+                    }
+                }
                 #[cfg(test)]
                 entry.hooks.fire(_event);
                 #[cfg(test)]
@@ -1182,6 +1234,12 @@ impl CodingRun {
                     _ => {}
                 }
                 let result = call(run);
+                if let Some(cell) = &observation {
+                    cell.native_returned(call_kind, result.is_err());
+                    if matches!(call_kind, NativeCall::Apply) {
+                        cell.apply_returned(result.is_ok());
+                    }
+                }
                 #[cfg(test)]
                 entry.hooks.fire(match _event {
                     "session.entered.staging_grant" => "session.after.staging_grant",
@@ -1317,9 +1375,6 @@ impl CodingRun {
             },
             || ApplyError::Refused(Refusal::AuthorityDenied),
             |run| {
-                if let Some(cell) = cell {
-                    cell.restore_entered();
-                }
                 let result = run.restore(approval, grant);
                 if let Some(cell) = cell {
                     use crate::host_session::outcome::RestoreOutcome;
@@ -4270,12 +4325,16 @@ impl Files {
                 let ledger = backend.ledger.store();
                 let mut storage = entry.native.lock().map_err(|_| AuthorityError::Halted)?;
                 entry.admit()?;
+                entry.binding.cell.native_entered(NativeCall::RunConstruct);
                 #[cfg(test)]
                 self.shared.fire("session.entered.run_construct");
-                *storage = Some(std::mem::ManuallyDrop::new(
-                    NativeRun::create_for_project_observing(ledger, project, scopes, stop)
-                        .map_err(run_error)?,
-                ));
+                let constructed =
+                    NativeRun::create_for_project_observing(ledger, project, scopes, stop);
+                entry
+                    .binding
+                    .cell
+                    .native_returned(NativeCall::RunConstruct, constructed.is_err());
+                *storage = Some(std::mem::ManuallyDrop::new(constructed.map_err(run_error)?));
                 drop(storage);
                 CodingRun::Host(entry)
             }
