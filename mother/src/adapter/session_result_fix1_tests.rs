@@ -67,7 +67,7 @@ impl Lane for HeldResearch {
 #[test]
 fn fix1_terminal_record_is_not_a_readable_prefix() {
     let Ok(case) = std::env::var(CASE) else {
-        for case in ["prefix", "readable-unsynced", "control"] {
+        for case in ["prefix", "readable-unsynced", "control", "later-failure"] {
             let output = child(case);
             assert!(
                 output.status.success(),
@@ -136,7 +136,7 @@ fn fix1_terminal_record_is_not_a_readable_prefix() {
         match case.as_str() {
             "prefix" => 1,
             "readable-unsynced" => 2,
-            "control" => 0,
+            "control" | "later-failure" => 0,
             _ => panic!("unknown case"),
         },
         Ordering::SeqCst,
@@ -144,6 +144,16 @@ fn fix1_terminal_record_is_not_a_readable_prefix() {
     m.cell_for_test().engage_emergency();
     release_tx.send(()).unwrap();
     assert!(worker.join().unwrap().is_err());
+    if case == "later-failure" {
+        mode.store(1, Ordering::SeqCst);
+        assert!(m
+            .coordinator
+            .inner
+            .lock()
+            .unwrap()
+            .write(crate::journal::SESSION, Event::SessionClosed)
+            .is_err());
+    }
     let facts = m.terminal_facts(id).unwrap();
     assert_eq!(facts.state, Some(MissionState::Stopped));
     assert_eq!(
@@ -151,7 +161,7 @@ fn fix1_terminal_record_is_not_a_readable_prefix() {
         "stop",
         "exact emergency terminal transition is not an earlier Start"
     );
-    if case == "control" {
+    if matches!(case.as_str(), "control" | "later-failure") {
         assert!(!facts.recording_unknown);
         let seq = facts
             .recorded_sequence

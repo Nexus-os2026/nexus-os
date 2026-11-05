@@ -6,7 +6,7 @@
   ],
   "baseline": {
     "F04": "wall and monotonic expiry after final Mother budget check each starts a real lane: RED; no-interference control GREEN. Broker final-hold oracle separately fails unavailable original-deadline API; not counted as behavioral reproduction.",
-    "F09": "entered lane plus append and poison failure: readable Start incorrectly returned as terminal first intent; readable failed terminal append incorrectly marked recording known. Both RED; healthy terminal control GREEN."
+    "F09": "entered lane plus append and poison failure: readable Start incorrectly returned as terminal first intent; readable failed terminal append incorrectly marked recording known. Both RED; healthy terminal control GREEN. Additive later-session-end failure control preserves earlier successful terminal receipt: GREEN."
   },
   "fixture_limits": [
     "Readable-unsynced JournalStore fixture durably appends underlying bytes then returns Injected to model a readable append whose caller received a durability failure; it does not force a physical filesystem sync syscall failure.",
@@ -40,6 +40,10 @@
     {
       "path": "fix1-F09/red-control.log",
       "sha256": "26fc6b86aad52892b36102d2cdffb704b2d5e9c0c35ee3186d5831366e8d1e4c"
+    },
+    {
+      "path": "fix1-F09/baseline-later-failure.log",
+      "sha256": "9f78deb3a30dea35c3e37de9f3ba5999d98cafe893f47484f3e9e35beb7d7ac6"
     }
   ]
 }
