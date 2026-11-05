@@ -16,6 +16,9 @@
 #[path = "hm_m3_guards/source.rs"]
 mod source;
 
+#[path = "hm_m3_guards/predicate_controls_tests.rs"]
+mod predicate_controls_tests;
+
 use nexus_kernel::coding_run::{LocalOllama, ModelError};
 use nexus_kernel::emergency_stop::StopAuthority;
 use nexus_kernel::inference::{
@@ -346,15 +349,221 @@ fn model_transport_impl(tokens: &[&str], mut at: usize) -> bool {
     }
 }
 
+/// Inside a macro definition, a caller-controlled trait position may introduce
+/// another transport without spelling its name in the implementation header.
+/// Skip impl generics, then inspect only the trait position before `for`.
+fn macro_transport_impl(tokens: &[&str], mut at: usize) -> bool {
+    if tokens.get(at) == Some(&"<") {
+        let Some(end) = route_group_end(tokens, at) else {
+            return false;
+        };
+        at = end;
+    }
+    let trait_start = at;
+    let mut metavariable = false;
+    while let Some(&token) = tokens.get(at) {
+        match token {
+            "for" => return metavariable || model_transport_impl(tokens, trait_start),
+            "{" | ";" | "where" => return false,
+            "<" | "(" | "[" => {
+                let Some(end) = route_group_end(tokens, at) else {
+                    return false;
+                };
+                metavariable |= tokens[at..end].contains(&"$");
+                at = end;
+            }
+            _ => {
+                metavariable |= token == "$";
+                at += 1;
+            }
+        }
+    }
+    false
+}
+
+fn route_macro_findings(file: &ProdFile, tokens: &[&str]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (at, &token) in tokens.iter().enumerate() {
+        if token == "macro_rules" && tokens.get(at + 1) == Some(&"!") {
+            let open = at + 3; // macro_rules ! NAME DELIMITER
+            if let Some(end) = route_group_end(tokens, open) {
+                for body_at in open + 1..end - 1 {
+                    if tokens[body_at] == "impl" && macro_transport_impl(tokens, body_at + 1) {
+                        out.push(format!(
+                            "{}: macro_rules trait implementation can name ModelTransport",
+                            file.rel
+                        ));
+                    }
+                }
+            } else {
+                out.push(format!("{}: unclassified macro_rules body", file.rel));
+            }
+        }
+        if token != "!" || at == 0 || tokens[at - 1] == "macro_rules" {
+            continue;
+        }
+        let name = tokens[at - 1];
+        let identifier = name
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_alphabetic() || ch == '_');
+        // A keyword followed by unary !(...) is not an invocation. Raw macro
+        // names remain identifiers after route_tokens normalizes their r#.
+        let offset = name.as_ptr() as usize - file.code.as_ptr() as usize;
+        let raw = file.code[..offset].ends_with("r#");
+        if !identifier || (!raw && matches!(name, "if" | "while" | "return" | "break" | "match")) {
+            continue;
+        }
+        if route_group_end(tokens, at + 1)
+            .is_some_and(|end| tokens[at + 2..end - 1].contains(&"ModelTransport"))
+        {
+            out.push(format!(
+                "{}: macro invocation names ModelTransport",
+                file.rel
+            ));
+        }
+    }
+    out
+}
+
+/// Resolve the named import root, including kernel-local self/super paths.
+/// A module merely named inference beneath some other root is not the kernel
+/// inference module. Globs inside the inference authority stay permitted.
+fn route_inference_import<'a>(rel: &'a str, scope: &[&'a str], path: &[&'a str]) -> bool {
+    if path.starts_with(&["nexus_kernel", "inference"]) {
+        return true;
+    }
+    let Some(local) = rel.strip_prefix("kernel/src/") else {
+        return false;
+    };
+    if path.starts_with(&["crate", "inference"]) {
+        return true;
+    }
+    let mut module: Vec<&str> = local.split('/').collect();
+    let file = module.pop().unwrap_or("");
+    if !matches!(file, "lib.rs" | "main.rs" | "mod.rs") {
+        module.push(file.strip_suffix(".rs").unwrap_or(file));
+    }
+    module.extend_from_slice(scope);
+    let mut at = 0;
+    if path.first() == Some(&"self") {
+        at = 1;
+    } else if path.first() == Some(&"super") {
+        while path.get(at) == Some(&"super") {
+            module.pop();
+            at += 1;
+        }
+    } else {
+        return path.first() == Some(&"inference");
+    }
+    module.extend_from_slice(&path[at..]);
+    module.first() == Some(&"inference")
+}
+
+/// Read one use tree, preserving each group's inherited prefix. This catches
+/// grouped forms such as nexus_kernel::{inference::{self, ollama::{*}}, Other}.
+fn route_use_tree<'a>(
+    tokens: &[&'a str],
+    at: &mut usize,
+    prefix: &[&'a str],
+    rel: &'a str,
+    scope: &[&'a str],
+) -> bool {
+    let mut path = prefix.to_vec();
+    let mut found = false;
+    if tokens.get(*at) == Some(&"::") {
+        path.clear();
+        *at += 1;
+    }
+    while let Some(&token) = tokens.get(*at) {
+        match token {
+            "*" => {
+                *at += 1;
+                return route_inference_import(rel, scope, &path);
+            }
+            "{" => {
+                *at += 1;
+                while tokens.get(*at).is_some_and(|&token| token != "}") {
+                    let before = *at;
+                    found |= route_use_tree(tokens, at, &path, rel, scope);
+                    if tokens.get(*at) == Some(&",") {
+                        *at += 1;
+                    } else if *at == before {
+                        // Unknown syntax cannot trap the scanner in a loop.
+                        *at += 1;
+                    }
+                }
+                if tokens.get(*at) == Some(&"}") {
+                    *at += 1;
+                }
+                return found;
+            }
+            "as" => {
+                *at += 2;
+                return found;
+            }
+            "," | "}" | ";" => return found,
+            "::" => *at += 1,
+            _ => {
+                path.push(token);
+                *at += 1;
+            }
+        }
+    }
+    found
+}
+
+fn route_inference_glob_findings(file: &ProdFile, tokens: &[&str]) -> Vec<String> {
+    if file.rel.starts_with("kernel/src/inference/") {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut modules = Vec::new();
+    for (at, &token) in tokens.iter().enumerate() {
+        match token {
+            "{" => {
+                depth += 1;
+                if at >= 2 && tokens[at - 2] == "mod" {
+                    modules.push((tokens[at - 1], depth));
+                }
+            }
+            "}" => {
+                if modules.last().is_some_and(|&(_, open)| open == depth) {
+                    modules.pop();
+                }
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+        if token != "use" {
+            continue;
+        }
+        let scope: Vec<_> = modules.iter().map(|&(name, _)| name).collect();
+        if route_use_tree(tokens, &mut (at + 1), &[], &file.rel, &scope) {
+            out.push(format!(
+                "{}: inference glob import outside kernel inference",
+                file.rel
+            ));
+        }
+    }
+    out
+}
+
 /// E-O65 (stricter oracle amendment): every impl header naming a trait path
 /// ending in ModelTransport counts, including qualified/raw/generic spellings.
 /// Exactly one implementation, in ollama.rs, is allowed. Trait renaming is
 /// forbidden; every identifier occurrence also needs an exact file/count entry.
+/// R-3 additionally rejects caller-supplied macro trait positions, named
+/// ModelTransport macro trait paths/arguments, and inference globs outside its
+/// module. Concrete macro trait paths with metavariables only in Self stay green.
 fn model_transport_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
     let mut impls = Vec::new();
     for file in files {
         let tokens = route_tokens(&file.code);
+        out.extend(route_macro_findings(file, &tokens));
+        out.extend(route_inference_glob_findings(file, &tokens));
         let count = tokens.iter().filter(|&&t| t == "ModelTransport").count();
         let expected = MODEL_TRANSPORT_ALLOWLIST
             .iter()
@@ -392,11 +601,10 @@ fn model_transport_findings(files: &[ProdFile]) -> Vec<String> {
 /// conversation_route_open in LocalOllama::bind. Also flags the listed legacy
 /// route tokens and API paths.
 /// Per Ruling R-2, these source-text checks are regression tripwires for ordinary,
-/// reviewed code. Adversarially constructed code (macro-generated items, cfg
-/// tricks, unusual literal prefixes, include!, build scripts) is out of scope;
-/// independent PR review, Mother's sealed effect port and the broker's runtime
-/// authority counter that code. Known pre-existing scanner gaps are tracked for
-/// a separate hardening PR with red/green controls.
+/// reviewed code. The reviewed macro, literal and cfg gaps have explicit
+/// red/green controls; this is not an adversarial-completeness claim. Independent
+/// PR review, Mother's sealed effect port and the broker's runtime authority
+/// remain required, including for include!, build scripts and constructed code.
 fn route_guard_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = model_transport_findings(files);
     for f in files {
@@ -520,7 +728,7 @@ fn predicate_literal_counts(file: &ProdFile) -> [usize; 3] {
 /// including raw identifiers, macro arguments/bodies, calls and imports.
 /// Fix round 2 is stricter: retain that fail-closed identifier rule AND reject
 /// exact string-literal contents "cloud", "remote_host" and "remote_model"
-/// outside kernel/src/inference/ (raw and byte strings included; comments and
+/// outside kernel/src/inference/ (raw, byte and C strings included; comments and
 /// test code excluded), except the exact file/literal/count allowlist above.
 /// `git grep` plus the production inventory verified the sole exemption:
 /// tts.rs's `"openai" | "cloud"`; identifier exemptions remain EMPTY.
@@ -529,11 +737,10 @@ fn predicate_literal_counts(file: &ProdFile) -> [usize; 3] {
 /// are explicitly out of scope. Per Ruling R-2, the identifier and exact-literal
 /// rules above are regression tripwires for ordinary, reviewed code, as are HM
 /// model-call classification, transport provider classification and E-O65.
-/// Adversarially constructed code (macro-generated items, cfg tricks, unusual
-/// literal prefixes, include!, build scripts) is out of scope; independent PR
-/// review, Mother's sealed effect port and the broker's runtime authority counter
-/// that code. Known pre-existing scanner gaps are tracked for a separate hardening
-/// PR with red/green controls.
+/// Reviewed macro, literal and cfg gaps have explicit red/green controls;
+/// this is not an adversarial-completeness claim. Independent PR review,
+/// Mother's sealed effect port and the broker's runtime authority remain
+/// required, including for include!, build scripts and constructed code.
 fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
     for file in files {
@@ -728,6 +935,242 @@ impl crate::inference::ModelTransport for Alternate {
     assert!(found[0].contains("ModelTransport implementations:"));
 }
 
+/// D1 stricter oracle amendment (R-3): old rule: "count named ModelTransport
+/// implementations and exact identifier sites". New rule: "also reject macro
+/// trait positions containing metavariables or ending in ModelTransport, macro
+/// invocations naming ModelTransport, and inference globs outside inference".
+/// Concrete macro trait paths without a metavariable remain permitted.
+/// The same test-item filtering used by the workspace scan, for fixture text.
+fn production_route_plant(rel: &str, src: &str) -> ProdFile {
+    let mut file = planted(rel, src);
+    let (ranges, _) = source::cfg_test_items(&file.code, &file.text);
+    let mut code = file.code.into_bytes();
+    let mut text = file.text.into_bytes();
+    for (start, end) in ranges {
+        for at in start..end {
+            if code[at] != b'\n' {
+                code[at] = b' ';
+                text[at] = b' ';
+            }
+        }
+    }
+    file.code = String::from_utf8(code).unwrap();
+    file.text = String::from_utf8(text).unwrap();
+    file
+}
+
+#[test]
+fn e_o65_macro_transport_reviewer_bypass_is_red_at_the_exact_identifier_count() {
+    let real = include_str!("../src/inference/ollama.rs");
+    let approved = production_route_plant("kernel/src/inference/ollama.rs", real);
+    assert!(route_guard_findings(&[approved]).is_empty());
+    let start = real.find("use super::{").unwrap();
+    let end = start + real[start..].find("};").unwrap() + 2;
+    assert!(real[start..end].contains("ModelTransport"));
+    // Reviewer's exact-count bypass: glob import, parameterized trait impl,
+    // and a qualified trait argument leave two ModelTransport identifiers.
+    let bypass = format!(
+        "{}use super::*;{}\n{}",
+        &real[..start],
+        &real[end..],
+        r#"
+struct Alternate {
+    client: reqwest::blocking::Client,
+    endpoint: String,
+    identity: ModelIdentity,
+}
+macro_rules! alternate_transport {
+    ($transport:path) => {
+        impl $transport for Alternate {
+            fn identity(&self) -> &ModelIdentity { &self.identity }
+            fn call(&self, _: &ModelRequest, _: &CallContext<'_>) -> Result<ModelReply, ModelError> {
+                let _ = self.client.post(&self.endpoint).send();
+                Err(ModelError::ConfigMismatch)
+            }
+        }
+    };
+}
+alternate_transport!(super::ModelTransport);
+"#
+    );
+    let file = production_route_plant("kernel/src/inference/ollama.rs", &bypass);
+    assert_eq!(
+        route_tokens(&file.code)
+            .iter()
+            .filter(|&&token| token == "ModelTransport")
+            .count(),
+        2
+    );
+    let findings = route_guard_findings(&[file]);
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("macro_rules trait implementation")),
+        "macro body must be rejected at the approved count: {findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("macro invocation names ModelTransport")),
+        "macro argument must be rejected independently: {findings:?}"
+    );
+}
+
+#[test]
+fn e_o65_macro_and_inference_glob_rules_have_red_and_green_controls() {
+    let approved = || {
+        planted(
+            "kernel/src/inference/ollama.rs",
+            "use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+        )
+    };
+    for body in [
+        "impl $transport for Alternate {}",
+        "impl<T> $transport for Wrapper<T> {}",
+        "impl $($p)::+ for Alternate {}",
+        "impl $module::Trait for $ty {}",
+        "impl crate::$trait_name for $ty {}",
+        "impl<T> crate::Trait<$transport> for Wrapper<T> {}",
+        "impl crate::ModelTransport for Alternate {}",
+        "impl ::nexus_kernel::inference::r#ModelTransport for Alternate {}",
+    ] {
+        let src = format!("macro_rules! make_impl {{ ($transport:path) => {{ {body} }}; }}");
+        let findings =
+            model_transport_findings(&[approved(), planted("kernel/src/ordinary.rs", &src)]);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("macro_rules trait implementation")),
+            "must fail closed on {src}: {findings:?}"
+        );
+    }
+    for src in [
+        "inspect!(super::ModelTransport);",
+        "crate::inspect!{r#ModelTransport}",
+        "inspect!([ModelTransport]);",
+    ] {
+        // Balance the inventory in its existing owner so this rule is tested
+        // independently of the identifier-count rule.
+        let src = format!("impl ModelTransport for VerifiedOllama {{}} {src}");
+        let findings = model_transport_findings(&[planted("kernel/src/inference/ollama.rs", &src)]);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("macro invocation names ModelTransport")),
+            "must reject {src}: {findings:?}"
+        );
+    }
+    for src in [
+        "use nexus_kernel::inference::*;",
+        "pub use crate::inference::ollama::*;",
+        "use nexus_kernel::{inference::*, coding_run::LocalOllama};",
+        "use crate::inference::{self, ollama::{*}};",
+        "use ::nexus_kernel::r#inference::*;",
+        "use super::inference::*;",
+    ] {
+        let findings =
+            model_transport_findings(&[approved(), planted("kernel/src/ordinary.rs", src)]);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("inference glob import")),
+            "must reject {src}: {findings:?}"
+        );
+    }
+    for src in [
+        "macro_rules! ordinary { ($name:ident) => { fn $name() {} }; } ordinary!(hello);",
+        "macro_rules! inherent { ($ty:ty) => { impl $ty { fn hello() {} } }; }",
+        "macro_rules! concrete { ($name:ident) => { impl fmt::Debug for $name {} impl Serialize for $name {} impl<'de> Deserialize<'de> for $name {} }; }",
+        "macro_rules! concrete_generic { ($name:ident) => { impl<T> crate::Trait<T> for $name {} }; }",
+        "macro_rules! body { () => { const S: &str = \"impl Trait for X {} ModelTransport\"; }; }",
+        "use crate::ordinary::*; use nexus_kernel::inference::VerifiedOllama;",
+        "use crate::ordinary::inference::*; use other_crate::inference::*;",
+        "#[cfg(test)] macro_rules! test_transport { ($transport:path) => { impl $transport for X {} }; }",
+        "#[cfg(all(test, unix))] mod test_only { use nexus_kernel::inference::*; inspect!(ModelTransport); }",
+    ] {
+        let findings = model_transport_findings(&[
+            approved(),
+            production_route_plant("mother/src/ordinary.rs", src),
+        ]);
+        assert!(findings.is_empty(), "ordinary or genuinely test-only code: {src}: {findings:?}");
+    }
+    // Real production concrete-trait macro accepted by R-3, without exemptions.
+    let real = include_str!("../../crates/nexus-typed-decision/src/slot.rs");
+    let start = real.find("macro_rules! redacted_debug").unwrap();
+    let open = start + real[start..].find('{').unwrap();
+    let end = source::close_of(real, open);
+    let findings = model_transport_findings(&[
+        approved(),
+        planted("crates/nexus-typed-decision/src/slot.rs", &real[start..end]),
+    ]);
+    assert!(
+        findings.is_empty(),
+        "real concrete Debug macro: {findings:?}"
+    );
+    // A glob within the inference authority does not import identifiers into
+    // another production module and is allowed by the new glob rule.
+    let findings = model_transport_findings(&[planted(
+        "kernel/src/inference/ollama.rs",
+        "use super::*; use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+    )]);
+    assert!(findings.is_empty(), "{findings:?}");
+}
+
+#[test]
+fn e_o65_inference_globs_respect_inline_module_scope() {
+    let approved = || {
+        planted(
+            "kernel/src/inference/ollama.rs",
+            "use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+        )
+    };
+    // The rule is unchanged: "inference globs outside inference are findings".
+    // Resolve inline module scopes so ordinary modules named inference remain
+    // green, while relative imports of the kernel authority remain red.
+    for (rel, src) in [
+        (
+            "kernel/src/ordinary.rs",
+            "mod inference { pub struct Ordinary; } mod child { use super::inference::*; }",
+        ),
+        (
+            "kernel/src/lib.rs",
+            "mod ordinary { mod inference {} mod child { use super::inference::*; } }",
+        ),
+        (
+            "kernel/src/ordinary.rs",
+            "mod wrapper { mod inference {} use self::inference::*; }",
+        ),
+    ] {
+        let found = model_transport_findings(&[approved(), planted(rel, src)]);
+        assert!(
+            found.is_empty(),
+            "ordinary inline module: {rel}: {src}: {found:?}"
+        );
+    }
+    for (rel, src) in [
+        (
+            "kernel/src/lib.rs",
+            "mod child { use super::inference::*; }",
+        ),
+        (
+            "kernel/src/ordinary.rs",
+            "mod child { use super::super::inference::*; }",
+        ),
+        (
+            "kernel/src/ordinary.rs",
+            "mod child { use crate::inference::*; }",
+        ),
+    ] {
+        let found = model_transport_findings(&[approved(), planted(rel, src)]);
+        assert!(
+            found
+                .iter()
+                .any(|finding| finding.contains("inference glob import")),
+            "kernel inference import: {rel}: {src}: {found:?}"
+        );
+    }
+}
+
 #[test]
 fn e_o65_model_transport_allowlist_matches_masked_production_counts() {
     let files = production_files();
@@ -906,6 +1349,29 @@ fn e_o15_local_model_predicates_are_defined_only_in_kernel_inference() {
     let files = production_files();
     let findings = predicate_findings(&files);
     assert!(findings.is_empty(), "{}", findings.join("\n"));
+}
+
+#[test]
+fn e_o15_whole_file_reviewer_probe_keeps_two_findings() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("lib.rs"), "#[path = \"config.rs\"]\nmod live;\n\n#[path = \"fixture.rs\"]\n#[cfg(all(unix, test))]\nmod config;\n").unwrap();
+    std::fs::write(
+        root.path().join("config.rs"),
+        "pub fn name_is_cloud() -> bool { false }\npub const P: &str = \"cloud\";\n",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("fixture.rs"), "fn genuine_test() {}\n").unwrap();
+    let files = source::production_files_in(root.path());
+    let findings = predicate_findings(&files);
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert!(findings
+        .iter()
+        .any(|f| f.contains("defines its own name_is_cloud")));
+    assert!(findings
+        .iter()
+        .any(|f| f.contains("predicate literal \"cloud\"")));
+    // R-4: fe5328af scanned this newly recognized test-only file.
+    assert!(files.iter().any(|f| f.rel == "fixture.rs"));
 }
 
 /// Mother Nexus cleanup (2026-11-05): two absence guards keep the retired
