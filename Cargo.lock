@@ -2338,24 +2338,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nexus-memory"
-version = "10.6.0"
-dependencies = [
- "chrono",
- "dashmap",
- "hex",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "nexus-mother"
 version = "0.1.0"
 dependencies = [
