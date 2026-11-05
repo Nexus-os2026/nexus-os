@@ -372,3 +372,28 @@ fn emergency_pending_drop_retains_real_staging_and_refuses_clean_close() {
         "unclean final-owner destruction may not remove staging"
     );
 }
+
+#[test]
+fn every_registered_work_or_restoration_sink_has_concrete_verification() {
+    use std::collections::BTreeSet;
+    let required: BTreeSet<_> = include_str!("session/sinks.tsv")
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split('\t').collect();
+            matches!(fields[1], "W" | "R").then_some((fields[0], fields[1], fields[2]))
+        })
+        .collect();
+    let mut covered = BTreeSet::new();
+    for line in include_str!("session/sink-verification.tsv")
+        .lines()
+        .skip(1)
+    {
+        let fields: Vec<_> = line.split('\t').collect();
+        assert_eq!(fields.len(), 6);
+        assert!(fields.iter().all(|field| !field.is_empty()));
+        assert!(covered.insert((fields[0], fields[1], fields[2])));
+    }
+    assert_eq!(covered, required);
+    assert_eq!(covered.len(), 75);
+}
