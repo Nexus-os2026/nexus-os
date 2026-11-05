@@ -19,6 +19,7 @@
 static atomic_int held;
 static atomic_int recording;
 static atomic_int journal_end;
+static atomic_int mother_terminal;
 
 static int mode(const char *wanted) {
     const char *value = getenv("M2DD_FAULT");
@@ -67,6 +68,13 @@ int fsync(int fd) {
         if (mode("journal-dir-fail") && parent && !strcmp(parent, path)) {
             errno = EIO; return -1;
         }
+        if ((mode("close-parent-fail") || mode("close-parent-hold")) &&
+            strstr(path, "/files/coding-runs") &&
+            strlen(path) >= strlen("/coding-runs") &&
+            !strcmp(path + strlen(path) - strlen("/coding-runs"), "/coding-runs")) {
+            if (mode("close-parent-hold")) boundary("close-parent-hold", path, NULL, 0);
+            errno = EIO; return -1;
+        }
         const char *workspace = getenv("M2DD_WORKSPACE");
         if (mode("published-dir-sync") && workspace && !strcmp(path, workspace)) {
             boundary("published-dir-sync", path, NULL, 0);
@@ -108,6 +116,14 @@ int renameat2(int oldfd, const char *old, int newfd, const char *name, unsigned 
 ssize_t pwrite64(int fd, const void *data, size_t size, off64_t offset) {
     ssize_t (*real)(int,const void *,size_t,off64_t) = dlsym(RTLD_NEXT, "pwrite64");
     char path[4096];
+    /* A snapshot's preparation is the first operation after the durable
+     * run.granted record. Hold before writing it: no snapshot has started. */
+    if (mode("before-snapshot") && path_of(fd, path, sizeof(path)) &&
+        strstr(path, "/files/ledger.db") && memmem(data, size, "snapshot", 8))
+        boundary("before-snapshot", path, NULL, 0);
+    if (mode("allocation-prepared-only") && path_of(fd, path, sizeof(path)) &&
+        strstr(path, "/files/ledger.db") && memmem(data, size, "op.outcome", 10))
+        boundary("allocation-prepared-only", path, NULL, 0);
     if ((mode("primary-close-fail") || mode("primary-close-hold")) && atomic_load(&journal_end) &&
         path_of(fd, path, sizeof(path)) && strstr(path, "/p3-evidence/evidence.sqlite3")) {
         if (mode("primary-close-hold")) boundary("primary-close-hold", path, NULL, 0);
@@ -133,6 +149,10 @@ ssize_t write(int fd, const void *data, size_t size) {
     if (fd == STDOUT_FILENO && mode("final-write-fail") &&
         memmem(data, size, "SESSION CLOSED recorded", 23)) { errno = EIO; return -1; }
     char path[4096];
+    if (mode("mother-terminal-after-sync") && path_of(fd, path, sizeof(path)) &&
+        strstr(path, "/mother-journal.jsonl") &&
+        memmem(data, size, "\"trigger\":\"action_denied\"", 25))
+        atomic_store(&mother_terminal, 1);
     if ((mode("mother-close-before-sync") || mode("mother-close-after-sync") ||
          mode("mother-close-torn") || mode("primary-close-fail") || mode("primary-close-hold")) && path_of(fd, path, sizeof(path)) &&
         strstr(path, "/mother-journal.jsonl") &&
@@ -150,6 +170,12 @@ ssize_t write(int fd, const void *data, size_t size) {
 int fdatasync(int fd) {
     int (*real)(int) = dlsym(RTLD_NEXT, "fdatasync");
     char path[4096];
+    if (mode("mother-terminal-after-sync") && atomic_load(&mother_terminal) &&
+        path_of(fd, path, sizeof(path)) && strstr(path, "/mother-journal.jsonl")) {
+        int result = real(fd);
+        if (!result) boundary("mother-terminal-after-sync", path, NULL, 0);
+        return result;
+    }
     if (atomic_load(&journal_end) && path_of(fd, path, sizeof(path)) &&
         strstr(path, "/mother-journal.jsonl")) {
         if (mode("mother-close-before-sync")) boundary("mother-close-before-sync", path, NULL, 0);

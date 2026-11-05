@@ -214,7 +214,7 @@ fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitu
         ),
         (
             "mother/host/tests/support/faults.c",
-            "6b371e57ce313bb824a1466165b8ff6a8a710b600f59b47e0f5032ac1e30ffd3",
+            "2ea491e3b869cfa2698d9b3562ec67c8b57af23131a84a7cf2dce19be5303d04",
         ),
     ] {
         let output = std::process::Command::new("python3")
