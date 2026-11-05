@@ -14,6 +14,36 @@ mod desktop_tripwire;
 use source::{close_of, enclosing_fn, mask, production_files, ProdFile};
 use std::collections::BTreeMap;
 
+/// Mother Nexus cleanup (2026-11-05): the retired separate memory crate
+/// must not return alongside the kept kernel/persistence HM foundation.
+#[test]
+fn hm_m3_retired_nexus_memory_directory_is_absent() {
+    let path = source::workspace_root().join("crates/nexus-memory");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired crates/nexus-memory path must remain absent"
+    );
+}
+
+#[test]
+fn hm_m3_retired_nexus_memory_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            std::path::Path::new(member.as_str().expect("workspace member path"))
+                != std::path::Path::new("crates/nexus-memory")
+        }),
+        "the retired crates/nexus-memory must not be a workspace member"
+    );
+}
+
 // ── A-S4: every production model call is classified (§12.1, §12.2, 04) ────
 
 /// The model-call shapes of A-S4: the call names and the known HTTP model
@@ -1022,7 +1052,10 @@ fn hm_m3_n5_i4_no_checkpoint_memory_is_written_back() {
 /// `04-DISPATCH-INVENTORY.md` §K): `(file, fn or "*", class, reference)`.
 /// A file entry with `"*"` covers every site of that file (the contract
 /// names the file or its directory).
-const CLASSIFIED: [(&str, &str, &str, &str); 13] = [
+/// Mother Nexus cleanup (2026-11-05): the `crates/nexus-memory/src/` row
+/// named the deleted memory crate. Twelve rows remain; every remaining
+/// production model call must still be classified.
+const CLASSIFIED: [(&str, &str, &str, &str); 12] = [
     // Mother Nexus cleanup (2026-10-31): the desktop (§12.2) rows, the
     // dreams, simulation, conductor and coder rows, the removed web-builder
     // modules and the swarm, capability-measurement and self-improve rows
@@ -1072,8 +1105,6 @@ const CLASSIFIED: [(&str, &str, &str, &str); 13] = [
         "04 K12",
     ),
     ("agents/web-builder/src/content_gen.rs", "*", "XS", "04 K12"),
-    // Crates (04 §K; §12.2 "Outside the desktop crate").
-    ("crates/nexus-memory/src/", "*", "latent", "04 K16"),
 ];
 
 // ── A-S4 errata E-M3-1 (AMENDMENT 3 A3.1): the sites §12.2 and 04 do not name
@@ -1397,10 +1428,8 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         ),
         Some("AR")
     );
-    assert_eq!(
-        class_of("crates/nexus-memory/src/embedding.rs", "embed_batch"),
-        Some("latent")
-    );
+    // Mother Nexus cleanup (2026-11-05): the assertion for the deleted
+    // `crates/nexus-memory/src/embedding.rs` `embed_batch` site was removed.
     assert_eq!(
         class_of(
             "connectors/llm/src/providers/ollama.rs",

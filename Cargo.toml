@@ -9,7 +9,6 @@ members = [
   "crates/nexus-crypto",
   "crates/nexus-governed-control",
   "crates/nexus-verifier-sandbox",
-  "crates/nexus-memory",
   "crates/nexus-typed-decision",
   "mother",
   "mother/host",
