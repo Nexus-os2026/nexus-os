@@ -2,11 +2,12 @@
 //!
 //! - Every `.rs` file of the workspace (build output, dependencies, VCS
 //!   metadata and `docs/` excluded).
-//! - Test code is excluded: test files (`tests/`, `*_tests.rs`,
-//!   `*/tests.rs`, `benches/`, `examples/`, `build.rs`), every module file
-//!   reached exclusively through declarations proved to require `test`, and
-//!   every such item inside a production file. Shared, uncertain or unresolved
-//!   file reachability stays production, including conditional path changes.
+//! - Whole-file exclusions are the INTERSECTION of the fe5328af exclusion
+//!   predicate and the new proof of exclusively test-only reachability. Every
+//!   independent Cargo production root stays scanned. Coverage can only grow
+//!   from fe5328af; shared, uncertain or unresolved reachability stays scanned.
+//! - Inside a scanned file, only items proved to require `test` are blanked.
+//!   Production-enabled cfg predicates never hide their items.
 //! - Two views of a production file: `code` (comments and the contents of
 //!   string and char literals blanked) and `text` (comments blanked,
 //!   literals kept). Both keep every byte offset and line.
@@ -829,6 +830,87 @@ fn default_module_dir(file: &Path) -> PathBuf {
     }
 }
 
+/// Independent entry points cannot inherit test-only status from module
+/// aliases. Keep each root's actual load directory as well as physical module
+/// contexts. Unreadable/malformed Cargo metadata denies ALL file exclusions.
+fn cargo_production_roots(
+    root: &Path,
+    raw: &BTreeMap<PathBuf, String>,
+) -> Option<BTreeMap<PathBuf, BTreeSet<PathBuf>>> {
+    let known: BTreeSet<_> = raw.keys().map(|p| file_identity(p)).collect();
+    let mut roots: BTreeMap<PathBuf, BTreeSet<PathBuf>> = BTreeMap::new();
+    let mut manifests = BTreeSet::new();
+    for file in raw.keys() {
+        // Preserve the previous conservative rule for standalone source trees
+        // too; Cargo metadata may be absent in an isolated guard fixture.
+        let rel = file
+            .strip_prefix(root)
+            .ok()?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !is_test_path(&rel) && matches!(file.file_name()?.to_str(), Some("lib.rs" | "main.rs")) {
+            roots
+                .entry(file_identity(file))
+                .or_default()
+                .insert(file.parent()?.to_path_buf());
+        }
+        for dir in file.ancestors().skip(1).take_while(|p| p.starts_with(root)) {
+            let manifest = dir.join("Cargo.toml");
+            if manifest.try_exists().ok()? {
+                manifests.insert(manifest);
+            }
+        }
+    }
+    for manifest in manifests {
+        let data: toml::Value = toml::from_str(&std::fs::read_to_string(&manifest).ok()?).ok()?;
+        let Some(package) = data.get("package") else {
+            continue;
+        };
+        let package = package.as_table()?;
+        let dir = manifest.parent()?;
+        let mut paths = vec![dir.join("src/lib.rs"), dir.join("src/main.rs")];
+        // Keep conventional bin candidates conservatively even if autodiscovery
+        // is disabled: a named [[bin]] without a path can still select them.
+        for file in raw.keys() {
+            if let Ok(rel) = file.strip_prefix(dir.join("src/bin")) {
+                if rel.components().count() == 1
+                    || (rel.components().count() == 2
+                        && rel.file_name()?.to_str() == Some("main.rs"))
+                {
+                    paths.push(file.clone());
+                }
+            }
+        }
+        if let Some(lib) = data.get("lib") {
+            if let Some(path) = lib.as_table()?.get("path") {
+                paths.push(dir.join(path.as_str()?));
+            }
+        }
+        if let Some(bins) = data.get("bin") {
+            for bin in bins.as_array()? {
+                if let Some(path) = bin.as_table()?.get("path") {
+                    paths.push(dir.join(path.as_str()?));
+                }
+            }
+        }
+        // The old scanner never scanned conventional build.rs. Custom build
+        // paths it could scan are independent production roots too.
+        if let Some(toml::Value::String(path)) = package.get("build") {
+            paths.push(dir.join(path));
+        }
+        for path in paths {
+            let identity = file_identity(&path);
+            if known.contains(&identity) {
+                roots
+                    .entry(identity)
+                    .or_default()
+                    .insert(path.parent()?.to_path_buf());
+            }
+        }
+    }
+    Some(roots)
+}
+
 #[derive(Default)]
 struct ModuleReach {
     targets: BTreeSet<PathBuf>,
@@ -955,6 +1037,9 @@ fn exclusively_test_files(
     raw: &BTreeMap<PathBuf, String>,
     ranges: &BTreeMap<PathBuf, Ranges>,
 ) -> BTreeSet<PathBuf> {
+    let Some(production_roots) = cargo_production_roots(root, raw) else {
+        return BTreeSet::new();
+    };
     let known: BTreeSet<_> = raw.keys().map(|p| file_identity(p)).collect();
     let mut directories: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for file in raw.keys() {
@@ -962,6 +1047,12 @@ fn exclusively_test_files(
             .entry(file_identity(file))
             .or_default()
             .insert(default_module_dir(file));
+    }
+    for (identity, dirs) in &production_roots {
+        directories
+            .entry(identity.clone())
+            .or_default()
+            .extend(dirs.iter().cloned());
     }
     let mut incoming: BTreeMap<PathBuf, Vec<Incoming>>;
     let mut unresolved;
@@ -1026,14 +1117,9 @@ fn exclusively_test_files(
                     .expect("workspace source")
                     .to_string_lossy()
                     .replace('\\', "/");
-                // Crate roots have a production entry independent of module
-                // declarations. A test alias cannot revoke that entry.
-                if !is_test_path(&rel)
-                    && matches!(
-                        file.file_name().and_then(|n| n.to_str()),
-                        Some("lib.rs" | "main.rs")
-                    )
-                {
+                // ANY independent production root overrides test aliases,
+                // including explicit paths, auto bins and canonical symlinks.
+                if production_roots.contains_key(&identity) {
                     return None;
                 }
                 let proven = match incoming.get(&identity) {
@@ -1081,10 +1167,14 @@ pub fn production_files_in(root: &Path) -> Vec<ProdFile> {
         let (ranges, _) = cfg_test_items(&code, &text);
         cfg_ranges.insert(p.clone(), ranges);
     }
-    let test = exclusively_test_files(root, &raw, &cfg_ranges);
+    // R-4: old "new proof alone excludes" -> new "OLD predicate AND NEW
+    // proof". Never canonicalize the old predicate's path spelling: a legacy
+    // scanned alias must remain scanned even when another alias was excluded.
+    let legacy_test = fe5328af::test_files_in(root, &raw);
+    let proved_test = exclusively_test_files(root, &raw, &cfg_ranges);
     let mut out = Vec::new();
     for (p, t) in &raw {
-        if test.contains(&file_identity(p)) {
+        if legacy_test.contains(p) && proved_test.contains(&file_identity(p)) {
             continue;
         }
         let mut code = mask(t, false).into_bytes();

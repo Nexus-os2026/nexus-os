@@ -538,3 +538,52 @@ pub fn enclosing_fn(code: &str, at: usize) -> String {
         _ => name,
     }
 }
+
+/// R-4 bridge: the historical exclusion predicate over the SAME input snapshot
+/// as the new proof. The complete scanner above is the differential reference.
+/// Initializing from readable keys instead of walked paths is equivalent for
+/// output: an unreadable test file has no raw body from which to propagate.
+pub(super) fn test_files_in(root: &Path, raw: &BTreeMap<PathBuf, String>) -> BTreeSet<PathBuf> {
+    let relative = |p: &Path| {
+        p.strip_prefix(root)
+            .unwrap_or(p)
+            .to_string_lossy()
+            .replace('\\', "/")
+    };
+    let mut test: BTreeSet<PathBuf> = raw
+        .keys()
+        .filter(|p| is_test_path(&relative(p)))
+        .cloned()
+        .collect();
+    for (p, t) in raw {
+        let code = mask(t, false);
+        let text = mask(t, true);
+        let (_, modules) = cfg_test_items(&code, &text);
+        for (name, path) in modules {
+            if let Some(f) = module_file(p, &name, path.as_deref()) {
+                test.insert(f);
+            }
+        }
+    }
+    loop {
+        let mut more = Vec::new();
+        for p in &test {
+            if let Some(t) = raw.get(p) {
+                let code = mask(t, false);
+                let text = mask(t, true);
+                for (name, path) in module_declarations(&code, &text) {
+                    if let Some(f) = module_file(p, &name, path.as_deref()) {
+                        if !test.contains(&f) {
+                            more.push(f);
+                        }
+                    }
+                }
+            }
+        }
+        if more.is_empty() {
+            break;
+        }
+        test.extend(more);
+    }
+    test
+}
