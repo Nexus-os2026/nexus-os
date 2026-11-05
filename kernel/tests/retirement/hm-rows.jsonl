@@ -1,0 +1,23 @@
+{"kind":"prompt-read","retire":11,"path":"kernel/src/cognitive/loop_runtime.rs","site":"CognitiveRuntime::latest_control_json","route":"field(value_json)"}
+{"kind":"prompt-read","retire":11,"path":"kernel/src/cognitive/evolution.rs","site":"EvolutionTracker::get_evolution_metrics","route":"recall_relevant"}
+{"kind":"prompt-read","retire":11,"path":"kernel/src/cognitive/evolution.rs","site":"EvolutionTracker::get_evolution_metrics","route":"load_strategy_history"}
+{"kind":"prompt-read","retire":11,"path":"kernel/src/cognitive/evolution.rs","site":"EvolutionTracker::get_agent_strategies","route":"load_strategy_history"}
+{"kind":"prompt-read","retire":11,"path":"kernel/src/cognitive/evolution.rs","site":"EvolutionTracker::record_outcome","route":"load_top_strategies"}
+{"kind":"prompt-read","retire":11,"path":"kernel/src/cognitive/evolution.rs","site":"EvolutionTracker::discover_shareable_strategies","route":"load_strategy_history"}
+{"kind":"model-class","retire":11,"path":"kernel/src/cognitive/planner.rs","site":"*","route":"AR"}
+{"kind":"model-class","retire":11,"path":"kernel/src/cognitive/algorithms/world_model.rs","site":"*","route":"XS"}
+{"kind":"model-class","retire":13,"path":"kernel/src/computer_control.rs","site":"query_vision_model","route":"AR, latent"}
+{"kind":"closed-model","retire":12,"path":"kernel/src/actuators/image_gen.rs","site":"*","route":"AR CLOSED"}
+{"kind":"closed-model","retire":12,"path":"kernel/src/actuators/tts.rs","site":"*","route":"AR CLOSED"}
+{"kind":"separation","retire":11,"path":"kernel/src/cognitive/algorithms/world_model.rs"}
+{"kind":"unlabelled-write","retire":11,"path":"kernel/src/cognitive/memory_manager.rs","site":"AgentMemoryManager::store_episodic::save_memory"}
+{"kind":"unlabelled-write","retire":11,"path":"kernel/src/cognitive/memory_manager.rs","site":"AgentMemoryManager::store_procedural::save_memory"}
+{"kind":"unlabelled-write","retire":11,"path":"kernel/src/cognitive/memory_manager.rs","site":"AgentMemoryManager::store_semantic::save_memory"}
+{"kind":"state-db-open","retire":6,"path":"kernel/src/persistence.rs"}
+{"kind":"state-db-open","retire":11,"path":"kernel/src/cognitive/loop_runtime.rs"}
+{"kind":"state-db-open","retire":12,"path":"kernel/src/actuators/agent_lifecycle.rs"}
+{"kind":"identity-db","retire":255,"path":"kernel/src/identity_home.rs"}
+{"kind":"identity-db","retire":11,"path":"kernel/src/cognitive/loop_runtime.rs"}
+{"kind":"no-own-connection","retire":12,"path":"kernel/src/actuators/knowledge_graph.rs"}
+{"kind":"vision-transport","retire":13,"path":"kernel/src/computer_control.rs","site":"query_vision_model"}
+{"kind":"vision-transport","retire":13,"path":"kernel/src/computer_control.rs","site":"list_ollama_models"}

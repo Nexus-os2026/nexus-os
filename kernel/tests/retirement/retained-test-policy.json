@@ -1,0 +1,1257 @@
+{
+  "kernel/src/audit/mod.rs::batcher_disabled_means_no_blocks": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(test)]\"],\"head\":\"modtests{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnbatcher_disabled_means_no_blocks(){"
+  },
+  "kernel/src/audit/mod.rs::batcher_enabled_batches_events": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(test)]\"],\"head\":\"modtests{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnbatcher_enabled_batches_events(){"
+  },
+  "kernel/src/audit/mod.rs::batcher_flush_seals_partial_batch": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(test)]\"],\"head\":\"modtests{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnbatcher_flush_seals_partial_batch(){"
+  },
+  "kernel/src/audit/mod.rs::batcher_preserves_original_event_uuids": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(test)]\"],\"head\":\"modtests{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnbatcher_preserves_original_event_uuids(){"
+  },
+  "kernel/src/audit/mod.rs::test_audit_chain_integrity": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(test)]\"],\"head\":\"modtests{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fntest_audit_chain_integrity(){"
+  },
+  "kernel/src/audit/writer_tests.rs::shared_writer_preserves_interleaved_events_and_hash_chain": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnshared_writer_preserves_interleaved_events_and_hash_chain(){"
+  },
+  "kernel/src/audit/writer_tests.rs::shared_writer_returns_append_failure_synchronously": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnshared_writer_returns_append_failure_synchronously(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_ancestor_revocation_invalidates_only_its_subtree": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_ancestor_revocation_invalidates_only_its_subtree(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_ancestor_sibling_prefix_and_parent_traversal_widening_denied": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_ancestor_sibling_prefix_and_parent_traversal_widening_denied(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_concurrent_independent_grants_and_revocation": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_concurrent_independent_grants_and_revocation(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_cwd_independence": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_cwd_independence(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_expiry_is_inherited_and_fails_closed_at_deadline": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_expiry_is_inherited_and_fails_closed_at_deadline(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_file_root_denied": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_file_root_denied(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_invalid_child_roots_never_mutate_filesystem": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_invalid_child_roots_never_mutate_filesystem(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_lookup_never_recreates_or_recanonicalizes_a_root": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_lookup_never_recreates_or_recanonicalizes_a_root(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_missing_root_denied_without_mutation": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_missing_root_denied_without_mutation(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_permission_escalation_denied_and_all_subsets_succeed": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_permission_escalation_denied_and_all_subsets_succeed(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_poisoned_registry_fails_closed": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_poisoned_registry_fails_closed(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_registry_instances_do_not_share_authority": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_registry_instances_do_not_share_authority(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_relative_root_denied": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_relative_root_denied(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_revocation_denies_resolution_and_narrowing": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_revocation_denies_resolution_and_narrowing(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_root_issuance_rejects_fake_parent_provenance_and_empty_bindings": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_root_issuance_rejects_fake_parent_provenance_and_empty_bindings(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_symlinks_are_canonicalized_and_cannot_widen": {
+    "scopes": [],
+    "attributes": [
+      "#[cfg(unix)]",
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_symlinks_are_canonicalized_and_cannot_widen(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_unissued_handle_and_root_bearing_json_cannot_grant_authority": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_unissued_handle_and_root_bearing_json_cannot_grant_authority(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_valid_child_and_same_root_inheritance": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_valid_child_and_same_root_inheritance(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_valid_issue_is_canonical_bound_and_non_mutating": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_valid_issue_is_canonical_bound_and_non_mutating(){"
+  },
+  "kernel/src/workspace_authority/tests.rs::p0_002c1_wrong_owner_and_project_run_denied_for_all_operations": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnp0_002c1_wrong_owner_and_project_run_denied_for_all_operations(){"
+  },
+  "kernel/tests/acceptance_criteria_tests.rs::test_audit_chain_detects_tampering": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fntest_audit_chain_detects_tampering(){"
+  },
+  "kernel/tests/acceptance_criteria_tests.rs::test_audit_chain_integrity_passes": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fntest_audit_chain_integrity_passes(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_a2_a4_a_disabled_optional_wrapper_reaches_webkit6_only_with_all_features": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_a2_a4_a_disabled_optional_wrapper_reaches_webkit6_only_with_all_features(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_a_gtk_family_also_reached_outside_the_desktop_is_red": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_a_gtk_family_also_reached_outside_the_desktop_is_red(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_a_member_that_depends_on_the_desktop_is_red": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_a_member_that_depends_on_the_desktop_is_red(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_an_impostor_desktop_gets_no_exemption": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_an_impostor_desktop_gets_no_exemption(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_control_a_clean_graph_is_green": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_control_a_clean_graph_is_green(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_metadata_is_read_locked_offline_in_both_configurations": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_metadata_is_read_locked_offline_in_both_configurations(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_alias": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_alias(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_build_dependency": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_build_dependency(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_dev_dependency": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_dev_dependency(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_direct_dependency": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_direct_dependency(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_links_only": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_links_only(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_sys_crate": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_sys_crate(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_target_specific_table": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_target_specific_table(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_webkit6": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_webkit6(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_planted_wrapper_into_a_non_desktop_member": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_planted_wrapper_into_a_non_desktop_member(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_r_every_tripwire_site_calls_the_shared_helper": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_r_every_tripwire_site_calls_the_shared_helper(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_r_no_local_tripwire_survives": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_r_no_local_tripwire_survives(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_r_the_body_reader_sees_one_test_at_a_time": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_r_the_body_reader_sees_one_test_at_a_time(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_the_registered_desktop_may_bring_the_gtk_families": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_the_registered_desktop_may_bring_the_gtk_families(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_the_workspace_has_no_desktop": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_the_workspace_has_no_desktop(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_tree_an_unregistered_mother_desktop_fails": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_tree_an_unregistered_mother_desktop_fails(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_tree_app_fails": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_tree_app_fails(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_tree_control_a_clean_tree_is_green": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_tree_control_a_clean_tree_is_green(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_tree_src_tauri_anywhere_fails": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_tree_src_tauri_anywhere_fails(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g0_tree_the_registered_mother_desktop_is_green": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_tree_the_registered_mother_desktop_is_green(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g11_a_webview_behind_a_gtk_wrapper_under_the_desktop_fails": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng11_a_webview_behind_a_gtk_wrapper_under_the_desktop_fails(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g11_a_webview_link_fails_under_the_desktop": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng11_a_webview_link_fails_under_the_desktop(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g11_a_webview_package_anywhere_in_the_document_fails": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng11_a_webview_package_anywhere_in_the_document_fails(){"
+  },
+  "kernel/tests/desktop_tripwire_oracles.rs::g11_every_webview_family_fails_under_the_desktop": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng11_every_webview_family_fails_under_the_desktop(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_cleanup_role": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_cleanup_role(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_helper_role": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_helper_role(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s10_a_leader_that_exited_is_still_held_when_its_group_is_signalled": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s10_a_leader_that_exited_is_still_held_when_its_group_is_signalled(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s11_nothing_is_signalled_on_inference": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s11_nothing_is_signalled_on_inference(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s12_a_failed_final_signal_fails_the_cleanup": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s12_a_failed_final_signal_fails_the_cleanup(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s1_a_symlink_named_src_tauri_to_an_outside_tree_is_red": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s1_a_symlink_named_src_tauri_to_an_outside_tree_is_red(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s2_a_symlink_named_app_is_red": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s2_a_symlink_named_app_is_red(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s3_a_symlinked_mother_desktop_is_red": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s3_a_symlinked_mother_desktop_is_red(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s4_a_symlink_loop_neither_hangs_nor_passes_silently": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s4_a_symlink_loop_neither_hangs_nor_passes_silently(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s5_an_unreadable_directory_is_red_with_a_clear_error": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s5_an_unreadable_directory_is_red_with_a_clear_error(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s6_an_unrelated_dangling_symlink_is_allowed_a_forbidden_one_is_not": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s6_an_unrelated_dangling_symlink_is_allowed_a_forbidden_one_is_not(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s7_a_helper_past_its_deadline_is_killed_and_reaped_with_its_children": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s7_a_helper_past_its_deadline_is_killed_and_reaped_with_its_children(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s8_a_failed_group_signal_fails_and_only_a_gone_group_is_gone": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s8_a_failed_group_signal_fails_and_only_a_gone_group_is_gone(){"
+  },
+  "kernel/tests/desktop_tripwire_symlinks.rs::g0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang": {
+    "scopes": [
+      "#![cfg(target_os=\"linux\")]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fng0_s9_the_whole_cleanup_is_bounded_even_when_kill_would_hang(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a3_2_the_desktop_store_fixture_module_is_test_only": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a3_2_the_desktop_store_fixture_module_is_test_only(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s1_no_ipc_writes_hm_no_replace_and_foreign_keys_on": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s1_no_ipc_writes_hm_no_replace_and_foreign_keys_on(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s1_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s1_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s2_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s2_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s2_prompt_modules_read_content_only_through_the_hm_api": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s2_prompt_modules_read_content_only_through_the_hm_api(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s3_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s3_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s3_single_issuer_attestation_admission_and_store": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s3_single_issuer_attestation_admission_and_store(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s4_every_production_model_call_is_classified": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s4_every_production_model_call_is_classified(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s6_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s6_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s6_separated_subsystems_receive_no_hm_content": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s6_separated_subsystems_receive_no_hm_content(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s6_xs_crates_reach_no_hm_content": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s6_xs_crates_reach_no_hm_content(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_a_s6_xs_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_a_s6_xs_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_i4_no_checkpoint_memory_is_written_back": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_i4_no_checkpoint_memory_is_written_back(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_r7_no_unlabelled_in_scope_content_write": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_r7_no_unlabelled_in_scope_content_write(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_n5_source_model_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_n5_source_model_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_retired_nexus_memory_directory_is_absent": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_retired_nexus_memory_directory_is_absent(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_retired_nexus_memory_is_not_a_workspace_member": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_retired_nexus_memory_is_not_a_workspace_member(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_retired_sdk_directory_is_absent": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_retired_sdk_directory_is_absent(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_retired_sdk_is_not_a_workspace_member": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_retired_sdk_is_not_a_workspace_member(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_retired_web_builder_directory_is_absent": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_retired_web_builder_directory_is_absent(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m3_retired_web_builder_is_not_a_workspace_member": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m3_retired_web_builder_is_not_a_workspace_member(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m4_n1_c4_latent_apply_evolution_planted_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m4_n1_c4_latent_apply_evolution_planted_controls(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::hm_m4_n4_no_capture_code_outside_cfg_test": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m4_n4_no_capture_code_outside_cfg_test(){"
+  },
+  "kernel/tests/hm_m3_guards.rs::print_model_call_inventory": {
+    "scopes": [],
+    "attributes": [
+      "#[test]",
+      "#[ignore=\"inventory print for the N5 allowlist\"]"
+    ],
+    "head": "fnprint_model_call_inventory(){"
+  },
+  "kernel/tests/m0_f5_emergency_stop.rs::m0_f5_stop_ends_an_inflight_local_model_call": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\"))]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm0_f5_stop_ends_an_inflight_local_model_call(){"
+  },
+  "kernel/tests/m0_fix2_f10_stop_seal.rs::m0_fix2_f10_only_the_owner_path_claims_the_global_controller": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm0_fix2_f10_only_the_owner_path_claims_the_global_controller(){"
+  },
+  "kernel/tests/m0_fix2_f10_stop_seal.rs::m0_fix2_f10_the_controller_cannot_be_copied_or_made": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm0_fix2_f10_the_controller_cannot_be_copied_or_made(){"
+  },
+  "kernel/tests/m0_fix2_f10_stop_seal.rs::m0_fix2_f10_the_stop_authority_itself_cannot_lift": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm0_fix2_f10_the_stop_authority_itself_cannot_lift(){"
+  },
+  "kernel/tests/m2d_k_broker_entry_points.rs::m2d_k_a_a_binding_from_bytes_names_exactly_those_identities": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2d_k_a_a_binding_from_bytes_names_exactly_those_identities(){"
+  },
+  "kernel/tests/m2d_k_broker_entry_points.rs::m2d_k_a_a_grant_to_a_bytes_binding_resolves_only_for_that_binding": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2d_k_a_a_grant_to_a_bytes_binding_resolves_only_for_that_binding(){"
+  },
+  "kernel/tests/m2d_k_broker_entry_points.rs::m2d_k_b_the_files_staging_step_and_its_report_use_kernel_paths_only": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(target_os=\\\"linux\\\")]\"],\"head\":\"modlinux{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2d_k_b_the_files_staging_step_and_its_report_use_kernel_paths_only(){"
+  },
+  "kernel/tests/m2d_k_broker_entry_points.rs::m2d_k_c_a_ledger_file_is_only_an_absolute_file_backed_database": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(target_os=\\\"linux\\\")]\"],\"head\":\"modlinux{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2d_k_c_a_ledger_file_is_only_an_absolute_file_backed_database(){"
+  },
+  "kernel/tests/m2d_k_broker_entry_points.rs::m2d_k_c_a_stored_run_id_that_is_not_canonical_is_an_integrity_failure": {
+    "scopes": [
+      "{\"scopes\":[],\"attributes\":[\"#[cfg(target_os=\\\"linux\\\")]\"],\"head\":\"modlinux{\"}"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2d_k_c_a_stored_run_id_that_is_not_canonical_is_an_integrity_failure(){"
+  },
+  "kernel/tests/m2d_k_broker_entry_points.rs::m2d_k_d_this_file_names_no_dependency_the_broker_lacks": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2d_k_d_this_file_names_no_dependency_the_broker_lacks(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o12_the_worker_grammar_is_defined_once": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o12_the_worker_grammar_is_defined_once(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o15_local_model_predicates_are_defined_only_in_kernel_inference": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o15_local_model_predicates_are_defined_only_in_kernel_inference(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o15_scanner_fails_closed_on_protected_identifiers": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o15_scanner_fails_closed_on_protected_identifiers(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o15_scanner_rejects_renamed_predicate_copies_and_exact_literals": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o15_scanner_rejects_renamed_predicate_copies_and_exact_literals(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o15_whole_file_reviewer_probe_keeps_two_findings": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o15_whole_file_reviewer_probe_keeps_two_findings(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o65_inference_globs_respect_inline_module_scope": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o65_inference_globs_respect_inline_module_scope(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o65_macro_and_inference_glob_rules_have_red_and_green_controls": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o65_macro_and_inference_glob_rules_have_red_and_green_controls(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o65_macro_transport_reviewer_bypass_is_red_at_the_exact_identifier_count": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o65_macro_transport_reviewer_bypass_is_red_at_the_exact_identifier_count(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o65_model_transport_allowlist_matches_masked_production_counts": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o65_model_transport_allowlist_matches_masked_production_counts(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o65_model_transport_inventory_rejects_alternate_spellings_and_aliases": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o65_model_transport_inventory_rejects_alternate_spellings_and_aliases(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::e_o65_the_seam_is_test_only_and_the_transport_call_guards_the_route_first": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fne_o65_the_seam_is_test_only_and_the_transport_call_guards_the_route_first(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::m2e_a2_retired_llm_connectors_are_not_a_workspace_member": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2e_a2_retired_llm_connectors_are_not_a_workspace_member(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::m2e_a2_retired_llm_connectors_directory_is_absent": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2e_a2_retired_llm_connectors_directory_is_absent(){"
+  },
+  "kernel/tests/m2e_a2_guards.rs::m2e_a2_scanners_flag_planted_violations": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2e_a2_scanners_flag_planted_violations(){"
+  },
+  "kernel/tests/m2e_transport_guards.rs::m2e_e_o14_ollama_api_paths_appear_only_in_the_transport_and_classified_providers": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2e_e_o14_ollama_api_paths_appear_only_in_the_transport_and_classified_providers(){"
+  },
+  "kernel/tests/m2e_transport_guards.rs::m2e_e_o14_scanner_flags_planted_paths_with_or_without_a_slash": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnm2e_e_o14_scanner_flags_planted_paths_with_or_without_a_slash(){"
+  },
+  "kernel/tests/m2e_transport_guards.rs::print_api_path_inventory": {
+    "scopes": [],
+    "attributes": [
+      "#[test]",
+      "#[ignore=\"inventory print for the E-O14 allowlist\"]"
+    ],
+    "head": "fnprint_api_path_inventory(){"
+  },
+  "kernel/tests/phase0_config_key.rs::launch_environment_key_material_governs_credential_writes": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnlaunch_environment_key_material_governs_credential_writes(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::direct_owned_child_terminates_promptly": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fndirect_owned_child_terminates_promptly(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::expired_cleanup_deadline_is_reported_and_can_be_retried": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnexpired_cleanup_deadline_is_reported_and_can_be_retried(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::finalization_is_idempotent_and_retains_original_exit_status": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnfinalization_is_idempotent_and_retains_original_exit_status(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_attempt_spawn": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"linux\")]",
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_attempt_spawn(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_cpu": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"linux\")]",
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_cpu(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_direct": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_direct(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_exit": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_exit(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_exit_259": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(windows)]",
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_exit_259(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_linux_limits": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"linux\")]",
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_linux_limits(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::helper_tree": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnhelper_tree(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::linux_all_four_limits_and_memory_file_enforcement": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"linux\")]",
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnlinux_all_four_limits_and_memory_file_enforcement(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::linux_cpu_limit_enforced": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"linux\")]",
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnlinux_cpu_limit_enforced(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::linux_nproc_prevents_additional_processes": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"linux\")]",
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnlinux_nproc_prevents_additional_processes(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::naturally_exited_root_retains_descendant_ownership": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnnaturally_exited_root_retains_descendant_ownership(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::programs_and_arguments_are_never_shell_interpreted": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnprograms_and_arguments_are_never_shell_interpreted(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::spawn_failures_release_resources_and_allow_subsequent_execution": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnspawn_failures_release_resources_and_allow_subsequent_execution(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::startup_descendant_is_contained_and_terminated": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnstartup_descendant_is_contained_and_terminated(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::unrelated_sentinel_is_not_killed": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnunrelated_sentinel_is_not_killed(){"
+  },
+  "kernel/tests/resource_limiter_integration_tests.rs::windows_exit_code_259_is_an_exit_not_a_live_process": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(windows)]",
+      "#[test]",
+      "#[serial_test::serial]"
+    ],
+    "head": "fnwindows_exit_code_259_is_an_exit_not_a_live_process(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::legacy_spawn_still_inherits_the_parent_environment": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnlegacy_spawn_still_inherits_the_parent_environment(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::macos_sealed_launch_environment_is_exact_before_runtime_mutation": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[cfg(target_os=\"macos\")]",
+      "#[test]"
+    ],
+    "head": "fnmacos_sealed_launch_environment_is_exact_before_runtime_mutation(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_child_receives_only_the_sealed_environment_and_fixed_policy": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnsealed_child_receives_only_the_sealed_environment_and_fixed_policy(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_exit": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnsealed_exit(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_hold": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnsealed_hold(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_middle": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnsealed_middle(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_report": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnsealed_report(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_spawn_rejects_invalid_specifications": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnsealed_spawn_rejects_invalid_specifications(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_tree": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]",
+      "#[ignore]"
+    ],
+    "head": "fnsealed_tree(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::sealed_tree_is_owned_and_finalized_with_its_descendant": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnsealed_tree_is_owned_and_finalized_with_its_descendant(){"
+  },
+  "kernel/tests/sealed_spawn_tests.rs::self_exiting_children_finalize_after_their_observed_exit": {
+    "scopes": [
+      "#![cfg(any(target_os=\"linux\",target_os=\"macos\",windows))]"
+    ],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnself_exiting_children_finalize_after_their_observed_exit(){"
+  },
+  "persistence/tests/hm_m2_guards.rs::hm_m2_n7_every_identity_home_connection_enables_foreign_keys": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m2_n7_every_identity_home_connection_enables_foreign_keys(){"
+  },
+  "persistence/tests/hm_m2_guards.rs::hm_m2_n7_hm_store_is_called_only_from_the_hm_modules": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m2_n7_hm_store_is_called_only_from_the_hm_modules(){"
+  },
+  "persistence/tests/hm_m2_guards.rs::hm_m2_n7_no_insert_into_hm_grant": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m2_n7_no_insert_into_hm_grant(){"
+  },
+  "persistence/tests/hm_m2_guards.rs::hm_m2_n7_no_replace_write_targets_an_hm_table": {
+    "scopes": [],
+    "attributes": [
+      "#[test]"
+    ],
+    "head": "fnhm_m2_n7_no_replace_write_targets_an_hm_table(){"
+  }
+}

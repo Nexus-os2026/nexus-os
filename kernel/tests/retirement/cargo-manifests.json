@@ -1,0 +1,12 @@
+[
+  "Cargo.toml",
+  "kernel/Cargo.toml",
+  "persistence/Cargo.toml",
+  "mother/Cargo.toml",
+  "mother/host/Cargo.toml",
+  "mother/desktop/Cargo.toml",
+  "crates/nexus-governed-control/Cargo.toml",
+  "crates/nexus-crypto/Cargo.toml",
+  "crates/nexus-verifier-sandbox/Cargo.toml",
+  "crates/nexus-typed-decision/Cargo.toml"
+]
