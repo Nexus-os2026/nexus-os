@@ -239,6 +239,24 @@ mod sealed {
 
 /// The calls Mother makes to reach the world.
 pub trait EffectPort: Send + Sync + sealed::Sealed {
+    fn prepare_file_wait(
+        &self,
+        _: MissionId,
+        _: u64,
+        _: &PendingAction,
+    ) -> Result<Option<nexus_governed_control::host_session::approval::PreparedWait>, EffectRefusal>
+    {
+        Ok(None)
+    }
+    fn publish_file_wait(
+        &self,
+        _: nexus_governed_control::host_session::approval::PreparedWait,
+        _: u64,
+    ) -> Result<(), EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NotAdmitted,
+        })
+    }
     /// Present only for a mandatory, broker-issued host session port.
     fn session_context(&self) -> Option<nexus_governed_control::host_session::SessionContext> {
         None

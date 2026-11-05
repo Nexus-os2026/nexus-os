@@ -172,16 +172,16 @@ pub struct GovernedPort {
     pub(crate) file_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     /// M2c: the port's only broker handle.
     door: PortDoor,
-    file_port: Result<FilePort, FileSessionError>,
+    file_port: Arc<Result<FilePort, FileSessionError>>,
     file_session: OnceLock<(Arc<FileAttachment>, HaltCell)>,
     workspace: Option<String>,
     admission_gate: Option<Arc<AdmissionGate>>,
     /// M2a-S: `fenced` and every run registration are under this mutex, so
     /// a run registers either before the fence (which cancels it) or after
     /// (and cancels itself); every broker call checks `fenced` first.
-    runs: Mutex<Runs>,
-    performed: AtomicUsize,
-    cancel_failures: AtomicUsize,
+    runs: Arc<Mutex<Runs>>,
+    performed: Arc<AtomicUsize>,
+    cancel_failures: Arc<AtomicUsize>,
     #[cfg(test)]
     file_acks_tried: AtomicUsize,
     #[cfg(test)]
@@ -232,7 +232,13 @@ impl GovernedPort {
     }
 
     fn from_door(door: PortDoor) -> Self {
-        let file_port = door.file_port();
+        let file_port = Arc::new(door.file_port());
+        Self::from_registered_door(door, file_port)
+    }
+    fn from_registered_door(
+        door: PortDoor,
+        file_port: Arc<Result<FilePort, FileSessionError>>,
+    ) -> Self {
         Self {
             file_port,
             #[cfg(test)]
@@ -243,9 +249,9 @@ impl GovernedPort {
             workspace: None,
             admission_gate: None,
             door,
-            runs: Mutex::new(Runs::default()),
-            performed: AtomicUsize::new(0),
-            cancel_failures: AtomicUsize::new(0),
+            runs: Arc::new(Mutex::new(Runs::default())),
+            performed: Arc::new(AtomicUsize::new(0)),
+            cancel_failures: Arc::new(AtomicUsize::new(0)),
             #[cfg(test)]
             file_acks_tried: AtomicUsize::new(0),
             #[cfg(test)]
@@ -561,7 +567,7 @@ impl EffectPort for GovernedPort {
         self.admit_host()
             .map_err(|_| FileSessionError::EmergencyHistory)?;
         Ok(Some(Arc::new(
-            self.file_port.as_ref().map_err(|e| *e)?.attach()?,
+            self.file_port.as_ref().as_ref().map_err(|e| *e)?.attach()?,
         )))
     }
     fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {

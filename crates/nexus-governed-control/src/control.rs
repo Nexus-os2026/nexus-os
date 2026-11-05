@@ -236,17 +236,27 @@ impl Control {
         &self,
         run: RunId,
     ) -> Result<(Place<'_>, crate::authority::commitment::PreparationSlot), AuthorityError> {
-        self.authority.runs().admit_file_stage(run)?;
+        self.reserve_host_proposal_request(run, None)
+    }
+    pub(crate) fn reserve_host_proposal_request(
+        &self,
+        run: RunId,
+        request: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<(Place<'_>, crate::authority::commitment::PreparationSlot), AuthorityError> {
+        self.authority.runs().admit_file_request(run, request)?;
         let limit = match self.authority.runs().class(run) {
             Some(RunClass::Owner) => MAX_PENDING,
             Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
             None => return Err(AuthorityError::UnknownRun),
         };
-        let cell = self
-            .authority
-            .runs()
-            .session_cell(run)?
-            .ok_or(AuthorityError::Halted)?;
+        let cell = match request {
+            Some(cell) => cell.clone(),
+            None => self
+                .authority
+                .runs()
+                .session_cell(run)?
+                .ok_or(AuthorityError::Halted)?,
+        };
         let mut place = self.place(run, limit).ok_or(AuthorityError::Capacity)?;
         place.cell = Some(cell.clone());
         let slot = self.authority.commitments().reserve_preparation(cell)?;
@@ -301,9 +311,15 @@ impl Control {
             Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
             None => return refuse(AuthorityError::UnknownRun),
         };
-        let halt = match self.authority.runs().session_cell(run) {
-            Ok(cell) => cell,
-            Err(error) => return refuse(error),
+        let halt = match reservation
+            .as_ref()
+            .and_then(|(place, _)| place.cell.clone())
+        {
+            Some(cell) => Some(cell),
+            None => match self.authority.runs().session_cell(run) {
+                Ok(cell) => cell,
+                Err(error) => return refuse(error),
+            },
         };
         if let Err(error) = crate::authority::file_session::check_halt(halt.as_ref()) {
             return refuse(error);

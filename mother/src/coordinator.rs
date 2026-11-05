@@ -2148,6 +2148,48 @@ impl<P: EffectPort> Coordinator<P> {
         waited
     }
 
+    fn publish_file_wait(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        let target = self.peek(|inner| {
+            let m = inner
+                .missions
+                .get(&id)
+                .ok_or(CoordinatorError::UnknownMission)?;
+            if m.state != MissionState::AwaitingApproval {
+                return Ok(None);
+            }
+            if m.busy {
+                return Err(CoordinatorError::Stopped);
+            }
+            Ok(m.open_action
+                .clone()
+                .map(|(effect, pending)| (effect, pending, m.generation)))
+        })?;
+        let Some((effect, pending, generation)) = target else {
+            return Ok(());
+        };
+        let Some(prepared) = self
+            .port
+            .prepare_file_wait(id, effect, &pending)
+            .map_err(|e| CoordinatorError::Broker(e.class))?
+        else {
+            return Ok(());
+        };
+        self.step(|inner| {
+            let m = inner.mission(id)?;
+            if m.state != MissionState::AwaitingApproval
+                || m.busy
+                || m.generation != generation
+                || m.waiting.as_ref().is_none_or(|wait| wait.effect != effect)
+                || m.open_action.as_ref() != Some(&(effect, pending))
+            {
+                return Err(CoordinatorError::Stopped);
+            }
+            self.port
+                .publish_file_wait(prepared, generation)
+                .map_err(|e| CoordinatorError::Broker(e.class))
+        })
+    }
+
     /// End a mission for `reason` (Blocked) and cancel what it opened at
     /// the port; a waiting mission's wait lapses (which withdraws the
     /// pending action).

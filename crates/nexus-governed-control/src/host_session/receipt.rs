@@ -116,6 +116,63 @@ impl History {
             Ok(_) => self.read().map(|(_, lines)| (false, lines)),
         }
     }
+    pub(super) fn waiting(&self, action: &Action) -> Result<(), AuthorityError> {
+        let (file, lines) = self.read()?;
+        let mission = action.mission.ok_or_else(unavailable)?;
+        let effect = action.effect.ok_or_else(unavailable)?;
+        let run = action.run.to_string();
+        let commitment = action.commitment.ok_or_else(unavailable)?.to_string();
+        let mut pending = false;
+        let mut waiting = false;
+        for line in lines.iter().filter(|line| line.mission == mission) {
+            let e = &line.event;
+            if e["event"] == "approval_pending" && e["effect"] == effect {
+                if pending || e["pending"]["run"] != run || e["pending"]["commitment"] != commitment
+                {
+                    return Err(unavailable());
+                }
+                pending = true;
+            }
+            if e["event"] == "settlement_started" || e["event"] == "held" {
+                return Err(unavailable());
+            }
+            if e["event"] == "transition" {
+                if waiting {
+                    return Err(unavailable());
+                }
+                if e["trigger"]["trigger"] == "await_approval" && e["trigger"]["effect"] == effect {
+                    if !pending {
+                        return Err(unavailable());
+                    }
+                    waiting = true;
+                }
+            }
+        }
+        if !waiting {
+            return Err(unavailable());
+        }
+        // Same opened file and fixed Home identity; journal data merely
+        // corroborates the retained native action, never creates authority.
+        file.sync_all().map_err(|_| unavailable())?;
+        self.verify_root()?;
+        if !same(
+            &file.metadata().map_err(|_| unavailable())?,
+            &std::fs::symlink_metadata(self.root.join("mother-journal.jsonl"))
+                .map_err(|_| unavailable())?,
+        ) {
+            return Err(unavailable());
+        }
+        let parent = File::open(&self.root).map_err(|_| unavailable())?;
+        if !same(
+            &parent.metadata().map_err(|_| unavailable())?,
+            &self.identity,
+        ) {
+            return Err(unavailable());
+        }
+        parent.sync_all().map_err(|_| unavailable())?;
+        self.verify_root()
+    }
+
     fn terminal(
         &self,
         action: &Action,
@@ -242,6 +299,7 @@ pub(super) struct Line {
     hash: String,
     pub(super) event: Value,
 }
+#[derive(Clone)]
 struct Terminal {
     sequence: u64,
     hash: [u8; 32],
@@ -275,26 +333,31 @@ impl Conclusive {
         }
     }
 }
+#[derive(Clone)]
 struct Receipt {
     outcome: Conclusive,
     terminal: Terminal,
     released: bool,
 }
+#[derive(Clone)]
 pub(super) struct Action {
-    session: SessionIdentity,
-    request: u64,
-    preparation: u64,
-    door: GroupId,
-    run: RunId,
-    mission: Option<u64>,
-    effect: Option<u64>,
+    pub(super) session: SessionIdentity,
+    pub(super) request: u64,
+    pub(super) door_request: u64,
+    pub(super) preparation: u64,
+    pub(super) door: GroupId,
+    pub(super) run: RunId,
+    pub(super) mission: Option<u64>,
+    pub(super) effect: Option<u64>,
     pub(super) commitment: Option<CommitmentId>,
     receipt: Option<Receipt>,
 }
 impl Action {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn reserved(
         session: SessionIdentity,
         request: u64,
+        door_request: u64,
         preparation: u64,
         door: GroupId,
         run: RunId,
@@ -309,6 +372,7 @@ impl Action {
         Self {
             session,
             request,
+            door_request,
             preparation,
             door,
             run,
@@ -333,7 +397,7 @@ pub(super) fn ack(door: &SessionDoor, id: CommitmentId) -> Result<(), AuthorityE
         .ok_or(AuthorityError::UnknownCommitment)?;
     if action.session != door.core.identity
         || action.door != door.door.origin()
-        || action.request != door.context.request()
+        || action.door_request != door.origin_request
         || action.preparation == 0
     {
         return Err(AuthorityError::NotMember);

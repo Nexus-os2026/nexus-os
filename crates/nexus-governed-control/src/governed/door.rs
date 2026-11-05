@@ -91,6 +91,10 @@ impl fmt::Debug for AgentDoor {
 }
 
 impl AgentDoor {
+    pub(crate) fn session_backend(&self) -> std::sync::Weak<GovernedControl> {
+        Arc::downgrade(&self.control)
+    }
+
     pub(crate) fn origin(&self) -> GroupId {
         self.core.group
     }
@@ -253,6 +257,36 @@ impl AgentDoor {
             .hooks()
             .fire(crate::test_hooks::at::DOOR_MEMBER_CHECKED);
         self.control.agent_action(&self.core.agent, run, intent)
+    }
+
+    pub(crate) fn admit_session_request(
+        &self,
+        run: RunId,
+        cell: &HaltCell,
+    ) -> Result<(), AuthorityError> {
+        if !self
+            .control
+            .authority()
+            .runs()
+            .is_member(run, self.core.group)
+        {
+            return Err(AuthorityError::NotMember);
+        }
+        self.control
+            .authority()
+            .runs()
+            .admit_file_request(run, Some(cell))
+    }
+    pub(crate) fn session_file_action(
+        &self,
+        run: RunId,
+        file: &crate::files::FileCreate,
+        cell: &HaltCell,
+    ) -> Result<AgentOutcome, AuthorityError> {
+        self.admit_session_request(run, cell)?;
+        self.control
+            .propose_session_file(&self.core.agent, run, file, cell)
+            .map(AgentOutcome::AwaitingApproval)
     }
 
     /// Cancel one of this door's runs, also once the door is halted (a

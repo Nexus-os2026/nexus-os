@@ -987,7 +987,9 @@ impl CommitmentRegistry {
         ttl: Duration,
         mut slot: Option<PreparationSlot>,
     ) -> Result<CommitmentView, AuthorityError> {
-        self.0.runs.check(run, agent)?;
+        self.0
+            .runs
+            .check_request(run, agent, slot.as_ref().map(|slot| &slot.cell))?;
         // Fixed now, from the class the run was admitted with (a run gone
         // meanwhile is Restricted), and kept for the commitment's life.
         let privacy = self.0.runs.privacy(run);
@@ -1080,7 +1082,12 @@ impl CommitmentRegistry {
             let retained = if entries.len() + reserved >= self.capacity() {
                 Err(AuthorityError::Capacity)
             } else {
-                self.0.runs.check_retaining(run, agent, files)
+                self.0.runs.check_request_retaining(
+                    run,
+                    agent,
+                    files,
+                    slot.as_ref().map(|slot| &slot.cell),
+                )
             };
             match retained {
                 Err(error) => {

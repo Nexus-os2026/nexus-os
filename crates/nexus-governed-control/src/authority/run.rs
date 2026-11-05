@@ -978,6 +978,7 @@ impl RunRegistry {
 
     /// Final staging admission, under the same table hold as the lookup.
     /// Session runs retain provenance through the pre-commitment interval.
+    #[cfg(test)]
     pub(crate) fn admit_file_stage(&self, run: RunId) -> Result<(), AuthorityError> {
         self.admit_file_request(run, None)
     }
@@ -1045,7 +1046,7 @@ impl RunRegistry {
             .map(|(token, _)| token)
     }
 
-    fn check_request_retaining(
+    pub(crate) fn check_request_retaining(
         &self,
         run: RunId,
         agent: &AgentId,

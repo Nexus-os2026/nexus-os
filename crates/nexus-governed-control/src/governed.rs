@@ -460,6 +460,30 @@ impl GovernedControl {
         proposed
     }
 
+    pub(crate) fn propose_session_file(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        file: &crate::files::FileCreate,
+        cell: &crate::authority::file_session::HaltCell,
+    ) -> Result<CommitmentView, AuthorityError> {
+        if self.authority().runs().class(run) != Some(RunClass::Agent) {
+            return Err(AuthorityError::WrongRun);
+        }
+        let reservation = self
+            .control
+            .reserve_host_proposal_request(run, Some(cell))?;
+        let preparation = self.files.prepare_session(
+            &self.control,
+            run,
+            file,
+            self.kernel_stop.authority(),
+            cell,
+        )?;
+        self.control
+            .propose_reserved(agent, run, preparation, reservation)
+    }
+
     /// Authorize (R2: the owner's native approval of exactly this
     /// commitment).
     pub fn authorize(

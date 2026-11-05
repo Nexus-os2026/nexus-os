@@ -143,6 +143,61 @@ impl<P: EffectPort> Coordinator<P> {
     }
 }
 
+impl FileSession<crate::adapter::SessionPort> {
+    /// Consumes the sole controller. Saved callbacks and ports keep their old
+    /// context; this transfer is bound to the exact live waiting generation.
+    pub fn continue_approval(
+        mut self,
+        continuation: nexus_governed_control::host_session::approval::ApprovalContinuation,
+    ) -> Result<Self, CoordinatorError> {
+        let id = MissionId(continuation.mission());
+        let generation = continuation.generation();
+        let effect = continuation.effect();
+        {
+            let mut inner = self.coordinator.inner.lock().map_err(|_| {
+                self.life().cell.engage_tagged(HaltTag::DoorHalted);
+                CoordinatorError::Poisoned
+            })?;
+            inner.usable()?;
+            let m = inner.mission(id)?;
+            if m.state != MissionState::AwaitingApproval
+                || m.generation != generation
+                || m.busy
+                || m.waiting.as_ref().is_none_or(|wait| wait.effect != effect)
+                || m.open_action
+                    .as_ref()
+                    .is_none_or(|(number, _)| *number != effect)
+            {
+                return Err(CoordinatorError::Stopped);
+            }
+            let (port, cell) = self
+                .coordinator
+                .port
+                .continue_approval(continuation, id, generation, effect)
+                .map_err(|e| CoordinatorError::Broker(e.class))?;
+            let context = port.context();
+            let private = self
+                .coordinator
+                .private
+                .continue_session(context.clone())
+                .map_err(CoordinatorError::Private)?;
+            context
+                .admit(nexus_governed_control::host_session::MotherStep::PortProjection)
+                .map_err(|_| CoordinatorError::Stopped)?;
+            self.coordinator.private = private;
+            self.coordinator.port = Arc::new(port);
+            inner.session_context = Some(context);
+            inner.file_cell = Some(cell.clone());
+            self.coordinator
+                .file
+                .as_mut()
+                .ok_or(CoordinatorError::Stopped)?
+                .cell = cell;
+        }
+        Ok(self)
+    }
+}
+
 impl<P: EffectPort> FileSession<P> {
     #[cfg(test)]
     pub(crate) fn end_for_test(
@@ -240,7 +295,9 @@ impl<P: EffectPort> FileSession<P> {
         self.runnable()?;
         self.call(|c| {
             c.file_admit(id)?;
-            c.advance(id)
+            let result = c.advance(id)?;
+            c.publish_file_wait(id)?;
+            Ok(result)
         })
     }
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {

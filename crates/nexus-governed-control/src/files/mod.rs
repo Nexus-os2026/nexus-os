@@ -989,7 +989,9 @@ impl HostBinding {
         if self.stop.is_stopped() || authority.grants().live(self.grant).is_none() {
             return Err(AuthorityError::Halted);
         }
-        authority.runs().admit_file_request(self.run, request)
+        authority
+            .runs()
+            .admit_file_request(self.run, Some(request.unwrap_or(&self.cell)))
     }
 }
 
@@ -1474,10 +1476,12 @@ impl Shared {
             .runs()
             .view(binding.run)
             .ok_or(AuthorityError::Halted)?;
-        control
-            .authority()
-            .runs()
-            .check_retaining(binding.run, &view.agent, true)?;
+        control.authority().runs().check_request_retaining(
+            binding.run,
+            &view.agent,
+            true,
+            Some(&binding.cell),
+        )?;
         let reservation = match binding.cell.reserve_resource() {
             Ok(reservation) => reservation,
             Err(error) => {
@@ -4031,7 +4035,7 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
-        self.prepare_bound(authority, run, create, stop, None)
+        self.prepare_bound(authority, run, create, stop, None, None)
     }
 
     pub(crate) fn prepare_control(
@@ -4041,9 +4045,28 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
-        self.prepare_bound(control.authority(), run, create, stop, Some(control))
+        self.prepare_bound(control.authority(), run, create, stop, Some(control), None)
     }
 
+    pub(crate) fn prepare_session(
+        &self,
+        control: &Arc<crate::control::Control>,
+        run: RunId,
+        create: &FileCreate,
+        stop: &Arc<StopAuthority>,
+        cell: &HaltCell,
+    ) -> Result<Preparation, AuthorityError> {
+        self.prepare_bound(
+            control.authority(),
+            run,
+            create,
+            stop,
+            Some(control),
+            Some(cell),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn prepare_bound(
         &self,
         authority: &Authority,
@@ -4051,6 +4074,7 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
         control: Option<&Arc<crate::control::Control>>,
+        request: Option<&HaltCell>,
     ) -> Result<Preparation, AuthorityError> {
         if control.is_none()
             && authority
@@ -4060,7 +4084,7 @@ impl Files {
         {
             return Err(AuthorityError::Halted);
         }
-        authority.runs().admit_file_stage(run)?;
+        authority.runs().admit_file_request(run, request)?;
         // H3 (M4′): a run whose publication a cause interrupted after its
         // final check asks for nothing more.
         if self.shared.is_closed(run) {
@@ -4098,10 +4122,11 @@ impl Files {
         }
         #[cfg(test)]
         self.hooks().fire("files.before_stage");
-        authority.runs().admit_file_stage(run)?;
+        authority.runs().admit_file_request(run, request)?;
         #[cfg(target_os = "linux")]
         return self.stage(
             control,
+            request,
             run,
             create,
             (admission, class),
@@ -4129,6 +4154,7 @@ impl Files {
     fn stage(
         &self,
         control: Option<&Arc<crate::control::Control>>,
+        request: Option<&HaltCell>,
         run: RunId,
         create: &FileCreate,
         (admission, class): (FilesAdmission, FileClass),
@@ -4137,9 +4163,12 @@ impl Files {
         mut summary: Vec<String>,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
-        let cell = match control {
-            Some(control) => control.authority().runs().session_cell(run)?,
-            None => None,
+        let cell = match request {
+            Some(cell) => Some(cell.clone()),
+            None => match control {
+                Some(control) => control.authority().runs().session_cell(run)?,
+                None => None,
+            },
         };
         let reserved = if let Some(cell) = cell.filter(HaltCell::host) {
             Some(self.shared.reserve(HostBinding {

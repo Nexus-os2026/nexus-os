@@ -169,6 +169,43 @@ impl SessionPort {
             inner: GovernedPort::from_door(PortDoor::Session(door)).with_workspace(workspace),
         }
     }
+    pub(crate) fn continue_approval(
+        &self,
+        continuation: nexus_governed_control::host_session::approval::ApprovalContinuation,
+        mission: MissionId,
+        generation: u64,
+        effect: u64,
+    ) -> Result<(Self, HaltCell), EffectRefusal> {
+        let PortDoor::Session(door) = &self.inner.door else {
+            return Err(refused(BrokerClass::Halted));
+        };
+        let door = door
+            .continue_approval(continuation, mission.0, generation, effect)
+            .map_err(|e| refused_by(e.class()))?;
+        let cell = door.lifecycle_halt();
+        let (attachment, _) = self
+            .inner
+            .file_session
+            .get()
+            .ok_or_else(|| refused(BrokerClass::NotAdmitted))?;
+        let mut inner = GovernedPort::from_registered_door(
+            PortDoor::Session(door),
+            self.inner.file_port.clone(),
+        );
+        inner.runs = self.inner.runs.clone();
+        inner.performed = self.inner.performed.clone();
+        inner.cancel_failures = self.inner.cancel_failures.clone();
+        inner.workspace = self.inner.workspace.clone();
+        inner.admission_gate = self.inner.admission_gate.clone();
+        if inner
+            .file_session
+            .set((attachment.clone(), cell.clone()))
+            .is_err()
+        {
+            return Err(refused(BrokerClass::Halted));
+        }
+        Ok((Self { inner }, cell))
+    }
     pub fn context(&self) -> SessionContext {
         match &self.inner.door {
             PortDoor::Session(door) => door.context(),
@@ -177,6 +214,45 @@ impl SessionPort {
     }
 }
 impl EffectPort for SessionPort {
+    fn prepare_file_wait(
+        &self,
+        mission: MissionId,
+        effect: u64,
+        pending: &PendingAction,
+    ) -> Result<Option<nexus_governed_control::host_session::approval::PreparedWait>, EffectRefusal>
+    {
+        let runs = self.inner.file_runs()?;
+        let id = CommitmentId::parse(&pending.commitment)
+            .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
+        if runs.open.get(&mission).map(ToString::to_string).as_ref() != Some(&pending.run)
+            || runs.waiting.get(&mission) != Some(&(id, pending.deadline_mono_ms))
+            || runs.file_effects.get(&mission) != Some(&effect)
+        {
+            return Err(refused(BrokerClass::ActionNotHeld));
+        }
+        drop(runs);
+        let PortDoor::Session(door) = &self.inner.door else {
+            return Err(refused(BrokerClass::Halted));
+        };
+        door.prepare_wait(mission.0, effect, id)
+            .map(Some)
+            .map_err(|e| refused_by(e.class()))
+    }
+    fn publish_file_wait(
+        &self,
+        wait: nexus_governed_control::host_session::approval::PreparedWait,
+        generation: u64,
+    ) -> Result<(), EffectRefusal> {
+        let runs = self.inner.file_runs()?;
+        if runs.fenced {
+            return Err(refused(BrokerClass::Halted));
+        }
+        let PortDoor::Session(door) = &self.inner.door else {
+            return Err(refused(BrokerClass::Halted));
+        };
+        door.publish_wait(wait, generation)
+            .map_err(|e| refused_by(e.class()))
+    }
     fn session_context(&self) -> Option<SessionContext> {
         Some(self.context())
     }

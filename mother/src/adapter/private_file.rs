@@ -401,6 +401,23 @@ impl FilePrivate {
 }
 
 impl PrivateStore for FilePrivate {
+    fn continue_session(
+        &self,
+        context: SessionContext,
+    ) -> Result<std::sync::Arc<dyn PrivateStore>, PrivateError> {
+        let PrivateMode::Session(original) = &self.mode else {
+            return Err(PrivateError::NotPrivate);
+        };
+        if original.session() != context.session() {
+            return Err(PrivateError::NotPrivate);
+        }
+        Ok(std::sync::Arc::new(Self {
+            mode: PrivateMode::Session(context),
+            dir: self.dir.clone(),
+            owner: self.owner,
+            chain: self.chain.clone(),
+        }))
+    }
     fn put(&self, kind: ContentKind, bytes: &[u8]) -> Result<ContentId, PrivateError> {
         if bytes.len() as u64 > MAX_CONTENT_BYTES {
             return Err(PrivateError::TooLarge);

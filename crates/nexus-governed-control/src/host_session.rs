@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
+pub mod approval;
 mod receipt;
 pub mod recovery;
 pub mod stop;
@@ -32,6 +33,12 @@ pub(crate) struct RequestScope {
     deadline: Instant,
     kind: ScopeKind,
     next_step: AtomicU64,
+    // Once a native File run is admitted, Mother sinks retain that original
+    // prerequisite. Installing it only narrows the original request.
+    mother_run: OnceLock<(
+        std::sync::Weak<crate::governed::GovernedControl>,
+        crate::authority::ids::RunId,
+    )>,
 }
 impl RequestScope {
     pub(crate) fn fail(&self) {
@@ -311,6 +318,12 @@ struct Core {
 }
 
 struct PendingContext {
+    mission: Option<u64>,
+    effect: Option<u64>,
+    generation: Option<u64>,
+    claimed: Option<Arc<RequestScope>>,
+    approved: Option<Arc<RequestScope>>,
+    continuation_taken: bool,
     identity: u64,
     run: crate::authority::ids::RunId,
     commitment: crate::authority::ids::CommitmentId,
@@ -394,6 +407,10 @@ pub enum MotherStep {
 pub struct SessionContext {
     cell: HaltCell,
     scope: Arc<RequestScope>,
+    run: Option<(
+        std::sync::Weak<crate::governed::GovernedControl>,
+        crate::authority::ids::RunId,
+    )>,
 }
 impl SessionContext {
     pub fn reserve_private(
@@ -438,7 +455,16 @@ impl SessionContext {
     /// This returns no capability. The owning private sink must do its one
     /// mutation or invocation immediately, without further validation or I/O.
     pub fn admit(&self, _step: MotherStep) -> Result<(), SessionError> {
-        self.cell.admit().map_err(|_| SessionError::Restricted)
+        match self.run.as_ref().or_else(|| self.scope.mother_run.get()) {
+            Some((control, run)) => control
+                .upgrade()
+                .ok_or(SessionError::Restricted)?
+                .authority()
+                .runs()
+                .admit_file_request(*run, Some(&self.cell)),
+            None => self.cell.admit(),
+        }
+        .map_err(|_| SessionError::Restricted)
     }
     pub fn fail(&self) {
         if let Some(core) = self.scope.core.upgrade() {
@@ -462,7 +488,8 @@ pub struct HostSession {
 /// Mother's closed File door. Its raw legacy representation is private and
 /// cannot be extracted, adopted, resumed, or used for another effect domain.
 pub struct SessionDoor {
-    door: crate::governed::AgentDoor,
+    door: Arc<crate::governed::AgentDoor>,
+    origin_request: u64,
     context: SessionContext,
     core: Arc<Core>,
 }
@@ -516,8 +543,10 @@ impl HostSession {
             deadline: seed.core.created + Duration::from_secs(300),
             kind: ScopeKind::Bootstrap,
             next_step: AtomicU64::new(0),
+            mother_run: OnceLock::new(),
         });
         let bootstrap = SessionContext {
+            run: None,
             cell: seed.core.cell.scoped(scope.clone()),
             scope,
         };
@@ -554,12 +583,11 @@ impl HostSession {
         }
     }
     pub fn context(&self, request: &SessionRequest) -> Result<SessionContext, SessionError> {
-        if !Arc::ptr_eq(&self.core, &request.core)
-            || !matches!(request.kind, CommandKind::Run | CommandKind::Approve)
-        {
+        if !Arc::ptr_eq(&self.core, &request.core) || request.kind != CommandKind::Run {
             return Err(SessionError::Restricted);
         }
         Ok(SessionContext {
+            run: None,
             cell: self.core.cell.scoped(request.scope.clone()),
             scope: request.scope.clone(),
         })
@@ -691,7 +719,8 @@ impl HostSession {
             )
             .map_err(|error| SessionError::Backend(error.class()))?;
         Ok(SessionDoor {
-            door,
+            origin_request: context.request(),
+            door: Arc::new(door),
             context,
             core: self.core.clone(),
         })
@@ -790,31 +819,63 @@ impl HostSession {
         if !Arc::ptr_eq(&self.core, &request.core) || request.kind != CommandKind::Approve {
             return Err(AuthorityError::Halted.into());
         }
-        let target = self.core.pending.lock().map_err(|_| {
-            self.ingress().fail();
-            SessionFailure::from(AuthorityError::Halted)
-        })?;
-        let target = target
-            .as_ref()
-            .filter(|t| t.identity == request.target)
-            .ok_or(AuthorityError::UnknownCommitment)?;
         let cell = self.core.cell.scoped(request.scope.clone());
-        cell.admit()?;
+        let (run, commitment, identity) = {
+            let mut target = self.core.pending.lock().map_err(|_| {
+                self.ingress().fail();
+                SessionFailure::from(AuthorityError::Halted)
+            })?;
+            let target = target
+                .as_mut()
+                .filter(|t| {
+                    t.identity == request.target
+                        && t.claimed.is_none()
+                        && self.core.pending_context.load(Ordering::SeqCst) == t.identity
+                })
+                .ok_or(AuthorityError::UnknownCommitment)?;
+            self.control
+                .authority()
+                .runs()
+                .admit_file_request(target.run, Some(&cell))?;
+            target.claimed = Some(request.scope.clone());
+            self.core.pending_context.store(0, Ordering::SeqCst);
+            (target.run, target.commitment, target.identity)
+        };
         let agent =
             crate::authority::ids::AgentId::new("mother").ok_or(AuthorityError::WrongAgent)?;
-        self.core.pending_context.store(0, Ordering::SeqCst);
         self.control
             .authority()
             .commitments()
-            .bind_session_request(target.commitment, &agent, target.run, &cell)?;
+            .bind_session_request(commitment, &agent, run, &cell)?;
         self.control
-            .authorize(target.commitment, &agent, target.run, &*self.confirmer)?;
+            .authorize(commitment, &agent, run, &*self.confirmer)?;
         cell.admit()?;
-        let result = self.control.execute(target.commitment, &agent, target.run);
-        if result.is_ok() && cell.admit().is_ok() {
-            self.core
-                .undo_context
-                .store(target.identity, Ordering::SeqCst);
+        let result = self.control.execute(commitment, &agent, run);
+        if result.as_ref().is_ok_and(|output| {
+            output.evidence.is_some_and(|evidence| {
+                matches!(
+                    evidence.end,
+                    crate::authority::evidence::EndStatus::Recorded { .. }
+                )
+            })
+        }) {
+            let mut target = self.core.pending.lock().map_err(|_| {
+                self.ingress().fail();
+                SessionFailure::from(AuthorityError::Halted)
+            })?;
+            let target = target
+                .as_mut()
+                .filter(|t| {
+                    t.identity == identity
+                        && t.claimed
+                            .as_ref()
+                            .is_some_and(|scope| Arc::ptr_eq(scope, &request.scope))
+                })
+                .ok_or(AuthorityError::UnknownCommitment)?;
+            if cell.admit().is_ok() {
+                target.approved = Some(request.scope.clone());
+                self.core.undo_context.store(identity, Ordering::SeqCst);
+            }
         }
         result.map_err(Into::into)
     }
@@ -867,11 +928,36 @@ impl SessionDoor {
         contract_hash: &str,
         request: &str,
     ) -> Result<(), SessionFailure> {
-        self.door
-            .admit_files(run, contract_hash, request)
-            .map_err(Into::into)
+        if self
+            .context
+            .scope
+            .mother_run
+            .get()
+            .is_some_and(|(_, known)| *known != run)
+        {
+            return Err(crate::authority::AuthorityError::NotMember.into());
+        }
+        self.door.admit_files(run, contract_hash, request)?;
+        if self
+            .context
+            .scope
+            .mother_run
+            .set((self.door.session_backend(), run))
+            .is_err()
+            && self
+                .context
+                .scope
+                .mother_run
+                .get()
+                .is_none_or(|(_, known)| *known != run)
+        {
+            self.context.fail();
+            return Err(crate::authority::AuthorityError::Halted.into());
+        }
+        Ok(())
     }
-    pub fn create_file(
+    #[cfg(test)]
+    pub(crate) fn create_file(
         &self,
         run: crate::authority::ids::RunId,
         file: &crate::files::FileCreate,
@@ -896,6 +982,15 @@ impl SessionDoor {
         file: &crate::files::FileCreate,
         effect: Option<u64>,
     ) -> Result<crate::governed::AgentOutcome, SessionFailure> {
+        if self
+            .context
+            .run
+            .as_ref()
+            .or_else(|| self.context.scope.mother_run.get())
+            .is_some_and(|(_, known)| *known != run)
+        {
+            return Err(crate::authority::AuthorityError::WrongRun.into());
+        }
         let identity = self
             .core
             .next_target
@@ -911,6 +1006,7 @@ impl SessionDoor {
         let action = receipt::Action::reserved(
             self.core.identity,
             self.context.request(),
+            self.origin_request,
             identity,
             self.door.origin(),
             run,
@@ -932,7 +1028,7 @@ impl SessionDoor {
         };
         let outcome = self
             .door
-            .agent_action(run, &crate::governed::Intent::File(file.clone()))
+            .session_file_action(run, file, &self.context.cell)
             .map_err(SessionFailure::from)?;
         if let crate::governed::AgentOutcome::AwaitingApproval(view) = &outcome {
             self.core.actions.lock().map_err(|_| {
@@ -951,8 +1047,26 @@ impl SessionDoor {
                     identity,
                     run,
                     commitment: view.id,
+                    mission: self.door.mission_request(run).ok().and_then(|request| {
+                        request
+                            .split('/')
+                            .next()?
+                            .strip_prefix("msn-")?
+                            .parse()
+                            .ok()
+                    }),
+                    effect,
+                    generation: None,
+                    claimed: None,
+                    approved: None,
+                    continuation_taken: false,
                 });
-                self.core.pending_context.store(identity, Ordering::SeqCst);
+                // Native unit fixtures have no Mother journal. Production
+                // effects publish only after the exact durable wait proof.
+                #[cfg(test)]
+                if effect.is_none() {
+                    self.core.pending_context.store(identity, Ordering::SeqCst);
+                }
             }
         }
         Ok(outcome)
@@ -961,6 +1075,15 @@ impl SessionDoor {
         &self,
         run: crate::authority::ids::RunId,
     ) -> Result<crate::governed::RecordBatch, SessionFailure> {
+        {
+            let pending = self.core.pending.lock().map_err(|_| {
+                self.context.fail();
+                crate::authority::AuthorityError::Halted
+            })?;
+            if pending.as_ref().is_some_and(|pending| pending.run == run) {
+                self.core.pending_context.store(0, Ordering::SeqCst);
+            }
+        }
         self.door.cancel_run(run).map_err(Into::into)
     }
     pub fn finish_when_settled(
@@ -1234,6 +1357,7 @@ impl SessionIngress {
                     deadline: close.deadline,
                     kind: ScopeKind::CloseCleanup,
                     next_step: AtomicU64::new(0),
+                    mother_run: OnceLock::new(),
                 }),
             });
         }
@@ -1270,6 +1394,7 @@ impl SessionIngress {
                     ScopeKind::Work
                 },
                 next_step: AtomicU64::new(0),
+                mother_run: OnceLock::new(),
             }),
         })
     }

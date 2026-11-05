@@ -114,6 +114,14 @@ pub enum PrivateError {
 
 /// Where Mother keeps working content.
 pub trait PrivateStore: Send + Sync {
+    /// Return an immutable view for an already verified continuation. A store
+    /// without a session implementation refuses; it never falls back to legacy.
+    fn continue_session(
+        &self,
+        _: nexus_governed_control::host_session::SessionContext,
+    ) -> Result<Arc<dyn PrivateStore>, PrivateError> {
+        Err(PrivateError::NotPrivate)
+    }
     /// Keep `bytes` durably; their content id.
     fn put(&self, kind: ContentKind, bytes: &[u8]) -> Result<ContentId, PrivateError>;
     /// The bytes kept under `id`, only if their content id is `id`.
