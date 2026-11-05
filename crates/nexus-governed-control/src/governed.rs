@@ -571,8 +571,7 @@ impl GovernedControl {
     /// dependency. Only after it does Stop tear the agent display down,
     /// which may stop the display's processes (cleanup that follows the
     /// engagement), and then write the records.
-    fn stop_for(&self, reason: Option<&'static str>) -> usize {
-        self.file_sessions.emergency();
+    fn narrow_native_stop(&self, reason: Option<&'static str>) -> crate::authority::Stopped {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
         self.kernel_stop.engage();
@@ -585,6 +584,12 @@ impl GovernedControl {
         // first engagement and the broker step may have lifted the kernel
         // stop, and the broker must never be stopped with the kernel lifted.
         self.kernel_stop.engage();
+        stopped
+    }
+
+    fn stop_for(&self, reason: Option<&'static str>) -> usize {
+        self.file_sessions.emergency();
+        let stopped = self.narrow_native_stop(reason);
         let cancelled = stopped.cancelled;
         let display = self.display.stop();
         self.authority().write_stop_records(stopped);
@@ -597,10 +602,8 @@ impl GovernedControl {
     /// native narrowing and its existing records follow here. Display and
     /// other domains cannot be created through the File-only facade.
     pub(crate) fn stop_session_event(&self) -> crate::authority::StopRecordOutcome {
-        self.kernel_stop.engage();
         let known = self.control.stop_metadata_known();
-        let stopped = self.control.stop_effects(None);
-        self.kernel_stop.engage();
+        let stopped = self.narrow_native_stop(None);
         let mut outcome = self.authority().write_stop_records_observed(stopped);
         // Legacy narrowing may recover a poisoned hold to deny more work.
         // It cannot establish complete session ownership from that metadata.
