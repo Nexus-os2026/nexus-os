@@ -2916,6 +2916,16 @@ pub struct HistoryInspection {
     pub unresolved: Vec<MissionId>,
     /// Terminal records survive; lost process-local acknowledgement does not.
     pub prior_acknowledgement_unavailable: usize,
+    pub details: Vec<HistoryMission>,
+}
+
+/// Verified identifiers only; no reconstructed operational authority.
+#[derive(Clone, Debug)]
+pub struct HistoryMission {
+    pub mission: MissionId,
+    pub state: MissionState,
+    pub terminal: Option<(Trigger, u64)>,
+    pub actions: Vec<(u64, PendingAction)>,
 }
 
 pub fn inspect_history(store: &dyn JournalStore) -> Result<HistoryInspection, JournalError> {
@@ -2954,6 +2964,39 @@ pub fn inspect_history_lines(lines: &[String]) -> Result<HistoryInspection, Jour
             })
             .collect(),
         prior_acknowledgement_unavailable: missions.values().map(|m| m.acks.len()).sum(),
+        details: missions
+            .iter()
+            .map(|(id, mission)| {
+                let mut actions = BTreeMap::new();
+                for entry in entries.iter().filter(|entry| entry.mission == *id) {
+                    match &entry.event {
+                        Event::ApprovalPending { effect, pending } => {
+                            actions.insert(*effect, pending.clone());
+                        }
+                        Event::Transition {
+                            trigger:
+                                Trigger::Settled {
+                                    effect,
+                                    action: Some(action),
+                                    ..
+                                },
+                        } => {
+                            actions.insert(*effect, action.clone());
+                        }
+                        _ => {}
+                    }
+                }
+                HistoryMission {
+                    mission: *id,
+                    state: mission.state,
+                    terminal: mission
+                        .terminal_record
+                        .as_ref()
+                        .and_then(|(trigger, seq)| seq.map(|seq| (trigger.clone(), seq))),
+                    actions: actions.into_iter().collect(),
+                }
+            })
+            .collect(),
     })
 }
 

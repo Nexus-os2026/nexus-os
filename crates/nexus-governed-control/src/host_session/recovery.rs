@@ -22,6 +22,21 @@ pub struct MotherHistory {
     pub terminal_missions: usize,
     pub unresolved_missions: usize,
     pub session_end_recorded: bool,
+    pub missions: Vec<RecordedMission>,
+}
+/// Canonical report-only identifiers, never adopted as live handles.
+#[derive(Clone, Debug)]
+pub struct RecordedMission {
+    pub mission: String,
+    pub state: String,
+    pub terminal: Option<(&'static str, u64, Option<u64>)>,
+    pub actions: Vec<RecordedAction>,
+}
+#[derive(Clone, Debug)]
+pub struct RecordedAction {
+    pub effect: u64,
+    pub run: String,
+    pub commitment: String,
 }
 #[derive(Clone, Debug)]
 pub struct StartupReport {
@@ -255,5 +270,6 @@ pub(super) fn history(history: &History) -> Result<MotherHistory, SourceFailure>
             })
             .count(),
         session_end_recorded: session_end,
+        missions: Vec::new(),
     })
 }

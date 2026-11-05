@@ -360,7 +360,9 @@ impl nexus_governed_control::host_session::recovery::HistoryInspector for Sessio
         nexus_governed_control::host_session::recovery::MotherHistory,
         nexus_governed_control::host_session::recovery::SourceFailure,
     > {
-        use nexus_governed_control::host_session::recovery::{MotherHistory, SourceFailure};
+        use nexus_governed_control::host_session::recovery::{
+            MotherHistory, RecordedAction, RecordedMission, SourceFailure,
+        };
         let report = crate::coordinator::inspect_history_lines(lines)
             .map_err(|_| SourceFailure::MotherHistory)?;
         Ok(MotherHistory {
@@ -373,6 +375,33 @@ impl nexus_governed_control::host_session::recovery::HistoryInspector for Sessio
                 .count(),
             unresolved_missions: report.unresolved.len(),
             session_end_recorded: report.session_end_recorded,
+            missions: report
+                .details
+                .into_iter()
+                .map(|mission| RecordedMission {
+                    mission: mission.mission.to_string(),
+                    state: format!("{:?}", mission.state),
+                    terminal: mission.terminal.map(|(trigger, seq)| {
+                        use crate::state::Trigger;
+                        let effect = match &trigger {
+                            Trigger::ActionDenied { effect }
+                            | Trigger::ApprovalLapsed { effect, .. }
+                            | Trigger::Settled { effect, .. } => Some(*effect),
+                            _ => None,
+                        };
+                        (trigger.name(), seq, effect)
+                    }),
+                    actions: mission
+                        .actions
+                        .into_iter()
+                        .map(|(effect, action)| RecordedAction {
+                            effect,
+                            run: action.run,
+                            commitment: action.commitment,
+                        })
+                        .collect(),
+                })
+                .collect(),
         })
     }
 }

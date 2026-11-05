@@ -258,6 +258,36 @@ fn finish(core: &Core, success: bool) {
 }
 
 impl HostSession {
+    /// Observations only, collected on the bounded close worker. Failure to
+    /// acquire a consistent snapshot is unknown, never zero obligations.
+    pub fn close_obligations(&self) -> Result<CloseObligations, SessionError> {
+        let actions_unacknowledged = self
+            .core
+            .actions
+            .try_lock()
+            .map_err(|_| SessionError::Unavailable)?
+            .iter()
+            .filter(|a| !a.acknowledged())
+            .count();
+        let (producers_live, producers_lost) = {
+            let producers = self
+                .core
+                .producers
+                .try_lock()
+                .map_err(|_| SessionError::Unavailable)?;
+            (
+                producers.slots.iter().filter(|p| p.live).count(),
+                producers.slots.iter().filter(|p| p.lost).count(),
+            )
+        };
+        Ok(CloseObligations {
+            actions_unacknowledged,
+            producers_live,
+            producers_lost,
+            authority_closed: self.core.authority_closed.load(Ordering::SeqCst),
+            halt: self.control.authority().halt_records(),
+        })
+    }
     pub fn close_records(&self) -> CloseRecords {
         match self.core.finals.get() {
             Some(f) => CloseRecords {
@@ -463,4 +493,14 @@ impl HostSession {
             EndStatus::Uncertain => Err(SessionError::Unavailable),
         }
     }
+}
+
+/// Current-process close debt; no operational handles.
+#[derive(Clone, Copy, Debug)]
+pub struct CloseObligations {
+    pub actions_unacknowledged: usize,
+    pub producers_live: usize,
+    pub producers_lost: usize,
+    pub authority_closed: bool,
+    pub halt: crate::authority::halt::HaltRecords,
 }

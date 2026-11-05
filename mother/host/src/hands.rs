@@ -615,38 +615,74 @@ impl Runtime {
             Err(_) => self.screen.emit("INVENTORY unknown\n"),
         }
     }
-    fn close(self, request: SessionRequest) -> Option<CloseSeal> {
-        let end = match self.mission {
-            Some(mission) => mission.session.prepare_session_end(),
-            None => self
-                .home
-                .journal()
-                .map_err(CoordinatorError::Journal)
-                .and_then(|j| PreparedSessionEnd::idle(j, self.home.session.identity())),
-        };
-        let end = match end {
-            Ok(end) => end,
-            Err(e) => {
-                self.screen
-                    .emit(&format!("UNCLEAN mother_settlement={}\n", mother_code(&e)));
-                return None;
+    fn close(mut self, request: SessionRequest) -> (Option<CloseSeal>, String) {
+        let result = (|| {
+            let end = match self.mission.take() {
+                Some(mission) => mission.session.prepare_session_end(),
+                None => self
+                    .home
+                    .journal()
+                    .map_err(CoordinatorError::Journal)
+                    .and_then(|j| PreparedSessionEnd::idle(j, self.home.session.identity())),
             }
-        };
-        if self.home.session.settle_close_resources(&request).is_err()
-            || self.home.session.settle_close_authority(&request).is_err()
-        {
-            return None;
+            .map_err(|_| "mother_settlement")?;
+            self.home
+                .session
+                .settle_close_resources(&request)
+                .map_err(|_| "resource_finalization")?;
+            self.home
+                .session
+                .settle_close_authority(&request)
+                .map_err(|_| "authority_finalization")?;
+            let seal = self.home.session.seal_close(&request).map_err(|_| "seal")?;
+            end.record(&seal).map_err(|_| "mother_end")?;
+            self.home
+                .session
+                .observe_mother_end(&seal)
+                .map_err(|_| "mother_end_observation")?;
+            self.home
+                .session
+                .close_primary(&seal)
+                .map_err(|_| "primary_end")?;
+            Ok(seal)
+        })();
+        match result {
+            Ok(seal) => (Some(seal), self.close_report("delivery_pending")),
+            Err(stage) => (None, self.close_report(stage)),
         }
-        let seal = self.home.session.seal_close(&request).ok()?;
-        if end.record(&seal).is_err()
-            || self.home.session.observe_mother_end(&seal).is_err()
-            || self.home.session.close_primary(&seal).is_err()
-        {
-            return None;
+    }
+    fn close_report(&self, stage: &str) -> String {
+        // This runs only on the bounded close worker, never on the deadline
+        // delivery path. A held observer yields an explicit unknown report.
+        let mut report = format!("CLOSE FAILED stage={stage}\n");
+        match self.home.session.resource_obligations() {
+            Ok(r) => report.push_str(&format!("CLOSE OBLIGATIONS reservations_unresolved={} uncertain={} private={} private_unresolved={}\n", r.unresolved, r.uncertain, r.private, r.private_unresolved)),
+            Err(_) => report.push_str(CLOSE_UNKNOWN),
         }
-        Some(seal)
+        match self.home.session.inventory() {
+            Ok(inventory) => {
+                for e in inventory.entries {
+                    report.push_str(&format!("CLOSE RESOURCE request={} in_flight={} uncertain={} discharged={} staging_absent={} private_finalization_established={} parent_synced={} grants_closed={} cleanup_recorded={} intentionally_retained={}\n", e.request, e.in_flight, e.uncertain, e.discharged, e.staging_absent, e.private_finalization_established, e.parent_synced, e.grants_closed, e.cleanup_recorded, e.intentionally_retained));
+                }
+            }
+            Err(_) => report.push_str(CLOSE_UNKNOWN),
+        }
+        match self.home.session.close_obligations() {
+            Ok(o) => report.push_str(&format!("CLOSE AUTHORITY closed={} actions_unacknowledged={} producers_live={} producers_lost={} halt_pending={} halt_owed={} halt_uncertain={} halt_lost={}\n", o.authority_closed, o.actions_unacknowledged, o.producers_live, o.producers_lost, o.halt.pending, o.halt.owed, o.halt.uncertain, o.halt.lost)),
+            Err(_) => report.push_str("CLOSE AUTHORITY unknown\n"),
+        }
+        match self.home.session.stop_obligations() {
+            Ok(o) => report.push_str(&format!("CLOSE STOP received={} recorded={} pending={} in_flight={} owed={} uncertain={} failed={} overflowed={}\n", o.received, o.recorded, o.pending, o.in_flight, o.owed, o.uncertain, o.failed, o.overflowed)),
+            Err(_) => report.push_str("CLOSE STOP unknown\n"),
+        }
+        let h = self.home.evidence_health();
+        report.push_str(&format!("CLOSE PRIMARY latched={} owed={} recovery_required={} unsettled={} unclean_sessions={}\n", h.latched, h.owed, h.recovery_required, h.unsettled, h.unclean_sessions));
+        report
     }
 }
+
+const CLOSE_UNKNOWN: &str =
+    "CLOSE OBLIGATIONS resource_snapshot=unknown in_flight_or_unknown=true\n";
 
 struct OwnerScreen(Arc<Shared>);
 impl nexus_mother::evidence::OwnerView for OwnerScreen {
@@ -663,11 +699,14 @@ impl nexus_governed_control::files::OwnerView for OwnerScreen {
 fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static str> {
     let sources = home.session.startup_report();
     screen.emit(&format!(
-        "SOURCES mother_verified={} resources_verified={} primary_latched={} primary_owed={}\n",
+        "SOURCES mother_verified={} resources_verified={} primary_latched={} primary_owed={} primary_recovery_required={} primary_unsettled={} primary_unclean_sessions={}\n",
         sources.mother.is_ok(),
         sources.resources.is_ok(),
         sources.primary.latched,
-        sources.primary.owed
+        sources.primary.owed,
+        sources.primary.recovery_required,
+        sources.primary.unsettled,
+        sources.primary.unclean_sessions
     ));
     screen.emit("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence.\n");
     if sources.mother.is_err() {
@@ -675,6 +714,38 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
     }
     if sources.resources.is_err() {
         screen.emit("RECOVERY FAILED kernel_resources\n");
+    }
+    if let Ok(mother) = &sources.mother {
+        for mission in &mother.missions {
+            let (terminal, sequence, effect) = mission
+                .terminal
+                .map(|(name, seq, effect)| (name, seq.to_string(), effect))
+                .unwrap_or(("unrecorded", "unavailable".into(), None));
+            let prefix = format!(
+                "RECORDED MOTHER mission={} state={} terminal={} terminal_seq={}",
+                mission.mission, mission.state, terminal, sequence
+            );
+            if !mission
+                .actions
+                .iter()
+                .any(|action| Some(action.effect) == effect)
+            {
+                screen.emit(&format!("{prefix} prior_acknowledgement=unavailable\n"));
+            }
+            for action in &mission.actions {
+                let association = if Some(action.effect) == effect {
+                    prefix.clone()
+                } else {
+                    format!("RECORDED ACTION mission={}", mission.mission)
+                };
+                screen.emit(&format!("{association} effect={} run={} commitment={} prior_acknowledgement=unavailable\n", action.effect, action.run, action.commitment));
+            }
+        }
+    }
+    if let Ok(resources) = &sources.resources {
+        for r in resources {
+            screen.emit(&format!("RECORDED RESOURCE run={} allocation_attempted={} allocated={} awaiting_approval={} discard_recorded={} publication_recorded={} restoration_recorded={} current_existence=unobserved\n", r.run, r.allocation_attempted, r.allocated, r.awaiting_approval, r.discard_recorded, r.publication_recorded, r.restoration_recorded));
+        }
     }
     let report = sources.kernel.map_err(|_| {
         screen.emit("RECOVERY FAILED kernel_ledger\n");
@@ -784,7 +855,13 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             let opened = hands_tests::open_home(seed, &config.home, confirmer.clone());
             #[cfg(not(test))]
             let opened = SessionServices::open(seed, &config.home, confirmer.clone());
-            let home = Arc::new(opened.map_err(|_| "home_unavailable")?);
+            let home = Arc::new(opened.map_err(|error| match error.0.as_str() {
+                "evidence_unavailable" => "evidence_unavailable",
+                "session_unavailable" => "session_unavailable",
+                "mother_history" => "mother_history",
+                "absolute_path_required" => "absolute_path_required",
+                _ => "home_unavailable",
+            })?);
             if !startup_screen.stop.bind(home.session.clone()) {
                 return Err("stop_binding_failed");
             }
@@ -954,6 +1031,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let stops_done = screen.stop.join_until(producers_until);
     let producers_done = terminal.quiesce(producers_until);
     let mut seal = None;
+    let mut close_report = CLOSE_UNKNOWN.to_owned();
     if reader_done
         && work_done
         && stops_done
@@ -970,12 +1048,15 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                     Arc::try_unwrap(runtime)
                         .ok()
                         .and_then(|r| r.into_inner().ok())
-                        .and_then(|r| r.close(request))
+                        .map(|r| r.close(request))
                 })
                 .ok();
             // An append shares the producer budget; it cannot borrow the
             // remaining delivery/mode-restoration time or refresh the clock.
-            seal = join(&mut close, producers_until, &screen).flatten();
+            if let Some((result, report)) = join(&mut close, producers_until, &screen).flatten() {
+                seal = result;
+                close_report = report;
+            }
             if close.is_some() {
                 std::mem::forget(close);
             }
@@ -1007,11 +1088,12 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     };
     let _delivered = screen.delivered(
         &format!(
-            "{}\nMOTHER END {}\nPRIMARY END {}\nFINAL DELIVERY {}\nUNCLEAN outstanding={}\n",
+            "{}\nMOTHER END {}\nPRIMARY END {}\nFINAL DELIVERY {}\n{}PRODUCERS outstanding={}\n",
             crate::terminal::UNCLEAN_NOTICE,
             status(records.mother),
             status(records.primary),
             status(records.delivery),
+            close_report,
             screen.stop.receipt().outstanding + usize::from(!work_done)
         ),
         deadline,

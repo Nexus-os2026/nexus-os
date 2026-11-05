@@ -444,6 +444,7 @@ pub struct RecoveryEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecordedResource {
     pub run: String,
+    pub allocation_attempted: bool,
     pub allocated: bool,
     pub awaiting_approval: bool,
     pub discard_recorded: bool,
@@ -3843,6 +3844,7 @@ impl Files {
                 .map_err(ledger_error)?;
             let mut fact = RecordedResource {
                 run: run.to_string(),
+                allocation_attempted: false,
                 allocated: false,
                 awaiting_approval: false,
                 discard_recorded: false,
@@ -3851,7 +3853,21 @@ impl Files {
             };
             for record in records {
                 match record.event_kind.as_str() {
-                    "run.granted" => fact.allocated = true,
+                    "op.prepared" => {
+                        let value: serde_json::Value = serde_json::from_str(&record.payload)
+                            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+                        value["op"]
+                            .as_u64()
+                            .ok_or(AuthorityError::EvidenceUnavailable)?;
+                        let kind = value["kind"]
+                            .as_str()
+                            .ok_or(AuthorityError::EvidenceUnavailable)?;
+                        fact.allocation_attempted |= kind == "allocate_staging";
+                    }
+                    "run.granted" => {
+                        fact.allocated = true;
+                        fact.allocation_attempted = true;
+                    }
                     "review.computed" | "approval.granted" => fact.awaiting_approval = true,
                     "apply.completed" => {
                         fact.publication_recorded = true;
