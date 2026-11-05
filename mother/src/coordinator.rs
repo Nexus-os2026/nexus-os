@@ -2962,13 +2962,15 @@ pub fn inspect_history_lines(lines: &[String]) -> Result<HistoryInspection, Jour
         unresolved: missions
             .iter()
             .filter_map(|(id, m)| {
+                // Settlement retains its first cause after the terminal line.
+                // Canonical replay validates that line; incomplete settlement
+                // is nonterminal, and uncertain outcomes retain their own debt.
                 (!m.state.is_terminal()
                     || m.unresolved_file.is_some()
                     || m.terminal_uncertain
                     || m.unsettled.is_some()
                     || m.open_action.is_some()
-                    || m.pending_lane.is_some()
-                    || m.settlement.is_some())
+                    || m.pending_lane.is_some())
                 .then_some(*id)
             })
             .collect(),
