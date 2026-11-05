@@ -2366,6 +2366,9 @@ fn session_result_facts_are_exact_observations_not_authority_or_generic_success(
             assert_eq!(before.target, request.context());
             assert_eq!(before.admitted_steps, 0, "acceptance is not admission");
             assert!(!before.apply_handed_off);
+            assert_eq!(before.kernel, RecordingStatus::NotStarted);
+            assert_eq!(before.primary, RecordingStatus::NotStarted);
+            assert!(before.calls.is_empty());
             let ingress = f._session.ingress();
             f.gov.files().hooks().arm(hook, move || {
                 if interfere {

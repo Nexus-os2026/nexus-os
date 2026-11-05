@@ -41,5 +41,12 @@
       "result-calls-baseline-corrected.log": "b2deaa48edebbc37c6451a9c86557c8383fe56133cfb24714b6d26fa697c3ece",
       "result-answers-baseline.log": "b41e51221dd87d75d1ca24cb4185a4459503b30a25a2c588a034211cef8988d9"
     }
+  },
+  "dialogue_poison": {
+    "executed": 1,
+    "expected": "ProtocolFailed",
+    "observed": "Affirmative after actual first affirmative answer and a poisoned dialogue lock",
+    "outcome": "behavioral red",
+    "log_sha256": "d6d8fb561e7d3fc7b376834a8063887350fda2d29feaccf2fb108c7be3152fdd"
   }
 }

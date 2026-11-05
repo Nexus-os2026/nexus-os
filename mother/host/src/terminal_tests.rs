@@ -635,3 +635,53 @@ fn session_stop_delivery_retains_exact_events_until_actual_output_ack() {
         .iter()
         .all(|d| d.ingress_delivered && !d.outcome_delivered));
 }
+
+#[test]
+fn session_dialogue_poison_cannot_reuse_an_earlier_affirmative_answer() {
+    use crate::terminal::AnswerState;
+    use std::time::{Duration, Instant};
+    let (c, frames) = scripted();
+    let first = c.clone();
+    let worker = std::thread::spawn(move || first.ask(Instant::now(), "first", facts(), 2, false));
+    let frame = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+    let code = frame
+        .text
+        .split("Answer code: ")
+        .nth(1)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .to_string();
+    frame.ack.send(Ok(())).unwrap();
+    let (mut input, timeout) = c
+        .shared
+        .changed
+        .wait_timeout_while(c.shared.input(), Duration::from_secs(2), |i| {
+            i.boundary == 0
+        })
+        .unwrap();
+    assert!(!timeout.timed_out());
+    input.acknowledged = input.boundary;
+    c.shared.changed.notify_all();
+    drop(input);
+    assert_eq!(
+        frames.recv_timeout(Duration::from_secs(2)).unwrap().text,
+        "INPUT READY\n"
+    );
+    c.shared.receive(Line::Answer(Some(code)), false);
+    assert!(worker.join().unwrap(), "real first affirmative control");
+    assert_eq!(c.answer(), AnswerState::Affirmative);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _held = c.shared.dialogue.lock().unwrap();
+        panic!("registered dialogue poison");
+    }))
+    .is_err());
+    assert!(!c.ask(Instant::now(), "second", facts(), 2, false));
+    assert_eq!(
+        c.answer(),
+        AnswerState::ProtocolFailed,
+        "poison is not the preceding answer"
+    );
+    assert!(c.shared.stop.ingress.failed());
+}
