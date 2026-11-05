@@ -53,6 +53,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 mod lite_port;
+mod session_port;
+use session_port::PortDoor;
+pub use session_port::SessionPort;
 
 #[cfg(test)]
 mod expiry_tests;
@@ -168,7 +171,7 @@ pub struct GovernedPort {
     #[cfg(test)]
     pub(crate) file_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     /// M2c: the port's only broker handle.
-    door: AgentDoor,
+    door: PortDoor,
     file_port: Result<FilePort, FileSessionError>,
     file_session: OnceLock<(Arc<FileAttachment>, HaltCell)>,
     workspace: Option<String>,
@@ -225,6 +228,10 @@ pub struct GovernedPort {
 impl GovernedPort {
     /// A port over `door`, which the host issued after the Owner's yes.
     pub fn new(door: AgentDoor) -> Self {
+        Self::from_door(PortDoor::Legacy(door))
+    }
+
+    fn from_door(door: PortDoor) -> Self {
         let file_port = door.file_port();
         Self {
             file_port,
@@ -275,6 +282,11 @@ impl GovernedPort {
     }
 
     fn admit_host(&self) -> Result<(), EffectRefusal> {
+        if let Some(context) = self.door.context() {
+            context
+                .admit(nexus_governed_control::host_session::MotherStep::PortProjection)
+                .map_err(|_| refused(BrokerClass::Halted))?;
+        }
         if self
             .admission_gate
             .as_ref()
@@ -538,6 +550,9 @@ impl GovernedPort {
 }
 
 impl EffectPort for GovernedPort {
+    fn session_context(&self) -> Option<nexus_governed_control::host_session::SessionContext> {
+        self.door.context()
+    }
     fn file_workspace(&self) -> Option<&str> {
         self.workspace.as_deref()
     }

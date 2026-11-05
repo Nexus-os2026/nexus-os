@@ -87,8 +87,14 @@ impl HaltTag {
 pub struct HaltCell(
     Arc<AtomicU64>,
     #[cfg(test)] pub(crate) Arc<crate::test_hooks::Hooks>,
-    bool,
+    CellMode,
 );
+
+#[derive(Clone, Debug)]
+enum CellMode {
+    Legacy,
+    Host(Option<Arc<crate::host_session::RequestScope>>),
+}
 
 /// Closed update vocabulary. Both admission ordering and ingress use this
 /// one atomic writer; no caller can publish a half-installed first intent.
@@ -97,10 +103,18 @@ enum Update {
     Latch { bits: u64, emergency: bool },
 }
 pub(crate) fn check_halt(cell: Option<&HaltCell>) -> Result<(), super::AuthorityError> {
-    if cell.is_some_and(HaltCell::is_engaged) {
-        Err(super::AuthorityError::Halted)
-    } else {
-        Ok(())
+    match cell {
+        Some(cell) => cell.admit(),
+        None => Ok(()),
+    }
+}
+
+/// Additional host-only sink boundary. Legacy calls retain their established
+/// checks and entered-call behavior; they cannot acquire a host scope here.
+pub(crate) fn admit_host(cell: Option<&HaltCell>) -> Result<(), super::AuthorityError> {
+    match cell {
+        Some(cell) if cell.host() => cell.admit(),
+        _ => Ok(()),
     }
 }
 
@@ -111,14 +125,38 @@ impl std::fmt::Debug for HaltCell {
     }
 }
 impl HaltCell {
-    fn host(&self) -> bool {
+    fn mode(&self) -> &CellMode {
         #[cfg(test)]
         {
-            self.2
+            &self.2
         }
         #[cfg(not(test))]
         {
-            self.1
+            &self.1
+        }
+    }
+    pub(crate) fn host(&self) -> bool {
+        matches!(self.mode(), CellMode::Host(_))
+    }
+    pub(crate) fn scoped(&self, scope: Arc<crate::host_session::RequestScope>) -> Self {
+        assert!(
+            self.host(),
+            "only the original host cell can bind a request"
+        );
+        Self(
+            self.0.clone(),
+            #[cfg(test)]
+            self.1.clone(),
+            CellMode::Host(Some(scope)),
+        )
+    }
+    /// A bounded step consumes its sequence before the final same-word CAS.
+    /// No permit is returned. The caller invokes one sink immediately.
+    pub(crate) fn admit(&self) -> Result<(), super::AuthorityError> {
+        match self.mode() {
+            CellMode::Legacy if !self.is_engaged() => Ok(()),
+            CellMode::Legacy | CellMode::Host(None) => Err(super::AuthorityError::Halted),
+            CellMode::Host(Some(scope)) => scope.admit(self),
         }
     }
 
@@ -127,7 +165,7 @@ impl HaltCell {
             Arc::new(AtomicU64::new(0)),
             #[cfg(test)]
             Arc::default(),
-            true,
+            CellMode::Host(None),
         )
     }
     pub(crate) fn session_word(&self) -> u64 {
@@ -207,6 +245,9 @@ impl HaltCell {
     }
     pub fn is_engaged(&self) -> bool {
         let word = self.0.load(Ordering::SeqCst);
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            return !scope.live(word);
+        }
         HaltCause::of(word).is_some()
             || (self.host()
                 && word
@@ -294,13 +335,20 @@ impl Default for FileSessions {
                 Arc::new(AtomicU64::new(0)),
                 #[cfg(test)]
                 Arc::default(),
-                false,
+                CellMode::Legacy,
             ),
             history: Mutex::default(),
         }
     }
 }
 impl FileSessions {
+    pub(crate) fn host(cell: HaltCell) -> Self {
+        assert!(cell.host());
+        Self {
+            state: cell,
+            history: Mutex::default(),
+        }
+    }
     fn lock(&self) -> Result<MutexGuard<'_, History>, FileSessionError> {
         self.history.lock().map_err(|_| {
             self.state.engage_tagged(HaltTag::DoorHalted);
@@ -323,18 +371,33 @@ impl FileSessions {
         }
         Ok(())
     }
-    pub(crate) fn port(self: &Arc<Self>, group: GroupId) -> Result<FilePort, FileSessionError> {
+    pub(crate) fn port(
+        self: &Arc<Self>,
+        group: GroupId,
+        request: Option<&HaltCell>,
+    ) -> Result<FilePort, FileSessionError> {
         let mut h = self.lock()?;
         if h.selected {
             self.state.engage_tagged(HaltTag::DoorHalted);
             return Err(FileSessionError::Reopened);
         }
-        h.ports = h.ports.checked_add(1).ok_or(FileSessionError::Capacity)?;
+        let number = h.ports.checked_add(1).ok_or(FileSessionError::Capacity)?;
+        if self.state.host() {
+            let request = request.ok_or(FileSessionError::WrongOwner)?;
+            if !self.state.same(request) {
+                return Err(FileSessionError::WrongOwner);
+            }
+            request
+                .admit()
+                .map_err(|_| FileSessionError::EmergencyHistory)?;
+        }
+        h.ports = number;
         h.original.get_or_insert(group);
         Ok(FilePort {
             sessions: self.clone(),
             group,
             number: h.ports,
+            request: request.cloned(),
         })
     }
     pub(crate) fn claim(
@@ -348,11 +411,26 @@ impl FileSessions {
             return Err(FileSessionError::AlreadySelected);
         }
         self.fresh()?;
+        if self.state.host() {
+            attachment
+                .request
+                .as_ref()
+                .ok_or(FileSessionError::WrongOwner)?
+                .admit()
+                .map_err(|_| FileSessionError::EmergencyHistory)?;
+        }
         h.selected = true;
         // A concurrent emergency engages the SAME atomic already held here;
         // even one immediately after this read cannot leave a live token.
         self.fresh()?;
-        Ok(self.state.clone())
+        if self.state.host() {
+            attachment
+                .request
+                .clone()
+                .ok_or(FileSessionError::WrongOwner)
+        } else {
+            Ok(self.state.clone())
+        }
     }
     fn validate(
         &self,
@@ -382,7 +460,18 @@ impl FileSessions {
             return Err(FileSessionError::WrongOwner);
         }
         self.fresh()?;
-        Ok(self.state.clone())
+        if self.state.host() {
+            let request = attachment
+                .request
+                .as_ref()
+                .ok_or(FileSessionError::WrongOwner)?;
+            request
+                .admit()
+                .map_err(|_| FileSessionError::EmergencyHistory)?;
+            Ok(request.clone())
+        } else {
+            Ok(self.state.clone())
+        }
     }
 }
 
@@ -391,6 +480,7 @@ pub struct FilePort {
     sessions: Arc<FileSessions>,
     group: GroupId,
     number: u64,
+    request: Option<HaltCell>,
 }
 impl FilePort {
     /// Register EVERY coordinator before replay/adoption. Before selection,
@@ -401,15 +491,24 @@ impl FilePort {
             self.sessions.state.engage_tagged(HaltTag::DoorHalted);
             return Err(FileSessionError::Reopened);
         }
-        h.attachments = h
+        let number = h
             .attachments
             .checked_add(1)
             .ok_or(FileSessionError::Capacity)?;
+        if self.sessions.state.host() {
+            self.request
+                .as_ref()
+                .ok_or(FileSessionError::WrongOwner)?
+                .admit()
+                .map_err(|_| FileSessionError::EmergencyHistory)?;
+        }
+        h.attachments = number;
         Ok(FileAttachment {
             sessions: self.sessions.clone(),
             group: self.group,
             port: self.number,
             number: h.attachments,
+            request: self.request.clone(),
         })
     }
 }
@@ -421,6 +520,7 @@ pub struct FileAttachment {
     group: GroupId,
     port: u64,
     number: u64,
+    request: Option<HaltCell>,
 }
 
 #[cfg(test)]

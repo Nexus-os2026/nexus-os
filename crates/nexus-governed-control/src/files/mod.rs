@@ -540,13 +540,16 @@ impl Kernel {
         root: &Path,
         runtime_root: &Path,
         reserved: &[PathBuf],
+        halt: Option<&HaltCell>,
     ) -> Result<Self, AuthorityError> {
         let authority = Arc::new(WorkspaceAuthorityRegistry::new());
         let mut trees: Vec<&Path> = reserved.iter().map(PathBuf::as_path).collect();
         trees.push(runtime_root);
         let projects = ProjectRegistry::reserving(Arc::clone(&authority), &trees);
+        let picked = Picked(root.to_path_buf());
+        crate::authority::file_session::admit_host(halt)?;
         let project = projects
-            .select(&Picked(root.to_path_buf()))
+            .select(&picked)
             .map_err(|_| refused("the kernel refused the workspace"))?;
         Ok(Self {
             projects,
@@ -2685,6 +2688,14 @@ impl Files {
     /// R3: the Owner's startup hold, at most [`MAX_HOLD`], set before the
     /// workspace is registered.
     pub(crate) fn set_hold(&self, hold: Duration) -> Result<(), AuthorityError> {
+        self.set_hold_with_halt(hold, None)
+    }
+
+    pub(crate) fn set_hold_with_halt(
+        &self,
+        hold: Duration,
+        cell: Option<&HaltCell>,
+    ) -> Result<(), AuthorityError> {
         if hold > MAX_HOLD {
             return Err(refused("the hold before publication is at most 30 seconds"));
         }
@@ -2694,6 +2705,7 @@ impl Files {
             ));
         }
         let ms = u64::try_from(hold.as_millis()).unwrap_or(u64::MAX);
+        crate::authority::file_session::admit_host(cell)?;
         self.shared.hold_ms.store(ms, Ordering::SeqCst);
         Ok(())
     }
@@ -2833,7 +2845,7 @@ impl Files {
         #[cfg(test)]
         self.hooks().fire("session.before.project_select");
         #[cfg(target_os = "linux")]
-        let kernel = Kernel::register(path, &self.runtime_root, &exclusions.reserved)?;
+        let kernel = Kernel::register(path, &self.runtime_root, &exclusions.reserved, halt)?;
         #[cfg(test)]
         self.hooks().fire("session.after.project_select");
         if identity_of(path)? != identity {

@@ -252,6 +252,16 @@ impl GovernedControl {
         evidence: Arc<dyn EvidenceSink>,
         clock: Arc<dyn Clock>,
     ) -> Result<Self, AuthorityError> {
+        Self::with_file_sessions(root, secrets, evidence, clock, Arc::default())
+    }
+
+    pub(crate) fn with_file_sessions(
+        root: &Path,
+        secrets: Arc<dyn SecretSource>,
+        evidence: Arc<dyn EvidenceSink>,
+        clock: Arc<dyn Clock>,
+        file_sessions: Arc<crate::authority::file_session::FileSessions>,
+    ) -> Result<Self, AuthorityError> {
         let root = RuntimeRoot::open(root)?;
         let files = Files::new(root.path().to_path_buf());
         // The owner's Stop/Resume path holds the kernel stop's controller
@@ -277,7 +287,7 @@ impl GovernedControl {
         let egress = Arc::new(Egress::system());
         let broker = CredentialBroker::new(control.authority(), secrets);
         let governed = Self {
-            file_sessions: Arc::default(),
+            file_sessions,
             connectors: Connectors::production(egress.clone(), broker.clone()),
             credentials: broker,
             doors_halted: AtomicU64::new(0),

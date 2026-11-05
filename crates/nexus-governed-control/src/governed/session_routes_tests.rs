@@ -4,11 +4,10 @@
 use super::*;
 use crate::authority::approval::*;
 use crate::authority::clock::ManualClock;
-use crate::authority::evidence::MemoryEvidence;
-use crate::files::{Exclusions, FileCreate};
+use crate::files::FileCreate;
 use crate::harness_tests::{temp_root, TempRoot};
+use crate::host_session::{CommandKind, HostSession, SessionDoor, SessionSeed};
 use nexus_kernel::coding_run::LedgerFile;
-use nexus_kernel::emergency_stop::StopAuthority;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -44,7 +43,8 @@ impl ControlConfirmer for Yes {
 
 struct Fixture {
     gov: Arc<GovernedControl>,
-    door: Arc<AgentDoor>,
+    door: Arc<SessionDoor>,
+    _session: Arc<HostSession>,
     run: RunId,
     clock: Arc<ManualClock>,
     grant: crate::authority::ids::GrantId,
@@ -64,40 +64,24 @@ impl Fixture {
     fn with_roots_and_duration(root: TempRoot, dirs: TempRoot, duration: Duration) -> Self {
         assert!(crate::files::make_non_dumpable());
         let clock = Arc::new(ManualClock::default());
-        let gov = Arc::new(
-            GovernedControl::with_secrets(
-                root.0.path(),
-                Vault::Disabled.source(),
-                Arc::new(MemoryEvidence::new(4096)),
-                clock.clone(),
-            )
-            .unwrap()
-            .with_kernel_stop(StopAuthority::new()),
+        let seed = SessionSeed::new().unwrap();
+        let ingress = seed.ingress();
+        let evidence = crate::evidence_store::PrimaryEvidence::open(
+            &root.0.path().join("p3-evidence/evidence.sqlite3"),
+            vec![],
+        )
+        .unwrap();
+        let session = Arc::new(
+            HostSession::open(seed, root.0.path(), evidence, clock.clone(), Arc::new(Yes)).unwrap(),
         );
-        let selected = dirs.0.path().join("selected");
-        let workspace = selected.join("workspace");
+        let workspace = dirs.0.path().join("selected/workspace");
         std::fs::create_dir_all(&workspace).unwrap();
-        let info = gov
-            .register_workspace_in(
-                &workspace,
-                &Exclusions {
-                    home: selected,
-                    identity_home: dirs.0.path().join("identity"),
-                    reserved: vec![dirs.0.path().join("reserved")],
-                    uid: crate::launcher::effective_uid(),
-                },
-            )
-            .unwrap();
-        let grant = gov
-            .request_grant(&GrantRequest::Files { workspace: info.id }, duration, &Yes)
-            .unwrap();
-        let door = gov
-            .issue_agent_door_with_halt(
-                AgentId::new("mother").unwrap(),
-                Arc::new(Yes),
-                Some(gov.file_session_halt()),
-            )
-            .unwrap();
+        session.bootstrap_workspace(&workspace, &[]).unwrap();
+        session.finish_bootstrap().unwrap();
+        let request = ingress.accept(CommandKind::Run, 1).unwrap();
+        let door = session.door_for_test(&request, duration).unwrap();
+        let gov = session.control_for_test();
+        let grant = gov.grants().into_iter().next().unwrap().id;
         let attachment = door.file_port().unwrap().attach().unwrap();
         door.claim_file_session(&attachment).unwrap();
         door.confirm_mission(&MissionConfirmation {
@@ -112,6 +96,7 @@ impl Fixture {
         Self {
             gov,
             door: Arc::new(door),
+            _session: session,
             run,
             clock,
             grant,
@@ -124,13 +109,15 @@ impl Fixture {
         self.propose_content("session.txt", "session oracle\n")
     }
     fn propose_content(&self, name: &str, content: &str) -> Result<AgentOutcome, AuthorityError> {
-        self.door.agent_action(
-            self.run,
-            &Intent::File(FileCreate {
-                name: name.into(),
-                content: content.into(),
-            }),
-        )
+        self.door
+            .create_file(
+                self.run,
+                &FileCreate {
+                    name: name.into(),
+                    content: content.into(),
+                },
+            )
+            .map_err(Into::into)
     }
     fn ledger_path(&self) -> std::path::PathBuf {
         self.gov.files().state_dir_for_test().join("ledger.db")

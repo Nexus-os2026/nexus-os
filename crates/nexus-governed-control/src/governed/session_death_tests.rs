@@ -2,6 +2,7 @@
 //! reaps the producer, then starts two independent read-only brokers. A
 //! callback alone is never counted as process-death coverage.
 use super::*;
+use crate::authority::evidence::MemoryEvidence;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;

@@ -117,7 +117,9 @@ impl AgentDoor {
     /// Register a port before any coordinator attachment or replay.
     /// Its history survives dropping every caller handle.
     pub fn file_port(&self) -> Result<FilePort, FileSessionError> {
-        self.control.file_sessions.port(self.core.group)
+        self.control
+            .file_sessions
+            .port(self.core.group, self.core.session_cell.as_ref())
     }
 
     /// Select the original File session once, with its broker-owned cell.

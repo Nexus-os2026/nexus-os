@@ -232,12 +232,17 @@ pub(crate) mod held {
 mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::adapter::GovernedPort {}
+    impl Sealed for crate::adapter::SessionPort {}
     #[cfg(test)]
     impl Sealed for crate::oracles::RecordingPort {}
 }
 
 /// The calls Mother makes to reach the world.
 pub trait EffectPort: Send + Sync + sealed::Sealed {
+    /// Present only for a mandatory, broker-issued host session port.
+    fn session_context(&self) -> Option<nexus_governed_control::host_session::SessionContext> {
+        None
+    }
     /// Register before replay. The default port has no File eligibility.
     fn file_workspace(&self) -> Option<&str> {
         None

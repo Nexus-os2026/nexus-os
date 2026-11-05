@@ -2,6 +2,7 @@
 //! fixture adapter must move to HostSession; these expectations must not be
 //! imposed on ordinary legacy clients.
 use super::*;
+use crate::authority::evidence::MemoryEvidence;
 
 struct Bare {
     gov: Arc<GovernedControl>,
