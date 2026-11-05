@@ -1945,3 +1945,51 @@ fn session_stop_poison_cannot_be_reported_as_completed_recording() {
         );
     }
 }
+
+#[test]
+fn session_stop_keeps_every_consequence_status_beside_the_final_record() {
+    let f = Fixture::new();
+    for name in ["first.txt", "second.txt"] {
+        assert!(matches!(
+            f.propose_content(name, "two pending actions\n").unwrap(),
+            AgentOutcome::AwaitingApproval(_)
+        ));
+    }
+    let staging = f.gov.files().state_dir_for_test().join("coding-runs");
+    let before = resources(&staging);
+    let event = f._session.ingress().emergency().unwrap();
+    f.primary.store().refuse_next_insert();
+    let receipt = f._session.record_stop(&event).unwrap();
+    assert_eq!(
+        (
+            receipt.consequences.recorded,
+            receipt.consequences.owed,
+            receipt.consequences.uncertain
+        ),
+        (1, 1, 0),
+        "the last successful consequence cannot replace the first append's owed result"
+    );
+    assert!(matches!(
+        receipt.record,
+        crate::authority::evidence::EndStatus::Recorded { .. }
+    ));
+    assert_eq!(f._session.stop_obligations().unwrap().recorded, 0);
+    assert_eq!(f._session.stop_obligations().unwrap().owed, 1);
+    assert_eq!(resources(&staging), before);
+}
+
+#[test]
+fn session_stop_spawn_failure_retains_the_unrecorded_event() {
+    let f = Fixture::new();
+    let event = f._session.ingress().emergency().unwrap();
+    let before = f.primary.store().rows();
+    f._session.stop_spawn_failed(&event).unwrap();
+    assert_eq!(f.primary.store().rows(), before);
+    let debt = f._session.stop_obligations().unwrap();
+    assert_eq!((debt.received, debt.failed, debt.recorded), (1, 1, 0));
+    assert!(f._session.record_stop(&event).is_err());
+    assert_eq!(
+        f._session.state(),
+        crate::host_session::SessionState::Failed
+    );
+}
