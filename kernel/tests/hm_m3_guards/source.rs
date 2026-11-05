@@ -26,6 +26,11 @@ mod source_literals_tests;
 #[path = "source_reachability_tests.rs"]
 mod source_reachability_tests;
 
+// Preserve the complete historical scanner, including unused view helpers.
+#[allow(dead_code)]
+#[path = "source_fe5328af.rs"]
+mod fe5328af;
+
 pub fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

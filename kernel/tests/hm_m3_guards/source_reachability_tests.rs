@@ -2,8 +2,29 @@
 //! Old: "any test-only declaration excludes the resolved file globally".
 //! New: "every incoming declaration must provably require test; uncertainty scans".
 
-use super::production_files_in;
+// R-4 amendment. Old: "new reachability alone may exclude whole files".
+// New: "exclude only if fe5328af excluded AND new proof establishes test-only;
+// every independent Cargo production root stays production".
+use super::{fe5328af, production_files_in};
 use std::collections::BTreeSet;
+use std::path::Path;
+
+fn assert_monotonic(root: &Path) -> BTreeSet<String> {
+    let legacy: BTreeSet<_> = fe5328af::production_files_in(root)
+        .into_iter()
+        .map(|file| file.rel)
+        .collect();
+    let current: BTreeSet<_> = production_files_in(root)
+        .into_iter()
+        .map(|file| file.rel)
+        .collect();
+    assert!(
+        legacy.is_subset(&current),
+        "lost fe5328af files: {:?}",
+        legacy.difference(&current).collect::<Vec<_>>()
+    );
+    current
+}
 
 fn inventory(files: &[(&str, &str)]) -> BTreeSet<String> {
     let root = tempfile::tempdir().unwrap();
@@ -12,14 +33,11 @@ fn inventory(files: &[(&str, &str)]) -> BTreeSet<String> {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
-    production_files_in(root.path())
-        .into_iter()
-        .map(|file| file.rel)
-        .collect()
+    assert_monotonic(root.path())
 }
 
 #[test]
-fn whole_file_attributes_are_complete_in_both_orders() {
+fn whole_file_new_test_proof_cannot_exclude_legacy_scanned_files_in_either_order() {
     for attrs in [
         "#[path = \"fixture.rs\"] #[cfg(all(unix, test))]",
         "#[cfg(all(unix, test))] #[path = \"fixture.rs\"]",
@@ -29,7 +47,8 @@ fn whole_file_attributes_are_complete_in_both_orders() {
             ("fixture.rs", "fn test_only() {}"),
             ("config.rs", "fn production() {}"),
         ]);
-        assert!(!files.contains("fixture.rs"), "{attrs}: {files:?}");
+        // fe5328af did not recognize all(unix, test): R-4 retains it.
+        assert!(files.contains("fixture.rs"), "{attrs}: {files:?}");
         assert!(files.contains("config.rs"), "{attrs}: {files:?}");
     }
 }
@@ -70,7 +89,9 @@ fn whole_file_test_only_reachability_propagates_without_hiding_shared_children()
         ("shared.rs", ""),
     ]);
     assert!(!files.contains("fixture.rs"));
-    assert!(!files.contains("fixture/child.rs"));
+    // The historical scanner kept this child (its same-line path lookup
+    // reused the earlier attribute); R-4 preserves that coverage too.
+    assert!(files.contains("fixture/child.rs"));
     assert!(files.contains("shared.rs"));
 }
 
@@ -109,7 +130,8 @@ fn whole_file_inline_modules_use_rust_relative_directory_rules() {
             (target, ""),
             ("fixture.rs", ""),
         ]);
-        assert!(!files.contains(target), "{source}: {files:?}");
+        // fe5328af did not resolve this inline target: R-4 retains it.
+        assert!(files.contains(target), "{source}: {files:?}");
         assert!(files.contains("fixture.rs"));
     }
     let files = inventory(&[
@@ -117,7 +139,7 @@ fn whole_file_inline_modules_use_rust_relative_directory_rules() {
         ("thread_files/tls.rs", ""),
         ("ordinary/thread/tls.rs", ""),
     ]);
-    assert!(!files.contains("thread_files/tls.rs"));
+    assert!(files.contains("thread_files/tls.rs"));
     assert!(files.contains("ordinary/thread/tls.rs"));
     let files = inventory(&[
         ("lib.rs", "#[cfg(test)] mod outer { mod child; } mod live { #[path = \"../outer/child.rs\"] mod shared; }"),
@@ -205,46 +227,166 @@ fn whole_file_symlink_path_alias_keeps_its_production_child_scanned() {
     std::fs::write(root.path().join("real/renamed.rs"), "mod child;").unwrap();
     std::fs::write(root.path().join("child.rs"), "").unwrap();
     std::os::unix::fs::symlink("real/renamed.rs", root.path().join("alias.rs")).unwrap();
-    assert!(production_files_in(root.path())
-        .iter()
-        .any(|f| f.rel == "child.rs"));
+    assert!(assert_monotonic(root.path()).contains("child.rs"));
 }
 
 #[test]
-fn real_tree_retains_legacy_production_inventory_except_proved_test_files() {
-    // Captured by running the scanner from fe5328afdb04732b9aa9bf9eb854b01823f8d352
-    // over this real tree. Check identities as well as the reviewer's count.
-    let legacy: BTreeSet<_> = include_str!("source_production_fe5328af.txt")
+fn real_tree_production_set_is_a_superset_of_fe5328af() {
+    // Keep the exact 242-path inventory, independently of the live old scanner.
+    let fixture: BTreeSet<_> = include_str!("source_production_fe5328af.txt")
         .lines()
+        .map(str::to_string)
         .collect();
-    assert_eq!(legacy.len(), 242);
-    let current: BTreeSet<_> = super::production_files()
+    assert_eq!(fixture.len(), 242);
+    let root = super::workspace_root();
+    let legacy: BTreeSet<_> = fe5328af::production_files_in(&root)
         .into_iter()
-        .map(|f| f.rel)
+        .map(|file| file.rel)
         .collect();
-    let missing: BTreeSet<_> = legacy
-        .iter()
-        .filter(|p| !current.contains(**p))
-        .copied()
-        .collect();
-    let expected: BTreeSet<_> = (3..=6)
-        .map(|n| format!("mother/src/adapter/lite_review{n}.rs"))
-        .collect();
-    // These four complete attribute lists are now resolved correctly. Each
-    // consists of path, target_os=linux, cfg(test); no production declaration
-    // reaches any of the four. Synthetic shared-reachability controls above
-    // must retain the file if a production declaration is added.
-    for n in 3..=6 {
-        let declaration = format!("#[path = \"../adapter/lite_review{n}.rs\"]\n#[cfg(target_os = \"linux\")]\n#[cfg(test)]\nmod review{n};");
-        assert!(include_str!("../../../mother/src/coordinator/lite.rs").contains(&declaration));
-    }
-    assert!(
-        missing.iter().all(|p| expected.contains(*p)),
-        "unexpected lost production files: {missing:?}"
-    );
-    assert!(current.len() >= 242 - missing.len());
+    assert_eq!(legacy, fixture, "historical oracle drifted");
+    let current = assert_monotonic(&root);
+    assert!(fixture.is_subset(&current));
+    assert!(current.contains("mother/src/contract.rs"));
     println!(
-        "production inventory: legacy=242 current={} extra exclusions={missing:?}",
+        "production inventory: legacy={} current={}",
+        fixture.len(),
         current.len()
     );
+}
+
+#[test]
+fn cargo_roots_and_their_children_survive_test_aliases_in_both_attribute_orders() {
+    let manifest = "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n[lib]\npath = \"library.rs\"\n[[bin]]\nname = \"explicit\"\npath = \"app.rs\"\n";
+    for cfg in ["all(unix, test)", "test"] {
+        for path_first in [true, false] {
+            let mut loader = String::new();
+            for (i, path) in [
+                "library.rs",
+                "app.rs",
+                "src/bin/helper.rs",
+                "src/bin/nested/main.rs",
+            ]
+            .iter()
+            .enumerate()
+            {
+                let attrs = if path_first {
+                    format!("#[path = {path:?}] #[cfg({cfg})]")
+                } else {
+                    format!("#[cfg({cfg})] #[path = {path:?}]")
+                };
+                loader.push_str(&format!("{attrs} mod alias{i};\n"));
+            }
+            // Exercise the same auto-bin alias alongside explicit targets.
+            let files = inventory(&[
+                ("Cargo.toml", manifest),
+                ("loader.rs", &loader),
+                ("src/lib.rs", &if path_first {
+                    format!("#[path = \"bin/helper.rs\"] #[cfg({cfg})] mod test_cli;")
+                } else {
+                    format!("#[cfg({cfg})] #[path = \"bin/helper.rs\"] mod test_cli;")
+                }),
+                ("library.rs", "mod child;"),
+                ("app.rs", "mod child; fn main() {}"),
+                ("child.rs", "pub fn production() {}"),
+                ("src/bin/helper.rs", "mod child; fn main() {}"),
+                ("src/bin/child.rs", "pub fn production() {}"),
+                ("src/bin/nested/main.rs", "mod child; fn main() {}"),
+                ("src/bin/nested/child.rs", "pub fn production() {}"),
+                ("test_loader.rs", "#[cfg(test)] #[path = \"child.rs\"] mod shared; #[cfg(test)] #[path = \"src/bin/child.rs\"] mod bin_child; #[cfg(test)] #[path = \"src/bin/nested/child.rs\"] mod nested_child;"),
+            ]);
+            for path in [
+                "library.rs",
+                "app.rs",
+                "child.rs",
+                "src/bin/helper.rs",
+                "src/bin/child.rs",
+                "src/bin/nested/main.rs",
+                "src/bin/nested/child.rs",
+            ] {
+                assert!(
+                    files.contains(path),
+                    "{cfg}, path_first={path_first}: lost {path}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn custom_build_root_remains_production_with_its_children() {
+    let files = inventory(&[
+        ("Cargo.toml", "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\nbuild = \"compile.rs\"\n"),
+        ("src/lib.rs", "#[cfg(test)] #[path = \"../compile.rs\"] mod fixture; #[cfg(test)] #[path = \"../child.rs\"] mod fixture_child;"),
+        ("compile.rs", "mod child; fn main() {}"),
+        ("child.rs", "pub fn production() {}"),
+        ("build.rs", "fn main() {}"),
+    ]);
+    assert!(files.contains("compile.rs"));
+    assert!(files.contains("child.rs"));
+    // fe5328af never covered the conventional build.rs path.
+    assert!(!files.contains("build.rs"));
+}
+
+#[cfg(unix)]
+#[test]
+fn cargo_root_symlinks_preserve_both_spelling_and_load_directory() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("src/bin")).unwrap();
+    std::fs::create_dir(root.path().join("real")).unwrap();
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("src/lib.rs"), "#[cfg(test)] #[path = \"../real/program.rs\"] mod fixture; #[cfg(test)] #[path = \"bin/child.rs\"] mod fixture_child;").unwrap();
+    std::fs::write(
+        root.path().join("real/program.rs"),
+        "mod child; fn main() {}",
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("src/bin/child.rs"),
+        "pub fn production() {}",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        "../../real/program.rs",
+        root.path().join("src/bin/helper.rs"),
+    )
+    .unwrap();
+    let files = assert_monotonic(root.path());
+    for path in ["real/program.rs", "src/bin/helper.rs", "src/bin/child.rs"] {
+        assert!(files.contains(path), "lost Cargo root or child: {path}");
+    }
+}
+
+#[test]
+fn reviewer_standard_cargo_auto_bin_remains_scanned_with_protected_content() {
+    for attrs in [
+        "#[path = \"bin/helper.rs\"] #[cfg(all(unix, test))]",
+        "#[cfg(all(unix, test))] #[path = \"bin/helper.rs\"]",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("src/bin")).unwrap();
+        std::fs::write(
+            root.path().join("Cargo.toml"),
+            "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("src/lib.rs"),
+            format!("{attrs} mod test_cli;"),
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("src/bin/helper.rs"),
+            "fn main() {} pub fn name_is_cloud() -> bool { false } pub const P: &str = \"cloud\";",
+        )
+        .unwrap();
+        assert!(assert_monotonic(root.path()).contains("src/bin/helper.rs"));
+        let files = production_files_in(root.path());
+        let binary = files.iter().find(|f| f.rel == "src/bin/helper.rs").unwrap();
+        assert!(binary.code.contains("name_is_cloud"));
+        assert!(binary.text.contains("\"cloud\""));
+    }
 }

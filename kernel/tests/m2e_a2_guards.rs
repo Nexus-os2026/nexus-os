@@ -1370,7 +1370,8 @@ fn e_o15_whole_file_reviewer_probe_keeps_two_findings() {
     assert!(findings
         .iter()
         .any(|f| f.contains("predicate literal \"cloud\"")));
-    assert!(!files.iter().any(|f| f.rel == "fixture.rs"));
+    // R-4: fe5328af scanned this newly recognized test-only file.
+    assert!(files.iter().any(|f| f.rel == "fixture.rs"));
 }
 
 /// Mother Nexus cleanup (2026-11-05): two absence guards keep the retired
