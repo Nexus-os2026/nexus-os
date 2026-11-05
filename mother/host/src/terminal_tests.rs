@@ -446,3 +446,42 @@ fn review2_crlf_transport_decoding_keeps_hostile_controls() {
         .chars()
         .any(|c| c != '\n' && !shown(c)));
 }
+
+// A5/A10/A12: these expectations are independent of the native boolean trait.
+#[test]
+fn session_confirmation_distinguishes_explicit_decline_invalid_input_and_ingress() {
+    use crate::terminal::AnswerState;
+    use std::time::{Duration, Instant};
+    for (answer, expected) in [("no", AnswerState::Declined), ("wrong", AnswerState::ProtocolFailed), ("STOP", AnswerState::Invalidated)] {
+        let (c, frames) = scripted();
+        let worker_c = c.clone();
+        let worker = std::thread::spawn(move || worker_c.ask(Instant::now(), "actual answer", facts(), 2, false));
+        let frame = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+        frame.ack.send(Ok(())).unwrap();
+        let (mut input, timeout) = c.shared.changed.wait_timeout_while(c.shared.input(), Duration::from_secs(2), |i| i.boundary == 0).unwrap();
+        assert!(!timeout.timed_out());
+        input.acknowledged = input.boundary;
+        c.shared.changed.notify_all();
+        drop(input);
+        assert_eq!(frames.recv_timeout(Duration::from_secs(2)).unwrap().text, "INPUT READY\n");
+        c.shared.receive(if answer == "STOP" { Line::Stop } else { Line::Answer(Some(answer.into())) }, false);
+        assert!(!worker.join().unwrap());
+        assert_eq!(c.answer(), expected, "false is not proof of an explicit decline");
+    }
+}
+
+#[test]
+fn session_confirmation_scope_keeps_original_request_time_and_generation() {
+    use nexus_governed_control::host_session::CommandKind;
+    let (c, frames) = scripted();
+    let original = c.shared.stop.ingress.accept(CommandKind::Run, 1).unwrap();
+    let retained = c.for_request(&original);
+    assert_eq!(retained.request_sequence(), Some(1));
+    assert_eq!(retained.request_deadline(), Some(original.deadline()));
+    c.shared.receive(Line::Stop, false);
+    let later = c.shared.stop.ingress.accept(CommandKind::Status, 2).unwrap();
+    let _later = c.for_request(&later);
+    assert!(!retained.ask(std::time::Instant::now(), "retained callback", facts(), 300, false));
+    assert!(frames.try_recv().is_err(), "later callback cannot replace the retained request's generation");
+    assert_eq!(retained.request_deadline(), Some(original.deadline()));
+}
