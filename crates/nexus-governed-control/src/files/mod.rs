@@ -437,6 +437,18 @@ pub struct RecoveryEntry {
     pub findings: Vec<RecoveryFinding>,
 }
 
+/// Recorded native facts, without treating identifiers as cleanup authority.
+/// A recorded discard is not an independent proof of durable parent sync.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordedResource {
+    pub run: String,
+    pub allocated: bool,
+    pub awaiting_approval: bool,
+    pub discard_recorded: bool,
+    pub publication_recorded: bool,
+    pub restoration_recorded: bool,
+}
+
 /// What the Files ledger says is uncertain or owed about one run. Reporting
 /// only: nothing is swept, and nothing is called disposable.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3082,6 +3094,52 @@ impl Files {
             }
         }
         Ok(entries)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn recorded_resources(&self) -> Result<Vec<RecordedResource>, AuthorityError> {
+        let backend = self.backend()?;
+        let store = backend.ledger.store();
+        let mut facts = Vec::new();
+        for run in backend.ledger.run_ids().map_err(ledger_error)? {
+            let records = store
+                .verified_records(run.ledger_key())
+                .map_err(ledger_error)?;
+            let mut fact = RecordedResource {
+                run: run.to_string(),
+                allocated: false,
+                awaiting_approval: false,
+                discard_recorded: false,
+                publication_recorded: false,
+                restoration_recorded: false,
+            };
+            for record in records {
+                match record.event_kind.as_str() {
+                    "run.granted" => fact.allocated = true,
+                    "review.computed" | "approval.granted" => fact.awaiting_approval = true,
+                    "apply.completed" => {
+                        fact.publication_recorded = true;
+                        fact.awaiting_approval = false;
+                    }
+                    "restore.completed" => fact.restoration_recorded = true,
+                    "staging.discarded" => {
+                        let payload: serde_json::Value = serde_json::from_str(&record.payload)
+                            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+                        fact.discard_recorded = payload["status"] == "discarded";
+                    }
+                    _ => {}
+                }
+            }
+            facts.push(fact);
+        }
+        Ok(facts)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn recorded_resources(&self) -> Result<Vec<RecordedResource>, AuthorityError> {
+        Err(AuthorityError::Unavailable(
+            "native resource reporting is unavailable",
+        ))
     }
 
     /// §6.6 (Codex review 1 of PR #64, M1): the Owner's bounded retry of

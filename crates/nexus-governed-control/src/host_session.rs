@@ -9,6 +9,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 mod receipt;
+pub mod recovery;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ScopeKind {
@@ -305,6 +306,8 @@ pub struct HostSession {
     control: Arc<crate::governed::GovernedControl>,
     confirmer: Arc<dyn crate::authority::approval::ControlConfirmer + Send + Sync>,
     bootstrap: SessionContext,
+    evidence: Arc<crate::evidence_store::PrimaryEvidence>,
+    report: OnceLock<recovery::StartupReport>,
 }
 
 /// Mother's closed File door. Its raw legacy representation is private and
@@ -372,7 +375,7 @@ impl HostSession {
         let control = crate::governed::GovernedControl::with_file_sessions(
             root,
             crate::broker::Vault::Disabled.source(),
-            evidence,
+            evidence.clone(),
             clock,
             sessions,
         )
@@ -385,6 +388,8 @@ impl HostSession {
             control: Arc::new(control),
             confirmer,
             bootstrap,
+            evidence,
+            report: OnceLock::new(),
         })
     }
 
@@ -415,7 +420,37 @@ impl HostSession {
             .files_recovery_report()
             .map_err(|error| SessionError::Backend(error.class()))
     }
+    pub fn startup_report(&self) -> recovery::StartupReport {
+        self.report
+            .get_or_init(|| {
+                use recovery::SourceFailure;
+                let report = recovery::StartupReport {
+                    kernel: self
+                        .control
+                        .files_recovery_report()
+                        .map_err(|_| SourceFailure::KernelLedger),
+                    resources: self
+                        .control
+                        .files()
+                        .recorded_resources()
+                        .map_err(|_| SourceFailure::KernelLedger),
+                    mother: self
+                        .core
+                        .history
+                        .get()
+                        .ok_or(SourceFailure::MotherHistory)
+                        .and_then(recovery::history),
+                    primary: self.evidence.health(),
+                };
+                if !report.ready() {
+                    self.ingress().fail();
+                }
+                report
+            })
+            .clone()
+    }
     pub fn bootstrap_hold(&self, hold: Duration) -> Result<(), SessionError> {
+        self.startup_report().require_ready()?;
         self.control
             .files()
             .set_hold_with_halt(hold, Some(&self.bootstrap.cell))
@@ -426,6 +461,7 @@ impl HostSession {
         path: &std::path::Path,
         reserved: &[&std::path::Path],
     ) -> Result<crate::files::WorkspaceInfo, SessionError> {
+        self.startup_report().require_ready()?;
         self.control
             .register_workspace_with_halt(path, reserved, Some(&self.bootstrap.cell))
             .map_err(|error| SessionError::Backend(error.class()))
@@ -434,6 +470,7 @@ impl HostSession {
     /// Last bootstrap transition, invoked by the trusted host only after its
     /// three-source report has succeeded. A late result never installs ready.
     pub fn finish_bootstrap(&self) -> Result<(), SessionError> {
+        self.startup_report().require_ready()?;
         if self.control.authority().recovery_required()
             || !self.recovery_report()?.is_empty()
             || self.control.workspace().is_none()

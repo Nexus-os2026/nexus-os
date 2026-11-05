@@ -45,7 +45,7 @@ impl History {
             return Err(unavailable());
         }
         let mut options = OpenOptions::new();
-        options.read(true).write(true);
+        options.read(true);
         #[cfg(target_os = "linux")]
         {
             use std::os::unix::fs::OpenOptionsExt;
@@ -58,7 +58,7 @@ impl History {
         let mut text = String::new();
         file.read_to_string(&mut text).map_err(|_| unavailable())?;
         self.verify_root()?;
-        if !text.ends_with('\n') {
+        if !text.is_empty() && !text.ends_with('\n') {
             return Err(unavailable());
         }
         let mut previous = "0".repeat(64);
@@ -99,6 +99,22 @@ impl History {
             });
         }
         Ok((file, lines))
+    }
+
+    pub(super) fn report_lines(&self) -> Result<(bool, Vec<Line>), AuthorityError> {
+        self.verify_root()?;
+        match std::fs::symlink_metadata(self.root.join("mother-journal.jsonl")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match std::fs::symlink_metadata(self.root.join("mother-journal.jsonl.poisoned")) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        Ok((true, Vec::new()))
+                    }
+                    _ => Err(unavailable()),
+                }
+            }
+            Err(_) => Err(unavailable()),
+            Ok(_) => self.read().map(|(_, lines)| (false, lines)),
+        }
     }
     fn terminal(
         &self,
@@ -220,11 +236,11 @@ fn same(a: &Metadata, b: &Metadata) -> bool {
 fn unavailable() -> AuthorityError {
     AuthorityError::EvidenceUnavailable
 }
-struct Line {
-    mission: u64,
+pub(super) struct Line {
+    pub(super) mission: u64,
     sequence: u64,
     hash: String,
-    event: Value,
+    pub(super) event: Value,
 }
 struct Terminal {
     sequence: u64,

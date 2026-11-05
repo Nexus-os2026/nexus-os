@@ -84,6 +84,42 @@ impl Bare {
 }
 
 #[test]
+fn session_readiness_sources_are_checked_before_hold_and_workspace() {
+    use crate::host_session::recovery::SourceFailure;
+    for source in ["new", "torn_mother", "poisoned_mother", "kernel"] {
+        let b = Bare::new();
+        let root = b._state.0.path();
+        match source {
+            "torn_mother" => {
+                std::fs::write(root.join("mother-journal.jsonl"), b"{\"format\":2").unwrap()
+            }
+            "poisoned_mother" => {
+                std::fs::write(root.join("mother-journal.jsonl.poisoned"), b"").unwrap()
+            }
+            "kernel" => std::fs::create_dir_all(root.join("files/ledger.db")).unwrap(),
+            _ => {}
+        }
+        let report = b.session.startup_report();
+        assert_eq!(report.ready(), source == "new");
+        match source {
+            "torn_mother" | "poisoned_mother" => {
+                assert!(matches!(report.mother, Err(SourceFailure::MotherHistory)))
+            }
+            "kernel" => assert!(matches!(report.kernel, Err(SourceFailure::KernelLedger))),
+            _ => assert!(report.mother.as_ref().unwrap().newly_absent),
+        }
+        assert_eq!(
+            b.session.bootstrap_hold(Duration::ZERO).is_ok(),
+            source == "new"
+        );
+        assert_eq!(b.register().is_ok(), source == "new");
+        assert_eq!(b.gov.workspace().is_some(), source == "new");
+        assert!(b.gov.grants().is_empty());
+        println!("READINESS/{source}: before_workspace=true conforms=true");
+    }
+}
+
+#[test]
 fn session_setup_commands_refuse_original_cell_emergency_without_native_workers() {
     let mut failures = Vec::new();
     for route in [

@@ -194,6 +194,19 @@ fn child(case: &str) {
     let lines = home.lines();
     let entries = verify(&lines).unwrap();
     for count in 0..=entries.len() {
+        let observed = crate::journal::MemoryJournal::new();
+        observed.set_lines(lines[..count].to_vec());
+        assert_eq!(
+            crate::coordinator::inspect_history(&observed)
+                .unwrap()
+                .records,
+            count
+        );
+        assert_eq!(
+            observed.lines(),
+            lines[..count],
+            "report-only inspection never appends"
+        );
         let mut missions = BTreeMap::new();
         let mut next = 1;
         let mut session = Session::Never;

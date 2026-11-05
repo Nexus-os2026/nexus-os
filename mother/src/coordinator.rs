@@ -2838,6 +2838,53 @@ enum Session {
 /// live, and records must come in the order the live coordinator writes
 /// them; anything else found is refused, with a closed code. P0: a mission
 /// is rebuilt from its references alone; recovery loads its content.
+/// A read-only account of verified Mother history. No port is attached, no
+/// run is adopted, no consent is installed and no transition is appended.
+#[derive(Clone, Debug)]
+pub struct HistoryInspection {
+    pub records: usize,
+    pub session_end_recorded: bool,
+    pub missions: Vec<(MissionId, MissionState)>,
+    pub unresolved: Vec<MissionId>,
+    /// Terminal records survive; lost process-local acknowledgement does not.
+    pub prior_acknowledgement_unavailable: usize,
+}
+
+pub fn inspect_history(store: &dyn JournalStore) -> Result<HistoryInspection, JournalError> {
+    let lines = store.load()?;
+    let entries = verify(&lines)?;
+    let mut missions = BTreeMap::new();
+    let mut next_mission = 1;
+    let mut session = Session::Never;
+    for (index, entry) in entries.iter().enumerate() {
+        check(&entry.event)
+            .and_then(|()| replay(&mut missions, &mut next_mission, &mut session, entry))
+            .map_err(|code| JournalError::Inconsistent {
+                line: index + 1,
+                code,
+            })?;
+    }
+    Ok(HistoryInspection {
+        records: entries.len(),
+        session_end_recorded: session == Session::Closed,
+        missions: missions.iter().map(|(id, m)| (*id, m.state)).collect(),
+        unresolved: missions
+            .iter()
+            .filter_map(|(id, m)| {
+                (!m.state.is_terminal()
+                    || m.unresolved_file.is_some()
+                    || m.terminal_uncertain
+                    || m.unsettled.is_some()
+                    || m.open_action.is_some()
+                    || m.pending_lane.is_some()
+                    || m.settlement.is_some())
+                .then_some(*id)
+            })
+            .collect(),
+        prior_acknowledgement_unavailable: missions.values().map(|m| m.acks.len()).sum(),
+    })
+}
+
 fn replay(
     missions: &mut BTreeMap<MissionId, Mission>,
     next_mission: &mut u64,
