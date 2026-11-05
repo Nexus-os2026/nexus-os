@@ -305,6 +305,27 @@ fn session_approval_two_files_keep_distinct_roots_and_reject_a_queued_replacemen
         .unwrap();
     assert_ne!(first.context(), second.context());
     home.session.approve_file(&second).unwrap();
+    use nexus_governed_control::host_session::outcome::Acknowledgement;
+    let second_before = home
+        .session
+        .operation_observation(&second)
+        .unwrap()
+        .actions
+        .remove(0);
+    assert_eq!(second_before.acknowledgement, Acknowledgement::Pending);
+    let pending_b = crate::effect::PendingAction {
+        run: second_before.run.to_string(),
+        commitment: second_before.commitment.unwrap().to_string(),
+        deadline_mono_ms: 0,
+    };
+    assert!(
+        home.port.file_ack(&pending_b).is_err(),
+        "A's durable terminal cannot acknowledge published B before B's terminal exists"
+    );
+    assert_eq!(
+        home.session.operation_observation(&second).unwrap().actions[0].acknowledgement,
+        Acknowledgement::Pending
+    );
     let session = session
         .continue_approval(home.session.approval_continuation(&second).unwrap())
         .unwrap();
@@ -324,5 +345,48 @@ fn session_approval_two_files_keep_distinct_roots_and_reject_a_queued_replacemen
         prefix.set_lines(lines[..end].to_vec());
         crate::coordinator::inspect_history(&prefix).unwrap();
     }
+    let first_after = home
+        .session
+        .operation_observation(&first)
+        .unwrap()
+        .actions
+        .remove(0);
+    let second_after = home
+        .session
+        .operation_observation(&second)
+        .unwrap()
+        .actions
+        .remove(0);
+    assert_eq!(first_after.acknowledgement, Acknowledgement::Verified);
+    assert_eq!(second_after.acknowledgement, Acknowledgement::Verified);
+    assert!(first_after.mother_sequence.is_some());
+    assert_ne!(first_after.mother_sequence, second_after.mother_sequence);
+    assert_ne!(first_after.mother_hash, second_after.mother_hash);
+    let pending_a = crate::effect::PendingAction {
+        run: first_after.run.to_string(),
+        commitment: first_after.commitment.unwrap().to_string(),
+        deadline_mono_ms: 0,
+    };
+    for pending in [&pending_a, &pending_b, &pending_a, &pending_b] {
+        home.port.file_ack(pending).unwrap();
+    }
+    let quit = home
+        .session
+        .ingress()
+        .accept(CommandKind::Quit, 103)
+        .unwrap();
+    let ending = session.prepare_session_end().unwrap();
+    let inventory = home.session.settle_close_resources(&quit).unwrap();
+    assert_eq!(inventory.entries.len(), 2);
+    assert!(
+        inventory.entries.iter().all(|entry| entry.discharged),
+        "duplicate ack cannot release either preparation pin twice"
+    );
+    home.session.settle_close_authority(&quit).unwrap();
+    let seal = home.session.seal_close(&quit).unwrap();
+    ending.record(&seal).unwrap();
+    home.session.observe_mother_end(&seal).unwrap();
+    home.session.close_primary(&seal).unwrap();
+    assert!(seal.finish_delivery());
     println!("CONTINUATION VERIFIED two-files");
 }

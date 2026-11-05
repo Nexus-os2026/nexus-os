@@ -2630,6 +2630,31 @@ fn session_retry_cleanup_handoff_and_successor_are_independently_admitted() {
         "RETRY/{stop_at}: native_workers=0 retry={expected_retry} remaining_temporaries={}",
         after.len()
     );
+    let staging = f.gov.files().state_dir_for_test().join("coding-runs");
+    let staged = resources(&staging);
+    drop(quit);
+    let Fixture {
+        gov,
+        door,
+        _session,
+        _root,
+        _dirs,
+        ..
+    } = f;
+    drop(door);
+    drop(gov);
+    drop(_session);
+    assert_eq!(
+        resources(&workspace),
+        after,
+        "last-owner drop cannot destroy an owed OwnedTemp"
+    );
+    assert_eq!(
+        resources(&staging),
+        staged,
+        "last-owner drop cannot discard the retained staging lease"
+    );
+    drop((_root, _dirs));
 }
 
 /// Count actual mutation/callback completions, even if a subsequent check
@@ -2788,4 +2813,72 @@ fn session_registry_each_final_mutation_has_an_independent_admission() {
         failures.is_empty(),
         "{executed} actual registry schedules: {failures:?}"
     );
+}
+
+#[test]
+fn session_reservation_transfer_releases_exactly_its_own_capacity() {
+    for transfer in [false, true] {
+        let f = Fixture::new();
+        f.gov.authority().commitments().set_capacity_for_test(2);
+        let a = f.gov.control.reserve_host_proposal(f.run).unwrap();
+        let b = f.gov.control.reserve_host_proposal(f.run).unwrap();
+        assert_eq!(f.gov.control.pending_places(), 2);
+        assert!(f.gov.control.reserve_host_proposal(f.run).is_err());
+        assert_eq!(
+            f.gov.control.pending_places(),
+            2,
+            "failed compound reservation returns its own Place"
+        );
+        if transfer {
+            let cell = f
+                .gov
+                .authority()
+                .runs()
+                .session_cell(f.run)
+                .unwrap()
+                .unwrap();
+            let preparation = f
+                .gov
+                .files()
+                .prepare_session(
+                    &f.gov.control,
+                    f.run,
+                    &FileCreate {
+                        name: "transfer.txt".into(),
+                        content: "retained transfer\n".into(),
+                    },
+                    f.gov.kernel_stop.authority(),
+                    &cell,
+                )
+                .unwrap();
+            let view = f
+                .gov
+                .control
+                .propose_reserved(f.door.agent(), f.run, preparation, a)
+                .unwrap();
+            assert!(f.gov.authority().commitments().pinned_for_test(view.id));
+            assert_eq!(f.gov.control.pending_held(f.run), 1);
+        } else {
+            drop(a);
+        }
+        assert_eq!(
+            f.gov.control.pending_places(),
+            1,
+            "transfer/drop must not return B's reservation"
+        );
+        drop(b);
+        assert_eq!(f.gov.control.pending_places(), 0);
+        let c = f
+            .gov
+            .control
+            .reserve_host_proposal(f.run)
+            .expect("released preparation capacity is really reusable");
+        assert_eq!(f.gov.control.pending_places(), 1);
+        drop(c);
+        assert_eq!(f.gov.control.pending_places(), 0);
+        println!(
+            "RESERVATION-OWNERSHIP/transfer={transfer}: native_pending={} reusable=true",
+            f.gov.control.pending_held(f.run)
+        );
+    }
 }
