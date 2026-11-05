@@ -385,7 +385,8 @@ fn recovery_restart_reports_crashed_preparation_without_sweeping_staging() {
     let before = support::privacy::files_under(&staging, None);
     assert!(!before.is_empty(), "real retained staging");
     let mut restarted = Pty::start(f.command("no restoration\n"));
-    restarted.ready();
+    restarted.expect("HANDS REPORT ONLY");
+    assert!(!restarted.output.contains("HANDS READY"));
     assert!(restarted
         .output
         .contains("prepared; publication or temp status unknown"));
@@ -450,13 +451,14 @@ fn review1_real_cr_lf_crlf_stop_during_publish_hold() {
         // Execution and recording are independent workers. Require both
         // receipts within the deadline without inventing their relative order.
         let deadline = std::time::Instant::now() + support::DEADLINE;
-        while !p.output.contains("ACTION FINISHED") {
+        while !p.output.contains("ACTION REFUSED") {
             assert!(
                 std::time::Instant::now() < deadline && p.read_once(deadline),
                 "execution finished: {}",
                 p.output
             );
         }
+        assert!(!p.output.contains("ACTION FINISHED"), "interrupted pre-publication call is not successful approval");
         p.line("status");
         p.expect("STATUS END\n");
         assert_eq!(p.output.matches("STOP REQUEST RECEIVED").count(), 1);
