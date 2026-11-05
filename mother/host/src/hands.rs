@@ -710,7 +710,11 @@ impl nexus_governed_control::files::OwnerView for OwnerScreen {
     }
 }
 
-fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static str> {
+fn show_recovery(
+    home: &SessionServices,
+    screen: &Shared,
+    prior_primary: bool,
+) -> Result<(), &'static str> {
     let sources = home.session.startup_report();
     screen.emit(&format!(
         "SOURCES mother_verified={} resources_verified={} primary_latched={} primary_owed={} primary_recovery_required={} primary_unsettled={} primary_unclean_sessions={}\n",
@@ -722,7 +726,18 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
         sources.primary.unsettled,
         sources.primary.unclean_sessions
     ));
-    screen.emit("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence.\n");
+    // Presentation only: never infer authority or readiness from this label.
+    // An existing primary store may contain prior sessions even when Mother
+    // has no mission records (including a process lost during bootstrap).
+    let fresh = !prior_primary
+        && sources.ready()
+        && sources.mother.as_ref().is_ok_and(|m| m.records == 0)
+        && sources.resources.as_ref().is_ok_and(Vec::is_empty);
+    if fresh {
+        screen.emit("Fresh start: no earlier session in this home; nothing to recover.\n");
+    } else {
+        screen.emit("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence.\n");
+    }
     if sources.mother.is_err() {
         screen.emit("RECOVERY FAILED mother_history\n");
     }
@@ -765,7 +780,9 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
         screen.emit("RECOVERY FAILED kernel_ledger\n");
         "recovery_report_unavailable"
     })?;
-    screen.emit("RECOVERY REPORT only; no sweep or workspace restoration\n");
+    if !fresh {
+        screen.emit("RECOVERY REPORT only; no sweep or workspace restoration\n");
+    }
     for entry in report {
         screen.emit(&format!("run={}\n", entry.run));
         for finding in entry.findings {
@@ -863,6 +880,13 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let mut startup = std::thread::Builder::new()
         .name("hands-startup".into())
         .spawn(move || {
+            // Snapshot before opening this session, which itself creates a
+            // primary store. Missing is distinct from unreadable/unknown.
+            let prior_primary =
+                match std::fs::metadata(config.home.join("broker/p3-evidence/evidence.sqlite3")) {
+                    Ok(metadata) => metadata.len() != 0,
+                    Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+                };
             #[cfg(test)]
             hands_tests::review2_startup("home");
             #[cfg(test)]
@@ -881,7 +905,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             }
             #[cfg(test)]
             hands_tests::review2_startup("recovery");
-            let report = show_recovery(&home, &startup_screen);
+            let report = show_recovery(&home, &startup_screen, prior_primary);
             if report.is_err() {
                 home.session.ingress().fail();
             }
