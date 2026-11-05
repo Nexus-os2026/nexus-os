@@ -956,6 +956,7 @@ impl CommitmentRegistry {
         }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&cell), "registry.preparation_reserve.before");
+        cell.admit()?;
         self.0.preparations.store(reserved + 1, Ordering::SeqCst);
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&cell), "registry.preparation_reserve.after");

@@ -214,26 +214,32 @@ impl Control {
 
     /// Check for room and take a place for a proposal in `run`, at once,
     /// under the lock.
-    fn place(&self, run: RunId, limit: usize) -> Option<Place<'_>> {
+    fn place(
+        &self,
+        run: RunId,
+        limit: usize,
+        request: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<Place<'_>, AuthorityError> {
         let mut table = self.pending();
         let in_run = table.held.values().filter(|p| p.run == run).count()
             + table.reserved_by_run.get(&run).copied().unwrap_or(0);
         if table.held.len() + table.reserved >= limit || in_run >= MAX_PENDING_PER_RUN {
-            return None;
+            return Err(AuthorityError::Capacity);
         }
         #[cfg(test)]
         let cell = self.authority.runs().session_cell(run).ok().flatten();
         #[cfg(test)]
         crate::authority::file_session::probe(cell.as_ref(), "registry.pending_reserve.before");
+        crate::authority::file_session::check_halt(request)?;
         table.reserved += 1;
         *table.reserved_by_run.entry(run).or_default() += 1;
         #[cfg(test)]
         crate::authority::file_session::probe(cell.as_ref(), "registry.pending_reserve.after");
-        Some(Place {
+        Ok(Place {
             control: self,
             run,
             held: true,
-            cell: None,
+            cell: request.cloned(),
         })
     }
 
@@ -267,8 +273,7 @@ impl Control {
                 .session_cell(run)?
                 .ok_or(AuthorityError::Halted)?,
         };
-        let mut place = self.place(run, limit).ok_or(AuthorityError::Capacity)?;
-        place.cell = Some(cell.clone());
+        let place = self.place(run, limit, Some(&cell))?;
         let slot = self.authority.commitments().reserve_preparation(cell)?;
         Ok((place, slot))
     }
@@ -340,15 +345,16 @@ impl Control {
             }
             Some(_) => return refuse(AuthorityError::Halted),
             None => {
-                let place = match self.place(run, limit) {
-                    Some(place) => place,
-                    None => {
+                let place = match self.place(run, limit, halt.as_ref()) {
+                    Ok(place) => place,
+                    Err(AuthorityError::Capacity) => {
                         self.prune();
-                        match self.place(run, limit) {
-                            Some(place) => place,
-                            None => return refuse(AuthorityError::Capacity),
+                        match self.place(run, limit, halt.as_ref()) {
+                            Ok(place) => place,
+                            Err(error) => return refuse(error),
                         }
                     }
+                    Err(error) => return refuse(error),
                 };
                 (place, None)
             }
