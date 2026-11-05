@@ -161,3 +161,31 @@ definition. BrowserAction fixtures are paired with independent Rust variants,
 an exhaustive variant/field match and independent serialization to frozen bytes.
 A swapped Click/ExtractText codec retains byte round-trips but fails that same
 semantic golden. No runtime, existing guard or LIVE_STAGE change is made here.
+
+## Fix round 3 registration
+
+The independent direct F3 guard now also requires a failing injected backend
+("backend down") to return its original error. `expect_err` rejects successful
+empty fallback; separate assertions require the cause and reject a false
+"web search is closed" refusal. The frozen snapshot pins all four tests.
+The existing stage controls now omit the new test and each error assertion
+individually and require `f3-coverage` at the direct guard through K11.
+
+`python3 kernel/tests/retirement/web-search-mutation.py --cargo-slot PATH` is
+the registered behavioral mutation control (run with explicit CARGO_TARGET_DIR
+and TMPDIR). It copies tracked files
+to a disposable scratch tree, stages the K03 same-type PlannedAction import used
+at K11, and runs the actual independent guard. Clean and byte-restored baselines
+must pass all four tests. Replacing the real actuator's error propagation with
+`.unwrap_or_default()` must fail the named failing-backend test; changing the
+error into a false closed refusal must fail that same test. Compile failures or
+unrelated test failures cannot supply the required red receipts. Scratch source
+is restored byte-for-byte in a finally block; worktree source is never mutated.
+This checks the registered K11 split, not a compiling K11 production deletion.
+
+A line-by-line comparison with m0_f3_web_search_guard.rs found no other missing
+behavioral assertion: source/process prohibitions and six plants, default honest
+refusal without an operator connection, and successful injected search are
+already carried. The predecessor's registry/executor default-refusal and executor
+injection assertions remain active with their subjects; executor checks retire
+with the K11 executor, while independent direct checks survive until K12.

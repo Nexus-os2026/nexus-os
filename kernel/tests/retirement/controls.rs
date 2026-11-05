@@ -114,6 +114,7 @@ fn f3_search_plants_and_coverage_omissions_stay_red_through_k11() {
             "f3_source_prohibition_survives_without_the_cognitive_executor",
             "f3_direct_default_search_refuses_without_a_connection",
             "f3_injected_hermetic_search_still_works_directly",
+            "f3_injected_backend_failure_preserves_the_original_error",
         ] {
             let mut tree = clean_tree(stage);
             let raw = tree.get_mut(WEB_TEST_PATH).unwrap();
@@ -122,6 +123,18 @@ fn f3_search_plants_and_coverage_omissions_stay_red_through_k11() {
                 .find(|d| d.name == name)
                 .unwrap();
             raw.replace_range(declaration.span.0..declaration.span.1, "/* omitted */");
+            rejected(stage, &tree, "f3-coverage", WEB_TEST_PATH);
+        }
+        // Removing either assertion alone must fail, even with the failing
+        // backend fixture, expect_err, and test declaration still present.
+        for assertion in [
+            r#"assert!(error.contains("backend down"), "{error}");"#,
+            r#"assert!(!error.contains("web search is closed"), "{error}");"#,
+        ] {
+            let mut tree = clean_tree(stage);
+            let raw = tree.get_mut(WEB_TEST_PATH).unwrap();
+            assert_eq!(raw.matches(assertion).count(), 1);
+            *raw = raw.replace(assertion, "/* omitted assertion */");
             rejected(stage, &tree, "f3-coverage", WEB_TEST_PATH);
         }
     }

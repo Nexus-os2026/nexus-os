@@ -6,6 +6,7 @@ mod web_search_source;
 
 use nexus_kernel::actuators::{
     Actuator, ActuatorContext, ActuatorRegistry, CurlWebBackend, GovernedWeb, WebSearchBackend,
+    WebSearchResult,
 };
 use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::AutonomyLevel;
@@ -83,4 +84,30 @@ fn f3_injected_hermetic_search_still_works_directly() {
         "{}",
         result.output
     );
+}
+
+/// The predecessor requires backend failure to stay an error with its original
+/// cause, never an empty successful result or the default backend's refusal.
+#[test]
+fn f3_injected_backend_failure_preserves_the_original_error() {
+    struct Failing;
+    impl WebSearchBackend for Failing {
+        fn search(&self, _: &str) -> Result<Vec<WebSearchResult>, String> {
+            Err("backend down".into())
+        }
+        fn fetch_content(&self, _: &str) -> Result<String, String> {
+            Err("backend down".into())
+        }
+    }
+    let error = GovernedWeb::with_backend(Arc::new(Failing))
+        .execute(
+            &PlannedAction::WebSearch {
+                query: "rust".into(),
+            },
+            &context(),
+        )
+        .expect_err("injected backend failure must not become successful empty results")
+        .to_string();
+    assert!(error.contains("backend down"), "{error}");
+    assert!(!error.contains("web search is closed"), "{error}");
 }
