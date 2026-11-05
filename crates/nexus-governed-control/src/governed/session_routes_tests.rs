@@ -2252,3 +2252,37 @@ fn session_undo_reports_native_handoff_and_physical_result_independently() {
     assert_eq!(facts.grant, GrantClosure::Closed);
     assert_eq!(std::fs::read(target).unwrap(), b"Owner changed bytes");
 }
+
+#[test]
+fn session_undo_acceptance_has_no_busy_target_and_returned_slot_has_new_version() {
+    use std::sync::atomic::AtomicBool;
+    struct DeclineWhileQueued {
+        ingress: crate::host_session::SessionIngress,
+        accepted: AtomicBool,
+    }
+    impl ControlConfirmer for DeclineWhileQueued {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool { false }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool { false }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool { false }
+        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool { false }
+        fn confirm_undo(&self, _: &UndoConfirmation) -> bool {
+            self.accepted.store(self.ingress.accept(CommandKind::Undo, 5).is_ok(), Ordering::SeqCst);
+            false
+        }
+    }
+    let f = Fixture::new();
+    let id = f.pending(); f.approve(id).unwrap();
+    let ingress = f._session.ingress();
+    let first = ingress.accept(CommandKind::Undo, 3).unwrap();
+    let queued = ingress.accept(CommandKind::Undo, 4).unwrap();
+    assert_eq!(first.context(), queued.context());
+    let confirmation = DeclineWhileQueued { ingress: ingress.clone(), accepted: AtomicBool::new(false) };
+    assert!(f._session.undo_confirmed(&first, &confirmation).is_err());
+    assert!(!confirmation.accepted.load(Ordering::SeqCst), "reader cannot bind undo while the exact slot is borrowed");
+    assert!(f._session.undo(&queued).is_err(), "returned slot is a new version, not the queued command's target");
+    let fresh = ingress.accept(CommandKind::Undo, 6).unwrap();
+    assert_ne!(fresh.context(), first.context());
+    assert!(f._session.undo(&fresh).is_ok(), "fresh same-session normal undo remains available after decline");
+    assert!(!f._dirs.0.path().join("selected/workspace/session.txt").exists());
+    assert_eq!(matching(&events(&f.ledger_path()), "restore.completed", None), 1);
+}
