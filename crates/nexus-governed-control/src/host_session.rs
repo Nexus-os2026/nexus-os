@@ -46,6 +46,14 @@ impl RequestScope {
         word == self.snapshot && self.eligible()
     }
     fn eligible(&self) -> bool {
+        #[cfg(test)]
+        if self
+            .core
+            .upgrade()
+            .is_some_and(|core| core.expired_request.load(Ordering::SeqCst) == self.request)
+        {
+            return false;
+        }
         let invalid = self.core.strong_count() == 0
             || Instant::now() >= self.deadline
             || self.snapshot & (FAILED | SEALED | EMERGENCY) != 0
@@ -167,6 +175,8 @@ struct CloseIdentity {
 /// All authority restrictions and the original first cause reside in cell's
 /// single atomic word. The other atomics publish non-authoritative indices.
 struct Core {
+    #[cfg(test)]
+    expired_request: AtomicU64,
     identity: SessionIdentity,
     cell: HaltCell,
     sequence: AtomicU64,
@@ -306,6 +316,10 @@ pub struct SessionDoor {
 }
 
 impl HostSession {
+    #[cfg(test)]
+    pub(crate) fn expire_request_for_test(&self, request: u64) {
+        self.core.expired_request.store(request, Ordering::SeqCst);
+    }
     pub fn open(
         seed: SessionSeed,
         root: &std::path::Path,
@@ -547,6 +561,11 @@ impl HostSession {
         cell.admit()?;
         let agent =
             crate::authority::ids::AgentId::new("mother").ok_or(AuthorityError::WrongAgent)?;
+        self.core.pending_context.store(0, Ordering::SeqCst);
+        self.control
+            .authority()
+            .commitments()
+            .bind_session_request(target.commitment, &agent, target.run, &cell)?;
         self.control
             .authorize(target.commitment, &agent, target.run, &*self.confirmer)?;
         cell.admit()?;
@@ -800,6 +819,8 @@ impl SessionSeed {
         getrandom::getrandom(&mut identity).map_err(|_| SessionError::Unavailable)?;
         Ok(Self {
             core: Arc::new(Core {
+                #[cfg(test)]
+                expired_request: AtomicU64::new(u64::MAX),
                 identity: SessionIdentity(identity),
                 cell: HaltCell::new_host(),
                 sequence: AtomicU64::new(0),

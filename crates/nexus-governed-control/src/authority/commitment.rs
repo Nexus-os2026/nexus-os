@@ -224,6 +224,9 @@ pub struct CommitmentView {
 }
 
 struct Entry {
+    /// A separately accepted approval root, bound only by the session facade.
+    /// Retained Run contexts stay immutable and are never refreshed.
+    request: Option<super::file_session::HaltCell>,
     agent: AgentId,
     run: RunId,
     /// P0: its run's privacy class, copied when it is created and never
@@ -664,6 +667,55 @@ impl CommitmentRegistry {
         self.0.entries.lock().expect("commitments")
     }
 
+    pub(crate) fn bind_session_request(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        run: RunId,
+        request: &super::file_session::HaltCell,
+    ) -> Result<(), AuthorityError> {
+        let mut entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
+        let entry = entries
+            .get_mut(&id)
+            .ok_or(AuthorityError::UnknownCommitment)?;
+        if &entry.agent != agent
+            || entry.run != run
+            || !entry.pinned
+            || entry.request.is_some()
+            || entry.state != CommitmentState::Prepared
+            || entry.reserved.is_some()
+        {
+            return Err(AuthorityError::NotPending);
+        }
+        let cancel = self.0.runs.check_request(run, agent, Some(request))?;
+        cancel.admit_host()?;
+        entry.request = Some(request.clone());
+        Ok(())
+    }
+
+    pub(crate) fn session_request(
+        &self,
+        id: CommitmentId,
+        run: RunId,
+    ) -> Result<super::file_session::HaltCell, AuthorityError> {
+        let entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
+        let entry = entries.get(&id).ok_or(AuthorityError::UnknownCommitment)?;
+        if entry.run != run || !entry.pinned {
+            return Err(AuthorityError::WrongRun);
+        }
+        if entry.state.is_final()
+            || entry.generation != self.0.generation.current()
+            || entry
+                .prepared
+                .grants
+                .iter()
+                .any(|id| self.0.grants.live(*id).is_none())
+        {
+            return Err(AuthorityError::Stale);
+        }
+        entry.request.clone().ok_or(AuthorityError::NotAdmitted)
+    }
+
     fn now(&self) -> Now {
         Now {
             monotonic_ms: self.0.clock.monotonic_ms(),
@@ -782,7 +834,10 @@ impl CommitmentRegistry {
                     // The run token was read before grant validation. Read
                     // its optional deny-only cell again in this same hold,
                     // immediately before approval/authorization/dispatch.
-                    if live.as_ref().is_ok_and(CancelToken::halt_engaged) {
+                    if live
+                        .as_ref()
+                        .is_ok_and(|cancel| cancel.admit_host().is_err())
+                    {
                         let reason = match entry.reserved.expect("reserved transition").transition {
                             Transition::Approve => "approval_refused_halted",
                             Transition::Authorize => "authorization_refused_halted",
@@ -948,6 +1003,7 @@ impl CommitmentRegistry {
             &[&nonce, prepared.parameters.as_bytes()],
         );
         let entry = Entry {
+            request: None,
             agent: agent.clone(),
             run,
             privacy,
@@ -1068,7 +1124,11 @@ impl CommitmentRegistry {
         if entry.run != run {
             return Err(AuthorityError::WrongRun);
         }
-        let token = match self.0.runs.check(run, agent) {
+        let token = match self
+            .0
+            .runs
+            .check_request(run, agent, entry.request.as_ref())
+        {
             Ok(token) => token,
             Err(error) => {
                 self.end_unconsumed(id, entry, CommitmentState::Revoked, &error, now, deferred);
@@ -1179,6 +1239,7 @@ impl CommitmentRegistry {
         };
         self.flush(deferred);
         let (request, binding) = asked?;
+        self.session_confirmation_handoff(id, agent, run, binding)?;
         let confirmed = confirmer.confirm_action(&request);
         let mut deferred = Deferred::default();
         let now = self.now();
@@ -1226,6 +1287,38 @@ impl CommitmentRegistry {
         self.record(&record)?;
         self.complete(id, token, CommitmentState::Prepared, agent, run, |_, _| ())?;
         Ok(R2Approval::confirmed(id, binding))
+    }
+
+    fn session_confirmation_handoff(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        run: RunId,
+        binding: Digest,
+    ) -> Result<(), AuthorityError> {
+        let mut deferred = Deferred::default();
+        let now = self.now();
+        let result = {
+            let mut entries = self.entries();
+            let entry = entries
+                .get_mut(&id)
+                .ok_or(AuthorityError::UnknownCommitment)?;
+            if entry.request.is_none() {
+                return Ok(());
+            }
+            if entry.binding != binding
+                || entry.state != CommitmentState::Prepared
+                || entry.reserved.is_some()
+            {
+                return Err(AuthorityError::NotPending);
+            }
+            self.live_check(id, entry, agent, run, now, &mut deferred)
+                .and_then(|cancel| cancel.admit_host())
+        };
+        if result.is_err() {
+            self.flush(deferred);
+        }
+        result
     }
 
     /// What the owner is asked to approve, read under the lock.

@@ -639,7 +639,18 @@ impl RunResource {
         }) {
             return Err(AuthorityError::Expired);
         }
-        self.binding.admit()
+        let request = commitment
+            .map(|id| {
+                self.binding
+                    .control
+                    .upgrade()
+                    .ok_or(AuthorityError::Halted)?
+                    .authority()
+                    .commitments()
+                    .session_request(id, self.binding.run)
+            })
+            .transpose()?;
+        self.binding.admit_request(request.as_ref())
     }
     fn grant(
         &self,
@@ -687,13 +698,13 @@ struct HostBinding {
 }
 #[cfg(target_os = "linux")]
 impl HostBinding {
-    fn admit(&self) -> Result<(), AuthorityError> {
+    fn admit_request(&self, request: Option<&HaltCell>) -> Result<(), AuthorityError> {
         let control = self.control.upgrade().ok_or(AuthorityError::Halted)?;
         let authority = control.authority();
         if self.stop.is_stopped() || authority.grants().live(self.grant).is_none() {
             return Err(AuthorityError::Halted);
         }
-        authority.runs().admit_file_stage(self.run)
+        authority.runs().admit_file_request(self.run, request)
     }
 }
 

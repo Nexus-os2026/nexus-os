@@ -161,6 +161,29 @@ impl Fixture {
 }
 
 #[test]
+fn session_approval_children_use_the_separately_accepted_request_without_refreshing_run() {
+    let f = Fixture::new();
+    let id = f.pending();
+    f._session.expire_request_for_test(1);
+    assert!(
+        f.propose_content("stale.txt", "stale\n").is_err(),
+        "retained original Run stays expired"
+    );
+    assert!(
+        f.approve(id).is_ok(),
+        "new accepted approval owns its child steps; native grants and commitment remain live"
+    );
+    assert_eq!(
+        std::fs::read(f._dirs.0.path().join("selected/workspace/session.txt")).unwrap(),
+        b"session oracle\n"
+    );
+    assert!(
+        f.propose_content("stale.txt", "stale\n").is_err(),
+        "approval never refreshes a retained Run handle"
+    );
+}
+
+#[test]
 fn session_inert_page_check_and_recheck_are_separate_mutating_calls() {
     const PAGE: &str = include_str!("../../../../kernel/src/inert_page/fixtures/reference.html");
     let mut failures = Vec::new();
