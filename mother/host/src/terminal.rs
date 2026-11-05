@@ -244,12 +244,19 @@ impl Shared {
             }
         }
     }
-    pub(crate) fn command(&self) -> Option<Command> {
+    pub(crate) fn command_if_idle(&self, work_idle: bool) -> Option<Command> {
         let mut input = self.input();
         if input.active {
             return None;
         }
-        input.commands.pop_front()
+        if work_idle {
+            return input.commands.pop_front();
+        }
+        let at = input
+            .commands
+            .iter()
+            .position(|command| command.name == "status" || command.refusal.is_some())?;
+        input.commands.remove(at)
     }
     pub(crate) fn ended(&self) -> bool {
         let input = self.input();
@@ -818,7 +825,8 @@ impl Terminal {
         } else if self.reporter.is_some() {
             ok = false;
         }
-        ok && self.shared.delivered("", deadline)
+        ok && self.shared.stop.delivery_debt().is_empty()
+            && self.shared.delivered("", deadline)
             && self.shared.queued_output.load(Ordering::SeqCst)
                 == self.shared.delivered_output.load(Ordering::SeqCst)
     }

@@ -15,13 +15,42 @@ struct Worker {
     handle: JoinHandle<bool>,
     producer: Producer,
 }
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
+struct DeliveryFlags {
+    ingress: bool,
+    outcome: bool,
+}
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DeliveryDebt {
+    pub event: u64,
+    pub ingress_delivered: bool,
+    pub outcome_delivered: bool,
+}
+#[derive(Clone, Copy)]
+enum Delivery {
+    Other,
+    Ingress(u64),
+    Outcome(u64),
+}
 struct State {
     workers: Vec<Worker>,
     deferred: Vec<u64>,
     finished: u64,
     failed_workers: u64,
     failed: bool,
+    deliveries: [DeliveryFlags; 256],
+}
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            workers: Vec::new(),
+            deferred: Vec::new(),
+            finished: 0,
+            failed_workers: 0,
+            failed: false,
+            deliveries: [DeliveryFlags::default(); 256],
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Receipt {
@@ -172,6 +201,55 @@ impl StopRoute {
             }
         }
     }
+    pub(crate) fn delivery_debt(&self) -> Vec<DeliveryDebt> {
+        let state = self.state.lock().unwrap_or_else(|poison| {
+            self.ingress.fail();
+            poison.into_inner()
+        });
+        let epoch = self.ingress.generation();
+        let mut debt: Vec<_> = state
+            .deliveries
+            .iter()
+            .take(epoch.min(256) as usize)
+            .enumerate()
+            .filter(|(_, status)| !status.ingress || !status.outcome)
+            .map(|(at, status)| DeliveryDebt {
+                event: at as u64 + 1,
+                ingress_delivered: status.ingress,
+                outcome_delivered: status.outcome,
+            })
+            .collect();
+        if epoch > 256 || state.failed {
+            debt.push(DeliveryDebt {
+                event: epoch,
+                ingress_delivered: false,
+                outcome_delivered: false,
+            });
+        }
+        debt
+    }
+    fn delivered(&self, delivery: Delivery) {
+        let (event, ingress) = match delivery {
+            Delivery::Other => return,
+            Delivery::Ingress(event) => (event, true),
+            Delivery::Outcome(event) => (event, false),
+        };
+        let Ok(mut state) = self.state.lock() else {
+            self.ingress.fail();
+            return;
+        };
+        if event == 0 || event > self.ingress.generation() || event > 256 {
+            state.failed = true;
+            self.ingress.fail();
+            return;
+        }
+        let slot = &mut state.deliveries[event as usize - 1];
+        if ingress {
+            slot.ingress = true;
+        } else {
+            slot.outcome = true;
+        }
+    }
     pub(crate) fn join_until(&self, deadline: Instant) -> bool {
         loop {
             self.reap();
@@ -199,32 +277,45 @@ pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<Ato
     let mut snapshot = None;
     let mut coalesced = 0;
     let mut outcomes = [false; 256];
-    let mut deliveries = Vec::<mpsc::Receiver<Result<(), Failure>>>::new();
+    let mut deliveries = Vec::<(Delivery, mpsc::Receiver<Result<(), Failure>>)>::new();
     loop {
         screen.stop.reap();
         screen.stop.dispatch_pending();
         let receipt = screen.stop.receipt();
         let mut frames = Vec::new();
         while received < receipt.epoch {
+            if received == 256 {
+                screen.fail(Failure::Capacity);
+                break;
+            }
             received += 1;
-            frames.push(format!(
-                "STOP REQUEST RECEIVED epoch={received}\n{}\nRECOVERY ONLY\n",
-                crate::terminal::EMERGENCY_NOTICE
+            frames.push((
+                Delivery::Ingress(received),
+                format!(
+                    "STOP REQUEST RECEIVED epoch={received}\n{}\nRECOVERY ONLY\n",
+                    crate::terminal::EMERGENCY_NOTICE
+                ),
             ));
         }
         while coalesced < receipt.coalesced {
             coalesced += 1;
-            frames.push("STOP COALESCED; recording remains pending\n".into());
+            frames.push((
+                Delivery::Other,
+                "STOP COALESCED; recording remains pending\n".into(),
+            ));
         }
         if let Some(session) = screen.stop.session.get() {
             let current = session.stop_snapshot();
             if snapshot != Some(current) && (current.kernel_stopped || current.broker_stopped) {
-                frames.push(format!(
-                    "kernel_stopped={} broker_stopped={} stop_number={} generation={}\n",
-                    current.kernel_stopped,
-                    current.broker_stopped,
-                    current.stop_number,
-                    current.policy_generation
+                frames.push((
+                    Delivery::Other,
+                    format!(
+                        "kernel_stopped={} broker_stopped={} stop_number={} generation={}\n",
+                        current.kernel_stopped,
+                        current.broker_stopped,
+                        current.stop_number,
+                        current.policy_generation
+                    ),
                 ));
             }
             snapshot = Some(current);
@@ -245,23 +336,25 @@ pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<Ato
                         _ => continue,
                     };
                         outcomes[at] = true;
-                        frames.push(text);
+                        frames.push((Delivery::Outcome(observed.event.generation()), text));
                     }
                 }
                 Err(_) => screen.fail(Failure::Input),
             }
         }
-        for text in frames {
+        for (delivery, text) in frames {
             match screen.send(text) {
-                Ok(ack) => deliveries.push(ack),
+                Ok(ack) => deliveries.push((delivery, ack)),
                 Err(_) => return, // fatal delivery debt remains in Shared
             }
         }
         let mut at = 0;
         while at < deliveries.len() {
-            match deliveries[at].try_recv() {
+            match deliveries[at].1.try_recv() {
                 Ok(Ok(())) => {
-                    deliveries.swap_remove(at);
+                    let (delivery, _) = deliveries.swap_remove(at);
+                    screen.stop.delivered(delivery);
+                    screen.changed.notify_all();
                 }
                 Err(mpsc::TryRecvError::Empty) => at += 1,
                 _ => {

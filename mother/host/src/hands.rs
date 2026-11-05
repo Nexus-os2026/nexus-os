@@ -503,6 +503,12 @@ impl Runtime {
                     Ok(resources) => self.screen.emit(&format!("RESERVATIONS total={} unresolved={} uncertain={} private={} private_unresolved={}\n", resources.reserved, resources.unresolved, resources.uncertain, resources.private, resources.private_unresolved)),
                     Err(_) => self.screen.emit("RESERVATIONS unknown\n"),
                 }
+                for debt in self.screen.stop.delivery_debt() {
+                    self.screen.emit(&format!(
+                        "STOP DELIVERY event={} ingress_delivered={} outcome_delivered={}\n",
+                        debt.event, debt.ingress_delivered, debt.outcome_delivered
+                    ));
+                }
                 self.screen.emit("INVENTORY END\n");
             }
             Err(_) => self.screen.emit("INVENTORY unknown\n"),
@@ -764,7 +770,6 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     }
     let mut work: Option<JoinHandle<()>> = None;
     let mut work_debt: Option<Producer> = None;
-    let mut queued = std::collections::VecDeque::new();
     loop {
         if work.as_ref().is_some_and(|h| h.is_finished()) {
             if join(&mut work, Instant::now(), &screen).is_none() {
@@ -782,11 +787,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         {
             break;
         }
-        let command = if work.is_none() && !queued.is_empty() {
-            queued.pop_front()
-        } else {
-            screen.command()
-        };
+        let command = screen.command_if_idle(work.is_none());
         if let Some(command) = command {
             if let Some(reason) = command.refusal {
                 let subject = if command.name == "undo" { "UNDO " } else { "" };
@@ -795,12 +796,6 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                 let current = session.stop_snapshot();
                 let receipt = screen.stop.receipt();
                 screen.emit(&format!("host_recovery_only={}\nsession={:?}\nkernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP WORKERS outstanding={}\nSTATUS END\n", ingress.emergency_seen(), session.state(), current.kernel_stopped, current.broker_stopped, current.stop_number, current.policy_generation, receipt.outstanding));
-            } else if work.is_some() {
-                if queued.len() == 64 {
-                    ingress.fail();
-                } else {
-                    queued.push_back(command);
-                }
             } else if let Some(request) = command.request {
                 let kind = if request.kind() == CommandKind::Evidence {
                     ProducerKind::Observation
