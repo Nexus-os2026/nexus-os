@@ -281,3 +281,200 @@ fn run_child(case: &str) -> bool {
     }
     passed
 }
+
+// F11: real private API calls after obligation reservation, including EOF,
+// normal closing without emergency, and fatal failure. No model counters stand
+// in for the actual filesystem snapshots and successor API observations.
+#[test]
+fn session_r37_eof_quit_fatal_each_reserved_private_boundary() {
+    let selected = std::env::var("M2DD_PRIVATE_CLOSE_CASE").ok();
+    let mut failures = Vec::new();
+    let mut executed = 0;
+    for kind in [ContentKind::Contract, ContentKind::PausedPhase] {
+        for sink in [
+            "private_mkdir",
+            "private_temp_create",
+            "private_write",
+            "private_sync",
+            "private_rename",
+            "private_parent_sync",
+            "private_error_remove",
+        ] {
+            for when in ["before", "after"] {
+                for restriction in ["control", "EOF", "quit", "fatal"] {
+                    let restricted = restriction != "control";
+                    let key = format!("{kind:?}/{sink}/{when}/{restriction}");
+                    if let Some(selected) = &selected {
+                        if selected != &key {
+                            continue;
+                        }
+                    } else {
+                        let passed = run_restriction_child(&key);
+                        if !passed {
+                            failures.push(key);
+                        }
+                        executed += 1;
+                        continue;
+                    }
+                    let dir = Scenario::new();
+                    let seed = SessionSeed::new().unwrap();
+                    let ingress = seed.ingress();
+                    let broker = dir.0.join("broker");
+                    let evidence = nexus_governed_control::evidence_store::PrimaryEvidence::open(
+                        &broker.join("p3-evidence/evidence.sqlite3"),
+                        vec![],
+                    )
+                    .unwrap();
+                    let session = HostSession::open(
+                        seed,
+                        &broker,
+                        evidence,
+                        Arc::new(nexus_governed_control::authority::clock::SystemClock::default()),
+                        Arc::new(crate::oracles::lite_support::FilesOwner::default()),
+                    )
+                    .unwrap();
+                    let workspace = dir.0.join("workspace");
+                    crate::adapter::create_private(&workspace).unwrap();
+                    session.bootstrap_workspace(&workspace, &[]).unwrap();
+                    session.finish_bootstrap().unwrap();
+                    let request = ingress.accept(CommandKind::Run, 1).unwrap();
+                    let store = FilePrivate::open_session(
+                        &dir.0.join("private"),
+                        session.context(&request).unwrap(),
+                    )
+                    .unwrap();
+                    let observed = Arc::new(Mutex::new(None));
+                    let captured = observed.clone();
+                    let root = dir.0.clone();
+                    let fail_write = sink == "private_error_remove";
+                    PROBE.with(|probe| {
+                        *probe.borrow_mut() = Probe {
+                            active: true,
+                            point: Some((
+                                when,
+                                sink,
+                                Box::new(move || {
+                                    let calls = PROBE.with(|p| p.borrow().calls.len());
+                                    *captured.lock().unwrap() = Some((snapshot(&root), calls));
+                                    // The exact reader EOF sequence is emergency
+                                    // denial followed by fatal restriction. Quit
+                                    // has no emergency; it invalidates the original
+                                    // Run snapshot through closing alone.
+                                    match restriction {
+                                        "control" => {}
+                                        "EOF" => {
+                                            ingress.emergency().unwrap();
+                                            ingress.fail();
+                                        }
+                                        "quit" => {
+                                            ingress.accept(CommandKind::Quit, 2).unwrap();
+                                        }
+                                        "fatal" => ingress.fail(),
+                                        _ => unreachable!(),
+                                    }
+                                }),
+                            )),
+                            fail_write,
+                            ..Probe::default()
+                        };
+                    });
+                    let result = store.put(kind, b"independent private content\n");
+                    let (before, calls) = observed
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .expect("real store reached the registered API boundary");
+                    let remaining = PROBE.with(|p| p.borrow().calls[calls..].to_vec());
+                    let after = snapshot(&dir.0);
+                    let obligations = session.resource_obligations().unwrap();
+                    // Literal obligation rule: a refusal before the first
+                    // creation creates no resource. Every other interrupted
+                    // creation/write/rename/removal still lacks a required
+                    // completion or parent-sync result, even if now absent.
+                    let expected_unresolved = usize::from(
+                        restricted
+                            && !matches!(
+                                (sink, when),
+                                ("private_mkdir" | "private_temp_create", "before")
+                            ),
+                    );
+                    assert_eq!(
+                        obligations.private_unresolved, expected_unresolved,
+                        "R37/{key}: independent private finalization obligations"
+                    );
+                    let correct = if !restricted {
+                        if fail_write {
+                            result.is_err()
+                                && after.keys().all(|p| {
+                                    !p.file_name()
+                                        .unwrap()
+                                        .to_string_lossy()
+                                        .starts_with(".tmp-")
+                                })
+                        } else {
+                            result.as_ref().is_ok_and(|id| {
+                                store.get(kind, id).unwrap() == b"independent private content\n"
+                            })
+                        }
+                    } else {
+                        remaining.is_empty() && before == after
+                    };
+                    println!("R37-CLOSE/{kind:?}/{sink}/{when}/{restriction}: new_calls={remaining:?} unchanged={} conforms={correct}", before == after);
+                    if !correct {
+                        failures.push(format!("{kind:?}/{sink}/{when}/{restriction}"));
+                    }
+                    executed += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(executed, if selected.is_some() { 1 } else { 112 });
+    assert!(
+        failures.is_empty(),
+        "executed {executed} private-store schedules; forbidden continuations: {}",
+        failures.join(", ")
+    );
+}
+
+fn run_restriction_child(case: &str) -> bool {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "adapter::private_file::session_probe::session_r37_eof_quit_fatal_each_reserved_private_boundary", "--nocapture"])
+        .env("M2DD_PRIVATE_CLOSE_CASE", case)
+        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    let out = std::thread::spawn(move || {
+        let mut text = String::new();
+        stdout.read_to_string(&mut text).unwrap();
+        text
+    });
+    let err = std::thread::spawn(move || {
+        let mut text = String::new();
+        stderr.read_to_string(&mut text).unwrap();
+        text
+    });
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let stdout = out.join().unwrap();
+    let stderr = err.join().unwrap();
+    let reached = stdout.lines().any(|line| line.starts_with("R37-CLOSE/"));
+    let passed = status.is_some_and(|status| status.success()) && reached;
+    print!("{stdout}");
+    if !passed {
+        eprintln!("private child {case} failed: {stderr}");
+    }
+    passed
+}

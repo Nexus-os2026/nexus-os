@@ -9,78 +9,8 @@ mod support;
 use model::*;
 use support::{Fixture, Pty};
 
-#[derive(Clone, Copy, Debug)]
-enum Pause {
-    Accepted,
-    Captured,
-    BeforeDialogue,
-    AfterDialogue,
-    BeforeSlow,
-    AfterSlow,
-    BeforeHold,
-    Reserved,
-    BeforeAdmission,
-    AfterAdmission,
-    KernelEntry,
-    PublicationObservation,
-    PhysicalEffect,
-    Successor,
-    Transfer,
-    CloseAssessment,
-    Quiescence,
-    Seal,
-    EndRecord,
-    Unwind,
-}
-const PAUSES: [Pause; 20] = [
-    Pause::Accepted,
-    Pause::Captured,
-    Pause::BeforeDialogue,
-    Pause::AfterDialogue,
-    Pause::BeforeSlow,
-    Pause::AfterSlow,
-    Pause::BeforeHold,
-    Pause::Reserved,
-    Pause::BeforeAdmission,
-    Pause::AfterAdmission,
-    Pause::KernelEntry,
-    Pause::PublicationObservation,
-    Pause::PhysicalEffect,
-    Pause::Successor,
-    Pause::Transfer,
-    Pause::CloseAssessment,
-    Pause::Quiescence,
-    Pause::Seal,
-    Pause::EndRecord,
-    Pause::Unwind,
-];
-const INGRESS: [&str; 17] = [
-    "CR",
-    "LF",
-    "CRLF",
-    "original_cell_unscheduled",
-    "repeated",
-    "EOF",
-    "partial_Ctrl_D",
-    "master_close",
-    "read_failure",
-    "mission_stop",
-    "stop_all",
-    "door_fence",
-    "budget",
-    "grant_revocation",
-    "grant_expiry",
-    "quit",
-    "fatal",
-];
-const FAILURES: [&str; 6] = [
-    "none",
-    "decline",
-    "record_failed",
-    "record_unknown",
-    "poison",
-    "panic",
-];
+#[path = "session/coverage.rs"]
+mod coverage;
 
 #[test]
 fn frozen_manifest_has_every_catalogue_row_and_unique_sink() {
@@ -104,31 +34,15 @@ fn frozen_manifest_has_every_catalogue_row_and_unique_sink() {
 
 #[test]
 fn independently_generated_schedule_manifest_is_nonempty_for_every_sink() {
-    // This enumerates required work, not successful production coverage.
-    let mut cases = 0usize;
-    let mut work = 0usize;
-    for line in include_str!("session/sinks.tsv").lines().skip(1) {
-        let fields: Vec<_> = line.split('\t').collect();
-        if !matches!(fields[1], "W" | "R") {
-            continue;
-        }
-        work += 1;
-        for pause in PAUSES {
-            for ingress in INGRESS {
-                for failure in FAILURES {
-                    // Each key is retained verbatim; a runner must supply a
-                    // structural exclusion or actual fixture observations.
-                    let key = format!("{}:{}:{pause:?}:{ingress}:{failure}", fields[0], fields[2]);
-                    assert!(!key.is_empty());
-                    cases += 1;
-                }
-            }
-        }
-    }
-    assert!(work > 50);
-    assert_eq!(cases, work * 20 * 17 * 6);
+    let keys = coverage::required();
+    assert_eq!(keys.len(), 153_000);
+    assert_eq!(
+        coverage::verify(&keys, include_str!("session/combination-dispositions.tsv")).unwrap(),
+        keys.len()
+    );
     println!(
-        "scheduled matrix: {work} W/R sinks, {cases} keys; production execution counted separately"
+        "scheduled matrix: {} explicitly dispositioned keys; executions counted separately",
+        keys.len()
     );
 }
 
