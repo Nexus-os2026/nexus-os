@@ -169,7 +169,10 @@ fn whole_file_path_loaded_children_keep_ambiguous_directory_contexts() {
     // its containing directory. The scanner keeps both possible contexts
     // when the physical file can also be loaded by its default name.
     let files = inventory(&[
-        ("lib.rs", "#[path = \"renamed.rs\"] mod alias; #[cfg(test)] #[path = \"child.rs\"] mod fixture;"),
+        (
+            "lib.rs",
+            "#[path = \"renamed.rs\"] mod alias; #[cfg(test)] #[path = \"child.rs\"] mod fixture;",
+        ),
         ("renamed.rs", "pub(crate) mod child;"),
         ("child.rs", ""),
         ("renamed/child.rs", ""),
@@ -187,6 +190,24 @@ fn whole_file_raw_identifiers_whitespace_paths_and_uncertain_cfg_stay_scanned() 
     ]);
     assert!(files.contains("shared.rs"));
     assert!(files.contains("uncertain.rs"));
+}
+
+#[cfg(unix)]
+#[test]
+fn whole_file_symlink_path_alias_keeps_its_production_child_scanned() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("real")).unwrap();
+    std::fs::write(
+        root.path().join("lib.rs"),
+        "#[path = \"alias.rs\"] mod live; #[cfg(test)] #[path = \"child.rs\"] mod fixture;",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("real/renamed.rs"), "mod child;").unwrap();
+    std::fs::write(root.path().join("child.rs"), "").unwrap();
+    std::os::unix::fs::symlink("real/renamed.rs", root.path().join("alias.rs")).unwrap();
+    assert!(production_files_in(root.path())
+        .iter()
+        .any(|f| f.rel == "child.rs"));
 }
 
 #[test]
