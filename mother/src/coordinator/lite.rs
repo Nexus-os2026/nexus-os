@@ -396,5 +396,6 @@ impl<P: EffectPort> FileSession<P> {
 }
 
 #[path = "../adapter/session_terminal_fix2_tests.rs"]
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 pub(super) mod session_terminal_fix2;

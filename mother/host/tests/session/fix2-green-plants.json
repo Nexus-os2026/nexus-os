@@ -320,6 +320,26 @@
       "sha256": "27d68efcd1a35b5bcb1b1a561e4052580d1828d7f68bda5a28c62a572c75be44",
       "head": "c54244311a415e9653e0f569b3849e6ff2293892",
       "results": []
+    },
+    "green-source-scans": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "adapter::scan",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 324.05,
+      "sha256": "f794689522c836a29d68fab84e840486e7725a4d25ac336cbd7cccd2f59056f4",
+      "head": "415ce0eb50543d7aa4c284b6eecd5b3d9198e4ff",
+      "results": [
+        "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 238 filtered out; finished in 0.75s"
+      ]
     }
   },
   "plants_restored": {
