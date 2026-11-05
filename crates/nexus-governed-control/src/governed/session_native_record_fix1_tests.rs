@@ -88,7 +88,7 @@ fn fix1_f08_nested_native_return_types_preserve_separate_facts() {
             true,
             1,
             RestoreOutcome::Refused,
-            RecordingStatus::NotStarted,
+            RecordingStatus::Unknown,
         ),
         (
             "rollback_is_not_restore",
