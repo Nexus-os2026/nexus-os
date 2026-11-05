@@ -189,6 +189,22 @@ fn session_r37_each_private_call_and_error_removal_has_its_own_boundary() {
                         .expect("real store reached the registered API boundary");
                     let remaining = PROBE.with(|p| p.borrow().calls[calls..].to_vec());
                     let after = snapshot(&dir.0);
+                    let obligations = session.resource_obligations().unwrap();
+                    // Literal obligation rule: a refusal before the first
+                    // creation creates no resource. Every other interrupted
+                    // creation/write/rename/removal still lacks a required
+                    // completion or parent-sync result, even if now absent.
+                    let expected_unresolved = usize::from(
+                        ingresses != 0
+                            && !matches!(
+                                (sink, when),
+                                ("private_mkdir" | "private_temp_create", "before")
+                            ),
+                    );
+                    assert_eq!(
+                        obligations.private_unresolved, expected_unresolved,
+                        "R37/{key}: independent private finalization obligations"
+                    );
                     let correct = if ingresses == 0 {
                         if fail_write {
                             result.is_err()
