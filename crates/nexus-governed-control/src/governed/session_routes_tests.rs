@@ -2890,3 +2890,6 @@ mod lifecycle_fix1;
 
 #[path = "session_budget_fix1_tests.rs"]
 mod budget_fix1;
+
+#[path = "session_coverage_record_fix1_tests.rs"]
+mod coverage_record_fix1;
