@@ -2,6 +2,7 @@
 
 pub mod actuators;
 pub mod adaptive_policy;
+pub mod agent_identity;
 pub mod audit;
 
 pub mod autonomy;

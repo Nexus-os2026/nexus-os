@@ -4,10 +4,10 @@
 //! risk levels, display names, and change history. Every toggle maps to
 //! a real kernel capability grant. Every change is audited.
 
+use crate::agent_identity::AgentId;
 use crate::audit::{AuditTrail, EventType};
 use crate::errors::AgentError;
 use crate::manifest::AgentManifest;
-use crate::supervisor::AgentId;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;

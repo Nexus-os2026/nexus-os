@@ -3,6 +3,7 @@
 //! hash domain. UUID raw bytes additionally pin WorkspaceBinding::from_bytes.
 #[allow(dead_code)]
 mod retirement;
+use nexus_kernel::agent_identity::AgentId;
 use nexus_kernel::audit::AuditError;
 use nexus_kernel::backup::BackupScheduleConfig;
 use nexus_kernel::cognitive::types::{BrowserAction, PlannedAction};
@@ -12,7 +13,6 @@ use nexus_kernel::fuel_hardening::FuelViolation;
 use nexus_kernel::lifecycle::AgentState;
 use nexus_kernel::manifest::FsPermissionLevel;
 use nexus_kernel::rate_limit::{ApiHardeningConfig, RateLimitConfig};
-use nexus_kernel::supervisor::AgentId;
 use nexus_kernel::workspace_authority::WorkspaceBinding;
 use retirement::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

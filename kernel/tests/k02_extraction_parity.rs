@@ -7,8 +7,8 @@
 //! order, the derive set and every serialized form of `FsPermissionLevel`. The
 //! grant, narrowing, expiry and revocation behavior stays covered by the
 //! unchanged workspace-authority tests; nothing here replaces them.
+use nexus_kernel::agent_identity::AgentId;
 use nexus_kernel::manifest::{FilesystemPermission, FsPermissionLevel};
-use nexus_kernel::supervisor::AgentId;
 use nexus_kernel::workspace_authority::WorkspaceBinding;
 use serde::de::value::{Error as ValueError, U32Deserializer};
 use serde::de::IntoDeserializer;
@@ -41,6 +41,19 @@ fn agent_id_is_the_uuid_type_itself() {
     let fresh = AgentId::new_v4();
     assert_eq!(fresh.get_version_num(), 4);
     assert_ne!(fresh, AgentId::new_v4());
+}
+
+/// The old path is a same-type re-export, not a copy: values cross between the
+/// two paths with no conversion. Delete with the old path (K14 retires
+/// `supervisor`; K22 requires no old-path exports).
+#[test]
+fn transitional_agent_id_export_is_the_same_type_as_its_new_home() {
+    use nexus_kernel::supervisor::AgentId as OldPathAgentId;
+    assert_eq!(TypeId::of::<OldPathAgentId>(), TypeId::of::<AgentId>());
+    let new_home: AgentId = Uuid::from_bytes(AGENT_BYTES);
+    let old_path: OldPathAgentId = new_home;
+    assert_eq!(old_path, new_home);
+    assert_eq!(old_path.to_string(), AGENT_TEXT);
 }
 
 #[test]

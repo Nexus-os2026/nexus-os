@@ -135,7 +135,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-pub type AgentId = Uuid;
+// Transitional same-type export (K02); the type now lives in `agent_identity`.
+pub use crate::agent_identity::AgentId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionMode {
