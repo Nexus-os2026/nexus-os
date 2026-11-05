@@ -390,3 +390,87 @@ fn reviewer_standard_cargo_auto_bin_remains_scanned_with_protected_content() {
         assert!(binary.text.contains("\"cloud\""));
     }
 }
+
+// Fix round 3. Old: "Rust ancestors discover roots; raw directories expand".
+// New: "workspace manifests discover every production root; normalized,
+// bounded contexts fail closed". R-4's old AND new intersection is unchanged.
+#[test]
+fn reviewer_external_cargo_root_is_production_without_member_rust_files() {
+    for member in ["app", "apps/*", "apps/a?p"] {
+        let dir = if member == "app" { "app" } else { "apps/app" };
+        let path = if member == "app" {
+            "../shared.rs"
+        } else {
+            "../../shared.rs"
+        };
+        let files = inventory(&[
+            ("Cargo.toml", &format!("[workspace]\nmembers = [{member:?}]\n")),
+            (&format!("{dir}/Cargo.toml"), &format!("[package]\nname = \"app\"\nversion = \"0.0.0\"\n[lib]\npath = {path:?}\n")),
+            ("test_loader.rs", "#[cfg(test)] #[path=\"shared.rs\"] mod fixture; #[cfg(test)] #[path=\"fixture.rs\"] mod only_test;"),
+            ("shared.rs", "pub fn name_is_cloud() -> bool { false } pub const P: &str = \"cloud\";"),
+            ("fixture.rs", "fn only_test() {}"),
+        ]);
+        assert!(files.contains("shared.rs"), "{member}: {files:?}");
+        assert!(
+            !files.contains("fixture.rs"),
+            "ordinary test-only files still exclude"
+        );
+    }
+}
+
+#[test]
+fn external_explicit_bin_and_build_roots_are_production() {
+    let files = inventory(&[
+        ("Cargo.toml", "[workspace]\nmembers = [\"app\"]\n"),
+        ("app/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.0.0\"\nbuild = \"../compile.rs\"\nautobins = false\n[[bin]]\nname = \"app\"\npath = \"../program.rs\"\n"),
+        ("test_loader.rs", "#[cfg(test)] #[path=\"program.rs\"] mod binary; #[cfg(test)] #[path=\"compile.rs\"] mod build; #[cfg(test)] #[path=\"app/src/bin/disabled.rs\"] mod disabled;"),
+        ("program.rs", "fn main() {}"),
+        ("compile.rs", "fn main() {}"),
+        ("app/src/bin/disabled.rs", "fn main() {}"),
+    ]);
+    assert!(files.contains("program.rs"));
+    assert!(files.contains("compile.rs"));
+    assert!(!files.contains("app/src/bin/disabled.rs"));
+}
+
+#[test]
+fn unresolved_workspace_members_fail_loudly() {
+    for member in ["missing", "missing/*", "apps/**", "apps/[ab]"] {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("Cargo.toml"),
+            format!("[workspace]\nmembers = [{member:?}]\n"),
+        )
+        .unwrap();
+        std::fs::write(root.path().join("ordinary.rs"), "").unwrap();
+        assert!(
+            std::panic::catch_unwind(|| production_files_in(root.path())).is_err(),
+            "unresolved {member} must fail loudly"
+        );
+    }
+}
+
+#[test]
+fn reviewer_disabled_module_cycle_terminates_and_keeps_production() {
+    let start = std::time::Instant::now();
+    let files = inventory(&[
+        (
+            "lib.rs",
+            "#[cfg(any())] mod outer { #[path=\"../lib.rs\"] mod child; }",
+        ),
+        (
+            "test_loader.rs",
+            "#[cfg(test)] #[path=\"lib.rs\"] mod fixture;",
+        ),
+    ]);
+    assert!(files.contains("lib.rs"));
+    assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    // A cycle involving ordinary, test-aliased files also stays production.
+    let files = inventory(&[
+        ("loader.rs", "#[cfg(test)] #[path=\"a.rs\"] mod fixture;"),
+        ("a.rs", "#[cfg(test)] #[path=\"b.rs\"] mod next;"),
+        ("b.rs", "#[cfg(test)] #[path=\"a.rs\"] mod next;"),
+    ]);
+    assert!(files.contains("a.rs"));
+    assert!(files.contains("b.rs"));
+}
