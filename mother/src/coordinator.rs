@@ -88,6 +88,9 @@ use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};
+#[cfg(test)]
+#[path = "oracles/m2e_budget.rs"]
+mod m2e_budget;
 mod lite;
 mod lite_intent;
 mod session_close;
