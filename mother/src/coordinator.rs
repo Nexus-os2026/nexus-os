@@ -320,6 +320,9 @@ struct Mission {
     settlement: Option<(u64, SettleCause)>,
     acks: Vec<PendingAction>,
     terminal_uncertain: bool,
+    // Exact terminal append result, independent of later store failures and
+    // readable-but-unacknowledged bytes. Never inferred from an older prefix.
+    terminal_record: Option<(Trigger, Option<u64>)>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -369,6 +372,7 @@ impl Mission {
             settlement: None,
             acks: Vec::new(),
             terminal_uncertain: false,
+            terminal_record: None,
         }
     }
 
@@ -774,12 +778,22 @@ impl Inner {
     ) -> Result<MissionState, CoordinatorError> {
         let from = self.mission(id)?.state;
         let to = transition(from, &trigger).map_err(|e| refusal(from, e))?;
-        self.append(
+        if to.is_terminal() {
+            self.mission(id)?
+                .terminal_record
+                .get_or_insert((trigger.clone(), None));
+        }
+        let sequence = self.append(
             id,
             Event::Transition {
                 trigger: trigger.clone(),
             },
         )?;
+        if let Some((intent, recorded)) = &mut self.mission(id)?.terminal_record {
+            if *intent == trigger {
+                *recorded = Some(sequence);
+            }
+        }
         self.mission(id)?.apply(&trigger, to, mono_now);
         Ok(to)
     }
@@ -3144,6 +3158,9 @@ fn replay(
                 _ => {}
             }
             mission.apply(trigger, to, 0);
+            if to.is_terminal() {
+                mission.terminal_record = Some((trigger.clone(), Some(entry.seq)));
+            }
             if let Trigger::Consent { hash, .. } = trigger {
                 // The verified journal's record of the broker's approval.
                 mission.consent = Some(Consent::minted(*hash));

@@ -190,9 +190,13 @@ impl HaltCell {
             scope.restore_entered();
         }
     }
-    pub(crate) fn restore_returned(&self, outcome: crate::host_session::outcome::RestoreOutcome) {
+    pub(crate) fn restore_returned(
+        &self,
+        outcome: crate::host_session::outcome::RestoreOutcome,
+        recording: crate::host_session::outcome::RecordingStatus,
+    ) {
         if let CellMode::Host(Some(scope)) = self.mode() {
-            scope.restore_returned(outcome);
+            scope.restore_returned(outcome, recording);
         }
     }
     pub(crate) fn restore_grant(&self, state: crate::host_session::outcome::GrantClosure) {

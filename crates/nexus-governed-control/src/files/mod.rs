@@ -1423,12 +1423,27 @@ impl CodingRun {
                 #[cfg(test)]
                 let result = restore_projection_for_test(result);
                 if let Some(cell) = cell {
-                    use crate::host_session::outcome::RestoreOutcome;
-                    cell.restore_returned(match &result {
-                        Ok(_) => RestoreOutcome::Completed,
-                        Err(ApplyError::Refused(_)) => RestoreOutcome::Refused,
-                        Err(_) => RestoreOutcome::Uncertain,
-                    });
+                    use crate::host_session::outcome::{RecordingStatus, RestoreOutcome};
+                    // Authority closure wraps, but never erases, the native
+                    // physical result and its independent completion record.
+                    let mut physical = &result;
+                    while let Err(ApplyError::AuthorityNotClosed { after }) = physical {
+                        physical = after;
+                    }
+                    let (outcome, recording) = match physical {
+                        Ok(_) => (RestoreOutcome::Completed, RecordingStatus::Recorded),
+                        Err(ApplyError::CompletionUnrecorded {
+                            operation: "restore",
+                        }) => (RestoreOutcome::Completed, RecordingStatus::Owed),
+                        Err(ApplyError::CompletionUnrecorded { .. }) => {
+                            (RestoreOutcome::Uncertain, RecordingStatus::Owed)
+                        }
+                        Err(ApplyError::Refused(_)) => {
+                            (RestoreOutcome::Refused, RecordingStatus::Unknown)
+                        }
+                        Err(_) => (RestoreOutcome::Uncertain, RecordingStatus::Unknown),
+                    };
+                    cell.restore_returned(outcome, recording);
                 }
                 result
             },

@@ -29,13 +29,32 @@ pub struct RestoreObservation {
 #[derive(Debug, Default)]
 pub(super) struct RestoreFacts {
     outcome: AtomicU8,
+    recording: AtomicU8,
     grant: AtomicU8,
 }
 impl RestoreFacts {
     pub(crate) fn entered(&self) {
+        self.recording.store(1, Ordering::SeqCst);
         self.outcome.store(1, Ordering::SeqCst);
     }
-    pub(crate) fn returned(&self, result: RestoreOutcome) {
+    fn recording(&self) -> RecordingStatus {
+        match self.recording.load(Ordering::SeqCst) {
+            0 => RecordingStatus::NotStarted,
+            2 => RecordingStatus::Recorded,
+            3 => RecordingStatus::Owed,
+            _ => RecordingStatus::Unknown,
+        }
+    }
+    pub(crate) fn returned(&self, result: RestoreOutcome, recording: RecordingStatus) {
+        self.recording.store(
+            match recording {
+                RecordingStatus::NotStarted => 0,
+                RecordingStatus::Recorded => 2,
+                RecordingStatus::Owed => 3,
+                RecordingStatus::Unknown => 1,
+            },
+            Ordering::SeqCst,
+        );
         self.outcome.store(
             match result {
                 RestoreOutcome::Completed => 2,
@@ -85,8 +104,8 @@ impl RequestScope {
     pub(crate) fn restore_entered(&self) {
         self.restore.entered();
     }
-    pub(crate) fn restore_returned(&self, outcome: RestoreOutcome) {
-        self.restore.returned(outcome);
+    pub(crate) fn restore_returned(&self, outcome: RestoreOutcome, recording: RecordingStatus) {
+        self.restore.returned(outcome, recording);
     }
     pub(crate) fn restore_grant(&self, state: GrantClosure) {
         self.restore.grant(state);
@@ -279,9 +298,9 @@ impl HostSession {
                 .cell
                 .reason()
                 .map(|(cause, reason)| (cause, reason.map(|r| r.get()))),
-            kernel: if request.scope.facts.apply_completed.load(Ordering::SeqCst)
-                || restore.outcome == RestoreOutcome::Completed
-            {
+            kernel: if restore.handed_off {
+                request.scope.restore.recording()
+            } else if request.scope.facts.apply_completed.load(Ordering::SeqCst) {
                 RecordingStatus::Recorded
             } else if request.scope.facts.admitted.load(Ordering::SeqCst) != 0 {
                 RecordingStatus::Unknown

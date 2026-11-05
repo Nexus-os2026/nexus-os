@@ -70,27 +70,24 @@ impl<P: EffectPort> FileSession<P> {
                 m.state,
                 m.settlement.map(|(_, cause)| cause),
                 inner.store.load(),
+                m.terminal_record.clone(),
             ))
         });
-        let state = observed.as_ref().map(|(state, _, _)| *state);
-        let settlement = observed.as_ref().and_then(|(_, cause, _)| *cause);
+        let state = observed.as_ref().map(|(state, _, _, _)| *state);
+        let settlement = observed.as_ref().and_then(|(_, cause, _, _)| *cause);
+        let attempted = observed
+            .as_ref()
+            .and_then(|(_, _, _, record)| record.clone());
         let entries = observed
-            .and_then(|(_, _, lines)| lines.ok())
+            .and_then(|(_, _, lines, _)| lines.ok())
             .and_then(|lines| verify(&lines).ok());
-        let recorded = entries.as_ref().and_then(|entries| {
-            if !state.is_some_and(MissionState::is_terminal) {
-                return None;
-            }
-            entries.iter().rev().find_map(|entry| {
-                if entry.mission == id {
-                    if let Event::Transition { trigger } = &entry.event {
-                        return Some((entry.seq, trigger.clone()));
-                    }
-                }
-                None
-            })
+        let recorded = attempted.as_ref().and_then(|(trigger, sequence)| {
+            let seq = (*sequence)?;
+            entries.as_ref()?.iter().find(|entry| entry.mission == id && entry.seq == seq
+                && matches!(&entry.event, Event::Transition { trigger: actual } if actual == trigger))
+                .map(|entry| entry.seq)
         });
-        let first = if let Some((_, trigger)) = &recorded {
+        let first = if let Some((trigger, _)) = &attempted {
             TerminalIntent::Transition(trigger.clone())
         } else if let Some(reason) = file.cell.reason() {
             if is_terminal_intent(reason) {
@@ -129,8 +126,8 @@ impl<P: EffectPort> FileSession<P> {
             first,
             state,
             settlement,
-            recorded_sequence: recorded.map(|(seq, _)| seq),
-            recording_unknown: entries.is_none(),
+            recorded_sequence: recorded,
+            recording_unknown: entries.is_none() || (attempted.is_some() && recorded.is_none()),
         })
     }
 }
