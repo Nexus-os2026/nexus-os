@@ -191,6 +191,14 @@ impl FileSession<crate::adapter::SessionPort> {
                 .continue_approval(continuation, id, generation, effect)
                 .map_err(|e| CoordinatorError::Broker(e.class))?;
             let context = port.context();
+            let life = self.life();
+            context
+                .narrow_mission_deadlines(
+                    self.coordinator.clock.clone(),
+                    life.mono_deadline.load(Ordering::SeqCst),
+                    life.wall_deadline.load(Ordering::SeqCst),
+                )
+                .map_err(|_| CoordinatorError::Stopped)?;
             let private = self
                 .coordinator
                 .private

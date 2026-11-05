@@ -1431,11 +1431,17 @@ impl<P: EffectPort> Coordinator<P> {
                     if mission.file_mode {
                         mission.consent_request = Some(asked.request.clone());
                         if let Some(file) = &self.file {
-                            file.consent_at(
-                                mono,
-                                at_wall_ms,
-                                mission.contract()?.budget.max_duration_ms,
-                            );
+                            let duration = mission.contract()?.budget.max_duration_ms;
+                            file.consent_at(mono, at_wall_ms, duration);
+                            if let Some(context) = self.port.session_context() {
+                                context
+                                    .narrow_mission_deadlines(
+                                        self.clock.clone(),
+                                        mono.saturating_add(duration),
+                                        at_wall_ms.saturating_add(duration),
+                                    )
+                                    .map_err(|_| CoordinatorError::Stopped)?;
+                            }
                         }
                     }
                     Ok(state)

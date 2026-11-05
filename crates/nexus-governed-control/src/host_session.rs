@@ -39,10 +39,27 @@ pub(crate) struct RequestScope {
     restore: outcome::RestoreFacts,
     // Once a native File run is admitted, Mother sinks retain that original
     // prerequisite. Installing it only narrows the original request.
+    mission_deadlines: OnceLock<MissionDeadlines>,
     mother_run: OnceLock<(
         std::sync::Weak<crate::governed::GovernedControl>,
         crate::authority::ids::RunId,
     )>,
+}
+struct MissionDeadlines {
+    clock: Arc<dyn crate::authority::clock::Clock>,
+    mono: AtomicU64,
+    wall: AtomicU64,
+}
+impl fmt::Debug for MissionDeadlines {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MissionDeadlines").finish_non_exhaustive()
+    }
+}
+impl MissionDeadlines {
+    fn live(&self) -> bool {
+        self.clock.monotonic_ms() < self.mono.load(Ordering::SeqCst)
+            && self.clock.wall_ms() < self.wall.load(Ordering::SeqCst)
+    }
 }
 impl RequestScope {
     pub(crate) fn fail(&self) {
@@ -75,6 +92,10 @@ impl RequestScope {
         }
         let invalid = self.core.strong_count() == 0
             || Instant::now() >= self.deadline
+            || self
+                .mission_deadlines
+                .get()
+                .is_some_and(|limits| !limits.live())
             || self.snapshot & (FAILED | SEALED | EMERGENCY) != 0
             || match self.kind {
                 ScopeKind::Bootstrap => self.snapshot & (READY | CLOSING | 7) != 0,
@@ -429,6 +450,29 @@ pub struct SessionContext {
     )>,
 }
 impl SessionContext {
+    /// Adds the original mission clocks to every final admission of this
+    /// request. Repeated calls may only narrow, using the same clock origin.
+    pub fn narrow_mission_deadlines(
+        &self,
+        clock: Arc<dyn crate::authority::clock::Clock>,
+        mono: u64,
+        wall: u64,
+    ) -> Result<(), SessionError> {
+        let limits = self
+            .scope
+            .mission_deadlines
+            .get_or_init(|| MissionDeadlines {
+                clock: clock.clone(),
+                mono: AtomicU64::new(mono),
+                wall: AtomicU64::new(wall),
+            });
+        if !Arc::ptr_eq(&limits.clock, &clock) {
+            return Err(SessionError::Restricted);
+        }
+        limits.mono.fetch_min(mono, Ordering::SeqCst);
+        limits.wall.fetch_min(wall, Ordering::SeqCst);
+        Ok(())
+    }
     pub fn reserve_private(
         &self,
         temporary: &std::path::Path,
@@ -561,6 +605,7 @@ impl HostSession {
             next_step: AtomicU64::new(0),
             facts: outcome::RequestFacts::default(),
             restore: outcome::RestoreFacts::default(),
+            mission_deadlines: OnceLock::new(),
             mother_run: OnceLock::new(),
         });
         let bootstrap = SessionContext {
@@ -1488,6 +1533,7 @@ impl SessionIngress {
                     next_step: AtomicU64::new(0),
                     facts: outcome::RequestFacts::default(),
                     restore: outcome::RestoreFacts::default(),
+                    mission_deadlines: OnceLock::new(),
                     mother_run: OnceLock::new(),
                 }),
             });
@@ -1527,6 +1573,7 @@ impl SessionIngress {
                 next_step: AtomicU64::new(0),
                 facts: outcome::RequestFacts::default(),
                 restore: outcome::RestoreFacts::default(),
+                mission_deadlines: OnceLock::new(),
                 mother_run: OnceLock::new(),
             }),
         })
