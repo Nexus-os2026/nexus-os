@@ -2211,3 +2211,44 @@ fn session_close_keeps_private_resource_and_exact_ack_debt_independent() {
             .any(|r| r.phase == "session_closed"));
     }
 }
+
+#[test]
+fn session_undo_reports_native_handoff_and_physical_result_independently() {
+    use crate::host_session::outcome::{GrantClosure, RestoreOutcome};
+    for (hook, entered) in [
+        ("session.before.request_restore", false),
+        ("session.before.restore", false),
+        ("session.after.restore", true),
+    ] {
+        for interfere in [false, true] {
+            let f = Fixture::new();
+            let id = f.pending();
+            f.approve(id).unwrap();
+            let request = f._session.ingress().accept(CommandKind::Undo, 3).unwrap();
+            let ingress = f._session.ingress();
+            f.gov.files().hooks().arm(hook, move || { if interfere { ingress.emergency().unwrap(); } });
+            let _result = f._session.undo(&request);
+            let facts = request.restore_observation();
+            assert_eq!(facts.request, 3);
+            assert_eq!(facts.target, request.context());
+            assert_eq!(facts.handed_off, !interfere || entered);
+            assert_eq!(facts.outcome, if !interfere || entered { RestoreOutcome::Completed } else { RestoreOutcome::NotEntered });
+            assert_eq!(facts.interrupted, interfere);
+            let target = f._dirs.0.path().join("selected/workspace/session.txt");
+            assert_eq!(target.exists(), interfere && !entered, "primitive target observation independently checks completion");
+            assert_eq!(matching(&events(&f.ledger_path()), "restore.completed", None), usize::from(!interfere || entered));
+            if !interfere || entered { assert_eq!(facts.grant, GrantClosure::Closed); }
+        }
+    }
+    let f = Fixture::new();
+    let id = f.pending(); f.approve(id).unwrap();
+    let target = f._dirs.0.path().join("selected/workspace/session.txt");
+    std::fs::write(&target, b"Owner changed bytes").unwrap();
+    let request = f._session.ingress().accept(CommandKind::Undo, 3).unwrap();
+    assert!(f._session.undo(&request).is_err());
+    let facts = request.restore_observation();
+    assert!(facts.handed_off, "native restore was entered and refused its changed target");
+    assert_eq!(facts.outcome, RestoreOutcome::Refused);
+    assert_eq!(facts.grant, GrantClosure::Closed);
+    assert_eq!(std::fs::read(target).unwrap(), b"Owner changed bytes");
+}
