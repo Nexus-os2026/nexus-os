@@ -549,6 +549,11 @@ struct Inner {
     details: VecDeque<(MissionId, WorkingDetail)>,
 }
 
+#[path = "adapter/session_journal_oracles_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_journal_oracles;
+
 impl Inner {
     /// Journal one record, after this session's opening and any hold not
     /// journaled yet.
@@ -645,6 +650,8 @@ impl Inner {
             }));
         }
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::at("before", &entry);
         if let Err(e) = self.store.append(&entry.to_line()) {
             // Fail closed, durably: a journal that may have lost a
             // transition (a Stop) must not be reopened as if it had not.
@@ -665,6 +672,8 @@ impl Inner {
             }
             return Err(CoordinatorError::Journal(e));
         }
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::at("after", &entry);
         self.head = entry.hash;
         self.next_seq += 1;
         Ok(entry.seq)
@@ -1286,6 +1295,10 @@ impl<P: EffectPort> Coordinator<P> {
             inner.usable()?;
             inner.clear_detail(id);
             let (seq, number) = (inner.next_seq, inner.next_request);
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("before", "consent_reserve");
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("entered", "consent_reserve");
             inner.next_request += 1;
             let mission = inner.mission(id)?;
             mission.not_held()?;
@@ -1302,6 +1315,8 @@ impl<P: EffectPort> Coordinator<P> {
                 ]);
             }
             mission.asking = Some(request.clone());
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("after", "consent_reserve");
             Ok((request, mission.generation))
         })
     }
@@ -1450,7 +1465,13 @@ impl<P: EffectPort> Coordinator<P> {
                 other => phase_roles(other),
             };
             let mission = inner.mission(id)?;
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("before", "phase_reserve");
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("entered", "phase_reserve");
             mission.busy = true;
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("after", "phase_reserve");
             Ok(Start::Run(report, from, roles, mission.generation))
         })?;
         let (mut report, from, roles, generation) = match start {
@@ -1721,7 +1742,13 @@ impl<P: EffectPort> Coordinator<P> {
                     .file_invocations
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             }
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("before", "lane_invoke");
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("entered", "lane_invoke");
             let output = lane.invoke(&input);
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("after", "lane_invoke");
             self.file_boundary(id)?;
 
             // Keep the answer only if the reservation still holds.
@@ -1992,7 +2019,14 @@ impl<P: EffectPort> Coordinator<P> {
         roles_left: &[LaneRole],
     ) -> Result<MissionState, CoordinatorError> {
         let bytes = serde_json::to_vec(rest).expect("effect requests serialise");
-        let content = match self.private.put(ContentKind::PausedPhase, &bytes) {
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::call("before", "paused_store");
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::call("entered", "paused_store");
+        let stored = self.private.put(ContentKind::PausedPhase, &bytes);
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::call("after", "paused_store");
+        let content = match stored {
             Ok(content) => content,
             Err(e) => {
                 let _ = self.end(id, BlockReason::AwaitingOwnerApproval);

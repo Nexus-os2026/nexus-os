@@ -1241,7 +1241,12 @@ mod door_tests;
 mod files_exec_tests;
 #[cfg(all(test, target_os = "linux"))]
 mod files_tests;
+
 #[cfg(test)]
 mod halt_tests;
+#[path = "governed/session_routes_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_routes;
 #[cfg(test)]
 mod tests;

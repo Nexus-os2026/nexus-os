@@ -63,9 +63,15 @@ fn io(e: std::io::Error) -> PrivateError {
 /// make one fail ([`seam`]).
 fn sync_dir(dir: &Path) -> std::io::Result<()> {
     #[cfg(test)]
+    session_probe::before("private_parent_sync");
+    #[cfg(test)]
     seam::sync(dir)?;
+    #[cfg(test)]
+    session_probe::entered("private_parent_sync");
     #[cfg(unix)]
     std::fs::File::open(dir)?.sync_all()?;
+    #[cfg(test)]
+    session_probe::after("private_parent_sync");
     Ok(())
 }
 
@@ -110,6 +116,10 @@ fn create_levels(dir: &Path) -> Result<(), PrivateError> {
             use std::os::unix::fs::DirBuilderExt;
             builder.mode(0o700);
         }
+        #[cfg(test)]
+        session_probe::before("private_mkdir");
+        #[cfg(test)]
+        session_probe::entered("private_mkdir");
         match builder.create(level) {
             Ok(()) => {}
             // Made meanwhile by another opener: synced here too.
@@ -118,6 +128,8 @@ fn create_levels(dir: &Path) -> Result<(), PrivateError> {
         }
         #[cfg(test)]
         seam::created(level);
+        #[cfg(test)]
+        session_probe::after("private_mkdir");
         sync_dir(level).map_err(io)?;
         sync_dir(parent_of(level)).map_err(io)?;
     }
@@ -190,6 +202,10 @@ fn chain_of(dir: &Path, owner: u32) -> Result<Vec<PathBuf>, PrivateError> {
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
 
+#[path = "private_session_oracles_tests.rs"]
+#[cfg(test)]
+mod session_probe;
+
 impl FilePrivate {
     /// The store at `dir` (created private if absent), its chain synced.
     pub fn open(dir: &Path) -> Result<Self, PrivateError> {
@@ -229,11 +245,37 @@ impl FilePrivate {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
+        #[cfg(test)]
+        session_probe::before("private_temp_create");
+        #[cfg(test)]
+        session_probe::entered("private_temp_create");
         let mut file = options.open(temp)?;
+        #[cfg(test)]
+        session_probe::after("private_temp_create");
+        #[cfg(test)]
+        session_probe::before("private_write");
+        #[cfg(test)]
+        session_probe::entered("private_write");
+        #[cfg(test)]
+        session_probe::write_result()?;
         file.write_all(bytes)?;
+        #[cfg(test)]
+        session_probe::after("private_write");
+        #[cfg(test)]
+        session_probe::before("private_sync");
+        #[cfg(test)]
+        session_probe::entered("private_sync");
         file.sync_all()?;
+        #[cfg(test)]
+        session_probe::after("private_sync");
         drop(file);
+        #[cfg(test)]
+        session_probe::before("private_rename");
+        #[cfg(test)]
+        session_probe::entered("private_rename");
         std::fs::rename(temp, target)?;
+        #[cfg(test)]
+        session_probe::after("private_rename");
         for level in self.chain.iter().rev() {
             sync_dir(level)?;
         }
@@ -260,7 +302,13 @@ impl PrivateStore for FilePrivate {
         let target = dir.join(id.to_hex());
         let written = self.write(&dir, &temp, &target, bytes);
         if written.is_err() {
+            #[cfg(test)]
+            session_probe::before("private_error_remove");
+            #[cfg(test)]
+            session_probe::entered("private_error_remove");
             let _ = std::fs::remove_file(&temp);
+            #[cfg(test)]
+            session_probe::after("private_error_remove");
         }
         written.map_err(io)?;
         Ok(id)

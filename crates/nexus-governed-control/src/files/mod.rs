@@ -868,7 +868,14 @@ fn discard(run: &mut CodingRun, _shared: &Shared) -> bool {
     if !run.state().is_terminal() {
         let _ = run.cancel();
     }
-    matches!(run.discard_staging(), Ok(CleanupStatus::Discarded))
+    #[cfg(test)]
+    _shared.fire("session.before.discard_staging");
+    #[cfg(test)]
+    _shared.fire("session.entered.discard_staging");
+    let result = run.discard_staging();
+    #[cfg(test)]
+    _shared.fire("session.after.discard_staging");
+    matches!(result, Ok(CleanupStatus::Discarded))
 }
 
 /// What a publication attempt came to for the file at the name (Codex
@@ -1051,7 +1058,13 @@ impl PendingEffect for FilesEffect {
         let run = run
             .as_mut()
             .ok_or(AuthorityError::Unavailable("the staged file is gone"))?;
+        #[cfg(test)]
+        self.shared.fire("session.before.revalidation_review");
+        #[cfg(test)]
+        self.shared.fire("session.entered.revalidation_review");
         let review = run.review().map_err(|_| AuthorityError::TargetChanged)?;
+        #[cfg(test)]
+        self.shared.fire("session.after.revalidation_review");
         if review.binding.hash() != self.review_hash || review.single_complete().is_none() {
             return Err(AuthorityError::TargetChanged);
         }
@@ -1112,22 +1125,34 @@ impl PendingEffect for FilesEffect {
         // The bridge's one construction site (§6.4).
         let hash = self.review_hash;
         let approved = BrokerApproved { review_hash: hash };
+        #[cfg(test)]
+        shared.fire("session.before.request_approval");
+        #[cfg(test)]
+        shared.fire("session.entered.request_approval");
         let approval = match run.request_approval(&kernel.project.name, &approved) {
             Ok(approval) => approval,
             Err(error) => return Err(self.not_published(guard, run, &error)),
         };
+        #[cfg(test)]
+        shared.fire("session.after.request_approval");
         // S1a-D (§7 step 4): a page is rechecked with its admission's facts
         // (never prepare's) immediately before its publication: only the
         // kernel write grant is issued between them. Its pass must still be
         // the one the Owner approved. Any failure publishes nothing, spends
         // the run's check and discards its staging.
         if let Some(page) = &self.page {
+            #[cfg(test)]
+            shared.fire("session.before.page_recheck");
+            #[cfg(test)]
+            shared.fire("session.entered.page_recheck");
             let rechecked = run
                 .recheck_inert_page(self.admission.page_facts.as_ref())
                 .and_then(|()| match run.latest_inert_page() {
                     Some(now) if now == page => Ok(()),
                     Some(_) | None => Err(InertPageError::Stale),
                 });
+            #[cfg(test)]
+            shared.fire("session.after.page_recheck");
             if let Err(error) = rechecked {
                 let kept = shared.retire(run);
                 return Err(self.failed_with(
@@ -1138,6 +1163,10 @@ impl PendingEffect for FilesEffect {
                 ));
             }
         }
+        #[cfg(test)]
+        shared.fire("session.before.write_grant");
+        #[cfg(test)]
+        shared.fire("session.entered.write_grant");
         let Ok(write) = kernel.projects.grant_for_apply(kernel.project.id, binding) else {
             let kept = shared.retire(run);
             return Err(self.failed_with(
@@ -1148,10 +1177,18 @@ impl PendingEffect for FilesEffect {
             ));
         };
         #[cfg(test)]
+        shared.fire("session.after.write_grant");
+        #[cfg(test)]
         shared.note_write_grant(&kernel.authority, &write);
         let observer = Observer::new(guard, &self.stop, shared.hold(), &shared);
         guard.handing_off();
+        #[cfg(test)]
+        shared.fire("session.before.apply");
+        #[cfg(test)]
+        shared.fire("session.entered.apply");
         let result = run.apply_observed(approval, write, &self.backend.staging, &observer);
+        #[cfg(test)]
+        shared.fire("session.after.apply");
         let recovery = match result {
             Ok(_) => false,
             Err(error) => match publication(&error) {
@@ -1637,23 +1674,55 @@ fn stage_one(
     content: &[u8],
     (class, facts): (FileClass, Option<ApprovedFacts>),
 ) -> Result<([u8; 32], Option<InertPageResult>, ManifestEntry), AuthorityError> {
+    #[cfg(test)]
+    _shared.fire("session.before.staging_grant");
+    #[cfg(test)]
+    _shared.fire("session.entered.staging_grant");
     run.grant(staging).map_err(run_error)?;
+    #[cfg(test)]
+    _shared.fire("session.after.staging_grant");
+    #[cfg(test)]
+    _shared.fire("session.before.snapshot");
+    #[cfg(test)]
+    _shared.fire("session.entered.snapshot");
     run.snapshot().map_err(run_error)?;
+    #[cfg(test)]
+    _shared.fire("session.after.snapshot");
+    #[cfg(test)]
+    _shared.fire("session.before.edit");
+    #[cfg(test)]
+    _shared.fire("session.entered.edit");
     run.edit(CandidateEdit::Create {
         path: path.clone(),
         content: content.to_vec(),
     })
     .map_err(run_error)?;
     #[cfg(test)]
+    _shared.fire("session.after.edit");
+    #[cfg(test)]
     _shared.fire(crate::test_hooks::at::FILE_STAGED);
+    #[cfg(test)]
+    _shared.fire("session.before.structural_verify");
+    #[cfg(test)]
+    _shared.fire("session.entered.structural_verify");
     if !run.verify_structural().map_err(run_error)?.passed() {
         return Err(refused("the file is not plain new text"));
     }
+    #[cfg(test)]
+    _shared.fire("session.after.structural_verify");
     let page = match class {
-        FileClass::Page => Some(
-            run.check_inert_page(&path.as_string(), facts)
-                .map_err(inert_refusal)?,
-        ),
+        FileClass::Page => {
+            #[cfg(test)]
+            _shared.fire("session.before.page_verify");
+            #[cfg(test)]
+            _shared.fire("session.entered.page_verify");
+            let result = run
+                .check_inert_page(&path.as_string(), facts)
+                .map_err(inert_refusal)?;
+            #[cfg(test)]
+            _shared.fire("session.after.page_verify");
+            Some(result)
+        }
         FileClass::Plain => None,
         FileClass::Refused => return Err(AuthorityError::FileTypeNotAllowed),
     };
@@ -1668,7 +1737,13 @@ fn stage_one(
     {
         return Err(AuthorityError::TargetChanged);
     }
+    #[cfg(test)]
+    _shared.fire("session.before.review");
+    #[cfg(test)]
+    _shared.fire("session.entered.review");
     let review = run.review().map_err(run_error)?;
+    #[cfg(test)]
+    _shared.fire("session.after.review");
     let bound = match (&page, review.binding.verification) {
         (Some(page), VerifierMarker::InertPage(hash)) => page.binding_hash() == hash,
         (Some(_), VerifierMarker::NoResult | VerifierMarker::Result(_)) => false,
@@ -2396,14 +2471,26 @@ impl Files {
             review_hash: applied.review_hash,
             live: &live,
         };
+        #[cfg(test)]
+        self.shared.fire("session.before.request_restore");
+        #[cfg(test)]
+        self.shared.fire("session.entered.request_restore");
         let requested = applied.run.request_restore(&kernel.project.name, &bridge);
+        #[cfg(test)]
+        self.shared.fire("session.after.request_restore");
         // A dialog refused because the lifetime ended is that, not a no.
         lifetime.check(authority)?;
         let approval = requested.map_err(undo_error)?;
+        #[cfg(test)]
+        self.shared.fire("session.before.undo_grant");
+        #[cfg(test)]
+        self.shared.fire("session.entered.undo_grant");
         let write = kernel
             .projects
             .grant_for_apply(kernel.project.id, applied.binding)
             .map_err(project_error)?;
+        #[cfg(test)]
+        self.shared.fire("session.after.undo_grant");
         #[cfg(test)]
         self.shared.note_write_grant(&kernel.authority, &write);
         // Armed from here until settled, across the restore and any unwind.
@@ -2437,7 +2524,13 @@ impl Files {
         }
         #[cfg(test)]
         self.shared.fire("files.undo_kernel_boundary");
+        #[cfg(test)]
+        self.shared.fire("session.before.restore");
+        #[cfg(test)]
+        self.shared.fire("session.entered.restore");
         let restored = applied.run.restore(approval, write);
+        #[cfg(test)]
+        self.shared.fire("session.after.restore");
         // Re-check 3: closed again (idempotent) and confirmed, whatever the
         // restore answered; not established is recovery required, reported.
         if !issued.close() {
@@ -2624,6 +2717,35 @@ impl Files {
         self.shared.kept.lock().unwrap().len()
     }
 
+    /// Registered session poison fixture: panic while the named real owning
+    /// hold is held. No production path or synthetic mutex is substituted.
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn session_poison_for_test(&self, which: &str) {
+        match which {
+            "slot" => {
+                let _hold = self.shared.slot.lock().unwrap();
+                panic!("session slot poison");
+            }
+            "kept" => {
+                let _hold = self.shared.kept.lock().unwrap();
+                panic!("session kept poison");
+            }
+            "deferred" => {
+                let _hold = self.shared.deferred.lock().unwrap();
+                panic!("session deferred poison");
+            }
+            "unclosed" => {
+                let _hold = self.shared.unclosed.lock().unwrap();
+                panic!("session unclosed poison");
+            }
+            "receipts" => {
+                let _hold = self.shared.receipts.lock().unwrap();
+                panic!("session receipt poison");
+            }
+            _ => panic!("unregistered session poison fixture"),
+        }
+    }
+
     /// Where the Files ledger and staging parent are (tests).
     #[cfg(test)]
     pub(crate) fn state_dir_for_test(&self) -> PathBuf {
@@ -2708,8 +2830,12 @@ impl Files {
         // M2d-B2: the same directory, registered with the kernel (its own
         // canonical and overlap checks, the broker's state reserved), and
         // still the directory checked.
+        #[cfg(test)]
+        self.hooks().fire("session.before.project_select");
         #[cfg(target_os = "linux")]
         let kernel = Kernel::register(path, &self.runtime_root, &exclusions.reserved)?;
+        #[cfg(test)]
+        self.hooks().fire("session.after.project_select");
         if identity_of(path)? != identity {
             return Err(AuthorityError::TargetChanged);
         }
@@ -2871,13 +2997,25 @@ impl Files {
             ScopeSet::default(),
         )
         .map_err(|_| refused("the file name is not allowed"))?;
+        #[cfg(test)]
+        self.shared.fire("session.before.read_grant");
+        #[cfg(test)]
+        self.shared.fire("session.entered.read_grant");
         let project = kernel
             .projects
             .grant_for_run(kernel.project.id, binding)
             .map_err(project_error)?;
+        #[cfg(test)]
+        self.shared.fire("session.after.read_grant");
+        #[cfg(test)]
+        self.shared.fire("session.before.run_construct");
+        #[cfg(test)]
+        self.shared.fire("session.entered.run_construct");
         let mut staged =
             CodingRun::create_for_project_observing(backend.ledger.store(), project, scopes, stop)
                 .map_err(run_error)?;
+        #[cfg(test)]
+        self.shared.fire("session.after.run_construct");
         // S1a-D: the page is checked with its admission's facts (the S-O22
         // hook alone replaces them, in tests).
         let facts = admission.page_facts.clone();

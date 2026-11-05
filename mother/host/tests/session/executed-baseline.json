@@ -1,0 +1,3007 @@
+{
+  "baseline_head": "e7a67505e31ff7ad45c7ceff20bc74ad05916d2e",
+  "scope": "Test-only continuation before the next production commit. Rows record executed schedules, not the planned 153000-key space. Old host-route fixtures must migrate to the mandatory facade without changing expected answers.",
+  "logs": {
+    "oracle-checkpoint-workspace-red.log": "218e962895d0dd1f591e44edac3c0c6ac5fc369f65dcba78b1057adf6552dcb9",
+    "coordinator-receipts-red.log": "55cd4df25deec33217747271c883a8acf7869296e23a2ce1b8d4a3d33cf5bb53"
+  },
+  "scheduled_cases": [
+    {
+      "case": "ACK/authorized/mother_reference=absent",
+      "conforms": true,
+      "observed": "first_refused=true second_refused=true pinned=true conforms=true"
+    },
+    {
+      "case": "ACK/declined/mother_reference=absent",
+      "conforms": false,
+      "observed": "first_refused=false second_refused=false pinned=false conforms=false"
+    },
+    {
+      "case": "ACK/pending/mother_reference=absent",
+      "conforms": true,
+      "observed": "first_refused=true second_refused=true pinned=true conforms=true"
+    },
+    {
+      "case": "ACK/published/mother_reference=absent",
+      "conforms": false,
+      "observed": "first_refused=false second_refused=false pinned=false conforms=false"
+    },
+    {
+      "case": "ACK/uncertain/mother_reference=absent",
+      "conforms": true,
+      "observed": "first_refused=true second_refused=true pinned=true conforms=true"
+    },
+    {
+      "case": "ATOMIC/ingresses=0",
+      "conforms": true,
+      "observed": "admitted=true generation=0"
+    },
+    {
+      "case": "ATOMIC/ingresses=1",
+      "conforms": true,
+      "observed": "admitted=false generation=1"
+    },
+    {
+      "case": "ATOMIC/ingresses=2",
+      "conforms": true,
+      "observed": "admitted=false generation=2"
+    },
+    {
+      "case": "ATOMIC/ingresses=3",
+      "conforms": true,
+      "observed": "admitted=false generation=3"
+    },
+    {
+      "case": "CLEANUP-TAIL/ingresses=0",
+      "conforms": true,
+      "observed": "tail_before=2 tail_after=0 conforms=true"
+    },
+    {
+      "case": "CLEANUP-TAIL/ingresses=1",
+      "conforms": true,
+      "observed": "tail_before=2 tail_after=2 conforms=true"
+    },
+    {
+      "case": "CLEANUP-TAIL/ingresses=2",
+      "conforms": true,
+      "observed": "tail_before=2 tail_after=2 conforms=true"
+    },
+    {
+      "case": "CLEANUP-TAIL/ingresses=3",
+      "conforms": true,
+      "observed": "tail_before=2 tail_after=2 conforms=true"
+    },
+    {
+      "case": "CLEANUP/discard_staging/ingresses=0",
+      "conforms": true,
+      "observed": "actual_call_returns=1 retained=false conforms=true"
+    },
+    {
+      "case": "CLEANUP/discard_staging/ingresses=1",
+      "conforms": false,
+      "observed": "actual_call_returns=1 retained=false conforms=false"
+    },
+    {
+      "case": "CLEANUP/discard_staging/ingresses=2",
+      "conforms": false,
+      "observed": "actual_call_returns=1 retained=false conforms=false"
+    },
+    {
+      "case": "CLEANUP/discard_staging/ingresses=3",
+      "conforms": false,
+      "observed": "actual_call_returns=1 retained=false conforms=false"
+    },
+    {
+      "case": "COMMITMENT-CAPACITY/available=0",
+      "conforms": false,
+      "observed": "native_allocations=2 conforms=false"
+    },
+    {
+      "case": "COMMITMENT-CAPACITY/available=1",
+      "conforms": true,
+      "observed": "native_allocations=2 conforms=true"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/approval_recognize/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/awaiting_approval/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/consent_install/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_install/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_install/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_install/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_install/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_install/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/consent_install/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/consent_install/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/consent_reserve/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/after/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/after/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/after/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reconcile/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/dispatch_reserve/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/draft/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/draft/after/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/draft/after/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/draft/after/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/draft/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/draft/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/draft/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/draft/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/file_select/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/file_select/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/file_select/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/file_select/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/file_select/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/file_select/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/file_select/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/file_select/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/lane_invoke/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/lane_reserve/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/paused_store/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/paused_store/after/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/paused_store/after/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/paused_store/after/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/paused_store/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/paused_store/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/paused_store/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/paused_store/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/pending_install/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/pending_install/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/pending_install/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/pending_install/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/pending_install/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/pending_install/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/pending_install/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/pending_install/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/phase_done/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_done/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_done/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_done/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_done/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_done/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/phase_done/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/phase_done/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/phase_reserve/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/revise/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/revise/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/revise/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/revise/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/revise/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/revise/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/revise/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/revise/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/start/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/start/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/start/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/start/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/start/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/start/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/start/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/start/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/submit/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/submit/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/submit/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/submit/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/submit/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/submit/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/submit/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/submit/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/after/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/after/1",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/after/2",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/after/3",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/before/0",
+      "conforms": true,
+      "observed": "reached=true conforms=true"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/before/1",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/before/2",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "COORDINATOR/verify_pass/before/3",
+      "conforms": false,
+      "observed": "reached=true conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.read_grant/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=true"
+    },
+    {
+      "case": "GRANT/session.before.read_grant/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.read_grant/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.read_grant/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.run_construct/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=true"
+    },
+    {
+      "case": "GRANT/session.before.run_construct/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.run_construct/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.run_construct/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.write_grant/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=true"
+    },
+    {
+      "case": "GRANT/session.before.write_grant/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.write_grant/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "GRANT/session.before.write_grant/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 actual_call_returns=1 conforms=false"
+    },
+    {
+      "case": "LITERAL/0/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/0/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/0/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/0/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/1/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/1/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/1/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/1/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/10/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/10/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/10/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/10/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/11/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/11/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/11/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/11/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/12/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/12/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/12/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/12/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/2/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/2/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/2/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/2/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/3/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/3/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/3/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/3/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/4/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/4/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/4/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/4/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/5/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/5/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/5/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/5/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/6/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/6/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/6/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/6/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/7/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/7/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/7/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/7/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/8/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/8/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/8/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/8/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/9/0",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/9/1",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/9/2",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "LITERAL/9/3",
+      "conforms": true,
+      "observed": "conforms=true"
+    },
+    {
+      "case": "NORMAL-DROP/published=false",
+      "conforms": false,
+      "observed": "before=2 after=0 conforms=false"
+    },
+    {
+      "case": "NORMAL-DROP/published=true",
+      "conforms": false,
+      "observed": "before=3 after=1 conforms=false"
+    },
+    {
+      "case": "PAGE/session.before.page_recheck/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "PAGE/session.before.page_recheck/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "PAGE/session.before.page_recheck/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "PAGE/session.before.page_recheck/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "PAGE/session.before.page_verify/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "PAGE/session.before.page_verify/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "PAGE/session.before.page_verify/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "PAGE/session.before.page_verify/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "POISON/commitments",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/deferred",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/history",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/kept",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/pending",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/receipts",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/runs",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "POISON/slot",
+      "conforms": false,
+      "observed": "resource_nodes_before=3 resource_nodes_after=1 conforms=false"
+    },
+    {
+      "case": "POISON/unclosed",
+      "conforms": false,
+      "observed": "resource_nodes_before=2 resource_nodes_after=0 conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/commitment_monotonic",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/commitment_wall",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/apply/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/apply/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/edit/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/edit/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/edit/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/edit/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/edit/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/edit/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/commitment_monotonic",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/commitment_wall",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/request_approval/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/commitment_monotonic",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/commitment_wall",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/revalidation_review/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/review/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/review/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/review/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=true conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/review/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/review/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/review/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/snapshot/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/snapshot/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/snapshot/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/snapshot/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/snapshot/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/snapshot/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/staging_grant/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/staging_grant/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/staging_grant/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/staging_grant/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/staging_grant/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/staging_grant/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/structural_verify/cancel",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/structural_verify/grant_expiry",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/structural_verify/kernel_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/structural_verify/mission_stop",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "PREREQUISITE/structural_verify/none",
+      "conforms": true,
+      "observed": "handoffs=1 success=true conforms=true"
+    },
+    {
+      "case": "PREREQUISITE/structural_verify/revoke",
+      "conforms": false,
+      "observed": "handoffs=1 success=false conforms=false"
+    },
+    {
+      "case": "R17/edit/before/ingresses=0",
+      "conforms": true,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/edit/before/ingresses=1",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/edit/before/ingresses=2",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/edit/before/ingresses=3",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/edit/returned/ingresses=0",
+      "conforms": true,
+      "observed": "successor_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/edit/returned/ingresses=1",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/edit/returned/ingresses=2",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/edit/returned/ingresses=3",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/review/before/ingresses=0",
+      "conforms": true,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/review/before/ingresses=1",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/review/before/ingresses=2",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/review/before/ingresses=3",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/snapshot/before/ingresses=0",
+      "conforms": true,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/snapshot/before/ingresses=1",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/snapshot/before/ingresses=2",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/snapshot/before/ingresses=3",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/snapshot/returned/ingresses=0",
+      "conforms": true,
+      "observed": "successor_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/snapshot/returned/ingresses=1",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/snapshot/returned/ingresses=2",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/snapshot/returned/ingresses=3",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/staging_grant/before/ingresses=0",
+      "conforms": true,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/staging_grant/before/ingresses=1",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/staging_grant/before/ingresses=2",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/staging_grant/before/ingresses=3",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/staging_grant/returned/ingresses=0",
+      "conforms": true,
+      "observed": "successor_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/staging_grant/returned/ingresses=1",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/staging_grant/returned/ingresses=2",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/staging_grant/returned/ingresses=3",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/structural_verify/before/ingresses=0",
+      "conforms": true,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/structural_verify/before/ingresses=1",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/structural_verify/before/ingresses=2",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/structural_verify/before/ingresses=3",
+      "conforms": false,
+      "observed": "reached=1 native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/structural_verify/returned/ingresses=0",
+      "conforms": true,
+      "observed": "successor_delta=1 conforms=true"
+    },
+    {
+      "case": "R17/structural_verify/returned/ingresses=1",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/structural_verify/returned/ingresses=2",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R17/structural_verify/returned/ingresses=3",
+      "conforms": false,
+      "observed": "successor_delta=1 conforms=false"
+    },
+    {
+      "case": "R18/unwind/session.after.edit",
+      "conforms": false,
+      "observed": "before=2 after=0 conforms=false"
+    },
+    {
+      "case": "R18/unwind/session.after.review",
+      "conforms": false,
+      "observed": "before=2 after=0 conforms=false"
+    },
+    {
+      "case": "R18/unwind/session.after.snapshot",
+      "conforms": false,
+      "observed": "before=1 after=0 conforms=false"
+    },
+    {
+      "case": "R18/unwind/session.after.staging_grant",
+      "conforms": false,
+      "observed": "before=1 after=0 conforms=false"
+    },
+    {
+      "case": "R18/unwind/session.after.structural_verify",
+      "conforms": false,
+      "observed": "before=2 after=0 conforms=false"
+    },
+    {
+      "case": "R19-R20/authorize.recorded/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true live=true resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/authorize.recorded/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false live=false resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/authorize.recorded/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false live=false resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/authorize.recorded/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false live=false resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/complete.checked/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true live=true resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/complete.checked/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false live=false resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/complete.checked/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false live=false resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/complete.checked/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false live=false resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/decision8.pending_validated/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true live=true resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/decision8.pending_validated/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/decision8.pending_validated/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/decision8.pending_validated/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/place.before_fill/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true live=true resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/place.before_fill/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/place.before_fill/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/place.before_fill/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/prepare.before_insert/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true live=true resources_retained=true conforms=true"
+    },
+    {
+      "case": "R19-R20/prepare.before_insert/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/prepare.before_insert/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R19-R20/prepare.before_insert/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 success=false live=false resources_retained=false conforms=false"
+    },
+    {
+      "case": "R21/revalidation_review/before/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 event_delta=2 conforms=true"
+    },
+    {
+      "case": "R21/revalidation_review/before/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R21/revalidation_review/before/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R21/revalidation_review/before/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R22/apply/before/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R22/apply/before/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R22/apply/before/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R22/apply/before/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R22/request_approval/before/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 event_delta=1 conforms=true"
+    },
+    {
+      "case": "R22/request_approval/before/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R22/request_approval/before/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R22/request_approval/before/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 event_delta=1 conforms=false"
+    },
+    {
+      "case": "R27/session.after.restore/ingresses=0",
+      "conforms": true,
+      "observed": "restored=1 next_discard=1 conforms=true"
+    },
+    {
+      "case": "R27/session.after.restore/ingresses=1",
+      "conforms": false,
+      "observed": "restored=1 next_discard=1 conforms=false"
+    },
+    {
+      "case": "R27/session.after.restore/ingresses=2",
+      "conforms": false,
+      "observed": "restored=1 next_discard=1 conforms=false"
+    },
+    {
+      "case": "R27/session.after.restore/ingresses=3",
+      "conforms": false,
+      "observed": "restored=1 next_discard=1 conforms=false"
+    },
+    {
+      "case": "R27/session.before.request_restore/ingresses=0",
+      "conforms": true,
+      "observed": "restored=1 next_discard=1 conforms=true"
+    },
+    {
+      "case": "R27/session.before.request_restore/ingresses=1",
+      "conforms": true,
+      "observed": "restored=0 next_discard=0 conforms=true"
+    },
+    {
+      "case": "R27/session.before.request_restore/ingresses=2",
+      "conforms": true,
+      "observed": "restored=0 next_discard=0 conforms=true"
+    },
+    {
+      "case": "R27/session.before.request_restore/ingresses=3",
+      "conforms": true,
+      "observed": "restored=0 next_discard=0 conforms=true"
+    },
+    {
+      "case": "R27/session.before.restore/ingresses=0",
+      "conforms": true,
+      "observed": "restored=1 next_discard=1 conforms=true"
+    },
+    {
+      "case": "R27/session.before.restore/ingresses=1",
+      "conforms": false,
+      "observed": "restored=1 next_discard=1 conforms=false"
+    },
+    {
+      "case": "R27/session.before.restore/ingresses=2",
+      "conforms": false,
+      "observed": "restored=1 next_discard=1 conforms=false"
+    },
+    {
+      "case": "R27/session.before.restore/ingresses=3",
+      "conforms": false,
+      "observed": "restored=1 next_discard=1 conforms=false"
+    },
+    {
+      "case": "R35/cancel",
+      "conforms": false,
+      "observed": "before=2 after_call=2 after_last_owner=0 conforms=false"
+    },
+    {
+      "case": "R35/deny",
+      "conforms": false,
+      "observed": "before=2 after_call=0 after_last_owner=0 conforms=false"
+    },
+    {
+      "case": "R35/finish",
+      "conforms": false,
+      "observed": "before=2 after_call=2 after_last_owner=0 conforms=false"
+    },
+    {
+      "case": "R35/last_owner",
+      "conforms": false,
+      "observed": "before=2 after_call=2 after_last_owner=0 conforms=false"
+    },
+    {
+      "case": "R35/prune",
+      "conforms": false,
+      "observed": "before=2 after_call=0 after_last_owner=0 conforms=false"
+    },
+    {
+      "case": "R35/shutdown",
+      "conforms": false,
+      "observed": "before=2 after_call=2 after_last_owner=0 conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/after/ingresses=1",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/after/ingresses=2",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/after/ingresses=3",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_error_remove/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_mkdir/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_parent_sync/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_rename/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_rename/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_rename/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_rename/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_rename/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_rename/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_rename/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_rename/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_sync/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_sync/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_sync/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_sync/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_sync/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_sync/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_sync/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_sync/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_temp_create/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_write/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_write/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_write/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_write/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_write/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/Contract/private_write/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_write/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/Contract/private_write/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/after/ingresses=1",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/after/ingresses=2",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/after/ingresses=3",
+      "conforms": true,
+      "observed": "new_calls=[] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_error_remove/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_error_remove\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_mkdir/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_mkdir\", \"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_parent_sync/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=true conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_rename/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_sync/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_temp_create/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_temp_create\", \"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/after/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/after/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/after/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/after/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/before/ingresses=0",
+      "conforms": true,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=true"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/before/ingresses=1",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/before/ingresses=2",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "R37/PausedPhase/private_write/before/ingresses=3",
+      "conforms": false,
+      "observed": "new_calls=[\"private_write\", \"private_sync\", \"private_rename\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\", \"private_parent_sync\"] unchanged=false conforms=false"
+    },
+    {
+      "case": "REPLACEMENT/ingresses=0",
+      "conforms": true,
+      "observed": "both_published=true resources_before=7 resources_after=5 conforms=true"
+    },
+    {
+      "case": "REPLACEMENT/ingresses=1",
+      "conforms": false,
+      "observed": "both_published=true resources_before=7 resources_after=5 conforms=false"
+    },
+    {
+      "case": "REPLACEMENT/ingresses=2",
+      "conforms": false,
+      "observed": "both_published=true resources_before=7 resources_after=5 conforms=false"
+    },
+    {
+      "case": "REPLACEMENT/ingresses=3",
+      "conforms": false,
+      "observed": "both_published=true resources_before=7 resources_after=5 conforms=false"
+    },
+    {
+      "case": "RUN-RETENTION/prepare.before_insert",
+      "conforms": true,
+      "observed": "new_run_refused=true original_retained=true conforms=true"
+    },
+    {
+      "case": "RUN-RETENTION/session.after.review",
+      "conforms": true,
+      "observed": "new_run_refused=true original_retained=true conforms=true"
+    },
+    {
+      "case": "RUN-RETENTION/session.after.staging_grant",
+      "conforms": true,
+      "observed": "new_run_refused=true original_retained=true conforms=true"
+    },
+    {
+      "case": "RUN-RETENTION/session.before.staging_grant",
+      "conforms": true,
+      "observed": "new_run_refused=true original_retained=true conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.admit_before_bind/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.admit_before_bind/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.admit_before_bind/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.admit_before_bind/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.consent_before_fill/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.consent_before_fill/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.consent_before_fill/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.consent_before_fill/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.mission_recorded/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.mission_recorded/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.mission_recorded/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/door.mission_recorded/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/files.before_install/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/files.before_install/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/files.before_install/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/files.before_install/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/run.before_insert/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/run.before_insert/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/run.before_insert/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP-HOLD/run.before_insert/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/attachment_claim/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/attachment_claim/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/attachment_claim/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/attachment_claim/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/door_activate/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/door_activate/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/door_activate/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/door_activate/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/file_select/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/file_select/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/file_select/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/file_select/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/files.before_register/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/files.before_register/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/files.before_register/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/files.before_register/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/grant_install/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/grant_install/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/grant_install/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/grant_install/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/hold_configure/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/hold_configure/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/hold_configure/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/hold_configure/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/issue.answered/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/issue.answered/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/issue.answered/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/issue.answered/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/issue.recorded/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/issue.recorded/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/issue.recorded/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/issue.recorded/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/mission_confirm/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/mission_confirm/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/mission_confirm/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/mission_confirm/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/port_issue/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/port_issue/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/port_issue/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/port_issue/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 success=true conforms=false"
+    },
+    {
+      "case": "SETUP/project_select/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 native_call_returns=1 conforms=true"
+    },
+    {
+      "case": "SETUP/project_select/ingresses=1",
+      "conforms": false,
+      "observed": "native_workers=0 native_call_returns=1 conforms=false"
+    },
+    {
+      "case": "SETUP/project_select/ingresses=2",
+      "conforms": false,
+      "observed": "native_workers=0 native_call_returns=1 conforms=false"
+    },
+    {
+      "case": "SETUP/project_select/ingresses=3",
+      "conforms": false,
+      "observed": "native_workers=0 native_call_returns=1 conforms=false"
+    },
+    {
+      "case": "SETUP/run_create/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/run_create/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/run_create/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/run_create/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/workspace_install/ingresses=0",
+      "conforms": true,
+      "observed": "native_workers=0 success=true conforms=true"
+    },
+    {
+      "case": "SETUP/workspace_install/ingresses=1",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/workspace_install/ingresses=2",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    },
+    {
+      "case": "SETUP/workspace_install/ingresses=3",
+      "conforms": true,
+      "observed": "native_workers=0 success=false conforms=true"
+    }
+  ],
+  "verified_native_deaths": [
+    "DEATH VERIFIED session.after.staging_grant killed_reaped=true fresh_reports=2 native_event=run.granted",
+    "DEATH VERIFIED session.after.snapshot killed_reaped=true fresh_reports=2 native_event=op.outcome",
+    "DEATH VERIFIED session.after.edit killed_reaped=true fresh_reports=2 native_event=op.outcome",
+    "DEATH VERIFIED session.after.structural_verify killed_reaped=true fresh_reports=2 native_event=verify.structural",
+    "DEATH VERIFIED session.after.review killed_reaped=true fresh_reports=2 native_event=review.computed",
+    "DEATH VERIFIED session.after.request_approval killed_reaped=true fresh_reports=2 native_event=approval.granted",
+    "DEATH VERIFIED files.before_final killed_reaped=true fresh_reports=2 native_event=apply.prepared",
+    "DEATH VERIFIED files.after_final killed_reaped=true fresh_reports=2 native_event=apply.prepared",
+    "DEATH VERIFIED session.after.apply killed_reaped=true fresh_reports=2 native_event=apply.completed",
+    "DEATH VERIFIED session.after.request_restore killed_reaped=true fresh_reports=2 native_event=restore.approved",
+    "DEATH VERIFIED session.after.restore killed_reaped=true fresh_reports=2 native_event=restore.completed",
+    "SETTLEMENT DEATH VERIFIED started killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED before_write killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED before_sync killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED inflight killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED torn killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED after_sync killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED fence killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED poison killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED before_ack killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED fence_terminal killed_reaped=true fresh_reports=2",
+    "SETTLEMENT DEATH VERIFIED poison_terminal killed_reaped=true fresh_reports=2"
+  ],
+  "model_cases": {
+    "three_actors_three_events": 369600,
+    "state_cause_publication_ack_record": 4160,
+    "independent_outcome_product": 7547904,
+    "lifecycle": 18,
+    "resource_facts": 1280
+  },
+  "capacity_observations": [
+    "INVENTORY-BOUNDARY/created=1: resource_nodes=0",
+    "INVENTORY-BOUNDARY/created=255: resource_nodes=0",
+    "INVENTORY-BOUNDARY/created=256: resource_nodes=0",
+    "INVENTORY-FULL/created=256: native_allocations=257 retained_nodes=0 overflow_refused=false",
+    "PENDING-BOUNDARY/retained=1",
+    "PENDING-BOUNDARY/retained=31",
+    "PENDING-BOUNDARY/retained=32",
+    "PENDING-FULL/available=0 native_allocations=33 overflow_refused=true",
+    "CONSENT-BOUNDARY/recorded=1",
+    "CONSENT-BOUNDARY/recorded=63",
+    "CONSENT-BOUNDARY/recorded=64",
+    "CONSENT-FULL/available=0 dialogs=64 original_binding_usable=true"
+  ],
+  "native_publication_observations": [
+    "NATIVE PUBLICATION OBSERVED published=true recovery=true interruption=true journal_prefixes=27",
+    "NATIVE PUBLICATION OBSERVED published=true recovery=true interruption=false journal_prefixes=26"
+  ],
+  "stop_record_observations": [
+    "STOP RECORDS accepted=1 verified=1 conforms=true",
+    "STOP RECORDS accepted=4 verified=4 conforms=true",
+    "STOP RECORDS accepted=5 verified=4 conforms=false"
+  ],
+  "workspace_failed_targets": [
+    "    `-p nexus-governed-control --lib`",
+    "    `-p nexus-mother --lib`",
+    "    `-p nexus-mother-host --lib`",
+    "    `-p nexus-mother-host --test faults`",
+    "    `-p nexus-mother-host --test pty`",
+    "    `-p nexus-mother-host --test session_close_failures`",
+    "    `-p nexus-mother-host --test session_native_publication`",
+    "    `-p nexus-mother-host --test session_oracles`",
+    "    `-p nexus-mother-host --test session_protocol`",
+    "    `-p nexus-mother-host --test session_sealing`",
+    "    `-p nexus-mother-host --test session_stop_accounting`",
+    "    `-p nexus-verifier-sandbox --test phase2_live_sandbox`"
+  ],
+  "counts": {
+    "executed_schedules": 583,
+    "conforming": 287
+  },
+  "host_death_receipts": [
+    "PROCESS DEATH verified killed_reaped=true",
+    "PROCESS DEATH verified killed_reaped=true",
+    "PROCESS DEATH verified killed_reaped=true",
+    "PROCESS DEATH point=cleanup-after-item killed_reaped=true fresh_reports=2 native_summary=empty_not_all_clear",
+    "PROCESS DEATH verified killed_reaped=true",
+    "PROCESS DEATH point=cleanup killed_reaped=true fresh_reports=2 native_summary=empty_not_all_clear",
+    "PROCESS DEATH verified killed_reaped=true",
+    "PROCESS DEATH point=restore.prepared killed_reaped=true fresh_reports=2"
+  ]
+}

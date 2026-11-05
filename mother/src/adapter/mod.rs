@@ -1189,6 +1189,10 @@ mod lite_crash;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+mod session_death_oracles_tests;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod lite_review5_port;
 
 #[cfg(test)]

@@ -281,6 +281,13 @@ impl Model {
         self.resources.get_mut(&id).unwrap().state = ResourceState::Retained;
     }
     pub fn quit(&mut self) {
+        // A6: no event reopens a sealed or completed session.
+        if matches!(
+            self.lifecycle,
+            Lifecycle::SealedFinalizing | Lifecycle::ClosedClean | Lifecycle::ClosedUnclean
+        ) {
+            return;
+        }
         if self.close_generation.is_some() {
             return;
         }

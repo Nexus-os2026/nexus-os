@@ -127,6 +127,8 @@ impl HaltCell {
         self.0.load(Ordering::SeqCst)
     }
     pub(crate) fn session_compare(&self, old: u64, new: u64) -> Result<(), u64> {
+        #[cfg(test)]
+        self.1.fire("session.before_compare");
         self.0
             .compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst)
             .map(|_| ())

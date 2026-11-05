@@ -63,7 +63,9 @@ fn m2dd_stop_cap_timeout_release_join_and_reaping() {
     changed.notify_all();
     assert!(route.join_until(Instant::now() + Duration::from_secs(2)));
     assert_eq!(route.receipt().outstanding, 0);
-    assert_eq!(route.receipt().finished, 4);
+    // A9: the fifth event is deferred recording, not a discharged event.
+    assert_eq!(route.receipt().finished, 5);
+    assert_eq!(lock.lock().unwrap().0, 5);
     assert_eq!(route.retained_handles(), 0);
 }
 

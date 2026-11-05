@@ -1,0 +1,14 @@
+route	boundary	reason	legacy_positive_control	bypass_plant
+R09-held_confirm	HostSession closed command and port vocabulary	unsupported_host_route	m2c held mission native confirmation fixtures	seal-held-confirm
+R09-held_resume	HostSession report-only recovery	no_such_authority	frozen held mission resume fixtures	seal-held-resume
+R11-adopt	HostSession immutable issued origin	no_such_authority	frozen ordinary legacy door adoption fixtures	seal-adopt
+R11-join	HostSession immutable issued origin	no_such_authority	frozen ordinary legacy door membership fixtures	seal-join
+R11-replay_authority	HostSession report-only recovery	no_such_authority	frozen C-lite legacy crash/replay fixtures	seal-replay
+R14-network	HostSession File-only port	unsupported_host_route	frozen real legacy egress and mixed File/network fixtures	seal-network
+R14-process	HostSession File-only port	unsupported_host_route	frozen governed process launcher fixtures	seal-process
+R14-connector	HostSession File-only port	unsupported_host_route	frozen connector broker fixtures	seal-connector
+R14-spend	HostSession File-only port	unsupported_host_route	frozen spend authority fixtures	seal-spend
+R14-display	HostSession File-only port	unsupported_host_route	frozen native display lifecycle fixtures	seal-display
+R31-lift	HostSession command kind typed unavailable	unsupported_host_route	unchanged cell-less Decision 10 legacy lift and undo control	seal-lift
+R32-inference_binding	HostSession File-only port	unsupported_host_route	frozen configured local-model admission fixtures	seal-inference
+R32-model_attempt	HostSession File-only port	unsupported_host_route	frozen configured model attempt and live inference fixtures	seal-model-attempt

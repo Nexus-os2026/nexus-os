@@ -952,3 +952,11 @@ These are the remaining material builder choices and the frozen answers supplied
 | Test exclusions | Checked-in structural reason and bypass plant; legacy positive control where applicable |
 | Verification | Five named Clippy crates, workspace/no-fail-fast, mandatory PTY/crash/plants, 23 frozen live receipts, exact-SHA CI |
 | Acceptance | Separate Owner physical acceptance and security-core approvals; no merge or phase advancement implied |
+
+---
+## Ruling R-1 (Architect, 2026-11-04): oracle provenance
+
+- `05239391` (production) came after its own component oracles (`a54602bc`) but before the full oracle set was registered.
+- **Accepted, with disclosure in the PR.** No history is rewritten.
+- From here on: commit ALL remaining oracles, the model coverage, schedule execution and the amended host oracles **before any further production commit**. Every later fix commit must name the oracle commit it satisfies.
+- Process deviations like this one are disclosed and the work continues. They are not STOP conditions. STOP only for the spec's defined conditions.

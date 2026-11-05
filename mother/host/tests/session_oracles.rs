@@ -213,16 +213,19 @@ fn enumerate_three_actors_and_three_interfering_events() {
                 for c in b..=9 {
                     let mut m = Model::normal();
                     let mut requests = [None, None, None];
-                    for gap in 0..=9 {
+                    for (gap, action) in order
+                        .iter()
+                        .copied()
+                        .map(Some)
+                        .chain(std::iter::once(None))
+                        .enumerate()
+                    {
                         for event in [a, b, c] {
                             if event == gap {
                                 m.stop();
                             }
                         }
-                        if gap == 9 {
-                            break;
-                        }
-                        let (actor, step) = order[gap];
+                        let Some((actor, step)) = action else { break };
                         match step {
                             0 => requests[actor] = Some(m.accept(actor as u16, None)),
                             1 => {

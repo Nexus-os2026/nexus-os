@@ -435,3 +435,328 @@ This is distinct from the emergency-dialogue behavioral red above.
 +    p.quit();
 +}
 ```
+
+## Ruling R-1 and the remaining Decision 10/11 host amendments
+
+The Architect accepted the disclosed `05239391` ordering deviation in Ruling
+R-1. It is not a STOP. The next checkpoint must contain the remaining oracles
+before another production commit. Every subsequent fix names that checkpoint.
+
+The following replaces only the host-bound expectations expressly listed in
+spec §5. The legacy cell-less recovery control and its `published_recovery`
+setup are unchanged. Normal undo/cleanup now starts before the first emergency.
+A later request refuses without dialogue or removal; native lift is unavailable
+in every host lifecycle state. Entered-call completion remains permitted.
+
+The current old-route fixtures are baseline adapters. They must migrate to the
+mandatory facade; changing legacy semantics to satisfy these host expectations
+is prohibited. Exact old/new assertions follow.
+
+```diff
+diff --git a/crates/nexus-governed-control/src/governed/files_host_decision10_tests.rs b/crates/nexus-governed-control/src/governed/files_host_decision10_tests.rs
+index bdd1d534..cb686086 100644
+--- a/crates/nexus-governed-control/src/governed/files_host_decision10_tests.rs
++++ b/crates/nexus-governed-control/src/governed/files_host_decision10_tests.rs
+@@ -57,8 +57,15 @@ fn published_recovery() -> Fx {
+     f
+ }
+
++fn published_normal() -> Fx {
++    let f = Fx::new();
++    let a = f.ready(NAME, CONTENT);
++    f.execute(&a).unwrap();
++    f
++}
++
+ fn undo_ingress(point: &'static str) {
+-    let f = published_recovery();
++    let f = published_normal();
+     let cell = f.gov.file_session_halt();
+     let gate = Gate::new();
+     let held = gate.clone();
+@@ -66,7 +73,7 @@ fn undo_ingress(point: &'static str) {
+     let (gov, owner, carried) = (f.gov.clone(), f.owner.clone(), cell.clone());
+     let worker = std::thread::spawn(move || gov.files_undo_with_halt(&*owner, Some(&carried)));
+     gate.reached();
+-    cell.engage_emergency(); // repeated ingress, NO Stop worker
++    cell.engage_emergency(); // first emergency, NO Stop worker
+     assert!(!f.gov.stop_snapshot().broker_stopped);
+     assert!(!f.gov.stop_snapshot().kernel_stopped);
+     gate.open();
+@@ -82,10 +89,11 @@ fn undo_ingress(point: &'static str) {
+         "typed stale ingress refusal"
+     );
+     assert!(!f.gov.files().write_grant_live_for_test());
+-    // Same permanently engaged cell, but a NEW request/confirmation is valid.
+-    f.gov.files_undo_with_halt(&*f.owner, Some(&cell)).unwrap();
+-    assert!(!f.ws.join(NAME).exists());
+-    assert_eq!(f.owner.undos().len(), 2);
++    // Host amendment: no fresh restore after the first emergency.
++    let asks = f.owner.undos().len();
++    assert!(matches!(f.gov.files_undo_with_halt(&*f.owner, Some(&cell)), Err(AuthorityError::Halted)));
++    assert!(f.ws.join(NAME).exists());
++    assert_eq!(f.owner.undos().len(), asks);
+ }
+
+ #[test]
+@@ -99,8 +107,8 @@ fn decision10_undo_final_dispatch_then_ingress_no_worker() {
+ }
+
+ #[test]
+-fn decision10_undo_dialogue_ingress_requires_new_request() {
+-    let f = published_recovery();
++fn decision10_normal_undo_dialogue_emergency_forbids_new_request() {
++    let f = published_normal();
+     let cell = f.gov.file_session_halt();
+     let ingress = cell.clone();
+     f.owner.during_undo(move || ingress.engage_emergency());
+@@ -110,8 +118,10 @@ fn decision10_undo_dialogue_ingress_requires_new_request() {
+         "dialogue ingress must not remove the file"
+     );
+     assert!(matches!(result, Err(AuthorityError::Halted)));
+-    f.gov.files_undo_with_halt(&*f.owner, Some(&cell)).unwrap();
+-    assert!(!f.ws.join(NAME).exists());
++    let asks = f.owner.undos().len();
++    assert!(matches!(f.gov.files_undo_with_halt(&*f.owner, Some(&cell)), Err(AuthorityError::Halted)));
++    assert!(f.ws.join(NAME).exists());
++    assert_eq!(f.owner.undos().len(), asks);
+ }
+
+ #[test]
+@@ -126,7 +136,6 @@ fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
+     assert_eq!(f.gov.files().kept_for_test(), 1);
+     std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
+     let cell = f.gov.file_session_halt();
+-    cell.engage_emergency();
+     let ingress = cell.clone();
+     f.gov
+         .files()
+@@ -141,32 +150,22 @@ fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
+     );
+     assert!(matches!(result, Err(AuthorityError::Halted)));
+     assert_eq!(f.gov.files().kept_for_test(), 1);
+-    let retry = f.gov.files_retry_cleanup_with_halt(Some(&cell)).unwrap();
+-    assert_eq!((retry.settled, retry.still_owed), (1, 0));
+-    assert!(!staging.exists());
++    assert!(matches!(f.gov.files_retry_cleanup_with_halt(Some(&cell)), Err(AuthorityError::Halted)));
++    assert!(staging.exists());
++    assert_eq!(f.gov.files().kept_for_test(), 1);
+ }
+
+ #[test]
+-fn decision10_recovery_lift_ingress_after_record() {
+-    let f = Fx::new();
+-    f.gov.emergency_stop();
+-    let cell = f.gov.file_session_halt();
+-    let ingress = cell.clone();
+-    f.gov
+-        .authority()
+-        .hooks()
+-        .arm("resume.before_lift", move || ingress.engage_emergency());
+-    let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
+-    assert!(
+-        f.gov.stop_snapshot().broker_stopped,
+-        "ingress after resume record must not lift broker Stop"
+-    );
+-    assert!(f.gov.stop_snapshot().kernel_stopped);
+-    assert!(matches!(result, Err(AuthorityError::Halted)));
+-    f.gov.resume_with_halt(&*f.owner, Some(&cell)).unwrap();
+-    assert!(!f.gov.stop_snapshot().broker_stopped);
+-    assert!(!f.gov.stop_snapshot().kernel_stopped);
+-    assert!(cell.is_engaged(), "lift never reopens the host session");
++fn decision10_host_lift_is_unavailable_before_any_native_record() {
++    for emergency in [false, true] {
++        let f = Fx::new();
++        if emergency { f.gov.emergency_stop(); }
++        let cell = f.gov.file_session_halt();
++        let before = f.evidence.records().len();
++        let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
++        assert!(matches!(result, Err(AuthorityError::Unavailable(_))));
++        assert_eq!(f.evidence.records().len(), before, "unsupported lift records no native resume");
++    }
+ }
+
+ fn selected() -> Fx {
+@@ -258,7 +257,7 @@ fn decision10_legacy_cell_less_recovery_control() {
+ // Decision 11: hooks are at the broker/kernel handoff, not inside kernel U1.
+ #[test]
+ fn decision11_undo_ingress_after_last_broker_check_reports_actual_removal() {
+-    let f = published_recovery();
++    let f = published_normal();
+     let cell = f.gov.file_session_halt();
+     let ingress = cell.clone();
+     f.gov
+@@ -299,7 +298,6 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
+     assert_eq!(f.gov.files().kept_for_test(), 1);
+     std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
+     let cell = f.gov.file_session_halt();
+-    cell.engage_emergency();
+     let ingress = cell.clone();
+     f.gov
+         .files()
+@@ -318,33 +316,18 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
+ }
+
+ #[test]
+-fn decision11_lift_ingress_at_and_after_kernel_call_reengages_native() {
++fn decision11_host_lift_cannot_reach_a_kernel_handoff() {
+     for point in ["resume.kernel_boundary", "resume.kernel_returned"] {
+         let f = Fx::new();
+         f.gov.emergency_stop();
+         let cell = f.gov.file_session_halt();
+-        let ingress = cell.clone();
+-        f.gov
+-            .authority()
+-            .hooks()
+-            .arm(point, move || ingress.engage_emergency());
+-        let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
+-        assert!(
+-            f.gov.stop_snapshot().kernel_stopped,
+-            "{point}: native halt re-engaged before return"
+-        );
++        let reached = Arc::new(AtomicUsize::new(0));
++        let seen = reached.clone();
++        f.gov.authority().hooks().arm(point, move || { seen.fetch_add(1, Ordering::SeqCst); });
++        assert!(matches!(f.gov.resume_with_halt(&*f.owner, Some(&cell)), Err(AuthorityError::Unavailable(_))));
++        assert_eq!(reached.load(Ordering::SeqCst), 0);
++        assert!(f.gov.stop_snapshot().kernel_stopped);
+         assert!(f.gov.stop_snapshot().broker_stopped);
+-        assert!(matches!(result, Err(AuthorityError::Halted)));
+-        assert!(cell.is_engaged());
+-        assert!(f.door.open_run().is_err());
+-        assert!(
+-            f.evidence
+-                .records()
+-                .iter()
+-                .filter(|r| r.phase == EvidencePhase::EmergencyStop)
+-                .count()
+-                >= 2
+-        );
+     }
+ }
+
+@@ -371,9 +354,8 @@ fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
+     let f = Fx::new();
+     f.propose(NAME, CONTENT).unwrap();
+     let staging = f.state().join("coding-runs").join(&f.staged()[0]);
+-    f.gov.emergency_stop();
++    let _ = f.door.cancel_run(f.run).unwrap().write();
+     let cell = f.gov.file_session_halt();
+-    f.gov.resume_with_halt(&*f.owner, Some(&cell)).unwrap();
+     assert_eq!(f.gov.files().deferred_for_test(), 1);
+     let ingress = cell.clone();
+     f.gov
+@@ -394,12 +376,11 @@ fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
+         !f.gov.stop_snapshot().kernel_stopped,
+         "no recording worker ran"
+     );
+-    // A fresh request still performs the inherited deferred drain, even
+-    // though there is no published file eligible for undo.
++    // No new request can drain after emergency; the unattempted tail stays.
+     assert!(matches!(
+         f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
+-        Err(AuthorityError::Unavailable(_))
++        Err(AuthorityError::Halted)
+     ));
+-    assert!(!staging.exists());
+-    assert_eq!(f.gov.files().deferred_for_test(), 0);
++    assert!(staging.exists());
++    assert_eq!(f.gov.files().deferred_for_test(), 1);
+ }
+```
+
+## Independent model correction, amendment B A6
+
+Old `Model::quit`: after `SealedFinalizing`, `ClosedClean` or `ClosedUnclean`,
+it could install `ClosingNormal` when no close identity had been populated.
+New assertion: Quit preserves all three final lifecycle states and their
+restriction facts. The explicit nine-state literal table in
+`session_model_lifecycle.rs` comes from A6; it imports no production state table.
+This correction was specified before that new reference-machine test ran.
+It changes no product expectation.
+## A9: fifth coalesced event remains a recording obligation
+
+Affected oracle: `mother/host/src/stop_tests.rs::m2dd_stop_cap_timeout_release_join_and_reaping`.
+
+Old assertion:
+
+```rust
+assert_eq!(route.receipt().finished, 4);
+```
+
+Replacement assertions:
+
+```rust
+assert_eq!(route.receipt().finished, 5);
+assert_eq!(lock.lock().unwrap().0, 5);
+```
+
+The four-slot concurrent-worker limit is preserved. Amendment B A9 requires
+the fifth accepted event to remain pending and be drained after a slot is
+available; coalescing cannot discharge it. The distinct real-store oracle
+`session_stop_accounting` independently verifies the primary evidence chain
+and requires one durable Stop record for each of one, four and five accepted
+events. The body-count check above alone makes no durability claim.
+
+
+## R-1 continuation checkpoint: executed evidence
+
+The following supersedes the earlier checkpoint's outstanding-oracle inventory.
+The checked-in `mother/host/tests/session/executed-baseline.json` contains 583
+unique executed schedule observations on production baseline `e7a67505`, with
+287 conforming and 296 violating the specification. Its two source logs are
+identified by SHA-256. These are observations, not the 153,000 planned keys.
+The baseline adapters still use the old host-bound routes: their migration to
+the mandatory facade preserves these expected answers and native observations.
+
+The 144 coordinator schedules reach 18 actual append/mutation/invocation
+boundaries, before/after and zero through three original-cell ingresses.
+Each child proves it reached the named boundary; failed fixture setup is not
+reported as a behavioral violation. Every durable journal prefix is replayed.
+The 112 private-store schedules include error-path removal as its own sink.
+The native broker schedules use actual verified ledger events, independent
+resource identities/content, and explicitly unscheduled native Stop workers.
+
+Additional executed observations include 256 allocations plus overflow,
+32 pending actions plus overflow, 64 consent entries plus overflow, exact
+one/four/five Stop records, and two native recovery-required publications
+(with and without interruption). The baseline has 257 native allocations at
+the inventory limit, 33 allocations at the pending limit, and four durable
+Stop records for five events. These are red evidence, not accepted behavior.
+Nine poisoned ownership holds and ordinary/emergency last-owner destruction
+remove staging on this baseline. Exact ack without a durable Mother reference
+incorrectly succeeds for declined and published commitments.
+
+The process-death suite reaches and kills/reaps 30 producer children: 11 native
+preparation/apply/restore boundaries, 11 Mother settlement/terminal boundaries,
+and eight host pending/close/Stop/restore/cleanup boundaries. Twenty-five of
+these points establish two fresh successful native reports each (22 broker/
+Mother plus three restore/cleanup). Host restart protocol assertions remain
+red where required reporting/readiness is missing. Empty native summaries are
+explicitly not all-clear claims. Torn Mother validation fails separately.
+
+Model-only counts remain separate: 369,600 bounded three-actor/three-event
+traces; 4,160 state/cause/publication/ack/record combinations; 7,547,904 literal
+outcome products; 18 lifecycle cases; 1,280 resource-fact products. The literal
+model fingerprints are frozen independently of production classifiers.
+
+Full workspace baseline: twelve failed targets, including the new behavioral
+oracles and the amended host expectations. Kernel: 1,464 passed, six existing
+ignored, no failures; frozen desktop live suite: 23/23. Five-crate all-target,
+all-feature warning-denied Clippy passed before the final receipt-only test.
+No kernel, workflow or lockfile change. These are baseline diagnostics, not
+final-HEAD gates or mission completion.
+
+Five model plants have actual red/restored-control receipts: absence treated
+as durability, unknown ack treated as duplicate, coalesced ingress treated as
+covered, omitted terminal state, and blanket admission denial. Production
+route/ownership/bypass plants remain a required implementation exit gate;
+this oracle checkpoint does not claim they have run.
+
+The full route and plant obligations remain those of frozen spec §§4/6 and
+amendment B. Each W/R sink's successful native control and denial comparison
+must follow its fixture when the call graph moves. Test-only hook relocation
+must retain immediate native entry observations; reported admission counters
+are never substitute primitive observations. Ownership-transfer plants are
+applied to each final transfer location, then byte-exactly reverted. No plant
+is part of a commit.

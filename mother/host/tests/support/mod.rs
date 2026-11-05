@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+pub mod evidence;
 pub mod faults;
 pub mod privacy;
 

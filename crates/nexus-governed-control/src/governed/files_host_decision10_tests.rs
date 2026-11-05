@@ -57,8 +57,15 @@ fn published_recovery() -> Fx {
     f
 }
 
+fn published_normal() -> Fx {
+    let f = Fx::new();
+    let a = f.ready(NAME, CONTENT);
+    f.execute(&a).unwrap();
+    f
+}
+
 fn undo_ingress(point: &'static str) {
-    let f = published_recovery();
+    let f = published_normal();
     let cell = f.gov.file_session_halt();
     let gate = Gate::new();
     let held = gate.clone();
@@ -66,7 +73,7 @@ fn undo_ingress(point: &'static str) {
     let (gov, owner, carried) = (f.gov.clone(), f.owner.clone(), cell.clone());
     let worker = std::thread::spawn(move || gov.files_undo_with_halt(&*owner, Some(&carried)));
     gate.reached();
-    cell.engage_emergency(); // repeated ingress, NO Stop worker
+    cell.engage_emergency(); // first emergency, NO Stop worker
     assert!(!f.gov.stop_snapshot().broker_stopped);
     assert!(!f.gov.stop_snapshot().kernel_stopped);
     gate.open();
@@ -82,10 +89,14 @@ fn undo_ingress(point: &'static str) {
         "typed stale ingress refusal"
     );
     assert!(!f.gov.files().write_grant_live_for_test());
-    // Same permanently engaged cell, but a NEW request/confirmation is valid.
-    f.gov.files_undo_with_halt(&*f.owner, Some(&cell)).unwrap();
-    assert!(!f.ws.join(NAME).exists());
-    assert_eq!(f.owner.undos().len(), 2);
+    // Host amendment: no fresh restore after the first emergency.
+    let asks = f.owner.undos().len();
+    assert!(matches!(
+        f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
+        Err(AuthorityError::Halted)
+    ));
+    assert!(f.ws.join(NAME).exists());
+    assert_eq!(f.owner.undos().len(), asks);
 }
 
 #[test]
@@ -99,8 +110,8 @@ fn decision10_undo_final_dispatch_then_ingress_no_worker() {
 }
 
 #[test]
-fn decision10_undo_dialogue_ingress_requires_new_request() {
-    let f = published_recovery();
+fn decision10_normal_undo_dialogue_emergency_forbids_new_request() {
+    let f = published_normal();
     let cell = f.gov.file_session_halt();
     let ingress = cell.clone();
     f.owner.during_undo(move || ingress.engage_emergency());
@@ -110,8 +121,13 @@ fn decision10_undo_dialogue_ingress_requires_new_request() {
         "dialogue ingress must not remove the file"
     );
     assert!(matches!(result, Err(AuthorityError::Halted)));
-    f.gov.files_undo_with_halt(&*f.owner, Some(&cell)).unwrap();
-    assert!(!f.ws.join(NAME).exists());
+    let asks = f.owner.undos().len();
+    assert!(matches!(
+        f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
+        Err(AuthorityError::Halted)
+    ));
+    assert!(f.ws.join(NAME).exists());
+    assert_eq!(f.owner.undos().len(), asks);
 }
 
 #[test]
@@ -126,7 +142,6 @@ fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
     assert_eq!(f.gov.files().kept_for_test(), 1);
     std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
     let cell = f.gov.file_session_halt();
-    cell.engage_emergency();
     let ingress = cell.clone();
     f.gov
         .files()
@@ -141,32 +156,31 @@ fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
     );
     assert!(matches!(result, Err(AuthorityError::Halted)));
     assert_eq!(f.gov.files().kept_for_test(), 1);
-    let retry = f.gov.files_retry_cleanup_with_halt(Some(&cell)).unwrap();
-    assert_eq!((retry.settled, retry.still_owed), (1, 0));
-    assert!(!staging.exists());
+    assert!(matches!(
+        f.gov.files_retry_cleanup_with_halt(Some(&cell)),
+        Err(AuthorityError::Halted)
+    ));
+    assert!(staging.exists());
+    assert_eq!(f.gov.files().kept_for_test(), 1);
 }
 
 #[test]
-fn decision10_recovery_lift_ingress_after_record() {
-    let f = Fx::new();
-    f.gov.emergency_stop();
-    let cell = f.gov.file_session_halt();
-    let ingress = cell.clone();
-    f.gov
-        .authority()
-        .hooks()
-        .arm("resume.before_lift", move || ingress.engage_emergency());
-    let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
-    assert!(
-        f.gov.stop_snapshot().broker_stopped,
-        "ingress after resume record must not lift broker Stop"
-    );
-    assert!(f.gov.stop_snapshot().kernel_stopped);
-    assert!(matches!(result, Err(AuthorityError::Halted)));
-    f.gov.resume_with_halt(&*f.owner, Some(&cell)).unwrap();
-    assert!(!f.gov.stop_snapshot().broker_stopped);
-    assert!(!f.gov.stop_snapshot().kernel_stopped);
-    assert!(cell.is_engaged(), "lift never reopens the host session");
+fn decision10_host_lift_is_unavailable_before_any_native_record() {
+    for emergency in [false, true] {
+        let f = Fx::new();
+        if emergency {
+            f.gov.emergency_stop();
+        }
+        let cell = f.gov.file_session_halt();
+        let before = f.evidence.records().len();
+        let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
+        assert!(matches!(result, Err(AuthorityError::Unavailable(_))));
+        assert_eq!(
+            f.evidence.records().len(),
+            before,
+            "unsupported lift records no native resume"
+        );
+    }
 }
 
 fn selected() -> Fx {
@@ -258,7 +272,7 @@ fn decision10_legacy_cell_less_recovery_control() {
 // Decision 11: hooks are at the broker/kernel handoff, not inside kernel U1.
 #[test]
 fn decision11_undo_ingress_after_last_broker_check_reports_actual_removal() {
-    let f = published_recovery();
+    let f = published_normal();
     let cell = f.gov.file_session_halt();
     let ingress = cell.clone();
     f.gov
@@ -299,7 +313,6 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
     assert_eq!(f.gov.files().kept_for_test(), 1);
     std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700)).unwrap();
     let cell = f.gov.file_session_halt();
-    cell.engage_emergency();
     let ingress = cell.clone();
     f.gov
         .files()
@@ -318,33 +331,23 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
 }
 
 #[test]
-fn decision11_lift_ingress_at_and_after_kernel_call_reengages_native() {
+fn decision11_host_lift_cannot_reach_a_kernel_handoff() {
     for point in ["resume.kernel_boundary", "resume.kernel_returned"] {
         let f = Fx::new();
         f.gov.emergency_stop();
         let cell = f.gov.file_session_halt();
-        let ingress = cell.clone();
-        f.gov
-            .authority()
-            .hooks()
-            .arm(point, move || ingress.engage_emergency());
-        let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
-        assert!(
-            f.gov.stop_snapshot().kernel_stopped,
-            "{point}: native halt re-engaged before return"
-        );
+        let reached = Arc::new(AtomicUsize::new(0));
+        let seen = reached.clone();
+        f.gov.authority().hooks().arm(point, move || {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+        assert!(matches!(
+            f.gov.resume_with_halt(&*f.owner, Some(&cell)),
+            Err(AuthorityError::Unavailable(_))
+        ));
+        assert_eq!(reached.load(Ordering::SeqCst), 0);
+        assert!(f.gov.stop_snapshot().kernel_stopped);
         assert!(f.gov.stop_snapshot().broker_stopped);
-        assert!(matches!(result, Err(AuthorityError::Halted)));
-        assert!(cell.is_engaged());
-        assert!(f.door.open_run().is_err());
-        assert!(
-            f.evidence
-                .records()
-                .iter()
-                .filter(|r| r.phase == EvidencePhase::EmergencyStop)
-                .count()
-                >= 2
-        );
     }
 }
 
@@ -371,9 +374,8 @@ fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
     let f = Fx::new();
     f.propose(NAME, CONTENT).unwrap();
     let staging = f.state().join("coding-runs").join(&f.staged()[0]);
-    f.gov.emergency_stop();
+    let _ = f.door.cancel_run(f.run).unwrap().write();
     let cell = f.gov.file_session_halt();
-    f.gov.resume_with_halt(&*f.owner, Some(&cell)).unwrap();
     assert_eq!(f.gov.files().deferred_for_test(), 1);
     let ingress = cell.clone();
     f.gov
@@ -394,12 +396,11 @@ fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
         !f.gov.stop_snapshot().kernel_stopped,
         "no recording worker ran"
     );
-    // A fresh request still performs the inherited deferred drain, even
-    // though there is no published file eligible for undo.
+    // No new request can drain after emergency; the unattempted tail stays.
     assert!(matches!(
         f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
-        Err(AuthorityError::Unavailable(_))
+        Err(AuthorityError::Halted)
     ));
-    assert!(!staging.exists());
-    assert_eq!(f.gov.files().deferred_for_test(), 0);
+    assert!(staging.exists());
+    assert_eq!(f.gov.files().deferred_for_test(), 1);
 }
