@@ -1,5 +1,131 @@
-//! Fix round 1: each finding has a control at its actual protected boundary.
+//! Mutation receipts name their exact protected subject and use fresh reachability.
 use super::*;
+
+#[test]
+fn scanner_inventory_loads_nested_docs_with_an_already_registered_module_name() {
+    let stage = 22;
+    let mut tree = clean_tree(stage);
+    tree.insert(
+        "kernel/src/privacy.rs".into(),
+        read("kernel/src/privacy.rs"),
+    );
+    tree.get_mut("kernel/src/lib.rs")
+        .unwrap()
+        .push_str("pub mod privacy;");
+    tree.prove_fixture();
+    let fixture = tree.write_fixture();
+    let baseline = load_tree_in(fixture.path());
+    let before = successor(stage, &baseline);
+    assert!(before.is_empty(), "{before:?}");
+    assert!(module_edges(stage)["kernel/src/privacy.rs"].contains("tests"));
+    let parent = fixture.path().join("kernel/src/privacy.rs");
+    let raw = std::fs::read_to_string(&parent).unwrap();
+    assert!(raw.contains("#[cfg(test)]\nmod tests"));
+    std::fs::write(
+        parent,
+        format!("{raw}\n#[cfg(not(test))] #[path=\"docs/runner.rs\"] mod tests;\n"),
+    )
+    .unwrap();
+    let subject = "kernel/src/docs/runner.rs";
+    let target = fixture.path().join(subject);
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "fn run(){ std::process::Command::new(\"sh\"); }").unwrap();
+    let production: BTreeSet<_> = source::production_files_in(fixture.path())
+        .into_iter()
+        .map(|f| f.rel)
+        .collect();
+    assert!(
+        production.contains(subject),
+        "plant must be production reachable"
+    );
+    let loaded = load_tree_in(fixture.path());
+    assert!(loaded.contains_key(subject));
+    assert!(!loaded.test_only.contains(subject));
+    assert!(production.iter().all(|p| loaded.contains_key(p)));
+    let added: Findings = successor(stage, &loaded)
+        .difference(&before)
+        .cloned()
+        .collect();
+    for oracle in ["f7-dependency", "raw-process"] {
+        assert!(added.contains(&(oracle, subject.into())), "{added:?}");
+    }
+    // The already registered module name alone does not flag the parent.
+    assert!(!added.contains(&("f7-dependency", "kernel/src/privacy.rs".into())));
+}
+
+#[test]
+fn harmless_mutations_remain_green_after_recomputing_reachability() {
+    for stage in 2..=22 {
+        let baseline = clean_tree(stage);
+        let before = successor(stage, &baseline);
+        assert!(before.is_empty());
+        for path in [
+            "kernel/src/privacy.rs",
+            "kernel/src/audit/mod.rs",
+            "kernel/src/workspace_authority/tests.rs",
+        ] {
+            let mut changed = baseline.clone();
+            changed
+                .get_mut(path)
+                .unwrap()
+                .push_str("\n// harmless mutation\n");
+            changed.prove_fixture();
+            assert_eq!(successor(stage, &changed), before, "K{stage}: {path}");
+            assert_eq!(changed.test_only, baseline.test_only, "K{stage}: {path}");
+        }
+    }
+}
+
+#[test]
+fn f3_search_plants_and_coverage_omissions_stay_red_through_k11() {
+    let path = "kernel/src/actuators/web.rs";
+    for stage in [2, 3, 10, 11, 12] {
+        for plant in [
+            "curl_get(_query)",
+            "Command::new(\"curl\").arg(_query).output()",
+            "Command::new(\"sh\").arg(_query).output()",
+            "get(\"https://html.duckduckgo.com\")",
+            "Err(\"use ShellCommand with curl\".into())",
+            "std::env::var(\"SEARXNG_URL\")",
+        ] {
+            let mut tree = clean_tree(stage);
+            let original = WEB_SOURCE_FIXTURE;
+            let mutant = original.replacen("Err(WEB_SEARCH_CLOSED.to_string())", plant, 1);
+            assert_ne!(original, mutant);
+            tree.insert(path.into(), mutant);
+            rejected(
+                stage,
+                &tree,
+                if stage < 12 {
+                    "f3-search"
+                } else {
+                    "f7-absence"
+                },
+                path,
+            );
+        }
+        if stage >= 12 {
+            continue;
+        }
+        let mut tree = clean_tree(stage);
+        tree.remove(WEB_TEST_PATH).unwrap();
+        rejected(stage, &tree, "f3-coverage", WEB_TEST_PATH);
+        for name in [
+            "f3_source_prohibition_survives_without_the_cognitive_executor",
+            "f3_direct_default_search_refuses_without_a_connection",
+            "f3_injected_hermetic_search_still_works_directly",
+        ] {
+            let mut tree = clean_tree(stage);
+            let raw = tree.get_mut(WEB_TEST_PATH).unwrap();
+            let declaration = coverage::declarations(raw)
+                .into_iter()
+                .find(|d| d.name == name)
+                .unwrap();
+            raw.replace_range(declaration.span.0..declaration.span.1, "/* omitted */");
+            rejected(stage, &tree, "f3-coverage", WEB_TEST_PATH);
+        }
+    }
+}
 
 #[test]
 fn current_reachability_promotion_never_hides_registered_test_source() {
@@ -9,7 +135,8 @@ fn current_reachability_promotion_never_hides_registered_test_source() {
         let target = "kernel/src/workspace_authority/tests.rs";
         let loaded = load_tree_in(fixture.path());
         assert!(loaded.test_only.contains(target));
-        assert_eq!(successor(stage, &loaded), Findings::new());
+        let baseline = successor(stage, &loaded);
+        assert!(baseline.is_empty());
         let parent = fixture.path().join("kernel/src/workspace_authority.rs");
         let raw = std::fs::read_to_string(&parent).unwrap();
         let promoted = raw.replace("#[cfg(test)]\nmod tests;", "mod tests;");
@@ -32,18 +159,19 @@ fn promoted() {
             .unwrap();
         let promoted = load_tree_in(fixture.path());
         assert!(!promoted.test_only.contains(target));
-        for oracle in [
-            "f7-dependency",
-            "raw-process",
-            "raw-network",
-            "acceptance-inventory",
+        let added: Findings = successor(stage, &promoted)
+            .difference(&baseline)
+            .cloned()
+            .collect();
+        for (oracle, subject) in [
+            ("f7-dependency", target.to_owned()),
+            ("raw-process", target.to_owned()),
+            ("raw-network", target.to_owned()),
+            ("acceptance-inventory", format!("{target}::load")),
         ] {
-            let findings = successor(stage, &promoted);
             assert!(
-                findings
-                    .iter()
-                    .any(|(o, p)| *o == oracle && p.starts_with(target)),
-                "K{stage:02} {oracle}: {findings:?}"
+                added.contains(&(oracle, subject)),
+                "K{stage:02} {oracle}: {added:?}"
             );
         }
     }
@@ -75,6 +203,7 @@ fn original_f7_plants_remain_red_at_every_applicable_transition() {
                     } else {
                         "f7-absence"
                     },
+                    path,
                 );
             }
         }
@@ -91,6 +220,7 @@ fn original_f7_plants_remain_red_at_every_applicable_transition() {
             } else {
                 "f7-absence"
             },
+            "kernel/src/actuators/computer_use.rs",
         );
     }
     // The predecessor's one checkpoint exception still applies while that
@@ -118,7 +248,13 @@ fn historical_f7_absence_includes_empty_roots_files_and_restored_children() {
         for (path, raw) in loaded.iter() {
             tree.insert(path.clone(), raw.clone());
         }
-        let findings = successor(stage, &tree);
+        tree.prove_fixture();
+        let baseline = successor(stage, &clean_tree(stage));
+        let findings: Findings = successor(stage, &tree)
+            .difference(&baseline)
+            .cloned()
+            .collect();
+        assert!(baseline.is_empty());
         for stem in F7_ABSENT {
             assert!(loaded.contains_key(stem));
             assert!(loaded.contains_key(&format!("{stem}.rs")));
@@ -148,7 +284,12 @@ fn f7_guard_presence_and_contacts_survive_until_their_subject_retires() {
             let mut tree = clean_tree(stage);
             let lib = tree.get_mut("kernel/src/lib.rs").unwrap();
             *lib = lib.replace(&format!("pub mod {module};"), "");
-            rejected(stage, &tree, "f7-presence");
+            rejected(
+                stage,
+                &tree,
+                "f7-presence",
+                &format!("kernel/src/lib.rs::{module}"),
+            );
         }
         for (until, path) in [
             (19, "kernel/src/consent.rs"),
@@ -160,7 +301,7 @@ fn f7_guard_presence_and_contacts_survive_until_their_subject_retires() {
             }
             let mut tree = clean_tree(stage);
             tree.insert(path.into(), String::new());
-            rejected(stage, &tree, "f7-presence");
+            rejected(stage, &tree, "f7-presence", path);
         }
     }
 }
@@ -180,7 +321,7 @@ fn no_handoff_preserves_identifiers_literals_and_sql_reads() {
         ] {
             let mut tree = clean_tree(stage);
             tree.insert(path.into(), plant.into());
-            rejected(stage, &tree, "hm-no-handoff");
+            rejected(stage, &tree, "hm-no-handoff", path);
         }
     }
     for route in NO_HANDOFF {
@@ -189,7 +330,7 @@ fn no_handoff_preserves_identifiers_literals_and_sql_reads() {
             "kernel/src/privacy.rs".into(),
             format!("fn handoff(){{outside.read(\"{route}\");}}"),
         );
-        rejected(22, &tree, "hm-no-handoff");
+        rejected(22, &tree, "hm-no-handoff", "kernel/src/privacy.rs");
     }
 }
 
@@ -217,7 +358,7 @@ fn retained_boundary_fixtures_contain_real_process_and_complete_workspace_paths(
             ] {
                 let mut tree = tree.clone();
                 tree.insert("kernel/src/privacy.rs".into(), format!("use {spelling};"));
-                rejected(stage, &tree, "f7-dependency");
+                rejected(stage, &tree, "f7-dependency", "kernel/src/privacy.rs");
             }
         }
     }
@@ -245,7 +386,7 @@ fn registered_test_contracts_preserve_real_declarations_cfg_scopes_and_ignore_po
                 .find(|d| d.kind == "fn" && d.name == function)
                 .unwrap();
             raw.insert_str(declaration.span.0, attribute);
-            rejected(22, &tree, "acceptance-inventory");
+            rejected(22, &tree, "acceptance-inventory", &name);
         }
         let mut tree = clean_tree(22);
         let raw = tree.get_mut(path).unwrap();
@@ -255,7 +396,7 @@ fn registered_test_contracts_preserve_real_declarations_cfg_scopes_and_ignore_po
             .unwrap();
         let commented = format!("/*{}*/", &raw[declaration.span.0..declaration.span.1]);
         raw.replace_range(declaration.span.0..declaration.span.1, &commented);
-        rejected(22, &tree, "acceptance-inventory");
+        rejected(22, &tree, "acceptance-inventory", &name);
     }
     // Ancestor attributes and missing external loading edges matter too.
     for edge in test_edges() {
@@ -274,7 +415,12 @@ fn registered_test_contracts_preserve_real_declarations_cfg_scopes_and_ignore_po
             } else {
                 raw.insert_str(declaration.span.0, replacement);
             }
-            rejected(22, &tree, "acceptance-inventory");
+            rejected(
+                22,
+                &tree,
+                "acceptance-inventory",
+                &format!("{}::load", edge.target),
+            );
         }
     }
     for prefix in ["#![cfg(any())]\n", "#[cfg(any())] mod disabled {\n"] {
@@ -285,7 +431,12 @@ fn registered_test_contracts_preserve_real_declarations_cfg_scopes_and_ignore_po
             "{prefix}{raw}{}",
             if prefix.starts_with("#[") { "\n}" } else { "" }
         );
-        rejected(22, &tree, "acceptance-inventory");
+        rejected(
+            22,
+            &tree,
+            "acceptance-inventory",
+            &format!("{path}::m0_f5_stop_ends_an_inflight_local_model_call"),
+        );
     }
 }
 
@@ -304,7 +455,7 @@ fn actual_retained_logging_sink_and_unchanged_expression_rebinding_are_red() {
         assert_ne!(mutant, raw);
         let mut tree = clean_tree(22);
         tree.insert(path.into(), mutant);
-        rejected(22, &tree, "logging");
+        rejected(22, &tree, "logging", path);
     }
     let rebound = raw.replacen(sink, &format!("let e = raw_content; {sink}"), 1);
     assert_eq!(
@@ -363,11 +514,11 @@ fn registered_self_spawn_scaffolds_allow_only_the_unchanged_test_source() {
         );
         assert_ne!(raw, mutant);
         tree.insert(path.clone(), mutant);
-        rejected(22, &tree, "raw-process");
+        rejected(22, &tree, "raw-process", &path);
         let mut tree = clean_tree(22);
         tree.get_mut(&path)
             .unwrap()
             .push_str("fn planted(){ Command::new(\"sh\"); }");
-        rejected(22, &tree, "raw-process");
+        rejected(22, &tree, "raw-process", &path);
     }
 }

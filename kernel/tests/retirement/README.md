@@ -46,7 +46,7 @@ There is no live-tree fallback, old-or-new acceptance or missing-file skip.
 | F7 | K05–K21 cumulatively prohibit exact retired roots and alternate file/directory spellings, root declarations, imports and exports. K11/K12/K14/K15/K17/K19 add runtime-type prohibitions. Free-api/orchestration/delegation bans remain at every stage. Current m0_f7_legacy_supervisor_cut.rs remains active throughout K01. |
 | Dependency closure | production-paths.txt fixes 327 source seeds; manifest files and extraction homes enter/leave with the selected stage. Every expected seed must be present; unknown renamed modules/files and Cargo dependency aliases/wrappers fail. Extraction destinations enter only at their stage. cargo-manifests.json fixes all ten dependency manifests; any later justified dependency change needs its own independently reviewed registration before activation. |
 | Logging | K11 replaces loop-source obligations with its absence and no replacement execution route. K12 removes actuator source obligations. logging.jsonl freezes 22 retained logging macro expressions; missing, changed or extra sinks fail, including raw result/error aliases and appended logging. Mother/broker live privacy oracles remain required. |
-| Web search | K12 prohibits actuator/registry/backend restoration, including renamed search modules and process sinks; there is no curl exception. broker-classifier.sha256 freezes the exhaustive classifier body and exact refusal vocabulary independently of imports. WebSearch stays inert. Existing broker egress, credentials and proxy tests remain required. |
+| Web search | Through K11, preserve F3's source prohibition plus the independently runnable kernel_retirement_web_search binary's direct default/backend/registry refusal, no-connection and injected-backend checks. K03 moves its PlannedAction import to action_types; its complete source is pinned by web-search-guard.rs.txt. K11 retires only the executor checks with their subject. K12 retires this actuator-dependent binary and switches to actuator/registry/backend absence, including renamed search modules/process sinks; no curl exception remains. broker-classifier.sha256 freezes the exhaustive classifier and refusal vocabulary independently of imports. WebSearch stays inert. Existing broker egress, credentials and proxy tests remain required. |
 | HM prompt/writers/separation | K11 removes exactly six prompt-content exceptions, three AgentMemoryManager writers and the world-model separation row. hm-rows.jsonl names sites/routes; the full 26-route no-handoff vocabulary and raw SQL/write/content-read plants survive. |
 | HM model/transport | K11 removes planner/world-model classifications; K12 removes image/tts errata; K13 removes vision/model-list classifications and both transport exceptions. Broker speech remains a separate governed route. Existing unknown-model, AR/XS/LATENT, five-path transport and A2 tests stay active. |
 | HM SQLite | K06 drops only the wrapper opener; K11 drops cognitive identity/open rows; K12 drops agent-lifecycle and knowledge-graph rows. Final identity resolver is identity_home.rs. Three raw-open files remain classified. Storage/FK/admission/label-taking/issuer/confirmer/capture/XS oracles are retained without new exceptions. |
@@ -61,8 +61,10 @@ There is no live-tree fallback, old-or-new acceptance or missing-file skip.
    Never regenerate fixtures from changed output to obtain green.
 3. At each approved deletion advance LIVE_STAGE to activate its staged absence
    checks through load_live_tree, retaining the named existing behavioral oracles.
-   The live loader prewalk fails on unreadable inputs and source symlinks; it uses
-   the existing HM production classifier for proved test-only exclusions. Preserve the existing HM
+   The live loader's metadata walk fails on unreadable inputs and source symlinks
+   and records retired empty/non-Rust paths. Every production file is loaded
+   directly from the existing HM scanner's inventory, including nested docs;
+   only workspace-root docs is excluded. Preserve the existing HM
    production scanner's intersection/reachability rules when wiring inventory
    comparisons; do not replace its model/authority/data-flow predicates with a
    weaker text predicate. The registered HM row sets specify only narrowing.
@@ -130,3 +132,32 @@ pinned separately. This permits their existing test executable only; any source
 change or additional process call loses that registration. These are not new
 production process boundaries or file exclusions. Source-policy registration
 still does not prove arbitrary caller/data-flow equivalence.
+
+## Fix round 2 registration
+
+Negative controls recompute reachability from each mutated fixture and require
+a new finding for the exact planted subject and oracle relative to its clean
+stage baseline. Absence findings name restored files/directories themselves.
+The missing-Cargo-manifest control requires the scanner's exact refusal to
+establish reachability, invalidated exclusions and a separate omission finding
+at that manifest; a scanner panic alone cannot supply a red receipt.
+Harmless comments in production, mixed audit and test-only source remain green
+at every K02–K22 stage. A disk-backed privacy.rs control preserves its existing
+test module and adds a production `docs/runner.rs` through the already registered
+name `tests`; both dependency and process findings must name that nested file.
+
+The verbatim F3 source predicate is shared by the new direct test binary and
+the staged successor before the legacy exemption. The predecessor's six search
+mutations are red through K11, then require source absence at K12. Missing the
+direct binary or any of its three tests is red before K12. The frozen text
+snapshot remains available after the live binary retires; it permits only the
+prescribed K03 import move. Synthetic pre-K12 source shapes do not depend on a
+deleted live actuator. This registers the K11 split; it does not implement K11.
+
+Both manifest extraction tests use the same stage-appropriate anchor check.
+Synthetic K02 homes with same-type re-exports pass, as do those homes after
+their original sources disappear; an empty new home fails despite an old
+definition. BrowserAction fixtures are paired with independent Rust variants,
+an exhaustive variant/field match and independent serialization to frozen bytes.
+A swapped Click/ExtractText codec retains byte round-trips but fails that same
+semantic golden. No runtime, existing guard or LIVE_STAGE change is made here.

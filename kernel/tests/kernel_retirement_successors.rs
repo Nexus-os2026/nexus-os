@@ -13,6 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[allow(dead_code)]
 #[path = "retirement/coverage.rs"]
 mod coverage;
+#[path = "retirement/web_search_source.rs"]
+mod web_search_source;
 
 /// Exclusions are a CURRENT scanner proof, never baseline inventory membership.
 /// Any in-memory mutation invalidates that proof: uncertain inputs are scanned.
@@ -105,6 +107,38 @@ fn required_tests() -> BTreeSet<String> {
         .lines()
         .map(str::to_owned)
         .collect()
+}
+const WEB_TEST_PATH: &str = "kernel/tests/kernel_retirement_web_search.rs";
+// The predecessor's synthetic shape, independent of later source deletion.
+// This is source-policy input, never a compiled/executed backend.
+const WEB_SOURCE_FIXTURE: &str = r#"
+pub trait WebSearchBackend {
+    fn search(&self, q: &str) -> R;
+    fn fetch_content(&self, url: &str) -> R;
+}
+impl WebSearchBackend for B {
+    fn search(&self, _query: &str) -> R {
+        Err(WEB_SEARCH_CLOSED.to_string())
+    }
+    fn fetch_content(&self, url: &str) -> R {
+        curl_get(url)
+    }
+}
+fn curl_get(url: &str) -> R {
+    let command = Command::new("curl");
+}
+"#;
+fn web_test_source(stage: u8) -> String {
+    // A frozen text fixture survives the K12 retirement of the live binary.
+    let raw = include_str!("retirement/web-search-guard.rs.txt");
+    if stage >= 3 {
+        raw.replace(
+            "nexus_kernel::cognitive::types::PlannedAction",
+            "nexus_kernel::action_types::PlannedAction",
+        )
+    } else {
+        raw.to_owned()
+    }
 }
 fn required_test_policy() -> BTreeMap<String, coverage::Contract> {
     serde_json::from_str(include_str!("retirement/retained-test-policy.json")).unwrap()
@@ -284,9 +318,9 @@ fn build_module_edges(stage: u8) -> BTreeMap<String, BTreeSet<String>> {
     edges
 }
 
-// Ready for later stage activation. A strict prewalk rejects unreadable inputs
-// and directory symlinks BEFORE the existing HM production classifier is used.
-// Whole-file test exclusions retain that scanner's intersection proof.
+// The scanner supplies the production inventory. The metadata walk additionally
+// rejects aliases/unreadable input and records retired non-Rust paths/empty dirs;
+// it never decides which production files are loaded.
 fn load_live_tree() -> Tree {
     load_tree_in(&root())
 }
@@ -323,7 +357,8 @@ fn load_tree_in(workspace: &std::path::Path) -> Tree {
             let name = entry.file_name();
             let name = name.to_str().unwrap();
             if name.starts_with("target")
-                || [".git", "node_modules", "dist", "docs"].contains(&name)
+                || [".git", "node_modules", "dist"].contains(&name)
+                || path == workspace.join("docs")
             {
                 continue;
             }
@@ -357,13 +392,14 @@ fn load_tree_in(workspace: &std::path::Path) -> Tree {
     }
     let mut paths = Vec::new();
     walk(workspace, workspace, &mut paths);
-    let production: BTreeMap<_, _> = source::production_files_in(workspace)
+    let production: BTreeSet<_> = source::production_files_in(workspace)
         .into_iter()
-        .map(|f| (f.rel, f.text))
+        .map(|f| f.rel)
         .collect();
     let test_paths: BTreeSet<_> = required_tests()
         .into_iter()
         .map(|t| t.rsplit_once("::").unwrap().0.to_owned())
+        .chain(std::iter::once(WEB_TEST_PATH.to_owned()))
         .collect();
     let mut known = production_paths();
     for row in stages() {
@@ -379,22 +415,30 @@ fn load_tree_in(workspace: &std::path::Path) -> Tree {
             .replace('\\', "/");
         if path.is_dir() || (retired_spelling(&rel) && path.extension().is_none_or(|e| e != "rs")) {
             tree.insert(rel, String::new());
-        } else if rel.ends_with("Cargo.toml")
-            || test_paths.contains(&rel)
-            || production.contains_key(&rel)
-        {
+        } else if rel.ends_with("Cargo.toml") || test_paths.contains(&rel) {
             tree.insert(rel, std::fs::read_to_string(path).unwrap());
         } else if known.contains(&rel) || retired_spelling(&rel) {
             tree.insert(rel, String::new());
         } // PROVED test-only file exists
     }
-    tree.prove_test_only_in(workspace);
+    // Load EVERY scanner-discovered file, independently of the metadata walk.
+    for rel in &production {
+        tree.insert(
+            rel.clone(),
+            std::fs::read_to_string(workspace.join(rel)).unwrap(),
+        );
+    }
+    tree.test_only = tree
+        .keys()
+        .filter(|p| p.ends_with(".rs") && !production.contains(*p))
+        .cloned()
+        .collect();
     tree
 }
 
 #[test]
 fn synthetic_loader_keeps_empty_directories_non_rust_and_test_only_restorations() {
-    let fixture = tempfile::tempdir().unwrap();
+    let fixture = clean_tree(22).write_fixture();
     for dir in ["kernel/src/cognitive", "kernel/src/supervisor"] {
         std::fs::create_dir_all(fixture.path().join(dir)).unwrap();
     }
@@ -417,13 +461,20 @@ fn synthetic_loader_keeps_empty_directories_non_rust_and_test_only_restorations(
     ] {
         assert!(tree.contains_key(path), "{path}");
     }
-    rejected(22, &tree, "f7-absence");
+    rejected(22, &tree, "f7-absence", "kernel/src/cognitive/note.txt");
 }
 
 #[test]
 fn live_successors_activate_only_at_the_explicit_reviewed_stage() {
     if LIVE_STAGE >= 2 {
         assert_eq!(successor(LIVE_STAGE, &load_live_tree()), Findings::new());
+    }
+}
+
+#[test]
+fn registered_f3_split_pins_the_live_direct_guard_until_k12() {
+    if LIVE_STAGE < 12 {
+        assert_eq!(read(WEB_TEST_PATH), web_test_source(LIVE_STAGE));
     }
 }
 
@@ -531,27 +582,37 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
             found.insert(("f7-dependency", path));
         }
     }
+    // K11 deletes the executor, not the web actuator. Preserve the independent
+    // F3 source/default/injected tests until K12, including their bodies. The
+    // only prescribed edit is K03's same-type PlannedAction import move.
+    if stage < 12 && tree.get(WEB_TEST_PATH) != Some(&web_test_source(stage)) {
+        found.insert(("f3-coverage", WEB_TEST_PATH.into()));
+    }
+    if stage < 12
+        && tree
+            .get("kernel/src/actuators/web.rs")
+            .is_none_or(|raw| !web_search_source::search_process_violations(raw).is_empty())
+    {
+        found.insert(("f3-search", "kernel/src/actuators/web.rs".into()));
+    }
     for stem in F7_ABSENT {
-        if tree
+        for path in tree
             .keys()
-            .any(|p| within(p, stem) || p == &format!("{stem}.rs"))
+            .filter(|p| within(p, stem) || *p == &format!("{stem}.rs"))
         {
-            found.insert(("f7-absence", stem.into()));
+            found.insert(("f7-absence", path.clone()));
         }
     }
     for row in stages().iter().filter(|r| r.stage <= stage) {
         for root in &row.roots {
-            if tree.keys().any(|p| within(p, root)) {
-                found.insert(("f7-absence", root.clone()));
-            }
             // Deny BOTH alternate Rust file/directory spellings, not just
             // the exact original file inventory.
             let stem = root.trim_end_matches(".rs");
-            if tree
+            for path in tree
                 .keys()
-                .any(|p| within(p, stem) || p == &format!("{stem}.rs"))
+                .filter(|p| within(p, root) || within(p, stem) || *p == &format!("{stem}.rs"))
             {
-                found.insert(("f7-absence", root.clone()));
+                found.insert(("f7-absence", path.clone()));
             }
         }
     }
@@ -571,7 +632,7 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
                 .and_then(|raw| coverage::root_module(raw, module))
                 .is_none_or(|c| !c.attributes.is_empty() || c.head != format!("pubmod{module};"))
         {
-            found.insert(("f7-presence", module.into()));
+            found.insert(("f7-presence", format!("kernel/src/lib.rs::{module}")));
         }
     }
     for (until, path, contact) in [
@@ -906,6 +967,13 @@ fn build_clean_tree(stage: u8) -> Tree {
         let (path, _) = test.rsplit_once("::").unwrap();
         tree.insert(path.into(), read(path));
     }
+    if stage < 12 {
+        tree.insert(WEB_TEST_PATH.into(), web_test_source(stage));
+        tree.insert(
+            "kernel/src/actuators/web.rs".into(),
+            WEB_SOURCE_FIXTURE.into(),
+        );
+    }
     // Real loading declarations are needed to prove both test-only exclusions
     // and retained test reachability. Extraction imports use their same-type home.
     let mut lib = "pub mod audit; pub mod workspace_authority;".to_owned();
@@ -988,11 +1056,23 @@ fn build_clean_tree(stage: u8) -> Tree {
     tree.prove_fixture();
     tree
 }
-fn rejected(stage: u8, tree: &Tree, oracle: &'static str) {
-    let findings = successor(stage, tree);
+fn rejected(stage: u8, tree: &Tree, oracle: &'static str, subject: &str) {
+    // Clean stage inputs are immutable (like clean_tree); cache their findings,
+    // never a mutated tree's reachability proof or findings.
+    static BASELINES: std::sync::OnceLock<Vec<Findings>> = std::sync::OnceLock::new();
+    let baseline = &BASELINES
+        .get_or_init(|| (2..=22).map(|s| successor(s, &clean_tree(s))).collect())
+        [usize::from(stage - 2)];
+    assert!(baseline.is_empty(), "K{stage}: baseline {baseline:?}");
+    // All in-memory changes invalidate the old proof. Recompute from the
+    // mutated fixture, including changed module/Cargo loading edges.
+    let mut current = tree.clone();
+    current.prove_fixture();
+    let findings = successor(stage, &current);
+    let added: Findings = findings.difference(baseline).cloned().collect();
     assert!(
-        findings.iter().any(|(o, _)| *o == oracle),
-        "expected {oracle}, got {findings:?}"
+        added.contains(&(oracle, subject.into())),
+        "K{stage}: expected new {oracle} at {subject}, added {added:?}"
     );
 }
 
@@ -1017,19 +1097,29 @@ fn every_retired_path_alternate_spelling_declaration_and_reexport_is_a_red_plant
                 format!("{}/restored.rs", root.trim_end_matches(".rs")),
                 String::new(),
             );
-            rejected(row.stage, &tree, "f7-absence");
+            rejected(
+                row.stage,
+                &tree,
+                "f7-absence",
+                &format!("{}/restored.rs", root.trim_end_matches(".rs")),
+            );
         }
         for declaration in &row.declarations {
             let mut tree = clean_tree(row.stage);
             tree.entry("kernel/src/lib.rs".into())
                 .or_default()
                 .push_str(declaration);
-            rejected(row.stage, &tree, "f7-absence");
+            rejected(row.stage, &tree, "f7-absence", "kernel/src/lib.rs");
         }
         for export in &row.reexports {
             let mut tree = clean_tree(row.stage);
             tree.insert("kernel/src/cognitive/mod.rs".into(), export.clone());
-            rejected(row.stage, &tree, "f7-absence");
+            rejected(
+                row.stage,
+                &tree,
+                "f7-absence",
+                "kernel/src/cognitive/mod.rs",
+            );
         }
     }
 }
@@ -1056,7 +1146,16 @@ fn renamed_runtime_alias_dependency_and_inline_module_cannot_return() {
             if plant.contains("alternate_brain") {
                 tree.get_mut("kernel/Cargo.toml").unwrap().push_str("\n[dependencies.alternate_brain]\npackage = \"runtime-wrapper\"\nversion = \"1\"\n");
             }
-            rejected(stage, &tree, "f7-dependency");
+            rejected(
+                stage,
+                &tree,
+                "f7-dependency",
+                if plant.contains("alternate_brain") {
+                    "kernel/Cargo.toml"
+                } else {
+                    path
+                },
+            );
         }
     }
 }
@@ -1127,14 +1226,14 @@ fn boundary_stop_hm_desktop_and_logging_mutations_have_specific_red_oracles() {
     ] {
         let mut tree = clean_tree(22);
         tree.entry(path.into()).or_default().push_str(plant);
-        rejected(22, &tree, oracle);
+        rejected(22, &tree, oracle, path);
     }
     for route in NO_HANDOFF {
         let mut tree = clean_tree(22);
         tree.entry("kernel/src/privacy.rs".into())
             .or_default()
             .push_str(&format!("fn handoff(){{outside::{route}(content);}}"));
-        rejected(22, &tree, "hm-no-handoff");
+        rejected(22, &tree, "hm-no-handoff", "kernel/src/privacy.rs");
     }
 }
 
@@ -1177,29 +1276,59 @@ fn hm_narrowing_is_exact_and_never_creates_an_exception() {
 
 #[test]
 fn omission_controls_reject_empty_missing_seed_sink_and_named_security_test() {
-    rejected(22, &Tree::new(), "omission");
+    rejected(22, &Tree::new(), "omission", "kernel/src/lib.rs");
     for path in [
         "kernel/src/lib.rs",
         "kernel/src/hm.rs",
         "kernel/src/emergency_stop.rs",
         "mother/src/lib.rs",
-        "kernel/Cargo.toml",
     ] {
         let mut tree = clean_tree(22);
         assert!(tree.remove(path).is_some());
-        rejected(22, &tree, "omission");
+        rejected(22, &tree, "omission", path);
     }
     for name in required_tests() {
         let (path, function) = name.rsplit_once("::").unwrap();
         let mut tree = clean_tree(22);
         let raw = tree.get_mut(path).unwrap();
         *raw = raw.replace(&format!("fn {function}()"), "fn omitted()");
-        rejected(22, &tree, "acceptance-inventory");
+        rejected(22, &tree, "acceptance-inventory", &name);
     }
     let sink = logs().remove(0);
     let mut tree = clean_tree(22);
     tree.get_mut(&sink.path).unwrap().clear();
-    rejected(22, &tree, "logging");
+    rejected(22, &tree, "logging", &sink.path);
+}
+
+#[test]
+fn cargo_manifest_omission_refuses_reachability_and_reports_the_subject() {
+    let mut tree = clean_tree(22);
+    let baseline = successor(22, &tree);
+    assert!(baseline.is_empty());
+    let subject = "kernel/Cargo.toml";
+    tree.remove(subject).unwrap();
+    let fixture = tree.write_fixture();
+    // This plant makes the scanner refuse to establish reachability. Require
+    // that exact error, keep every exclusion invalidated, and separately require
+    // the successor's omission finding at the planted manifest.
+    let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tree.prove_test_only_in(fixture.path());
+    }))
+    .unwrap_err();
+    let message = error.downcast_ref::<String>().unwrap();
+    assert_eq!(
+        message,
+        &format!(
+            "source scan: workspace member lacks Cargo.toml: {}",
+            fixture.path().join("kernel").display()
+        )
+    );
+    assert!(tree.test_only.is_empty());
+    let added: Findings = successor(22, &tree)
+        .difference(&baseline)
+        .cloned()
+        .collect();
+    assert!(added.contains(&("omission", subject.into())), "{added:?}");
 }
 
 #[test]
@@ -1241,6 +1370,6 @@ fn web_search_successor_has_no_curl_exception_and_classifier_mutation_is_red() {
     ] {
         let mut tree = clean_tree(12);
         tree.entry(path.into()).or_default().push_str(plant);
-        rejected(12, &tree, oracle);
+        rejected(12, &tree, oracle, path);
     }
 }
