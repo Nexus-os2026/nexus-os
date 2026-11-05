@@ -3,9 +3,9 @@
 use crate::session_home::DoorPrompt;
 use crate::stop::StopRoute;
 use nexus_governed_control::authority::approval::{
-    AcknowledgementConfirmation, ActionConfirmation, ConfirmationText, ControlConfirmer,
-    GrantConfirmation, MissionConfirmation, MissionResumeConfirmation, ResumeConfirmation,
-    UndoConfirmation,
+    AcknowledgementConfirmation, ActionConfirmation, ConfirmationAnswer, ConfirmationText,
+    ControlConfirmer, GrantConfirmation, MissionConfirmation, MissionResumeConfirmation,
+    ResumeConfirmation, UndoConfirmation,
 };
 use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
 use nexus_governed_control::authority::evidence::{escaped, is_plain, shown};
@@ -415,6 +415,16 @@ impl TerminalConfirmer {
     pub(crate) fn answer(&self) -> AnswerState {
         Self::decode_answer(self.answer.load(Ordering::SeqCst))
     }
+    fn confirmation_answer(&self) -> ConfirmationAnswer {
+        match self.answer() {
+            AnswerState::NotAsked => ConfirmationAnswer::NotAsked,
+            AnswerState::Awaiting => ConfirmationAnswer::Awaiting,
+            AnswerState::Declined => ConfirmationAnswer::Declined,
+            AnswerState::Affirmative => ConfirmationAnswer::Affirmative,
+            AnswerState::Invalidated => ConfirmationAnswer::Invalidated,
+            AnswerState::ProtocolFailed => ConfirmationAnswer::ProtocolFailed,
+        }
+    }
     fn decode_answer(value: u8) -> AnswerState {
         match value {
             0 => AnswerState::NotAsked,
@@ -634,6 +644,8 @@ impl TerminalConfirmer {
         text: ConfirmationText,
         seconds: u64,
     ) -> bool {
+        self.answered(AnswerState::NotAsked);
+        self.answers[question].store(AnswerState::NotAsked as u8, Ordering::SeqCst);
         if self.facts.is_none() {
             return false;
         }
@@ -649,6 +661,8 @@ impl TerminalConfirmer {
             && self.confirmed(3, r.title(), r.text(), r.expires_in_secs.min(300))
     }
     fn grant(&self, r: &GrantConfirmation) -> bool {
+        self.answered(AnswerState::NotAsked);
+        self.answers[0].store(AnswerState::NotAsked as u8, Ordering::SeqCst);
         r.kind == CapabilityKind::Files && self.confirmed(0, r.title(), r.text(), 120)
     }
     fn mission(&self, r: &MissionConfirmation) -> bool {
@@ -663,6 +677,18 @@ impl TerminalConfirmer {
 }
 
 impl ControlConfirmer for TerminalConfirmer {
+    fn confirm_grant_answer(&self, request: &GrantConfirmation) -> ConfirmationAnswer {
+        self.grant(request);
+        self.confirmation_answer()
+    }
+    fn confirm_agent_door_answer(&self, request: &DoorPrompt) -> ConfirmationAnswer {
+        self.door(request);
+        self.confirmation_answer()
+    }
+    fn confirm_mission_answer(&self, request: &MissionConfirmation) -> ConfirmationAnswer {
+        self.mission(request);
+        self.confirmation_answer()
+    }
     fn confirm_action(&self, request: &ActionConfirmation) -> bool {
         self.action(request)
     }

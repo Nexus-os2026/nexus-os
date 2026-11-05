@@ -331,11 +331,11 @@ impl GrantStore {
         #[cfg(test)]
         super::file_session::probe(halt, "setup.grant_confirm");
         super::file_session::check_halt(halt)?;
-        if !confirmer.confirm_grant(&request) {
-            // The owner's decline has taken effect and permits nothing: its
-            // record is an end record, and may only be owed (C-5).
-            self.record_end(&self.record_of(EvidencePhase::GrantDeclined, None, &scope));
-            return Err(AuthorityError::Declined);
+        let answer = confirmer.confirm_grant_answer(&request);
+        let mut refusal = self.record_of(EvidencePhase::GrantDeclined, None, &scope);
+        if let Some(error) = answer.refusal(&mut refusal) {
+            self.record_end(&refusal);
+            return Err(error);
         }
         let id = GrantId::fresh();
         let now = self.clock.monotonic_ms();

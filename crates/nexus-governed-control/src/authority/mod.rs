@@ -42,6 +42,10 @@ use std::sync::Arc;
 /// gives, a door halt's reasons ([`halt::HaltReason`]) and the stop's
 /// `recovery_required` (a test keeps them in step).
 pub(crate) const REASONS: &[&str] = &[
+    "confirmation_not_asked",
+    "confirmation_awaiting",
+    "confirmation_invalidated",
+    "confirmation_protocol_failed",
     "unknown_commitment",
     "unknown_run",
     "unknown_grant",
@@ -586,7 +590,8 @@ impl Authority {
         }
         self.mission_admissible()?;
         let reserved = before_ask()?;
-        let yes = confirmer.confirm_mission(request);
+        let answer = confirmer.confirm_mission_answer(request);
+        let yes = answer == approval::ConfirmationAnswer::Affirmative;
         let phase = if yes {
             EvidencePhase::MissionConsented
         } else {
@@ -608,10 +613,9 @@ impl Authority {
                 .detail
                 .push(("facts_hash".into(), hex::encode(facts.hash())));
         }
-        if !yes {
-            // The owner's decline has taken effect and permits nothing.
+        if let Some(error) = answer.refusal(&mut record) {
             self.record_end(&record);
-            return Err(AuthorityError::Declined);
+            return Err(error);
         }
         // A stop pressed, or quitting begun, while the owner was asked wins.
         self.mission_admissible()?;
@@ -788,6 +792,20 @@ impl Authority {
             self.record_end(&record);
             Ok(())
         }
+    }
+
+    pub(crate) fn record_door_answer_refusal(
+        &self,
+        answer: approval::ConfirmationAnswer,
+        agent: &AgentId,
+        door: &str,
+    ) -> AuthorityError {
+        let mut record = self.door_record(EvidencePhase::AgentDoorDeclined, agent, Some(door));
+        let Some(error) = answer.refusal(&mut record) else {
+            return AuthorityError::Unavailable("confirmation_awaiting");
+        };
+        self.record_end(&record);
+        error
     }
 
     // The existing door record builder also constructs session refusals.

@@ -481,8 +481,18 @@ impl Runtime {
                     } else {
                         record.phase.as_str()
                     };
-                    self.screen
-                        .emit(&format!("phase={phase} cancelled={}\n", record.cancelled));
+                    let reason = record
+                        .detail
+                        .iter()
+                        .find(|(key, _)| key == "reason")
+                        .map(|(_, value)| value.as_str())
+                        .unwrap_or("none");
+                    self.screen.emit(&format!(
+                        "phase={phase} cancelled={} failure={} reason={}\n",
+                        record.cancelled,
+                        record.failure.as_deref().unwrap_or("none"),
+                        reason
+                    ));
                 }
                 let health = self.home.evidence_health();
                 self.screen.emit(&format!("latched={} owed={} recovery_required={} unsettled={} unclean_sessions={}\nEVIDENCE HEALTH\n", health.latched, health.owed, health.recovery_required, health.unsettled, health.unclean_sessions));

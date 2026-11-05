@@ -791,13 +791,13 @@ impl GovernedControl {
         #[cfg(test)]
         crate::authority::file_session::probe(halt.as_ref(), "setup.door_confirm");
         check(Some(&core.id))?;
-        let yes = confirmer.confirm_agent_door(&request);
+        let answer = confirmer.confirm_agent_door_answer(&request);
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::ISSUE_ANSWERED);
-        if !yes {
-            // The decline has taken effect: the reservation dies with `core`.
-            authority.record_door(false, &agent, &core.id)?;
-            return Err(AuthorityError::Declined);
+        if answer != crate::authority::approval::ConfirmationAnswer::Affirmative {
+            // Every non-affirmative result denies; the native record preserves
+            // whether the Owner declined or no valid answer was received.
+            return Err(authority.record_door_answer_refusal(answer, &agent, &core.id));
         }
         check(Some(&core.id))?;
         authority.door_admissible()?;
