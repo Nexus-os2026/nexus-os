@@ -42,6 +42,10 @@ use std::sync::Arc;
 /// gives, a door halt's reasons ([`halt::HaltReason`]) and the stop's
 /// `recovery_required` (a test keeps them in step).
 pub(crate) const REASONS: &[&str] = &[
+    "confirmation_not_asked",
+    "confirmation_awaiting",
+    "confirmation_invalidated",
+    "confirmation_protocol_failed",
     "unknown_commitment",
     "unknown_run",
     "unknown_grant",
@@ -68,6 +72,16 @@ pub(crate) const REASONS: &[&str] = &[
     "capacity",
     "not_member",
     "halted",
+    "door_activation_refused_halted",
+    "grant_issue_refused_halted",
+    "approval_refused_halted",
+    "authorization_refused_halted",
+    "execution_dispatch_refused_halted",
+    "recovery_lift_refused_halted",
+    "commitment_prepare_refused_halted",
+    "mission_consent_refused_halted",
+    "held_consent_refused_halted",
+    "pending_effect_refused_halted",
     "closed",
     "invalid_action",
     "unavailable",
@@ -576,7 +590,8 @@ impl Authority {
         }
         self.mission_admissible()?;
         let reserved = before_ask()?;
-        let yes = confirmer.confirm_mission(request);
+        let answer = confirmer.confirm_mission_answer(request);
+        let yes = answer == approval::ConfirmationAnswer::Affirmative;
         let phase = if yes {
             EvidencePhase::MissionConsented
         } else {
@@ -598,10 +613,9 @@ impl Authority {
                 .detail
                 .push(("facts_hash".into(), hex::encode(facts.hash())));
         }
-        if !yes {
-            // The owner's decline has taken effect and permits nothing.
+        if let Some(error) = answer.refusal(&mut record) {
             self.record_end(&record);
-            return Err(AuthorityError::Declined);
+            return Err(error);
         }
         // A stop pressed, or quitting begun, while the owner was asked wins.
         self.mission_admissible()?;
@@ -771,6 +785,37 @@ impl Authority {
         } else {
             EvidencePhase::AgentDoorDeclined
         };
+        let record = self.door_record(phase, agent, Some(door));
+        if yes {
+            self.record(&record)
+        } else {
+            self.record_end(&record);
+            Ok(())
+        }
+    }
+
+    pub(crate) fn record_door_answer_refusal(
+        &self,
+        answer: approval::ConfirmationAnswer,
+        agent: &AgentId,
+        door: &str,
+    ) -> AuthorityError {
+        let mut record = self.door_record(EvidencePhase::AgentDoorDeclined, agent, Some(door));
+        let Some(error) = answer.refusal(&mut record) else {
+            return AuthorityError::Unavailable("confirmation_awaiting");
+        };
+        self.record_end(&record);
+        error
+    }
+
+    // The existing door record builder also constructs session refusals.
+    // Every route still goes through the same privacy-sealing writer.
+    fn door_record(
+        &self,
+        phase: EvidencePhase,
+        agent: &AgentId,
+        door: Option<&str>,
+    ) -> EvidenceRecord {
         let mut record = EvidenceRecord::new(
             phase,
             self.clock.wall_ms(),
@@ -778,13 +823,44 @@ impl Authority {
             Privacy::Restricted,
         );
         record.agent = Some(agent.to_string());
-        record.detail.push(("door".into(), door.to_string()));
-        if yes {
-            self.record(&record)
-        } else {
-            self.record_end(&record);
-            Ok(())
+        if let Some(door) = door {
+            record.detail.push(("door".into(), door.into()));
         }
+        record
+    }
+
+    /// An attempted door activation refused by the host's session cell.
+    /// The earlier native answer, if recorded, is never rewritten.
+    pub(crate) fn record_door_halt_refusal(&self, agent: &AgentId, door: Option<&str>) {
+        let mut record = self.door_record(EvidencePhase::AgentDoorDeclined, agent, door);
+        record.failure = Some("halted");
+        record
+            .detail
+            .push(("reason".into(), "door_activation_refused_halted".into()));
+        self.record_end(&record);
+    }
+
+    /// A recorded yes that could not become a usable host-session consent.
+    pub(crate) fn record_consent_halt_refusal(
+        &self,
+        agent: &AgentId,
+        door: &str,
+        kind: run::ConsentKind,
+    ) {
+        let (phase, reason) = match kind {
+            run::ConsentKind::Mission => (
+                EvidencePhase::MissionDeclined,
+                "mission_consent_refused_halted",
+            ),
+            run::ConsentKind::Resume => (
+                EvidencePhase::MissionResumeDeclined,
+                "held_consent_refused_halted",
+            ),
+        };
+        let mut record = self.door_record(phase, agent, Some(door));
+        record.failure = Some("halted");
+        record.detail.push(("reason".into(), reason.into()));
+        self.record_end(&record);
     }
 
     /// Unclean sessions the evidence store reports (advisory only).
@@ -1008,6 +1084,7 @@ impl Authority {
             record.detail.push(("reason".into(), reason.into()));
         }
         Stopped {
+            number: stop.number,
             cancelled: stop.cancelled,
             revoked,
             record,
@@ -1021,6 +1098,18 @@ impl Authority {
         self.record_end(&stopped.record);
     }
 
+    pub(crate) fn write_stop_records_observed(&self, stopped: Stopped) -> StopRecordOutcome {
+        let consequences = self.commitments.write_ends_observed(stopped.revoked);
+        let record = self.record_end(&stopped.record);
+        StopRecordOutcome {
+            ownership_established: true,
+            number: stopped.number,
+            cancelled: stopped.cancelled,
+            consequences,
+            record,
+        }
+    }
+
     /// Lift an emergency stop: only after the owner's native confirmation,
     /// and only the stop the owner confirmed. The stop's number and count
     /// are read once under the runs lock and shown; after the answer a
@@ -1030,6 +1119,17 @@ impl Authority {
     /// stop. A Resumed record is therefore not proof that the stop was
     /// lifted.
     pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        self.resume_with_recovery(confirmer, None)
+    }
+
+    pub(crate) fn resume_with_recovery(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+        recovery: Option<&file_session::RecoveryCheck>,
+    ) -> Result<(), AuthorityError> {
+        if let Some(check) = recovery {
+            check.check()?;
+        }
         // A latched store can record nothing in this process: refused before
         // any dialog, and nothing changes (C-6).
         if self
@@ -1050,7 +1150,11 @@ impl Authority {
             stop_number: stop.number,
             runs_cancelled_by_the_stop: stop.cancelled,
         };
-        if !confirmer.confirm_resume(&request) {
+        let confirmed = confirmer.confirm_resume(&request);
+        if let Some(check) = recovery {
+            check.check()?;
+        }
+        if !confirmed {
             return Err(AuthorityError::Declined);
         }
         if self.runs.check_lift(request.stop_number).map_err(refused)? == Lift::AlreadyLifted {
@@ -1072,13 +1176,38 @@ impl Authority {
         ));
         // Evidence first: an unrecorded resume does not happen.
         self.record(&record)?;
-        self.runs.lift(request.stop_number).map_err(refused)?;
-        Ok(())
+        #[cfg(test)]
+        self.hooks().fire("resume.before_lift");
+        let result = match recovery {
+            Some(check) => self.runs.lift_with_recovery(request.stop_number, check),
+            None => self.runs.lift(request.stop_number),
+        }
+        .map_err(refused);
+        if matches!(result, Err(AuthorityError::Halted)) {
+            // The earlier Resumed record is the confirmation, not proof of a
+            // lift. Append the refusal; never rewrite that earlier evidence.
+            record.phase = EvidencePhase::Denied;
+            record.failure = Some("halted");
+            record
+                .detail
+                .push(("reason".into(), "recovery_lift_refused_halted".into()));
+            self.record_end(&record);
+        }
+        result.map(|_| ())
     }
+}
+
+pub(crate) struct StopRecordOutcome {
+    pub(crate) ownership_established: bool,
+    pub(crate) number: u64,
+    pub(crate) cancelled: usize,
+    pub(crate) consequences: halt::BatchOutcome,
+    pub(crate) record: EndStatus,
 }
 
 /// An emergency stop that has taken effect, its records still to write.
 pub(crate) struct Stopped {
+    number: u64,
     pub(crate) cancelled: usize,
     revoked: commitment::Unwritten,
     record: EvidenceRecord,
@@ -1146,6 +1275,7 @@ fn summary_digest(summary: &[String]) -> String {
 /// What a resume the run registry refused returns.
 fn refused(refusal: Refusal) -> AuthorityError {
     match refusal {
+        Refusal::Halted => AuthorityError::Halted,
         Refusal::Superseded => AuthorityError::ResumeSuperseded,
         Refusal::Exhausted => AuthorityError::EmergencyStopped,
         Refusal::TooLate => AuthorityError::Closed("the desktop is quitting"),

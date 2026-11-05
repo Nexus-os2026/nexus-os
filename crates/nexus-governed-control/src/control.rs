@@ -42,6 +42,10 @@ pub struct EffectOutput {
 
 /// An effect prepared by a domain actuator, waiting for its commitment.
 pub(crate) trait PendingEffect: Send {
+    fn bind_commitment(&self, _id: CommitmentId) -> Result<(), AuthorityError> {
+        Ok(())
+    }
+
     /// Resolve the target again, immediately before the effect, and return
     /// its identity digest (it must equal the committed one).
     fn revalidate(&self) -> Result<Digest, AuthorityError>;
@@ -114,34 +118,56 @@ impl PendingTable {
 
 /// A place held for one proposal while it is prepared: filled by its
 /// effect, or given back when dropped (the preparation was refused).
-struct Place<'a> {
+pub(crate) struct Place<'a> {
     control: &'a Control,
     run: RunId,
     held: bool,
+    cell: Option<crate::authority::file_session::HaltCell>,
 }
 
 impl Place<'_> {
     /// Hold the effect of a prepared commitment; one that ended meanwhile
     /// (its run was cancelled while it was prepared) is not held.
-    fn fill(mut self, id: CommitmentId, pending: Pending) {
+    fn fill(
+        mut self,
+        id: CommitmentId,
+        pending: Pending,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<(), AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         #[cfg(test)]
         self.control
             .authority
             .hooks()
             .fire(crate::test_hooks::at::PLACE_BEFORE_FILL);
-        let unheld = {
+        let (unheld, refused) = {
             let mut table = self.control.pending();
             table.give_back(self.run);
             self.held = false;
-            if self.control.authority.commitments().is_unconsumed(id) {
+            let unconsumed = self.control.authority.commitments().is_unconsumed(id);
+            #[cfg(test)]
+            self.control
+                .authority
+                .hooks()
+                .fire("decision8.pending_validated");
+            #[cfg(test)]
+            crate::authority::file_session::probe(halt, "registry.pending_install.before");
+            let refused = crate::authority::file_session::check_halt(halt).err();
+            if unconsumed && refused.is_none() {
                 table.held.insert(id, pending);
-                None
+                #[cfg(test)]
+                crate::authority::file_session::probe(halt, "registry.pending_install.after");
+                (None, None)
             } else {
-                Some(pending)
+                (Some(pending), refused)
             }
         };
         // An effect not held is dropped outside the lock.
         drop(unheld);
+        match refused {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }
 
@@ -150,6 +176,8 @@ impl Drop for Place<'_> {
         if self.held {
             if let Ok(mut table) = self.control.pending.lock() {
                 table.give_back(self.run);
+            } else if let Some(cell) = &self.cell {
+                cell.fail_session();
             }
         }
     }
@@ -186,19 +214,32 @@ impl Control {
 
     /// Check for room and take a place for a proposal in `run`, at once,
     /// under the lock.
-    fn place(&self, run: RunId, limit: usize) -> Option<Place<'_>> {
+    fn place(
+        &self,
+        run: RunId,
+        limit: usize,
+        request: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<Place<'_>, AuthorityError> {
         let mut table = self.pending();
         let in_run = table.held.values().filter(|p| p.run == run).count()
             + table.reserved_by_run.get(&run).copied().unwrap_or(0);
         if table.held.len() + table.reserved >= limit || in_run >= MAX_PENDING_PER_RUN {
-            return None;
+            return Err(AuthorityError::Capacity);
         }
+        #[cfg(test)]
+        let cell = self.authority.runs().session_cell(run).ok().flatten();
+        #[cfg(test)]
+        crate::authority::file_session::probe(cell.as_ref(), "registry.pending_reserve.before");
+        crate::authority::file_session::check_halt(request)?;
         table.reserved += 1;
         *table.reserved_by_run.entry(run).or_default() += 1;
-        Some(Place {
+        #[cfg(test)]
+        crate::authority::file_session::probe(cell.as_ref(), "registry.pending_reserve.after");
+        Ok(Place {
             control: self,
             run,
             held: true,
+            cell: request.cloned(),
         })
     }
 
@@ -207,11 +248,61 @@ impl Control {
     }
 
     /// Commit to a prepared effect for `agent` in `run`. Nothing happens yet.
+    pub(crate) fn reserve_host_proposal(
+        &self,
+        run: RunId,
+    ) -> Result<(Place<'_>, crate::authority::commitment::PreparationSlot), AuthorityError> {
+        self.reserve_host_proposal_request(run, None)
+    }
+    pub(crate) fn reserve_host_proposal_request(
+        &self,
+        run: RunId,
+        request: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<(Place<'_>, crate::authority::commitment::PreparationSlot), AuthorityError> {
+        self.authority.runs().admit_file_request(run, request)?;
+        let limit = match self.authority.runs().class(run) {
+            Some(RunClass::Owner) => MAX_PENDING,
+            Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
+            None => return Err(AuthorityError::UnknownRun),
+        };
+        let cell = match request {
+            Some(cell) => cell.clone(),
+            None => self
+                .authority
+                .runs()
+                .session_cell(run)?
+                .ok_or(AuthorityError::Halted)?,
+        };
+        let place = self.place(run, limit, Some(&cell))?;
+        let slot = self.authority.commitments().reserve_preparation(cell)?;
+        Ok((place, slot))
+    }
+
+    pub(crate) fn propose_reserved(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        preparation: Preparation,
+        reservation: (Place<'_>, crate::authority::commitment::PreparationSlot),
+    ) -> Result<CommitmentView, AuthorityError> {
+        self.propose_with_reservation(agent, run, preparation, Some(reservation))
+    }
+
     pub(crate) fn propose(
         &self,
         agent: &AgentId,
         run: RunId,
         preparation: Preparation,
+    ) -> Result<CommitmentView, AuthorityError> {
+        self.propose_with_reservation(agent, run, preparation, None)
+    }
+
+    fn propose_with_reservation(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        preparation: Preparation,
+        reservation: Option<(Place<'_>, crate::authority::commitment::PreparationSlot)>,
     ) -> Result<CommitmentView, AuthorityError> {
         let Preparation {
             action,
@@ -235,30 +326,68 @@ impl Control {
             Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
             None => return refuse(AuthorityError::UnknownRun),
         };
-        let place = match self.place(run, limit) {
-            Some(place) => place,
+        let halt = match reservation
+            .as_ref()
+            .and_then(|(place, _)| place.cell.clone())
+        {
+            Some(cell) => Some(cell),
+            None => match self.authority.runs().session_cell(run) {
+                Ok(cell) => cell,
+                Err(error) => return refuse(error),
+            },
+        };
+        if let Err(error) = crate::authority::file_session::check_halt(halt.as_ref()) {
+            return refuse(error);
+        }
+        let (place, slot) = match reservation {
+            Some((place, slot)) if std::ptr::eq(place.control, self) && place.run == run => {
+                (place, Some(slot))
+            }
+            Some(_) => return refuse(AuthorityError::Halted),
             None => {
-                self.prune();
-                match self.place(run, limit) {
-                    Some(place) => place,
-                    None => return refuse(AuthorityError::Capacity),
-                }
+                let place = match self.place(run, limit, halt.as_ref()) {
+                    Ok(place) => place,
+                    Err(AuthorityError::Capacity) => {
+                        self.prune();
+                        match self.place(run, limit, halt.as_ref()) {
+                            Ok(place) => place,
+                            Err(error) => return refuse(error),
+                        }
+                    }
+                    Err(error) => return refuse(error),
+                };
+                (place, None)
             }
         };
-        // The place is held while the commitment is prepared (and its
-        // preparation recorded) with no lock held.
-        let view = self
-            .authority
-            .commitments()
-            .prepare(agent, run, action, ttl)?;
-        place.fill(
+        let view = match slot {
+            Some(slot) => self
+                .authority
+                .commitments()
+                .prepare_reserved(agent, run, action, ttl, slot)?,
+            None => self
+                .authority
+                .commitments()
+                .prepare(agent, run, action, ttl)?,
+        };
+        if let Err(error) = effect.bind_commitment(view.id) {
+            self.authority.commitments().refuse_pending_install(view.id);
+            return Err(error);
+        }
+        if let Err(error) = place.fill(
             view.id,
             Pending {
                 agent: agent.clone(),
                 run,
                 effect,
             },
-        );
+            halt.as_ref(),
+        ) {
+            // No pending effect was installed. End the earlier commitment
+            // truthfully outside the pending-table hold, keeping its pin/ack
+            // bookkeeping under the existing File lifecycle rules.
+            self.authority.commitments().refuse_pending_install(view.id);
+            return Err(error);
+        }
         Ok(view)
     }
 
@@ -410,6 +539,20 @@ impl Control {
     /// The effects of an emergency stop, its records not yet written: every
     /// run cancelled, every unconsumed commitment ended, the generation
     /// moved, every pending effect dropped.
+    pub(crate) fn close_ready(&self) -> bool {
+        self.stop_metadata_known()
+            && self
+                .pending
+                .lock()
+                .is_ok_and(|p| p.held.is_empty() && p.reserved == 0 && p.reserved_by_run.is_empty())
+    }
+
+    pub(crate) fn stop_metadata_known(&self) -> bool {
+        !self.pending.is_poisoned()
+            && self.authority.runs().stop_metadata_known()
+            && self.authority.commitments().stop_metadata_known()
+    }
+
     pub(crate) fn stop_effects(&self, reason: Option<&'static str>) -> Stopped {
         let stopped = self.authority.stop_effects(reason);
         let dropped = self.pending().take_unless(|_, _| false);

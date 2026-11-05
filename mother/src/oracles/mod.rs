@@ -893,3 +893,6 @@ impl World {
 pub(crate) mod lite_support;
 
 pub(crate) mod lite_engagement_hooks;
+
+#[cfg(target_os = "linux")]
+pub(crate) mod session_support;

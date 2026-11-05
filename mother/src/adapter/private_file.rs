@@ -37,13 +37,46 @@
 
 use crate::journal::IoKind;
 use crate::private::{ContentId, ContentKind, PrivateError, PrivateStore, MAX_CONTENT_BYTES};
+use nexus_governed_control::host_session::{MotherStep, PrivateObligation, SessionContext};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+enum PrivateMode {
+    Legacy,
+    Session(SessionContext),
+}
+impl PrivateMode {
+    fn reserve(
+        &self,
+        temporary: &Path,
+        retained: Option<&Path>,
+    ) -> std::io::Result<Option<PrivateObligation>> {
+        match self {
+            Self::Legacy => Ok(None),
+            Self::Session(context) => context
+                .reserve_private(temporary, retained)
+                .map(Some)
+                .map_err(|_| std::io::Error::other("session private inventory unavailable")),
+        }
+    }
+    fn admit(&self, step: MotherStep) -> std::io::Result<()> {
+        match self {
+            Self::Legacy => Ok(()),
+            Self::Session(context) => context.admit(step).map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "session private sink refused",
+                )
+            }),
+        }
+    }
+}
+
 /// Mother's private store on disk.
 pub struct FilePrivate {
+    mode: PrivateMode,
     /// The store's directory, canonical.
     dir: PathBuf,
     /// The owner of the store's directory (Unix), which every directory
@@ -61,11 +94,20 @@ fn io(e: std::io::Error) -> PrivateError {
 
 /// Sync a directory (its entries durable). Tests see every call and can
 /// make one fail ([`seam`]).
-fn sync_dir(dir: &Path) -> std::io::Result<()> {
+fn sync_dir(dir: &Path, mode: &PrivateMode) -> std::io::Result<()> {
+    #[cfg(test)]
+    session_probe::before("private_parent_sync");
     #[cfg(test)]
     seam::sync(dir)?;
     #[cfg(unix)]
-    std::fs::File::open(dir)?.sync_all()?;
+    let directory = std::fs::File::open(dir)?;
+    mode.admit(MotherStep::PrivateParentSync)?;
+    #[cfg(test)]
+    session_probe::entered("private_parent_sync");
+    #[cfg(unix)]
+    directory.sync_all()?;
+    #[cfg(test)]
+    session_probe::after("private_parent_sync");
     Ok(())
 }
 
@@ -87,7 +129,7 @@ fn parent_of(dir: &Path) -> &Path {
 
 /// Create every missing level of `dir`, each on its own (0700), each
 /// synced with its parent as it is created. Every failure is returned.
-fn create_levels(dir: &Path) -> Result<(), PrivateError> {
+fn create_levels(dir: &Path, mode: &PrivateMode) -> Result<(), PrivateError> {
     let mut missing = Vec::new();
     let mut at = dir;
     loop {
@@ -104,22 +146,43 @@ fn create_levels(dir: &Path) -> Result<(), PrivateError> {
         }
     }
     for level in missing.iter().rev() {
+        let obligation = mode.reserve(level, Some(level)).map_err(io)?;
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {
             use std::os::unix::fs::DirBuilderExt;
             builder.mode(0o700);
         }
+        #[cfg(test)]
+        session_probe::before("private_mkdir");
+        if let Err(error) = mode.admit(MotherStep::PrivateDirectory) {
+            if let Some(obligation) = obligation {
+                obligation.complete();
+            }
+            return Err(io(error));
+        }
+        #[cfg(test)]
+        session_probe::entered("private_mkdir");
         match builder.create(level) {
             Ok(()) => {}
             // Made meanwhile by another opener: synced here too.
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(io(e)),
         }
+        if let Some(obligation) = &obligation {
+            obligation
+                .observe_created(std::fs::symlink_metadata(level).map_err(io)?)
+                .map_err(|_| PrivateError::Io(IoKind::Other))?;
+        }
         #[cfg(test)]
         seam::created(level);
-        sync_dir(level).map_err(io)?;
-        sync_dir(parent_of(level)).map_err(io)?;
+        #[cfg(test)]
+        session_probe::after("private_mkdir");
+        sync_dir(level, mode).map_err(io)?;
+        sync_dir(parent_of(level), mode).map_err(io)?;
+        if let Some(obligation) = obligation {
+            obligation.complete();
+        }
     }
     Ok(())
 }
@@ -190,19 +253,63 @@ fn chain_of(dir: &Path, owner: u32) -> Result<Vec<PathBuf>, PrivateError> {
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Default)]
+struct WriteState {
+    creation_entered: bool,
+    created: bool,
+    published: bool,
+    parent: Option<std::fs::Metadata>,
+    temporary: Option<std::fs::Metadata>,
+}
+
+fn same_resource(before: Option<&std::fs::Metadata>, path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        before.is_some_and(|before| {
+            std::fs::symlink_metadata(path).is_ok_and(|now| {
+                (before.dev(), before.ino(), before.file_type())
+                    == (now.dev(), now.ino(), now.file_type())
+            })
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (before, path);
+        false
+    }
+}
+
+#[path = "private_session_oracles_tests.rs"]
+#[cfg(test)]
+mod session_probe;
+
 impl FilePrivate {
     /// The store at `dir` (created private if absent), its chain synced.
     pub fn open(dir: &Path) -> Result<Self, PrivateError> {
-        create_levels(dir)?;
+        Self::open_mode(dir, PrivateMode::Legacy)
+    }
+
+    pub fn open_session(dir: &Path, context: SessionContext) -> Result<Self, PrivateError> {
+        Self::open_mode(dir, PrivateMode::Session(context))
+    }
+
+    fn open_mode(dir: &Path, mode: PrivateMode) -> Result<Self, PrivateError> {
+        create_levels(dir, &mode)?;
         // The path as given: a link is refused before it is resolved.
         let owner = private_dir(dir, None)?;
         let dir = std::fs::canonicalize(dir).map_err(io)?;
         private_dir(&dir, Some(owner))?;
         let chain = chain_of(&dir, owner)?;
         for level in chain.iter().rev() {
-            sync_dir(level).map_err(io)?;
+            sync_dir(level, &mode).map_err(io)?;
         }
-        Ok(Self { dir, owner, chain })
+        Ok(Self {
+            dir,
+            owner,
+            chain,
+            mode,
+        })
     }
 
     pub fn dir(&self) -> &Path {
@@ -214,14 +321,22 @@ impl FilePrivate {
     fn kind_dir(&self, kind: ContentKind) -> Result<PathBuf, PrivateError> {
         private_dir(&self.dir, Some(self.owner))?;
         let dir = self.dir.join(kind.as_str());
-        create_levels(&dir)?;
+        create_levels(&dir, &self.mode)?;
         private_dir(&dir, Some(self.owner))?;
         Ok(dir)
     }
 
     /// The blob: temp, fsync, rename; then the chain, from the top down,
     /// and the kind directory last.
-    fn write(&self, dir: &Path, temp: &Path, target: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    fn write(
+        &self,
+        dir: &Path,
+        temp: &Path,
+        target: &Path,
+        bytes: &[u8],
+        obligation: Option<&PrivateObligation>,
+        state: &mut WriteState,
+    ) -> std::io::Result<()> {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -229,20 +344,80 @@ impl FilePrivate {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options.open(temp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        drop(file);
-        std::fs::rename(temp, target)?;
-        for level in self.chain.iter().rev() {
-            sync_dir(level)?;
+        if obligation.is_some() {
+            state.parent = Some(std::fs::symlink_metadata(dir)?);
         }
-        sync_dir(dir)?;
+        #[cfg(test)]
+        session_probe::before("private_temp_create");
+        self.mode.admit(MotherStep::PrivateTemporary)?;
+        #[cfg(test)]
+        session_probe::entered("private_temp_create");
+        state.creation_entered = true;
+        let mut file = options.open(temp)?;
+        state.created = true;
+        if let Some(obligation) = obligation {
+            let metadata = file.metadata()?;
+            state.temporary = Some(metadata.clone());
+            obligation
+                .observe_created(metadata)
+                .map_err(|_| std::io::Error::other("private inventory identity unavailable"))?;
+        }
+        #[cfg(test)]
+        session_probe::after("private_temp_create");
+        #[cfg(test)]
+        session_probe::before("private_write");
+        self.mode.admit(MotherStep::PrivateWrite)?;
+        #[cfg(test)]
+        session_probe::entered("private_write");
+        #[cfg(test)]
+        session_probe::write_result()?;
+        file.write_all(bytes)?;
+        #[cfg(test)]
+        session_probe::after("private_write");
+        #[cfg(test)]
+        session_probe::before("private_sync");
+        self.mode.admit(MotherStep::PrivateSync)?;
+        #[cfg(test)]
+        session_probe::entered("private_sync");
+        file.sync_all()?;
+        #[cfg(test)]
+        session_probe::after("private_sync");
+        drop(file);
+        #[cfg(test)]
+        session_probe::before("private_rename");
+        self.mode.admit(MotherStep::PrivateRename)?;
+        #[cfg(test)]
+        session_probe::entered("private_rename");
+        std::fs::rename(temp, target)?;
+        state.published = true;
+        #[cfg(test)]
+        session_probe::after("private_rename");
+        for level in self.chain.iter().rev() {
+            sync_dir(level, &self.mode)?;
+        }
+        sync_dir(dir, &self.mode)?;
         Ok(())
     }
 }
 
 impl PrivateStore for FilePrivate {
+    fn continue_session(
+        &self,
+        context: SessionContext,
+    ) -> Result<std::sync::Arc<dyn PrivateStore>, PrivateError> {
+        let PrivateMode::Session(original) = &self.mode else {
+            return Err(PrivateError::NotPrivate);
+        };
+        if original.session() != context.session() {
+            return Err(PrivateError::NotPrivate);
+        }
+        Ok(std::sync::Arc::new(Self {
+            mode: PrivateMode::Session(context),
+            dir: self.dir.clone(),
+            owner: self.owner,
+            chain: self.chain.clone(),
+        }))
+    }
     fn put(&self, kind: ContentKind, bytes: &[u8]) -> Result<ContentId, PrivateError> {
         if bytes.len() as u64 > MAX_CONTENT_BYTES {
             return Err(PrivateError::TooLarge);
@@ -258,9 +433,41 @@ impl PrivateStore for FilePrivate {
             TEMP.fetch_add(1, Ordering::SeqCst)
         ));
         let target = dir.join(id.to_hex());
-        let written = self.write(&dir, &temp, &target, bytes);
+        let obligation = self.mode.reserve(&temp, Some(&target)).map_err(io)?;
+        let mut state = WriteState::default();
+        let written = self.write(&dir, &temp, &target, bytes, obligation.as_ref(), &mut state);
+        let mut disposed = !state.creation_entered;
         if written.is_err() {
-            let _ = std::fs::remove_file(&temp);
+            let owned = matches!(self.mode, PrivateMode::Legacy)
+                || (state.created
+                    && !state.published
+                    && same_resource(state.parent.as_ref(), &dir)
+                    && same_resource(state.temporary.as_ref(), &temp));
+            #[cfg(test)]
+            session_probe::before("private_error_remove");
+            if owned && self.mode.admit(MotherStep::PrivateErrorRemoval).is_ok() {
+                #[cfg(test)]
+                session_probe::entered("private_error_remove");
+                let removed = std::fs::remove_file(&temp);
+                #[cfg(test)]
+                session_probe::after("private_error_remove");
+                if matches!(self.mode, PrivateMode::Session(_)) {
+                    // Rename may already have published an intentionally
+                    // retained blob. Removing its old temporary name then
+                    // proves nothing about the failed final synchronization.
+                    if state.created && !state.published && removed.is_ok() {
+                        disposed = matches!(std::fs::symlink_metadata(&temp), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+                            && same_resource(state.parent.as_ref(), &dir)
+                            && sync_dir(&dir, &self.mode).is_ok()
+                            && same_resource(state.parent.as_ref(), &dir);
+                    }
+                }
+            }
+        }
+        if written.is_ok() || disposed {
+            if let Some(obligation) = obligation {
+                obligation.complete();
+            }
         }
         written.map_err(io)?;
         Ok(id)

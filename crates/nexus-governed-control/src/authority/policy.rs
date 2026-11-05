@@ -251,11 +251,19 @@ struct Room<'a> {
 }
 
 impl Room<'_> {
-    fn fill(mut self, grant: Grant) {
+    fn fill(
+        mut self,
+        grant: Grant,
+        halt: Option<&super::file_session::HaltCell>,
+    ) -> Result<(), AuthorityError> {
         let mut grants = self.grants.lock().expect("grant store");
+        #[cfg(test)]
+        super::file_session::probe(halt, "setup.grant_install");
+        super::file_session::check_halt(halt)?;
         grants.reserved = grants.reserved.saturating_sub(1);
         grants.map.insert(grant.id, grant);
         self.held = false;
+        Ok(())
     }
 }
 
@@ -291,12 +299,24 @@ impl GrantStore {
 
     /// Ask the owner, natively, to grant `scope` for `ttl` (at most a day).
     /// Only a confirmed request creates a grant.
+    #[cfg(test)]
     pub(crate) fn request(
         &self,
         scope: GrantScope,
         ttl: Duration,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<GrantId, AuthorityError> {
+        self.request_with_halt(scope, ttl, confirmer, None)
+    }
+
+    pub(crate) fn request_with_halt(
+        &self,
+        scope: GrantScope,
+        ttl: Duration,
+        confirmer: &dyn ControlConfirmer,
+        halt: Option<&super::file_session::HaltCell>,
+    ) -> Result<GrantId, AuthorityError> {
+        super::file_session::check_halt(halt)?;
         let ttl = ttl.min(MAX_GRANT_TTL);
         let lines = scope.describe();
         // The owner must read exactly what is granted.
@@ -308,11 +328,14 @@ impl GrantStore {
             lines,
             expires_in_secs: ttl.as_secs(),
         };
-        if !confirmer.confirm_grant(&request) {
-            // The owner's decline has taken effect and permits nothing: its
-            // record is an end record, and may only be owed (C-5).
-            self.record_end(&self.record_of(EvidencePhase::GrantDeclined, None, &scope));
-            return Err(AuthorityError::Declined);
+        #[cfg(test)]
+        super::file_session::probe(halt, "setup.grant_confirm");
+        super::file_session::check_halt(halt)?;
+        let answer = confirmer.confirm_grant_answer(&request);
+        let mut refusal = self.record_of(EvidencePhase::GrantDeclined, None, &scope);
+        if let Some(error) = answer.refusal(&mut refusal) {
+            self.record_end(&refusal);
+            return Err(error);
         }
         let id = GrantId::fresh();
         let now = self.clock.monotonic_ms();
@@ -343,9 +366,21 @@ impl GrantStore {
             grants: &self.grants,
             held: true,
         };
-        // Evidence first: an unrecorded grant is never issued.
+        // Check before evidence where possible. A later ingress cannot
+        // erase earlier evidence; append a route-specific refusal instead.
+        #[cfg(test)]
+        super::file_session::probe(halt, "setup.grant_issue");
+        super::file_session::check_halt(halt)?;
         self.record(EvidencePhase::GrantIssued, Some(id), &scope)?;
-        room.fill(grant);
+        if let Err(error) = room.fill(grant, halt) {
+            let mut record = self.record_of(EvidencePhase::GrantDeclined, Some(id), &scope);
+            record.failure = Some(error.class());
+            record
+                .detail
+                .push(("reason".into(), "grant_issue_refused_halted".into()));
+            self.record_end(&record);
+            return Err(error);
+        }
         Ok(id)
     }
 

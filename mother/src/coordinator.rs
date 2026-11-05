@@ -90,10 +90,14 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 mod lite;
 mod lite_intent;
+mod session_close;
+pub use session_close::PreparedSessionEnd;
 #[cfg(test)]
 mod lite_oracles;
 mod lite_settle;
 pub use lite::FileSession;
+mod session_result;
+pub use session_result::{TerminalFacts, TerminalIntent};
 
 /// The most missions one coordinator keeps.
 pub const MAX_MISSIONS: usize = 1024;
@@ -316,6 +320,9 @@ struct Mission {
     settlement: Option<(u64, SettleCause)>,
     acks: Vec<PendingAction>,
     terminal_uncertain: bool,
+    // Exact terminal append result, independent of later store failures and
+    // readable-but-unacknowledged bytes. Never inferred from an older prefix.
+    terminal_record: Option<(Trigger, Option<u64>)>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -365,6 +372,7 @@ impl Mission {
             settlement: None,
             acks: Vec::new(),
             terminal_uncertain: false,
+            terminal_record: None,
         }
     }
 
@@ -514,6 +522,7 @@ impl Mission {
 }
 
 struct Inner {
+    session_context: Option<nexus_governed_control::host_session::SessionContext>,
     file_cell: Option<nexus_governed_control::authority::file_session::HaltCell>,
     store: Box<dyn JournalStore>,
     head: String,
@@ -549,7 +558,21 @@ struct Inner {
     details: VecDeque<(MissionId, WorkingDetail)>,
 }
 
+#[path = "adapter/session_journal_oracles_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_journal_oracles;
+
 impl Inner {
+    fn admit_session(
+        &self,
+        step: nexus_governed_control::host_session::MotherStep,
+    ) -> Result<(), CoordinatorError> {
+        if let Some(context) = &self.session_context {
+            context.admit(step).map_err(|_| CoordinatorError::Stopped)?;
+        }
+        Ok(())
+    }
     /// Journal one record, after this session's opening and any hold not
     /// journaled yet.
     fn append(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
@@ -645,7 +668,58 @@ impl Inner {
             }));
         }
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
-        if let Err(e) = self.store.append(&entry.to_line()) {
+        let work = match &entry.event {
+            Event::Drafted { .. }
+            | Event::FileModeSelected
+            | Event::LaneInvoked { .. }
+            | Event::LaneReturned { .. }
+            | Event::EffectDispatched { .. }
+            | Event::EffectSettled { .. }
+            | Event::ApprovalPending { .. }
+            | Event::Resumed => true,
+            Event::Transition { trigger } => matches!(
+                trigger,
+                Trigger::Revise { .. }
+                    | Trigger::Submit { .. }
+                    | Trigger::Consent { .. }
+                    | Trigger::Start
+                    | Trigger::PhaseDone
+                    | Trigger::VerifyPass
+                    | Trigger::AwaitApproval { .. }
+                    | Trigger::ActionApproved { .. }
+            ),
+            Event::ConsentRefused { .. }
+            | Event::LaneOvertaken { .. }
+            | Event::EffectRefused { .. }
+            | Event::ApprovalClosed { .. }
+            | Event::SessionOpened
+            | Event::SessionClosed
+            | Event::Held { .. }
+            | Event::SettlementStarted { .. } => false,
+        };
+        let line = entry.to_line();
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::at("before", &entry);
+        #[cfg(all(test, target_os = "linux"))]
+        lite::session_terminal_fix2::before(&entry);
+        if work {
+            self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
+        }
+        // Serialization and refused work admission are not terminal intent.
+        // Retain an attempt only once this exact append has been admitted;
+        // an entered append which fails must still report recording unknown.
+        if let Event::Transition { trigger } = &entry.event {
+            if self
+                .missions
+                .get(&mission)
+                .is_some_and(|m| transition(m.state, trigger).is_ok_and(|to| to.is_terminal()))
+            {
+                self.mission(mission)?
+                    .terminal_record
+                    .get_or_insert((trigger.clone(), None));
+            }
+        }
+        if let Err(e) = self.store.append(&line) {
             // Fail closed, durably: a journal that may have lost a
             // transition (a Stop) must not be reopened as if it had not.
             // If poisoning fails too, the journal reopens, but its session
@@ -665,6 +739,8 @@ impl Inner {
             }
             return Err(CoordinatorError::Journal(e));
         }
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::at("after", &entry);
         self.head = entry.hash;
         self.next_seq += 1;
         Ok(entry.seq)
@@ -718,12 +794,15 @@ impl Inner {
     ) -> Result<MissionState, CoordinatorError> {
         let from = self.mission(id)?.state;
         let to = transition(from, &trigger).map_err(|e| refusal(from, e))?;
-        self.append(
+        let sequence = self.append(
             id,
             Event::Transition {
                 trigger: trigger.clone(),
             },
         )?;
+        if to.is_terminal() {
+            self.mission(id)?.terminal_record = Some((trigger.clone(), Some(sequence)));
+        }
         self.mission(id)?.apply(&trigger, to, mono_now);
         Ok(to)
     }
@@ -985,11 +1064,12 @@ impl<P: EffectPort> Coordinator<P> {
         let coordinator = Self {
             file_attachment,
             file: None,
-            port,
+            port: port.clone(),
             lanes,
             clock,
             private: Arc::new(private),
             inner: Mutex::new(Inner {
+                session_context: port.session_context(),
                 file_cell: None,
                 store: Box::new(store),
                 head: entries
@@ -1286,6 +1366,11 @@ impl<P: EffectPort> Coordinator<P> {
             inner.usable()?;
             inner.clear_detail(id);
             let (seq, number) = (inner.next_seq, inner.next_request);
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("before", "consent_reserve");
+            inner.admit_session(nexus_governed_control::host_session::MotherStep::ConsentReservation)?;
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("entered", "consent_reserve");
             inner.next_request += 1;
             let mission = inner.mission(id)?;
             mission.not_held()?;
@@ -1302,6 +1387,8 @@ impl<P: EffectPort> Coordinator<P> {
                 ]);
             }
             mission.asking = Some(request.clone());
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("after", "consent_reserve");
             Ok((request, mission.generation))
         })
     }
@@ -1367,11 +1454,17 @@ impl<P: EffectPort> Coordinator<P> {
                     if mission.file_mode {
                         mission.consent_request = Some(asked.request.clone());
                         if let Some(file) = &self.file {
-                            file.consent_at(
-                                mono,
-                                at_wall_ms,
-                                mission.contract()?.budget.max_duration_ms,
-                            );
+                            let duration = mission.contract()?.budget.max_duration_ms;
+                            file.consent_at(mono, at_wall_ms, duration);
+                            if let Some(context) = self.port.session_context() {
+                                context
+                                    .narrow_mission_deadlines(
+                                        self.clock.clone(),
+                                        mono.saturating_add(duration),
+                                        at_wall_ms.saturating_add(duration),
+                                    )
+                                    .map_err(|_| CoordinatorError::Stopped)?;
+                            }
                         }
                     }
                     Ok(state)
@@ -1449,8 +1542,20 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 other => phase_roles(other),
             };
+            let context = inner.session_context.clone();
             let mission = inner.mission(id)?;
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("before", "phase_reserve");
+            if let Some(context) = context {
+                context
+                    .admit(nexus_governed_control::host_session::MotherStep::PhaseReservation)
+                    .map_err(|_| CoordinatorError::Stopped)?;
+            }
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("entered", "phase_reserve");
             mission.busy = true;
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("after", "phase_reserve");
             Ok(Start::Run(report, from, roles, mission.generation))
         })?;
         let (mut report, from, roles, generation) = match start {
@@ -1721,7 +1826,20 @@ impl<P: EffectPort> Coordinator<P> {
                     .file_invocations
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             }
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("before", "lane_invoke");
+            #[cfg(all(test, target_os = "linux"))]
+            lite::session_budget_fix1::before_admit();
+            if let Some(context) = self.port.session_context() {
+                context
+                    .admit(nexus_governed_control::host_session::MotherStep::LaneInvocation)
+                    .map_err(|_| CoordinatorError::Stopped)?;
+            }
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("entered", "lane_invoke");
             let output = lane.invoke(&input);
+            #[cfg(all(test, target_os = "linux"))]
+            session_journal_oracles::call("after", "lane_invoke");
             self.file_boundary(id)?;
 
             // Keep the answer only if the reservation still holds.
@@ -1992,7 +2110,19 @@ impl<P: EffectPort> Coordinator<P> {
         roles_left: &[LaneRole],
     ) -> Result<MissionState, CoordinatorError> {
         let bytes = serde_json::to_vec(rest).expect("effect requests serialise");
-        let content = match self.private.put(ContentKind::PausedPhase, &bytes) {
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::call("before", "paused_store");
+        if let Some(context) = self.port.session_context() {
+            context
+                .admit(nexus_governed_control::host_session::MotherStep::PrivateWrite)
+                .map_err(|_| CoordinatorError::Stopped)?;
+        }
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::call("entered", "paused_store");
+        let stored = self.private.put(ContentKind::PausedPhase, &bytes);
+        #[cfg(all(test, target_os = "linux"))]
+        session_journal_oracles::call("after", "paused_store");
+        let content = match stored {
             Ok(content) => content,
             Err(e) => {
                 let _ = self.end(id, BlockReason::AwaitingOwnerApproval);
@@ -2051,6 +2181,48 @@ impl<P: EffectPort> Coordinator<P> {
             return Err(CoordinatorError::Journal(e));
         }
         waited
+    }
+
+    fn publish_file_wait(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        let target = self.peek(|inner| {
+            let m = inner
+                .missions
+                .get(&id)
+                .ok_or(CoordinatorError::UnknownMission)?;
+            if m.state != MissionState::AwaitingApproval {
+                return Ok(None);
+            }
+            if m.busy {
+                return Err(CoordinatorError::Stopped);
+            }
+            Ok(m.open_action
+                .clone()
+                .map(|(effect, pending)| (effect, pending, m.generation)))
+        })?;
+        let Some((effect, pending, generation)) = target else {
+            return Ok(());
+        };
+        let Some(prepared) = self
+            .port
+            .prepare_file_wait(id, effect, &pending)
+            .map_err(|e| CoordinatorError::Broker(e.class))?
+        else {
+            return Ok(());
+        };
+        self.step(|inner| {
+            let m = inner.mission(id)?;
+            if m.state != MissionState::AwaitingApproval
+                || m.busy
+                || m.generation != generation
+                || m.waiting.as_ref().is_none_or(|wait| wait.effect != effect)
+                || m.open_action.as_ref() != Some(&(effect, pending))
+            {
+                return Err(CoordinatorError::Stopped);
+            }
+            self.port
+                .publish_file_wait(prepared, generation)
+                .map_err(|e| CoordinatorError::Broker(e.class))
+        })
     }
 
     /// End a mission for `reason` (Blocked) and cancel what it opened at
@@ -2743,6 +2915,102 @@ enum Session {
 /// live, and records must come in the order the live coordinator writes
 /// them; anything else found is refused, with a closed code. P0: a mission
 /// is rebuilt from its references alone; recovery loads its content.
+/// A read-only account of verified Mother history. No port is attached, no
+/// run is adopted, no consent is installed and no transition is appended.
+#[derive(Clone, Debug)]
+pub struct HistoryInspection {
+    pub records: usize,
+    pub session_end_recorded: bool,
+    pub missions: Vec<(MissionId, MissionState)>,
+    pub unresolved: Vec<MissionId>,
+    /// Terminal records survive; lost process-local acknowledgement does not.
+    pub prior_acknowledgement_unavailable: usize,
+    pub details: Vec<HistoryMission>,
+}
+
+/// Verified identifiers only; no reconstructed operational authority.
+#[derive(Clone, Debug)]
+pub struct HistoryMission {
+    pub mission: MissionId,
+    pub state: MissionState,
+    pub terminal: Option<(Trigger, u64)>,
+    pub actions: Vec<(u64, PendingAction)>,
+}
+
+pub fn inspect_history(store: &dyn JournalStore) -> Result<HistoryInspection, JournalError> {
+    inspect_history_lines(&store.load()?)
+}
+
+/// Canonical report-only inspection of an already captured source snapshot.
+pub fn inspect_history_lines(lines: &[String]) -> Result<HistoryInspection, JournalError> {
+    let entries = verify(lines)?;
+    let mut missions = BTreeMap::new();
+    let mut next_mission = 1;
+    let mut session = Session::Never;
+    for (index, entry) in entries.iter().enumerate() {
+        check(&entry.event)
+            .and_then(|()| replay(&mut missions, &mut next_mission, &mut session, entry))
+            .map_err(|code| JournalError::Inconsistent {
+                line: index + 1,
+                code,
+            })?;
+    }
+    Ok(HistoryInspection {
+        records: entries.len(),
+        session_end_recorded: session == Session::Closed,
+        missions: missions.iter().map(|(id, m)| (*id, m.state)).collect(),
+        unresolved: missions
+            .iter()
+            .filter_map(|(id, m)| {
+                // Settlement retains its first cause after the terminal line.
+                // Canonical replay validates that line; incomplete settlement
+                // is nonterminal, and uncertain outcomes retain their own debt.
+                (!m.state.is_terminal()
+                    || m.unresolved_file.is_some()
+                    || m.terminal_uncertain
+                    || m.unsettled.is_some()
+                    || m.open_action.is_some()
+                    || m.pending_lane.is_some())
+                .then_some(*id)
+            })
+            .collect(),
+        prior_acknowledgement_unavailable: missions.values().map(|m| m.acks.len()).sum(),
+        details: missions
+            .iter()
+            .map(|(id, mission)| {
+                let mut actions = BTreeMap::new();
+                for entry in entries.iter().filter(|entry| entry.mission == *id) {
+                    match &entry.event {
+                        Event::ApprovalPending { effect, pending } => {
+                            actions.insert(*effect, pending.clone());
+                        }
+                        Event::Transition {
+                            trigger:
+                                Trigger::Settled {
+                                    effect,
+                                    action: Some(action),
+                                    ..
+                                },
+                        } => {
+                            actions.insert(*effect, action.clone());
+                        }
+                        _ => {}
+                    }
+                }
+                HistoryMission {
+                    mission: *id,
+                    state: mission.state,
+                    terminal: mission
+                        .terminal_record
+                        .as_ref()
+                        .and_then(|(trigger, seq)| seq.map(|seq| (trigger.clone(), seq))),
+                    actions: actions.into_iter().collect(),
+                }
+            })
+            .collect(),
+    })
+}
+
 fn replay(
     missions: &mut BTreeMap<MissionId, Mission>,
     next_mission: &mut u64,
@@ -2944,6 +3212,9 @@ fn replay(
                 _ => {}
             }
             mission.apply(trigger, to, 0);
+            if to.is_terminal() {
+                mission.terminal_record = Some((trigger.clone(), Some(entry.seq)));
+            }
             if let Trigger::Consent { hash, .. } = trigger {
                 // The verified journal's record of the broker's approval.
                 mission.consent = Some(Consent::minted(*hash));

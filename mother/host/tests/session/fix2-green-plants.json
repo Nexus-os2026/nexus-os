@@ -1,0 +1,357 @@
+{
+  "log_root": "/home/nexus/.m2d/fix2",
+  "source": "worktree repairs over da20ccc0; final gates will name the clean commit",
+  "receipts": {
+    "green-native": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "fix2_native",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 13.59,
+      "sha256": "89affd51ddc4d054c217478bf3b4e540478cac5a38e19d57c53a62a100bf5439",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.05s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 1.94s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s"
+      ]
+    },
+    "green-mother": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "fix2_",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 11.07,
+      "sha256": "5946364aa18a5950fe73b7ba29dd52264e6380e9af653075adaa4984bd5784a2",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.15s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.20s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.21s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.14s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.19s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.14s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.27s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 253 filtered out; finished in 1.00s"
+      ]
+    },
+    "green-f09": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "fix1_terminal_record_is_not_a_readable_prefix",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 10.72,
+      "sha256": "44e5b73cf8429b394c818a0f806a8420eaba724c67183bd1535d2eb7eb2aaa4e",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.55s"
+      ]
+    },
+    "green-pending-host": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "pty",
+        "--test",
+        "session_protocol",
+        "normal_",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 18.76,
+      "sha256": "4a54d3e49a2b871157f2891ebede6dc004fd05cf1bbb9b23c96f06f7cd8fe2c8",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 1.25s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.35s"
+      ]
+    },
+    "plant-budget": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "fix2_native",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 634.22,
+      "sha256": "c55235a34f9ae675b9a58463d865e528955dcc08d0899b8750a761b0561b0983",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 2.20s"
+      ]
+    },
+    "plant-terminal": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "fix2_refused_done",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 9.01,
+      "sha256": "edf02a58374fb705caeb886d5b02c433741a5dfb42c9df16920ddb9e38caf8b3",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.14s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.70s"
+      ]
+    },
+    "green-restored": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "fix2_",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 13.34,
+      "sha256": "32a484fd79926ff25de66fa9e070ab0411642136f32e0189ac87c1ba6f93fb26",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.05s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.06s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 841 filtered out; finished in 1.80s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.41s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.20s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.22s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.19s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.15s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 253 filtered out; finished in 0.84s"
+      ]
+    },
+    "green-coverage": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_oracles",
+        "independently_generated_schedule_manifest_is_nonempty_for_every_sink",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 10.43,
+      "sha256": "a1b752d1e37390ecaaf4682633ceaabd3986119ca0b2c65923ea0ac43fcb0323",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.98s"
+      ]
+    },
+    "green-lint": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "clippy",
+        "-p",
+        "nexus-governed-control",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 16.18,
+      "sha256": "13c72654a91fe65ad1c2b1fbaa2a96ef6fdf03467687aeb72b111b1830248a81",
+      "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
+      "results": []
+    },
+    "green-host-lint": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "clippy",
+        "-p",
+        "nexus-mother-host",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 70.27,
+      "sha256": "27d68efcd1a35b5bcb1b1a561e4052580d1828d7f68bda5a28c62a572c75be44",
+      "head": "c54244311a415e9653e0f569b3849e6ff2293892",
+      "results": []
+    },
+    "green-source-scans": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "adapter::scan",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 324.05,
+      "sha256": "f794689522c836a29d68fab84e840486e7725a4d25ac336cbd7cccd2f59056f4",
+      "head": "415ce0eb50543d7aa4c284b6eecd5b3d9198e4ff",
+      "results": [
+        "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 238 filtered out; finished in 0.75s"
+      ]
+    }
+  },
+  "plants_restored": {
+    "budget": {
+      "path": "crates/nexus-governed-control/src/host_session.rs",
+      "sha256": "2f2d63ea0d8a607daa6657d719e0aa712456f3e0a82b35c1c25a9d2e3604b980",
+      "restored": true
+    },
+    "terminal": {
+      "path": "mother/src/coordinator.rs",
+      "sha256": "94792a5933a0ec9732eb35d4642c51abcaab8bde5ea2ffb2322b8cd27d5786ec",
+      "restored": true
+    }
+  }
+}

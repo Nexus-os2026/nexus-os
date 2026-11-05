@@ -37,7 +37,7 @@ impl FileLife {
 
 /// Owns the coordinator exclusively. Its Stop calls return recording errors.
 pub struct FileSession<P: EffectPort> {
-    coordinator: Coordinator<P>,
+    pub(super) coordinator: Coordinator<P>,
 }
 
 #[path = "../adapter/lite_review3.rs"]
@@ -59,6 +59,31 @@ mod review5;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod review6;
+
+#[path = "../adapter/session_terminal_oracles_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_terminal_oracles;
+
+#[path = "../adapter/session_continuation_oracles_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_continuation_oracles;
+
+#[path = "../adapter/session_close_oracles_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_close_oracles;
+
+#[path = "../adapter/session_result_fix1_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_result_fix1;
+
+#[path = "../adapter/session_budget_fix1_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+pub(super) mod session_budget_fix1;
 
 impl<P: EffectPort> Coordinator<P> {
     /// Consume the legacy interface before selecting File mode. This cannot
@@ -133,6 +158,69 @@ impl<P: EffectPort> Coordinator<P> {
     }
 }
 
+impl FileSession<crate::adapter::SessionPort> {
+    /// Consumes the sole controller. Saved callbacks and ports keep their old
+    /// context; this transfer is bound to the exact live waiting generation.
+    pub fn continue_approval(
+        mut self,
+        continuation: nexus_governed_control::host_session::approval::ApprovalContinuation,
+    ) -> Result<Self, CoordinatorError> {
+        let id = MissionId(continuation.mission());
+        let generation = continuation.generation();
+        let effect = continuation.effect();
+        {
+            let mut inner = self.coordinator.inner.lock().map_err(|_| {
+                self.life().cell.engage_tagged(HaltTag::DoorHalted);
+                CoordinatorError::Poisoned
+            })?;
+            inner.usable()?;
+            let m = inner.mission(id)?;
+            if m.state != MissionState::AwaitingApproval
+                || m.generation != generation
+                || m.busy
+                || m.waiting.as_ref().is_none_or(|wait| wait.effect != effect)
+                || m.open_action
+                    .as_ref()
+                    .is_none_or(|(number, _)| *number != effect)
+            {
+                return Err(CoordinatorError::Stopped);
+            }
+            let (port, cell) = self
+                .coordinator
+                .port
+                .continue_approval(continuation, id, generation, effect)
+                .map_err(|e| CoordinatorError::Broker(e.class))?;
+            let context = port.context();
+            let life = self.life();
+            context
+                .narrow_mission_deadlines(
+                    self.coordinator.clock.clone(),
+                    life.mono_deadline.load(Ordering::SeqCst),
+                    life.wall_deadline.load(Ordering::SeqCst),
+                )
+                .map_err(|_| CoordinatorError::Stopped)?;
+            let private = self
+                .coordinator
+                .private
+                .continue_session(context.clone())
+                .map_err(CoordinatorError::Private)?;
+            context
+                .admit(nexus_governed_control::host_session::MotherStep::PortProjection)
+                .map_err(|_| CoordinatorError::Stopped)?;
+            self.coordinator.private = private;
+            self.coordinator.port = Arc::new(port);
+            inner.session_context = Some(context);
+            inner.file_cell = Some(cell.clone());
+            self.coordinator
+                .file
+                .as_mut()
+                .ok_or(CoordinatorError::Stopped)?
+                .cell = cell;
+        }
+        Ok(self)
+    }
+}
+
 impl<P: EffectPort> FileSession<P> {
     #[cfg(test)]
     pub(crate) fn end_for_test(
@@ -163,7 +251,7 @@ impl<P: EffectPort> FileSession<P> {
         panic!("lite coordinator poison");
     }
 
-    fn life(&self) -> &FileLife {
+    pub(super) fn life(&self) -> &FileLife {
         self.coordinator
             .file
             .as_ref()
@@ -172,7 +260,7 @@ impl<P: EffectPort> FileSession<P> {
 
     /// Also catches a poisoned later stage or an unwinding external callback:
     /// the original cell remains engaged, and a typed error reaches the caller.
-    fn call<T>(
+    pub(super) fn call<T>(
         &self,
         body: impl FnOnce(&Coordinator<P>) -> Result<T, CoordinatorError>,
     ) -> Result<T, CoordinatorError> {
@@ -230,7 +318,9 @@ impl<P: EffectPort> FileSession<P> {
         self.runnable()?;
         self.call(|c| {
             c.file_admit(id)?;
-            c.advance(id)
+            let result = c.advance(id)?;
+            c.publish_file_wait(id)?;
+            Ok(result)
         })
     }
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
@@ -272,6 +362,12 @@ impl<P: EffectPort> FileSession<P> {
         self.touch()?;
         self.call(|c| Ok(c.reason(id)))
     }
+    /// Owner-only, take-once, memory-only detail through the typed lifecycle.
+    /// Settlement and poison errors stay observable; no coordinator escapes.
+    pub fn working_detail(&self, id: MissionId) -> Result<Option<WorkingDetail>, CoordinatorError> {
+        self.touch()?;
+        self.call(|c| Ok(c.working_detail(id)))
+    }
     /// The exact Owner notice persists for uncertain terminal work.
     pub fn notice(&self, id: MissionId) -> Result<Option<&'static str>, CoordinatorError> {
         self.touch()?;
@@ -298,3 +394,8 @@ impl<P: EffectPort> FileSession<P> {
         })
     }
 }
+
+#[path = "../adapter/session_terminal_fix2_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+pub(super) mod session_terminal_fix2;

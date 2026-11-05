@@ -71,6 +71,53 @@ fn in_desktop_tests(rel: &str) -> bool {
     rel.starts_with("desktop/tests/")
 }
 
+/// M2d-D G4/G5: Cargo integration targets and these explicitly registered
+/// unit-test files only. Production module declarations are checked below.
+fn in_hands_tests(rel: &str) -> bool {
+    rel.starts_with("host/tests/")
+        || matches!(
+            rel,
+            "host/src/terminal_tests.rs" | "host/src/hands_tests.rs" | "host/src/stop_tests.rs"
+        )
+}
+
+/// M2d-D G3: safe borrowed descriptor access in the terminal, and a typed
+/// binary return. No process, filesystem, networking or FFI exemption.
+fn without_hands_items(rel: &str, text: &str) -> String {
+    let allowed: &[&str] = match rel {
+        "host/src/terminal.rs" | "host/src/legacy_terminal.rs" => {
+            &["use std::os::fd::{AsFd, AsRawFd};"]
+        }
+        "host/src/bin/mother-hands.rs" => &["use std::process::ExitCode;"],
+        _ => &[],
+    };
+    let mut text = text.to_string();
+    for item in allowed {
+        text = text.replace(item, "");
+    }
+    text
+}
+
+#[test]
+fn scan_m2dd_safe_items_are_exact() {
+    let fd = "use std::os::fd::{AsFd, AsRawFd};";
+    assert_eq!(without_hands_items("host/src/terminal.rs", fd), "");
+    assert_eq!(without_hands_items("host/src/legacy_terminal.rs", fd), "");
+    assert_eq!(without_hands_items("host/src/hands.rs", fd), fd);
+    let exit = "use std::process::ExitCode;";
+    assert_eq!(
+        without_hands_items("host/src/bin/mother-hands.rs", exit),
+        ""
+    );
+    assert_eq!(without_hands_items("host/src/terminal.rs", exit), exit);
+    for denied in ["std::process::Command", "std::fs::File", "std::os::raw"] {
+        assert_eq!(without_hands_items("host/src/terminal.rs", denied), denied);
+    }
+    assert!(in_hands_tests("host/tests/pty.rs"));
+    assert!(!in_hands_tests("host/src/test_support.rs"));
+    assert!(!in_hands_tests("host/src/bin/tests.rs"));
+}
+
 /// The only kernel items the desktop's production code may name: the
 /// identity home (its state directory) and the kernel Stop's reads.
 const DESKTOP_KERNEL_PATHS: [&str; 2] = [
@@ -164,11 +211,11 @@ fn scan_no_host_access_outside_the_adapter() {
     .collect();
     let mut checked = 0;
     for (rel, text) in mother_sources() {
-        if in_adapter(&rel) || in_desktop_tests(&rel) {
+        if in_adapter(&rel) || in_desktop_tests(&rel) || in_hands_tests(&rel) {
             continue;
         }
         checked += 1;
-        let text = without_desktop_exit_code(&rel, &code(&text));
+        let text = without_hands_items(&rel, &without_desktop_exit_code(&rel, &code(&text)));
         for needle in &needles {
             assert!(!text.contains(needle.as_str()), "{rel}: {needle}");
         }
@@ -265,9 +312,12 @@ fn scan_no_production_consent_confirmer() {
         rel.starts_with("src/oracles/")
             || rel == "src/adapter/real_broker.rs"
             || in_desktop_tests(rel)
+            || in_hands_tests(rel)
     };
     let mut walk_impls = 0;
     let mut desktop_impls = 0;
+    let mut terminal_impls = 0;
+    let mut legacy_terminal_impls = 0;
     for (rel, text) in mother_sources() {
         let text = code(&text);
         assert!(
@@ -276,6 +326,22 @@ fn scan_no_production_consent_confirmer() {
         );
         let impls = text.matches(needle.as_str()).count();
         if impls == 0 || test_only(&rel) {
+            continue;
+        }
+        if rel == "host/src/legacy_terminal.rs" {
+            assert!(
+                walk_terminal_confirmer(&rel, &text),
+                "walk terminal contract"
+            );
+            legacy_terminal_impls += impls;
+            continue;
+        }
+        if rel == "host/src/terminal.rs" {
+            assert!(
+                hands_confirmer(&rel, &text),
+                "{rel}: terminal confirmer contract"
+            );
+            terminal_impls += impls;
             continue;
         }
         // M2b-A (G10): the desktop's one confirmer answers no to all seven
@@ -304,25 +370,18 @@ fn scan_no_production_consent_confirmer() {
             "a consent confirmer in Mother's production code"
         );
         walk_impls += impls;
-        let bodies = confirm_bodies(&text);
-        assert_eq!(bodies.len(), 1, "the walk asks about missions once");
-        for body in bodies {
-            assert!(
-                body.contains("stdin"),
-                "the walk's confirmer must ask the Owner: {body}"
-            );
-            assert_ne!(body, "true", "an always-yes confirmer");
-            assert!(!body.ends_with(";true"), "an always-yes confirmer: {body}");
-        }
-        // M2c-A (A8): the door and held-mission dialogs ask the Owner too.
-        for dialog in ["confirm_agent_door", "confirm_held_mission"] {
+        // M2d-D G2: exactly the three original permissions, now through
+        // the shared, freshness-checked terminal implementation.
+        for dialog in [
+            "confirm_mission",
+            "confirm_agent_door",
+            "confirm_held_mission",
+        ] {
             let bodies = bodies_of(&text, dialog);
-            assert_eq!(bodies.len(), 1, "the walk asks {dialog} once");
-            assert!(bodies[0].contains("stdin"), "walk: {dialog} must ask");
-            assert_ne!(bodies[0], "true", "walk: an always-yes {dialog}");
-            assert!(
-                !bodies[0].ends_with(";true"),
-                "walk: an always-yes {dialog}"
+            assert_eq!(
+                bodies,
+                vec![format!("self.0.{dialog}(request)")],
+                "walk: {dialog}"
             );
         }
         for other in [
@@ -340,6 +399,24 @@ fn scan_no_production_consent_confirmer() {
         "the walk example's terminal confirmer, exactly once"
     );
     assert_eq!(desktop_impls, 1, "the desktop's confirmer, exactly once");
+    assert_eq!(
+        terminal_impls, 1,
+        "M2d-D: exactly one session terminal confirmer"
+    );
+    assert_eq!(
+        legacy_terminal_impls, 1,
+        "exactly one isolated walk terminal confirmer"
+    );
+    // The eighth method stays denied by default outside Hands.
+    for rel in ["desktop/src/confirm.rs", "host/examples/walk.rs"] {
+        let text = code(&std::fs::read_to_string(crate_root().join(rel)).unwrap());
+        assert!(
+            bodies_of(&text, "confirm_undo")
+                .iter()
+                .all(|b| b == "false"),
+            "{rel}: undo"
+        );
+    }
 
     // The rest of the workspace: outside test code, no confirmer answers a
     // literal yes to a mission; in the broker, every answer is no.
@@ -410,6 +487,100 @@ fn scan_no_production_consent_confirmer() {
         dialog_defaults >= 2,
         "the broker's door and held-mission defaults were not found"
     );
+}
+
+/// G1/G6: pin the implementation type, count, path and every delegation.
+/// Behavior is independently exercised by the scripted and PTY oracles.
+fn hands_confirmer(rel: &str, text: &str) -> bool {
+    let implementation = ["impl", "ControlConfirmer", "for", "TerminalConfirmer"].join(" ");
+    let needle = ["ControlConfirmer", "for"].join(" ");
+    if rel != "host/src/terminal.rs"
+        || text.matches(&needle).count() != 1
+        || !text.contains(&implementation)
+    {
+        return false;
+    }
+    for (method, delegate) in [
+        ("confirm_action", "action"),
+        ("confirm_grant", "grant"),
+        ("confirm_mission", "mission"),
+        ("confirm_agent_door", "door"),
+        ("confirm_undo", "undo"),
+    ] {
+        if bodies_of(text, method) != vec![format!("self.{delegate}(request)")] {
+            return false;
+        }
+    }
+    [
+        "confirm_acknowledgement",
+        "confirm_resume",
+        "confirm_held_mission",
+    ]
+    .iter()
+    .all(|method| bodies_of(text, method) == vec!["false".to_string()])
+}
+
+#[test]
+fn scan_m2dd_terminal_confirmer_negative_controls() {
+    let prefix = ["impl", "ControlConfirmer", "for", "TerminalConfirmer"].join(" ");
+    let mut fixture = format!("{prefix} {{");
+    for (method, delegate) in [
+        ("action", "action"),
+        ("grant", "grant"),
+        ("mission", "mission"),
+        ("agent_door", "door"),
+        ("undo", "undo"),
+    ] {
+        fixture.push_str(&format!(
+            "fn confirm_{method}(&self, request: &R) -> bool {{ self.{delegate}(request) }}"
+        ));
+    }
+    fixture.push_str("fn confirm_acknowledgement(&self, _: &R) -> bool { false } fn confirm_resume(&self, _: &R) -> bool { false } fn confirm_held_mission(&self, _: &R) -> bool { false }}");
+    assert!(hands_confirmer("host/src/terminal.rs", &fixture));
+    assert!(!hands_confirmer("host/src/hands.rs", &fixture));
+    assert!(!hands_confirmer(
+        "host/src/terminal.rs",
+        &format!("{fixture}{fixture}")
+    ));
+    assert!(!hands_confirmer(
+        "host/src/terminal.rs",
+        &fixture.replace("TerminalConfirmer", "Other")
+    ));
+    for delegate in ["action", "grant", "mission", "door", "undo"] {
+        assert!(!hands_confirmer(
+            "host/src/terminal.rs",
+            &fixture.replace(&format!("self.{delegate}(request)"), "true")
+        ));
+    }
+    assert!(!hands_confirmer(
+        "host/src/terminal.rs",
+        &fixture.replace("false", "true")
+    ));
+}
+
+#[test]
+fn scan_m2dd_test_helpers_cannot_be_production_modules() {
+    for (rel, text) in mother_sources() {
+        if !rel.starts_with("host/src/") || in_hands_tests(&rel) {
+            continue;
+        }
+        for (name, test_only) in declared_modules(&code(&text)) {
+            if matches!(
+                name.as_str(),
+                "terminal_tests" | "hands_tests" | "stop_tests"
+            ) {
+                assert!(test_only, "{rel}: {name} must be cfg(test)");
+            }
+        }
+        assert!(
+            !text.contains("#[path"),
+            "host production modules use ordinary checked declarations: {rel}"
+        );
+        assert!(
+            !text.contains("include!("),
+            "no inclusion of test code: {rel}"
+        );
+    }
 }
 
 /// The text of each `trait ControlConfirmer` and `impl … ControlConfirmer
@@ -635,4 +806,149 @@ fn scan_m2c_the_port_acts_through_its_door() {
 #[test]
 fn scan_m2b_no_desktop_outside_the_registered_package() {
     desktop_tripwire::assert_no_desktop();
+}
+
+// The legacy walk keeps exactly its historical three dialogues. It cannot
+// confirm Files, grants, native resume, acknowledgement or undo.
+fn walk_terminal_confirmer(rel: &str, text: &str) -> bool {
+    let implementation = ["impl", "ControlConfirmer", "for", "WalkConfirmer"].join(" ");
+    let needle = ["ControlConfirmer", "for"].join(" ");
+    rel == "host/src/legacy_terminal.rs"
+        && text.matches(&needle).count() == 1
+        && text.contains(&implementation)
+        && [
+            ("confirm_mission", "mission"),
+            ("confirm_agent_door", "door"),
+            ("confirm_held_mission", "held"),
+        ]
+        .iter()
+        .all(|(method, delegate)| {
+            bodies_of(text, method) == vec![format!("self.{delegate}(request)")]
+        })
+        && [
+            "confirm_action",
+            "confirm_grant",
+            "confirm_resume",
+            "confirm_acknowledgement",
+            "confirm_undo",
+        ]
+        .iter()
+        .all(|method| bodies_of(text, method) == vec!["false".to_string()])
+}
+
+#[test]
+fn scan_isolated_walk_confirmer_keeps_only_legacy_permissions() {
+    let prefix = ["impl", "ControlConfirmer", "for", "WalkConfirmer"].join(" ");
+    let mut fixture = format!("{prefix} {{");
+    for (method, delegate) in [
+        ("mission", "mission"),
+        ("agent_door", "door"),
+        ("held_mission", "held"),
+    ] {
+        fixture.push_str(&format!(
+            "fn confirm_{method}(&self, request: &R) -> bool {{ self.{delegate}(request) }}"
+        ));
+    }
+    for method in ["action", "grant", "resume", "acknowledgement", "undo"] {
+        fixture.push_str(&format!(
+            "fn confirm_{method}(&self, _: &R) -> bool {{ false }}"
+        ));
+    }
+    fixture.push('}');
+    assert!(walk_terminal_confirmer(
+        "host/src/legacy_terminal.rs",
+        &fixture
+    ));
+    for path in [
+        "host/src/terminal.rs",
+        "host/src/hands.rs",
+        "host/src/other.rs",
+    ] {
+        assert!(!walk_terminal_confirmer(path, &fixture));
+    }
+    for (old, new) in [
+        ("WalkConfirmer", "Other"),
+        ("false", "true"),
+        ("self.mission(request)", "true"),
+        ("self.door(request)", "true"),
+        ("self.held(request)", "true"),
+    ] {
+        assert!(!walk_terminal_confirmer(
+            "host/src/legacy_terminal.rs",
+            &fixture.replace(old, new)
+        ));
+    }
+    assert!(!walk_terminal_confirmer(
+        "host/src/legacy_terminal.rs",
+        &format!("{fixture}{fixture}")
+    ));
+}
+
+#[test]
+fn scan_hands_services_cannot_import_the_walk_or_raw_authority() {
+    for rel in [
+        "host/src/hands.rs",
+        "host/src/terminal.rs",
+        "host/src/stop.rs",
+        "host/src/session_home.rs",
+    ] {
+        let text = code(&std::fs::read_to_string(crate_root().join(rel)).unwrap());
+        for forbidden in [
+            "legacy_terminal",
+            "legacy_stop",
+            "GovernedControl",
+            "GovernedPort",
+            ".owner()",
+            "Home::",
+        ] {
+            assert!(!text.contains(forbidden), "{rel}: {forbidden}");
+        }
+    }
+}
+
+// G/F10: typed Hands answers reach the same fixed terminal implementation;
+// adding typed callbacks does not create an unguarded authority route.
+fn hands_typed_answers(text: &str) -> bool {
+    [
+        ("confirm_grant_answer", "grant"),
+        ("confirm_agent_door_answer", "door"),
+        ("confirm_mission_answer", "mission"),
+    ]
+    .iter()
+    .all(|(method, delegate)| {
+        bodies_of(text, method)
+            == vec![format!(
+                "self.{delegate}(request);self.confirmation_answer()"
+            )]
+    })
+}
+
+#[test]
+fn scan_m2dd_typed_confirmation_exact_delegates_and_negative_controls() {
+    let mut fixture = String::new();
+    for (method, delegate) in [
+        ("grant", "grant"),
+        ("agent_door", "door"),
+        ("mission", "mission"),
+    ] {
+        fixture.push_str(&format!("fn confirm_{method}_answer(&self, request: &R) -> ConfirmationAnswer {{ self.{delegate}(request); self.confirmation_answer() }}"));
+    }
+    assert!(hands_typed_answers(&fixture));
+    for delegate in ["grant", "door", "mission"] {
+        assert!(!hands_typed_answers(&fixture.replace(
+            &format!("self.{delegate}(request); self.confirmation_answer()"),
+            "ConfirmationAnswer::Affirmative",
+        )));
+        assert!(!hands_typed_answers(&fixture.replace(
+            &format!("self.{delegate}(request); self.confirmation_answer()"),
+            "ConfirmationAnswer::Declined",
+        )));
+    }
+    assert!(!hands_typed_answers(&format!("{fixture}{fixture}")));
+    let text = code(&std::fs::read_to_string(crate_root().join("host/src/terminal.rs")).unwrap());
+    assert!(hands_confirmer("host/src/terminal.rs", &text));
+    assert!(
+        hands_typed_answers(&text),
+        "typed answers must keep the real terminal's exact result"
+    );
 }

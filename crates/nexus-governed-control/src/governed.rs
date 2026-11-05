@@ -252,6 +252,16 @@ impl GovernedControl {
         evidence: Arc<dyn EvidenceSink>,
         clock: Arc<dyn Clock>,
     ) -> Result<Self, AuthorityError> {
+        Self::with_file_sessions(root, secrets, evidence, clock, Arc::default())
+    }
+
+    pub(crate) fn with_file_sessions(
+        root: &Path,
+        secrets: Arc<dyn SecretSource>,
+        evidence: Arc<dyn EvidenceSink>,
+        clock: Arc<dyn Clock>,
+        file_sessions: Arc<crate::authority::file_session::FileSessions>,
+    ) -> Result<Self, AuthorityError> {
         let root = RuntimeRoot::open(root)?;
         let files = Files::new(root.path().to_path_buf());
         // The owner's Stop/Resume path holds the kernel stop's controller
@@ -277,7 +287,7 @@ impl GovernedControl {
         let egress = Arc::new(Egress::system());
         let broker = CredentialBroker::new(control.authority(), secrets);
         let governed = Self {
-            file_sessions: Arc::default(),
+            file_sessions,
             connectors: Connectors::production(egress.clone(), broker.clone()),
             credentials: broker,
             doors_halted: AtomicU64::new(0),
@@ -404,7 +414,7 @@ impl GovernedControl {
             Intent::Synthetic(intent) => synthetic::prepare(authority, run, intent),
             Intent::File(intent) => {
                 self.files
-                    .prepare(authority, run, intent, self.kernel_stop.authority())
+                    .prepare_control(&self.control, run, intent, self.kernel_stop.authority())
             }
         }?;
         // P4-UAT05: a synthetic action is R2 or nothing, refused before any
@@ -426,15 +436,52 @@ impl GovernedControl {
         if let Intent::Connector(intent) = intent {
             return self.connectors.propose(&self.control, agent, run, intent);
         }
-        let proposed = self
-            .prepare(run, intent)
-            .and_then(|preparation| self.control.propose(agent, run, preparation));
+        let host = matches!(intent, Intent::File(_))
+            && self
+                .authority()
+                .runs()
+                .session_cell(run)?
+                .is_some_and(|cell| cell.host());
+        let proposed = if host {
+            let reservation = self.control.reserve_host_proposal(run)?;
+            self.prepare(run, intent).and_then(|preparation| {
+                self.control
+                    .propose_reserved(agent, run, preparation, reservation)
+            })
+        } else {
+            self.prepare(run, intent)
+                .and_then(|preparation| self.control.propose(agent, run, preparation))
+        };
         // M2d-B2: a refused Files proposal's staging is discarded now (its
         // effect only handed the run over when it was dropped).
         if matches!(intent, Intent::File(_)) {
             self.files.drain();
         }
         proposed
+    }
+
+    pub(crate) fn propose_session_file(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        file: &crate::files::FileCreate,
+        cell: &crate::authority::file_session::HaltCell,
+    ) -> Result<CommitmentView, AuthorityError> {
+        if self.authority().runs().class(run) != Some(RunClass::Agent) {
+            return Err(AuthorityError::WrongRun);
+        }
+        let reservation = self
+            .control
+            .reserve_host_proposal_request(run, Some(cell))?;
+        let preparation = self.files.prepare_session(
+            &self.control,
+            run,
+            file,
+            self.kernel_stop.authority(),
+            cell,
+        )?;
+        self.control
+            .propose_reserved(agent, run, preparation, reservation)
     }
 
     /// Authorize (R2: the owner's native approval of exactly this
@@ -497,6 +544,43 @@ impl GovernedControl {
         self.control.cancel_run(run)
     }
 
+    /// Session narrowing has no implicit Files drain and returns a typed
+    /// failure if any registry ownership or pending reservation is unknown.
+    pub(crate) fn close_session_authority(&self) -> Result<(), AuthorityError> {
+        if !self.control.stop_metadata_known() {
+            return Err(AuthorityError::Halted);
+        }
+        let runs = self.authority().runs();
+        runs.close();
+        for run in runs.views() {
+            if !run.cancelled && !run.finished {
+                self.control.cancel_run(run.id)?;
+            }
+        }
+        for grant in self.authority().grants().all() {
+            if !grant.revoked {
+                self.authority().grants().revoke(grant.id)?;
+            }
+        }
+        self.control.prune();
+        if !self.control.close_ready()
+            || !runs.is_closed()
+            || runs.views().iter().any(|run| {
+                (!run.cancelled && !run.finished)
+                    || self
+                        .authority()
+                        .commitments()
+                        .views_of_run(run.id)
+                        .iter()
+                        .any(|c| !c.state.is_final())
+            })
+            || self.authority().grants().all().iter().any(|g| !g.revoked)
+        {
+            return Err(AuthorityError::Halted);
+        }
+        Ok(())
+    }
+
     /// The desktop is quitting: no run opens any more, and every open run
     /// is cancelled (recorded). Returns how many were cancelled.
     pub fn shut_down(&self) -> usize {
@@ -512,6 +596,13 @@ impl GovernedControl {
     pub fn finish_run(&self, run: RunId) {
         self.display.forget_run(run);
         self.control.finish_run(run);
+    }
+
+    /// Owner host ingress handle for the existing File-session halt. It can
+    /// only deny; it cannot select, reopen, resume or grant a File session.
+    /// Available before File selection so startup Stop cannot lose its latch.
+    pub fn file_session_halt(&self) -> crate::authority::file_session::HaltCell {
+        self.file_sessions.halt_cell()
     }
 
     /// The owner's emergency stop: every run cancelled, every unconsumed
@@ -541,8 +632,7 @@ impl GovernedControl {
     /// dependency. Only after it does Stop tear the agent display down,
     /// which may stop the display's processes (cleanup that follows the
     /// engagement), and then write the records.
-    fn stop_for(&self, reason: Option<&'static str>) -> usize {
-        self.file_sessions.emergency();
+    fn narrow_native_stop(&self, reason: Option<&'static str>) -> crate::authority::Stopped {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
         self.kernel_stop.engage();
@@ -555,6 +645,12 @@ impl GovernedControl {
         // first engagement and the broker step may have lifted the kernel
         // stop, and the broker must never be stopped with the kernel lifted.
         self.kernel_stop.engage();
+        stopped
+    }
+
+    fn stop_for(&self, reason: Option<&'static str>) -> usize {
+        self.file_sessions.emergency();
+        let stopped = self.narrow_native_stop(reason);
         let cancelled = stopped.cancelled;
         let display = self.display.stop();
         self.authority().write_stop_records(stopped);
@@ -563,17 +659,62 @@ impl GovernedControl {
         cancelled
     }
 
+    /// The sealed session already accepted and counted this ingress. Only
+    /// native narrowing and its existing records follow here. Display and
+    /// other domains cannot be created through the File-only facade.
+    pub(crate) fn stop_session_event(&self) -> crate::authority::StopRecordOutcome {
+        let known = self.control.stop_metadata_known();
+        let stopped = self.narrow_native_stop(None);
+        let mut outcome = self.authority().write_stop_records_observed(stopped);
+        // Legacy narrowing may recover a poisoned hold to deny more work.
+        // It cannot establish complete session ownership from that metadata.
+        outcome.ownership_established = known && self.control.stop_metadata_known();
+        outcome
+    }
+
     /// Lift the emergency stop after the owner's native confirmation. The
     /// kernel's stop is lifted only once the broker's stop is lifted too;
     /// work either stop ended stays ended.
     pub fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
-        // The kernel stop this resume may lift: the one in force before the
-        // owner is asked. A Stop pressed meanwhile (from any door) engages
-        // a newer kernel stop first, and that one is not lifted here.
+        self.resume_with_halt(confirmer, None)
+    }
+
+    /// Recovery-only host lift: a fresh confirmation may lift the native
+    /// halt, never the permanent session cell. Ingress at the kernel handoff
+    /// is observed on return and re-engages native Stop before any action.
+    pub fn resume_with_halt(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+        cell: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<(), AuthorityError> {
+        let recovery = crate::authority::file_session::RecoveryCheck::take(cell)?;
         let confirmed = self.kernel_stop.authority().stop_number();
-        self.authority().resume(confirmer)?;
+        if cell.is_none() {
+            // Preserve the legacy route, including its lock ordering.
+            self.authority().resume(confirmer)?;
+            if !self.authority().runs().is_stopped() {
+                self.kernel_stop.lift_if(confirmed);
+            }
+            return Ok(());
+        }
+        self.authority()
+            .resume_with_recovery(confirmer, Some(&recovery))?;
         if !self.authority().runs().is_stopped() {
-            self.kernel_stop.lift_if(confirmed);
+            let lifted = self.authority().runs().recovery_boundary(&recovery, || {
+                #[cfg(test)]
+                self.authority().hooks().fire("resume.kernel_boundary");
+                self.kernel_stop.lift_if(confirmed);
+                #[cfg(test)]
+                self.authority().hooks().fire("resume.kernel_returned");
+            });
+            // No callback, rendering, evidence or other host action precedes
+            // this re-engagement when the confirmed lift was overtaken.
+            if lifted.is_err() || recovery.check().is_err() {
+                // This existing route engages the original cell and native
+                // halt before any blocking recording or cleanup dependency.
+                self.emergency_stop();
+                return Err(AuthorityError::Halted);
+            }
         }
         Ok(())
     }
@@ -599,7 +740,28 @@ impl GovernedControl {
         agent: AgentId,
         confirmer: Arc<dyn ControlConfirmer + Send + Sync>,
     ) -> Result<AgentDoor, AuthorityError> {
+        self.issue_agent_door_with_halt(agent, confirmer, None)
+    }
+
+    /// Issue a host-session door with an optional, deny-only ingress cell.
+    /// The cell grants nothing and is carried by every run of this door.
+    /// `None` preserves the legacy native-resume policy.
+    pub fn issue_agent_door_with_halt(
+        self: &Arc<Self>,
+        agent: AgentId,
+        confirmer: Arc<dyn ControlConfirmer + Send + Sync>,
+        halt: Option<crate::authority::file_session::HaltCell>,
+    ) -> Result<AgentDoor, AuthorityError> {
         let authority = self.authority();
+        let check = |door| {
+            if crate::authority::file_session::check_halt(halt.as_ref()).is_err() {
+                authority.record_door_halt_refusal(&agent, door);
+                Err(AuthorityError::Halted)
+            } else {
+                Ok(())
+            }
+        };
+        check(None)?;
         authority.door_admissible()?;
         let runs = authority.runs();
         let core = Arc::new(DoorCore {
@@ -607,6 +769,7 @@ impl GovernedControl {
             agent: agent.clone(),
             group: runs.next_group(),
             file_cell: std::sync::OnceLock::new(),
+            session_cell: halt.clone(),
         });
         let life: Arc<dyn std::any::Any + Send + Sync> = core.clone();
         runs.reserve_door(core.group, &agent, Arc::downgrade(&life))?;
@@ -624,19 +787,30 @@ impl GovernedControl {
             door: core.id.clone(),
             advisory,
         };
-        let yes = confirmer.confirm_agent_door(&request);
+        // Reservation/advisory reads can wait; check again before the dialogue.
+        #[cfg(test)]
+        crate::authority::file_session::probe(halt.as_ref(), "setup.door_confirm");
+        check(Some(&core.id))?;
+        let answer = confirmer.confirm_agent_door_answer(&request);
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::ISSUE_ANSWERED);
-        if !yes {
-            // The decline has taken effect: the reservation dies with `core`.
-            authority.record_door(false, &agent, &core.id)?;
-            return Err(AuthorityError::Declined);
+        if answer != crate::authority::approval::ConfirmationAnswer::Affirmative {
+            // Every non-affirmative result denies; the native record preserves
+            // whether the Owner declined or no valid answer was received.
+            return Err(authority.record_door_answer_refusal(answer, &agent, &core.id));
         }
+        check(Some(&core.id))?;
         authority.door_admissible()?;
         authority.record_door(true, &agent, &core.id)?;
         #[cfg(test)]
         self.hooks().fire(crate::test_hooks::at::ISSUE_RECORDED);
-        runs.activate_door(core.group)?;
+        if let Err(error) = runs.activate_door_with_halt(core.group, halt.as_ref()) {
+            if error == AuthorityError::Halted {
+                // The earlier answer is historical evidence, not activation.
+                authority.record_door_halt_refusal(&agent, Some(&core.id));
+            }
+            return Err(error);
+        }
         self.doors_issued.fetch_add(1, Ordering::SeqCst);
         Ok(AgentDoor::new(self.clone(), core, confirmer))
     }
@@ -774,6 +948,17 @@ impl GovernedControl {
         path: &Path,
         reserved: &[&Path],
     ) -> Result<WorkspaceInfo, AuthorityError> {
+        self.register_workspace_with_halt(path, reserved, None)
+    }
+
+    /// Owner registration narrowed by the host session's deny-only cell.
+    pub fn register_workspace_with_halt(
+        &self,
+        path: &Path,
+        reserved: &[&Path],
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         let home = std::env::var_os("HOME")
             .map(std::path::PathBuf::from)
             .filter(|home| home.is_absolute())
@@ -786,7 +971,7 @@ impl GovernedControl {
         let uid = crate::launcher::effective_uid();
         #[cfg(not(target_os = "linux"))]
         let uid = u32::MAX;
-        self.register_workspace_in(
+        self.register_workspace_in_with_halt(
             path,
             &Exclusions {
                 home,
@@ -794,17 +979,28 @@ impl GovernedControl {
                 reserved: trees,
                 uid,
             },
+            halt,
         )
     }
 
     /// [`Self::register_workspace`] with what may not be the workspace
     /// given (tests name their own homes).
+    #[cfg(test)]
     pub(crate) fn register_workspace_in(
         &self,
         path: &Path,
         exclusions: &Exclusions,
     ) -> Result<WorkspaceInfo, AuthorityError> {
         self.files.register(path, exclusions)
+    }
+
+    pub(crate) fn register_workspace_in_with_halt(
+        &self,
+        path: &Path,
+        exclusions: &Exclusions,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<WorkspaceInfo, AuthorityError> {
+        self.files.register_with_halt(path, exclusions, halt)
     }
 
     /// The registered workspace, if any (its id and display name).
@@ -831,8 +1027,22 @@ impl GovernedControl {
         &self,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<UndoReport, AuthorityError> {
-        self.files
-            .undo(self.authority(), self.kernel_stop.authority(), confirmer)
+        self.files_undo_with_halt(confirmer, None)
+    }
+
+    /// Owner-only undo with the host's original cell and a fresh ingress
+    /// snapshot, captured before its dialogue and never refreshed.
+    pub fn files_undo_with_halt(
+        &self,
+        confirmer: &dyn ControlConfirmer,
+        cell: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<UndoReport, AuthorityError> {
+        self.files.undo(
+            self.authority(),
+            self.kernel_stop.authority(),
+            confirmer,
+            cell,
+        )
     }
 
     /// M2d (§6.7): the startup recovery report: what the Files ledger says
@@ -865,7 +1075,17 @@ impl GovernedControl {
     /// established is released, the rest stays owned and in the recovery
     /// report. The Owner's only: no door route.
     pub fn files_retry_cleanup(&self) -> Result<CleanupRetry, AuthorityError> {
-        self.files.retry_cleanup()
+        self.files_retry_cleanup_with_halt(None)
+    }
+
+    /// Owner retry with a request-local ingress snapshot. A refusal retains
+    /// every unattempted cleanup obligation; already handed-off cleanup may
+    /// finish (Decision 11).
+    pub fn files_retry_cleanup_with_halt(
+        &self,
+        cell: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<CleanupRetry, AuthorityError> {
+        self.files.retry_cleanup(cell)
     }
 
     /// M2e-B (design v2 §8): register the process's one local model, the
@@ -910,9 +1130,23 @@ impl GovernedControl {
         ttl: Duration,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<GrantId, AuthorityError> {
+        self.request_grant_with_halt(request, ttl, confirmer, None)
+    }
+
+    /// Owner grant issuance narrowed by the host session's deny-only cell.
+    pub fn request_grant_with_halt(
+        &self,
+        request: &GrantRequest,
+        ttl: Duration,
+        confirmer: &dyn ControlConfirmer,
+        halt: Option<&crate::authority::file_session::HaltCell>,
+    ) -> Result<GrantId, AuthorityError> {
+        crate::authority::file_session::check_halt(halt)?;
         let scope = self.grant_scope(request)?;
         let ttl = synthetic::capped(&scope, ttl.min(MAX_GRANT));
-        self.authority().grants().request(scope, ttl, confirmer)
+        self.authority()
+            .grants()
+            .request_with_halt(scope, ttl, confirmer, halt)
     }
 
     pub fn revoke_grant(&self, id: GrantId) -> Result<(), AuthorityError> {
@@ -1024,6 +1258,18 @@ impl GovernedControl {
         }
     }
 
+    /// M2d-D A8: actual backend observations only, without evidence access.
+    /// This is not an atomic pair or an ingress acknowledgement. Hosts show
+    /// both observations and sample again after concurrent Stop/resume.
+    pub fn stop_snapshot(&self) -> StopSnapshot {
+        StopSnapshot {
+            kernel_stopped: self.kernel_stop.authority().is_stopped(),
+            stop_number: self.kernel_stop.authority().stop_number(),
+            broker_stopped: self.authority().runs().is_stopped(),
+            policy_generation: self.authority().policy_generation(),
+        }
+    }
+
     pub fn status(&self) -> ControlStatus {
         ControlStatus {
             platform_supported: cfg!(target_os = "linux"),
@@ -1051,6 +1297,16 @@ impl GovernedControl {
             halt_records: self.authority().halt_records(),
         }
     }
+}
+
+/// Read-only, memory-only Stop observations for Owner hosts. No controller,
+/// watch, authority handle, evidence access or mutable state is exposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StopSnapshot {
+    pub kernel_stopped: bool,
+    pub stop_number: u64,
+    pub broker_stopped: bool,
+    pub policy_generation: u64,
 }
 
 /// Declines everything: R0 and R1 authorization never asks, and nothing on
@@ -1089,7 +1345,12 @@ mod door_tests;
 mod files_exec_tests;
 #[cfg(all(test, target_os = "linux"))]
 mod files_tests;
+
 #[cfg(test)]
 mod halt_tests;
+#[path = "governed/session_routes_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_routes;
 #[cfg(test)]
 mod tests;

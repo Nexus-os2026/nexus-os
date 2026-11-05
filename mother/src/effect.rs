@@ -127,7 +127,7 @@ pub struct EffectRefusal {
 /// made it, once that call holds no Mother lock, or by no one, and then the
 /// broker counts its records lost. It has no `Drop` of its own.
 #[derive(Default)]
-pub struct Owed(Vec<RecordBatch>);
+pub struct Owed(Vec<RecordBatch>, bool);
 
 impl Owed {
     /// Typed File lifecycle record result. Try every batch; an owed or
@@ -137,7 +137,7 @@ impl Owed {
         if !self.is_empty() {
             held::assert_none();
         }
-        let mut failed = false;
+        let mut failed = self.1;
         for batch in self.0 {
             // The batch owns its records. On unwind its Drop counts the
             // in-flight record uncertain and the remainder lost. Preserve
@@ -156,7 +156,11 @@ impl Owed {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.iter().all(RecordBatch::is_empty)
+        !self.1 && self.0.iter().all(RecordBatch::is_empty)
+    }
+
+    pub(crate) fn refuse(&mut self) {
+        self.1 = true;
     }
 
     pub(crate) fn push(&mut self, batch: RecordBatch) {
@@ -164,6 +168,7 @@ impl Owed {
     }
 
     pub(crate) fn extend(&mut self, other: Owed) {
+        self.1 |= other.1;
         self.0.extend(other.0);
     }
 
@@ -232,12 +237,35 @@ pub(crate) mod held {
 mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::adapter::GovernedPort {}
+    impl Sealed for crate::adapter::SessionPort {}
     #[cfg(test)]
     impl Sealed for crate::oracles::RecordingPort {}
 }
 
 /// The calls Mother makes to reach the world.
 pub trait EffectPort: Send + Sync + sealed::Sealed {
+    fn prepare_file_wait(
+        &self,
+        _: MissionId,
+        _: u64,
+        _: &PendingAction,
+    ) -> Result<Option<nexus_governed_control::host_session::approval::PreparedWait>, EffectRefusal>
+    {
+        Ok(None)
+    }
+    fn publish_file_wait(
+        &self,
+        _: nexus_governed_control::host_session::approval::PreparedWait,
+        _: u64,
+    ) -> Result<(), EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NotAdmitted,
+        })
+    }
+    /// Present only for a mandatory, broker-issued host session port.
+    fn session_context(&self) -> Option<nexus_governed_control::host_session::SessionContext> {
+        None
+    }
     /// Register before replay. The default port has no File eligibility.
     fn file_workspace(&self) -> Option<&str> {
         None

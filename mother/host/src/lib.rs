@@ -14,12 +14,34 @@
 
 #![deny(unsafe_code)]
 
+#[cfg(target_os = "linux")]
+pub mod hands;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod hands_tests;
+#[cfg(target_os = "linux")]
+mod legacy_stop;
+#[cfg(target_os = "linux")]
+pub mod legacy_terminal;
+#[cfg(target_os = "linux")]
+mod session_home;
+#[cfg(target_os = "linux")]
+mod stop;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod stop_tests;
+#[cfg(target_os = "linux")]
+pub mod terminal;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod terminal_tests;
+
 use nexus_governed_control::authority::approval::ControlConfirmer;
 use nexus_governed_control::authority::clock::SystemClock;
-use nexus_governed_control::authority::evidence::{EndStatus, MemoryEvidence};
+use nexus_governed_control::authority::evidence::{EndStatus, EvidenceRecord, MemoryEvidence};
 use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::broker::Vault;
-use nexus_governed_control::evidence_store::PrimaryEvidence;
+use nexus_governed_control::evidence_store::{EvidenceHealth, PrimaryEvidence};
 use nexus_governed_control::governed::{AgentDoor, GovernedControl};
 use nexus_mother::adapter::{create_private, mother_agent, FileJournal, FilePrivate};
 use nexus_mother::journal::JournalError;
@@ -41,6 +63,7 @@ pub struct Home {
     /// The evidence store, kept only to close its session on a clean
     /// Quit (`close_session`); nothing else of it is handed out.
     evidence: Arc<PrimaryEvidence>,
+    recent: Arc<MemoryEvidence>,
 }
 
 /// Why a home cannot be opened.
@@ -56,9 +79,10 @@ impl Home {
         }
         create_private(dir).map_err(|e| HomeError(e.to_string()))?;
         let broker = dir.join("broker");
+        let recent = Arc::new(MemoryEvidence::new(256));
         let evidence = PrimaryEvidence::open(
             &broker.join("p3-evidence").join("evidence.sqlite3"),
-            vec![Arc::new(MemoryEvidence::new(256))],
+            vec![recent.clone()],
         )
         .map_err(|e| HomeError(format!("evidence store: {}", e.as_str())))?;
         let control = GovernedControl::new(
@@ -73,6 +97,7 @@ impl Home {
             control: Arc::new(control),
             confirmer,
             evidence,
+            recent,
         })
     }
 
@@ -191,9 +216,33 @@ impl Home {
         self.evidence.close_session()
     }
 
+    /// Bounded recent projection, not a verified complete durable chain.
+    /// Owner-side only; neither this handle nor the writer goes to Mother.
+    pub fn recent_evidence(&self) -> Vec<EvidenceRecord> {
+        self.recent.records()
+    }
+
+    /// May wait for storage. Call on an owned backend worker, never ingress.
+    pub fn evidence_health(&self) -> EvidenceHealth {
+        self.evidence.health()
+    }
+
     /// The Owner's side of the broker (grants, approvals, the emergency
     /// stop). Never hand it to Mother.
     pub fn owner(&self) -> &Arc<GovernedControl> {
         &self.control
+    }
+}
+
+/// Startup refusal on targets without the acknowledged terminal protocol.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HandsStartupFailure {
+    UnsupportedPlatform,
+}
+impl HandsStartupFailure {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::UnsupportedPlatform => "hands_unavailable: unsupported_platform",
+        }
     }
 }
