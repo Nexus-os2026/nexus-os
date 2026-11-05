@@ -1040,10 +1040,7 @@ fn failed_startup(
     let _input = terminal.stop_reader(producers_until);
     let _stops = screen.stop.join_until(producers_until);
     let _modes = terminal.restore_modes(deadline);
-    let _delivered = screen.delivered(
-        &format!("{}\n", crate::terminal::UNCLEAN_NOTICE),
-        deadline,
-    );
+    let _delivered = screen.delivered(&format!("{}\n", crate::terminal::UNCLEAN_NOTICE), deadline);
     let _terminal = terminal.finish(deadline);
     std::mem::forget(startup);
     std::mem::forget(screen);
