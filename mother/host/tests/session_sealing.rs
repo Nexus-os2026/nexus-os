@@ -228,3 +228,42 @@ fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitu
         );
     }
 }
+
+#[test]
+fn fix1_f13_published_hands_build_is_self_contained() {
+    let readme = include_str!("../../README.md");
+    let section = readme.split("## Run Hands (").nth(1).unwrap();
+    let shell = section
+        .split("```bash\n")
+        .nth(1)
+        .unwrap()
+        .split("```")
+        .next()
+        .unwrap();
+    let build = shell.split("install -d").next().unwrap().trim();
+    assert!(
+        build.starts_with("cargo build "),
+        "published build must start with the repository-supported cargo command, without a builder scratch script: {build}"
+    );
+    assert_eq!(
+        build.lines().count(),
+        1,
+        "standalone build has no external slot assignment"
+    );
+    for argument in [
+        "-p nexus-mother-host",
+        "--bin mother-hands",
+        "--locked",
+        "--target-dir target",
+    ] {
+        assert!(
+            build.contains(argument),
+            "missing reproducible build argument {argument}"
+        );
+    }
+    assert!(!build.contains("/tmp/") && !build.contains("scratchpad") && !build.contains("$slot"));
+    assert!(
+        shell.contains("target/debug/mother-hands"),
+        "run the artifact built by the documented command"
+    );
+}
