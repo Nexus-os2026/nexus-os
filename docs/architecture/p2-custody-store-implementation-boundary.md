@@ -1,5 +1,14 @@
 # P2 custody store: implementation boundary (P2-V1-R3B-I3-I1, R1, R2, R3)
 
+> **Retained test contract, not a Mother roadmap.** The historical candidate,
+> evidence paths and status statements below describe the original study, not
+> today's checkout or an available Mother capability. Several evidence paths
+> now exist only in Git history. The current roles, mission and state come from
+> `MOTHER.md` and Git. This material is retained because
+> `crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs` embeds its
+> procedure tables and crash matrix. Those contracts are unchanged. It grants
+> no production integration, host qualification or permission to resume old work.
+
 This document records what the custody store implementation is, what it is
 not, and what stays open. It belongs to the candidate on
 `review/p2-v1-custody-store-implementation`, based on the R5 design commit

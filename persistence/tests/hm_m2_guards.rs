@@ -351,20 +351,15 @@ fn raw_opens(text: &str) -> usize {
 /// each one opens. None of them is the identity-home `nexus.db`.
 /// Mother Nexus cleanup (2026-10-31): the `metering/src/store.rs` and
 /// `marketplace/src/sqlite_registry.rs` rows named deleted crates.
-const RAW_OPEN_FILES: [(&str, &str); 5] = [
+/// Mother Nexus cleanup (2026-11-05): the `crates/nexus-memory/src/persistence.rs`
+/// and `crates/nexus-memory/src/audit.rs` rows named the deleted memory crate.
+/// Three rows remain; every remaining raw open must still be classified.
+const RAW_OPEN_FILES: [(&str, &str); 3] = [
     (
         "persistence/src/lib.rs",
         "NexusDatabase::open / in_memory (foreign keys on)",
     ),
     ("persistence/src/coding_run_ledger.rs", "coding-runs.db"),
-    (
-        "crates/nexus-memory/src/persistence.rs",
-        "<data_dir>/memory.db",
-    ),
-    (
-        "crates/nexus-memory/src/audit.rs",
-        "<data_dir>/memory_audit.db",
-    ),
     (
         "crates/nexus-governed-control/src/evidence_store.rs",
         "<state>/p3-evidence/evidence.sqlite3",

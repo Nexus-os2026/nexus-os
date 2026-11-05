@@ -14,6 +14,66 @@ mod desktop_tripwire;
 use source::{close_of, enclosing_fn, mask, production_files, ProdFile};
 use std::collections::BTreeMap;
 
+/// Mother Nexus cleanup (2026-11-05): the retired separate memory crate
+/// must not return alongside the kept kernel/persistence HM foundation.
+#[test]
+fn hm_m3_retired_nexus_memory_directory_is_absent() {
+    let path = source::workspace_root().join("crates/nexus-memory");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired crates/nexus-memory path must remain absent"
+    );
+}
+
+#[test]
+fn hm_m3_retired_nexus_memory_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            std::path::Path::new(member.as_str().expect("workspace member path"))
+                != std::path::Path::new("crates/nexus-memory")
+        }),
+        "the retired crates/nexus-memory must not be a workspace member"
+    );
+}
+
+/// Mother Nexus cleanup (2026-11-05): the retired production website
+/// builder must not return after its independent HTML oracles moved to kernel.
+#[test]
+fn hm_m3_retired_web_builder_directory_is_absent() {
+    let path = source::workspace_root().join("agents/web-builder");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired agents/web-builder path must remain absent"
+    );
+}
+
+#[test]
+fn hm_m3_retired_web_builder_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            std::path::Path::new(member.as_str().expect("workspace member path"))
+                != std::path::Path::new("agents/web-builder")
+        }),
+        "the retired agents/web-builder must not be a workspace member"
+    );
+}
+
 // ── A-S4: every production model call is classified (§12.1, §12.2, 04) ────
 
 /// The model-call shapes of A-S4: the call names and the known HTTP model
@@ -823,9 +883,10 @@ const NO_HANDOFF: [&str; 26] = [
 
 /// The subsystems of §12.8, by whole file (`dir/` prefix or file) or by
 /// function (`file::fn`).
-const SEPARATED_FILES: [&str; 3] = [
+/// Mother Nexus cleanup (2026-11-05): the `agents/web-builder/` row
+/// named the retired builder. Two remaining files retain the same scan.
+const SEPARATED_FILES: [&str; 2] = [
     "connectors/llm/src/rag.rs",
-    "agents/web-builder/",
     "kernel/src/cognitive/algorithms/world_model.rs",
 ];
 /// Mother Nexus cleanup (2026-10-31): every by-function entry was a desktop
@@ -1022,7 +1083,12 @@ fn hm_m3_n5_i4_no_checkpoint_memory_is_written_back() {
 /// `04-DISPATCH-INVENTORY.md` §K): `(file, fn or "*", class, reference)`.
 /// A file entry with `"*"` covers every site of that file (the contract
 /// names the file or its directory).
-const CLASSIFIED: [(&str, &str, &str, &str); 13] = [
+/// Mother Nexus cleanup (2026-11-05): the `crates/nexus-memory/src/` row
+/// named the deleted memory crate.
+/// Mother Nexus cleanup (2026-11-05): the four `agents/web-builder/src/`
+/// rows named the retired builder. Eight rows remain; every remaining
+/// production model call must still be classified.
+const CLASSIFIED: [(&str, &str, &str, &str); 8] = [
     // Mother Nexus cleanup (2026-10-31): the desktop (§12.2) rows, the
     // dreams, simulation, conductor and coder rows, the removed web-builder
     // modules and the swarm, capability-measurement and self-improve rows
@@ -1062,18 +1128,6 @@ const CLASSIFIED: [(&str, &str, &str, &str); 13] = [
         "04 K18",
     ),
     ("connectors/llm/src/routing.rs", "*", "latent", "04 K18"),
-    // Builder agents (04 K12, §12.2 "Builder agents").
-    ("agents/web-builder/src/plan.rs", "*", "XS", "04 K12"),
-    ("agents/web-builder/src/classifier.rs", "*", "XS", "04 K12"),
-    (
-        "agents/web-builder/src/model_router.rs",
-        "*",
-        "XS",
-        "04 K12",
-    ),
-    ("agents/web-builder/src/content_gen.rs", "*", "XS", "04 K12"),
-    // Crates (04 §K; §12.2 "Outside the desktop crate").
-    ("crates/nexus-memory/src/", "*", "latent", "04 K16"),
 ];
 
 // ── A-S4 errata E-M3-1 (AMENDMENT 3 A3.1): the sites §12.2 and 04 do not name
@@ -1397,10 +1451,8 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         ),
         Some("AR")
     );
-    assert_eq!(
-        class_of("crates/nexus-memory/src/embedding.rs", "embed_batch"),
-        Some("latent")
-    );
+    // Mother Nexus cleanup (2026-11-05): the assertion for the deleted
+    // `crates/nexus-memory/src/embedding.rs` `embed_batch` site was removed.
     assert_eq!(
         class_of(
             "connectors/llm/src/providers/ollama.rs",
@@ -1412,10 +1464,8 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         class_of("connectors/llm/src/attest.rs", "VerifiedLocalOllama::query"),
         Some("T")
     );
-    assert_eq!(
-        class_of("agents/web-builder/src/plan.rs", "generate_plan_with_model"),
-        Some("XS")
-    );
+    // Mother Nexus cleanup (2026-11-05): the assertion for the retired
+    // `agents/web-builder/src/plan.rs` `generate_plan_with_model` site was removed.
     assert_eq!(
         class_of("connectors/llm/src/attest.rs", "verify_local_ollama"),
         None
@@ -1724,7 +1774,10 @@ fn hm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog() {
 /// Mother Nexus cleanup (2026-10-31): the protocols, content, social-poster,
 /// connectors/social, factory, perception, nexus-code, coder and conductor
 /// rows named deleted crates.
-const XS_CRATES: [&str; 1] = ["agents/web-builder/"];
+/// Mother Nexus cleanup (2026-11-05): the final `agents/web-builder/`
+/// row named the retired builder. Zero XS crates remain; the scanners and
+/// planted controls stay, and the retirement guards above reject its return.
+const XS_CRATES: [&str; 0] = [];
 
 /// What an XS crate may never name: [`NO_HANDOFF`] and the types that hold
 /// or produce HM content.
@@ -1743,10 +1796,10 @@ const XS_NO_HANDOFF: [&str; 8] = [
 /// identifiers)`.
 /// Mother Nexus cleanup (2026-10-31): the protocols and factory rows named
 /// deleted crates.
-const XS_CLOSED_ENTRIES: [(&str, &[&str]); 1] = [(
-    "agents/web-builder/",
-    &["generate_image", "generate_all_images", "generate_api"],
-)];
+/// Mother Nexus cleanup (2026-11-05): the `agents/web-builder/` tuple
+/// named the retired builder's three closed entries. Zero tuples remain;
+/// the entry-reference scan and its planted controls remain unchanged.
+const XS_CLOSED_ENTRIES: [(&str, &[&str]); 0] = [];
 
 /// XS crates reached from outside the scanned set, by their library names.
 /// Mother Nexus cleanup (2026-10-31): every row (nexus-perception,

@@ -2,78 +2,103 @@
 
 *Your Mother. Our Home. Our Future.*
 
-Mother Nexus is being built as a governed, local-first Hybrid Intelligence: it
-turns a person's goal into a verified result. Independent agents research,
-challenge, build and verify; a deterministic broker, not a language model,
-controls every real effect; the person consents first, can stop anything, and
-learns along the way.
+Mother Nexus is a governed, local-first Hybrid Intelligence being built along
+one pathway: **goal → plan → governed execution → verified proof → teaching**.
+The AI proposes, a deterministic broker controls effects, and the Owner decides
+what matters. Most of the intelligence and the complete user journey are still
+unavailable. This is not production-ready or a claim of a passed physical gate.
 
-It is not production-ready, and most of what that sentence describes is
-**planned, not built**.
+The goal of Mother Nexus is to become a **Super Hybrid Intelligence** — her nine intelligence systems:
+Mission Brain, Research Council, Discovery Engine, Invention Lab, Governed Hands, Guardian+Verifier,
+Evidence Memory, Evolution Engine and Teaching Intelligence, working together at the top of the agency ladder,
+with the Owner, the AI and the deterministic rules each making the others stronger, while remaining trustworthy and stoppable.
+She must grow along the one main pathway, each rung of agency paid for by its guardrail first, never by weakening
+the safety core: an intelligence nobody can trust or stop is not super; the safety core is what lets her grow powerful.
+She is not a Super Hybrid Intelligence today; nothing is claimed before it is proven. Today's status remains as
+the [“Built and merged”](#built-and-merged) and [“Still to build and prove”](#still-to-build-and-prove) sections below say.
+Mother's skills map: [SKILLS.md](SKILLS.md).
 
-## What this repository is today
+## Built and merged
 
-On 2026-10-31 the Owner replaced the old Nexus OS with Mother Nexus. Only the
-parts of Nexus OS that are real, tested and useful to Mother were kept; everything
-else was removed. The removed code (the old desktop app and its 91 pages,
-about 45 crates, the marketing websites, server deployments and old evidence
-documents) is preserved, unchanged, at the tag
-[`archive/nexus-before-mother`](https://github.com/Nexus-os2026/nexus-os/tree/archive/nexus-before-mother)
-(commit `12eec16c`).
+The repository contains these implemented components. Implementation and tests
+are separate from installed-build qualification and Owner acceptance.
 
-The separate Mother desktop lives in `mother/desktop`; it still declines
-capability dialogues. This branch also includes the Linux terminal Hands
-candidate, described in [Run Hands](mother/README.md#run-hands-m2d-d-candidate-linux-only).
-Hands uses one broker-owned session boundary. After emergency it permits
-status, evidence and Quit; entered kernel calls may still finish. Restart is
-report-only and restores neither cleanup permission nor undo. Its automated
-tests do not replace Owner acceptance on the installed build.
-Older installed Nexus OS builds came from the archived code.
-
-| Crate | What it is | Mother system |
+| Component | What exists | Limit today |
 |---|---|---|
-| `crates/nexus-governed-control` | The capability broker: Owner grants, commitments, native approval, emergency Stop, evidence store | Governed Hands, Guardian, Stop |
-| `crates/nexus-verifier-sandbox` | Linux verification sandbox (namespaces, Landlock, seccomp); fails closed | Invention Laboratory, Verifier |
-| `kernel` | Workspace authority, governed paths, resource limits, secrets, governed coding runs, historical memory (`hm`), the cognitive loop | Hands, Evidence Memory, Mission Brain |
-| `persistence` | SQLite storage, including the fail-closed coding-run ledger | Evidence Memory |
-| `connectors/llm` | Model gateway, including the loopback-only Ollama provider | Research Council |
-| `crates/nexus-memory` | Hash-chained memory with contradiction detection | Evidence Memory |
-| `agents/web-builder` | Notes-to-static-site builder (templates, content, assembly). Publishing and network image generation were removed | Builder (first demo) |
-| `crates/nexus-self-improve` | Improvement proposals that are never applied by themselves | Evolution Engine |
-| `crates/nexus-outcome-eval` | Success criteria fixed before execution | Verifier |
-| `crates/nexus-crypto`, `sdk` | Shared primitives | — |
+| Governed coordinator (`mother/`) | Bounded mission contracts, hash-bound consent, deterministic transitions, lane budgets and Stop | Deterministic core, not a complete autonomous intelligence |
+| Durable journal and evidence | Restart holds, denial and Stop durability, private content separated from evidence, fail-closed replay | Unkeyed chains are not protection against an attacker rewriting all history; private content is not encrypted |
+| Broker door and halt | Owner-confirmed agent door, run binding, consent/resume controls, halt before recording and admission checks | Cancellation cannot undo an effect already performed |
+| Files | Consent-bound file sessions, bounded publication, retained settlement obligations and truthful uncertainty/recovery | Uncertain publication is not clean success; no general file or shell authority |
+| Terminal Hands session (M2d-D) | [Linux terminal File missions](mother/README.md#run-hands-m2d-d-candidate-linux-only) through one broker-owned session boundary | After emergency only status, evidence and Quit; entered kernel calls may still finish. Restart is report-only and restores neither cleanup permission nor undo. Linux terminal only; automated tests are not Owner acceptance |
+| Local model transport | Pinned local identity, loopback-only transport, budgets, cancellation, broker evidence | The worker's conversation route is **shut until installed qualification** (`N1_QUALIFIED = false`); no automatic cloud fallback |
+| Page checker | Inert-page policy, facts extraction and deterministic second reader | **Not rendered**; no viewport, layout or general content-correctness proof; its Mother lane is not wired |
+| Typed decisions T1 (`crates/nexus-typed-decision`) | Code-owned registry, bounded framing, strict reader, fixed-point values, advice composition and single-use assessment slots | Pure core with no I/O; no live model transport or permission-granting decisions |
+| Native desktop (`mother/desktop`) | GTK4 status window, Stop ingress, bounded Quit and honest status | Mission, door and resume dialogs decline; the full mission UI is not built |
 
-## Accepted foundation (Linux support profile)
+See [mother/README.md](mother/README.md) for invariants, oracle mappings and
+limits. [MOTHER.md](MOTHER.md) defines the charter and approvals;
+[AGENTS.md](AGENTS.md) preserves the permanent engineering rules. Current
+checkpoint and acceptance state come from Git and the latest approved mission.
 
-These Nexus OS phases were completed and frozen before the cleanup. Their
-checkpoints and evidence branches are unchanged; the cleanup does not
-redefine them.
+## Still to build and prove
 
-| Phase | Frozen checkpoint |
-|---|---|
-| Phase Zero — trust-boundary foundation | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
-| Phase One — governed coding workflow | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
-| Phase Two — governed verification execution | `rebuild/phase2-governed-verification` at `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc` |
-| Phase Three — governed real-world control | commit `51af45efc70dfe2551db29991f074c4a00d836de` |
+The first end-to-end local site mission, its model qualification and wiring,
+verified safe preview, complete native dialogs and teaching handoff are not
+accepted as a working whole. Independent live research, durable authenticated
+memory, invention, self-improvement promotion, cloud escalation and companion
+devices need their own approved work and evidence. No features are added beside
+the main pathway; other ideas remain parked.
 
-Evidence branches: `evidence/phase0-closure`, `evidence/phase1-closure`,
-`evidence/phase2-closure`. Windows and macOS validation remains deferred.
+Mother is **Linux-first**. Windows and macOS are deferred, unvalidated targets.
+There is no embedded browser engine in the native UI. A static page passing the
+checker has not been rendered or proved correct.
 
-## Non-claims
+## Build and test
 
-- Nothing in Mother Nexus's nine intelligence systems is accepted yet. A
-  capability counts only after its physical test passes on the real build.
-- No external audit, SOC 2, NIST or EU AI Act certification is claimed.
-- Path validation is not an operating-system sandbox; a workspace grant is not
-  subprocess confinement. The verifier sandbox is Linux x86_64 only.
-- When a cloud model provider is configured, request data leaves the machine.
-  Keeping everything local needs a local model runtime (Ollama) and no cloud
-  provider.
+Use the pinned Rust toolchain in `rust-toolchain.toml` (including its declared
+Wasm target). Linux desktop builds also need GTK4 development libraries and
+`pkg-config`; do not install host packages without the Owner's approval.
+A local model runtime is not needed for the pure coordinator or typed-decision
+tests. Live transport and sandbox tests need their separately qualified host.
 
-## Security
+```sh
+cargo build --workspace --locked
+cargo test -p nexus-mother -p nexus-typed-decision --locked
+cargo test --workspace --locked --no-fail-fast
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
 
-See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
+Follow the mission's shared Cargo slot when one is assigned. A test runner
+reporting a live test as unavailable is not installed-host proof. The Architect
+runs required CI on the exact candidate; local green alone is not acceptance.
 
-## License
+For an interactive deterministic demonstration of door, consent and restart
+holds (creates a fresh temporary home; calls no model):
+
+```sh
+cargo run -p nexus-mother-host --locked --example walk
+```
+
+To launch the limited GTK4 status window on a Linux desktop:
+
+```sh
+cargo run -p nexus-mother-desktop --locked --bin nexus-mother
+```
+
+## Relationship to the old product
+
+The old Nexus OS is not this product. Its desktop, services, broad agents and
+roadmaps are not Mother's runtime or backlog. Removed code remains in Git
+history and the `archive/nexus-before-mother` tag. Retained crates contain
+foundation code; their existence does not authorize Mother to call legacy
+paths. The old Nexus must never break Mother Nexus. Builders use only their
+approved worktree and keep isolation guards green.
+
+## Security and licence
+
+[SECURITY.md](SECURITY.md) explains reporting and non-claims;
+[THREAT_MODEL.md](THREAT_MODEL.md) records current trust boundaries. No external
+audit, certification or security-supported release is claimed.
 
 [MIT](LICENSE)

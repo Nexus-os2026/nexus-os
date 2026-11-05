@@ -1,19 +1,27 @@
 ---
-name: Feature Request
-about: Propose a new capability or product improvement
-title: "[Feature] "
+name: Main Pathway Proposal
+about: Propose a bounded improvement to Mother Nexus's main pathway
+title: "[Proposal] "
 labels: enhancement
 assignees: ""
 ---
 
-## Description
+## User benefit
 
-Describe the feature request.
+What does the person need to do, understand or verify?
 
-## Use Case
+## Main pathway
 
-Who needs this and why?
+Explain how this supports goal → plan → governed execution → verified proof
+→ teaching. Mother is ONE PLATFORM. New features beside this pathway are
+parked notes, not implementation requests.
 
-## Proposed Solution
+## Evidence and boundaries
 
-What should NexusOS do?
+What is built now, what is missing, which authority is needed, and what test
+would prove the improvement? Do not claim planned behavior already works.
+
+## Proposed scope
+
+Name a small reviewable change and its non-goals. A proposal grants no builder
+permission; implementation needs an approved mission under MOTHER.md.

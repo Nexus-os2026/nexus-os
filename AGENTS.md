@@ -1,24 +1,19 @@
 # AGENTS.md
 # Mother Nexus Engineering Constitution
 
-> **Role update, 2026-10-31 (Owner decision).** `MOTHER.md` defines current
-> roles and product direction. There is no ChatGPT, GPT or Codex role.
-> Claude Code is the Mother Architect and the executor ("Work" below).
-> Wherever this file says "Architect", read "the Mother Architect, subject to
-> the independence controls and Owner-only approvals in `MOTHER.md` §3".
-> Every permanent rule in Part I still applies in full. Part II is a historical
-> snapshot; current phase status is in `README.md` and Git.
-
 > Scope: repository root and all descendant paths unless a deeper `AGENTS.md` adds stricter local rules.
+>
+> `MOTHER.md` defines current roles and product direction. Claude Code is the
+> Mother Architect and executor ("Work" below). Every mention of "Architect"
+> is subject to the independence controls and Owner-only approvals in
+> `MOTHER.md` §3. The legacy label "ChatGPT Work" in Part I means that
+> executor, not a separate role. This constitution grants no additional role
+> or authority.
 >
 > A descendant `AGENTS.md` may narrow permissions, add tests, or add subsystem-specific requirements. It may **not** weaken this root constitution, bypass a trust boundary, authorize phase advancement, permit destructive Git operations, or remove required verification.
 >
-> This file contains two kinds of information:
->
-> 1. **PERMANENT ENGINEERING RULES** — durable operating rules for Nexus OS.
-> 2. **CURRENT PROJECT STATE** — a point-in-time snapshot that may change as approved work lands.
->
-> If the current-state section becomes stale, preserve the permanent rules and re-establish current state from Git, GitHub, approved architecture records, and the latest architect-approved mission.
+> Part I contains permanent engineering rules. Part II points to current
+> authority; it is not a checkpoint, roadmap, or CI snapshot.
 
 ---
 
@@ -26,7 +21,7 @@
 
 ## 1. Purpose
 
-Nexus OS is being rebuilt as a governed, local-first agentic operating system.
+Mother Nexus is being built as a governed, local-first Hybrid Intelligence.
 
 It is not acceptable for the system to merely appear functional.
 
@@ -90,7 +85,12 @@ The Architect:
 - reviews the verified mission result
 - authorizes phase progression
 
-The Architect is independent of the implementation loop.
+The Architect is independent of the implementation loop. Under [MOTHER.md
+§3](MOTHER.md#3-independence-without-a-second-architect), this means independent
+review and acceptance through its pre-registered oracles, deterministic gates,
+fresh-context security review and Owner-only approvals. The Architect also
+implements, but must never approve its own work; implementation cannot replace
+those independent controls or Owner physical acceptance.
 
 Work must not silently replace architect decisions with its own broader architecture.
 
@@ -382,6 +382,10 @@ Do not implement repair work directly on `main`.
 
 Do not merge to `main` unless explicitly authorized.
 
+`main` may advance only through an explicit Owner-approved fast-forward integration.
+
+Before merging into `main`, all required jobs in `.github/workflows/ci.yml` and `.github/workflows/audit.yml` must pass on the exact candidate SHA. Fast Local CI cannot replace these gates.
+
 Use bounded repair branches/worktrees.
 
 Prefer one root cause per repair commit.
@@ -445,7 +449,33 @@ If used:
 
 ---
 
+## 7.5 Immutable historical refs
+
+The historical closure refs `rebuild/phase0-trust-boundary`,
+`evidence/phase0-closure`, `rebuild/phase1-governed-coding` and
+`evidence/phase1-closure` must not move. No mission, report or agent can
+authorize moving them. Evidence for later work belongs on a new designated
+ref. Removing the old operational snapshot does not change these protections.
+
+`rebuild/phase2-governed-verification` and `evidence/phase2-closure` are also immutable historical refs. Neither may move; subsequent work and evidence belong on new refs.
+
+The Owner-frozen Phase Three engineering identity is commit
+`51af45efc70dfe2551db29991f074c4a00d836de`. Later documentation or integration
+must not redefine it or expand its recorded claims.
+
+---
+
 # 8. Worktree Discipline
+
+Local clones name their remotes differently, and a clone's `origin` or a
+branch's configured upstream may point at a stale mirror. Name the remote and
+ref explicitly for every fetch, push and comparison; never rely on a bare
+`git push` or `git pull`.
+
+No filesystem path is authoritative. Discover worktrees with
+`git worktree list --porcelain` and choose one by its branch, `HEAD` and tree
+compared with the mission's approved refs. A worktree that has a protected
+branch checked out is not a place to commit.
 
 Before any implementation:
 
@@ -526,6 +556,10 @@ CI is an evidence system.
 It is not a box-checking exercise.
 
 ## 11.1 Required Behavior
+
+Before merging into `main`, all required jobs in `.github/workflows/ci.yml` and `.github/workflows/audit.yml` must pass on the exact candidate SHA. Fast Local CI cannot replace these gates.
+
+Deferred portability CI is additional evidence, not a substitute for these gates.
 
 After an authoritative push:
 
@@ -736,7 +770,8 @@ If a test measures process-wide handles/file descriptors/global state, serialize
 
 # 14. Platform Portability Rules
 
-Nexus OS targets Linux, Windows, and macOS.
+Mother Nexus is Linux-first today. Windows and macOS are deferred portability
+targets, not validated platforms.
 
 "Works on Linux" is not sufficient for cross-platform components.
 
@@ -909,131 +944,21 @@ Never use "complete" to mean "I made progress."
 
 ---
 
-# PART II — CURRENT PROJECT STATE
+# PART II — CURRENT AUTHORITY
 
-> Snapshot date: 2026-09-30 (P2-ENTRY-H1).
->
-> This section is operational context, not permanent authorization.
-> Re-verify it against Git and GitHub before acting. The latest
-> Architect-approved mission supersedes it.
+# 21. Sources of truth
 
-# 21. Project and Sources of Truth
+Use `MOTHER.md` for Mother Nexus's charter, the latest explicit
+Owner/Architect-approved mission for scope and permissions, and Git plus the
+mission's required verification evidence for current state. Re-establish the
+branch, base, changed files and gates at the start of each mission. A document
+or a green run never authorizes the next mission.
 
-Project:
+Mother follows one pathway: goal → plan → governed execution → verified proof
+→ teaching. Old product plans are not Mother's roadmap. Do not store current
+SHAs, candidate branches, changing phase status or a copied CI job list here.
 
-```text
-Nexus OS — governed, local-first agentic AI operating environment
-```
-
-Authoritative remote:
-
-```text
-GitHub: Nexus-os2026/nexus-os
-```
-
-- Local clones name their remotes differently, and a clone's `origin` or a branch's configured upstream may point at a stale mirror. Name the remote and ref explicitly for every fetch, push and comparison; never rely on a bare `git push` or `git pull`.
-- No filesystem path is authoritative. Discover worktrees with `git worktree list --porcelain` and choose one by its branch, `HEAD` and tree compared with the refs in §22 and §23.
-- A worktree that has a protected branch checked out is not a place to commit.
-
----
-
-# 22. Phase Status
-
-| Phase | Status | Frozen checkpoint | Evidence |
-|---|---|---|---|
-| Phase Zero — trust-boundary foundation | Complete, Linux support profile (Architect declaration 2026-09-29) | `rebuild/phase0-trust-boundary` = `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` | `evidence/phase0-closure` = `e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1` |
-| Phase One — governed coding workflow | Complete, Linux support profile (Architect declaration 2026-09-30) | `rebuild/phase1-governed-coding` = `14270a9a38770ac84456c1f812042d2967edec42` | `evidence/phase1-closure` = `c237937189b5977eaad01acad6a4c52bcce796cc` |
-| Phase Two — governed verification execution | **In progress** (P2-IMPLEMENT, Linux support profile): implementation candidate on `implement/phase2-governed-verification`, under Architect review; not complete | — | — |
-
-- `main` is the public default branch. The Phase Two mission started from `main` = `e47bf65788247946eb8401138f57435e7c1680fc` (tree `1ea52b426ae859aaa1dadea0a0c8f1726e513376`): the frozen Phase One checkpoint plus post-completion status documentation, generated ACL schema/test hygiene and the Architect-authorized P2-ENTRY hardening integration. Those commits do not redefine the frozen checkpoint. Later Architect-approved commits may advance `main`; verify it with Git.
-- The P1→P2 deep local reality audit is complete and was accepted by the Architect for Phase Two architecture design.
-- Phase Two is implemented under the Architect-approved P2-IMPLEMENT mission; its design record is `docs/security/phase2-governed-verification.md`. The implementation branch is a candidate only: it is not integrated, no Phase Two evidence or frozen ref exists, and only the Architect declares completion.
-
----
-
-# 23. Protected Refs
-
-```text
-main                              public default branch
-rebuild/phase0-trust-boundary     frozen Phase Zero checkpoint
-evidence/phase0-closure           Phase Zero evidence
-rebuild/phase1-governed-coding    frozen Phase One checkpoint
-evidence/phase1-closure           Phase One evidence
-```
-
-The four closure refs above (`rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding`, `evidence/phase1-closure`) are immutable historical checkpoints and evidence. They must not move, and no mission, report or agent can authorize moving them. Evidence for a future phase goes on a new Architect-designated ref, never on one of these. `main` is different: it may advance only through an explicit Architect-authorized fast-forward integration.
-
----
-
-# 24. Supported Validation Profile
-
-- Linux is the supported validation profile for Phase Zero and Phase One.
-- Phase Two's sandboxed verification exists only on Linux x86_64 and only where every mandatory layer is available (unprivileged user namespaces, Landlock ABI ≥ 6, the seccomp allow-list, cgroup v2 user delegation through the systemd user manager, the packaged verifier toolchain and the installed helper). Anywhere else it is unavailable: it fails closed, with no degraded mode.
-- Windows and macOS portability validation is deferred. Linux success is not Windows or macOS proof, and no Phase Zero or Phase One security claim is made for them.
-- Part I §14 still applies to new code: do not add platform assumptions that would block the deferred portability work.
-
----
-
-# 25. Current CI Gate
-
-The gate for a candidate is NEXUS OS CI (`.github/workflows/ci.yml`) and NEXUS OS Security Audit (`.github/workflows/audit.yml`), all jobs green on the exact SHA:
-
-```text
-NEXUS OS CI:               test-linux, security-audit-linux, test-frontend, test-python
-NEXUS OS Security Audit:   security-audit
-```
-
-- NEXUS OS CI runs on push to `main` and by `workflow_dispatch` with an Architect-approved `candidate_sha`. Security Audit runs on push to `main`, weekly and by dispatch.
-- `test-linux` includes formatting, Clippy, the Rust tests, the live webview boundary harness (dev and release profiles) and the packaged Builder toolchain gate.
-- NEXUS OS Fast Local CI (`.github/workflows/ci-fast-local.yml`) runs on a self-hosted runner for pushes to `implement/**` and `repair/**`. It is pre-integration evidence, not the gate.
-- The deferred portability workflow (`.github/workflows/ci-portability.yml`, macOS and Windows) runs only by dispatch. It is deferred evidence, not a gate.
-- The old five-job Phase Zero baseline (`test-linux`, `test-windows`, `test-macos`, `test-frontend`, `test-python`) is historical. It is not the current gate.
-
----
-
-# 26. Workflow Doctrine
-
-The old manual bridge workflow:
-
-```text
-Architect → Owner copies prompt → Work → Owner copies result → Architect
-```
-
-is no longer the preferred operating model when Work has direct repository and GitHub access.
-
-The corrected model is:
-
-```text
-Owner
-  ↓
-Architect defines and approves bounded mission
-  ↓
-Work executes autonomously
-  ↓
-Work runs tests / Git / GitHub / CI directly
-  ↓
-Work iterates within mission
-  ↓
-Work produces verified result
-  ↓
-Architect reviews result and decides next mission
-```
-
-The Owner remains in control of goals and approvals.
-
-The Architect remains the architecture/security reviewer.
-
-Work becomes autonomous **inside** the mission rather than requiring the Owner to transport every intermediate artifact.
-
----
-
-# 27. History
-
-Until 2026-09-30 this part held a 2026-09-22 Phase Zero snapshot: the P0-002C2 plan, the R5.1 Darwin process-group work, the R5–R9 CI repair order, the known Windows, macOS and frontend CI root-cause groups, and the five-job CI gate. That material is history. It authorizes nothing and does not describe the current state. It is preserved in Git (`git show 6f3d64360dd21aa8d717c3995c46e48f396148b9:AGENTS.md`, former §§21–29) for the deferred portability work.
-
----
-
-# 28. Final Rule
+# 22. Final rule
 
 When uncertain, prefer:
 

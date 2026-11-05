@@ -1,6 +1,6 @@
 [package]
 name = "nexus-kernel"
-description = "Core kernel providing governance, audit trails, fuel metering, and agent supervision for Nexus OS"
+description = "Retained governance, authority, audit and resource primitives for Mother Nexus; legacy actuators are not Mother routes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -69,6 +69,7 @@ windows-sys = { version = "=0.61.2", features = [
 ] }
 
 [dev-dependencies]
+scraper = "0.22"
 tempfile = "3"
 serial_test = "3"
 nexus-kernel = { path = ".", features = ["test-utils"] }

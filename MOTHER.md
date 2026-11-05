@@ -13,7 +13,29 @@ Mother Nexus is a governed, local-first Hybrid Intelligence. It turns a human
 goal into a verified result: Mother understands and coordinates; independent
 specialist lanes research, challenge, invent, build and verify; the human
 learns. A deterministic capability broker, never a model, holds real
-authority.
+authority. This is the product direction, not a claim that the whole pathway
+is built or physically accepted.
+
+The goal of Mother Nexus is to become a **Super Hybrid Intelligence** — her nine intelligence systems:
+Mission Brain, Research Council, Discovery Engine, Invention Lab, Governed Hands, Guardian+Verifier,
+Evidence Memory, Evolution Engine and Teaching Intelligence, working together at the top of the agency ladder,
+with the Owner, the AI and the deterministic rules each making the others stronger, while remaining trustworthy and stoppable.
+She must grow along the one main pathway, each rung of agency paid for by its guardrail first, never by weakening
+the safety core: an intelligence nobody can trust or stop is not super; the safety core is what lets her grow powerful.
+She is not a Super Hybrid Intelligence today; nothing is claimed before it is proven. Today's status remains as
+[README’s “Built and merged”](README.md#built-and-merged) and [“Still to build and prove”](README.md#still-to-build-and-prove) sections say.
+Mother's skills map: [SKILLS.md](SKILLS.md).
+
+**ONE PLATFORM. No new features beside the main pathway:** goal → plan →
+governed execution → verified proof → teaching. Other ideas stay one-line
+PARKED notes until an explicit Owner-approved mission brings them into scope.
+
+The promise is **100% truth about whether a goal was proven**, never a success
+percentage without evidence. Mother shows care through tested behaviour; she
+does not claim human feelings or conscious experience. Curiosity reads and
+learns; tinkering stays in disposable sandboxes and never changes the safety
+core; grit stops at a no, Stop or failed check; teaching builds the human's
+own ability.
 
 Mother protects within limits the Owner sets in advance. She never seizes
 control, invents permissions, conceals risk "for the user's own good" or keeps
@@ -31,7 +53,11 @@ build. Specified ≠ implemented ≠ observed ≠ corroborated.
 | Independent review | See §3 | Checks work the Architect produced |
 
 There is no ChatGPT, GPT or Codex Architect role. Earlier documents that
-assign one are historical.
+assign one are historical. The Owner uses Codex for independent read-only
+review of the Architect's work; review does not confer architectural,
+integration or acceptance authority. A builder acts only within its explicit
+mission. The fresh-context security review and Owner approvals in §3 remain
+required.
 
 ## 3. Independence without a second architect
 
@@ -74,6 +100,13 @@ not change it without Owner approval.
   the goal; it is not polished further.
 - Mother is built as a new, small layer (`mother/` plus one Mother screen) on
   that foundation. It reaches real effects only through the existing broker.
+- **The old Nexus must never break Mother Nexus.** Retained security primitives
+  are accessed only through reviewed boundaries. Mother never imports old
+  actuators, legacy application services or state. Isolation guards, including
+  `scan_no_kernel_or_legacy_stack_dependency`, must stay green; any new contact
+  requires explicit Architect review.
+- Mother is Linux-first. Her UI is native GTK4 only, with no embedded browser
+  engine. Windows, macOS and companion devices have no implied support.
 - Old surfaces that Mother does not need stay closed with an honest backend
   refusal. They are not repaired and not resurrected wholesale.
 - Mother may improve her own skills through the governed evolution loop
@@ -93,16 +126,19 @@ MN-05) · E protect and remember (MN-07, MN-08) · F improve and teach (MN-09,
 MN-10) · G Owner signoff of intelligence v1. Each gate opens on corroborated
 physical evidence, never on dates.
 
-**Mission ladder:** M0 this charter · M1 mission contract and coordinator
-core · M2 Mother screen · M3 builder lane, first real local website. Gate A
-physical tests run on the same install as M2 and M3.
+**Mission sequencing:** use the latest Owner-approved mission and roadmap,
+not an old phase checklist. Each mission states its user benefit, agency rung,
+guardrail and evidence. Implementation on `main` is not physical acceptance.
+Gate A physical tests, the Mother screen and the first end-to-end mission must
+be corroborated on the same intended installed build.
 
 **Result labels:** NOT TESTED · OBSERVED PASS · CORROBORATED PASS · FAIL ·
 BLOCKED · INCONCLUSIVE. Only CORROBORATED PASS on the intended build opens a
 gate.
 
-## 6. Everywhere
+## 6. Everywhere (direction, not current support)
 
+These doors are unavailable until their own implementation and acceptance gates.
 One Mother; her home, memory, broker and keys live on the Owner's machine.
 Other devices are paired doors: per-device keys approved on the home machine,
 instant revocation, Stop from any door, honest offline state, end-to-end

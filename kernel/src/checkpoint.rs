@@ -2,7 +2,7 @@
 //! full agent execution state, side effects, and recovery strategies.
 //!
 //! Three-level rollback:
-//! - **Level 1**: Memory rollback (nexus-memory Phase 3 — already built)
+//! - **Level 1**: Legacy memory rollback (retired; identifier retained below)
 //! - **Level 2**: Execution rollback (this module) — task state, plan, step outputs
 //! - **Level 3**: Side effect compensation (this module) — file writes, messages, API calls
 
@@ -31,7 +31,7 @@ pub struct ExecutionCheckpoint {
     pub step_index: usize,
     pub plan_state: serde_json::Value,
     pub step_outputs: Vec<StepOutput>,
-    /// Links to nexus-memory MemoryCheckpoint.
+    /// Legacy memory checkpoint identifier retained for serialized compatibility.
     pub memory_checkpoint_id: Option<Uuid>,
     /// Side effects recorded since the previous checkpoint.
     pub side_effects: Vec<SideEffect>,

@@ -4,7 +4,7 @@ version = "0.1.0"
 license = "MIT"
 edition = "2021"
 publish = false
-description = "Phase Two governed verification: verifier profiles, sandbox and resource policy identities, and the Linux verifier sandbox helper"
+description = "Retained Linux verifier isolation and policy primitives for Mother Nexus; unavailable without all mandatory layers"
 
 [dependencies]
 sha2 = "0.10"
