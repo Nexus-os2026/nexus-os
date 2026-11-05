@@ -208,11 +208,21 @@ pub struct FileReceipt {
     pub overtaken: bool,
 }
 
-/// What the interface and Mother's port may know of the workspace.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+/// What the interface and Mother's port may know of the workspace. Its
+/// `Debug` shows the id and the size of the name, never the name.
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct WorkspaceInfo {
     pub id: String,
     pub name: String,
+}
+
+impl fmt::Debug for WorkspaceInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkspaceInfo")
+            .field("id", &self.id)
+            .field("name_bytes", &self.name.len())
+            .finish()
+    }
 }
 
 /// What a workspace may not be (§6.2): exactly `/`, `home` or

@@ -255,8 +255,9 @@ pub(crate) fn text_digest(text: &str) -> String {
     super::ids::Digest::of(TEXT_DOMAIN, &[text.as_bytes()]).to_hex()
 }
 
-/// One evidence record. Every text field is bounded by `bounded`.
-#[derive(Clone, Debug)]
+/// One evidence record. Every text field is bounded by `bounded`. Its
+/// `Debug` shows no target and no detail: ids, codes, digests and sizes.
+#[derive(Clone)]
 pub struct EvidenceRecord {
     pub phase: EvidencePhase,
     pub at_wall_ms: u64,
@@ -281,6 +282,34 @@ pub struct EvidenceRecord {
     privacy: Privacy,
     /// Sealed (I6 applied) on its way to a sink: sealing is done once.
     sealed: bool,
+}
+
+impl std::fmt::Debug for EvidenceRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvidenceRecord")
+            .field("phase", &self.phase)
+            .field("at_wall_ms", &self.at_wall_ms)
+            .field("policy_generation", &self.policy_generation)
+            .field("commitment", &self.commitment)
+            .field("agent", &self.agent)
+            .field("run", &self.run)
+            .field("kind", &self.kind)
+            .field("class", &self.class)
+            .field("operation", &self.operation)
+            .field("target_bytes", &self.target.as_ref().map(String::len))
+            .field("target_digest", &self.target_digest)
+            .field("parameters_digest", &self.parameters_digest)
+            .field("approval", &self.approval)
+            .field("started_wall_ms", &self.started_wall_ms)
+            .field("finished_wall_ms", &self.finished_wall_ms)
+            .field("outcome", &self.outcome)
+            .field("failure", &self.failure)
+            .field("cancelled", &self.cancelled)
+            .field("detail_entries", &self.detail.len())
+            .field("privacy", &self.privacy)
+            .field("sealed", &self.sealed)
+            .finish()
+    }
 }
 
 /// Longest text a record keeps for one field.

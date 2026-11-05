@@ -30,14 +30,33 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// What a tool's builder produced from its typed input.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What a tool's builder produced from its typed input. Its `Debug` shows
+/// counts and sizes, never an argument, a file or a summary line.
+#[derive(Clone, PartialEq, Eq)]
 pub struct ToolInvocation {
     pub args: Vec<String>,
     /// Files written into the working directory before the launch, by
     /// names the definition fixes.
     pub files: Vec<(&'static str, Vec<u8>)>,
     pub summary: Vec<String>,
+}
+
+impl std::fmt::Debug for ToolInvocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolInvocation")
+            .field("arg_count", &self.args.len())
+            .field("file_count", &self.files.len())
+            .field(
+                "file_bytes",
+                &self
+                    .files
+                    .iter()
+                    .map(|(_, bytes)| bytes.len())
+                    .sum::<usize>(),
+            )
+            .field("summary_lines", &self.summary.len())
+            .finish()
+    }
 }
 
 /// What a tool returns.
@@ -64,13 +83,23 @@ pub struct ToolDefinition {
     pub(crate) trust: Trust,
 }
 
-/// A tool request, as data.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+/// A tool request, as data. Its `Debug` shows the size of the name and the
+/// shape of the input, never either.
+#[derive(Clone, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ToolIntent {
     pub tool: String,
     #[serde(default)]
     pub input: Value,
+}
+
+impl std::fmt::Debug for ToolIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolIntent")
+            .field("tool_bytes", &self.tool.len())
+            .field("input", &crate::connector::JsonShape(&self.input))
+            .finish()
+    }
 }
 
 const MAX_ARGS: usize = 64;

@@ -210,8 +210,8 @@ pub(crate) enum Append {
     Latched,
 }
 
-/// A row as stored.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A row as stored. Its `Debug` shows the body's size, never the body.
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Row {
     pub(crate) seq: u64,
     pub(crate) session: String,
@@ -221,6 +221,21 @@ pub(crate) struct Row {
     pub(crate) body: String,
     pub(crate) prev: String,
     pub(crate) tag: String,
+}
+
+impl std::fmt::Debug for Row {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Row")
+            .field("seq", &self.seq)
+            .field("session", &self.session)
+            .field("stored_ms", &self.stored_ms)
+            .field("phase", &self.phase)
+            .field("commitment", &self.commitment)
+            .field("body_bytes", &self.body.len())
+            .field("prev", &self.prev)
+            .field("tag", &self.tag)
+            .finish()
+    }
 }
 
 /// The most records owed at once: at least the commitments that can be live

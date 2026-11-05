@@ -82,13 +82,25 @@ impl DestHost {
     }
 }
 
-/// A canonical request destination.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A canonical request destination. Its `Debug` shows the scheme, the host
+/// and the port, which are what a grant names, and not the path or the
+/// query, which the agent chose.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Destination {
     url: Url,
     scheme: &'static str,
     host: DestHost,
     port: u16,
+}
+
+impl std::fmt::Debug for Destination {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Destination")
+            .field("scheme", &self.scheme)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Destination {

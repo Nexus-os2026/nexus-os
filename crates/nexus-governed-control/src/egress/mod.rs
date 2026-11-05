@@ -59,8 +59,9 @@ impl Default for EgressLimits {
 
 /// A request, as data: what a planner, an agent action or a command asks
 /// for. It carries no credential; credentials reach requests only through
-/// connector operations and broker leases.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+/// connector operations and broker leases. Its `Debug` shows sizes and
+/// counts, never the method, the URL, a header or the body.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct EgressIntent {
     pub method: String,
@@ -69,6 +70,16 @@ pub struct EgressIntent {
     pub headers: Vec<(String, String)>,
     #[serde(default)]
     pub body: Option<String>,
+}
+
+impl std::fmt::Debug for EgressIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EgressIntent")
+            .field("url_bytes", &self.url.len())
+            .field("header_count", &self.headers.len())
+            .field("body_bytes", &self.body.as_ref().map(String::len))
+            .finish_non_exhaustive()
+    }
 }
 
 /// Headers a request may carry. Everything else (`Authorization`, `Cookie`,
