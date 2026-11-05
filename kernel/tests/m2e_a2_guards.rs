@@ -16,6 +16,9 @@
 #[path = "hm_m3_guards/source.rs"]
 mod source;
 
+#[path = "hm_m3_guards/predicate_controls_tests.rs"]
+mod predicate_controls_tests;
+
 use nexus_kernel::coding_run::{LocalOllama, ModelError};
 use nexus_kernel::emergency_stop::StopAuthority;
 use nexus_kernel::inference::{
@@ -726,6 +729,187 @@ impl crate::inference::ModelTransport for Alternate {
     )]);
     assert_eq!(found.len(), 1);
     assert!(found[0].contains("ModelTransport implementations:"));
+}
+
+/// D1 stricter oracle amendment (R-3): old rule: "count named ModelTransport
+/// implementations and exact identifier sites". New rule: "also reject macro
+/// trait positions containing metavariables or ending in ModelTransport, macro
+/// invocations naming ModelTransport, and inference globs outside inference".
+/// Concrete macro trait paths without a metavariable remain permitted.
+/// The same test-item filtering used by the workspace scan, for fixture text.
+fn production_route_plant(rel: &str, src: &str) -> ProdFile {
+    let mut file = planted(rel, src);
+    let (ranges, _) = source::cfg_test_items(&file.code, &file.text);
+    let mut code = file.code.into_bytes();
+    let mut text = file.text.into_bytes();
+    for (start, end) in ranges {
+        for at in start..end {
+            if code[at] != b'\n' {
+                code[at] = b' ';
+                text[at] = b' ';
+            }
+        }
+    }
+    file.code = String::from_utf8(code).unwrap();
+    file.text = String::from_utf8(text).unwrap();
+    file
+}
+
+#[test]
+fn e_o65_macro_transport_reviewer_bypass_is_red_at_the_exact_identifier_count() {
+    let real = include_str!("../src/inference/ollama.rs");
+    let approved = production_route_plant("kernel/src/inference/ollama.rs", real);
+    assert!(route_guard_findings(&[approved]).is_empty());
+    let start = real.find("use super::{").unwrap();
+    let end = start + real[start..].find("};").unwrap() + 2;
+    assert!(real[start..end].contains("ModelTransport"));
+    // Reviewer's exact-count bypass: glob import, parameterized trait impl,
+    // and a qualified trait argument leave two ModelTransport identifiers.
+    let bypass = format!(
+        "{}use super::*;{}\n{}",
+        &real[..start],
+        &real[end..],
+        r#"
+struct Alternate {
+    client: reqwest::blocking::Client,
+    endpoint: String,
+    identity: ModelIdentity,
+}
+macro_rules! alternate_transport {
+    ($transport:path) => {
+        impl $transport for Alternate {
+            fn identity(&self) -> &ModelIdentity { &self.identity }
+            fn call(&self, _: &ModelRequest, _: &CallContext<'_>) -> Result<ModelReply, ModelError> {
+                let _ = self.client.post(&self.endpoint).send();
+                Err(ModelError::ConfigMismatch)
+            }
+        }
+    };
+}
+alternate_transport!(super::ModelTransport);
+"#
+    );
+    let file = production_route_plant("kernel/src/inference/ollama.rs", &bypass);
+    assert_eq!(
+        route_tokens(&file.code)
+            .iter()
+            .filter(|&&token| token == "ModelTransport")
+            .count(),
+        2
+    );
+    let findings = route_guard_findings(&[file]);
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("macro_rules trait implementation")),
+        "macro body must be rejected at the approved count: {findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("macro invocation names ModelTransport")),
+        "macro argument must be rejected independently: {findings:?}"
+    );
+}
+
+#[test]
+fn e_o65_macro_and_inference_glob_rules_have_red_and_green_controls() {
+    let approved = || {
+        planted(
+            "kernel/src/inference/ollama.rs",
+            "use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+        )
+    };
+    for body in [
+        "impl $transport for Alternate {}",
+        "impl<T> $transport for Wrapper<T> {}",
+        "impl $($p)::+ for Alternate {}",
+        "impl $module::Trait for $ty {}",
+        "impl crate::$trait_name for $ty {}",
+        "impl<T> crate::Trait<$transport> for Wrapper<T> {}",
+        "impl crate::ModelTransport for Alternate {}",
+        "impl ::nexus_kernel::inference::r#ModelTransport for Alternate {}",
+    ] {
+        let src = format!("macro_rules! make_impl {{ ($transport:path) => {{ {body} }}; }}");
+        let findings =
+            model_transport_findings(&[approved(), planted("kernel/src/ordinary.rs", &src)]);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("macro_rules trait implementation")),
+            "must fail closed on {src}: {findings:?}"
+        );
+    }
+    for src in [
+        "inspect!(super::ModelTransport);",
+        "crate::inspect!{r#ModelTransport}",
+        "inspect!([ModelTransport]);",
+    ] {
+        // Balance the inventory in its existing owner so this rule is tested
+        // independently of the identifier-count rule.
+        let src = format!("impl ModelTransport for VerifiedOllama {{}} {src}");
+        let findings = model_transport_findings(&[planted("kernel/src/inference/ollama.rs", &src)]);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("macro invocation names ModelTransport")),
+            "must reject {src}: {findings:?}"
+        );
+    }
+    for src in [
+        "use nexus_kernel::inference::*;",
+        "pub use crate::inference::ollama::*;",
+        "use nexus_kernel::{inference::*, coding_run::LocalOllama};",
+        "use crate::inference::{self, ollama::{*}};",
+        "use ::nexus_kernel::r#inference::*;",
+        "use super::inference::*;",
+    ] {
+        let findings =
+            model_transport_findings(&[approved(), planted("kernel/src/ordinary.rs", src)]);
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("inference glob import")),
+            "must reject {src}: {findings:?}"
+        );
+    }
+    for src in [
+        "macro_rules! ordinary { ($name:ident) => { fn $name() {} }; } ordinary!(hello);",
+        "macro_rules! inherent { ($ty:ty) => { impl $ty { fn hello() {} } }; }",
+        "macro_rules! concrete { ($name:ident) => { impl fmt::Debug for $name {} impl Serialize for $name {} impl<'de> Deserialize<'de> for $name {} }; }",
+        "macro_rules! concrete_generic { ($name:ident) => { impl<T> crate::Trait<T> for $name {} }; }",
+        "macro_rules! body { () => { const S: &str = \"impl Trait for X {} ModelTransport\"; }; }",
+        "use crate::ordinary::*; use nexus_kernel::inference::VerifiedOllama;",
+        "use crate::ordinary::inference::*; use other_crate::inference::*;",
+        "#[cfg(test)] macro_rules! test_transport { ($transport:path) => { impl $transport for X {} }; }",
+        "#[cfg(all(test, unix))] mod test_only { use nexus_kernel::inference::*; inspect!(ModelTransport); }",
+    ] {
+        let findings = model_transport_findings(&[
+            approved(),
+            production_route_plant("mother/src/ordinary.rs", src),
+        ]);
+        assert!(findings.is_empty(), "ordinary or genuinely test-only code: {src}: {findings:?}");
+    }
+    // Real production concrete-trait macro accepted by R-3, without exemptions.
+    let real = include_str!("../../crates/nexus-typed-decision/src/slot.rs");
+    let start = real.find("macro_rules! redacted_debug").unwrap();
+    let open = start + real[start..].find('{').unwrap();
+    let end = source::close_of(real, open);
+    let findings = model_transport_findings(&[
+        approved(),
+        planted("crates/nexus-typed-decision/src/slot.rs", &real[start..end]),
+    ]);
+    assert!(
+        findings.is_empty(),
+        "real concrete Debug macro: {findings:?}"
+    );
+    // A glob within the inference authority does not import identifiers into
+    // another production module and is allowed by the new glob rule.
+    let findings = model_transport_findings(&[planted(
+        "kernel/src/inference/ollama.rs",
+        "use super::*; use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+    )]);
+    assert!(findings.is_empty(), "{findings:?}");
 }
 
 #[test]

@@ -13,6 +13,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+#[path = "source_cfg_tests.rs"]
+mod cfg_tests;
+
+#[cfg(test)]
+#[path = "source_literals_tests.rs"]
+mod source_literals_tests;
+
 pub fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
