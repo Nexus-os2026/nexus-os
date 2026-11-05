@@ -6,10 +6,10 @@
 //! last test checks its own text). The temporary directories (`tempfile`)
 //! are fixture scaffolding only.
 
-use nexus_kernel::manifest::FsPermissionLevel;
 use nexus_kernel::workspace_authority::{
     WorkspaceAuthorityError, WorkspaceAuthorityRegistry, WorkspaceAuthoritySource, WorkspaceBinding,
 };
+use nexus_kernel::workspace_permissions::FsPermissionLevel;
 
 /// The broker's own agent identity bytes, and a broker run's.
 const AGENT: [u8; 16] = [0x4d; 16];

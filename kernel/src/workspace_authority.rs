@@ -17,7 +17,7 @@
 //! their existing permission checks. A resolved snapshot is not a lasting lease.
 
 use crate::agent_identity::AgentId;
-use crate::manifest::FsPermissionLevel;
+use crate::workspace_permissions::FsPermissionLevel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

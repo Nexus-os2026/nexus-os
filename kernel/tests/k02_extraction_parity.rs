@@ -8,8 +8,9 @@
 //! grant, narrowing, expiry and revocation behavior stays covered by the
 //! unchanged workspace-authority tests; nothing here replaces them.
 use nexus_kernel::agent_identity::AgentId;
-use nexus_kernel::manifest::{FilesystemPermission, FsPermissionLevel};
+use nexus_kernel::manifest::FilesystemPermission;
 use nexus_kernel::workspace_authority::WorkspaceBinding;
+use nexus_kernel::workspace_permissions::FsPermissionLevel;
 use serde::de::value::{Error as ValueError, U32Deserializer};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
@@ -109,6 +110,28 @@ const LEVELS: [(FsPermissionLevel, &str); 3] = [
     (FsPermissionLevel::ReadWrite, "ReadWrite"),
     (FsPermissionLevel::Deny, "Deny"),
 ];
+
+/// The old path is a same-type re-export, not a copy: the registered consumer
+/// `manifest::FilesystemPermission` stores the new-home type directly. Delete
+/// with the old path (K19 retires `manifest`; K22 requires no old-path exports).
+#[test]
+fn transitional_fs_permission_level_export_is_the_same_type_as_its_new_home() {
+    use nexus_kernel::manifest::FsPermissionLevel as OldPathLevel;
+    assert_eq!(
+        TypeId::of::<OldPathLevel>(),
+        TypeId::of::<FsPermissionLevel>()
+    );
+    for (level, name) in &LEVELS {
+        let old_path: OldPathLevel = level.clone();
+        assert_eq!(&old_path, level);
+        let entry = FilesystemPermission {
+            path_pattern: "/x".into(),
+            permission: level.clone(),
+        };
+        let stored: &FsPermissionLevel = &entry.permission;
+        assert_eq!(format!("{stored:?}"), *name);
+    }
+}
 
 #[test]
 fn fs_permission_level_keeps_variant_order() {
