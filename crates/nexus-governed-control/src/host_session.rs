@@ -39,7 +39,7 @@ pub(crate) struct RequestScope {
     restore: outcome::RestoreFacts,
     // Once a native File run is admitted, Mother sinks retain that original
     // prerequisite. Installing it only narrows the original request.
-    mission_deadlines: OnceLock<MissionDeadlines>,
+    mission_deadlines: OnceLock<Arc<MissionDeadlines>>,
     mother_run: OnceLock<(
         std::sync::Weak<crate::governed::GovernedControl>,
         crate::authority::ids::RunId,
@@ -355,6 +355,9 @@ struct Core {
 }
 
 struct PendingContext {
+    // The exact preparing run's clock origin and narrowing-only limits survive
+    // the fresh Approve root. Its request deadline is deliberately independent.
+    original_scope: Arc<RequestScope>,
     mission: Option<u64>,
     effect: Option<u64>,
     generation: Option<u64>,
@@ -458,14 +461,13 @@ impl SessionContext {
         mono: u64,
         wall: u64,
     ) -> Result<(), SessionError> {
-        let limits = self
-            .scope
-            .mission_deadlines
-            .get_or_init(|| MissionDeadlines {
+        let limits = self.scope.mission_deadlines.get_or_init(|| {
+            Arc::new(MissionDeadlines {
                 clock: clock.clone(),
                 mono: AtomicU64::new(mono),
                 wall: AtomicU64::new(wall),
-            });
+            })
+        });
         if !Arc::ptr_eq(&limits.clock, &clock) {
             return Err(SessionError::Restricted);
         }
@@ -980,6 +982,22 @@ impl HostSession {
                         && self.core.pending_context.load(Ordering::SeqCst) == t.identity
                 })
                 .ok_or(AuthorityError::UnknownCommitment)?;
+            // Bind before the first admission and dialogue, not only when
+            // Mother takes the post-execution continuation. Share the limits
+            // so later narrowing cannot be lost in a copied deadline.
+            if let Some(limits) = target.original_scope.mission_deadlines.get() {
+                let bound = request
+                    .scope
+                    .mission_deadlines
+                    .get_or_init(|| limits.clone());
+                if !Arc::ptr_eq(bound, limits) {
+                    return Err(AuthorityError::Halted.into());
+                }
+            } else if target.effect.is_some() {
+                // Numbered Mother effects always have consent clocks. Their
+                // absence cannot become unrestricted approval authority.
+                return Err(AuthorityError::Halted.into());
+            }
             self.control
                 .authority()
                 .runs()
@@ -1205,6 +1223,7 @@ impl SessionDoor {
             // for a new approval after the original request was invalidated.
             if self.context.cell.admit().is_ok() {
                 *pending = Some(PendingContext {
+                    original_scope: self.context.scope.clone(),
                     identity,
                     run,
                     commitment: view.id,
