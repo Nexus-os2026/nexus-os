@@ -2905,8 +2905,12 @@ pub struct HistoryInspection {
 }
 
 pub fn inspect_history(store: &dyn JournalStore) -> Result<HistoryInspection, JournalError> {
-    let lines = store.load()?;
-    let entries = verify(&lines)?;
+    inspect_history_lines(&store.load()?)
+}
+
+/// Canonical report-only inspection of an already captured source snapshot.
+pub fn inspect_history_lines(lines: &[String]) -> Result<HistoryInspection, JournalError> {
+    let entries = verify(lines)?;
     let mut missions = BTreeMap::new();
     let mut next_mission = 1;
     let mut session = Session::Never;

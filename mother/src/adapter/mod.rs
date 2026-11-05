@@ -55,7 +55,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod lite_port;
 mod session_port;
 use session_port::PortDoor;
-pub use session_port::SessionPort;
+pub use session_port::{SessionHistoryInspector, SessionPort};
 
 #[cfg(test)]
 mod expiry_tests;

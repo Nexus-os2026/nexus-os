@@ -47,7 +47,7 @@ impl SessionServices {
                 projections,
             )
             .map_err(|_| HomeError("evidence_unavailable".into()))?;
-            let session = HostSession::open_with_history(
+            let mut session = HostSession::open_with_history(
                 seed,
                 &dir.join("broker"),
                 dir,
@@ -56,6 +56,9 @@ impl SessionServices {
                 confirmer,
             )
             .map_err(|_| HomeError("session_unavailable".into()))?;
+            session
+                .bind_history_inspector(Arc::new(nexus_mother::adapter::SessionHistoryInspector))
+                .map_err(|_| HomeError("mother_history".into()))?;
             Ok(Self {
                 dir: dir.into(),
                 session: Arc::new(session),

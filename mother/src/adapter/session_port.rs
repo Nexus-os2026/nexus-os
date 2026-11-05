@@ -349,3 +349,30 @@ impl EffectPort for SessionPort {
         self.inner.hand(mission, pending)
     }
 }
+
+/// Canonical Mother replay supplied to the broker's report-only boundary.
+pub struct SessionHistoryInspector;
+impl nexus_governed_control::host_session::recovery::HistoryInspector for SessionHistoryInspector {
+    fn inspect(
+        &self,
+        lines: &[String],
+    ) -> Result<
+        nexus_governed_control::host_session::recovery::MotherHistory,
+        nexus_governed_control::host_session::recovery::SourceFailure,
+    > {
+        use nexus_governed_control::host_session::recovery::{MotherHistory, SourceFailure};
+        let report = crate::coordinator::inspect_history_lines(lines)
+            .map_err(|_| SourceFailure::MotherHistory)?;
+        Ok(MotherHistory {
+            newly_absent: false,
+            records: report.records,
+            terminal_missions: report
+                .missions
+                .iter()
+                .filter(|(_, state)| state.is_terminal())
+                .count(),
+            unresolved_missions: report.unresolved.len(),
+            session_end_recorded: report.session_end_recorded,
+        })
+    }
+}

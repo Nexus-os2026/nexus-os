@@ -10,6 +10,11 @@ pub enum SourceFailure {
     MotherHistory,
     PrimaryEvidence,
 }
+/// Report-only integration with Mother's canonical typed replay. Implementors
+/// inspect these exact verified bytes; they receive no operational handles.
+pub trait HistoryInspector: Send + Sync {
+    fn inspect(&self, lines: &[String]) -> Result<MotherHistory, SourceFailure>;
+}
 #[derive(Clone, Debug)]
 pub struct MotherHistory {
     pub newly_absent: bool,
@@ -131,12 +136,42 @@ impl Mission {
         Ok(())
     }
 }
+pub(super) fn startup_history(history: &History) -> Result<MotherHistory, SourceFailure> {
+    // A broker-only client cannot validate Mother missions by approximating
+    // canonical replay. Without the adapter, only empty/session-only history
+    // can establish readiness. No fallback grants authority for mission rows.
+    if history.inspector.get().is_none() {
+        let (_, lines) = history
+            .report_lines()
+            .map_err(|_| SourceFailure::MotherHistory)?;
+        if lines.iter().any(|line| line.mission != 0) {
+            return Err(SourceFailure::MotherHistory);
+        }
+    }
+    self::history(history)
+}
 pub(super) fn history(history: &History) -> Result<MotherHistory, SourceFailure> {
     let (newly_absent, lines) = history
         .report_lines()
         .map_err(|_| SourceFailure::MotherHistory)?;
+    if let Some(inspector) = history.inspector.get() {
+        let raw: Vec<_> = lines.iter().map(|line| line.raw.clone()).collect();
+        let mut report = inspector.inspect(&raw)?;
+        let (absent_after, after) = history
+            .report_lines()
+            .map_err(|_| SourceFailure::MotherHistory)?;
+        if absent_after != newly_absent
+            || after.len() != lines.len()
+            || after.iter().zip(&lines).any(|(a, b)| a.hash != b.hash)
+        {
+            return Err(SourceFailure::MotherHistory);
+        }
+        report.newly_absent = newly_absent;
+        return Ok(report);
+    }
     let mut missions = BTreeMap::<u64, Mission>::new();
     let mut session_end = false;
+    let mut session_open = false;
     for line in &lines {
         let e = &line.event;
         let event = e["event"].as_str().ok_or(SourceFailure::MotherHistory)?;
@@ -145,6 +180,10 @@ pub(super) fn history(history: &History) -> Result<MotherHistory, SourceFailure>
                 if line.mission != 0 {
                     return Err(SourceFailure::MotherHistory);
                 }
+                if event == "session_closed" && !session_open {
+                    return Err(SourceFailure::MotherHistory);
+                }
+                session_open = event == "session_opened";
                 session_end = event == "session_closed";
                 continue;
             }

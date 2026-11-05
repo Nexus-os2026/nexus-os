@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 pub(super) struct History {
     root: PathBuf,
     identity: Metadata,
+    pub(super) inspector:
+        std::sync::OnceLock<std::sync::Arc<dyn super::recovery::HistoryInspector>>,
 }
 impl History {
     pub(super) fn bind(root: &Path) -> Result<Self, AuthorityError> {
@@ -24,7 +26,11 @@ impl History {
         if !identity.is_dir() {
             return Err(unavailable());
         }
-        Ok(Self { root, identity })
+        Ok(Self {
+            root,
+            identity,
+            inspector: std::sync::OnceLock::new(),
+        })
     }
     fn verify_root(&self) -> Result<(), AuthorityError> {
         let now = std::fs::symlink_metadata(&self.root).map_err(|_| unavailable())?;
@@ -51,12 +57,31 @@ impl History {
             use std::os::unix::fs::OpenOptionsExt;
             options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
         }
-        let mut file = options.open(path).map_err(|_| unavailable())?;
+        let mut file = options.open(&path).map_err(|_| unavailable())?;
         if !same(&metadata, &file.metadata().map_err(|_| unavailable())?) {
             return Err(unavailable());
         }
         let mut text = String::new();
         file.read_to_string(&mut text).map_err(|_| unavailable())?;
+        // The verified bytes must belong to one unchanged source snapshot,
+        // including when an in-place writer changes the same inode.
+        let after = file.metadata().map_err(|_| unavailable())?;
+        let named = std::fs::symlink_metadata(&path).map_err(|_| unavailable())?;
+        if !same(&metadata, &after)
+            || !same(&after, &named)
+            || metadata.len() != after.len()
+            || after.len() != named.len()
+            || metadata.modified().map_err(|_| unavailable())?
+                != after.modified().map_err(|_| unavailable())?
+            || after.modified().map_err(|_| unavailable())?
+                != named.modified().map_err(|_| unavailable())?
+        {
+            return Err(unavailable());
+        }
+        match std::fs::symlink_metadata(self.root.join("mother-journal.jsonl.poisoned")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => return Err(unavailable()),
+        }
         self.verify_root()?;
         if !text.is_empty() && !text.ends_with('\n') {
             return Err(unavailable());
@@ -92,6 +117,7 @@ impl History {
             }
             previous = hash.to_owned();
             lines.push(Line {
+                raw: raw.to_owned(),
                 mission,
                 sequence: sequence as u64,
                 hash: previous.clone(),
@@ -329,6 +355,7 @@ fn unavailable() -> AuthorityError {
     AuthorityError::EvidenceUnavailable
 }
 pub(super) struct Line {
+    pub(super) raw: String,
     pub(super) mission: u64,
     sequence: u64,
     pub(super) hash: String,

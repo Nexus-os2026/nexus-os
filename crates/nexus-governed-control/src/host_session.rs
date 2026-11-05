@@ -660,6 +660,23 @@ impl HostSession {
             .files_recovery_report()
             .map_err(|error| SessionError::Backend(error.class()))
     }
+    /// Install the canonical report-only adapter before any source inspection
+    /// or readiness. Exclusive ownership prevents replacement after exposure.
+    pub fn bind_history_inspector(
+        &mut self,
+        inspector: Arc<dyn recovery::HistoryInspector>,
+    ) -> Result<(), SessionError> {
+        if self.report.get().is_some() {
+            return Err(SessionError::Restricted);
+        }
+        self.core
+            .history
+            .get()
+            .ok_or(SessionError::Unavailable)?
+            .inspector
+            .set(inspector)
+            .map_err(|_| SessionError::Restricted)
+    }
     pub fn startup_report(&self) -> recovery::StartupReport {
         self.report
             .get_or_init(|| {
@@ -679,7 +696,7 @@ impl HostSession {
                         .history
                         .get()
                         .ok_or(SourceFailure::MotherHistory)
-                        .and_then(recovery::history),
+                        .and_then(recovery::startup_history),
                     primary: self.evidence.health(),
                 };
                 if !report.ready() {
