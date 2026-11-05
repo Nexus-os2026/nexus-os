@@ -543,3 +543,60 @@ fn session_confirmation_scope_keeps_original_request_time_and_generation() {
     );
     assert_eq!(retained.request_deadline(), Some(original.deadline()));
 }
+
+#[test]
+fn session_busy_work_retains_one_bounded_original_command_queue() {
+    let (c, _) = scripted();
+    for _ in 0..63 {
+        c.shared.receive(Line::Answer(Some("run".into())), false);
+    }
+    c.shared.receive(Line::Answer(Some("status".into())), false);
+    let status = c.shared.command_if_idle(false).expect("status remains responsive while work owns the runtime");
+    assert_eq!(status.name, "status");
+    assert_eq!(c.shared.input().commands.len(), 63);
+    assert!(c.shared.command_if_idle(false).is_none(), "busy work cannot move commands into another capacity budget");
+    c.shared.receive(Line::Answer(Some("run".into())), false);
+    assert_eq!(c.shared.input().commands.len(), 64);
+    assert!(!c.shared.stop.ingress.failed());
+    c.shared.receive(Line::Answer(Some("run".into())), false);
+    assert!(c.shared.stop.ingress.failed(), "65th command refuses before a second queue can expand capacity");
+    let first = c.shared.command_if_idle(true).unwrap();
+    assert_eq!(first.request.unwrap().sequence(), 1, "dequeue preserves the first accepted command");
+}
+
+#[test]
+fn session_stop_delivery_retains_exact_events_until_actual_output_ack() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+    let (c, frames) = scripted();
+    c.shared.receive(Line::Stop, false);
+    c.shared.receive(Line::Stop, false);
+    let initial = c.shared.stop.delivery_debt();
+    assert_eq!(initial.iter().map(|d| d.event).collect::<Vec<_>>(), [1, 2]);
+    assert!(initial.iter().all(|d| !d.ingress_delivered && !d.outcome_delivered));
+    let end = std::sync::Arc::new(AtomicBool::new(false));
+    let worker_end = end.clone();
+    let screen = c.shared.clone();
+    let worker = std::thread::spawn(move || crate::stop::report_receipts(screen, worker_end));
+    let first = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+    let second = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(first.text.contains("epoch=1"));
+    assert!(second.text.contains("epoch=2"));
+    assert!(c.shared.stop.delivery_debt().iter().all(|d| !d.ingress_delivered), "queueing output does not discharge delivery");
+    first.ack.send(Ok(())).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !c.shared.stop.delivery_debt()[0].ingress_delivered && Instant::now() < deadline { c.shared.wait(); }
+    let middle = c.shared.stop.delivery_debt();
+    assert!(middle[0].ingress_delivered);
+    assert!(!middle[1].ingress_delivered);
+    assert!(middle.iter().all(|d| !d.outcome_delivered), "ingress output cannot cover native result output");
+    second.ack.send(Ok(())).unwrap();
+    end.store(true, Ordering::SeqCst);
+    c.shared.changed.notify_all();
+    while !worker.is_finished() && Instant::now() < deadline { c.shared.wait(); }
+    assert!(worker.is_finished());
+    worker.join().unwrap();
+    let remaining = c.shared.stop.delivery_debt();
+    assert_eq!(remaining.len(), 2, "no native workers ran: both outcome deliveries remain owed");
+    assert!(remaining.iter().all(|d| d.ingress_delivered && !d.outcome_delivered));
+}
