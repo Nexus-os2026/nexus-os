@@ -4,9 +4,9 @@
 //!   metadata and `docs/` excluded).
 //! - Test code is excluded: test files (`tests/`, `*_tests.rs`,
 //!   `*/tests.rs`, `benches/`, `examples/`, `build.rs`), every module file
-//!   declared under a cfg predicate proved to require `test` (and everything
-//!   below it), and every such item inside a production file. Unknown cfg
-//!   syntax stays production.
+//!   reached exclusively through declarations proved to require `test`, and
+//!   every such item inside a production file. Shared, uncertain or unresolved
+//!   file reachability stays production, including conditional path changes.
 //! - Two views of a production file: `code` (comments and the contents of
 //!   string and char literals blanked) and `text` (comments blanked,
 //!   literals kept). Both keep every byte offset and line.
@@ -60,13 +60,6 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
             out.push(path);
         }
     }
-}
-
-pub fn relative(path: &Path) -> String {
-    path.strip_prefix(workspace_root())
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/")
 }
 
 /// A test file by its path alone.
@@ -617,10 +610,29 @@ pub fn cfg_test_items(code: &str, text: &str) -> (Ranges, ModuleDecls) {
     while let Some(p) = code[from..].find('#') {
         let at = from + p;
         from = at + 1;
-        let Some(attr_end) = cfg_test_attribute(code, text, at) else {
+        let item = skip_attributes(code, at);
+        if item == at {
             continue;
-        };
-        let item = skip_attributes(code, attr_end);
+        }
+        // Start at the FIRST attribute, so path/cfg order cannot change the
+        // module's identity. Any independent test requirement is sufficient.
+        let mut attr = at;
+        let mut test_only = false;
+        while let Some(open) = outer_attribute_open(code, attr) {
+            test_only |= cfg_test_attribute(code, text, attr).is_some();
+            attr = close_of(code, open);
+            while code
+                .as_bytes()
+                .get(attr)
+                .is_some_and(u8::is_ascii_whitespace)
+            {
+                attr += 1;
+            }
+        }
+        if !test_only {
+            from = item;
+            continue;
+        }
         // The gated item, field, match arm or expression: up to its block's
         // close (and a following comma), or a `;` or `,` at depth 0, or the
         // close of the enclosing group (exclusive).
@@ -663,12 +675,10 @@ pub fn cfg_test_items(code: &str, text: &str) -> (Ranges, ModuleDecls) {
             let words: Vec<&str> = head.split(' ').collect();
             if let Some(m) = words.iter().position(|w| *w == "mod") {
                 if let Some(name) = words.get(m + 1) {
-                    let path = text[at..item].find("#[path").and_then(|q| {
-                        let s = &text[at + q..item];
-                        let a = s.find('"')? + 1;
-                        let z = s[a..].find('"')? + a;
-                        Some(s[a..z].to_string())
-                    });
+                    let paths = module_paths(code, text, at, item);
+                    let path = (!paths.uncertain && !paths.unresolved)
+                        .then(|| paths.explicit.first().cloned())
+                        .flatten();
                     modules.push((name.trim_end_matches(';').to_string(), path));
                 }
             }
@@ -679,59 +689,362 @@ pub fn cfg_test_items(code: &str, text: &str) -> (Ranges, ModuleDecls) {
     (ranges, modules)
 }
 
-/// Every `mod NAME;` declaration of `code` (any gating), with its
-/// `#[path]`.
-fn module_declarations(code: &str, text: &str) -> Vec<(String, Option<String>)> {
-    let mut out = Vec::new();
-    let b = code.as_bytes();
-    let mut from = 0;
-    while let Some(p) = code[from..].find("mod ") {
-        let at = from + p;
-        from = at + 4;
-        if at > 0 && (b[at - 1].is_ascii_alphanumeric() || b[at - 1] == b'_') {
-            continue;
-        }
-        let rest = &code[at + 4..];
-        let name: String = rest
-            .trim_start()
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
-        let after = rest.trim_start()[name.len()..].trim_start();
-        if name.is_empty() || !after.starts_with(';') {
-            continue;
-        }
-        let line_start = code[..at].rfind('\n').map_or(0, |n| n + 1);
-        let window_start = code[..line_start].rfind(['}', ';']).map_or(0, |n| n + 1);
-        let path = text[window_start..at].find("#[path").and_then(|q| {
-            let s = &text[window_start + q..at];
-            let a = s.find('"')? + 1;
-            let z = s[a..].find('"')? + a;
-            Some(s[a..z].to_string())
-        });
-        out.push((name, path));
+#[derive(Default)]
+struct ModulePaths {
+    explicit: Vec<String>,
+    conditional: Vec<String>,
+    uncertain: bool,
+    unresolved: bool,
+}
+
+/// Decode only unambiguous path literals. Escapes, macros and unfamiliar
+/// syntax cannot grant permission to exclude any file.
+fn path_value(parser: &mut CfgParser<'_>) -> Option<String> {
+    if !parser.eat("=") {
+        return None;
     }
+    let value = parser.string()?;
+    let quote = value.find('"')?;
+    let marks = value[..quote].bytes().filter(|&c| c == b'#').count();
+    let body = &value[quote + 1..value.len() - 1 - marks];
+    (!body.contains('\\')).then(|| body.to_string())
+}
+
+fn module_paths(code: &str, text: &str, mut at: usize, end: usize) -> ModulePaths {
+    let mut out = ModulePaths::default();
+    while at < end {
+        let Some(open) = outer_attribute_open(code, at) else {
+            break;
+        };
+        let close = close_of(code, open);
+        let body = &text[open + 1..close - 1];
+        let mut parser = CfgParser { src: body, at: 0 };
+        match parser.ident().as_deref() {
+            Some("path") => {
+                if let Some(path) = path_value(&mut parser) {
+                    out.explicit.push(path);
+                    parser.ws();
+                    out.unresolved |= parser.at != body.len();
+                } else {
+                    out.unresolved = true;
+                }
+            }
+            Some("cfg_attr") => {
+                // Inspect nested effects in the code view, never words inside
+                // literals. Any path-changing cfg_attr is uncertain even if
+                // another attribute independently proves cfg(test).
+                let masked = &code[open + 1..close - 1];
+                let mut tokens = CfgParser {
+                    src: masked,
+                    at: parser.at,
+                };
+                while tokens.at < masked.len() {
+                    let start = tokens.at;
+                    if let Some(name) = tokens.ident() {
+                        if name == "path" && tokens.eat("=") {
+                            out.uncertain = true;
+                            let mut value = CfgParser {
+                                src: body,
+                                at: start,
+                            };
+                            value.ident();
+                            if let Some(path) = path_value(&mut value) {
+                                out.conditional.push(path);
+                            } else {
+                                out.unresolved = true;
+                            }
+                        }
+                    } else {
+                        tokens.at += masked[tokens.at..].chars().next().unwrap().len_utf8();
+                    }
+                }
+            }
+            _ => {}
+        }
+        at = close;
+        while code.as_bytes().get(at).is_some_and(u8::is_ascii_whitespace) {
+            at += 1;
+        }
+    }
+    out.uncertain |= out.explicit.len() > 1;
     out
 }
 
-/// The file a `mod NAME;` of `declaring` resolves to.
-fn module_file(declaring: &Path, name: &str, path: Option<&str>) -> Option<PathBuf> {
-    let dir = declaring.parent()?;
-    if let Some(path) = path {
-        return Some(dir.join(path));
+/// A module head at a token boundary, including restricted visibility and raw
+/// identifiers. Return the name and the offset of its `;` or opening brace.
+fn module_head(code: &str, at: usize) -> Option<(String, usize)> {
+    let mut parser = CfgParser { src: code, at };
+    let mut keyword = parser.ident()?;
+    if keyword == "pub" {
+        parser.ws();
+        if code.as_bytes().get(parser.at) == Some(&b'(') {
+            // This is already the code view. Re-masking it would interpret
+            // blanked character contents as malformed character literals.
+            parser.at = close_of(code, parser.at);
+        }
+        keyword = parser.ident()?;
     }
-    let file = declaring.file_name()?.to_string_lossy();
-    let base = if matches!(file.as_ref(), "mod.rs" | "lib.rs" | "main.rs") {
-        dir.to_path_buf()
+    if keyword == "unsafe" {
+        keyword = parser.ident()?;
+    }
+    if keyword != "mod" {
+        return None;
+    }
+    let name = parser.ident()?;
+    parser.ws();
+    matches!(code.as_bytes().get(parser.at), Some(b';' | b'{')).then_some((name, parser.at))
+}
+
+/// Normalize parent components even for a missing inline directory, then use
+/// canonical file identity so two spellings/symlinks cannot split ownership.
+fn file_identity(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normalized.push(other),
+        }
+    }
+    path.canonicalize()
+        .unwrap_or_else(|_| normalized.canonicalize().unwrap_or(normalized))
+}
+
+fn default_module_dir(file: &Path) -> PathBuf {
+    let parent = file.parent().expect("source parent");
+    if matches!(
+        file.file_name().and_then(|n| n.to_str()),
+        Some("mod.rs" | "lib.rs" | "main.rs")
+    ) {
+        parent.to_path_buf()
     } else {
-        dir.join(declaring.file_stem()?)
-    };
-    let flat = base.join(format!("{name}.rs"));
-    if flat.exists() {
-        return Some(flat);
+        parent.join(file.file_stem().expect("source stem"))
     }
-    let nested = base.join(name).join("mod.rs");
-    nested.exists().then_some(nested)
+}
+
+#[derive(Default)]
+struct ModuleReach {
+    targets: BTreeSet<PathBuf>,
+    // Canonical identity plus the directory of the actual load spelling.
+    path_loaded: BTreeSet<(PathBuf, PathBuf)>,
+    test_only: bool,
+    uncertain: bool,
+}
+
+struct ModuleScan<'a> {
+    code: &'a str,
+    text: &'a str,
+    ranges: &'a Ranges,
+    known: &'a BTreeSet<PathBuf>,
+    declarations: BTreeMap<usize, ModuleReach>,
+    unresolved: bool,
+}
+
+impl ModuleScan<'_> {
+    /// Scan all token groups, preserving the directory only across inline
+    /// module blocks. Function/macro blocks do not add module directories.
+    fn visit(
+        &mut self,
+        mut at: usize,
+        end: usize,
+        default_dir: &Path,
+        path_dir: &Path,
+        uncertain: bool,
+    ) {
+        while at < end {
+            if self.code.as_bytes()[at].is_ascii_whitespace() {
+                at += 1;
+                continue;
+            }
+            let start = at;
+            let item = skip_attributes(self.code, at);
+            if let Some((name, terminator)) = module_head(self.code, item) {
+                let paths = module_paths(self.code, self.text, start, item);
+                self.unresolved |= paths.unresolved;
+                let uncertain = uncertain || paths.uncertain || paths.unresolved;
+                let mut dirs: Vec<_> = paths
+                    .explicit
+                    .iter()
+                    .chain(&paths.conditional)
+                    .map(|p| path_dir.join(p))
+                    .collect();
+                if paths.explicit.is_empty() {
+                    dirs.push(default_dir.join(&name));
+                }
+                if self.code.as_bytes()[terminator] == b'{' {
+                    let close = close_of(self.code, terminator);
+                    for dir in dirs {
+                        self.visit(terminator + 1, close - 1, &dir, &dir, uncertain);
+                    }
+                    at = close;
+                    continue;
+                }
+                let mut reach = ModuleReach {
+                    test_only: self.ranges.iter().any(|&(a, z)| a <= item && item < z),
+                    uncertain,
+                    ..ModuleReach::default()
+                };
+                for path in paths.explicit.iter().chain(&paths.conditional) {
+                    let target = path_dir.join(path);
+                    let identity = file_identity(&target);
+                    if self.known.contains(&identity) {
+                        reach.uncertain |= !target.is_file();
+                        reach.targets.insert(identity.clone());
+                        reach
+                            .path_loaded
+                            .insert((identity, target.parent().unwrap().to_path_buf()));
+                    }
+                }
+                if paths.explicit.is_empty() {
+                    let candidates: Vec<_> = [
+                        default_dir.join(format!("{name}.rs")),
+                        default_dir.join(&name).join("mod.rs"),
+                    ]
+                    .into_iter()
+                    .filter(|p| self.known.contains(&file_identity(p)))
+                    .collect();
+                    reach.uncertain |= candidates.len() > 1;
+                    for target in candidates {
+                        reach.uncertain |= !target.is_file();
+                        reach.targets.insert(file_identity(&target));
+                    }
+                }
+                // Multiple inline path contexts must agree before excluding.
+                if let Some(previous) = self.declarations.get_mut(&item) {
+                    previous.uncertain |= reach.uncertain || previous.targets != reach.targets;
+                    previous.targets.extend(reach.targets);
+                    previous.path_loaded.extend(reach.path_loaded);
+                } else {
+                    self.declarations.insert(item, reach);
+                }
+                at = terminator + 1;
+            } else if item > at {
+                at = item;
+            } else {
+                // Advance a complete identifier so `some_mod`/raw identifiers
+                // cannot be mistaken for a new `mod` keyword mid-token.
+                let mut token = CfgParser { src: self.code, at };
+                if token.ident().is_some() {
+                    at = token.at;
+                } else {
+                    at += self.code[at..].chars().next().unwrap().len_utf8();
+                }
+            }
+        }
+    }
+}
+
+struct Incoming {
+    source: PathBuf,
+    test_only: bool,
+    uncertain: bool,
+}
+
+/// Least fixed point: a file becomes test-only only after EVERY incoming
+/// declaration is proved test-only (locally or through its declaring file).
+/// Cycles without a proof remain scanned. Path uncertainty overrides parents.
+fn exclusively_test_files(
+    root: &Path,
+    raw: &BTreeMap<PathBuf, String>,
+    ranges: &BTreeMap<PathBuf, Ranges>,
+) -> BTreeSet<PathBuf> {
+    let known: BTreeSet<_> = raw.keys().map(|p| file_identity(p)).collect();
+    let mut directories: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    for file in raw.keys() {
+        directories
+            .entry(file_identity(file))
+            .or_default()
+            .insert(default_module_dir(file));
+    }
+    let mut incoming: BTreeMap<PathBuf, Vec<Incoming>>;
+    let mut unresolved;
+    loop {
+        incoming = BTreeMap::new();
+        unresolved = false;
+        let mut more = Vec::new();
+        for (file, source) in raw {
+            let identity = file_identity(file);
+            let code = mask(source, false);
+            let text = mask(source, true);
+            let mut scan = ModuleScan {
+                code: &code,
+                text: &text,
+                ranges: &ranges[file],
+                known: &known,
+                declarations: BTreeMap::new(),
+                unresolved: false,
+            };
+            // A #[path]-loaded non-mod-rs file can use its containing directory
+            // for default children. Keep both physical contexts conservatively;
+            // disagreement is uncertain, rather than guessing one ownership.
+            for dir in &directories[&identity] {
+                scan.visit(0, code.len(), dir, file.parent().unwrap(), false);
+            }
+            unresolved |= scan.unresolved;
+            for reach in scan.declarations.into_values() {
+                more.extend(reach.path_loaded);
+                for target in reach.targets {
+                    incoming.entry(target).or_default().push(Incoming {
+                        source: identity.clone(),
+                        test_only: reach.test_only,
+                        uncertain: reach.uncertain,
+                    });
+                }
+            }
+        }
+        let mut changed = false;
+        for (file, dir) in more {
+            changed |= directories.entry(file).or_default().insert(dir);
+        }
+        if !changed {
+            break;
+        }
+    }
+    // A nonliteral path could reach ANY file. No exclusion is safe in that
+    // scan; do not silently use default resolution for the failed attribute.
+    if unresolved {
+        return BTreeSet::new();
+    }
+    let mut test = BTreeSet::new();
+    loop {
+        let more: Vec<_> = raw
+            .keys()
+            .filter_map(|file| {
+                let identity = file_identity(file);
+                if test.contains(&identity) {
+                    return None;
+                }
+                let rel = file
+                    .strip_prefix(root)
+                    .expect("workspace source")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                // Crate roots have a production entry independent of module
+                // declarations. A test alias cannot revoke that entry.
+                if !is_test_path(&rel)
+                    && matches!(
+                        file.file_name().and_then(|n| n.to_str()),
+                        Some("lib.rs" | "main.rs")
+                    )
+                {
+                    return None;
+                }
+                let proven = match incoming.get(&identity) {
+                    Some(edges) => edges.iter().all(|edge| {
+                        !edge.uncertain && (edge.test_only || test.contains(&edge.source))
+                    }),
+                    None => is_test_path(&rel),
+                };
+                proven.then_some(identity)
+            })
+            .collect();
+        if more.is_empty() {
+            return test;
+        }
+        test.extend(more);
+    }
 }
 
 /// Every production file of the workspace.
@@ -756,48 +1069,17 @@ pub fn production_files_in(root: &Path) -> Vec<ProdFile> {
             raw.insert(p.clone(), t);
         }
     }
-    // Test module files: by path, by a `#[cfg(test)] mod` declaration, and
-    // every module declared by a test file, to a fixed point.
-    let mut test: BTreeSet<PathBuf> = paths
-        .iter()
-        .filter(|p| is_test_path(&relative(p)))
-        .cloned()
-        .collect();
     let mut cfg_ranges: BTreeMap<PathBuf, Vec<(usize, usize)>> = BTreeMap::new();
     for (p, t) in &raw {
         let code = mask(t, false);
         let text = mask(t, true);
-        let (ranges, modules) = cfg_test_items(&code, &text);
-        for (name, path) in modules {
-            if let Some(f) = module_file(p, &name, path.as_deref()) {
-                test.insert(f);
-            }
-        }
+        let (ranges, _) = cfg_test_items(&code, &text);
         cfg_ranges.insert(p.clone(), ranges);
     }
-    loop {
-        let mut more = Vec::new();
-        for p in &test {
-            if let Some(t) = raw.get(p) {
-                let code = mask(t, false);
-                let text = mask(t, true);
-                for (name, path) in module_declarations(&code, &text) {
-                    if let Some(f) = module_file(p, &name, path.as_deref()) {
-                        if !test.contains(&f) {
-                            more.push(f);
-                        }
-                    }
-                }
-            }
-        }
-        if more.is_empty() {
-            break;
-        }
-        test.extend(more);
-    }
+    let test = exclusively_test_files(root, &raw, &cfg_ranges);
     let mut out = Vec::new();
     for (p, t) in &raw {
-        if test.contains(p) {
+        if test.contains(&file_identity(p)) {
             continue;
         }
         let mut code = mask(t, false).into_bytes();
