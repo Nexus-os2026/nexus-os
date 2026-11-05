@@ -8,6 +8,40 @@ use crate::oracles::{contract_with, Yes};
 use nexus_governed_control::host_session::{CommandKind, SessionError, SessionIngress};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+const CASE: &str = "M2DD_APPROVAL_CONTINUATION";
+fn child(test: &str, case: &str) {
+    let mut process = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            &format!("coordinator::lite::session_continuation_oracles::{test}"),
+            "--nocapture",
+        ])
+        .env(CASE, case)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while process.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() >= deadline {
+            process.kill().unwrap();
+            process.wait().unwrap();
+            panic!("bounded continuation child: {case}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let output = process.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{case}: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains(&format!("CONTINUATION VERIFIED {case}"))
+    );
+}
+
 fn waiting(
     home: &crate::adapter::session_support::Fixture,
     store: impl JournalStore + 'static,
@@ -77,6 +111,13 @@ impl JournalStore for ObserveWait {
 
 #[test]
 fn session_approval_target_is_not_published_inside_either_wait_append() {
+    if std::env::var(CASE).as_deref() != Ok("publication") {
+        child(
+            "session_approval_target_is_not_published_inside_either_wait_append",
+            "publication",
+        );
+        return;
+    }
     assert!(nexus_governed_control::files::make_non_dumpable());
     let home = crate::adapter::session_support::Fixture::new("pending-publication");
     let observed = Arc::new(Mutex::new(Vec::new()));
@@ -102,12 +143,23 @@ fn session_approval_target_is_not_published_inside_either_wait_append() {
         "same real route publishes its exact target after waiting"
     );
     assert!(!home.workspace.join("session.txt").exists());
+    println!("CONTINUATION VERIFIED publication");
 }
 
 #[test]
 fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission() {
     assert!(nexus_governed_control::files::make_non_dumpable());
-    for stop_before_continuation in [false, true] {
+    let Ok(case) = std::env::var(CASE) else {
+        for case in ["control", "stopped"] {
+            child(
+                "session_approval_continuation_binds_the_new_root_and_refuses_changed_mission",
+                case,
+            );
+        }
+        return;
+    };
+    assert!(matches!(case.as_str(), "control" | "stopped"));
+    for stop_before_continuation in [case == "stopped"] {
         let label = if stop_before_continuation {
             "continuation-stopped"
         } else {
@@ -144,6 +196,7 @@ fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission(
                 continued.is_err(),
                 "settlement/changed generation cannot be refreshed by a saved continuation"
             );
+            println!("CONTINUATION VERIFIED {case}");
             continue;
         }
         let continued = continued.unwrap();
@@ -182,5 +235,6 @@ fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission(
             prefix.set_lines(lines[..end].to_vec());
             crate::coordinator::inspect_history(&prefix).unwrap();
         }
+        println!("CONTINUATION VERIFIED {case}");
     }
 }

@@ -1993,3 +1993,23 @@ fn session_stop_spawn_failure_retains_the_unrecorded_event() {
         crate::host_session::SessionState::Failed
     );
 }
+
+#[test]
+fn session_mother_context_refuses_its_cancelled_native_run_without_session_stop() {
+    let f = Fixture::new();
+    let context = f.door.context();
+    assert!(context
+        .admit(crate::host_session::MotherStep::LaneInvocation)
+        .is_ok());
+    f.door.cancel_run(f.run).unwrap().write();
+    for step in [
+        crate::host_session::MotherStep::LaneInvocation,
+        crate::host_session::MotherStep::Transition,
+        crate::host_session::MotherStep::PrivateWrite,
+    ] {
+        assert!(
+            context.admit(step).is_err(),
+            "the original request CAS cannot substitute for the native run prerequisite"
+        );
+    }
+}
