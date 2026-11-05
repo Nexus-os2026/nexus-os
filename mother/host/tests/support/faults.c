@@ -125,7 +125,10 @@ ssize_t pwrite64(int fd, const void *data, size_t size, off64_t offset) {
 
 ssize_t write(int fd, const void *data, size_t size) {
     ssize_t (*real)(int,const void *,size_t) = dlsym(RTLD_NEXT, "write");
-    if (fd == STDOUT_FILENO && mode("display")) boundary("display", "stdout", data, size);
+    /* The display oracle owns the actual fresh-code question, not whichever
+     * unrelated result/status write happens to be draining when it arms. */
+    if (fd == STDOUT_FILENO && mode("display") &&
+        memmem(data, size, "Answer code: ", 13)) boundary("display", "stdout", data, size);
     if (fd == STDOUT_FILENO && mode("write-fail")) { errno = EIO; return -1; }
     if (fd == STDOUT_FILENO && mode("final-write-fail") &&
         memmem(data, size, "SESSION CLOSED recorded", 23)) { errno = EIO; return -1; }
