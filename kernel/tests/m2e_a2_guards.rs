@@ -1089,6 +1089,61 @@ fn e_o65_macro_and_inference_glob_rules_have_red_and_green_controls() {
 }
 
 #[test]
+fn e_o65_inference_globs_respect_inline_module_scope() {
+    let approved = || {
+        planted(
+            "kernel/src/inference/ollama.rs",
+            "use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+        )
+    };
+    // The rule is unchanged: "inference globs outside inference are findings".
+    // Resolve inline module scopes so ordinary modules named inference remain
+    // green, while relative imports of the kernel authority remain red.
+    for (rel, src) in [
+        (
+            "kernel/src/ordinary.rs",
+            "mod inference { pub struct Ordinary; } mod child { use super::inference::*; }",
+        ),
+        (
+            "kernel/src/lib.rs",
+            "mod ordinary { mod inference {} mod child { use super::inference::*; } }",
+        ),
+        (
+            "kernel/src/ordinary.rs",
+            "mod wrapper { mod inference {} use self::inference::*; }",
+        ),
+    ] {
+        let found = model_transport_findings(&[approved(), planted(rel, src)]);
+        assert!(
+            found.is_empty(),
+            "ordinary inline module: {rel}: {src}: {found:?}"
+        );
+    }
+    for (rel, src) in [
+        (
+            "kernel/src/lib.rs",
+            "mod child { use super::inference::*; }",
+        ),
+        (
+            "kernel/src/ordinary.rs",
+            "mod child { use super::super::inference::*; }",
+        ),
+        (
+            "kernel/src/ordinary.rs",
+            "mod child { use crate::inference::*; }",
+        ),
+    ] {
+        let found = model_transport_findings(&[approved(), planted(rel, src)]);
+        assert!(
+            found
+                .iter()
+                .any(|finding| finding.contains("inference glob import")),
+            "kernel inference import: {rel}: {src}: {found:?}"
+        );
+    }
+}
+
+#[test]
 fn e_o65_model_transport_allowlist_matches_masked_production_counts() {
     let files = production_files();
     assert!(model_transport_findings(&files).is_empty());
