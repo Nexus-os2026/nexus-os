@@ -201,12 +201,21 @@ fn session_literal_oracle_provenance_is_frozen_independently_of_product_classifi
 
 // The death harness is itself an oracle. Freeze its successful native report,
 // torn-line, and exact receipt checks so a weakening cannot green itself.
+// Oracle amendment U1/U3, Owner: "Make these 5 fixes don't keep pending."
+// Re-seal only the already registered oracle changes, not new behavior:
+// session_protocol.rs (1577232a): old fresh-home "Recovery report only..."
+// -> "Fresh start: no earlier session in this home; nothing to recover."
+// Old digest c707a7359fc2122f01e80893f135e2b38ced6aa1eafb7f1066ff2b7f66c51d89.
+// faults.c (2349a9e6): old "no echo-write hold" -> "echo-hold plus native
+// Stop-recording receipt". Original death/torn/receipt checks are unchanged.
+// Old digest eb49fa95f07b430062cc396c80a3c1677a42dff75bb652599eb83990e0078de5.
+// Keep the exact source-digest assertions below; any further edit must fail.
 #[test]
 fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitutions() {
     for (file, expected) in [
         (
             "mother/host/tests/session_protocol.rs",
-            "c707a7359fc2122f01e80893f135e2b38ced6aa1eafb7f1066ff2b7f66c51d89",
+            "bbc0a15ace1bcd682f1daebeead1793c12b82bfd20c3e2a72bc342077e99b71b",
         ),
         (
             "mother/host/tests/support/faults.rs",
@@ -214,7 +223,7 @@ fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitu
         ),
         (
             "mother/host/tests/support/faults.c",
-            "eb49fa95f07b430062cc396c80a3c1677a42dff75bb652599eb83990e0078de5",
+            "68c4c3dc0e2dfc69f7584154788d71f008270fa6b4a1c1e8ecdfd0f5647a2c1b",
         ),
     ] {
         let output = std::process::Command::new("python3")

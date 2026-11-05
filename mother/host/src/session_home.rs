@@ -7,7 +7,7 @@ use nexus_governed_control::authority::evidence::{
 };
 use nexus_governed_control::evidence_store::{EvidenceHealth, PrimaryEvidence};
 use nexus_governed_control::host_session::{HostSession, SessionContext, SessionSeed};
-use nexus_mother::adapter::{create_private, FileJournal, FilePrivate};
+use nexus_mother::adapter::{create_private, home_has_no_prior_state, FileJournal, FilePrivate};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -16,6 +16,7 @@ pub(crate) type DoorPrompt = nexus_governed_control::authority::approval::AgentD
 
 pub(crate) struct SessionServices {
     dir: PathBuf,
+    pub(crate) initially_empty: bool,
     pub(crate) session: Arc<HostSession>,
     recent: Arc<MemoryEvidence>,
     evidence: Arc<PrimaryEvidence>,
@@ -39,6 +40,11 @@ impl SessionServices {
             if !dir.is_absolute() {
                 return Err(HomeError("absolute_path_required".into()));
             }
+            // Capture before even creating the Home. All session stores below
+            // (broker evidence/resources, Mother journal and private payloads)
+            // live beneath this root. Emptiness excludes earlier state at every
+            // one of those locations; post-open record counts cannot prove it.
+            let initially_empty = home_has_no_prior_state(dir);
             create_private(dir).map_err(|_| HomeError("home_unavailable".into()))?;
             let recent = Arc::new(MemoryEvidence::new(256));
             projections.push(recent.clone());
@@ -61,6 +67,7 @@ impl SessionServices {
                 .map_err(|_| HomeError("mother_history".into()))?;
             Ok(Self {
                 dir: dir.into(),
+                initially_empty,
                 session: Arc::new(session),
                 recent,
                 evidence,

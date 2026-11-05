@@ -128,7 +128,15 @@ fn session_idle_emergency_can_close_with_exact_notice_and_recorded_end() {
     p.quit();
     assert_eq!(support::evidence::counts(&f), [1, 1, 1]);
     assert!(p.output.contains(EMERGENCY));
-    assert!(p.output.contains(RECOVERY));
+    // Oracle amendment U3, Owner: "Make these 5 fixes don't keep pending."
+    // Old fresh-home assertion: RECOVERY ("Recovery report only. Mother has not
+    // removed files or staging, restored workspace permission, or restored undo.
+    // Some unfinished work may be known only from incomplete evidence.").
+    // New fresh-home assertion: "Fresh start: no earlier session in this home; nothing to recover."
+    // Restart assertions for homes with history below keep RECOVERY exactly.
+    assert!(p
+        .output
+        .contains("Fresh start: no earlier session in this home; nothing to recover."));
     let entries = journal(&f);
     assert!(matches!(
         entries.last().map(|e| &e.event),
