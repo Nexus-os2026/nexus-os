@@ -89,6 +89,13 @@ pub struct HaltCell(
     #[cfg(test)] pub(crate) Arc<crate::test_hooks::Hooks>,
     bool,
 );
+
+/// Closed update vocabulary. Both admission ordering and ingress use this
+/// one atomic writer; no caller can publish a half-installed first intent.
+enum Update {
+    Exact { expected: u64, replacement: u64 },
+    Latch { bits: u64, emergency: bool },
+}
 pub(crate) fn check_halt(cell: Option<&HaltCell>) -> Result<(), super::AuthorityError> {
     if cell.is_some_and(HaltCell::is_engaged) {
         Err(super::AuthorityError::Halted)
@@ -129,9 +136,10 @@ impl HaltCell {
     pub(crate) fn session_compare(&self, old: u64, new: u64) -> Result<(), u64> {
         #[cfg(test)]
         self.1.fire("session.before_compare");
-        self.0
-            .compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst)
-            .map(|_| ())
+        self.update(Update::Exact {
+            expected: old,
+            replacement: new,
+        })
     }
     /// Compatibility shorthand with an exact built-in Owner disposition.
     pub fn engage(&self) {
@@ -158,27 +166,40 @@ impl HaltCell {
         self.latch(HaltTag::EmergencyStop, true);
     }
     fn latch(&self, intent: HaltTag, emergency: bool) {
-        let bits = intent.bits();
-        let history = if emergency { EMERGENCY } else { 0 };
-        let _ = self
-            .0
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                if self.host() && old & crate::host_session::SEALED != 0 {
-                    return None;
-                }
-                // Host terminal settlement preserves ingress generation. A
-                // mission's cause remains distinct from a new input event.
-                let epoch = if self.host() && !emergency {
-                    old & EPOCH_MASK
-                } else {
-                    (old & EPOCH_MASK).saturating_add(EPOCH_STEP) & EPOCH_MASK
-                };
-                Some(
-                    epoch | (old & !EPOCH_MASK) | history | if old & CAUSE == 0 { bits } else { 0 },
-                )
-            });
+        let _ = self.update(Update::Latch {
+            bits: intent.bits(),
+            emergency,
+        });
         #[cfg(test)]
         self.1.fire("file.engaged");
+    }
+    fn update(&self, update: Update) -> Result<(), u64> {
+        self.0
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| match update {
+                Update::Exact {
+                    expected,
+                    replacement,
+                } => (old == expected).then_some(replacement),
+                Update::Latch { bits, emergency } => {
+                    if self.host() && old & crate::host_session::SEALED != 0 {
+                        return None;
+                    }
+                    // Mission intent preserves the host ingress generation.
+                    // Legacy callers retain their existing epoch semantics.
+                    let epoch = if self.host() && !emergency {
+                        old & EPOCH_MASK
+                    } else {
+                        (old & EPOCH_MASK).saturating_add(EPOCH_STEP) & EPOCH_MASK
+                    };
+                    Some(
+                        epoch
+                            | (old & !EPOCH_MASK)
+                            | if emergency { EMERGENCY } else { 0 }
+                            | if old & CAUSE == 0 { bits } else { 0 },
+                    )
+                }
+            })
+            .map(|_| ())
     }
     /// Monotone, memory-only ingress observation; it grants no authority.
     pub fn ingress_epoch(&self) -> u64 {
