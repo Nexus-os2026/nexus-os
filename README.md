@@ -24,7 +24,10 @@ documents) is preserved, unchanged, at the tag
 The separate Mother desktop lives in `mother/desktop`; it still declines
 capability dialogues. This branch also includes the Linux terminal Hands
 candidate, described in [Run Hands](mother/README.md#run-hands-m2d-d-candidate-linux-only).
-Its automated tests do not replace Owner acceptance on the installed build.
+Hands uses one broker-owned session boundary. After emergency it permits
+status, evidence and Quit; entered kernel calls may still finish. Restart is
+report-only and restores neither cleanup permission nor undo. Its automated
+tests do not replace Owner acceptance on the installed build.
 Older installed Nexus OS builds came from the archived code.
 
 | Crate | What it is | Mother system |

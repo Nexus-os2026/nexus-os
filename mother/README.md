@@ -251,8 +251,9 @@ Coordinator rules the oracles pin:
   write access who cuts the journal back to a clean close (dropping a
   later Stop) is not detected; that is the existing truncation non-claim.
 - **Consent is the broker's.** The desktop still denies every dialogue.
-  Hands and the walk use the shared terminal confirmer with fresh codes;
-  the walk retains its three original dialogue categories. A confirmer
+  Hands uses the original session-bound terminal confirmer with fresh codes.
+  The isolated legacy walk retains its three original dialogue categories.
+  A confirmer
   that does not implement a category declines it.
 - The broker shows Mother's summary beside the hash; it does not check the
   summary against the hash (Mother builds both). It binds the Owner's
@@ -474,18 +475,21 @@ Type `run`, then answer each Files grant, Mother door and mission-consent
 dialogue with its own eight-character lowercase hexadecimal code. The grant
 lasts 300 seconds. When `FILE PENDING` appears, type `approve`; inspect all
 facts and the complete fenced content before typing the new code. Every answer
-is exact: whitespace, an empty line, `no`, a wrong code and an overlong line
-all deny. A code inside content is data. Codes are random, checked against the
+is exact. `no` is an explicit decline; whitespace, an empty line, a wrong code
+or an overlong line fails the protocol and ends the host without approval.
+A code inside content is data. Codes are random, checked against the
 fixed display for collisions, and regenerated per dialogue.
 
 Wait for `INPUT READY` before typing. The reader invalidates complete queued
 answers and partial lines after the entire display is written and flushed.
 A stale partial line is discarded through its newline. Stop, Quit and Ctrl-D
 remain active across that boundary. There is one dialogue at a time; display,
-flush, input and boundary failures deny and end the host. Door, grant, undo and
-lift dialogues allow 120 seconds; mission dialogues allow 300; File approval
-is bounded by the lesser of 300 seconds and its remaining commitment lifetime,
-including display time. Input accumulation and queues are bounded. Terminal
+flush, input and boundary failures deny and end the host. Door, grant and undo
+dialogues allow 120 seconds; mission dialogues allow
+300. These limits start at the original command acceptance, including queue
+and display time. File approval also respects both original backend deadlines.
+A new display code never refreshes request authority. Input accumulation and
+queues are bounded. Terminal
 echo, canonical input and newline translation are disabled while Hands owns
 the terminal; orderly exit restores the prior modes. Ctrl-C is not intercepted.
 
@@ -493,57 +497,69 @@ the terminal; orderly exit restores the prior modes. Ctrl-C is not intercepted.
 |---|---|
 | `run` | Start the one File mission allowed in this process. |
 | `approve` | Ask for approval of this mission's exact pending action, then execute only if authorized. |
-| `status` | Show the permanent host restriction separately from actual kernel/broker Stop and worker receipts. Admission counts are in-memory boundary receipts, not proof of backend success. |
-| `evidence` | Show bounded recent evidence and durable-store health. This is not a complete verified chain export. |
-| `detail` | Consume the Owner-only in-memory working detail. |
-| `stop` | Permanently enter recovery-only mode and dispatch an owned Stop worker. |
-| `lift-for-undo` | With no Stop workers outstanding, separately consent to lift the native halt for Owner undo only. |
-| `undo` | Separately approve removal of the last eligible file created in this process, once. Full bytes, SHA-256 and inode identity are shown. An Owner edit refuses without removing it. |
-| `cleanup` | Make one bounded `files_retry_cleanup` attempt; report settled and still-owed work. Never lifts Stop. |
-| `quit` | Cancel the dialogue and close within one three-second shutdown deadline. |
+| `status` | Show session restriction, actual kernel/broker Stop and worker receipts. |
+| `evidence` | Show bounded recent evidence, store health and resource/recording obligations; not a complete chain export. |
+| `detail` | Consume the Owner-only in-memory working detail during normal operation. |
+| `stop` | Deny through the original session cell immediately, then record that exact event off the reader. |
+| `lift-for-undo` | Unavailable in every Hands state; no dialogue. |
+| `undo` | Before emergency, separately approve removal of the exact eligible same-session file, once. Full bytes, SHA-256 and inode identity are shown; Owner edits refuse. |
+| `cleanup` | Before emergency, request cleanup of a fixed list of returned disposable entries. Report settled, owed, excluded, in-flight and unknown facts. |
+| `quit` | Quiesce, settle and close within the original three-second deadline. It never invokes undo. |
 
-There is one File mission per fresh process, no replacement coordinator or
-recycled eligibility. Emergency never resumes or advances the mission. Queued
-work is also subject to the permanent host gate. Lifting native Stop never
-clears that restriction or the broker's File-session emergency latch. A second
-Stop invalidates an in-progress lift, undo or cleanup through the last broker
-check immediately before its kernel call; request fresh consent afterward.
-After that boundary, an already-confirmed undo or cleanup may still finish.
-The terminal reports the actual outcome, including uncertainty and remaining
-cleanup obligations. Stop still blocks all later mission work and is recorded.
-If ingress overtakes a lift, native Stop is re-engaged immediately on return,
-before another host action; the permanent host restriction stays engaged.
-This kernel-boundary window is an explicit non-claim. Closing it is future
-**M2d-K3, a deny-only cell or watch at the kernel's undo, cleanup and lift final
-steps**. M2d-D changes no kernel code and makes no stronger cancellation claim.
-Recovery acknowledgement is unsupported, so evidence recovery may prevent a
-lift altogether. Nothing is lifted automatically or for status or cleanup.
+There is one original broker-issued session before input starts, one File
+mission per process, and no replacement coordinator, adoption or recycled
+eligibility. Commands retain their acceptance identity, target and deadline
+through queues, dialogue and all child operations. A missing, busy or changed
+approval/undo target refuses; a later target cannot repair an old command.
+
+After emergency only status, evidence and Quit remain available; repeated Stop
+still ingresses until sealing. No fresh undo, cleanup, lift or mission work can
+start. Normal undo is available only before the first emergency. An already
+handed-off kernel call may finish its documented internal work, including
+compensation and internal cleanup. Each subsequent broker call needs a new
+admission against its original request. Removing emergency undo does not close
+the native handoff window; no new kernel observer or kernel change is claimed.
 
 The reader performs memory-only Stop ingress and never waits on broker,
 coordinator, output or cleanup. Up to four owned workers perform synchronous
-Stop recording; additional presses still perform ingress and coalesce.
+Stop recording; additional presses still perform ingress and retain pending
+recording obligations. Free worker slots drain them individually.
 `STOP REQUEST RECEIVED`, corroborated kernel/broker halt, and
 `STOP RECORDING COMPLETED` are different receipts. Worker return alone does
 not establish durable recording; inspect health for owed/uncertain records.
 
 A write already past the final native authorization check may publish once.
-The host reports it honestly and permits separate Owner undo when available.
+The host reports it honestly. Emergency does not grant permission for undo.
 The exact uncertainty notice is:
 
 > A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.
 
-Startup reports recovery without sweeping staging or restoring workspace
-permission or undo. Restart is not workspace restoration or permission to
-retry an uncertain write. Same-session undo remains the last-file slot only.
+Startup verifies the kernel ledger, Mother history and primary evidence before
+workspace selection or work. It does not sweep staging, restore permission,
+recreate acknowledgement capabilities or restore undo. Unresolved or invalid
+sources keep the Home report-only. A repeated start does not certify cleanup
+or permit retrying an uncertain write. Facts absent from durable evidence are
+reported as unavailable.
 
-Clean Quit requires joined workers, successful typed File-session close,
-broker shutdown and confirmed durable evidence close, in that order.
-`SESSION CLOSED recorded` accompanies a successful exit. Active File work,
-owed recording/cleanup, terminal failure or timeout produces an unclean,
-nonzero exit. EOF/read error first performs emergency ingress. An exited
-process promises no eventual completion of blocked writes. FileJournal opens
-sync both the journal and its parent directory, including existing entries;
-a sync failure is returned, never silently acknowledged.
+Normal Quit withdraws the exact pending action and truthfully settles a
+nonterminal mission before cleanup. Cleanup preserves the published Owner
+file and intentionally retained recovery material. Emergency close cannot
+start new cleanup. Clean close requires joined producers/workers, complete
+resource/recording/acknowledgement accounting, an atomic seal, durable Mother
+then primary end records, terminal restoration and acknowledged final delivery.
+After sealing, retained handles refuse and ingress returns `SessionEnded`.
+
+`SESSION CLOSED recorded` is the final receipt; zero exit additionally requires
+its successful delivery and renderer finalization before the same deadline.
+A blocked append remains Unknown. Failure can leave one or both end records
+durable while the full close fails; their statuses are reported separately.
+EOF/read error engages emergency before nonzero shutdown. No exited process
+promises eventual cleanup or recording. The exact notice is:
+
+> UNCLEAN EXIT: this process did not complete the full clean-close protocol. Some session-end records may already be durable; any unverified recording or resource obligations are listed separately. No cleanup or recording is promised after this process exits.
+
+FileJournal synchronizes both journal and parent directory, including existing
+entries. Synchronization failure is returned rather than acknowledged.
 
 ### Install and record the exact build (Owner procedure)
 
@@ -578,3 +594,14 @@ and independently inspect the workspace. Record these as **OBSERVED** Owner
 results; automated PTY tests are separate evidence. No installed physical
 acceptance, H1 acceptance, C-11 closure, cross-session undo, Windows/macOS
 terminal support, sandboxing or phase advancement is claimed by this document.
+
+For the session-refactor acceptance addendum, additionally record a normal
+create/undo/clean-Quit control and a separate emergency after publication.
+For the latter, verify that lift, undo, cleanup, run and approve each refuse
+without dialogue and that the Owner file remains unchanged. With an unfinished
+preparation, record the retained staging and nonzero Quit. Restart twice and
+verify report-only findings and unchanged resource identities/content. Do not
+interpret an empty native apply summary as proof of complete resource cleanup.
+The frozen contract and oracle amendments are in
+[`docs/security/m2d-d-session-spec.md`](../docs/security/m2d-d-session-spec.md)
+and [the host registration](../docs/security/m2d-d-host-oracles.md).
