@@ -35,7 +35,6 @@ from the archived code.
 | `crates/nexus-memory` | Hash-chained memory with contradiction detection | Evidence Memory |
 | `agents/web-builder` | Notes-to-static-site builder (templates, content, assembly). Publishing and network image generation were removed | Builder (first demo) |
 | `crates/nexus-self-improve` | Improvement proposals that are never applied by themselves | Evolution Engine |
-| `crates/nexus-outcome-eval` | Success criteria fixed before execution | Verifier |
 | `crates/nexus-crypto`, `sdk` | Shared primitives | — |
 
 ## Accepted foundation (Linux support profile)
