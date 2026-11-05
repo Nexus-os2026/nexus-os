@@ -3011,6 +3011,11 @@ fn replay(
             return Err(V::SessionRecordNamesMission);
         }
         Event::SessionOpened => {
+            // A session boundary ends the invocation's charging lifetime.
+            // Keep totals, declarations and pending-lane settlement evidence.
+            for mission in missions.values_mut() {
+                mission.call_accounting = None;
+            }
             if *session != Session::Closed {
                 // After a session with no clean close, every unfinished
                 // mission not held must be held.
@@ -3038,6 +3043,11 @@ fn replay(
             return Err(V::CloseWithUnheldMission);
         }
         Event::SessionClosed => {
+            // A session boundary ends the invocation's charging lifetime.
+            // Keep totals, declarations and pending-lane settlement evidence.
+            for mission in missions.values_mut() {
+                mission.call_accounting = None;
+            }
             *session = Session::Closed;
             return Ok(());
         }
