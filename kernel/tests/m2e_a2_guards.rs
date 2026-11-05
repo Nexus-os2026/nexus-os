@@ -340,16 +340,47 @@ fn grammar_findings(files: &[ProdFile]) -> Vec<String> {
     out
 }
 
-/// E-O15: local-model predicate identifiers must stay in kernel inference.
-/// Mother Nexus cleanup (2026-11-05), fix round 1: the old rule rejected
-/// only adjacent `fn` + protected-name tokens. The stricter rule rejects ANY
-/// protected identifier occurrence outside kernel inference, including macro
-/// arguments/bodies, calls, imports and raw identifiers. Comments and literal
-/// contents remain masked by the existing production source scanner.
+/// Exact production literal exemptions: (file, literal content, count, why).
+const PREDICATE_LITERAL_ALLOWLIST: [(&str, &str, usize, &str); 1] = [(
+    "kernel/src/actuators/tts.rs",
+    "cloud",
+    1,
+    "Legacy actuator scheduled for removal in the kernel plan",
+)];
+
+const PREDICATE_LITERALS: [&str; 3] = ["cloud", "remote_host", "remote_model"];
+
+/// Count complete string-literal contents, using the existing production views.
+/// Only delimiter quotes survive in `code`: quotes inside ordinary/raw/byte
+/// strings and char literals are masked. Pair those delimiters and read each
+/// complete content from `text`, where comments and test code are excluded.
+fn predicate_literal_counts(file: &ProdFile) -> [usize; 3] {
+    let mut counts = [0; 3];
+    let mut quotes = file.code.match_indices('"');
+    while let (Some((open, _)), Some((close, _))) = (quotes.next(), quotes.next()) {
+        let content = &file.text[open + 1..close];
+        if let Some(i) = PREDICATE_LITERALS.iter().position(|&s| s == content) {
+            counts[i] += 1;
+        }
+    }
+    counts
+}
+
+/// E-O15: no second copy of the local-model predicates outside kernel inference.
+/// Fix round 1 rejected ANY occurrence of the four protected identifiers,
+/// including raw identifiers, macro arguments/bodies, calls and imports.
+/// Fix round 2 is stricter: retain that fail-closed identifier rule AND reject
+/// exact string-literal contents "cloud", "remote_host" and "remote_model"
+/// outside kernel/src/inference/ (raw and byte strings included; comments and
+/// test code excluded), except the exact file/literal/count allowlist above.
+/// `git grep` plus the production inventory verified the sole exemption:
+/// tts.rs's `"openai" | "cloud"`; identifier exemptions remain EMPTY.
 ///
-/// Legitimate-reference allowlist: EMPTY. `git grep` verified that today's
-/// production references all live in kernel inference; no external call or
-/// `use` needs an exact-file/exact-count exemption. Fail closed for new uses.
+/// Semantic clones using NEITHER the protected identifiers NOR these literals
+/// are explicitly out of scope. Independent guards against a second model path
+/// remain: HM model-call classification in kernel/tests/hm_m3_guards.rs,
+/// provider classification in kernel/tests/m2e_transport_guards.rs, and E-O65's
+/// route_guard_findings in this file.
 fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
     for file in files {
@@ -380,6 +411,21 @@ fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
                     "contains protected predicate identifier"
                 };
                 out.push(format!("{} {detail} {name}", file.rel));
+            }
+        }
+        for (literal, count) in PREDICATE_LITERALS
+            .iter()
+            .zip(predicate_literal_counts(file))
+        {
+            let expected = PREDICATE_LITERAL_ALLOWLIST
+                .iter()
+                .find(|&&(rel, content, _, _)| rel == file.rel && content == *literal)
+                .map_or(0, |&(_, _, count, _)| count);
+            if count != expected {
+                out.push(format!(
+                    "{}: predicate literal {literal:?}: {count} occurrence(s), exact allowlist count {expected}",
+                    file.rel
+                ));
             }
         }
     }
@@ -490,6 +536,85 @@ define_predicate!(ollama_model_name_is_cloud);
     }
     let owner = [planted("kernel/src/inference/ollama.rs", generated)];
     assert!(predicate_findings(&owner).is_empty());
+}
+
+#[test]
+fn e_o15_scanner_rejects_renamed_predicate_copies_and_exact_literals() {
+    let findings = |src: &str| predicate_findings(&[planted("sdk/src/local_model.rs", src)]);
+    // Reviewer's renamed function, closure and trait-default copies.
+    let renamed = r#"
+pub fn rejects_cloud_model(model: &str) -> bool {
+    model.to_ascii_lowercase().split([':', '-', '/', '.', '_']).any(|part| part == "cloud")
+}
+"#;
+    let closure = r#"
+fn caller(model: &str) -> bool {
+    let rejects = |model: &str| model.to_ascii_lowercase().split([':', '-', '/', '.', '_']).any(|part| part == "cloud");
+    rejects(model)
+}
+"#;
+    let trait_default = r#"
+trait LocalModel {
+    fn rejects_cloud_model(&self, model: &str) -> bool {
+        model.to_ascii_lowercase().split([':', '-', '/', '.', '_']).any(|part| part == "cloud")
+    }
+}
+"#;
+    for src in [renamed, closure, trait_default] {
+        let found = findings(src);
+        assert_eq!(found.len(), 1, "must reject {src}");
+        assert!(found[0].contains("predicate literal \"cloud\""));
+    }
+    let remote_copy = r#"
+fn description_is_remote(show: &serde_json::Value) -> bool {
+    ["remote_host", "remote_model"].iter().any(|field| {
+        show.get(field).is_some_and(|value| {
+            !value.is_null() && value.as_str().is_none_or(|text| !text.trim().is_empty())
+        })
+    })
+}
+"#;
+    let remote = findings(remote_copy);
+    assert_eq!(remote.len(), 2);
+    for literal in ["remote_host", "remote_model"] {
+        assert!(remote.iter().any(|finding| finding.contains(literal)));
+    }
+    // Exact contents in ordinary, raw, byte and raw-byte strings all count.
+    for literal in PREDICATE_LITERALS {
+        for spelling in [
+            format!("\"{literal}\""),
+            format!("r#\"{literal}\"#"),
+            format!("b\"{literal}\""),
+            format!("br##\"{literal}\"##"),
+        ] {
+            assert_eq!(findings(&format!("const S = {spelling};")).len(), 1);
+        }
+    }
+    for src in [
+        r#"// "cloud"
+/* "remote_host" /* "remote_model" */ */"#,
+        r#"const S: &str = "cloudy"; const T: &str = "remote_hosts";"#,
+        r###"const S: &str = r##"contains "cloud" and "remote_host""##;"###,
+        r#"const S: &str = "contains \"cloud\""; const C: char = '"';"#,
+    ] {
+        assert!(findings(src).is_empty(), "must ignore {src}");
+    }
+    for src in [renamed, closure, trait_default, remote_copy] {
+        assert!(predicate_findings(&[planted("kernel/src/inference/ollama.rs", src)]).is_empty());
+    }
+
+    let tts = r#"match provider { "openai" | "cloud" => run_openai(), _ => refuse() }"#;
+    let allowlisted =
+        |src: &str| predicate_findings(&[planted("kernel/src/actuators/tts.rs", src)]);
+    assert!(allowlisted(tts).is_empty());
+    assert_eq!(findings(tts).len(), 1, "exemption is exact-file only");
+    assert_eq!(allowlisted("").len(), 1, "exemption requires exact count");
+    assert_eq!(allowlisted(&format!("{tts} {tts}")).len(), 1);
+    assert_eq!(
+        allowlisted(&format!("{tts} const S = \"remote_model\";")).len(),
+        1
+    );
+    assert_eq!(allowlisted(&format!("{tts} name_is_cloud();")).len(), 1);
 }
 
 // ── E-O65, E-O12, E-O15 on the workspace ────────────────────────────────────
