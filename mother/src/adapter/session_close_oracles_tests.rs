@@ -98,6 +98,99 @@ fn session_pending_quit_prepares_terminal_ack_without_recording_an_end() {
     assert!(!home.workspace.join("never.txt").exists());
 }
 
+#[test]
+fn fix2_conclusive_pending_quit_has_no_replay_debt() {
+    const TEST: &str =
+        "coordinator::lite::session_close_oracles::fix2_conclusive_pending_quit_has_no_replay_debt";
+    if std::env::var("M2DD_FIX2_REPLAY").as_deref() != Ok("canonical") {
+        let out = super::session_budget_fix1::child_case(TEST, "M2DD_FIX2_REPLAY", "canonical");
+        println!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(out.status.success());
+        return;
+    }
+    assert!(nexus_governed_control::files::make_non_dumpable());
+    let home = Fixture::canonical("fix2-replay");
+    let m = Coordinator::open(
+        home.journal(),
+        home.port.clone(),
+        Lanes::new(files_lanes()).unwrap(),
+        home.clock.clone(),
+        home.private(),
+    )
+    .unwrap()
+    .into_file_session()
+    .unwrap();
+    let mut contract = contract_with("MKFILE:never.txt");
+    contract.requested_folder = Some(home.session.workspace().unwrap().name);
+    let id = m.draft(contract).unwrap();
+    m.submit(id).unwrap();
+    answering(&Yes, || m.request_consent(id)).unwrap();
+    for _ in 0..8 {
+        if m.state(id).unwrap() == Some(MissionState::AwaitingApproval) {
+            break;
+        }
+        m.advance(id).unwrap();
+    }
+    let quit = home.session.ingress().accept(CommandKind::Quit, 2).unwrap();
+    let ending = m.prepare_session_end().unwrap();
+    let lines = home.lines();
+    let entries = verify(&lines).unwrap();
+    let settled = entries
+        .iter()
+        .position(|e| {
+            matches!(
+                &e.event,
+                Event::Transition {
+                    trigger: Trigger::Settled {
+                        outcome: SettlementOutcome::NotPublished,
+                        ..
+                    }
+                }
+            )
+        })
+        .expect("conclusive native nonpublication");
+    for count in 1..=entries.len() {
+        let report = inspect_history_lines(&lines[..count]).unwrap();
+        if count <= settled && report.missions.iter().any(|(mission, _)| *mission == id) {
+            assert!(
+                report.unresolved.contains(&id),
+                "incomplete prefix retains its debt"
+            );
+        }
+    }
+    let report = inspect_history_lines(&lines).unwrap();
+    assert!(
+        report.unresolved.is_empty(),
+        "retained first cause is history, not unresolved settlement: {:?}",
+        report.unresolved
+    );
+    assert_eq!(report.missions, vec![(id, MissionState::Stopped)]);
+    assert!(!report.session_end_recorded);
+    assert!(!home.workspace.join("never.txt").exists());
+    assert!(home
+        .session
+        .settle_close_resources(&quit)
+        .unwrap()
+        .entries
+        .iter()
+        .all(|e| e.discharged));
+    home.session.settle_close_authority(&quit).unwrap();
+    let seal = home.session.seal_close(&quit).unwrap();
+    ending.record(&seal).unwrap();
+    home.session.observe_mother_end(&seal).unwrap();
+    home.session.close_primary(&seal).unwrap();
+    assert!(seal.finish_delivery());
+    assert_eq!(home.session.state(), SessionState::ClosedClean);
+    println!(
+        "FIX2 REPLAY VERIFIED conclusive-pending-quit prefixes={}",
+        lines.len()
+    );
+}
+
 #[path = "session_lifecycle_fix1_tests.rs"]
 mod lifecycle_fix1;
 #[path = "session_native_record_fix1_tests.rs"]

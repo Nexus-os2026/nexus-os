@@ -80,9 +80,13 @@ fn fix1_original_budget_is_rechecked_under_final_run_hold() {
 }
 
 fn child(case: &str) -> std::process::Output {
+    child_case(TEST, CASE, case)
+}
+
+pub(super) fn child_case(test: &str, key: &str, case: &str) -> std::process::Output {
     let mut process = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", TEST, "--nocapture"])
-        .env(CASE, case)
+        .args(["--exact", test, "--nocapture"])
+        .env(key, case)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

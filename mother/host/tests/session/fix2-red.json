@@ -1,0 +1,121 @@
+{
+  "base": "3abf8fc5e6533c921c58b03de15f5e9bd023bf22",
+  "log_root": "/home/nexus/.m2d/fix2",
+  "receipts": {
+    "red-native-expanded": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "fix2_native",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 107.41,
+      "sha256": "e04fd20c42e430e85a869b22c2aaddbf3088bac77ca8262c03f76d392af28090",
+      "head": "3abf8fc5e6533c921c58b03de15f5e9bd023bf22",
+      "results": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.07s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.09s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.08s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.10s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 850 filtered out; finished in 0.11s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 850 filtered out; finished in 2.21s"
+      ]
+    },
+    "red-mother-expanded": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "fix2_",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 85.73,
+      "sha256": "4b6b1a445c360cf2a9913910fa12d441530faa4cfc96c25eb348be0e4100b943",
+      "head": "3abf8fc5e6533c921c58b03de15f5e9bd023bf22",
+      "results": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.17s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.20s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.20s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.18s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.16s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 255 filtered out; finished in 0.13s",
+        "test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 253 filtered out; finished in 0.84s"
+      ]
+    },
+    "red-lint": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "clippy",
+        "-p",
+        "nexus-governed-control",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 101,
+      "seconds": 95.54,
+      "sha256": "ed7e7cab188d875ac9fe61a2a8fb1ae2def2b478991942ec4eb96ae471dc7a79",
+      "head": "3abf8fc5e6533c921c58b03de15f5e9bd023bf22",
+      "results": []
+    },
+    "oracle-notice": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "faults",
+        "h1_shutdown_with_storage_held_is_bounded_and_unclean",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 156.79,
+      "sha256": "b5c8e3f88e5ecb312f736ac86cf05fc150472017bb8fab60f35d81e4e65415c7",
+      "head": "3abf8fc5e6533c921c58b03de15f5e9bd023bf22",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 2.90s"
+      ]
+    }
+  }
+}

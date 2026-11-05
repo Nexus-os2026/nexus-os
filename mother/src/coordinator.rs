@@ -700,6 +700,8 @@ impl Inner {
         let line = entry.to_line();
         #[cfg(all(test, target_os = "linux"))]
         session_journal_oracles::at("before", &entry);
+        #[cfg(all(test, target_os = "linux"))]
+        lite::session_terminal_fix2::before(&entry);
         if work {
             self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
         }

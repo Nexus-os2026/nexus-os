@@ -38,6 +38,7 @@ in_memory = set("hold_configure workspace_install grant_install port_issue attac
 aliases = dict(contract_draft="draft", contract_revise="revise", verify_done="verify_pass", paused_rest="paused_store", approval_pending="pending_install", undo_request="request_restore")
 
 rules = {
+ "approval-budget": ("equivalence", "Original mission budget on a fresh Approve root: the exact pending run retains its original consent clock origin and limits before the first approval admission or dialogue. New native receipts execute expiry before acceptance/approval and at the owning hold, dialogue, revalidation, write-grant and apply boundaries, with live controls and independent normal undo after expiry. The Mother consent receipt proves the limits originate at consent, not in a test-only continuation. These receipts establish the missing inheritance premise of the existing final-hold evidence."),
  "close": ("equivalence", "The original Quit capability may finalize its fixed inventory after input quiescence and before seal, within the first shutdown deadline. It is distinct from an ordinary cleanup request. The linked B producer/retained-close oracles and E failed/held-finalizer oracle test this exact lifecycle; emergency/failure still deny new restorative handoffs and the deadline path reports an unknown in-flight snapshot."),
  "removed": ("exclusion", "No filesystem sink: the old implicit cleanup route was removed. The non-owning index transfers no cleanup authority; the linked real ownership runner and existing route bypass plants prove conservation. Explicit cleanup has its own R29 dispositions."),
  "lifecycle": ("exclusion", "Unreachable lifecycle for a new W/R sink: after seal/end-record only pre-reserved final obligations may run. These rows do not exclude resources that already exist: B retained-close and in-flight-finalizer oracles exercise refusal and sealing debt, with independent pre-seal controls."),
@@ -122,6 +123,11 @@ for s in sink_rows:
         elif ingress in {"mission_stop","stop_all","door_fence","budget","grant_revocation","grant_expiry"} and route in {"R03","R04","R05","R06","R07"}: rule="prerequisite"
         else:
             refs.append(proof(ingress_fragments[ingress]))
+            if ingress == "budget" and route in {"R20", "R21", "R22"}:
+                point = {"action_confirm": "before_approve", "token_issue": "action_confirm", "authorize": "action_confirm", "revalidation_review": "session.before.revalidation_review", "request_approval": "session.before.request_approval", "write_grant": "session.before.write_grant", "apply": "session.before.apply"}.get(sink, "request.final_hold")
+                refs += [proof("FIX2 NATIVE VERIFIED " + point + "/" + clock + " ") for clock in ["mono", "wall", "control"]]
+                refs.append(proof("fix2_mother_consent_budget_precedes_native_approval ... ok"))
+                if rule == "before": rule = "approval-budget"
             if pause in after and failure.startswith("record_"):
                 rule="record-after"
                 # Native exact after-handoff record faults are preferred.

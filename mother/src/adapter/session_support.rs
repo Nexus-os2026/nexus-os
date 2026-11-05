@@ -19,6 +19,12 @@ pub(crate) struct Fixture {
 }
 impl Fixture {
     pub fn new(label: &str) -> Self {
+        Self::with_inspector(label, false)
+    }
+    pub fn canonical(label: &str) -> Self {
+        Self::with_inspector(label, true)
+    }
+    fn with_inspector(label: &str, canonical: bool) -> Self {
         let dir = std::env::temp_dir().join(format!("m2dd-{label}-{}", std::process::id()));
         create_private(&dir).unwrap();
         let broker = dir.join("broker");
@@ -29,7 +35,7 @@ impl Fixture {
         .unwrap();
         let clock = Arc::new(ManualClock::default());
         let owner = Arc::new(Owner::default());
-        let session = HostSession::open_with_history(
+        let mut session = HostSession::open_with_history(
             SessionSeed::new().unwrap(),
             &broker,
             &dir,
@@ -38,6 +44,11 @@ impl Fixture {
             owner.clone(),
         )
         .unwrap();
+        if canonical {
+            session
+                .bind_history_inspector(Arc::new(crate::adapter::SessionHistoryInspector))
+                .unwrap();
+        }
         let workspace = dir.join("workspace");
         create_private(&workspace).unwrap();
         let info = session.bootstrap_workspace(&workspace, &[]).unwrap();
