@@ -114,6 +114,10 @@ pub struct LaneOutput {
 
 /// A lane.
 pub trait Lane: Send + Sync {
+    /// Code-defined allowance. C1a refuses nonzero caps at submission.
+    fn max_model_calls(&self) -> u32 {
+        0
+    }
     fn identity(&self) -> LaneIdentity;
     fn invoke(&self, input: &LaneInput) -> LaneOutput;
 }

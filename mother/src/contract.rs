@@ -87,7 +87,7 @@ pub struct PassCriterion {
 }
 
 /// A mission contract.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MissionContract {
     /// The Owner's words, verbatim: never trimmed, normalised or rewritten.
@@ -105,6 +105,46 @@ pub struct MissionContract {
     pub questions: Vec<Question>,
     /// What the Verifier judges the result against, fixed before work.
     pub pass_criteria: Vec<PassCriterion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelChoice>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deliverable: Option<String>,
+}
+
+/// Consented data, never registration or authority.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelChoice {
+    pub name: String,
+    pub digest: String,
+    pub identity: String,
+}
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Note {
+    pub label: String,
+    pub text: String,
+}
+impl fmt::Debug for Note {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Note")
+            .field("bytes", &self.text.len())
+            .finish_non_exhaustive()
+    }
+}
+impl fmt::Debug for ModelChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ModelChoice { redacted }")
+    }
+}
+impl fmt::Debug for MissionContract {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MissionContract")
+            .field("hash", &self.hash())
+            .finish_non_exhaustive()
+    }
 }
 
 /// The SHA-256 hash of a contract's canonical form.
@@ -159,6 +199,19 @@ impl<'de> Deserialize<'de> for ContractHash {
 /// Why a contract cannot be drafted or submitted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContractError {
+    ModelChoiceInvalid,
+    DeliverableInvalid,
+    TooManyNotes,
+    NotesTooLarge,
+    NoteNotPlain {
+        index: usize,
+    },
+    NoteLooksLikeCredential {
+        index: usize,
+    },
+    /// C1a has no production model route. C1b must amend the admission oracle.
+    ModelLaneUnavailable,
+    ModelCapOutOfRange,
     EmptyOwnerWords,
     OwnerWordsTooLong,
     EmptyRestatement,
@@ -240,6 +293,58 @@ impl MissionContract {
         if self.budget.max_money_minor != 0 {
             return Err(ContractError::MoneyNotZero);
         }
+        self.validate_model_notes()?;
+        Ok(())
+    }
+
+    fn validate_model_notes(&self) -> Result<(), ContractError> {
+        if let Some(m) = &self.model {
+            let hex = |s: &str| {
+                s.len() == 64
+                    && s.bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            };
+            if m.name.is_empty()
+                || m.name.len() > 128
+                || !m.name.starts_with(|c: char| c.is_ascii_alphanumeric())
+                || !m
+                    .name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._:-/".contains(&b))
+                || !hex(&m.digest)
+                || !hex(&m.identity)
+            {
+                return Err(ContractError::ModelChoiceInvalid);
+            }
+        }
+        if self
+            .deliverable
+            .as_deref()
+            .is_some_and(|d| d != "index.html")
+        {
+            return Err(ContractError::DeliverableInvalid);
+        }
+        if self.notes.len() > 4 {
+            return Err(ContractError::TooManyNotes);
+        }
+        let mut bytes = 0;
+        let mut lines = 0;
+        for (index, note) in self.notes.iter().enumerate() {
+            if note.label.chars().count() > 64
+                || !plain(&note.label)
+                || !note.text.lines().all(is_plain)
+            {
+                return Err(ContractError::NoteNotPlain { index });
+            }
+            if looks_like_credential(&note.label) || looks_like_credential(&note.text) {
+                return Err(ContractError::NoteLooksLikeCredential { index });
+            }
+            bytes += 10 + note.label.len() + note.text.len();
+            lines += note.text.lines().count();
+            if bytes > 1792 || lines > 40 {
+                return Err(ContractError::NotesTooLarge);
+            }
+        }
         Ok(())
     }
 
@@ -276,4 +381,20 @@ pub(crate) fn sha256(domain: &[u8], parts: &[&[u8]]) -> [u8; 32] {
 /// field length).
 fn plain(text: &str) -> bool {
     !text.trim().is_empty() && is_plain(text)
+}
+
+// Exact predicate/fixtures pre-registered by C1a oracle snapshots 02/03.
+fn looks_like_credential(text: &str) -> bool {
+    const PEM: [&str; 4] = [
+        "-----BEGIN PRIVATE KEY-----",
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN EC PRIVATE KEY-----",
+        "-----BEGIN OPENSSH PRIVATE KEY-----",
+    ];
+    text.lines().any(|line| PEM.contains(&line.trim()))
+        || text.split_whitespace().any(|token| {
+            token.strip_prefix("sk-").is_some_and(|tail| {
+                tail.len() >= 20 && tail.bytes().all(|b| b.is_ascii_alphanumeric())
+            })
+        })
 }

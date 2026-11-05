@@ -28,7 +28,7 @@ use std::collections::BTreeSet;
 /// What the Owner is shown about a mission, built only by the coordinator
 /// from the mission's current contract. The broker's dialog shows it as
 /// plain lines ([`MissionSummary::lines`]) beside the exact hash.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MissionSummary {
     pub mission: MissionId,
     pub hash: ContractHash,
@@ -42,6 +42,9 @@ pub struct MissionSummary {
     /// Each question with its answer.
     pub answers: Vec<(String, String)>,
     pub pass_criteria: Vec<String>,
+    pub model: Option<crate::contract::ModelChoice>,
+    pub notes: Vec<crate::contract::Note>,
+    pub deliverable: Option<String>,
 }
 
 impl MissionSummary {
@@ -53,6 +56,9 @@ impl MissionSummary {
         Self {
             mission,
             hash: contract.hash(),
+            model: contract.model.clone(),
+            notes: contract.notes.clone(),
+            deliverable: contract.deliverable.clone(),
             owner_words: contract.owner_words.clone(),
             restatement: contract.restatement.clone(),
             requested_folder: contract.requested_folder.clone(),
@@ -88,8 +94,20 @@ impl MissionSummary {
             )),
             None => lines.push("Folder: none requested".into()),
         }
+        if let Some(model) = &self.model {
+            lines.extend(quoted("Model name", &model.name));
+            lines.extend(quoted("Model digest", &model.digest));
+            lines.extend(quoted("Model identity", &model.identity));
+        }
+        for note in &self.notes {
+            lines.extend(quoted("Note label", &note.label));
+            lines.extend(quoted("Selected note", &note.text));
+        }
+        if self.deliverable.as_deref() == Some("index.html") {
+            lines.push("File Mother may draft: index.html".into());
+        }
         lines.push(format!(
-            "Budget: {} ms, {} lane calls, money {} (minor units)",
+            "Budget: {} ms, {} model calls (each lane call counts as at least one), money {} (minor units)",
             self.max_duration_ms, self.max_model_calls, self.max_money_minor
         ));
         let forbidden: Vec<&str> = self.forbidden_effects.iter().map(|k| k.as_str()).collect();
@@ -156,5 +174,14 @@ impl Consent {
     /// Whether this consent covers `contract` exactly.
     pub fn covers(&self, contract: &MissionContract) -> bool {
         self.hash == contract.hash()
+    }
+}
+
+impl std::fmt::Debug for MissionSummary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MissionSummary")
+            .field("mission", &self.mission)
+            .field("hash", &self.hash)
+            .finish_non_exhaustive()
     }
 }

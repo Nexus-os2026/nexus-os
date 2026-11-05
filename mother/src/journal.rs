@@ -93,7 +93,13 @@ pub enum Event {
         role: LaneRole,
         identity_sha256: String,
         input_hash: String,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        model_cap: u32,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        model_budget: u32,
     },
+    /// Authorizes one future send; not proof that anything was sent.
+    ModelCallCharged { invocation: InvocationId, call: u32 },
     LaneReturned {
         invocation: InvocationId,
         output_hash: String,
@@ -235,6 +241,8 @@ pub enum ReplayViolation {
     WaitNotWritten,
     ApprovalOfOtherWait,
     EndOfOtherWait,
+    ModelChargeOutOfPlace,
+    ModelBudgetMismatch,
     LaneOutOfPlace,
     LaneAnswerWithoutCall,
     DispatchOutOfPlace,
@@ -404,4 +412,8 @@ impl JournalStore for MemoryJournal {
         *self.poisoned.lock().expect("journal") = true;
         Ok(())
     }
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
