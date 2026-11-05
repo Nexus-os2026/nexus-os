@@ -1,8 +1,11 @@
 //! K01 registration. LIVE_STAGE changes only in the reviewed deletion/extraction PR.
 //! Successors are exercised on synthetic trees in K01, never on the live runtime.
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+
+#[path = "dependencies.rs"]
+pub mod dependencies;
 
 pub const LIVE_STAGE: u8 = 1;
 
@@ -96,7 +99,7 @@ pub fn paths_at(stage: u8) -> BTreeSet<String> {
     }
     paths
 }
-pub fn cargo_manifests() -> BTreeMap<String, String> {
+pub fn cargo_manifests() -> BTreeSet<String> {
     serde_json::from_str(include_str!("cargo-manifests.json")).unwrap()
 }
 pub fn within(path: &str, parent: &str) -> bool {

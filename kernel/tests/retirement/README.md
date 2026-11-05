@@ -38,13 +38,13 @@ AgentError texts (both AuditError causes) and on_error strategies.
 Every current guard remains active and unchanged. `LIVE_STAGE = 1` is explicit.
 The successor test driver applies K02–K22 policies to synthetic in-memory source
 trees only. Synthetic empty module slots are effect-free fixtures, never purported
-production source. Cargo manifests are public, hash-pinned registration inputs.
+production source. Cargo manifests are public policy inputs, never byte-frozen snapshots.
 There is no live-tree fallback, old-or-new acceptance or missing-file skip.
 
 | Oracle | Activation and current evidence preserved |
 |---|---|
 | F7 | K05–K21 cumulatively prohibit exact retired roots and alternate file/directory spellings, root declarations, imports and exports. K11/K12/K14/K15/K17/K19 add runtime-type prohibitions. Free-api/orchestration/delegation bans remain at every stage. Current m0_f7_legacy_supervisor_cut.rs remains active throughout K01. |
-| Dependency closure | production-paths.txt fixes 327 source seeds; manifest files and extraction homes enter/leave with the selected stage. Every expected seed must be present; unknown renamed modules/files and Cargo dependency aliases/wrappers fail. Extraction destinations enter only at their stage. cargo-manifests.json fixes all ten dependency manifests; any later justified dependency change needs its own independently reviewed registration before activation. |
+| Dependency closure | production-paths.txt fixes 327 source seeds; manifest files and extraction homes enter/leave with the selected stage. Every expected seed must be present; unknown renamed modules/files and Cargo dependency aliases/wrappers fail. Extraction destinations enter only at their stage. cargo-manifests.json retains the ten required manifest paths, while manifests selected by current workspace membership are also checked. Retired package identities (including aliases and workspace declarations) and paths under retirement roots are forbidden in every dependency kind and target. kernel-dependency-names.json caps the kernel dependency names at the 39-name base set; later stages may shrink it. Unrelated non-kernel dependency changes do not require fixture edits. |
 | Logging | K11 replaces loop-source obligations with its absence and no replacement execution route. K12 removes actuator source obligations. logging.jsonl freezes 22 retained logging macro expressions; missing, changed or extra sinks fail, including raw result/error aliases and appended logging. Mother/broker live privacy oracles remain required. |
 | Web search | Through K11, preserve F3's source prohibition plus the independently runnable kernel_retirement_web_search binary's direct default/backend/registry refusal, no-connection and injected-backend checks. K03 moves its PlannedAction import to action_types; its complete source is pinned by web-search-guard.rs.txt. K11 retires only the executor checks with their subject. K12 retires this actuator-dependent binary and switches to actuator/registry/backend absence, including renamed search modules/process sinks; no curl exception remains. broker-classifier.sha256 freezes the exhaustive classifier and refusal vocabulary independently of imports. WebSearch stays inert. Existing broker egress, credentials and proxy tests remain required. |
 | HM prompt/writers/separation | K11 removes exactly six prompt-content exceptions, three AgentMemoryManager writers and the world-model separation row. hm-rows.jsonl names sites/routes; the full 26-route no-handoff vocabulary and raw SQL/write/content-read plants survive. |
@@ -189,3 +189,55 @@ refusal without an operator connection, and successful injected search are
 already carried. The predecessor's registry/executor default-refusal and executor
 injection assertions remain active with their subjects; executor checks retire
 with the K11 executor, while independent direct checks survive until K12.
+
+## Fix round 4 registration
+
+`test(oracle-fix)` — Old: "freeze the exact bytes of ten Cargo manifests".
+New: "enforce retirement dependency policy and a narrowing kernel name set".
+Architect ruling: no retained manifest (root or workspace member) may depend on
+retired crates or paths under registered retirement roots; kernel dependency
+names across all kinds may stay equal or shrink from the base fixture; seed-path
+existence checks stay unchanged. No production manifest or lockfile changes.
+
+Both the live manifest check and the staged successor use dependencies.rs.
+Normal, dev, build, inactive target, renamed `package =`, path and workspace
+declarations are checked without resolving or downloading dependencies. The
+six already-retired crate identities/roots are explicit; all K02–K22 roots come
+from manifest.jsonl and are forbidden dependency destinations from registration
+onwards. Paths are resolved relative to each manifest (including traversal and
+absolute paths within the checkout), using component boundaries. The live
+inventory rejects symlink aliases. Malformed or missing workspace metadata is
+red. Current workspace members, including newly introduced members, cannot evade
+the required-path fixture. New unrelated non-kernel dependencies remain green.
+
+The kernel name fixture was taken from d4b205c750b291bcc2f10e9e5665cbd46ff12ee0,
+including every normal/dev/build/target dependency key, with duplicates removed.
+It contains 39 names. All stages accept a subset; a new name requires an explicit
+fixture amendment in review. This does not authorize dependency additions.
+
+Controls plant retired packages and aliases in every retained manifest and every
+kind/target, workspace aliases at the root, retired/traversing/absolute paths,
+new workspace members and malformed/missing metadata. Positive controls retain
+#83's nix/uuid content, add an unrelated host dependency, accept a neighboring
+non-retired path and remove a kernel dependency. New kernel names fail in every
+kind. The staged successor controls exercise legitimate host changes, retired
+aliases and kernel additions at every K02–K22 stage with fresh reachability.
+
+Audit of other K01 freezes: the staged successor duplicated the manifest-byte
+freeze and is fixed here. The kernel gate also exposed two broader inventory
+freezes after #83: registered_module_edges_name_todays_exact_declarations rejects
+additions in eight non-kernel sources, and
+registered_logging_sinks_match_current_production_views rejects three new host
+startup diagnostics: `eprintln!("{code}")`, `eprintln!("{}", e.code())` in hands.rs,
+and UnsupportedPlatform.code() in bin/mother-hands.rs.
+The old registered logging-context hashes still match. Related staged source
+and logging predicates deliberately reject unknown modules and new/rebound
+sinks, with explicit negative controls. They are preserved pending an Architect
+ruling on the replacement module/logging policy; no inventory was rehashed or
+widened just to obtain green. This round is BLOCKED on those remaining gates.
+
+Codec byte preimages, the F3 guard snapshot, broker classifier/refusal vocabulary,
+bounded logging context and four self-spawn scaffolds are deliberate
+security/behavior registrations with mutation controls. No other byte drift of
+registered files was found. LIVE_STAGE remains 1; no existing guard or trust
+boundary is changed. No phase advancement or integration is authorized here.

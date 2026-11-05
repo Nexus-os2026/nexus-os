@@ -229,15 +229,16 @@ fn retained_production_seeds_and_dependency_manifests_are_present() {
     for path in paths_at(LIVE_STAGE) {
         assert!(root().join(&path).is_file(), "missing stage seed: {path}");
     }
-    let manifests = cargo_manifests();
-    assert_eq!(manifests.len(), 10);
-    for (path, expected) in manifests {
-        assert_eq!(
-            digest(read(&path).as_bytes()),
-            expected,
-            "dependency policy changed: {path}"
-        );
+    let manifests = dependencies::load_manifests();
+    assert_eq!(cargo_manifests().len(), 10);
+    for path in cargo_manifests() {
+        assert!(manifests.contains_key(&path), "missing manifest: {path}");
     }
+    assert_eq!(
+        dependencies::violations(LIVE_STAGE, &manifests),
+        BTreeSet::new(),
+        "retirement dependency policy"
+    );
 }
 
 #[test]
@@ -365,4 +366,175 @@ fn payload_presence_rejects_comments_literals_macros_and_disabling_cfg() {
             assert!(!coverage::active_anchor(&mutant, anchor), "{mutant}");
         }
     }
+}
+
+#[test]
+fn dependency_policy_rejects_retired_names_aliases_and_all_dependency_kinds() {
+    let baseline = dependencies::load_manifests();
+    assert!(dependencies::violations(1, &baseline).is_empty());
+    for path in baseline.keys() {
+        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            for prefix in [String::new(), "target.'cfg(target_os = \"never\")'.".into()] {
+                for (alias, spec) in [
+                    ("nexus-sdk", "version = '1'"),
+                    ("innocent_alias", "package = 'nexus-sdk'\nversion = '1'"),
+                ] {
+                    let mut changed = baseline.clone();
+                    changed
+                        .get_mut(path)
+                        .unwrap()
+                        .push_str(&format!("\n[{prefix}{kind}.{alias}]\n{}\n", spec));
+                    assert!(
+                        dependencies::violations(1, &changed).contains(path),
+                        "{path}: {prefix}{kind}.{alias}"
+                    );
+                }
+            }
+        }
+    }
+    // A workspace alias is resolved through the root declaration even when
+    // inherited by a member; neither table may reintroduce a retired package.
+    let mut changed = baseline.clone();
+    changed
+        .get_mut("Cargo.toml")
+        .unwrap()
+        .push_str("\n[workspace.dependencies.alias]\npackage = 'nexus-memory'\nversion = '1'\n");
+    changed
+        .get_mut("mother/host/Cargo.toml")
+        .unwrap()
+        .push_str("\n[dependencies.alias]\nworkspace = true\n");
+    assert!(dependencies::violations(1, &changed).contains("Cargo.toml"));
+}
+
+#[test]
+fn dependency_policy_checks_retired_paths_and_every_registered_retirement_root() {
+    let baseline = dependencies::load_manifests();
+    let path = "mother/host/Cargo.toml";
+    for retired in [
+        "sdk",
+        "connectors/llm",
+        "agents/web-builder",
+        "crates/nexus-memory",
+        "crates/nexus-self-improve",
+        "crates/nexus-outcome-eval",
+    ] {
+        for dependency in [
+            format!("../../{retired}/nested"),
+            format!("../../mother/../{retired}/nested"),
+            root()
+                .join(retired)
+                .join("nested")
+                .to_str()
+                .unwrap()
+                .to_owned(),
+        ] {
+            let mut changed = baseline.clone();
+            changed.get_mut(path).unwrap().push_str(&format!(
+                "\n[build-dependencies.alias]\npath = {dependency:?}\n"
+            ));
+            assert!(
+                dependencies::violations(1, &changed).contains(path),
+                "{dependency}"
+            );
+        }
+    }
+    for row in stages() {
+        for retired in &row.roots {
+            let mut changed = baseline.clone();
+            changed.get_mut(path).unwrap().push_str(&format!("\n[target.'cfg(windows)'.dev-dependencies.alias]\npath = '../../{retired}/nested'\n"));
+            assert!(
+                dependencies::violations(1, &changed).contains(path),
+                "K01: {retired}"
+            );
+            assert!(
+                dependencies::violations(row.stage, &changed).contains(path),
+                "K{}: {retired}",
+                row.stage
+            );
+        }
+    }
+    // Component boundaries do not prohibit an unrelated neighboring path.
+    let mut changed = baseline;
+    changed
+        .get_mut(path)
+        .unwrap()
+        .push_str("\n[dependencies.alias]\npath = '../../sdk-tools'\n");
+    assert!(dependencies::violations(22, &changed).is_empty());
+}
+
+#[test]
+fn dependency_policy_allows_legitimate_manifest_changes_and_kernel_shrinkage() {
+    let baseline = dependencies::load_manifests();
+    for stage in [1, 2, 11, 22] {
+        let mut changed = baseline.clone();
+        // The merged #83 nix/uuid content is already in the green baseline.
+        changed
+            .get_mut("mother/host/Cargo.toml")
+            .unwrap()
+            .push_str("\n[dev-dependencies.new_host_helper]\nversion = '1'\n");
+        assert!(dependencies::violations(stage, &changed).is_empty());
+        let mut kernel: toml::Value = toml::from_str(&changed["kernel/Cargo.toml"]).unwrap();
+        kernel["dependencies"]
+            .as_table_mut()
+            .unwrap()
+            .remove("htmd")
+            .unwrap();
+        changed.insert(
+            "kernel/Cargo.toml".into(),
+            toml::to_string(&kernel).unwrap(),
+        );
+        assert!(dependencies::violations(stage, &changed).is_empty());
+        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            let mut added = changed.clone();
+            added
+                .get_mut("kernel/Cargo.toml")
+                .unwrap()
+                .push_str(&format!(
+                    "\n[target.'cfg(windows)'.{kind}.brand_new_kernel_name]\nversion = '1'\n"
+                ));
+            assert_eq!(
+                dependencies::violations(stage, &added),
+                BTreeSet::from(["kernel/Cargo.toml".into()])
+            );
+        }
+    }
+}
+
+#[test]
+fn dependency_policy_covers_new_workspace_members_and_fails_on_missing_or_invalid_manifests() {
+    let mut changed = dependencies::load_manifests();
+    let mut workspace: toml::Value = toml::from_str(&changed["Cargo.toml"]).unwrap();
+    workspace["workspace"]["members"]
+        .as_array_mut()
+        .unwrap()
+        .push(toml::Value::String("new-member".into()));
+    changed.insert("Cargo.toml".into(), toml::to_string(&workspace).unwrap());
+    assert!(dependencies::violations(1, &changed).contains("Cargo.toml"));
+    let path = "new-member/Cargo.toml";
+    changed.insert(
+        path.into(),
+        "[package]\nname = 'new-member'\nversion = '1.0.0'\n".into(),
+    );
+    assert!(dependencies::violations(1, &changed).is_empty());
+    changed.get_mut(path).unwrap().push_str("\n[target.'cfg(windows)'.dependencies.alias]\npackage = 'nexus-connectors-llm'\nversion = '1'\n");
+    assert!(dependencies::violations(1, &changed).contains(path));
+    let mut globbed = changed.clone();
+    let mut root_manifest: toml::Value = toml::from_str(&globbed["Cargo.toml"]).unwrap();
+    *root_manifest["workspace"]["members"]
+        .as_array_mut()
+        .unwrap()
+        .last_mut()
+        .unwrap() = toml::Value::String("new-*".into());
+    globbed.insert(
+        "Cargo.toml".into(),
+        toml::to_string(&root_manifest).unwrap(),
+    );
+    assert!(dependencies::violations(1, &globbed).contains(path));
+    globbed.insert(
+        path.into(),
+        "[package]\nname = 'new-member'\nversion = '1.0.0'\n".into(),
+    );
+    assert!(dependencies::violations(1, &globbed).is_empty());
+    changed.insert(path.into(), "invalid TOML = [".into());
+    assert!(dependencies::violations(1, &changed).contains(path));
 }

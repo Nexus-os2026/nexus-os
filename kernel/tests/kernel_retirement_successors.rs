@@ -567,20 +567,15 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         .collect();
     for path in expected
         .iter()
-        .chain(manifests.keys())
+        .chain(manifests.iter())
         .chain(test_files.iter())
     {
         if !tree.contains_key(path) {
             found.insert(("omission", path.clone()));
         }
     }
-    for (path, expected_hash) in manifests {
-        if tree
-            .get(&path)
-            .is_none_or(|raw| digest(raw.as_bytes()) != expected_hash)
-        {
-            found.insert(("f7-dependency", path));
-        }
+    for path in dependencies::violations(stage, tree) {
+        found.insert(("f7-dependency", path));
     }
     // K11 deletes the executor, not the web actuator. Preserve the independent
     // F3 source/default/injected tests until K12, including their bodies. The
@@ -960,8 +955,8 @@ fn build_clean_tree(stage: u8) -> Tree {
             .collect(),
         ..Tree::default()
     };
-    for (path, _) in cargo_manifests() {
-        tree.insert(path.clone(), read(&path));
+    for (path, raw) in dependencies::load_manifests() {
+        tree.insert(path, raw);
     }
     for test in required_tests() {
         let (path, _) = test.rsplit_once("::").unwrap();

@@ -535,3 +535,27 @@ fn registered_self_spawn_scaffolds_allow_only_the_unchanged_test_source() {
         rejected(22, &tree, "raw-process", &path);
     }
 }
+
+#[test]
+fn manifest_policy_is_shared_by_every_staged_successor() {
+    for stage in 2..=22 {
+        let mut tree = clean_tree(stage);
+        let path = "mother/host/Cargo.toml";
+        tree.get_mut(path)
+            .unwrap()
+            .push_str("\n[dev-dependencies.new_host_helper]\nversion = '1'\n");
+        tree.prove_fixture();
+        assert_eq!(
+            successor(stage, &tree),
+            Findings::new(),
+            "K{stage}: legitimate host dependency"
+        );
+        tree.get_mut(path).unwrap().push_str("\n[target.'cfg(windows)'.build-dependencies.alias]\npackage = 'nexus-sdk'\nversion = '1'\n");
+        rejected(stage, &tree, "f7-dependency", path);
+        let mut tree = clean_tree(stage);
+        tree.get_mut("kernel/Cargo.toml")
+            .unwrap()
+            .push_str("\n[build-dependencies.new_kernel_dependency]\nversion = '1'\n");
+        rejected(stage, &tree, "f7-dependency", "kernel/Cargo.toml");
+    }
+}
