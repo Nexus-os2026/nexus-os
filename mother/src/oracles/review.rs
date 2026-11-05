@@ -172,6 +172,8 @@ fn review_replay_refuses_records_out_of_their_live_order() {
                         role: identity.role,
                         identity_sha256: crate::evidence::lane_identity_digest(&identity),
                         input_hash: "0".repeat(64),
+                        model_cap: 0,
+                        model_budget: 0,
                     },
                 ),
             ]),

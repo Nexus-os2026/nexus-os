@@ -103,12 +103,16 @@ fn p0_o9_every_string_field_is_checked() {
                 role: LaneRole::Builder,
                 identity_sha256: bad.to_string(),
                 input_hash: digest.clone(),
+                model_cap: 0,
+                model_budget: 0,
             },
             Event::LaneInvoked {
                 invocation,
                 role: LaneRole::Builder,
                 identity_sha256: digest.clone(),
                 input_hash: bad.to_string(),
+                model_cap: 0,
+                model_budget: 0,
             },
             Event::LaneReturned {
                 invocation,
@@ -225,6 +229,8 @@ fn p0_o9_a_hand_chained_violation_is_refused_at_replay() {
             role: LaneRole::Sentinel,
             identity_sha256: "ab".repeat(32),
             input_hash: cs.cl.clone(),
+            model_cap: 0,
+            model_budget: 0,
         },
     ));
     write(&chain(&events));

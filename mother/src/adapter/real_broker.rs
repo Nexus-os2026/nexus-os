@@ -1038,6 +1038,8 @@ fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World
                     },
                 ),
                 input_hash: "0".repeat(64),
+                model_cap: 0,
+                model_budget: 0,
             },
         );
         (lines, requests)

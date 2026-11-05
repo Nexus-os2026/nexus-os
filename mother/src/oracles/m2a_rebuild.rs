@@ -669,6 +669,8 @@ fn three_open_and_an_unanswered_lane() -> Vec<String> {
             version: "m1-test".into(),
         }),
         input_hash: "0".repeat(64),
+        model_cap: 0,
+        model_budget: 0,
     };
     let mut events = vec![
         crate::oracles::drafted(&c),

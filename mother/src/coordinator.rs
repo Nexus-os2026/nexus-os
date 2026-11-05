@@ -88,6 +88,8 @@ use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};
+mod model_calls;
+use model_calls::{CallAccounting, LaneCalls};
 mod lite;
 mod lite_intent;
 #[cfg(test)]
@@ -291,6 +293,9 @@ struct Mission {
     dispatched_in_phase: bool,
     /// A lane call journaled as invoked and not yet answered (replay).
     pending_lane: Option<InvocationId>,
+    call_accounting: Option<CallAccounting>,
+    lane_calls: Option<LaneCalls>,
+    declared_model_budgets: Vec<u32>,
     prior_outputs: Vec<String>,
     reason: Option<String>,
     /// The broker request the Owner is being asked about (in memory).
@@ -359,6 +364,9 @@ impl Mission {
             dispatched_kind: None,
             dispatched_in_phase: false,
             pending_lane: None,
+            call_accounting: None,
+            lane_calls: None,
+            declared_model_budgets: Vec::new(),
             prior_outputs: Vec::new(),
             reason: None,
             asking: None,
@@ -383,6 +391,8 @@ impl Mission {
     /// the caller: live from the broker's approval, on replay from the
     /// verified journal.
     fn apply(&mut self, trigger: &Trigger, to: MissionState, mono_now: u64) {
+        self.lane_calls = None;
+        self.call_accounting = None;
         let mut dispatched = false;
         // Round 4: the waited File, resolved by its approval, a denial or a
         // lapse (each confirmed not published, or published cleanly): its
@@ -671,35 +681,7 @@ impl Inner {
             }));
         }
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
-        let work = match &entry.event {
-            Event::Drafted { .. }
-            | Event::FileModeSelected
-            | Event::LaneInvoked { .. }
-            | Event::LaneReturned { .. }
-            | Event::EffectDispatched { .. }
-            | Event::EffectSettled { .. }
-            | Event::ApprovalPending { .. }
-            | Event::Resumed => true,
-            Event::Transition { trigger } => matches!(
-                trigger,
-                Trigger::Revise { .. }
-                    | Trigger::Submit { .. }
-                    | Trigger::Consent { .. }
-                    | Trigger::Start
-                    | Trigger::PhaseDone
-                    | Trigger::VerifyPass
-                    | Trigger::AwaitApproval { .. }
-                    | Trigger::ActionApproved { .. }
-            ),
-            Event::ConsentRefused { .. }
-            | Event::LaneOvertaken { .. }
-            | Event::EffectRefused { .. }
-            | Event::ApprovalClosed { .. }
-            | Event::SessionOpened
-            | Event::SessionClosed
-            | Event::Held { .. }
-            | Event::SettlementStarted { .. } => false,
-        };
+        let work = journal_work(&entry.event);
         let line = entry.to_line();
         #[cfg(all(test, target_os = "linux"))]
         session_journal_oracles::at("before", &entry);
@@ -1784,44 +1766,17 @@ impl<P: EffectPort> Coordinator<P> {
             }
             // Reserve the call.
             let step = self.step(|inner| {
-                let seq = inner.next_seq;
-                let mission = inner.mission(id)?;
-                if mission.generation != generation {
-                    return Err(CoordinatorError::Stopped);
+                if identity.role != *role {
+                    return Ok(Then::End(BlockReason::LaneIdentityChanged));
                 }
-                let contract = mission.contract()?;
-                let reason = if identity.role != *role {
-                    Some(BlockReason::LaneIdentityChanged)
-                } else if mission.model_calls >= contract.budget.max_model_calls {
-                    Some(BlockReason::BudgetModelCalls)
-                } else if mission.out_of_time(&*self.clock) {
-                    Some(BlockReason::BudgetTime)
-                } else {
-                    None
-                };
-                if let Some(reason) = reason {
-                    return Ok(Then::End(reason));
-                }
-                let input = LaneInput {
-                    invocation: InvocationId { mission: id, seq },
-                    role: *role,
-                    contract_hash: mission.contract_ref.contract_hash,
-                    owner_words: contract.owner_words.clone(),
-                    restatement: contract.restatement.clone(),
-                    pass_criteria: contract.pass_criteria.clone(),
-                    prior_outputs: mission.prior_outputs.clone(),
-                };
-                inner.append(
+                model_calls::reserve_lane(
+                    inner,
                     id,
-                    Event::LaneInvoked {
-                        invocation: input.invocation,
-                        role: identity.role,
-                        identity_sha256: lane_identity_digest(&identity),
-                        input_hash: input_hash(&input),
-                    },
-                )?;
-                inner.mission(id)?.model_calls += 1;
-                Ok(Then::Go(input))
+                    generation,
+                    &identity,
+                    lane.max_model_calls(),
+                    &*self.clock,
+                )
             })?;
             let input = match self.then(id, step)? {
                 Ok(input) => input,
@@ -1866,6 +1821,10 @@ impl<P: EffectPort> Coordinator<P> {
                             invocation: input.invocation,
                         },
                     )?;
+                    let m = inner.mission(id)?;
+                    m.pending_lane = None;
+                    m.lane_calls = None;
+                    m.call_accounting = None;
                     return Err(CoordinatorError::Stopped);
                 }
                 inner.append(
@@ -1876,6 +1835,9 @@ impl<P: EffectPort> Coordinator<P> {
                     },
                 )?;
                 let mission = inner.mission(id)?;
+                mission.pending_lane = None;
+                mission.lane_calls = None;
+                mission.call_accounting = None;
                 mission.prior_outputs.push(hash.clone());
                 Ok(mission.contract()?.clone())
             })?;
@@ -3233,6 +3195,7 @@ fn replay(
                 mission.consent = Some(Consent::minted(*hash));
             }
         }
+        Event::ModelCallCharged { .. } => return Err(V::ModelChargeOutOfPlace),
         Event::LaneInvoked { invocation, .. } => {
             if mission.settlement.is_some() {
                 return Err(V::SettlementConflict);
@@ -3354,4 +3317,38 @@ fn replay(
         }
     }
     Ok(())
+}
+
+// A charge authorizes future work; it is never a settlement exemption.
+fn journal_work(event: &Event) -> bool {
+    match event {
+        Event::Drafted { .. }
+        | Event::FileModeSelected
+        | Event::ModelCallCharged { .. }
+        | Event::LaneInvoked { .. }
+        | Event::LaneReturned { .. }
+        | Event::EffectDispatched { .. }
+        | Event::EffectSettled { .. }
+        | Event::ApprovalPending { .. }
+        | Event::Resumed => true,
+        Event::Transition { trigger } => matches!(
+            trigger,
+            Trigger::Revise { .. }
+                | Trigger::Submit { .. }
+                | Trigger::Consent { .. }
+                | Trigger::Start
+                | Trigger::PhaseDone
+                | Trigger::VerifyPass
+                | Trigger::AwaitApproval { .. }
+                | Trigger::ActionApproved { .. }
+        ),
+        Event::ConsentRefused { .. }
+        | Event::LaneOvertaken { .. }
+        | Event::EffectRefused { .. }
+        | Event::ApprovalClosed { .. }
+        | Event::SessionOpened
+        | Event::SessionClosed
+        | Event::Held { .. }
+        | Event::SettlementStarted { .. } => false,
+    }
 }

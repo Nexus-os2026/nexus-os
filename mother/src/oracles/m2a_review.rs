@@ -240,6 +240,8 @@ fn m2a_review_replay_checks_the_wait_s_payload() {
             version: "m1-test".into(),
         }),
         input_hash: "0".repeat(64),
+        model_cap: 0,
+        model_budget: 0,
     });
     events.push(Event::LaneOvertaken {
         invocation: crate::lane::InvocationId {
