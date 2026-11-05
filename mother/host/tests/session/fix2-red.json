@@ -116,6 +116,25 @@
       "results": [
         "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 2.90s"
       ]
+    },
+    "workspace-host-lint-frontier": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 101,
+      "seconds": 53.19,
+      "sha256": "03aa58f5991be776bf513cdff2fa292e2d00f6b0513f5795fd93e6864667d01d",
+      "head": "8097875dd29fbbb18579468d3b4c1f1dac69a9e5",
+      "results": []
     }
   }
 }
