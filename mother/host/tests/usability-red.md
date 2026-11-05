@@ -37,3 +37,8 @@ recording for undo (`host_session/outcome.rs`); the stronger blanket wording
 would hide that distinction. The baseline RED never reached this assertion;
 no GREEN result has been seen. All physical, grant, journal and safety
 assertions remain unchanged. This follows the same Owner approval above.
+
+The echo-hold fixture accepts any initial printable prefix of `mistake` as
+its held write, rather than assuming the PTY reader consumes all seven bytes
+in one read. This changes no expected behavior or assertion; the native Stop
+recording receipt is still required while the real renderer write is held.

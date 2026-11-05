@@ -146,7 +146,7 @@ ssize_t write(int fd, const void *data, size_t size) {
     if (fd == STDOUT_FILENO && mode("display") &&
         memmem(data, size, "Answer code: ", 13)) boundary("display", "stdout", data, size);
     if (fd == STDOUT_FILENO && mode("echo-hold") &&
-        size == 7 && !memcmp(data, "mistake", 7)) boundary("echo-hold", "stdout", data, size);
+        size > 0 && size <= 7 && !memcmp(data, "mistake", size)) boundary("echo-hold", "stdout", data, size);
     if (fd == STDOUT_FILENO && mode("write-fail")) { errno = EIO; return -1; }
     if (fd == STDOUT_FILENO && mode("final-write-fail") &&
         memmem(data, size, "SESSION CLOSED recorded", 23)) { errno = EIO; return -1; }
