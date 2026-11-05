@@ -16,6 +16,16 @@ learns. A deterministic capability broker, never a model, holds real
 authority. This is the product direction, not a claim that the whole pathway
 is built or physically accepted.
 
+The goal of Mother Nexus is to become a **Super Hybrid Intelligence** — her nine intelligence systems:
+Mission Brain, Research Council, Discovery Engine, Invention Lab, Governed Hands, Guardian+Verifier,
+Evidence Memory, Evolution Engine and Teaching Intelligence, working together at the top of the agency ladder,
+with the Owner, the AI and the deterministic rules each making the others stronger, while remaining trustworthy and stoppable.
+She must grow along the one main pathway, each rung of agency paid for by its guardrail first, never by weakening
+the safety core: an intelligence nobody can trust or stop is not super; the safety core is what lets her grow powerful.
+She is not a Super Hybrid Intelligence today; nothing is claimed before it is proven. Today's status remains as
+[README’s “Built and merged”](README.md#built-and-merged) and [“Still to build and prove”](README.md#still-to-build-and-prove) sections say.
+Mother's skills map: [SKILLS.md](SKILLS.md).
+
 **ONE PLATFORM. No new features beside the main pathway:** goal → plan →
 governed execution → verified proof → teaching. Other ideas stay one-line
 PARKED notes until an explicit Owner-approved mission brings them into scope.
