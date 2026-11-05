@@ -1316,7 +1316,21 @@ impl CodingRun {
                 cleanup: false,
             },
             || ApplyError::Refused(Refusal::AuthorityDenied),
-            |run| run.restore(approval, grant),
+            |run| {
+                if let Some(cell) = cell {
+                    cell.restore_entered();
+                }
+                let result = run.restore(approval, grant);
+                if let Some(cell) = cell {
+                    use crate::host_session::outcome::RestoreOutcome;
+                    cell.restore_returned(match &result {
+                        Ok(_) => RestoreOutcome::Completed,
+                        Err(ApplyError::Refused(_)) => RestoreOutcome::Refused,
+                        Err(_) => RestoreOutcome::Uncertain,
+                    });
+                }
+                result
+            },
         )
     }
     fn retry_cleanup(&mut self, cell: Option<&HaltCell>) -> Result<(), ApplyError> {
@@ -3433,6 +3447,31 @@ impl Files {
         Ok(())
     }
 
+    /// Read-only eligibility after an owned attempt returned its exact slot.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn session_undo_available(&self) -> Result<bool, AuthorityError> {
+        let slot = self
+            .shared
+            .slot
+            .lock()
+            .map_err(|_| AuthorityError::Halted)?;
+        let Some(applied) = slot.as_ref() else {
+            return Ok(false);
+        };
+        let CodingRun::Host(entry) = &applied.run else {
+            return Err(AuthorityError::Halted);
+        };
+        let native = entry.native.lock().map_err(|_| AuthorityError::Halted)?;
+        Ok(!entry.uncertain.load(Ordering::SeqCst)
+            && native
+                .as_ref()
+                .is_some_and(|run| run.apply_state() == ApplyState::Applied))
+    }
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn session_undo_available(&self) -> Result<bool, AuthorityError> {
+        Ok(false)
+    }
+
     /// §6.6 and H2′: undo the last create of this process, once, with the
     /// Owner's dialog and fresh authority (see
     /// `GovernedControl::files_undo`). Its lifetime (the broker's kernel
@@ -3507,6 +3546,18 @@ impl Files {
         authority: &Authority,
     ) -> Result<(), AuthorityError> {
         let kernel = &applied.workspace.kernel;
+        let close_grant = |issued: IssuedGrant<'_>| {
+            let closed = issued.close();
+            if let Some(cell) = lifetime.recovery.cell() {
+                use crate::host_session::outcome::GrantClosure;
+                cell.restore_grant(if closed {
+                    GrantClosure::Closed
+                } else {
+                    GrantClosure::Unknown
+                });
+            }
+            closed
+        };
         let live = || lifetime.check(authority).is_ok();
         let bridge = UndoBridge {
             confirmer,
@@ -3546,12 +3597,15 @@ impl Files {
             &self.shared,
         );
         issued.host = grant_resource;
+        if let Some(cell) = lifetime.recovery.cell() {
+            cell.restore_grant(crate::host_session::outcome::GrantClosure::Unclosed);
+        }
         #[cfg(test)]
         self.shared.fire(crate::test_hooks::at::FILE_UNDO_APPROVED);
         if let Err(error) = lifetime.check(authority) {
             // HIGH 2: the unused grant is closed now; a closure that is not
             // established is recovery required, and reported.
-            return Err(if issued.close() {
+            return Err(if close_grant(issued) {
                 error
             } else {
                 AuthorityError::RecoveryRequired
@@ -3562,7 +3616,7 @@ impl Files {
         // Busy still owns the whole attempt. This is the last broker check;
         // kernel preflight/U1 cannot observe the cell (Decision 11, M2d-K3).
         if let Err(error) = lifetime.check(authority) {
-            return Err(if issued.close() {
+            return Err(if close_grant(issued) {
                 error
             } else {
                 AuthorityError::RecoveryRequired
@@ -3579,7 +3633,7 @@ impl Files {
             .restore(approval, write, lifetime.recovery.cell());
         // Re-check 3: closed again (idempotent) and confirmed, whatever the
         // restore answered; not established is recovery required, reported.
-        if !issued.close() {
+        if !close_grant(issued) {
             return Err(AuthorityError::RecoveryRequired);
         }
         restored.map(|_| ()).map_err(undo_error)

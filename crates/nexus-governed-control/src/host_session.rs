@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 pub mod approval;
 pub mod close;
+pub mod outcome;
 mod receipt;
 pub mod recovery;
 pub mod stop;
@@ -34,6 +35,7 @@ pub(crate) struct RequestScope {
     deadline: Instant,
     kind: ScopeKind,
     next_step: AtomicU64,
+    restore: outcome::RestoreFacts,
     // Once a native File run is admitted, Mother sinks retain that original
     // prerequisite. Installing it only narrows the original request.
     mother_run: OnceLock<(
@@ -547,6 +549,7 @@ impl HostSession {
             deadline: seed.core.created + Duration::from_secs(300),
             kind: ScopeKind::Bootstrap,
             next_step: AtomicU64::new(0),
+            restore: outcome::RestoreFacts::default(),
             mother_run: OnceLock::new(),
         });
         let bootstrap = SessionContext {
@@ -668,6 +671,10 @@ impl HostSession {
         self.control.workspace()
     }
 
+    pub fn run_count(&self) -> usize {
+        self.control.authority().runs().views().len()
+    }
+
     pub fn stop_snapshot(&self) -> crate::governed::StopSnapshot {
         self.control.stop_snapshot()
     }
@@ -687,14 +694,15 @@ impl HostSession {
         if request.kind != CommandKind::Run {
             return Err(SessionError::Restricted);
         }
-        self.grant_files(request, grant_lifetime)?;
-        self.activate_file_door(request)
+        self.grant_files(request, grant_lifetime, &*self.confirmer)?;
+        self.activate_file_door(request, self.confirmer.clone())
     }
 
     fn grant_files(
         &self,
         request: &SessionRequest,
         grant_lifetime: Duration,
+        confirmer: &dyn crate::authority::approval::ControlConfirmer,
     ) -> Result<crate::authority::ids::GrantId, SessionError> {
         let context = self.context(request)?;
         let workspace = self.control.workspace().ok_or(SessionError::Unavailable)?;
@@ -705,20 +713,24 @@ impl HostSession {
                     workspace: workspace.id,
                 },
                 grant_lifetime,
-                &*self.confirmer,
+                confirmer,
                 Some(&context.cell),
             )
             .map_err(|error| SessionError::Backend(error.class()))?;
         Ok(grant)
     }
 
-    fn activate_file_door(&self, request: &SessionRequest) -> Result<SessionDoor, SessionError> {
+    fn activate_file_door(
+        &self,
+        request: &SessionRequest,
+        confirmer: Arc<dyn crate::authority::approval::ControlConfirmer + Send + Sync>,
+    ) -> Result<SessionDoor, SessionError> {
         let context = self.context(request)?;
         let door = self
             .control
             .issue_agent_door_with_halt(
                 crate::authority::ids::AgentId::new("mother").ok_or(SessionError::Unavailable)?,
-                self.confirmer.clone(),
+                confirmer,
                 Some(context.cell.clone()),
             )
             .map_err(|error| SessionError::Backend(error.class()))?;
@@ -728,6 +740,24 @@ impl HostSession {
             context,
             core: self.core.clone(),
         })
+    }
+
+    /// The trusted host supplies an immutable presentation for this command.
+    /// Native consent and the original request still govern every sink.
+    pub fn open_confirmed_file_door(
+        &self,
+        request: &SessionRequest,
+        confirmer: Arc<dyn crate::authority::approval::ControlConfirmer + Send + Sync>,
+    ) -> Result<SessionDoor, SessionError> {
+        if request.kind != CommandKind::Run {
+            return Err(SessionError::Restricted);
+        }
+        self.grant_files(
+            request,
+            request.deadline.saturating_duration_since(Instant::now()),
+            &*confirmer,
+        )?;
+        self.activate_file_door(request, confirmer)
     }
 
     pub fn cleanup(
@@ -802,6 +832,13 @@ impl HostSession {
         &self,
         request: &SessionRequest,
     ) -> Result<crate::files::UndoReport, SessionFailure> {
+        self.undo_confirmed(request, &*self.confirmer)
+    }
+    pub fn undo_confirmed(
+        &self,
+        request: &SessionRequest,
+        confirmer: &dyn crate::authority::approval::ControlConfirmer,
+    ) -> Result<crate::files::UndoReport, SessionFailure> {
         if !Arc::ptr_eq(&self.core, &request.core)
             || request.kind != CommandKind::Undo
             || request.target == 0
@@ -810,14 +847,42 @@ impl HostSession {
             return Err(crate::authority::AuthorityError::Halted.into());
         }
         let cell = self.core.cell.scoped(request.scope.clone());
-        self.control
-            .files_undo_with_halt(&*self.confirmer, Some(&cell))
-            .map_err(Into::into)
+        cell.admit()?;
+        let claim = outcome::UndoClaim::take(&self.core, request.target)?;
+        let result = self
+            .control
+            .files_undo_with_halt(confirmer, Some(&cell))
+            .map_err(Into::into);
+        if self.control.files().session_undo_available()? && cell.admit().is_ok() {
+            let version = self
+                .core
+                .next_target
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
+                .map_err(|_| crate::authority::AuthorityError::Capacity)?
+                + 1;
+            // A distinct returned version cannot be adopted by a queued command.
+            // A separately published target is never overwritten by this return.
+            let _published = self.core.undo_context.compare_exchange(
+                0,
+                version,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            );
+        }
+        claim.returned();
+        result
     }
 
     pub fn approve_file(
         &self,
         request: &SessionRequest,
+    ) -> Result<crate::control::EffectOutput, SessionFailure> {
+        self.approve_file_confirmed(request, &*self.confirmer)
+    }
+    pub fn approve_file_confirmed(
+        &self,
+        request: &SessionRequest,
+        confirmer: &dyn crate::authority::approval::ControlConfirmer,
     ) -> Result<crate::control::EffectOutput, SessionFailure> {
         use crate::authority::AuthorityError;
         if !Arc::ptr_eq(&self.core, &request.core) || request.kind != CommandKind::Approve {
@@ -851,8 +916,7 @@ impl HostSession {
             .authority()
             .commitments()
             .bind_session_request(commitment, &agent, run, &cell)?;
-        self.control
-            .authorize(commitment, &agent, run, &*self.confirmer)?;
+        self.control.authorize(commitment, &agent, run, confirmer)?;
         cell.admit()?;
         let result = self.control.execute(commitment, &agent, run);
         if result.as_ref().is_ok_and(|output| {
@@ -1166,13 +1230,13 @@ impl HostSession {
         &self,
         request: &SessionRequest,
     ) -> Result<crate::authority::ids::GrantId, SessionError> {
-        self.grant_files(request, Duration::from_secs(60))
+        self.grant_files(request, Duration::from_secs(60), &*self.confirmer)
     }
     pub(crate) fn activate_for_test(
         &self,
         request: &SessionRequest,
     ) -> Result<SessionDoor, SessionError> {
-        self.activate_file_door(request)
+        self.activate_file_door(request, self.confirmer.clone())
     }
     pub(crate) fn control_for_test(&self) -> Arc<crate::governed::GovernedControl> {
         self.control.clone()
@@ -1379,6 +1443,7 @@ impl SessionIngress {
                     deadline: close.deadline,
                     kind: ScopeKind::CloseCleanup,
                     next_step: AtomicU64::new(0),
+                    restore: outcome::RestoreFacts::default(),
                     mother_run: OnceLock::new(),
                 }),
             });
@@ -1416,6 +1481,7 @@ impl SessionIngress {
                     ScopeKind::Work
                 },
                 next_step: AtomicU64::new(0),
+                restore: outcome::RestoreFacts::default(),
                 mother_run: OnceLock::new(),
             }),
         })

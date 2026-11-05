@@ -154,6 +154,21 @@ impl HaltCell {
             _ => Err(super::AuthorityError::Halted),
         }
     }
+    pub(crate) fn restore_entered(&self) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.restore_entered();
+        }
+    }
+    pub(crate) fn restore_returned(&self, outcome: crate::host_session::outcome::RestoreOutcome) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.restore_returned(outcome);
+        }
+    }
+    pub(crate) fn restore_grant(&self, state: crate::host_session::outcome::GrantClosure) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.restore_grant(state);
+        }
+    }
     pub(crate) fn fail_session(&self) {
         if let CellMode::Host(Some(scope)) = self.mode() {
             scope.fail();

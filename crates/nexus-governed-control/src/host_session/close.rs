@@ -11,6 +11,7 @@ pub enum ProducerKind {
     Work,
     StopWorker,
     Reporter,
+    Observation,
     Output,
 }
 struct ProducerSlot {
@@ -104,7 +105,10 @@ impl SessionIngress {
         if word & SEALED != 0 {
             return Err(SessionError::SessionEnded);
         }
-        if word & (CLOSING | FAILED) != 0 && kind != ProducerKind::StopWorker && !settlement {
+        if !settlement
+            && kind != ProducerKind::StopWorker
+            && (word & CLOSING != 0 || word & FAILED != 0 && kind != ProducerKind::Observation)
+        {
             return Err(SessionError::Restricted);
         }
         let index = producers
