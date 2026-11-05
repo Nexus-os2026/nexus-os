@@ -1,141 +1,103 @@
-# Contributing to Nexus OS
+# Contributing to Mother Nexus
 
-Thanks for your interest in contributing to Nexus OS! This guide covers everything you need to get started.
+Start with [MOTHER.md](MOTHER.md), [AGENTS.md](AGENTS.md) and the latest approved
+mission. Work only on the main pathway: goal → plan → governed execution →
+verified proof → teaching. An issue or old plan is not implementation authority.
 
-## Development Setup
+## Development
 
-### Prerequisites
+Mother is Linux-first, with a native GTK4 UI. The pinned Rust toolchain and
+components are in `rust-toolchain.toml`; GTK4 development libraries and
+`pkg-config` are needed for desktop builds. Package installs, privileged steps
+and service changes require the Owner. Use installed dependencies; do not copy
+setup instructions from the retired app. Windows and macOS remain unvalidated.
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Rust | 1.94+ stable | Backend (kernel, agents, CLI, connectors) |
-| Node.js | 22+ | Desktop frontend (React/TypeScript) |
-| npm | 10+ | Frontend package management |
-| Python | 3.11+ | Voice assistant (optional) |
-| Ollama | Latest | Local LLM inference (optional) |
+Use only the assigned branch and worktree. Before editing, verify:
 
-### Platform Dependencies
-
-**Linux (Debian/Ubuntu):**
-```bash
-sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
-  libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
+```sh
+git status -sb
+git rev-parse HEAD
 ```
 
-**macOS:**
-```bash
-xcode-select --install
-```
+Preserve unexpected changes and report a wrong base. Never repair provenance
+with destructive Git. The approved mission controls commit, push and integration
+permissions; the Owner merges.
 
-**Windows:**
-- Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with C++ workload
-- Install [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+Typical checks (the mission's exact gates take precedence):
 
-### Clone and Build
-
-```bash
-git clone https://gitlab.com/nexaiceo/nexus-os.git
-cd nexus-os
-
-# Add the WASM target (required for sandbox tests)
-rustup target add wasm32-wasip1
-
-# Build everything
-cargo build --workspace
-
-# Build the frontend
-cd app && npm install && npm run build
-```
-
-## Code Style
-
-All code must pass these checks before merge. Run them locally before opening a PR:
-
-```bash
-# Format check (zero tolerance for unformatted code)
+```sh
+cargo build --workspace --locked
 cargo fmt --all -- --check
-
-# Lint check (zero warnings allowed)
-cargo clippy --workspace --all-targets -- -D warnings
-
-# Full test suite (1,941 tests)
-cargo test --workspace
-
-# Frontend build
-cd app && npm run build
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test -p nexus-mother -p nexus-typed-decision --locked
+cargo test --workspace --locked --no-fail-fast
+git diff --check
 ```
 
-### Rust Conventions
+Use an assigned Cargo slot when sharing the host. Do not repeat the full suite
+without new evidence or mission authorization. Live desktop, model and sandbox
+checks require their intended host and installed-build evidence; a unit pass or
+an unavailable live test is not physical acceptance.
 
-- **Edition 2021**, no unsafe code (`unsafe_code = "forbid"`)
-- Public types derive `Debug`, `Clone`, `Serialize`, `Deserialize`
-- Errors use `thiserror` or custom enums — no `unwrap()` in library code
-- UUID v4 for all identifiers
-- Capability checks before every agent action
-- Fuel checks before every agent action
-- Audit events via `AuditTrail::append_event()`
+## Rust conventions and required checks
 
-### TypeScript Conventions
+Rust code uses Edition 2021. The workspace declares `unsafe_code = "forbid"`;
+preserve that policy. Errors use `thiserror` or custom enums; do not use
+`unwrap()` in library code.
 
-- Strict mode enabled
-- No `any` types — use proper interfaces
-- Functional React components with hooks
+Public data types derive `Debug`, `Clone`, `Serialize` and `Deserialize` where
+their contract permits. Preserve deliberate custom implementations and types
+that withhold cloning or serialization for secret/authority safety; do not add
+those traits mechanically. Use UUID v4 for fresh UUID identifiers; preserve
+existing typed, hash-derived and sequence identifiers rather than replacing
+their identity contract. An identifier alone never grants authority.
 
-## Architecture for New Contributors
+New workspace crates keep the `nexus-` package prefix and must pass `cargo check`.
 
-Nexus OS is organized into 33 workspace crates:
+Legacy kernel, SDK and connector code still in the workspace keeps its existing checks and tests until an Owner-approved retirement removes it; it is not a pattern for new Mother code, and new Mother code must not be built on it.
 
-```
-kernel/          Core governance: capabilities, fuel, audit, autonomy
-sdk/             Agent SDK: NexusAgent trait, AgentContext, ManifestBuilder
-distributed/     Cross-node: TCP transport, replication, quorum, membership
-enterprise/      RBAC, SOC 2 compliance reporting
-marketplace/     Agent registry, trust scoring, signed bundles
-cli/             24-command CLI
-app/             Tauri desktop shell (React + TypeScript frontend)
-connectors/      External connectors: LLM, web, social, messaging, control
-agents/          9 built-in agents (coder, designer, web-builder, etc.)
-```
+All applicable formatting, zero-warning Clippy, behavioral tests and required
+CI checks must pass before merge. Run the required local checks before opening
+a PR, and report any unavailable gate as blocked. Keep one focused feature or
+fix per PR, test behavior changes, update public API/configuration documentation,
+and write commit messages explaining why. Follow the mission's approved base,
+not a stale branch instruction or historical test count.
 
-**Key principle:** All agent actions flow through the kernel. The SDK wraps the kernel for agent-facing use. Agents depend on `nexus-sdk`, never on `nexus-kernel` directly.
+## Native UI review
 
-**Governance pipeline** (every action follows this path):
-```
-Agent Request → Capability Check → Fuel Check → Autonomy Gate
-    → HITL Approval (if needed) → Execute → Audit Event → Fuel Deduction
-```
+Review Mother's native GTK4 desktop window:
 
-## Pull Request Process
+- Provide visible keyboard focus and a logical focus order.
+- Give controls accessible names and labels.
+- Never use colour alone to convey information.
+- Maintain at least 4.5:1 text contrast in both light and dark themes.
+- Make primary actions, including Stop, reachable by keyboard.
+- Show honest, specific status and errors near the affected control.
+- Respect reduced-motion preferences.
+- Do not embed a browser or webview.
 
-1. **Branch from `main`** — use descriptive branch names (`fix/audit-hash-validation`, `feat/agent-checkpointing`)
-2. **Keep changes focused** — one feature or fix per PR. Large PRs are harder to review.
-3. **Include tests** when behavior changes. We have 1,941 tests and the count should only go up.
-4. **Update docs** for public-facing changes (API, CLI, configuration)
-5. **All CI checks must pass** — cargo fmt, clippy, tests, frontend build
-6. **Write clear commit messages** — explain the "why", not just the "what"
+## Boundaries
 
-### PR Title Format
+- `mother/` holds the coordinator; `mother/host` constructs the broker and owns
+  the Owner side; `mother/desktop` presents native status and Stop.
+- Mother reaches effects only through its sealed port and broker-issued door.
+  Existing crates do not give Mother permission to use old actuators or services.
+- `crates/nexus-typed-decision` is a pure advisory core. Its decisions cannot
+  enlarge deterministic permission or override a failed check.
+- Security-core changes, including guard tests and workflows, require explicit
+  approval under the charter. Never amend a pre-registered oracle after seeing
+  its result without an explicitly authorized oracle amendment.
+- Do not log private content or secrets. Evidence uses bounded ids, hashes,
+  counts and closed reason codes; private content stays separate.
 
-```
-feat: Add agent checkpointing to SDK
-fix: Correct fuel deduction for delegated actions
-docs: Update deployment guide for multi-node setup
-refactor: Simplify audit hash-chain verification
-```
+## Review
 
-## What to Contribute
+Keep each change within its mission and explain the user benefit, files,
+invariants, actual tests and limitations. Add meaningful behavioral tests when
+required and update documentation without inventing completion or support.
+Report all failures and omitted gates. Local green is not CI or Owner acceptance.
+Use the PR template, provide reproducible evidence, and await independent review
+and the Owner's integration decision. No adjacent feature work is implied.
 
-- Bug fixes (check issues on GitLab)
-- New agents (use `agents/coder/` as a template)
-- Connector integrations (Slack, Discord, etc.)
-- Documentation improvements
-- Test coverage improvements
-- Performance optimizations
-
-## Code of Conduct
-
-By participating, you agree to collaborate respectfully and constructively. We value clear communication, honest feedback, and inclusive behavior.
-
-## Questions?
-
-Open an issue on [GitLab](https://gitlab.com/nexaiceo/nexus-os/-/issues) or start a discussion. We're happy to help you get oriented.
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for participation standards and
+[SECURITY.md](SECURITY.md) for private reports.

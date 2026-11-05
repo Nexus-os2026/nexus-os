@@ -1,1 +1,9 @@
-A bug has been reported: "$ARGUMENTS". Investigate by reading relevant source files, checking logs if available, and tracing the issue to its root cause. Fix it with minimal code changes. Run tests to verify the fix. Update tasks/lessons.md with what went wrong and how to prevent it. Do NOT ask clarifying questions - just investigate and fix.
+Investigate "$ARGUMENTS" inside the current approved Mother Nexus mission.
+Read AGENTS.md, MOTHER.md, CLAUDE.md, relevant source/tests and Git evidence.
+Establish the failure before editing. If implementation is authorized, repair
+only that root cause, preserve oracles and isolation, run the mission gates
+and report actual results. Record what went wrong and how to prevent recurrence
+in the mission's designated lessons record; do not create an ad-hoc task file.
+A report alone grants no permission to fix unrelated
+bugs. Stop with evidence if the safe repair exceeds scope. Use only the assigned
+worktree and the mission's Git permissions; never infer push or merge authority.

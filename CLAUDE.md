@@ -47,17 +47,22 @@ Never automatically:
 - redesign neighboring systems;
 - migrate deferred commands;
 - add unrelated refactors;
-- change frontend in a backend-only mission;
+- change the UI in a backend-only mission;
 - change kernel primitives unless authorized;
 - begin the next checkpoint because the current one finished.
 
 One bounded trust boundary/root cause per mission unless explicitly expanded by the Owner.
 
+Build only Mother Nexus on the main pathway in `MOTHER.md`. Old code, services,
+state and archived plans must never become a dependency of Mother. Use only the
+mission's worktree; never touch the Owner's other worktrees. Park other ideas;
+do not turn a command, lesson or roadmap note into feature authorization.
+
 ## Trust boundaries
 Prefer fail closed.
 
 Do not treat these as authority unless the approved architecture explicitly does:
-- frontend/caller strings;
+- UI/caller strings;
 - caller paths, returned paths, saved JSON or model output;
 - UUID syntax alone;
 - `HOME`, cwd, `.`, `/tmp`, repo root, or fallback raw paths;
@@ -80,15 +85,17 @@ Forbidden unless explicitly authorized:
 - destructive worktree/branch deletion.
 
 Use the mission's branch/worktree.
-Do not modify `main`; it advances only through an explicit Owner-approved integration.
+Do not modify `main` directly.
+`main` may advance only through an explicit Owner-approved fast-forward integration.
 Never move the closure refs `rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding` and `evidence/phase1-closure`: they are immutable. Evidence for a future phase goes on a new Owner-approved ref.
-Use `--ff-only` for authoritative integration when instructed.
+Never move `rebuild/phase2-governed-verification` or `evidence/phase2-closure` either; subsequent work and evidence belong on new refs.
+Use `--ff-only` for authorized authoritative integration.
 Do not merge validation PRs unless explicitly authorized.
 
 Provenance:
 - use the remote and ref the mission names, explicitly, for every fetch, push and comparison;
 - never assume a bare `git push` or `git pull`, or a branch's configured upstream, targets the authoritative remote (`origin` may be a stale mirror);
-- Phase Two work uses the `github` remote unless a later Owner-approved mission says otherwise.
+- use the Mother mission's explicit repository/ref; never use a legacy mirror or another worktree by assumption.
 
 ## Autonomous loop
 Inside an approved implementation mission:
@@ -118,11 +125,13 @@ Before commit, normally run the applicable subset:
 - mission-required regressions;
 - `cargo fmt --all -- --check`;
 - appropriate Clippy for changed crates;
-- frontend tests/TypeScript/build when frontend changes;
+- native GTK4 checks and live desktop tests when the Mother UI changes;
 - Python tests when relevant;
 - `git diff --check`.
 
-Native Linux, Windows, macOS, Frontend, and Python evidence is required for trust-boundary completion when the mission requires it.
+Mother is Linux-first. Run every platform and language gate the mission requires;
+Windows and macOS remain deferred and need their own native evidence. The UI
+is native GTK4 only, with no embedded browser engine.
 
 Never:
 - replace a real security assertion with a mock solely for portability;
@@ -144,7 +153,7 @@ For subprocess work:
 - treat Drop as defense in depth only.
 
 ## Locks and audit
-Do not hold authority/catalog/process/lifecycle locks across audit callbacks, provider calls, filesystem mutation, process spawn/wait/termination, network operations, or frontend delivery.
+Do not hold authority/catalog/process/lifecycle locks across audit callbacks, provider calls, filesystem mutation, process spawn/wait/termination, network operations, or UI delivery.
 
 Prefer:
 snapshot/reserve → unlock → native operation → generation/identity re-check → bounded state transition → unlock → completion → audit.
@@ -175,6 +184,12 @@ Do not stop merely because context is getting low. Preserve state using Git and 
 
 Do not create ad-hoc repository state files unless authorized.
 Do not resume stale assumptions from an old Claude session; re-establish state from Git and the current mission.
+
+Use plain-text mission prompts, never Bash scripts as prompts. Run required
+full-workspace tests through the approved terminal or CI runner, not inside a
+Claude Code session unless the current Owner-approved mission explicitly requires
+it; report the actual runner and result. The mission's explicit validation
+instructions take precedence over older session/tool restrictions.
 
 ## CLAUDE.md maintenance
 Keep this file concise and durable. Do not store current checkpoint SHA, current branch/worktree, transient CI failures, changing roadmap status, competitor/marketing claims, or launch goals.

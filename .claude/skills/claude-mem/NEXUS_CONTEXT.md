@@ -1,42 +1,17 @@
-# Nexus OS — Persistent Context
+# Mother Nexus context
 
-## Project
-- Location: ~/NEXUS/nexus-os
-- GitLab: gitlab.com/nexaiceo/nexus-os
-- Version: v9.3.0
+Read AGENTS.md for permanent engineering rules, MOTHER.md for the charter and
+CLAUDE.md for the execution adapter. Current state comes from Git and the latest
+approved mission, not this context file or a previous session's memory.
 
-## Stack
-- Rust kernel + Tauri 2.0 + React/TypeScript
-- Python voice pipeline
-- Ollama (local) + NVIDIA NIM (93 models)
+Mother follows one pathway: goal → plan → governed execution → verified proof
+→ teaching. The AI proposes; the deterministic broker controls effects; the
+Owner decides goals, consent and acceptance. Report 100% truth about whether
+a result was proven. Implementation is not installed qualification or acceptance.
 
-## STRICT RULES — NEVER BREAK
-- NEVER use --all-features (crashes Candle ML)
-- NEVER resume interrupted sessions
-- Always run cargo fmt/clippy on modified crates only
-- Plain text prompts only — never bash scripts
-- Full workspace tests run in terminal not in Claude Code
-
-## Current Status
-- 3,514 tests passing, 0 failures
-- Zero production unwrap/expect/panic
-- Darwin Core: REAL (AdversarialArena + SwarmCoordinator + PlanEvolutionEngine)
-- Flash Engine: REAL (Qwen 35B/122B/397B running locally)
-- NVIDIA NIM: 93 models, 18 providers
-- Discord + Telegram + A2A + MCP Client: REAL
-
-## Remaining Work
-1. Universal Inference Engine (any model, any RAM)
-2. Memory leak fixes (9 files — useEffect cleanup)
-3. Slack adapter
-4. MCP Server
-5. Visual Workflow Editor
-6. Premium website
-7. Demo video (Suresh records)
-8. Hacker News launch (Suresh posts)
-
-## Crate Names
-nexus-kernel, nexus-connectors-llm, nexus-flash,
-nexus-inference, nexus-conductor, nexus-sandbox,
-nexus-identity, nexus-audit, nexus-hitl,
-nexus-desktop-backend
+Linux-first. Native GTK4 only; no embedded browser engine. The old Nexus must
+never break Mother Nexus: no legacy actuator/service/state dependency, no edits
+to other worktrees, no old roadmap resurrection. Keep isolation guards green.
+Typed decisions are advice; missing authority and failed checks refuse. Ideas
+outside the main pathway remain one-line PARKED notes. This file grants no
+mission, permission, test exception or phase advancement.

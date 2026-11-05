@@ -30,6 +30,8 @@ response to any instances of unacceptable behavior.
 
 ## Contact
 
-Report issues to: nexaiceo@gitlab.com
+Mother Nexus maintainers enforce this policy. Contact the project Owner through
+an established private project channel for sensitive reports. Use public project
+issues only for non-sensitive participation concerns; never publish private data.
 
 This Code of Conduct is adapted from the Contributor Covenant, version 2.1.

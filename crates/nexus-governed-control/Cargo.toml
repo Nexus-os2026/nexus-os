@@ -4,7 +4,7 @@ version = "0.1.0"
 license = "MIT"
 edition = "2021"
 publish = false
-description = "Phase Three governed real-world control: action commitments, effect classes, approvals, grants, evidence, cancellation and the governed actuators behind them"
+description = "Mother Nexus capability broker: bound grants, commitments, approvals, evidence, cancellation and governed effects"
 
 [dependencies]
 sha2 = "0.10"
