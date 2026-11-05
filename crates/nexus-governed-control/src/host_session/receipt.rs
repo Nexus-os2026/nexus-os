@@ -386,6 +386,7 @@ pub(super) struct Action {
     pub(super) effect: Option<u64>,
     pub(super) commitment: Option<CommitmentId>,
     receipt: Option<Receipt>,
+    ack_claimed: bool,
 }
 impl Action {
     pub(super) fn observation(
@@ -461,6 +462,7 @@ impl Action {
             effect,
             commitment: None,
             receipt: None,
+            ack_claimed: false,
         }
     }
 }
@@ -468,60 +470,102 @@ pub(super) fn ack(door: &SessionDoor, id: CommitmentId) -> Result<(), AuthorityE
     if door.core.cell.session_word() & SEALED != 0 {
         return Err(AuthorityError::Halted);
     }
-    let mut actions = door.core.actions.lock().map_err(|_| {
-        door.context.fail();
-        unavailable()
-    })?;
-    let action = actions
-        .iter_mut()
-        .find(|a| a.commitment == Some(id))
-        .ok_or(AuthorityError::UnknownCommitment)?;
-    if action.session != door.core.identity
-        || action.door != door.door.origin()
-        || action.door_request != door.origin_request
-        || action.preparation == 0
-    {
-        return Err(AuthorityError::NotMember);
-    }
-    if let Some(receipt) = &action.receipt {
-        if receipt.released && receipt.terminal.hash != [0; 32] && receipt.terminal.sequence > 0 {
+    let lock = || {
+        door.core.actions.lock().map_err(|_| {
+            door.context.fail();
+            unavailable()
+        })
+    };
+    let (slot, action) = {
+        let mut actions = lock()?;
+        let (slot, action) = actions
+            .iter_mut()
+            .enumerate()
+            .find(|(_, a)| a.commitment == Some(id))
+            .ok_or(AuthorityError::UnknownCommitment)?;
+        if action.session != door.core.identity
+            || action.door != door.door.origin()
+            || action.door_request != door.origin_request
+            || action.preparation == 0
+        {
+            return Err(AuthorityError::NotMember);
+        }
+        if action.acknowledged() {
             return Ok(());
         }
-    }
-    let Lookup::Mine((view, publication)) = door.door.file_observation(id)? else {
-        return Err(AuthorityError::UnknownCommitment);
+        if action.ack_claimed {
+            return Err(unavailable());
+        }
+        action.ack_claimed = true;
+        (slot, action.clone())
     };
-    if view.run != action.run
-        || !view.state.is_final()
-        || matches!(
-            publication,
-            PublicationClass::Pending | PublicationClass::Uncertain
-        )
-    {
-        return Err(unavailable());
-    }
-    if action.receipt.is_none() {
+    // The exact claim and pin remain owed while verification and native ack
+    // run outside the session-wide metadata hold. Unwind retains the claim.
+    let unchanged = |current: &Action| {
+        current.ack_claimed
+            && current.session == action.session
+            && current.request == action.request
+            && current.door_request == action.door_request
+            && current.preparation == action.preparation
+            && current.door == action.door
+            && current.run == action.run
+            && current.mission == action.mission
+            && current.effect == action.effect
+            && current.commitment == action.commitment
+    };
+    let result = (|| {
+        let Lookup::Mine((view, publication)) = door.door.file_observation(id)? else {
+            return Err(AuthorityError::UnknownCommitment);
+        };
+        if view.run != action.run
+            || !view.state.is_final()
+            || matches!(
+                publication,
+                PublicationClass::Pending | PublicationClass::Uncertain
+            )
+        {
+            return Err(unavailable());
+        }
         let outcome = Conclusive::of(&publication)?;
-        let terminal = door.core.history.get().ok_or_else(unavailable)?.terminal(
-            action,
-            &publication,
-            view.state,
-            #[cfg(test)]
-            &door.context.cell,
-        )?;
-        action.receipt = Some(Receipt {
-            outcome,
-            terminal,
-            released: false,
-        });
-    }
-    let receipt = action.receipt.as_mut().ok_or_else(unavailable)?;
-    if receipt.outcome != Conclusive::of(&publication)? {
-        return Err(unavailable());
-    }
-    // Receipt and unresolved transfer survive an error or unwind. The native
-    // registry's exact ack is idempotent; no other action's pin is released.
-    door.door.ack_commitment(id)?;
-    receipt.released = true;
-    Ok(())
+        let receipt = match action.receipt {
+            Some(ref receipt) if receipt.outcome == outcome => receipt.clone(),
+            Some(_) => return Err(unavailable()),
+            None => Receipt {
+                outcome,
+                terminal: door.core.history.get().ok_or_else(unavailable)?.terminal(
+                    &action,
+                    &publication,
+                    view.state,
+                    #[cfg(test)]
+                    &door.context.cell,
+                )?,
+                released: false,
+            },
+        };
+        {
+            let mut actions = lock()?;
+            let current = actions
+                .get_mut(slot)
+                .filter(|a| unchanged(a))
+                .ok_or_else(unavailable)?;
+            current.receipt = Some(receipt);
+        }
+        // Install durable proof before releasing its exact native pin. The
+        // receipt survives failure, pruning or a lost return; retries are exact.
+        door.door.ack_commitment(id)?;
+        let mut actions = lock()?;
+        let current = actions
+            .get_mut(slot)
+            .filter(|a| unchanged(a))
+            .ok_or_else(unavailable)?;
+        current.receipt.as_mut().ok_or_else(unavailable)?.released = true;
+        Ok(())
+    })();
+    let mut actions = lock()?;
+    let current = actions
+        .get_mut(slot)
+        .filter(|a| unchanged(a))
+        .ok_or_else(unavailable)?;
+    current.ack_claimed = false;
+    result
 }
