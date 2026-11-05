@@ -5,7 +5,6 @@ members = [
   "persistence",
   "sdk",
   "connectors/llm",
-  "agents/web-builder",
   "crates/nexus-crypto",
   "crates/nexus-governed-control",
   "crates/nexus-verifier-sandbox",
