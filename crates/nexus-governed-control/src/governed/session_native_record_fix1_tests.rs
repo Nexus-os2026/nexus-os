@@ -60,3 +60,77 @@ fn fix1_f08_restore_completion_record_failure_keeps_physical_completion() {
     }
     assert!(failures.is_empty(), "a failed completion append cannot erase conclusive physical completion or independent record debt: {failures:?}");
 }
+
+#[test]
+fn fix1_f08_nested_native_return_types_preserve_separate_facts() {
+    use crate::host_session::outcome::{RecordingStatus, RestoreOutcome};
+    let mut failures = Vec::new();
+    for (label, fail_record, edited, injection, physical, recording) in [
+        (
+            "authority_after_ok",
+            false,
+            false,
+            1,
+            RestoreOutcome::Completed,
+            RecordingStatus::Recorded,
+        ),
+        (
+            "authority_after_unrecorded_restore",
+            true,
+            false,
+            1,
+            RestoreOutcome::Completed,
+            RecordingStatus::Owed,
+        ),
+        (
+            "authority_after_refused",
+            false,
+            true,
+            1,
+            RestoreOutcome::Refused,
+            RecordingStatus::NotStarted,
+        ),
+        (
+            "rollback_is_not_restore",
+            false,
+            false,
+            2,
+            RestoreOutcome::Uncertain,
+            RecordingStatus::Owed,
+        ),
+    ] {
+        let f = Fixture::new();
+        let id = f.pending();
+        f.approve(id).unwrap();
+        if fail_record {
+            rusqlite::Connection::open(f.ledger_path()).unwrap().execute_batch("CREATE TRIGGER fix1_restore_record_failure BEFORE INSERT ON coding_run_ledger WHEN NEW.event_kind='restore.completed' BEGIN SELECT RAISE(ABORT, 'injected restore record failure'); END;").unwrap();
+        }
+        if edited {
+            std::fs::write(
+                f._dirs.0.path().join("selected/workspace/session.txt"),
+                b"Owner changed bytes",
+            )
+            .unwrap();
+        }
+        let request = f._session.ingress().accept(CommandKind::Undo, 3).unwrap();
+        crate::files::set_restore_projection_for_test(injection);
+        let result = f._session.undo(&request);
+        assert!(
+            result.is_err(),
+            "injected outer native error must remain operational failure"
+        );
+        let actual = request.restore_observation();
+        let kernel = f._session.operation_observation(&request).unwrap().kernel;
+        println!("FIX1-F08 TYPED-PROJECTION label={label} physical={:?} kernel_recording={kernel:?}; synthetic native return, not a real grant-close fault", actual.outcome);
+        if actual.outcome != physical || kernel != recording {
+            failures.push(format!(
+                "{label}: {:?}/{kernel:?}, expected {physical:?}/{recording:?}",
+                actual.outcome
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "native nested result facts were lost: {failures:?}"
+    );
+}

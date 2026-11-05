@@ -784,6 +784,32 @@ impl Drop for Preparing {
         }
     }
 }
+// The unchanged kernel's grant-close fault seam is not available to broker
+// tests. These supplemental controls alter only the returned native type;
+// they are never counted as real grant-closure failure executions.
+#[cfg(all(test, target_os = "linux"))]
+thread_local! {
+    static RESTORE_PROJECTION_FAULT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn set_restore_projection_for_test(mode: u8) {
+    RESTORE_PROJECTION_FAULT.with(|fault| fault.set(mode));
+}
+#[cfg(all(test, target_os = "linux"))]
+fn restore_projection_for_test(
+    result: Result<nexus_kernel::coding_run::ApplyReport, ApplyError>,
+) -> Result<nexus_kernel::coding_run::ApplyReport, ApplyError> {
+    match RESTORE_PROJECTION_FAULT.with(|fault| fault.replace(0)) {
+        1 => Err(ApplyError::AuthorityNotClosed {
+            after: Box::new(result),
+        }),
+        2 => Err(ApplyError::CompletionUnrecorded {
+            operation: "rollback",
+        }),
+        _ => result,
+    }
+}
+
 #[cfg(target_os = "linux")]
 impl RunResource {
     fn narrow_grants(&self) -> bool {
@@ -1386,6 +1412,8 @@ impl CodingRun {
             || ApplyError::Refused(Refusal::AuthorityDenied),
             |run| {
                 let result = run.restore(approval, grant);
+                #[cfg(test)]
+                let result = restore_projection_for_test(result);
                 if let Some(cell) = cell {
                     use crate::host_session::outcome::RestoreOutcome;
                     cell.restore_returned(match &result {
