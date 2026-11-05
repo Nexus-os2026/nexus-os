@@ -6,8 +6,8 @@ use nexus_governed_control::authority::approval::*;
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::host_session::{
-    close::{FinalStatus, ProducerKind}, CommandKind, HostSession, SessionError, SessionSeed,
-    SessionState,
+    close::{FinalStatus, ProducerKind},
+    CommandKind, HostSession, SessionError, SessionSeed, SessionState,
 };
 use nexus_mother::adapter::{create_private, FileJournal};
 use nexus_mother::journal::{Entry, Event, JournalStore, GENESIS, SESSION};
@@ -15,40 +15,95 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 struct No;
 impl ControlConfirmer for No {
-    fn confirm_action(&self, _: &ActionConfirmation) -> bool { false }
-    fn confirm_grant(&self, _: &GrantConfirmation) -> bool { false }
-    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool { false }
-    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool { false }
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        true
+    }
+    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool { true }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
 }
 fn child(case: &str) {
     let fixture = support::Fixture::new();
     let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", "session_close_facade_enforces_the_complete_order", "--nocapture"])
-        .env("M2DD_CLOSE_FACADE", case).env("M2DD_CLOSE_ROOT", &fixture.home)
-        .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+        .args([
+            "--exact",
+            "session_close_facade_enforces_the_complete_order",
+            "--nocapture",
+        ])
+        .env("M2DD_CLOSE_FACADE", case)
+        .env("M2DD_CLOSE_ROOT", &fixture.home)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);
     while child.try_wait().unwrap().is_none() {
         if Instant::now() >= deadline {
-            child.kill().unwrap(); child.wait().unwrap(); panic!("bounded close child: {case}");
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("bounded close child: {case}");
         }
         std::thread::sleep(Duration::from_millis(5));
     }
     let result = child.wait_with_output().unwrap();
-    assert!(result.status.success(), "{case}: {}{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
-    assert!(String::from_utf8_lossy(&result.stdout).contains(&format!("CLOSE FACADE VERIFIED {case}")));
-    let expected_end = u64::from(matches!(case, "normal" | "idle_emergency" | "producer" | "ingress_after_seal"));
+    assert!(
+        result.status.success(),
+        "{case}: {}{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&result.stdout).contains(&format!("CLOSE FACADE VERIFIED {case}"))
+    );
+    let expected_end = u64::from(matches!(
+        case,
+        "normal" | "idle_emergency" | "producer" | "ingress_after_seal" | "retained_door"
+    ));
     let expected_stop = u64::from(case == "idle_emergency");
-    assert_eq!(support::evidence::counts(&fixture), [expected_stop, 1, expected_end], "independently verified primary records for {case}");
+    assert_eq!(
+        support::evidence::counts(&fixture),
+        [expected_stop, 1, expected_end],
+        "independently verified primary records for {case}"
+    );
     if case != "incomplete_history" {
         let raw = std::fs::read_to_string(fixture.home.join("mother-journal.jsonl")).unwrap();
-        let entries = nexus_mother::journal::verify(&raw.lines().map(str::to_owned).collect::<Vec<_>>()).unwrap();
-        assert_eq!(entries.iter().filter(|entry| matches!(entry.event, Event::SessionClosed)).count(), expected_end as usize + usize::from(case == "missing_primary"));
+        let entries =
+            nexus_mother::journal::verify(&raw.lines().map(str::to_owned).collect::<Vec<_>>())
+                .unwrap();
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| matches!(entry.event, Event::SessionClosed))
+                .count(),
+            expected_end as usize + usize::from(case == "missing_primary")
+        );
     }
 }
 #[test]
 fn session_close_facade_enforces_the_complete_order() {
     let Ok(case) = std::env::var("M2DD_CLOSE_FACADE") else {
-        for case in ["normal", "idle_emergency", "producer", "lost_producer", "pending_stop", "incomplete_history", "ingress_after_seal", "missing_mother", "missing_primary", "lost_finalizer"] { child(case); }
+        for case in [
+            "normal",
+            "idle_emergency",
+            "producer",
+            "lost_producer",
+            "pending_stop",
+            "incomplete_history",
+            "ingress_after_seal",
+            "missing_mother",
+            "missing_primary",
+            "lost_finalizer",
+            "retained_door",
+        ] {
+            child(case);
+        }
         return;
     };
     assert!(nexus_governed_control::files::make_non_dumpable());
@@ -57,23 +112,53 @@ fn session_close_facade_enforces_the_complete_order() {
     let seed = SessionSeed::new().unwrap();
     let ingress = seed.ingress();
     let producer = ingress.producer(ProducerKind::Input).unwrap();
-    let evidence = PrimaryEvidence::open(&root.join("broker/p3-evidence/evidence.sqlite3"), vec![]).unwrap();
-    let session = HostSession::open_with_history(seed, &root.join("broker"), &root, evidence.clone(), Arc::new(SystemClock::default()), Arc::new(No)).unwrap();
+    let evidence =
+        PrimaryEvidence::open(&root.join("broker/p3-evidence/evidence.sqlite3"), vec![]).unwrap();
+    let session = HostSession::open_with_history(
+        seed,
+        &root.join("broker"),
+        &root,
+        evidence.clone(),
+        Arc::new(SystemClock::default()),
+        Arc::new(No),
+    )
+    .unwrap();
     assert!(session.startup_report().ready());
+    let retained = if case == "retained_door" {
+        let workspace = root.join("workspace");
+        create_private(&workspace).unwrap();
+        session.bootstrap_workspace(&workspace, &[]).unwrap();
+        session.finish_bootstrap().unwrap();
+        let run_request = ingress.accept(CommandKind::Run, 1).unwrap();
+        let door = session.open_file_door(&run_request).unwrap();
+        let attachment = door.file_port().unwrap().attach().unwrap();
+        door.claim_file_session(&attachment).unwrap();
+        let run = door.open_file_run(&attachment).unwrap();
+        Some((door, run))
+    } else { None };
     let mut journal = FileJournal::open(&root.join("mother-journal.jsonl")).unwrap();
     let opening = Entry::chained(0, GENESIS, SESSION, Event::SessionOpened);
     journal.append(&opening.to_line()).unwrap();
     if matches!(case.as_str(), "idle_emergency" | "pending_stop") {
         let event = ingress.emergency().unwrap();
-        if case == "idle_emergency" { session.record_stop(&event).unwrap(); }
+        if case == "idle_emergency" {
+            session.record_stop(&event).unwrap();
+        }
     }
-    let request = ingress.accept(CommandKind::Quit, 1).unwrap();
+    let request = ingress.accept(CommandKind::Quit, 2).unwrap();
     let deadline = request.deadline();
-    let repeated = ingress.accept(CommandKind::Quit, 2).unwrap();
-    assert_eq!(repeated.deadline(), deadline, "repeated Quit must not restart shutdown");
+    let repeated = ingress.accept(CommandKind::Quit, 3).unwrap();
+    assert_eq!(
+        repeated.deadline(),
+        deadline,
+        "repeated Quit must not restart shutdown"
+    );
     assert_eq!(repeated.close_identity(), request.close_identity());
     session.settle_close_authority(&request).unwrap();
-    assert!(session.seal_close(&request).is_err(), "unjoined input producer blocks seal after authority closure");
+    assert!(
+        session.seal_close(&request).is_err(),
+        "unjoined input producer blocks seal after authority closure"
+    );
     if case == "lost_producer" {
         drop(producer);
         assert!(session.seal_close(&request).is_err());
@@ -81,12 +166,20 @@ fn session_close_facade_enforces_the_complete_order() {
     } else {
         producer.joined();
         if case == "producer" {
-            assert!(ingress.producer(ProducerKind::Work).is_err(), "closing cannot create another work producer");
+            assert!(
+                ingress.producer(ProducerKind::Work).is_err(),
+                "closing cannot create another work producer"
+            );
         }
         session.settle_close_authority(&request).unwrap();
         if case == "incomplete_history" {
             use std::io::Write;
-            std::fs::OpenOptions::new().append(true).open(root.join("mother-journal.jsonl")).unwrap().write_all(b"{torn").unwrap();
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(root.join("mother-journal.jsonl"))
+                .unwrap()
+                .write_all(b"{torn")
+                .unwrap();
         }
         if matches!(case.as_str(), "pending_stop" | "incomplete_history") {
             assert!(session.seal_close(&request).is_err());
@@ -94,8 +187,15 @@ fn session_close_facade_enforces_the_complete_order() {
             let seal = session.seal_close(&request).unwrap();
             assert_eq!(session.state(), SessionState::SealedFinalizing);
             assert_eq!(ingress.emergency(), Err(SessionError::SessionEnded));
-            assert!(matches!(ingress.accept(CommandKind::Status, 3), Err(SessionError::SessionEnded)));
+            assert!(matches!(
+                ingress.accept(CommandKind::Status, 4),
+                Err(SessionError::SessionEnded)
+            ));
             assert!(session.seal_close(&request).is_err(), "one finalizer only");
+            if let Some((door, run)) = &retained {
+                assert!(door.cancel_run(*run).is_err(), "a retained door cannot create settlement records after seal");
+                assert!(door.finish_when_settled(*run).is_err(), "no retained post-seal finishing route");
+            }
             if case == "lost_finalizer" {
                 drop(seal);
                 assert_eq!(session.state(), SessionState::ClosedUnclean);
