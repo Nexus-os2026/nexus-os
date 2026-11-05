@@ -830,6 +830,147 @@ fn default_module_dir(file: &Path) -> PathBuf {
     }
 }
 
+/// Discover manifests independently of source files, including packages whose
+/// entire production target is outside their package directory. Mirror the
+/// source walk's directory exclusions; never follow directory symlink cycles.
+fn manifest_files(dir: &Path, out: &mut BTreeSet<PathBuf>) -> Option<()> {
+    for entry in std::fs::read_dir(dir).ok()? {
+        let entry = entry.ok()?;
+        let kind = entry.file_type().ok()?;
+        let name = entry.file_name();
+        let name = name.to_str()?;
+        if kind.is_dir() {
+            if !name.starts_with("target") && !matches!(name, "node_modules" | ".git" | "dist") {
+                manifest_files(&entry.path(), out)?;
+            }
+        } else if name == "Cargo.toml" {
+            out.insert(entry.path());
+        }
+    }
+    Some(())
+}
+
+/// Cargo's simple component globs: * and ?. More complex syntax is rejected
+/// loudly instead of guessing a member list. The DP has bounded input sizes.
+fn member_component_matches(pattern: &str, name: &str) -> bool {
+    let mut matched = vec![false; name.chars().count() + 1];
+    matched[0] = true;
+    for token in pattern.chars() {
+        let previous = matched.clone();
+        matched[0] = token == '*' && previous[0];
+        for (i, c) in name.chars().enumerate() {
+            matched[i + 1] = if token == '*' {
+                previous[i + 1] || matched[i]
+            } else {
+                previous[i] && (token == '?' || token == c)
+            };
+        }
+    }
+    *matched.last().unwrap()
+}
+
+fn workspace_member_dirs(root: &Path, pattern: &str) -> BTreeSet<PathBuf> {
+    assert!(
+        !pattern.is_empty()
+            && pattern.len() <= 1024
+            && !pattern.contains("**")
+            && !pattern.contains(['[', ']', '{', '}', '\\'])
+            && !Path::new(pattern).is_absolute(),
+        "source scan: unsupported workspace member pattern {pattern:?}"
+    );
+    let mut dirs = BTreeSet::from([root.to_path_buf()]);
+    for part in pattern.split('/') {
+        let mut next = BTreeSet::new();
+        for dir in dirs {
+            if part.contains(['*', '?']) {
+                let entries = std::fs::read_dir(&dir).unwrap_or_else(|e| {
+                    panic!("source scan: cannot resolve member {pattern:?}: {e}")
+                });
+                for entry in entries {
+                    let entry = entry.expect("source scan: unreadable workspace member entry");
+                    let name = entry.file_name();
+                    let name = name
+                        .to_str()
+                        .expect("source scan: non-UTF8 workspace member");
+                    if member_component_matches(part, name) {
+                        assert!(
+                            entry.path().is_dir(),
+                            "source scan: non-directory workspace member: {}",
+                            entry.path().display()
+                        );
+                        next.insert(file_identity(&entry.path()));
+                    }
+                }
+            } else {
+                let path = dir.join(part);
+                if path.is_dir() {
+                    next.insert(file_identity(&path));
+                }
+            }
+        }
+        assert!(
+            next.len() <= 4096,
+            "source scan: workspace member expansion bound exceeded"
+        );
+        dirs = next;
+    }
+    assert!(
+        !dirs.is_empty(),
+        "source scan: unresolved workspace member {pattern:?}"
+    );
+    dirs
+}
+
+fn workspace_manifests(root: &Path, manifests: &mut BTreeSet<PathBuf>) -> Option<()> {
+    let manifest = root.join("Cargo.toml");
+    if !manifest.try_exists().ok()? {
+        return Some(()); // Isolated non-Cargo scanner controls.
+    }
+    let data: toml::Value = toml::from_str(&std::fs::read_to_string(manifest).ok()?).ok()?;
+    if let Some(workspace) = data.get("workspace") {
+        let workspace = workspace.as_table()?;
+        let mut members = BTreeSet::new();
+        if let Some(patterns) = workspace.get("members") {
+            for pattern in patterns
+                .as_array()
+                .expect("source scan: workspace members array")
+            {
+                members.extend(workspace_member_dirs(
+                    root,
+                    pattern
+                        .as_str()
+                        .expect("source scan: workspace member string"),
+                ));
+            }
+        }
+        if let Some(patterns) = workspace.get("exclude") {
+            for pattern in patterns
+                .as_array()
+                .expect("source scan: workspace exclude array")
+            {
+                for dir in workspace_member_dirs(
+                    root,
+                    pattern
+                        .as_str()
+                        .expect("source scan: workspace exclude string"),
+                ) {
+                    members.remove(&dir);
+                }
+            }
+        }
+        for dir in members {
+            let manifest = dir.join("Cargo.toml");
+            assert!(
+                manifest.is_file(),
+                "source scan: workspace member lacks Cargo.toml: {}",
+                dir.display()
+            );
+            manifests.insert(manifest);
+        }
+    }
+    Some(())
+}
+
 /// Independent entry points cannot inherit test-only status from module
 /// aliases. Keep each root's actual load directory as well as physical module
 /// contexts. Unreadable/malformed Cargo metadata denies ALL file exclusions.
@@ -840,6 +981,8 @@ fn cargo_production_roots(
     let known: BTreeSet<_> = raw.keys().map(|p| file_identity(p)).collect();
     let mut roots: BTreeMap<PathBuf, BTreeSet<PathBuf>> = BTreeMap::new();
     let mut manifests = BTreeSet::new();
+    manifest_files(root, &mut manifests)?;
+    workspace_manifests(root, &mut manifests)?;
     for file in raw.keys() {
         // Preserve the previous conservative rule for standalone source trees
         // too; Cargo metadata may be absent in an isolated guard fixture.
@@ -852,13 +995,7 @@ fn cargo_production_roots(
             roots
                 .entry(file_identity(file))
                 .or_default()
-                .insert(file.parent()?.to_path_buf());
-        }
-        for dir in file.ancestors().skip(1).take_while(|p| p.starts_with(root)) {
-            let manifest = dir.join("Cargo.toml");
-            if manifest.try_exists().ok()? {
-                manifests.insert(manifest);
-            }
+                .insert(file_identity(file.parent()?));
         }
     }
     for manifest in manifests {
@@ -869,15 +1006,43 @@ fn cargo_production_roots(
         let package = package.as_table()?;
         let dir = manifest.parent()?;
         let mut paths = vec![dir.join("src/lib.rs"), dir.join("src/main.rs")];
-        // Keep conventional bin candidates conservatively even if autodiscovery
-        // is disabled: a named [[bin]] without a path can still select them.
+        let autobins = package
+            .get("autobins")
+            .map_or(Some(true), toml::Value::as_bool)?;
+        // Named bins without a path still select a conventional candidate when
+        // autodiscovery is disabled. Other src/bin files gain no root authority.
+        let named_bins: BTreeSet<_> = data
+            .get("bin")
+            .map_or(Some(Vec::new()), |bins| {
+                bins.as_array()?
+                    .iter()
+                    .map(|bin| {
+                        let table = bin.as_table()?;
+                        if table.contains_key("path") {
+                            Some(None)
+                        } else {
+                            Some(Some(table.get("name")?.as_str()?.to_string()))
+                        }
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })?
+            .into_iter()
+            .flatten()
+            .collect();
         for file in raw.keys() {
             if let Ok(rel) = file.strip_prefix(dir.join("src/bin")) {
                 if rel.components().count() == 1
                     || (rel.components().count() == 2
                         && rel.file_name()?.to_str() == Some("main.rs"))
                 {
-                    paths.push(file.clone());
+                    let name = if rel.components().count() == 1 {
+                        file.file_stem()?.to_str()?
+                    } else {
+                        rel.parent()?.file_name()?.to_str()?
+                    };
+                    if autobins || named_bins.contains(name) {
+                        paths.push(file.clone());
+                    }
                 }
             }
         }
@@ -904,7 +1069,7 @@ fn cargo_production_roots(
                 roots
                     .entry(identity)
                     .or_default()
-                    .insert(path.parent()?.to_path_buf());
+                    .insert(file_identity(path.parent()?));
             }
         }
     }
@@ -927,6 +1092,8 @@ struct ModuleScan<'a> {
     known: &'a BTreeSet<PathBuf>,
     declarations: BTreeMap<usize, ModuleReach>,
     unresolved: bool,
+    expansions: usize,
+    depth: usize,
 }
 
 impl ModuleScan<'_> {
@@ -940,6 +1107,11 @@ impl ModuleScan<'_> {
         path_dir: &Path,
         uncertain: bool,
     ) {
+        self.expansions += 1;
+        if self.expansions > 4096 || self.depth > 64 {
+            self.unresolved = true;
+            return;
+        }
         while at < end {
             if self.code.as_bytes()[at].is_ascii_whitespace() {
                 at += 1;
@@ -962,9 +1134,18 @@ impl ModuleScan<'_> {
                 }
                 if self.code.as_bytes()[terminator] == b'{' {
                     let close = close_of(self.code, terminator);
+                    self.depth += 1;
                     for dir in dirs {
+                        // Lexical normalization through a missing directory is
+                        // useful for termination, but cannot prove ownership.
+                        let uncertain = uncertain || !dir.is_dir();
+                        let dir = file_identity(&dir);
                         self.visit(terminator + 1, close - 1, &dir, &dir, uncertain);
+                        if self.unresolved {
+                            break;
+                        }
                     }
+                    self.depth -= 1;
                     at = close;
                     continue;
                 }
@@ -981,7 +1162,7 @@ impl ModuleScan<'_> {
                         reach.targets.insert(identity.clone());
                         reach
                             .path_loaded
-                            .insert((identity, target.parent().unwrap().to_path_buf()));
+                            .insert((identity, file_identity(target.parent().unwrap())));
                     }
                 }
                 if paths.explicit.is_empty() {
@@ -1041,66 +1222,106 @@ fn exclusively_test_files(
         return BTreeSet::new();
     };
     let known: BTreeSet<_> = raw.keys().map(|p| file_identity(p)).collect();
-    let mut directories: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    // Context = canonical file identity, normalized default-child directory,
+    // normalized explicit-path directory. Preserve distinct symlink load sites.
+    let mut pending = BTreeSet::new();
     for file in raw.keys() {
-        directories
-            .entry(file_identity(file))
-            .or_default()
-            .insert(default_module_dir(file));
+        pending.insert((
+            file_identity(file),
+            file_identity(&default_module_dir(file)),
+            file_identity(file.parent().unwrap()),
+        ));
     }
     for (identity, dirs) in &production_roots {
-        directories
-            .entry(identity.clone())
-            .or_default()
-            .extend(dirs.iter().cloned());
-    }
-    let mut incoming: BTreeMap<PathBuf, Vec<Incoming>>;
-    let mut unresolved;
-    loop {
-        incoming = BTreeMap::new();
-        unresolved = false;
-        let mut more = Vec::new();
-        for (file, source) in raw {
-            let identity = file_identity(file);
-            let code = mask(source, false);
-            let text = mask(source, true);
-            let mut scan = ModuleScan {
-                code: &code,
-                text: &text,
-                ranges: &ranges[file],
-                known: &known,
-                declarations: BTreeMap::new(),
-                unresolved: false,
-            };
-            // A #[path]-loaded non-mod-rs file can use its containing directory
-            // for default children. Keep both physical contexts conservatively;
-            // disagreement is uncertain, rather than guessing one ownership.
-            for dir in &directories[&identity] {
-                scan.visit(0, code.len(), dir, file.parent().unwrap(), false);
-            }
-            unresolved |= scan.unresolved;
-            for reach in scan.declarations.into_values() {
-                more.extend(reach.path_loaded);
-                for target in reach.targets {
-                    incoming.entry(target).or_default().push(Incoming {
-                        source: identity.clone(),
-                        test_only: reach.test_only,
-                        uncertain: reach.uncertain,
-                    });
-                }
-            }
-        }
-        let mut changed = false;
-        for (file, dir) in more {
-            changed |= directories.entry(file).or_default().insert(dir);
-        }
-        if !changed {
-            break;
+        for dir in dirs {
+            pending.insert((identity.clone(), dir.clone(), dir.clone()));
         }
     }
-    // A nonliteral path could reach ANY file. No exclusion is safe in that
-    // scan; do not silently use default resolution for the failed attribute.
-    if unresolved {
+    let sources: BTreeMap<_, _> = raw.keys().map(|p| (file_identity(p), p)).collect();
+    let mut visited = BTreeSet::new();
+    let mut declarations: BTreeMap<PathBuf, BTreeMap<usize, ModuleReach>> = BTreeMap::new();
+    while let Some((identity, default_dir, path_dir)) = pending.pop_first() {
+        if !visited.insert((identity.clone(), default_dir.clone(), path_dir.clone())) {
+            continue;
+        }
+        // A changing context cycle must never consume unbounded work. Denying
+        // ALL exclusions also covers files reachable beyond the stopping point.
+        if visited.len() > 4096 || pending.len() > 4096 {
+            return BTreeSet::new();
+        }
+        let file = sources[&identity];
+        let code = mask(&raw[file], false);
+        let text = mask(&raw[file], true);
+        let mut scan = ModuleScan {
+            code: &code,
+            text: &text,
+            ranges: &ranges[file],
+            known: &known,
+            declarations: BTreeMap::new(),
+            unresolved: false,
+            expansions: 0,
+            depth: 0,
+        };
+        scan.visit(0, code.len(), &default_dir, &path_dir, false);
+        if scan.unresolved {
+            return BTreeSet::new();
+        }
+        let merged = declarations.entry(identity.clone()).or_default();
+        for (item, reach) in scan.declarations {
+            for (target, dir) in &reach.path_loaded {
+                pending.insert((target.clone(), dir.clone(), dir.clone()));
+            }
+            if let Some(previous) = merged.get_mut(&item) {
+                previous.uncertain |= reach.uncertain || previous.targets != reach.targets;
+                previous.targets.extend(reach.targets);
+                previous.path_loaded.extend(reach.path_loaded);
+            } else {
+                merged.insert(item, reach);
+            }
+        }
+    }
+    let mut incoming: BTreeMap<PathBuf, Vec<Incoming>> = BTreeMap::new();
+    for (identity, declarations) in declarations {
+        for reach in declarations.into_values() {
+            for target in reach.targets {
+                incoming.entry(target).or_default().push(Incoming {
+                    source: identity.clone(),
+                    test_only: reach.test_only,
+                    uncertain: reach.uncertain,
+                });
+            }
+        }
+    }
+    // Peel acyclic source->target edges without recursion. A residual cycle,
+    // even one disabled by cfg, denies exclusions; its dependents stay scanned.
+    let mut degree: BTreeMap<_, usize> = known.iter().map(|p| (p.clone(), 0)).collect();
+    let mut outgoing: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
+    for (target, edges) in &incoming {
+        for edge in edges {
+            *degree.get_mut(target).unwrap() += 1;
+            outgoing
+                .entry(edge.source.clone())
+                .or_default()
+                .push(target.clone());
+        }
+    }
+    let mut ready: Vec<_> = degree
+        .iter()
+        .filter(|(_, n)| **n == 0)
+        .map(|(p, _)| p.clone())
+        .collect();
+    let mut removed = 0;
+    while let Some(source) = ready.pop() {
+        removed += 1;
+        for target in outgoing.get(&source).into_iter().flatten() {
+            let n = degree.get_mut(target).unwrap();
+            *n -= 1;
+            if *n == 0 {
+                ready.push(target.clone());
+            }
+        }
+    }
+    if removed != known.len() {
         return BTreeSet::new();
     }
     let mut test = BTreeSet::new();
