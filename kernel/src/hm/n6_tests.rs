@@ -5,7 +5,7 @@
 use super::testing::{ScriptedLlm, TestConfig, TestHm};
 use super::{
     DispatchContext, DispatchError, DispatchIssuer, NewMemory, Principal, ProbePoint,
-    PromptBuilder, RecallSpec, RecordTable, Refused, RouteClass, SourceKind, Unit,
+    PromptBuilder, RecallSpec, RecordTable, Refused, ReplyRefused, RouteClass, SourceKind, Unit,
 };
 use nexus_persistence::NexusDatabase;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -97,8 +97,8 @@ fn hm_m3_n6_a_c3_no_retained_record_in_a_context_that_may_not_carry_one() {
 /// tightening that another connection commits before the admission
 /// transaction refuses the non-local dispatch (nothing is sent); an
 /// admission holding the write lock makes a tightening on the other
-/// connection wait, so the admitted request stands and the tightening
-/// governs the next dispatch.
+/// connection wait, so the admitted request is sent. A tightening committed
+/// before the reply discards that reply and governs the next dispatch.
 #[test]
 fn hm_m3_n6_a_p4_two_connections_ordering_by_the_admission_transaction() {
     let dir = tempfile::TempDir::new().unwrap();
@@ -133,15 +133,32 @@ fn hm_m3_n6_a_p4_two_connections_ordering_by_the_admission_transaction() {
         "(1) admitted after the other connection's tightening: {refused:?}"
     );
     assert!(llm.sent().is_empty(), "(1): {:?}", llm.sent());
+    assert!(hm
+        .db
+        .hm()
+        .read(|tx| tx.admission_rows())
+        .unwrap()
+        .is_empty());
 
     // (2) The admission holds the write lock; the other connection's
     // tightening waits for it.
     let db3 = NexusDatabase::open(&path).unwrap();
     super::testing::exec(&db3, "PRAGMA busy_timeout = 0;");
     let mut ctx = hm.goal(second);
+    // Control: without a concurrent tightening, admission and reply
+    // acceptance both succeed through the same dispatch entry.
+    let control = ScriptedLlm::replying(&hm.issuer, RouteClass::NonLocal, "reply");
+    let accepted = control.ask(&mut ctx, &mut text_prompt("SYNTH-p4-control"));
+    assert!(
+        accepted.is_ok(),
+        "(2) control did not succeed: {accepted:?}"
+    );
+    assert_eq!(control.sent(), ["SYNTH-p4-control"]);
+    let generation = ctx.policy().policy_generation();
     let lock_held: Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
-    type Tightening = std::thread::JoinHandle<bool>;
+    type Tightening = std::thread::JoinHandle<()>;
     let worker: Arc<Mutex<Option<Tightening>>> = Arc::new(Mutex::new(None));
+    let (committed, completion) = mpsc::channel();
     let fired = AtomicBool::new(false);
     let (held, slot, i2) = (lock_held.clone(), worker.clone(), issuer2.clone());
     hm.issuer.install_probe(Box::new(move |point| {
@@ -153,26 +170,56 @@ fn hm_m3_n6_a_p4_two_connections_ordering_by_the_admission_transaction() {
         *held.lock().unwrap() = Some(db3.hm().immediate(|_| Ok(())).is_err());
         let (started, ready) = mpsc::channel();
         let issuer = i2.clone();
+        let committed = committed.clone();
         *slot.lock().unwrap() = Some(std::thread::spawn(move || {
             started.send(()).unwrap();
-            issuer
+            let policy = issuer
                 .resolve_agent_route_policy(second)
-                .map(|p| p.local_only())
-                .unwrap_or(false)
+                .expect("(2) the waiting tightening must commit");
+            committed.send(policy).unwrap();
         }));
         ready.recv_timeout(Duration::from_secs(30)).unwrap();
     }));
-    let llm = ScriptedLlm::replying(&hm.issuer, RouteClass::NonLocal, "reply");
-    let admitted = llm.ask(&mut ctx, &mut text_prompt("SYNTH-p4-two"));
+    let db = hm.db.clone();
+    let completion = Mutex::new(completion);
+    let llm = ScriptedLlm::answering(&hm.issuer, RouteClass::NonLocal, move |_| {
+        // Reaching the transport proves admission succeeded. Verify its
+        // committed row at the original generation, before O3 can run.
+        let rows = db.hm().read(|tx| tx.admission_rows()).unwrap();
+        assert_eq!(rows.len(), 2, "(2) control and concurrent admission");
+        let admission = &rows[1];
+        assert_eq!(admission.agent_id, Some(second.to_string()));
+        assert_eq!(admission.route_class, "non_local");
+        assert_eq!(admission.policy_generation, generation);
+        assert_eq!(admission.outcome, "admitted");
+
+        // A worker-start signal does not order its commit relative to O3.
+        // Hold the reply until the tightening commits: the request stands,
+        // but its reply must now be discarded (§12.6).
+        let policy = completion
+            .lock()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(30))
+            .expect("(2) tightening did not finish after admission committed");
+        assert!(policy.local_only());
+        assert_eq!(policy.policy_generation(), generation + 1);
+        "reply".to_string()
+    });
+    let result = llm.ask(&mut ctx, &mut text_prompt("SYNTH-p4-two"));
     hm.issuer.install_probe(Box::new(|_| {}));
+    worker.lock().unwrap().take().unwrap().join().unwrap();
     assert_eq!(*lock_held.lock().unwrap(), Some(true), "(2) lock not held");
-    assert!(
-        admitted.is_ok(),
-        "(2) the admission did not stand: {admitted:?}"
+    assert_eq!(
+        result.unwrap_err(),
+        DispatchError::Reply(ReplyRefused::Discarded),
+        "(2) the tightening committed before reply acceptance"
     );
-    assert_eq!(llm.sent().len(), 1, "(2) the admitted request was not sent");
-    let tightened = worker.lock().unwrap().take().unwrap().join().unwrap();
-    assert!(tightened, "(2) the waiting tightening did not commit");
+    assert_eq!(llm.sent(), ["SYNTH-p4-two"], "(2) exactly one request sent");
+    let rows = hm.db.hm().read(|tx| tx.admission_rows()).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].outcome, "reply_used");
+    assert_eq!(rows[1].outcome, "reply_discarded");
+    assert_eq!(ctx.working_set().derived_labels().len(), 1, "control only");
     // The tightening governs the next dispatch of that unit.
     let next = llm.ask(&mut ctx, &mut text_prompt("SYNTH-p4-three"));
     assert!(
