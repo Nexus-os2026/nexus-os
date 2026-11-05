@@ -1,6 +1,6 @@
 [package]
 name = "web-builder-agent"
-description = "Autonomous website and web application builder agent for Nexus OS"
+description = "Static-site assembly and content primitives retained for the Mother Nexus main pathway"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

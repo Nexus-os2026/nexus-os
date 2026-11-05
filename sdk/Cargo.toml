@@ -1,6 +1,6 @@
 [package]
 name = "nexus-sdk"
-description = "Agent-facing SDK that re-exports kernel modules and provides the public API for Nexus OS"
+description = "Retained agent SDK and kernel re-exports; Mother Nexus uses its sealed broker port instead of this SDK"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

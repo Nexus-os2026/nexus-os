@@ -3,7 +3,7 @@ name = "nexus-memory"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Agent Memory Management Subsystem for Nexus OS"
+description = "Retained hash-chained memory primitives; not accepted Mother Nexus authenticated memory"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

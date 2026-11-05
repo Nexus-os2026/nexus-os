@@ -1,13 +1,34 @@
-# Mother Nexus M1 + M2a: mission contract, coordinator core, broker consent
+# Mother Nexus coordinator and broker adapter
 
-Status: M1 and M2a (mission consent in the broker; Mother waits for broker
-approval) are on `main`. M2a-S (Stop and denial durability across
-restarts) is a candidate on `mother/m2a-s-stop-durability`.
-Headless Rust library only: no UI, no real research, no website building,
-no model calls. It is not a passed gate. Every capability here is PLANNED
-until its physical test passes on the installed build (`MOTHER.md` §1).
+This crate contains the governed mission core and its sealed broker adapter.
+Merged components include consent and restart holds, privacy-separated durable
+journaling, broker doors/halt, Files with safety settlement, and the deterministic
+page Verifier. Local inference transport exists in the kernel/broker; its worker
+conversation route stays shut until installed qualification. Typed decisions T1
+is a separate pure advisory crate, not yet a live model lane. The GTK4 status/Stop
+window lives in `desktop/`; the host alone constructs the broker.
 
-## What M1 is
+This is not a passed physical gate or a complete goal → plan → governed execution
+→ verified proof → teaching journey. The page Verifier's Mother lane, full native
+mission dialogs, first live site mission and teaching handoff still need approved
+implementation/qualification and Owner acceptance. Current state comes from Git
+and the latest mission; milestone names below identify contracts and oracles,
+not a standing roadmap. See [the root README](../README.md) and
+[MOTHER.md](../MOTHER.md).
+
+## Current Files boundary
+
+File sessions have separate provenance/admission, publication, terminal settlement
+and acknowledgement. Stop engages the shared halt before lock or record waits;
+uncertain or interrupted publication cannot be reported as ordinary approval,
+clean lapse or success. Unacknowledged terminal obligations stay pinned. Replay,
+process death and recovery tests cover these boundaries; see
+[the registered oracles](../docs/security/m2d-c-lite-oracles.md) and the
+`adapter/lite_*` tests. This does not expose unrestricted file, shell or spend
+authority. The original generic M1 file route remains refused; the distinct typed
+File session is the implemented route.
+
+## Core coordinator (M1 contract and subsequent hardening)
 
 Mother turns a human goal into a governed mission:
 
@@ -66,8 +87,8 @@ Mother turns a human goal into a governed mission:
 
 The oracles were committed before the implementation (`MOTHER.md` §3.1).
 Unit oracles are in `src/oracles/`; the real-broker, file-journal and
-source-scan oracles are in `src/adapter/` (only the adapter module touches
-the host, tests included).
+source-scan oracles are in `src/adapter/`. Coordinator host access stays in
+the adapter; the host/desktop exceptions are explicit and pinned by scans.
 
 | Invariant | Oracles |
 |---|---|
@@ -224,8 +245,9 @@ Coordinator rules the oracles pin:
 
 ## Non-claims
 
-- M3-A: the page Verifier is not wired yet (M3-D adds its lane and its
-  input). Its second reader is independent only as a text extraction
+- M3-A: the page Verifier is not wired into a Mother lane yet; wiring and
+  input require an approved mission. Its second reader is independent only
+  as a text extraction
   within S1a's accepted language; nothing is rendered, the 375 px and
   1366 px views stay OPEN, and the page's other sentences are not checked.
 - **M2c: `resume` asks the Owner through the broker's held-mission
@@ -249,8 +271,8 @@ Coordinator rules the oracles pin:
 - M2a-S: the clean close is a record in the unkeyed chain. Someone with
   write access who cuts the journal back to a clean close (dropping a
   later Stop) is not detected; that is the existing truncation non-claim.
-- **Consent is the broker's, the dialog is not built yet.** No desktop
-  dialog implements `confirm_mission` in this mission (no UI): the walk
+- **Consent is the broker's, the dialog is not built yet.** The limited GTK4 desktop
+  does not implement `confirm_mission` and declines: the walk
   example stands in for it at the terminal, and only test code fakes one.
   A confirmer that does not implement it declines every mission.
 - The broker shows Mother's summary beside the hash; it does not check the
@@ -387,8 +409,9 @@ Coordinator rules the oracles pin:
 - The journal append is made under the coordinator lock: it is the
   transition's commit (a bounded local write), so the journal's order is the
   state machine's.
-- The broker has no file or spend route: the adapter refuses both
-  (`no_broker_route`). M1 writes no files for a mission.
+- The original generic M1 file request and spend routes remain refused
+  (`no_broker_route`). Typed File sessions above use a distinct, governed route;
+  no general file authority or spending capability follows from it.
 - The journal file takes no exclusive lock: two coordinators on one file
   would interleave entries and the next open refuses the journal. A torn
   last line after a crash, or a poisoned journal, refuses the journal with
@@ -401,7 +424,8 @@ Coordinator rules the oracles pin:
   blocks, `stdin` and a literal `true` body).
 - `GovernedPort::cancel` cannot report a failed run cancellation to its
   caller. The adapter counts each one (`cancel_failures`).
-- Lane calls are counted as model calls; no model is called in M1.
+- Deterministic M1 lanes and the walk call no model. The local transport is a
+  separate implemented boundary; the conversation route remains unqualified.
 - Mother depends on `nexus-governed-control`, which itself depends on the
   kernel. Mother uses no kernel actuator and none of the legacy stack.
 - Path validation, workspace grants and the broker's process-group

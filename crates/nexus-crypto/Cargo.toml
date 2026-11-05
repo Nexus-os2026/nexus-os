@@ -3,7 +3,7 @@ name = "nexus-crypto"
 version = "0.1.0"
 license = "MIT"
 edition = "2021"
-description = "Crypto-agility layer for Nexus OS — pluggable signature and key exchange algorithms"
+description = "Cryptographic signature and key-exchange primitives for the Mother Nexus foundation"
 
 [dependencies]
 ed25519-dalek = { version = "2.2", features = ["serde", "rand_core"] }
