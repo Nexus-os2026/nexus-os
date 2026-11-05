@@ -92,8 +92,8 @@ mod model_calls;
 use model_calls::{CallAccounting, LaneCalls};
 mod lite;
 mod lite_intent;
-#[cfg(test)]
 #[path = "oracles/m2e_budget.rs"]
+#[cfg(test)]
 mod m2e_budget;
 mod session_close;
 pub use session_close::PreparedSessionEnd;

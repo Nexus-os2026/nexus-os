@@ -59,6 +59,10 @@ impl CallAccounting {
     }
 }
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "C1a exposes no production model caller")
+)]
 pub(super) struct LaneCalls {
     invocation: InvocationId,
     generation: u64,
@@ -156,7 +160,10 @@ pub(super) fn reserve_lane(
 
 // Intentionally no production construction route until C1b. Keeping the
 // private implementation compiled lets Clippy check the future adapter seam.
-#[allow(dead_code)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "C1a exposes no production model caller")
+)]
 pub(super) struct ModelMeter<P: EffectPort> {
     pub(super) coordinator: Weak<Coordinator<P>>,
     pub(super) invocation: InvocationId,
