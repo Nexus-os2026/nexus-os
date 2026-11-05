@@ -57,9 +57,17 @@ fn d_o3_wrong_empty_whitespace_and_embedded_codes_deny() {
             answer
         };
         p.line(answer);
-        p.expect("ACTION DENIED\n");
-        f.empty();
-        p.quit();
+        if answer == "no" {
+            p.expect("ACTION DENIED\n");
+            f.empty();
+            p.quit();
+        } else {
+            p.expect("ACTION REFUSED");
+            f.empty();
+            p.line("quit");
+            assert!(!p.finish().success(), "invalid answer is a failed protocol, not Owner decline");
+            assert!(!p.output.contains("ACTION DENIED"));
+        }
     }
 }
 
@@ -74,9 +82,11 @@ fn d_o4_overlong_and_invalid_utf8_are_not_answers() {
         p.code();
         p.send(&answer);
         p.send(b"\n");
-        p.expect("ACTION DENIED\n");
+        p.expect("ACTION REFUSED");
         f.empty();
-        p.quit();
+        p.line("quit");
+        assert!(!p.finish().success(), "invalid UTF-8/overlong input cannot certify a decline or clean exit");
+        assert!(!p.output.contains("ACTION DENIED"));
     }
 }
 
@@ -242,18 +252,17 @@ fn lite_one_mission_per_process_and_restart_no_workspace_restore() {
 }
 
 #[test]
-fn close_refuses_unfinished_file_work() {
+fn normal_quit_settles_pending_file_work_without_owner_publication() {
     let f = Fixture::new();
     let mut p = Pty::start(f.command("held file\n"));
     p.ready();
     p.mission();
-    p.line("quit");
-    assert!(
-        !p.finish().success(),
-        "unfinished File work cannot close cleanly"
-    );
-    assert!(!p.output.contains("SESSION CLOSED recorded"));
+    p.quit();
     f.empty();
+    let raw = std::fs::read_to_string(f.home.join("mother-journal.jsonl")).unwrap();
+    let entries = nexus_mother::journal::verify(&raw.lines().map(str::to_owned).collect::<Vec<_>>()).unwrap();
+    assert!(entries.iter().any(|entry| matches!(entry.event, nexus_mother::journal::Event::SessionClosed)));
+    assert!(raw.contains("settled"), "normal Quit must actually settle the pending action before the end");
 }
 
 #[test]

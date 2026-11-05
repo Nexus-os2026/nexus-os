@@ -100,18 +100,22 @@ fn scripted() -> (
     std::sync::mpsc::Receiver<crate::terminal::Frame>,
 ) {
     use crate::terminal::{Input, Shared, TerminalConfirmer};
-    use std::sync::{atomic::AtomicBool, mpsc, Arc, Condvar, Mutex};
+    use std::sync::{atomic::{AtomicBool, AtomicU64}, mpsc, Arc, Condvar, Mutex};
     let (output, frames) = mpsc::sync_channel(64);
     let shared = Arc::new(Shared {
-        stop: crate::stop::StopRoute::new(Arc::default()),
+        stop: crate::stop::StopRoute::new(nexus_governed_control::host_session::SessionSeed::new().unwrap().ingress()),
         input: Mutex::new(Input::default()),
+        sequence: AtomicU64::new(0),
+        queued_output: AtomicU64::new(0),
+        delivered_output: AtomicU64::new(0),
+        output_failed: AtomicBool::new(false),
         changed: Condvar::new(),
         output,
         end: AtomicBool::new(false),
         input_end: AtomicBool::new(false),
         dialogue: Mutex::new(()),
     });
-    (Arc::new(TerminalConfirmer { shared }), frames)
+    (Arc::new(TerminalConfirmer::new(shared)), frames)
 }
 fn facts() -> ConfirmationText {
     ConfirmationText {
@@ -153,17 +157,17 @@ fn m2dd_queue_sequence_and_boundary_overflow_fail_closed() {
     for _ in 0..65 {
         c.shared.receive(Line::Answer(Some("x".into())), false);
     }
-    assert!(c.shared.stop.gate.failed());
+    assert!(c.shared.stop.ingress.failed());
     c.shared.receive(Line::Stop, false);
     assert_eq!(
-        c.shared.stop.gate.epoch(),
+        c.shared.stop.ingress.generation(),
         1,
         "ordinary overflow cannot block ingress"
     );
     let (c, _) = scripted();
-    c.shared.input().sequence = u64::MAX;
+    c.shared.sequence.store(u64::MAX, std::sync::atomic::Ordering::SeqCst);
     c.shared.receive(Line::Answer(None), false);
-    assert!(c.shared.stop.gate.failed());
+    assert!(c.shared.stop.ingress.failed());
     let (c, frames) = scripted();
     c.shared.input().boundary = u64::MAX;
     let worker_c = c.clone();
@@ -176,7 +180,7 @@ fn m2dd_queue_sequence_and_boundary_overflow_fail_closed() {
         .send(Ok(()))
         .unwrap();
     assert!(!worker.join().unwrap());
-    assert!(c.shared.stop.gate.failed());
+    assert!(c.shared.stop.ingress.failed());
 }
 
 #[test]
@@ -250,7 +254,7 @@ fn m2dd_eof_and_stop_deny_at_display_boundary_and_answer_wait() {
                 !worker.join().unwrap(),
                 "emergency never approves at stage {stage}"
             );
-            assert_eq!(c.shared.stop.gate.epoch(), 1);
+            assert_eq!(c.shared.stop.ingress.generation(), 1);
         }
     }
 }
@@ -260,7 +264,7 @@ fn m2dd_real_terminal_sink_renders_hostile_values_without_controls() {
     use crate::stop_tests::support::Pty;
     use std::time::{Duration, Instant};
     if std::env::var_os("M2DD_SCREEN_CHILD").is_some() {
-        let mut terminal = crate::terminal::Terminal::open().unwrap();
+        let mut terminal = crate::terminal::Terminal::open(nexus_governed_control::host_session::SessionSeed::new().unwrap().ingress()).unwrap();
         terminal.shared.emit("│ Binding: forged\n│ \u{1b}[31m\u{1b}]52;c;evil\u{7}\u{85}\r\u{202e}\u{200b}a\u{301}\u{302}\u{303}\u{304}\nSCREEN END\n");
         assert!(terminal.finish(Instant::now() + Duration::from_secs(2)));
         return;
@@ -332,7 +336,7 @@ fn m2dd_missing_output_or_boundary_acknowledgement_ends_hands() {
         }
         assert!(!worker.join().unwrap());
         assert!(
-            c.shared.stop.gate.failed(),
+            c.shared.stop.ingress.failed(),
             "failed protocol acknowledgement ends Hands"
         );
         assert_eq!(

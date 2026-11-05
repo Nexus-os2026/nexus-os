@@ -1,14 +1,14 @@
 //! Review 1: deterministic production-path schedules, test-only child hooks.
 use crate::hands::run;
-use crate::stop::Gate;
+use crate::stop::StopRoute;
 use crate::stop_tests::support::{Fixture, Pty};
 use crate::terminal::Shared;
-use crate::Home;
-use nexus_governed_control::authority::clock::SystemClock;
+use crate::session_home::SessionHome;
+use nexus_governed_control::host_session::SessionSeed;
 use nexus_governed_control::authority::evidence::EvidencePhase;
 use nexus_governed_control::authority::evidence::{EvidenceProjection, EvidenceRecord};
 use nexus_governed_control::files::FileCreate;
-use nexus_mother::adapter::GovernedPort;
+use nexus_mother::adapter::SessionPort;
 use nexus_mother::effect::{EffectPort, EffectRequest};
 use nexus_mother::journal::MissionId;
 use nexus_mother::lane::LaneRole;
@@ -18,32 +18,34 @@ use std::sync::Arc;
 const CHILD: &str = "M2DD_REVIEW1_CHILD";
 static ENGAGED: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn before_internal_admission(screen: &Shared, home: &Home) {
+pub(crate) fn before_internal_admission(screen: &Shared, home: &SessionHome) {
     if std::env::var(CHILD).as_deref() == Ok("admission") && !ENGAGED.swap(true, Ordering::SeqCst) {
-        assert!(!screen.stop.gate.recovery());
+        assert!(!screen.stop.ingress.emergency_seen());
         // The outer Mission check has succeeded. Perform exactly the first
         // memory-only step of Stop ingress; its worker has not been scheduled.
-        screen.stop.gate.emergency();
-        assert!(!home.owner().stop_snapshot().broker_stopped);
-        assert_eq!(screen.stop.receipt().outstanding, 0);
+        screen.stop.hold_dispatch.store(true, Ordering::SeqCst);
+        screen.stop.press();
+        assert!(!home.session.stop_snapshot().broker_stopped);
+        assert_eq!(screen.stop.retained_handles(), 0);
     }
 }
 
-pub(crate) fn before_internal_dispatch(gate: &Gate, role: LaneRole) {
+pub(crate) fn before_internal_dispatch(route: &StopRoute, role: LaneRole) {
     if std::env::var(CHILD).as_deref() == Ok("dispatch") && role == LaneRole::Builder {
         // Lane was admitted and returned its request, but the coordinator has
         // not handed that request to the real port yet.
-        gate.emergency();
+        route.hold_dispatch.store(true, Ordering::SeqCst);
+        route.press();
         ENGAGED.store(true, Ordering::SeqCst);
     }
 }
 
-pub(crate) fn after_internal_admission(port: &GovernedPort, home: &Home, id: MissionId) {
+pub(crate) fn after_internal_admission(port: &SessionPort, home: &SessionHome, id: MissionId) {
     let scenario = std::env::var(CHILD).unwrap_or_default();
     if scenario != "admission" && !(scenario == "dispatch" && ENGAGED.load(Ordering::SeqCst)) {
         return;
     }
-    let runs = home.owner().authority().runs().views().len();
+    let runs = home.session.run_count();
     let bindings = port.file_binding_count();
     let dispatches = port.performed();
     let models = home
@@ -93,40 +95,15 @@ impl EvidenceProjection for PanicRecording {
 }
 
 pub(crate) fn open_home(
+    seed: SessionSeed,
     path: &std::path::Path,
     confirmer: crate::Confirmer,
-) -> Result<Home, crate::HomeError> {
+) -> Result<SessionHome, crate::HomeError> {
     if std::env::var(CHILD).as_deref() != Ok("panic") {
-        return Home::open(path, confirmer);
+        SessionHome::open(seed, path, confirmer)
+    } else {
+        SessionHome::open_projected(seed, path, confirmer, vec![Arc::new(PanicRecording)])
     }
-    use nexus_governed_control::authority::evidence::MemoryEvidence;
-    use nexus_governed_control::{
-        broker::Vault, evidence_store::PrimaryEvidence, governed::GovernedControl,
-    };
-    nexus_mother::adapter::create_private(path).unwrap();
-    let broker = path.join("broker");
-    let recent = Arc::new(MemoryEvidence::new(256));
-    let evidence = PrimaryEvidence::open(
-        &broker.join("p3-evidence/evidence.sqlite3"),
-        vec![recent.clone(), Arc::new(PanicRecording)],
-    )
-    .unwrap();
-    let control = Arc::new(
-        GovernedControl::new(
-            &broker,
-            Vault::Disabled,
-            evidence.clone(),
-            Arc::new(SystemClock::default()),
-        )
-        .unwrap(),
-    );
-    Ok(Home {
-        dir: path.into(),
-        control,
-        confirmer,
-        evidence,
-        recent,
-    })
 }
 
 #[test]
@@ -231,17 +208,17 @@ fn review1_internal_dispatch_after_lane_reservation() {
 
 // Decision 6: Stop uses the actual reader ingress with its worker unscheduled.
 const REVIEW2: &str = "M2DD_REVIEW2_CHILD";
-pub(crate) fn review2_before_step(screen: &Shared, home: &Home, step: &str) {
+pub(crate) fn review2_before_step(screen: &Shared, home: &SessionHome, step: &str) {
     if std::env::var(REVIEW2).as_deref() != Ok(step) {
         return;
     }
     screen.stop.hold_dispatch.store(true, Ordering::SeqCst);
     screen.receive(crate::terminal::Line::Stop, false);
     assert_eq!(screen.stop.receipt().outstanding, 1);
-    assert!(!home.owner().stop_snapshot().broker_stopped);
-    assert!(!home.owner().stop_snapshot().kernel_stopped);
+    assert!(!home.session.stop_snapshot().broker_stopped);
+    assert!(!home.session.stop_snapshot().kernel_stopped);
 }
-pub(crate) fn review2_after_step(screen: &Shared, home: &Home, step: &str, refused: bool) {
+pub(crate) fn review2_after_step(screen: &Shared, home: &SessionHome, step: &str, refused: bool) {
     if std::env::var(REVIEW2).as_deref() != Ok(step) {
         return;
     }
@@ -250,7 +227,7 @@ pub(crate) fn review2_after_step(screen: &Shared, home: &Home, step: &str, refus
         "{step}: Stop ingress must refuse mission admission before any worker runs"
     );
     assert!(
-        home.owner().authority().runs().views().is_empty(),
+        home.session.run_count() == 0,
         "zero backend runs"
     );
     assert!(
@@ -434,31 +411,30 @@ fn review2_recording_panics_before_startup_finishes_are_receipted() {
 // Decision 11: inject reader ingress immediately after a real Owner route
 // returns. The Stop worker is held until the command has reported its result.
 const REVIEW4: &str = "M2DD_REVIEW4_CHILD";
-pub(crate) fn review4_returned(screen: &Shared, home: &Home, route: &str) {
+pub(crate) fn review4_returned(screen: &Shared, home: &SessionHome, route: &str) {
     let scenario = std::env::var(REVIEW4).unwrap_or_default();
     if scenario.split('-').next() != Some(route) {
         return;
     }
     screen.stop.hold_dispatch.store(true, Ordering::SeqCst);
     screen.receive(crate::terminal::Line::Stop, false);
-    assert!(home.owner().file_session_halt().is_engaged());
+    assert!(home.session.ingress().emergency_seen());
     assert_eq!(screen.stop.receipt().outstanding, 1);
 }
 
-pub(crate) fn review4_reported(screen: &Shared, home: &Home, route: &str) {
+pub(crate) fn review4_reported(screen: &Shared, home: &SessionHome, route: &str) {
     let scenario = std::env::var(REVIEW4).unwrap_or_default();
     if scenario.split('-').next() != Some(route) {
         return;
     }
     if route == "lift" {
         assert!(
-            home.owner().stop_snapshot().kernel_stopped,
+            home.session.stop_snapshot().kernel_stopped,
             "native halt must be re-engaged before the next host action"
         );
     }
-    for entry in crate::stop::Route::ALL {
-        assert!(!screen.stop.gate.admit(entry));
-    }
+    assert!(screen.stop.ingress.emergency_seen());
+    assert_ne!(home.session.state(), nexus_governed_control::host_session::SessionState::Normal);
     screen.stop.hold_dispatch.store(false, Ordering::SeqCst);
     screen.stop.dispatch_pending();
     screen.emit("REVIEW4 NO LATER WORK\n");
