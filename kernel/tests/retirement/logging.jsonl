@@ -1,0 +1,22 @@
+{"path":"kernel/src/audit/retention.rs","expression":"eprintln!(\n                \"warn: could not create audit archive dir {}: {e}\",\n                config.archive_dir.display()\n            )"}
+{"path":"kernel/src/config.rs","expression":"eprintln!(\"nexus_kernel::config: the configuration file's protection changed: {protection}\")"}
+{"path":"kernel/src/secrets/migrate.rs","expression":"eprintln!(\n                \"config-file re-save failed after migration commit; \\\n                 on-disk SocialConfig fields are stale but unused: {e}\"\n            )"}
+{"path":"kernel/src/secrets/migrate.rs","expression":"eprintln!(\"secrets audit append failed (event=secrets_format_upgraded): {e}\")"}
+{"path":"kernel/src/secrets/mod.rs","expression":"eprintln!(\"secrets audit append failed (event={event_kind} scope={scope}): {e}\")"}
+{"path":"kernel/src/secrets/mod.rs","expression":"eprintln!(\"credential resolved: {} source={}\", scope, source.as_str())"}
+{"path":"mother/desktop/src/app.rs","expression":"eprintln!(\"nexus-mother: {e}\")"}
+{"path":"mother/desktop/src/app.rs","expression":"eprintln!(\"nexus-mother: {e}\")"}
+{"path":"mother/desktop/src/app.rs","expression":"eprintln!(\"nexus-mother: {}\", outcome.report())"}
+{"path":"mother/desktop/src/window.rs","expression":"eprintln!(\"nexus-mother: a {what} callback panicked; it was contained\")"}
+{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-matrix:{count} pairs\")"}
+{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-pair:{pair}\")"}
+{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-pair:{pair}\")"}
+{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-pair:{pair}\")"}
+{"path":"mother/src/adapter/lite_review4.rs","expression":"println!(\"review4-matrix:{count} cases\")"}
+{"path":"mother/src/adapter/lite_review4.rs","expression":"println!(\"review4:{case}\")"}
+{"path":"mother/src/adapter/lite_review4.rs","expression":"println!(\"review4:{case}\")"}
+{"path":"mother/src/adapter/lite_review5.rs","expression":"println!(\"review5-matrix:{count} cases\")"}
+{"path":"mother/src/adapter/lite_review5.rs","expression":"println!(\"review5:{case}\")"}
+{"path":"mother/src/adapter/lite_review6.rs","expression":"println!(\"review6-matrix:{count} cases\")"}
+{"path":"mother/src/adapter/lite_review6.rs","expression":"println!(\"review6:{case}\")"}
+{"path":"persistence/src/lib.rs","expression":"eprintln!(\"idempotency lazy eviction sweep failed: {e}\")"}
