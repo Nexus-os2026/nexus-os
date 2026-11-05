@@ -755,6 +755,24 @@ impl CommitmentRegistry {
         last
     }
 
+    pub(crate) fn stop_metadata_known(&self) -> bool {
+        !self.0.entries.is_poisoned() && !self.0.leases.is_poisoned()
+    }
+
+    /// Session callers retain the result of every consequence, not only the
+    /// final append. Legacy callers keep their existing last-result contract.
+    pub(crate) fn write_ends_observed(&self, records: Unwritten) -> super::halt::BatchOutcome {
+        let mut outcome = super::halt::BatchOutcome::default();
+        for record in &records.0 {
+            match write_end(&*self.0.evidence, record) {
+                EndStatus::Recorded { .. } => outcome.recorded += 1,
+                EndStatus::Owed => outcome.owed += 1,
+                EndStatus::Uncertain => outcome.uncertain += 1,
+            }
+        }
+        outcome
+    }
+
     fn base_record(
         &self,
         phase: EvidencePhase,

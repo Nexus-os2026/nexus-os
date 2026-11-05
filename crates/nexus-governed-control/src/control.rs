@@ -507,6 +507,12 @@ impl Control {
     /// The effects of an emergency stop, its records not yet written: every
     /// run cancelled, every unconsumed commitment ended, the generation
     /// moved, every pending effect dropped.
+    pub(crate) fn stop_metadata_known(&self) -> bool {
+        !self.pending.is_poisoned()
+            && self.authority.runs().stop_metadata_known()
+            && self.authority.commitments().stop_metadata_known()
+    }
+
     pub(crate) fn stop_effects(&self, reason: Option<&'static str>) -> Stopped {
         let stopped = self.authority.stop_effects(reason);
         let dropped = self.pending().take_unless(|_, _| false);

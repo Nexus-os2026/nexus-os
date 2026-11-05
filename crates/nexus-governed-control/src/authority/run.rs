@@ -1130,6 +1130,10 @@ impl RunRegistry {
         self.closed.load(Ordering::SeqCst)
     }
 
+    pub(crate) fn stop_metadata_known(&self) -> bool {
+        !self.runs.is_poisoned()
+    }
+
     /// The emergency stop: cancel every run and refuse new work until a
     /// resume lifts this stop, in one hold of the runs lock. In order: what
     /// became of the stop before; the next stop number, or `exhausted` at

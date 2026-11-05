@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 mod receipt;
 pub mod recovery;
+pub mod stop;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ScopeKind {
@@ -295,6 +296,7 @@ struct Core {
     #[cfg(test)]
     expired_request: AtomicU64,
     identity: SessionIdentity,
+    stops: stop::Stops,
     cell: HaltCell,
     sequence: AtomicU64,
     pending_context: AtomicU64,
@@ -1044,6 +1046,8 @@ impl HostSession {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IngressEvent {
+    session: SessionIdentity,
+    index: usize,
     generation: u64,
 }
 impl IngressEvent {
@@ -1061,6 +1065,7 @@ impl SessionSeed {
                 #[cfg(test)]
                 expired_request: AtomicU64::new(u64::MAX),
                 identity: SessionIdentity(identity),
+                stops: stop::Stops::default(),
                 cell: HaltCell::new_host(),
                 sequence: AtomicU64::new(0),
                 pending_context: AtomicU64::new(0),
@@ -1144,9 +1149,7 @@ impl SessionIngress {
             };
             let next = (old + EPOCH_STEP) | EMERGENCY | cause;
             if self.core.cell.session_compare(old, next).is_ok() {
-                return Ok(IngressEvent {
-                    generation: next / EPOCH_STEP,
-                });
+                return self.core.stops.register(&self.core, next / EPOCH_STEP);
             }
         }
     }

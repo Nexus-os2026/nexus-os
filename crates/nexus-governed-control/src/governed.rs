@@ -593,6 +593,21 @@ impl GovernedControl {
         cancelled
     }
 
+    /// The sealed session already accepted and counted this ingress. Only
+    /// native narrowing and its existing records follow here. Display and
+    /// other domains cannot be created through the File-only facade.
+    pub(crate) fn stop_session_event(&self) -> crate::authority::StopRecordOutcome {
+        self.kernel_stop.engage();
+        let known = self.control.stop_metadata_known();
+        let stopped = self.control.stop_effects(None);
+        self.kernel_stop.engage();
+        let mut outcome = self.authority().write_stop_records_observed(stopped);
+        // Legacy narrowing may recover a poisoned hold to deny more work.
+        // It cannot establish complete session ownership from that metadata.
+        outcome.ownership_established = known && self.control.stop_metadata_known();
+        outcome
+    }
+
     /// Lift the emergency stop after the owner's native confirmation. The
     /// kernel's stop is lifted only once the broker's stop is lifted too;
     /// work either stop ended stays ended.

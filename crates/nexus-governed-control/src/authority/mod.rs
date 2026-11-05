@@ -1066,6 +1066,7 @@ impl Authority {
             record.detail.push(("reason".into(), reason.into()));
         }
         Stopped {
+            number: stop.number,
             cancelled: stop.cancelled,
             revoked,
             record,
@@ -1077,6 +1078,18 @@ impl Authority {
     pub(crate) fn write_stop_records(&self, stopped: Stopped) {
         self.commitments.write_ends(stopped.revoked);
         self.record_end(&stopped.record);
+    }
+
+    pub(crate) fn write_stop_records_observed(&self, stopped: Stopped) -> StopRecordOutcome {
+        let consequences = self.commitments.write_ends_observed(stopped.revoked);
+        let record = self.record_end(&stopped.record);
+        StopRecordOutcome {
+            ownership_established: true,
+            number: stopped.number,
+            cancelled: stopped.cancelled,
+            consequences,
+            record,
+        }
     }
 
     /// Lift an emergency stop: only after the owner's native confirmation,
@@ -1166,8 +1179,17 @@ impl Authority {
     }
 }
 
+pub(crate) struct StopRecordOutcome {
+    pub(crate) ownership_established: bool,
+    pub(crate) number: u64,
+    pub(crate) cancelled: usize,
+    pub(crate) consequences: halt::BatchOutcome,
+    pub(crate) record: EndStatus,
+}
+
 /// An emergency stop that has taken effect, its records still to write.
 pub(crate) struct Stopped {
+    number: u64,
     pub(crate) cancelled: usize,
     revoked: commitment::Unwritten,
     record: EvidenceRecord,
