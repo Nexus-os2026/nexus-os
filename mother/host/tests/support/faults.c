@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <termios.h>
 
 static atomic_int held;
 static atomic_int recording;
@@ -195,4 +196,12 @@ int unlink(const char *name) {
         if (mode("cleanup-fail") && !atomic_exchange(&held, 1)) { errno = EIO; return -1; }
     }
     return real(name);
+}
+
+int tcsetattr(int fd, int action, const struct termios *modes) {
+    int (*real)(int,int,const struct termios *) = dlsym(RTLD_NEXT, "tcsetattr");
+    if (mode("terminal-finalize-fail") && (modes->c_lflag & ICANON)) {
+        errno = EIO; return -1;
+    }
+    return real(fd, action, modes);
 }

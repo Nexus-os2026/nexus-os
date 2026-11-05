@@ -86,3 +86,40 @@ fn session_primary_append_timeout_keeps_unknown_separate_from_mother_recorded() 
     assert_eq!(support::evidence::counts(&f), [0, 1, 0]);
     println!("CLOSE TIMEOUT mother_end=Recorded primary_end=Unknown exit=nonzero");
 }
+
+#[test]
+fn session_terminal_finalization_failure_keeps_ends_without_clean_receipt() {
+    let f = Fixture::new();
+    let fault = support::faults::Fault::new(&f, "terminal-finalize-fail");
+    let mut command = f.command("terminal finalization fixture\n");
+    fault.attach(&f, &mut command);
+    let mut p = Pty::start(command);
+    p.ready();
+    p.create();
+    fault.arm();
+    p.line("quit");
+    assert!(!p.finish().success());
+    assert_eq!(mother_end(&f), 1);
+    assert_eq!(support::evidence::counts(&f), [0, 1, 1]);
+    assert!(!p.output.contains("SESSION CLOSED recorded"), "terminal finalization is part of the close proof");
+    assert!(p.output.contains(UNCLEAN));
+    assert!(p.output.contains("MOTHER END Recorded"));
+    assert!(p.output.contains("PRIMARY END Recorded"));
+}
+
+#[test]
+fn session_inventory_reports_current_undo_exclusion_beside_actual_staging() {
+    let f = Fixture::new();
+    let mut p = Pty::start(f.command("retained current undo\n"));
+    p.ready();
+    p.create();
+    let before = support::privacy::files_under(&f.home.join("broker/files/coding-runs"), None);
+    assert!(!before.is_empty());
+    p.line("cleanup");
+    p.expect("current_undo=1");
+    p.expect("excluded=1");
+    p.expect("INVENTORY END");
+    assert_eq!(support::privacy::files_under(&f.home.join("broker/files/coding-runs"), None), before);
+    assert_eq!(std::fs::read(f.workspace.join("hello.txt")).unwrap(), b"retained current undo\n");
+    p.quit();
+}
