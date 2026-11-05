@@ -414,7 +414,7 @@ impl GovernedControl {
             Intent::Synthetic(intent) => synthetic::prepare(authority, run, intent),
             Intent::File(intent) => {
                 self.files
-                    .prepare(authority, run, intent, self.kernel_stop.authority())
+                    .prepare_control(&self.control, run, intent, self.kernel_stop.authority())
             }
         }?;
         // P4-UAT05: a synthetic action is R2 or nothing, refused before any
@@ -436,9 +436,22 @@ impl GovernedControl {
         if let Intent::Connector(intent) = intent {
             return self.connectors.propose(&self.control, agent, run, intent);
         }
-        let proposed = self
-            .prepare(run, intent)
-            .and_then(|preparation| self.control.propose(agent, run, preparation));
+        let host = matches!(intent, Intent::File(_))
+            && self
+                .authority()
+                .runs()
+                .session_cell(run)?
+                .is_some_and(|cell| cell.host());
+        let proposed = if host {
+            let reservation = self.control.reserve_host_proposal(run)?;
+            self.prepare(run, intent).and_then(|preparation| {
+                self.control
+                    .propose_reserved(agent, run, preparation, reservation)
+            })
+        } else {
+            self.prepare(run, intent)
+                .and_then(|preparation| self.control.propose(agent, run, preparation))
+        };
         // M2d-B2: a refused Files proposal's staging is discarded now (its
         // effect only handed the run over when it was dropped).
         if matches!(intent, Intent::File(_)) {

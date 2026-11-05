@@ -402,6 +402,7 @@ impl LeaseEnd for NoLeases {
 
 pub(crate) struct Inner {
     entries: Mutex<HashMap<CommitmentId, Entry>>,
+    preparations: std::sync::atomic::AtomicUsize,
     generation: Arc<PolicyGeneration>,
     grants: Arc<GrantStore>,
     runs: Arc<RunRegistry>,
@@ -415,6 +416,28 @@ pub(crate) struct Inner {
     hooks: Arc<crate::test_hooks::Hooks>,
     #[cfg(test)]
     capacity: AtomicU64,
+}
+
+/// Capacity reserved before a host action creates any native resource.
+/// The count is changed only while the entries hold is owned.
+pub(crate) struct PreparationSlot {
+    registry: CommitmentRegistry,
+    held: bool,
+}
+impl Drop for PreparationSlot {
+    fn drop(&mut self) {
+        if self.held {
+            // Dropping a reservation cannot lose capacity accounting on
+            // poison; it performs no evidence or native cleanup.
+            let _entries = self
+                .registry
+                .0
+                .entries
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.registry.0.preparations.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
 }
 
 /// Where revocation records go: an unwritten list (the emergency stop), or
@@ -513,6 +536,7 @@ impl CommitmentRegistry {
     ) -> Self {
         Self(Arc::new(Inner {
             entries: Mutex::new(HashMap::new()),
+            preparations: std::sync::atomic::AtomicUsize::new(0),
             generation,
             grants,
             runs,
@@ -821,6 +845,41 @@ impl CommitmentRegistry {
         owed.leases(&entry.prepared.leases);
     }
 
+    pub(crate) fn reserve_preparation(&self) -> Result<PreparationSlot, AuthorityError> {
+        let mut entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
+        let reserved = self.0.preparations.load(Ordering::SeqCst);
+        if entries.len() + reserved >= self.capacity() {
+            entries.retain(|_, entry| !entry.state.is_final() || entry.pinned);
+        }
+        if entries.len() + reserved >= self.capacity() {
+            return Err(AuthorityError::Capacity);
+        }
+        self.0.preparations.store(reserved + 1, Ordering::SeqCst);
+        Ok(PreparationSlot {
+            registry: self.clone(),
+            held: true,
+        })
+    }
+
+    pub(crate) fn prepare_reserved(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        prepared: PreparedAction,
+        ttl: Duration,
+        slot: PreparationSlot,
+    ) -> Result<CommitmentView, AuthorityError> {
+        if !Arc::ptr_eq(&self.0, &slot.registry.0) || !slot.held {
+            return Err(AuthorityError::Halted);
+        }
+        let leases = prepared.leases.clone();
+        let result = self.prepare_leased(agent, run, prepared, ttl, Some(slot));
+        if result.is_err() {
+            self.end_leases(&leases);
+        }
+        result
+    }
+
     /// Record a commitment for `agent` in `run`. The run must be active and
     /// every grant the action relies on live. Nothing happens yet.
     pub(crate) fn prepare(
@@ -831,7 +890,7 @@ impl CommitmentRegistry {
         ttl: Duration,
     ) -> Result<CommitmentView, AuthorityError> {
         let leases = prepared.leases.clone();
-        let result = self.prepare_leased(agent, run, prepared, ttl);
+        let result = self.prepare_leased(agent, run, prepared, ttl, None);
         if result.is_err() {
             // A refused preparation leaves no credential lease behind.
             self.end_leases(&leases);
@@ -845,6 +904,7 @@ impl CommitmentRegistry {
         run: RunId,
         prepared: PreparedAction,
         ttl: Duration,
+        mut slot: Option<PreparationSlot>,
     ) -> Result<CommitmentView, AuthorityError> {
         self.0.runs.check(run, agent)?;
         // Fixed now, from the class the run was admitted with (a run gone
@@ -923,14 +983,19 @@ impl CommitmentRegistry {
         let now = self.now();
         let refused = {
             let mut entries = self.entries();
-            if entries.len() >= self.capacity() {
+            if let Some(slot) = slot.as_mut() {
+                self.0.preparations.fetch_sub(1, Ordering::SeqCst);
+                slot.held = false;
+            }
+            let reserved = self.0.preparations.load(Ordering::SeqCst);
+            if entries.len() + reserved >= self.capacity() {
                 entries.retain(|_, e| !e.state.is_final() || e.pinned);
             }
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
             let files = entry.prepared.kind == CapabilityKind::Files;
-            let retained = if entries.len() >= self.capacity() {
+            let retained = if entries.len() + reserved >= self.capacity() {
                 Err(AuthorityError::Capacity)
             } else {
                 self.0.runs.check_retaining(run, agent, files)

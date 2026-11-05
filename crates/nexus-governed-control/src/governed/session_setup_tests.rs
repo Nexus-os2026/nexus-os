@@ -2,69 +2,77 @@
 //! fixture adapter must move to HostSession; these expectations must not be
 //! imposed on ordinary legacy clients.
 use super::*;
-use crate::authority::evidence::MemoryEvidence;
 
 struct Bare {
     gov: Arc<GovernedControl>,
     workspace: std::path::PathBuf,
-    exclusions: Exclusions,
+    session: HostSession,
+    request: std::sync::OnceLock<crate::host_session::SessionRequest>,
     _state: TempRoot,
     _selected: TempRoot,
 }
 impl Bare {
     fn new() -> Self {
+        Self::with_confirmer(Arc::new(Yes))
+    }
+    fn with_confirmer(confirmer: Arc<dyn ControlConfirmer + Send + Sync>) -> Self {
         assert!(crate::files::make_non_dumpable());
         let state = temp_root("session-setup-state");
         let selected = temp_root("session-setup-selected");
         let home = selected.0.path().join("selected");
         let workspace = home.join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
-        let exclusions = Exclusions {
-            home,
-            identity_home: selected.0.path().join("identity"),
-            reserved: vec![selected.0.path().join("reserved")],
-            uid: crate::launcher::effective_uid(),
-        };
-        let gov = Arc::new(
-            GovernedControl::with_secrets(
-                state.0.path(),
-                Vault::Disabled.source(),
-                Arc::new(MemoryEvidence::new(1024)),
-                Arc::new(ManualClock::default()),
-            )
-            .unwrap()
-            .with_kernel_stop(StopAuthority::new()),
-        );
+        let seed = SessionSeed::new().unwrap();
+        let evidence = crate::evidence_store::PrimaryEvidence::open(
+            &state.0.path().join("p3-evidence/evidence.sqlite3"),
+            vec![],
+        )
+        .unwrap();
+        let session = HostSession::open(
+            seed,
+            state.0.path(),
+            evidence,
+            Arc::new(ManualClock::default()),
+            confirmer,
+        )
+        .unwrap();
+        let gov = session.control_for_test();
         Self {
             gov,
             workspace,
-            exclusions,
+            session,
+            request: std::sync::OnceLock::new(),
             _state: state,
             _selected: selected,
         }
     }
     fn register(&self) -> Result<crate::files::WorkspaceInfo, AuthorityError> {
-        self.gov.register_workspace_in_with_halt(
-            &self.workspace,
-            &self.exclusions,
-            Some(&self.gov.file_session_halt()),
-        )
+        let info = self
+            .session
+            .bootstrap_workspace(&self.workspace, &[])
+            .map_err(|_| AuthorityError::Halted)?;
+        self.session
+            .finish_bootstrap()
+            .map_err(|_| AuthorityError::Halted)?;
+        let request = self
+            .session
+            .ingress()
+            .accept(CommandKind::Run, 1)
+            .map_err(|_| AuthorityError::Halted)?;
+        self.request
+            .set(request)
+            .map_err(|_| AuthorityError::Halted)?;
+        Ok(info)
     }
     fn grant(&self) -> Result<crate::authority::ids::GrantId, AuthorityError> {
-        let workspace = self.gov.workspace().unwrap().id;
-        self.gov.request_grant_with_halt(
-            &GrantRequest::Files { workspace },
-            Duration::from_secs(60),
-            &Yes,
-            Some(&self.gov.file_session_halt()),
-        )
+        self.session
+            .grant_for_test(self.request.get().unwrap())
+            .map_err(|_| AuthorityError::Halted)
     }
-    fn door(&self) -> Result<AgentDoor, AuthorityError> {
-        self.gov.issue_agent_door_with_halt(
-            AgentId::new("mother").unwrap(),
-            Arc::new(Yes),
-            Some(self.gov.file_session_halt()),
-        )
+    fn door(&self) -> Result<SessionDoor, AuthorityError> {
+        self.session
+            .activate_for_test(self.request.get().unwrap())
+            .map_err(|_| AuthorityError::Halted)
     }
     fn stop(&self, times: usize) {
         for _ in 0..times {
@@ -117,7 +125,7 @@ fn session_setup_commands_refuse_original_cell_emergency_without_native_workers(
             }
             f.stop(ingresses);
             let success = match route {
-                "hold_configure" => f.gov.hold_files_before_publish(Duration::ZERO).is_ok(),
+                "hold_configure" => f.session.bootstrap_hold(Duration::ZERO).is_ok(),
                 "workspace_install" => f.register().is_ok(),
                 "grant_install" => f.grant().is_ok(),
                 "door_activate" => f.door().is_ok(),
@@ -341,18 +349,11 @@ impl ControlConfirmer for MissionCount {
 
 #[test]
 fn session_consent_capacity_is_reserved_before_dialogue_and_keeps_existing_bindings() {
-    let f = Bare::new();
+    let owner = Arc::new(MissionCount::default());
+    let f = Bare::with_confirmer(owner.clone());
     f.register().unwrap();
     f.grant().unwrap();
-    let owner = Arc::new(MissionCount::default());
-    let door = f
-        .gov
-        .issue_agent_door_with_halt(
-            AgentId::new("mother").unwrap(),
-            owner.clone(),
-            Some(f.gov.file_session_halt()),
-        )
-        .unwrap();
+    let door = f.door().unwrap();
     let attachment = door.file_port().unwrap().attach().unwrap();
     door.claim_file_session(&attachment).unwrap();
     assert_eq!(owner.0.load(Ordering::SeqCst), 0);
@@ -385,12 +386,12 @@ fn session_consent_capacity_is_reserved_before_dialogue_and_keeps_existing_bindi
     let run = door.open_file_run(&attachment).unwrap();
     door.admit_files(run, HASH, "msn-000001/1/64").unwrap();
     assert!(matches!(
-        door.agent_action(
+        door.create_file(
             run,
-            &Intent::File(FileCreate {
+            &FileCreate {
                 name: "consent.txt".into(),
                 content: "preserved cached consent\n".into()
-            })
+            }
         ),
         Ok(AgentOutcome::AwaitingApproval(_))
     ));

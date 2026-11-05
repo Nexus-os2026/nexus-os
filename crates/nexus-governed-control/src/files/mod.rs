@@ -94,10 +94,11 @@ use nexus_kernel::coding_run::ProjectGrant;
 #[cfg(target_os = "linux")]
 use nexus_kernel::coding_run::{
     analyze_apply, ApplyError, ApplyFinding, ApplyInterrupt, ApplyState, CandidateEdit, ChangeKind,
-    CleanupStatus, CodingRun, ConfirmationKind, ConfirmationRequest, FolderPicker, InertPageError,
-    InertPageResult, InterruptCause, LedgerFailure, LedgerFile, ManifestEntry, OwnerConfirmer,
-    PreparedFile, ProjectError, ProjectInfo, ProjectRegistry, Refusal, RelPath, RevocationReason,
-    RunError, RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft, VerifierMarker,
+    CleanupStatus, CodingRun as NativeRun, ConfirmationKind, ConfirmationRequest, FolderPicker,
+    InertPageError, InertPageResult, InterruptCause, LedgerFailure, LedgerFile, ManifestEntry,
+    OwnerConfirmer, PreparedFile, ProjectError, ProjectInfo, ProjectRegistry, Refusal, RelPath,
+    RevocationReason, RunError, RunScopes, ScopeEntry, ScopeSet, StagingParent, TempLeft,
+    VerifierMarker,
 };
 use nexus_kernel::emergency_stop::StopAuthority;
 #[cfg(target_os = "linux")]
@@ -593,6 +594,428 @@ fn open_backend(runtime_root: &Path) -> Result<Backend, AuthorityError> {
     })
 }
 
+/// Native objects belonging to a host session never acquire an ordinary
+/// stack owner. The inventory owns their destructor-suppressed storage before
+/// construction; all other collections carry references to that same entry.
+#[cfg(target_os = "linux")]
+struct RunResource {
+    native: Mutex<Option<std::mem::ManuallyDrop<NativeRun>>>,
+    binding: HostBinding,
+    commitment: Mutex<Option<CommitmentId>>,
+    grants: Mutex<NativeGrants>,
+    abandoned: AtomicBool,
+    retired: AtomicBool,
+    uncertain: AtomicBool,
+    #[cfg(test)]
+    hooks: Arc<crate::test_hooks::Hooks>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct NativeGrants {
+    read: Option<(
+        Arc<WorkspaceAuthorityRegistry>,
+        WorkspaceGrantId,
+        WorkspaceBinding,
+    )>,
+    write: Option<(
+        Arc<WorkspaceAuthorityRegistry>,
+        WorkspaceGrantId,
+        WorkspaceBinding,
+    )>,
+}
+#[cfg(target_os = "linux")]
+impl RunResource {
+    fn admit(&self) -> Result<(), AuthorityError> {
+        let commitment = self.commitment.lock().map_err(|_| {
+            self.binding.cell.fail_session();
+            AuthorityError::Halted
+        })?;
+        if commitment.is_some_and(|id| {
+            self.binding
+                .control
+                .upgrade()
+                .is_none_or(|control| control.authority().commitments().expired(id))
+        }) {
+            return Err(AuthorityError::Expired);
+        }
+        self.binding.admit()
+    }
+    fn grant(
+        &self,
+        kernel: &Kernel,
+        binding: WorkspaceBinding,
+        write: bool,
+    ) -> Result<ProjectGrant, AuthorityError> {
+        let mut grants = self.grants.lock().map_err(|_| {
+            self.binding.cell.fail_session();
+            AuthorityError::Halted
+        })?;
+        let slot = if write {
+            &mut grants.write
+        } else {
+            &mut grants.read
+        };
+        if slot.is_some() {
+            return Err(AuthorityError::Halted);
+        }
+        self.admit()?;
+        #[cfg(test)]
+        self.hooks.fire(if write {
+            "session.entered.write_grant"
+        } else {
+            "session.entered.read_grant"
+        });
+        let grant = if write {
+            kernel.projects.grant_for_apply(kernel.project.id, binding)
+        } else {
+            kernel.projects.grant_for_run(kernel.project.id, binding)
+        }
+        .map_err(project_error)?;
+        *slot = Some((kernel.authority.clone(), grant.grant_id(), grant.binding()));
+        Ok(grant)
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct HostBinding {
+    control: std::sync::Weak<crate::control::Control>,
+    cell: HaltCell,
+    run: RunId,
+    grant: GrantId,
+    stop: Arc<StopAuthority>,
+}
+#[cfg(target_os = "linux")]
+impl HostBinding {
+    fn admit(&self) -> Result<(), AuthorityError> {
+        let control = self.control.upgrade().ok_or(AuthorityError::Halted)?;
+        let authority = control.authority();
+        if self.stop.is_stopped() || authority.grants().live(self.grant).is_none() {
+            return Err(AuthorityError::Halted);
+        }
+        authority.runs().admit_file_stage(self.run)
+    }
+}
+
+#[cfg(target_os = "linux")]
+enum NativeStep<'a> {
+    Work,
+    Recovery {
+        cell: Option<&'a HaltCell>,
+        cleanup: bool,
+    },
+    Settlement,
+}
+#[cfg(target_os = "linux")]
+enum CodingRun {
+    Legacy(Box<NativeRun>),
+    Host(Arc<RunResource>),
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for CodingRun {
+    fn drop(&mut self) {
+        if let Self::Host(entry) = self {
+            entry.abandoned.store(true, Ordering::SeqCst);
+            if std::thread::panicking() {
+                entry.uncertain.store(true, Ordering::SeqCst);
+                entry.binding.cell.fail_session();
+            }
+        }
+    }
+}
+
+/// This guard owns only a mutex borrow. Unwinding marks the existing entry;
+/// it cannot drop the contained run, even when the metadata becomes poisoned.
+#[cfg(target_os = "linux")]
+struct NativeBorrow<'a> {
+    resource: &'a RunResource,
+    native: std::sync::MutexGuard<'a, Option<std::mem::ManuallyDrop<NativeRun>>>,
+}
+#[cfg(target_os = "linux")]
+impl Drop for NativeBorrow<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.resource.uncertain.store(true, Ordering::SeqCst);
+            self.resource.binding.cell.fail_session();
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl CodingRun {
+    fn write_grant(
+        &self,
+        kernel: &Kernel,
+        binding: WorkspaceBinding,
+        _shared: &Shared,
+    ) -> Result<ProjectGrant, AuthorityError> {
+        match self {
+            Self::Legacy(_) => {
+                #[cfg(test)]
+                _shared.fire("session.entered.write_grant");
+                kernel
+                    .projects
+                    .grant_for_apply(kernel.project.id, binding)
+                    .map_err(project_error)
+            }
+            Self::Host(entry) => entry.grant(kernel, binding, true),
+        }
+    }
+    fn host(&self) -> bool {
+        matches!(self, Self::Host(_))
+    }
+    fn retain(&self) {
+        if let Self::Host(entry) = self {
+            entry.retired.store(true, Ordering::SeqCst);
+            entry.abandoned.store(true, Ordering::SeqCst);
+        }
+    }
+    fn observe<T>(&self, observe: impl FnOnce(&NativeRun) -> T) -> T {
+        match self {
+            Self::Legacy(run) => observe(run),
+            Self::Host(entry) => {
+                let native = entry.native.lock().unwrap_or_else(|poison| {
+                    entry.binding.cell.fail_session();
+                    entry.uncertain.store(true, Ordering::SeqCst);
+                    poison.into_inner()
+                });
+                observe(native.as_ref().expect("constructed inventory reference"))
+            }
+        }
+    }
+    fn mutate<T, E>(
+        &mut self,
+        _event: &'static str,
+        mode: NativeStep<'_>,
+        refused: impl FnOnce() -> E,
+        call: impl FnOnce(&mut NativeRun) -> Result<T, E>,
+    ) -> Result<T, E> {
+        match self {
+            Self::Legacy(run) => call(run),
+            Self::Host(entry) => {
+                let native = match entry.native.lock() {
+                    Ok(native) => native,
+                    Err(_) => {
+                        entry.binding.cell.fail_session();
+                        entry.uncertain.store(true, Ordering::SeqCst);
+                        return Err(refused());
+                    }
+                };
+                let mut borrowed = NativeBorrow {
+                    resource: entry,
+                    native,
+                };
+                let Some(run) = borrowed.native.as_mut() else {
+                    return Err(refused());
+                };
+                let admitted = match mode {
+                    NativeStep::Work => entry.admit(),
+                    NativeStep::Recovery { cell, cleanup } => {
+                        entry.binding.cell.admit_recovery(cell, cleanup)
+                    }
+                    NativeStep::Settlement => {
+                        if entry.binding.cell.session_word() & crate::host_session::SEALED != 0 {
+                            Err(AuthorityError::Halted)
+                        } else {
+                            Ok(())
+                        }
+                    }
+                };
+                if admitted.is_err() {
+                    return Err(refused());
+                }
+                #[cfg(test)]
+                entry.hooks.fire(_event);
+                #[cfg(test)]
+                match _event {
+                    "session.entered.discard_staging" => {
+                        entry.hooks.fire(crate::test_hooks::at::FILE_DISCARD)
+                    }
+                    "session.entered.restore" => entry.hooks.fire("files.undo_kernel_boundary"),
+                    _ => {}
+                }
+                let result = call(run);
+                #[cfg(test)]
+                entry.hooks.fire(match _event {
+                    "session.entered.staging_grant" => "session.after.staging_grant",
+                    "session.entered.snapshot" => "session.after.snapshot",
+                    "session.entered.edit" => "session.after.edit",
+                    "session.entered.structural_verify" => "session.after.structural_verify",
+                    "session.entered.page_verify" => "session.after.page_verify",
+                    "session.entered.review" => "session.after.review",
+                    "session.entered.revalidation_review" => "session.after.revalidation_review",
+                    "session.entered.request_approval" => "session.after.request_approval",
+                    "session.entered.page_recheck" => "session.after.page_recheck",
+                    "session.entered.apply" => "session.after.apply",
+                    "session.entered.request_restore" => "session.after.request_restore",
+                    "session.entered.restore" => "session.after.restore",
+                    "session.entered.retry_cleanup" => "session.after.retry_cleanup",
+                    "session.entered.discard_staging" => "session.after.discard_staging",
+                    "session.entered.cancel" => "session.after.cancel",
+                    _ => unreachable!("closed native call vocabulary"),
+                });
+                result
+            }
+        }
+    }
+    fn id(&self) -> nexus_kernel::coding_run::RunId {
+        self.observe(|run| run.id())
+    }
+    fn state(&self) -> nexus_kernel::coding_run::RunState {
+        self.observe(|run| run.state())
+    }
+    fn apply_state(&self) -> ApplyState {
+        self.observe(|run| run.apply_state())
+    }
+    fn cleanup_status(&self) -> CleanupStatus {
+        self.observe(|run| run.cleanup_status())
+    }
+    fn cleanup_owed(&self) -> Vec<String> {
+        self.observe(|run| run.cleanup_owed())
+    }
+    fn write_grant_at_close(&self) -> Option<InterruptCause> {
+        self.observe(|run| run.write_grant_at_close())
+    }
+    fn latest_inert_page(&self) -> Option<InertPageResult> {
+        self.observe(|run| run.latest_inert_page().cloned())
+    }
+    fn grant(&mut self, parent: &StagingParent) -> Result<(), RunError> {
+        self.mutate(
+            "session.entered.staging_grant",
+            NativeStep::Work,
+            || RunError::AuthorityDenied,
+            |run| run.grant(parent),
+        )
+    }
+    fn snapshot(&mut self) -> Result<nexus_kernel::coding_run::ManifestHash, RunError> {
+        self.mutate(
+            "session.entered.snapshot",
+            NativeStep::Work,
+            || RunError::AuthorityDenied,
+            |run| run.snapshot(),
+        )
+    }
+    fn edit(&mut self, edit: CandidateEdit) -> Result<(), RunError> {
+        self.mutate(
+            "session.entered.edit",
+            NativeStep::Work,
+            || RunError::AuthorityDenied,
+            |run| run.edit(edit),
+        )
+    }
+    fn verify_structural(
+        &mut self,
+    ) -> Result<nexus_kernel::coding_run::StructuralVerification, RunError> {
+        self.mutate(
+            "session.entered.structural_verify",
+            NativeStep::Work,
+            || RunError::AuthorityDenied,
+            |run| run.verify_structural(),
+        )
+    }
+
+    fn request_approval(
+        &mut self,
+        name: &str,
+        confirmer: &dyn OwnerConfirmer,
+    ) -> Result<nexus_kernel::coding_run::OwnerApproval, ApplyError> {
+        self.mutate(
+            "session.entered.request_approval",
+            NativeStep::Work,
+            || ApplyError::Refused(Refusal::AuthorityDenied),
+            |run| run.request_approval(name, confirmer),
+        )
+    }
+    fn apply_observed(
+        &mut self,
+        approval: nexus_kernel::coding_run::OwnerApproval,
+        grant: ProjectGrant,
+        staging: &StagingParent,
+        observer: &dyn ApplyInterrupt,
+    ) -> Result<nexus_kernel::coding_run::ApplyReport, ApplyError> {
+        self.mutate(
+            "session.entered.apply",
+            NativeStep::Work,
+            || ApplyError::Refused(Refusal::AuthorityDenied),
+            |run| run.apply_observed(approval, grant, staging, observer),
+        )
+    }
+    fn request_restore(
+        &mut self,
+        name: &str,
+        confirmer: &dyn OwnerConfirmer,
+        cell: Option<&HaltCell>,
+    ) -> Result<nexus_kernel::coding_run::OwnerApproval, ApplyError> {
+        self.mutate(
+            "session.entered.request_restore",
+            NativeStep::Recovery {
+                cell,
+                cleanup: false,
+            },
+            || ApplyError::Refused(Refusal::AuthorityDenied),
+            |run| run.request_restore(name, confirmer),
+        )
+    }
+    fn restore(
+        &mut self,
+        approval: nexus_kernel::coding_run::OwnerApproval,
+        grant: ProjectGrant,
+        cell: Option<&HaltCell>,
+    ) -> Result<nexus_kernel::coding_run::ApplyReport, ApplyError> {
+        self.mutate(
+            "session.entered.restore",
+            NativeStep::Recovery {
+                cell,
+                cleanup: false,
+            },
+            || ApplyError::Refused(Refusal::AuthorityDenied),
+            |run| run.restore(approval, grant),
+        )
+    }
+    fn retry_cleanup(&mut self, cell: Option<&HaltCell>) -> Result<(), ApplyError> {
+        self.mutate(
+            "session.entered.retry_cleanup",
+            NativeStep::Recovery {
+                cell,
+                cleanup: true,
+            },
+            || ApplyError::Refused(Refusal::AuthorityDenied),
+            |run| run.retry_cleanup(),
+        )
+    }
+    fn discard_staging(&mut self, cell: Option<&HaltCell>) -> Result<CleanupStatus, RunError> {
+        self.mutate(
+            "session.entered.discard_staging",
+            NativeStep::Recovery {
+                cell,
+                cleanup: true,
+            },
+            || RunError::AuthorityDenied,
+            |run| run.discard_staging(),
+        )
+    }
+    fn cancel(&mut self) -> Result<(), RunError> {
+        self.mutate(
+            "session.entered.cancel",
+            NativeStep::Settlement,
+            || RunError::AuthorityDenied,
+            |run| run.cancel(),
+        )
+    }
+    fn review(
+        &mut self,
+        event: &'static str,
+    ) -> Result<nexus_kernel::coding_run::Review, RunError> {
+        self.mutate(
+            event,
+            NativeStep::Work,
+            || RunError::AuthorityDenied,
+            |run| run.review(),
+        )
+    }
+}
+
 /// The last file created in this process, the undo slot (§6.6).
 #[cfg(target_os = "linux")]
 struct Applied {
@@ -616,6 +1039,8 @@ type Lines = Vec<(&'static str, String)>;
 /// filesystem, a dialog or evidence.
 #[derive(Default)]
 struct Shared {
+    #[cfg(target_os = "linux")]
+    inventory: Mutex<Vec<Arc<RunResource>>>,
     /// The ledger and staging parent, opened at first use.
     #[cfg(target_os = "linux")]
     backend: Mutex<Option<Arc<Backend>>>,
@@ -685,6 +1110,45 @@ impl Drop for Busy<'_> {
 }
 
 impl Shared {
+    #[cfg(target_os = "linux")]
+    fn reserve(&self, binding: HostBinding) -> Result<Arc<RunResource>, AuthorityError> {
+        let mut inventory = self.inventory.lock().map_err(|_| {
+            binding.cell.fail_session();
+            AuthorityError::Halted
+        })?;
+        if inventory.len() >= 256 {
+            return Err(AuthorityError::Capacity);
+        }
+        // All storage and index capacity is acquired before any native grant
+        // or object exists. Entries are never evicted to admit more work.
+        if inventory.is_empty() {
+            inventory.reserve_exact(256);
+        }
+        let control = binding.control.upgrade().ok_or(AuthorityError::Halted)?;
+        let view = control
+            .authority()
+            .runs()
+            .view(binding.run)
+            .ok_or(AuthorityError::Halted)?;
+        control
+            .authority()
+            .runs()
+            .check_retaining(binding.run, &view.agent, true)?;
+        let resource = Arc::new(RunResource {
+            native: Mutex::new(None),
+            binding,
+            commitment: Mutex::new(None),
+            grants: Mutex::new(NativeGrants::default()),
+            abandoned: AtomicBool::new(false),
+            retired: AtomicBool::new(false),
+            uncertain: AtomicBool::new(false),
+            #[cfg(test)]
+            hooks: self.hooks.clone(),
+        });
+        inventory.push(resource.clone());
+        Ok(resource)
+    }
+
     fn hold(&self) -> Duration {
         Duration::from_millis(self.hold_ms.load(Ordering::SeqCst))
     }
@@ -713,11 +1177,15 @@ impl Shared {
     /// was kept.
     #[cfg(target_os = "linux")]
     fn retire(&self, mut run: CodingRun) -> bool {
+        if run.host() {
+            run.retain();
+            return true;
+        }
         if owes(&run) {
             self.keep(run);
             return true;
         }
-        if !discard(&mut run, self) {
+        if !discard(&mut run, self, None) {
             self.keep(run);
             return true;
         }
@@ -726,6 +1194,10 @@ impl Shared {
 
     #[cfg(target_os = "linux")]
     fn keep(&self, run: CodingRun) {
+        if run.host() {
+            run.retain();
+            return;
+        }
         self.kept.lock().expect("files kept").push(run);
     }
 
@@ -862,22 +1334,20 @@ fn owes(run: &CodingRun) -> bool {
 /// whether its removal is established. Never called on a Stop path: a
 /// dropped effect only hands its run over (H1 decision, requirement 2).
 #[cfg(target_os = "linux")]
-fn discard(run: &mut CodingRun, _shared: &Shared) -> bool {
+fn discard(run: &mut CodingRun, _shared: &Shared, cell: Option<&HaltCell>) -> bool {
     if run.cleanup_status() == CleanupStatus::Discarded {
         return true;
     }
     #[cfg(test)]
-    _shared.fire(crate::test_hooks::at::FILE_DISCARD);
+    if !run.host() {
+        _shared.fire(crate::test_hooks::at::FILE_DISCARD);
+    }
     if !run.state().is_terminal() {
         let _ = run.cancel();
     }
     #[cfg(test)]
     _shared.fire("session.before.discard_staging");
-    #[cfg(test)]
-    _shared.fire("session.entered.discard_staging");
-    let result = run.discard_staging();
-    #[cfg(test)]
-    _shared.fire("session.after.discard_staging");
+    let result = run.discard_staging(cell);
     matches!(result, Ok(CleanupStatus::Discarded))
 }
 
@@ -1042,6 +1512,20 @@ fn page_lines(page: &InertPageResult) -> Vec<String> {
 
 #[cfg(target_os = "linux")]
 impl PendingEffect for FilesEffect {
+    fn bind_commitment(&self, id: CommitmentId) -> Result<(), AuthorityError> {
+        let run = self.run.lock().map_err(|_| AuthorityError::Halted)?;
+        if let Some(CodingRun::Host(entry)) = run.as_ref() {
+            let mut commitment = entry
+                .commitment
+                .lock()
+                .map_err(|_| AuthorityError::Halted)?;
+            if commitment.is_some() {
+                return Err(AuthorityError::Halted);
+            }
+            *commitment = Some(id);
+        }
+        Ok(())
+    }
     /// The workspace is still the admitted directory, the name still
     /// absent, and the staged candidate still reviews to exactly the
     /// committed review hash (§6.1 step 6).
@@ -1063,11 +1547,9 @@ impl PendingEffect for FilesEffect {
             .ok_or(AuthorityError::Unavailable("the staged file is gone"))?;
         #[cfg(test)]
         self.shared.fire("session.before.revalidation_review");
-        #[cfg(test)]
-        self.shared.fire("session.entered.revalidation_review");
-        let review = run.review().map_err(|_| AuthorityError::TargetChanged)?;
-        #[cfg(test)]
-        self.shared.fire("session.after.revalidation_review");
+        let review = run
+            .review("session.entered.revalidation_review")
+            .map_err(|_| AuthorityError::TargetChanged)?;
         if review.binding.hash() != self.review_hash || review.single_complete().is_none() {
             return Err(AuthorityError::TargetChanged);
         }
@@ -1130,14 +1612,10 @@ impl PendingEffect for FilesEffect {
         let approved = BrokerApproved { review_hash: hash };
         #[cfg(test)]
         shared.fire("session.before.request_approval");
-        #[cfg(test)]
-        shared.fire("session.entered.request_approval");
         let approval = match run.request_approval(&kernel.project.name, &approved) {
             Ok(approval) => approval,
             Err(error) => return Err(self.not_published(guard, run, &error)),
         };
-        #[cfg(test)]
-        shared.fire("session.after.request_approval");
         // S1a-D (§7 step 4): a page is rechecked with its admission's facts
         // (never prepare's) immediately before its publication: only the
         // kernel write grant is issued between them. Its pass must still be
@@ -1149,13 +1627,16 @@ impl PendingEffect for FilesEffect {
             #[cfg(test)]
             shared.fire("session.entered.page_recheck");
             let rechecked = run
-                .recheck_inert_page(self.admission.page_facts.as_ref())
+                .mutate(
+                    "session.entered.page_recheck",
+                    NativeStep::Work,
+                    || InertPageError::EmergencyStopped,
+                    |native| native.recheck_inert_page(self.admission.page_facts.as_ref()),
+                )
                 .and_then(|()| match run.latest_inert_page() {
-                    Some(now) if now == page => Ok(()),
+                    Some(now) if &now == page => Ok(()),
                     Some(_) | None => Err(InertPageError::Stale),
                 });
-            #[cfg(test)]
-            shared.fire("session.after.page_recheck");
             if let Err(error) = rechecked {
                 let kept = shared.retire(run);
                 return Err(self.failed_with(
@@ -1168,9 +1649,7 @@ impl PendingEffect for FilesEffect {
         }
         #[cfg(test)]
         shared.fire("session.before.write_grant");
-        #[cfg(test)]
-        shared.fire("session.entered.write_grant");
-        let Ok(write) = kernel.projects.grant_for_apply(kernel.project.id, binding) else {
+        let Ok(write) = run.write_grant(kernel, binding, &shared) else {
             let kept = shared.retire(run);
             return Err(self.failed_with(
                 guard,
@@ -1187,11 +1666,7 @@ impl PendingEffect for FilesEffect {
         guard.handing_off();
         #[cfg(test)]
         shared.fire("session.before.apply");
-        #[cfg(test)]
-        shared.fire("session.entered.apply");
         let result = run.apply_observed(approval, write, &self.backend.staging, &observer);
-        #[cfg(test)]
-        shared.fire("session.after.apply");
         let recovery = match result {
             Ok(_) => false,
             Err(error) => match publication(&error) {
@@ -1293,6 +1768,9 @@ impl Drop for FilesEffect {
             .unwrap_or_else(PoisonError::into_inner)
             .take();
         if let Some(run) = taken {
+            if run.host() {
+                return;
+            }
             self.shared
                 .deferred
                 .lock()
@@ -1679,51 +2157,39 @@ fn stage_one(
 ) -> Result<([u8; 32], Option<InertPageResult>, ManifestEntry), AuthorityError> {
     #[cfg(test)]
     _shared.fire("session.before.staging_grant");
-    #[cfg(test)]
-    _shared.fire("session.entered.staging_grant");
     run.grant(staging).map_err(run_error)?;
     #[cfg(test)]
-    _shared.fire("session.after.staging_grant");
-    #[cfg(test)]
     _shared.fire("session.before.snapshot");
-    #[cfg(test)]
-    _shared.fire("session.entered.snapshot");
     run.snapshot().map_err(run_error)?;
     #[cfg(test)]
-    _shared.fire("session.after.snapshot");
-    #[cfg(test)]
     _shared.fire("session.before.edit");
-    #[cfg(test)]
-    _shared.fire("session.entered.edit");
     run.edit(CandidateEdit::Create {
         path: path.clone(),
         content: content.to_vec(),
     })
     .map_err(run_error)?;
     #[cfg(test)]
-    _shared.fire("session.after.edit");
-    #[cfg(test)]
     _shared.fire(crate::test_hooks::at::FILE_STAGED);
     #[cfg(test)]
     _shared.fire("session.before.structural_verify");
-    #[cfg(test)]
-    _shared.fire("session.entered.structural_verify");
     if !run.verify_structural().map_err(run_error)?.passed() {
         return Err(refused("the file is not plain new text"));
     }
-    #[cfg(test)]
-    _shared.fire("session.after.structural_verify");
     let page = match class {
         FileClass::Page => {
             #[cfg(test)]
             _shared.fire("session.before.page_verify");
             #[cfg(test)]
             _shared.fire("session.entered.page_verify");
+            let native_path = path.as_string();
             let result = run
-                .check_inert_page(&path.as_string(), facts)
+                .mutate(
+                    "session.entered.page_verify",
+                    NativeStep::Work,
+                    || InertPageError::EmergencyStopped,
+                    |native| native.check_inert_page(&native_path, facts),
+                )
                 .map_err(inert_refusal)?;
-            #[cfg(test)]
-            _shared.fire("session.after.page_verify");
             Some(result)
         }
         FileClass::Plain => None,
@@ -1742,11 +2208,7 @@ fn stage_one(
     }
     #[cfg(test)]
     _shared.fire("session.before.review");
-    #[cfg(test)]
-    _shared.fire("session.entered.review");
-    let review = run.review().map_err(run_error)?;
-    #[cfg(test)]
-    _shared.fire("session.after.review");
+    let review = run.review("session.entered.review").map_err(run_error)?;
     let bound = match (&page, review.binding.verification) {
         (Some(page), VerifierMarker::InertPage(hash)) => page.binding_hash() == hash,
         (Some(_), VerifierMarker::NoResult | VerifierMarker::Result(_)) => false,
@@ -2359,6 +2821,13 @@ impl Files {
     pub(crate) fn drain(&self) {
         #[cfg(target_os = "linux")]
         {
+            if let Ok(inventory) = self.shared.inventory.lock() {
+                for entry in inventory.iter() {
+                    if entry.abandoned.load(Ordering::SeqCst) {
+                        entry.retired.store(true, Ordering::SeqCst);
+                    }
+                }
+            }
             let runs = std::mem::take(&mut *self.shared.deferred.lock().expect("files deferred"));
             for run in runs {
                 #[cfg(test)]
@@ -2476,11 +2945,10 @@ impl Files {
         };
         #[cfg(test)]
         self.shared.fire("session.before.request_restore");
-        #[cfg(test)]
-        self.shared.fire("session.entered.request_restore");
-        let requested = applied.run.request_restore(&kernel.project.name, &bridge);
-        #[cfg(test)]
-        self.shared.fire("session.after.request_restore");
+        let requested =
+            applied
+                .run
+                .request_restore(&kernel.project.name, &bridge, lifetime.recovery.cell());
         // A dialog refused because the lifetime ended is that, not a no.
         lifetime.check(authority)?;
         let approval = requested.map_err(undo_error)?;
@@ -2526,14 +2994,14 @@ impl Files {
             });
         }
         #[cfg(test)]
-        self.shared.fire("files.undo_kernel_boundary");
+        if !applied.run.host() {
+            self.shared.fire("files.undo_kernel_boundary");
+        }
         #[cfg(test)]
         self.shared.fire("session.before.restore");
-        #[cfg(test)]
-        self.shared.fire("session.entered.restore");
-        let restored = applied.run.restore(approval, write);
-        #[cfg(test)]
-        self.shared.fire("session.after.restore");
+        let restored = applied
+            .run
+            .restore(approval, write, lifetime.recovery.cell());
         // Re-check 3: closed again (idempotent) and confirmed, whatever the
         // restore answered; not established is recovery required, reported.
         if !issued.close() {
@@ -2622,6 +3090,38 @@ impl Files {
         #[cfg(test)]
         self.shared.fire("files.retry_before_effect");
         recovery.check()?;
+        if cell.is_some_and(HaltCell::host) {
+            let selected: Vec<_> = self
+                .shared
+                .inventory
+                .lock()
+                .map_err(|_| AuthorityError::Halted)?
+                .iter()
+                .filter(|entry| {
+                    entry.abandoned.load(Ordering::SeqCst)
+                        && !entry.uncertain.load(Ordering::SeqCst)
+                })
+                .cloned()
+                .collect();
+            let mut retry = CleanupRetry::default();
+            for entry in selected {
+                #[cfg(test)]
+                self.shared.fire(crate::test_hooks::at::FILE_CLEANUP);
+                recovery.check()?;
+                let mut run = CodingRun::Host(entry);
+                if owes(&run) {
+                    retry.still_owed += 1;
+                    continue;
+                }
+                if discard(&mut run, &self.shared, cell) {
+                    retry.settled += 1;
+                } else {
+                    retry.still_owed += 1;
+                    recovery.check()?;
+                }
+            }
+            return Ok(retry);
+        }
         let runs = std::mem::take(&mut *self.shared.kept.lock().expect("files kept"));
         let mut retry = CleanupRetry::default();
         let mut still = Vec::new();
@@ -2632,11 +3132,11 @@ impl Files {
                 // refusal, return this run AND every unattempted obligation.
                 recovery.check()?;
                 if !run.cleanup_owed().is_empty() {
-                    let _ = run.retry_cleanup();
+                    let _ = run.retry_cleanup(cell);
                 }
                 if !owes(&run) {
                     recovery.check()?;
-                    Ok(discard(&mut run, &self.shared))
+                    Ok(discard(&mut run, &self.shared, cell))
                 } else {
                     Ok(false)
                 }
@@ -2720,6 +3220,16 @@ impl Files {
     #[cfg(all(test, target_os = "linux"))]
     pub(crate) fn deferred_for_test(&self) -> usize {
         self.shared.deferred.lock().unwrap().len()
+            + self
+                .shared
+                .inventory
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| {
+                    entry.abandoned.load(Ordering::SeqCst) && !entry.retired.load(Ordering::SeqCst)
+                })
+                .count()
     }
 
     /// How many runs Files keeps owning for owed cleanup or recovery
@@ -2727,6 +3237,16 @@ impl Files {
     #[cfg(all(test, target_os = "linux"))]
     pub(crate) fn kept_for_test(&self) -> usize {
         self.shared.kept.lock().unwrap().len()
+            + self
+                .shared
+                .inventory
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| {
+                    entry.abandoned.load(Ordering::SeqCst) && entry.retired.load(Ordering::SeqCst)
+                })
+                .count()
     }
 
     /// Registered session poison fixture: panic while the named real owning
@@ -2915,6 +3435,7 @@ impl Files {
     /// live Files grant on it, the name, the content, the name absent, and
     /// the complete display; then the kernel staging ([`Self::stage`]). No
     /// lock is held across filesystem work.
+    #[cfg(test)]
     pub(crate) fn prepare(
         &self,
         authority: &Authority,
@@ -2922,6 +3443,35 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
+        self.prepare_bound(authority, run, create, stop, None)
+    }
+
+    pub(crate) fn prepare_control(
+        &self,
+        control: &Arc<crate::control::Control>,
+        run: RunId,
+        create: &FileCreate,
+        stop: &Arc<StopAuthority>,
+    ) -> Result<Preparation, AuthorityError> {
+        self.prepare_bound(control.authority(), run, create, stop, Some(control))
+    }
+
+    fn prepare_bound(
+        &self,
+        authority: &Authority,
+        run: RunId,
+        create: &FileCreate,
+        stop: &Arc<StopAuthority>,
+        control: Option<&Arc<crate::control::Control>>,
+    ) -> Result<Preparation, AuthorityError> {
+        if control.is_none()
+            && authority
+                .runs()
+                .session_cell(run)?
+                .is_some_and(|cell| cell.host())
+        {
+            return Err(AuthorityError::Halted);
+        }
         authority.runs().admit_file_stage(run)?;
         // H3 (M4′): a run whose publication a cause interrupted after its
         // final check asks for nothing more.
@@ -2963,6 +3513,7 @@ impl Files {
         authority.runs().admit_file_stage(run)?;
         #[cfg(target_os = "linux")]
         return self.stage(
+            control,
             run,
             create,
             (admission, class),
@@ -2989,6 +3540,7 @@ impl Files {
     #[allow(clippy::too_many_arguments)]
     fn stage(
         &self,
+        control: Option<&Arc<crate::control::Control>>,
         run: RunId,
         create: &FileCreate,
         (admission, class): (FilesAdmission, FileClass),
@@ -2997,6 +3549,21 @@ impl Files {
         mut summary: Vec<String>,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
+        let cell = match control {
+            Some(control) => control.authority().runs().session_cell(run)?,
+            None => None,
+        };
+        let reserved = if let Some(cell) = cell.filter(HaltCell::host) {
+            Some(self.shared.reserve(HostBinding {
+                control: Arc::downgrade(control.ok_or(AuthorityError::Halted)?),
+                cell,
+                run,
+                grant,
+                stop: stop.clone(),
+            })?)
+        } else {
+            None
+        };
         self.drain();
         let backend = self.backend()?;
         let kernel = &workspace.kernel;
@@ -3011,21 +3578,49 @@ impl Files {
         .map_err(|_| refused("the file name is not allowed"))?;
         #[cfg(test)]
         self.shared.fire("session.before.read_grant");
-        #[cfg(test)]
-        self.shared.fire("session.entered.read_grant");
-        let project = kernel
-            .projects
-            .grant_for_run(kernel.project.id, binding)
-            .map_err(project_error)?;
+        let project = match &reserved {
+            Some(entry) => entry.grant(kernel, binding, false)?,
+            None => {
+                #[cfg(test)]
+                self.shared.fire("session.entered.read_grant");
+                kernel
+                    .projects
+                    .grant_for_run(kernel.project.id, binding)
+                    .map_err(project_error)?
+            }
+        };
         #[cfg(test)]
         self.shared.fire("session.after.read_grant");
         #[cfg(test)]
         self.shared.fire("session.before.run_construct");
-        #[cfg(test)]
-        self.shared.fire("session.entered.run_construct");
-        let mut staged =
-            CodingRun::create_for_project_observing(backend.ledger.store(), project, scopes, stop)
-                .map_err(run_error)?;
+        let mut staged = match reserved {
+            Some(entry) => {
+                let ledger = backend.ledger.store();
+                let mut storage = entry.native.lock().map_err(|_| AuthorityError::Halted)?;
+                entry.admit()?;
+                #[cfg(test)]
+                self.shared.fire("session.entered.run_construct");
+                *storage = Some(std::mem::ManuallyDrop::new(
+                    NativeRun::create_for_project_observing(ledger, project, scopes, stop)
+                        .map_err(run_error)?,
+                ));
+                drop(storage);
+                CodingRun::Host(entry)
+            }
+            None => {
+                #[cfg(test)]
+                self.shared.fire("session.entered.run_construct");
+                CodingRun::Legacy(Box::new(
+                    NativeRun::create_for_project_observing(
+                        backend.ledger.store(),
+                        project,
+                        scopes,
+                        stop,
+                    )
+                    .map_err(run_error)?,
+                ))
+            }
+        };
         #[cfg(test)]
         self.shared.fire("session.after.run_construct");
         // S1a-D: the page is checked with its admission's facts (the S-O22

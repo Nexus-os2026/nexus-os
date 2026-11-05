@@ -45,6 +45,7 @@ struct Fixture {
     gov: Arc<GovernedControl>,
     door: Arc<SessionDoor>,
     _session: Arc<HostSession>,
+    sequence: AtomicUsize,
     run: RunId,
     clock: Arc<ManualClock>,
     grant: crate::authority::ids::GrantId,
@@ -97,6 +98,7 @@ impl Fixture {
             gov,
             door: Arc::new(door),
             _session: session,
+            sequence: AtomicUsize::new(1),
             run,
             clock,
             grant,
@@ -119,6 +121,24 @@ impl Fixture {
             )
             .map_err(Into::into)
     }
+    fn cleanup(&self) -> Result<crate::files::CleanupRetry, crate::host_session::SessionFailure> {
+        let seq = self.sequence.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+        let request = self
+            ._session
+            .ingress()
+            .accept(CommandKind::Cleanup, seq)
+            .map_err(|_| crate::host_session::SessionFailure::from(AuthorityError::Halted))?;
+        self._session.cleanup(&request)
+    }
+    fn undo(&self) -> Result<crate::files::UndoReport, crate::host_session::SessionFailure> {
+        let seq = self.sequence.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+        let request = self
+            ._session
+            .ingress()
+            .accept(CommandKind::Undo, seq)
+            .map_err(|_| crate::host_session::SessionFailure::from(AuthorityError::Halted))?;
+        self._session.undo(&request)
+    }
     fn ledger_path(&self) -> std::path::PathBuf {
         self.gov.files().state_dir_for_test().join("ledger.db")
     }
@@ -129,8 +149,14 @@ impl Fixture {
         }
     }
     fn approve(&self, id: CommitmentId) -> Result<EffectOutput, AuthorityError> {
-        self.gov.authorize(id, self.door.agent(), self.run, &Yes)?;
-        self.gov.execute(id, self.door.agent(), self.run)
+        assert_eq!(self._session.pending_for_test(), Some(id));
+        let sequence = self.sequence.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+        let request = self
+            ._session
+            .ingress()
+            .accept(CommandKind::Approve, sequence)
+            .map_err(|_| AuthorityError::Halted)?;
+        self._session.approve_file(&request).map_err(Into::into)
     }
 }
 
@@ -300,9 +326,7 @@ fn session_discard_after_normal_cleanup_reservation_rechecks_original_lifetime()
             .arm("session.after.discard_staging", move || {
                 done.fetch_add(1, Ordering::SeqCst);
             });
-        let result = f
-            .gov
-            .files_retry_cleanup_with_halt(Some(&f.gov.file_session_halt()));
+        let result = f.cleanup();
         assert_eq!(reached.load(Ordering::SeqCst), 1);
         let calls = completed.load(Ordering::SeqCst);
         let after = resources(&staging);
@@ -591,9 +615,7 @@ fn session_r27_normal_restore_admission_and_post_return_no_discard() {
                     cell.engage_emergency();
                 }
             });
-            let result = f
-                .gov
-                .files_undo_with_halt(&Yes, Some(&f.gov.file_session_halt()));
+            let result = f.undo();
             assert_eq!(
                 seen.load(Ordering::SeqCst),
                 1,
@@ -699,12 +721,14 @@ fn session_r18_r24_r30_r35_terminal_wrappers_and_last_owner_conserve_staging() {
         let Fixture {
             gov,
             door,
+            _session,
             _root,
             _dirs,
             ..
         } = f;
         drop(door);
         drop(gov);
+        drop(_session);
         // The fixture's parent roots are kept alive. Only actual broker-owned
         // destructors have run; fixture cleanup is not mistaken for the SUT.
         let after_last_owner = resources(&staging);
@@ -882,9 +906,7 @@ fn session_cleanup_fixed_tail_is_retained_when_ingress_follows_one_discard() {
                     cell.engage_emergency();
                 }
             });
-        let result = f
-            .gov
-            .files_retry_cleanup_with_halt(Some(&f.gov.file_session_halt()));
+        let result = f.cleanup();
         let before = captured
             .lock()
             .unwrap()
@@ -1034,6 +1056,7 @@ fn session_poisoned_ownership_holds_preserve_resources_through_last_owner_drop()
         let Fixture {
             gov,
             door,
+            _session,
             _root,
             _dirs,
             ..
@@ -1041,6 +1064,7 @@ fn session_poisoned_ownership_holds_preserve_resources_through_last_owner_drop()
         let _destruction = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             drop(door);
             drop(gov);
+            drop(_session);
         }));
         let after = resources(&staging);
         let correct = before == after;
@@ -1382,12 +1406,14 @@ fn session_normal_final_owner_drop_is_not_an_implicit_cleanup_request() {
         let Fixture {
             gov,
             door,
+            _session,
             _root,
             _dirs,
             ..
         } = f;
         drop(door);
         drop(gov);
+        drop(_session);
         let after = resources(&staging);
         let correct = before == after;
         println!(

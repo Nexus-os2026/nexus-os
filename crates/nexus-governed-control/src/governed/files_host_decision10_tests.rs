@@ -3,51 +3,141 @@
 //! cell APIs replace them by ordinary Rust method resolution after the fix;
 //! the schedules, effect observations and assertions stay unchanged.
 use super::*;
-use crate::authority::file_session::HaltCell;
-use crate::files::{CleanupRetry, UndoReport};
+use crate::host_session::{CommandKind, HostSession, SessionDoor, SessionSeed};
 
-#[allow(dead_code)]
-trait BaselineRecoveryRoutes {
-    fn files_undo_with_halt(
-        &self,
-        owner: &dyn ControlConfirmer,
-        cell: Option<&HaltCell>,
-    ) -> Result<UndoReport, AuthorityError>;
-    fn files_retry_cleanup_with_halt(
-        &self,
-        cell: Option<&HaltCell>,
-    ) -> Result<CleanupRetry, AuthorityError>;
-    fn resume_with_halt(
-        &self,
-        owner: &dyn ControlConfirmer,
-        cell: Option<&HaltCell>,
-    ) -> Result<(), AuthorityError>;
+struct HostFx {
+    gov: Arc<GovernedControl>,
+    session: Arc<HostSession>,
+    door: Arc<SessionDoor>,
+    attachment: Arc<crate::authority::file_session::FileAttachment>,
+    owner: Arc<Owner>,
+    evidence: Arc<MemoryEvidence>,
+    run: RunId,
+    ws: PathBuf,
+    sequence: AtomicUsize,
+    _root: TempRoot,
+    _dirs: Dirs,
 }
-impl BaselineRecoveryRoutes for GovernedControl {
-    fn files_undo_with_halt(
-        &self,
-        owner: &dyn ControlConfirmer,
-        _: Option<&HaltCell>,
-    ) -> Result<UndoReport, AuthorityError> {
-        self.files_undo(owner)
+impl HostFx {
+    fn new() -> Self {
+        assert!(make_non_dumpable());
+        let root = temp_root("session-d10");
+        let dirs = Dirs::new();
+        let ws = dirs.0.join("home/ws");
+        let owner = Owner::new();
+        let evidence = Arc::new(MemoryEvidence::new(4096));
+        let primary = crate::evidence_store::PrimaryEvidence::open(
+            &root.0.path().join("p3-evidence/evidence.sqlite3"),
+            vec![evidence.clone()],
+        )
+        .unwrap();
+        let session = Arc::new(
+            HostSession::open(
+                SessionSeed::new().unwrap(),
+                root.0.path(),
+                primary,
+                Arc::new(ManualClock::default()),
+                owner.clone(),
+            )
+            .unwrap(),
+        );
+        session.bootstrap_workspace(&ws, &[]).unwrap();
+        session.finish_bootstrap().unwrap();
+        let request = session.ingress().accept(CommandKind::Run, 1).unwrap();
+        let door = Arc::new(session.open_file_door(&request).unwrap());
+        let attachment = Arc::new(door.file_port().unwrap().attach().unwrap());
+        door.claim_file_session(&attachment).unwrap();
+        door.confirm_mission(&MissionConfirmation {
+            contract_hash: HASH.into(),
+            request: LABEL.into(),
+            summary: vec!["One file".into()],
+            page_facts: None,
+        })
+        .unwrap();
+        let run = door.open_file_run(&attachment).unwrap();
+        door.admit_files(run, HASH, LABEL).unwrap();
+        Self {
+            gov: session.control_for_test(),
+            session,
+            door,
+            attachment,
+            owner,
+            evidence,
+            run,
+            ws,
+            sequence: AtomicUsize::new(1),
+            _root: root,
+            _dirs: dirs,
+        }
     }
-    fn files_retry_cleanup_with_halt(
+    fn request(
         &self,
-        _: Option<&HaltCell>,
-    ) -> Result<CleanupRetry, AuthorityError> {
-        self.files_retry_cleanup()
+        kind: CommandKind,
+    ) -> Result<crate::host_session::SessionRequest, AuthorityError> {
+        let seq = self.sequence.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+        self.session
+            .ingress()
+            .accept(kind, seq)
+            .map_err(|error| match error {
+                crate::host_session::SessionError::Unavailable => {
+                    AuthorityError::Unavailable("host lift is unavailable")
+                }
+                _ => AuthorityError::Halted,
+            })
     }
-    fn resume_with_halt(
-        &self,
-        owner: &dyn ControlConfirmer,
-        _: Option<&HaltCell>,
-    ) -> Result<(), AuthorityError> {
-        self.resume(owner)
+    fn propose(&self, name: &str, content: &str) -> Result<CommitmentView, AuthorityError> {
+        match self
+            .door
+            .create_file(
+                self.run,
+                &FileCreate {
+                    name: name.into(),
+                    content: content.into(),
+                },
+            )
+            .map_err(AuthorityError::from)?
+        {
+            AgentOutcome::AwaitingApproval(view) => Ok(view),
+            _ => panic!("separate approval required"),
+        }
+    }
+    fn ready(&self, name: &str, content: &str) -> CommitmentView {
+        self.propose(name, content).unwrap()
+    }
+    fn execute(&self, view: &CommitmentView) -> Result<EffectOutput, AuthorityError> {
+        assert_eq!(self.session.pending_for_test(), Some(view.id));
+        self.session
+            .approve_file(&self.request(CommandKind::Approve)?)
+            .map_err(Into::into)
+    }
+    fn undo(&self) -> Result<crate::files::UndoReport, AuthorityError> {
+        self.session
+            .undo(&self.request(CommandKind::Undo)?)
+            .map_err(Into::into)
+    }
+    fn cleanup(&self) -> Result<crate::files::CleanupRetry, AuthorityError> {
+        self.session
+            .cleanup(&self.request(CommandKind::Cleanup)?)
+            .map_err(Into::into)
+    }
+    fn lift(&self) -> Result<(), AuthorityError> {
+        self.request(CommandKind::Lift).map(|_| ())
+    }
+    fn state(&self) -> PathBuf {
+        self.gov.files().state_dir_for_test()
+    }
+    fn staged(&self) -> Vec<String> {
+        let path = self.state().join("coding-runs");
+        if path.exists() {
+            entries(&path)
+        } else {
+            vec![]
+        }
     }
 }
 
-fn published_recovery() -> Fx {
-    let f = Fx::new();
+fn published_recovery() -> super::Fx {
+    let f = super::Fx::new();
     let a = f.ready(NAME, CONTENT);
     f.execute(&a).unwrap();
     f.gov.emergency_stop();
@@ -57,8 +147,8 @@ fn published_recovery() -> Fx {
     f
 }
 
-fn published_normal() -> Fx {
-    let f = Fx::new();
+fn published_normal() -> HostFx {
+    let f = HostFx::new();
     let a = f.ready(NAME, CONTENT);
     f.execute(&a).unwrap();
     f
@@ -70,8 +160,9 @@ fn undo_ingress(point: &'static str) {
     let gate = Gate::new();
     let held = gate.clone();
     f.gov.files().hooks().arm(point, move || held.hold());
-    let (gov, owner, carried) = (f.gov.clone(), f.owner.clone(), cell.clone());
-    let worker = std::thread::spawn(move || gov.files_undo_with_halt(&*owner, Some(&carried)));
+    let session = f.session.clone();
+    let request = f.request(CommandKind::Undo).unwrap();
+    let worker = std::thread::spawn(move || session.undo(&request).map_err(AuthorityError::from));
     gate.reached();
     cell.engage_emergency(); // first emergency, NO Stop worker
     assert!(!f.gov.stop_snapshot().broker_stopped);
@@ -91,10 +182,7 @@ fn undo_ingress(point: &'static str) {
     assert!(!f.gov.files().write_grant_live_for_test());
     // Host amendment: no fresh restore after the first emergency.
     let asks = f.owner.undos().len();
-    assert!(matches!(
-        f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
-        Err(AuthorityError::Halted)
-    ));
+    assert!(matches!(f.undo(), Err(AuthorityError::Halted)));
     assert!(f.ws.join(NAME).exists());
     assert_eq!(f.owner.undos().len(), asks);
 }
@@ -115,17 +203,14 @@ fn decision10_normal_undo_dialogue_emergency_forbids_new_request() {
     let cell = f.gov.file_session_halt();
     let ingress = cell.clone();
     f.owner.during_undo(move || ingress.engage_emergency());
-    let result = f.gov.files_undo_with_halt(&*f.owner, Some(&cell));
+    let result = f.undo();
     assert!(
         f.ws.join(NAME).exists(),
         "dialogue ingress must not remove the file"
     );
     assert!(matches!(result, Err(AuthorityError::Halted)));
     let asks = f.owner.undos().len();
-    assert!(matches!(
-        f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
-        Err(AuthorityError::Halted)
-    ));
+    assert!(matches!(f.undo(), Err(AuthorityError::Halted)));
     assert!(f.ws.join(NAME).exists());
     assert_eq!(f.owner.undos().len(), asks);
 }
@@ -133,7 +218,7 @@ fn decision10_normal_undo_dialogue_emergency_forbids_new_request() {
 #[test]
 fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
     use std::os::unix::fs::PermissionsExt;
-    let f = Fx::new();
+    let f = HostFx::new();
     f.propose(NAME, CONTENT).unwrap();
     let staging = f.state().join("coding-runs").join(&f.staged()[0]);
     let _ = f.door.cancel_run(f.run).unwrap().write();
@@ -149,17 +234,14 @@ fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
         .arm("files.retry_before_effect", move || {
             ingress.engage_emergency()
         });
-    let result = f.gov.files_retry_cleanup_with_halt(Some(&cell));
+    let result = f.cleanup();
     assert!(
         staging.exists(),
         "cleanup ingress must preserve the owed staging"
     );
     assert!(matches!(result, Err(AuthorityError::Halted)));
     assert_eq!(f.gov.files().kept_for_test(), 1);
-    assert!(matches!(
-        f.gov.files_retry_cleanup_with_halt(Some(&cell)),
-        Err(AuthorityError::Halted)
-    ));
+    assert!(matches!(f.cleanup(), Err(AuthorityError::Halted)));
     assert!(staging.exists());
     assert_eq!(f.gov.files().kept_for_test(), 1);
 }
@@ -167,13 +249,12 @@ fn decision10_cleanup_ingress_before_effect_preserves_obligation() {
 #[test]
 fn decision10_host_lift_is_unavailable_before_any_native_record() {
     for emergency in [false, true] {
-        let f = Fx::new();
+        let f = HostFx::new();
         if emergency {
             f.gov.emergency_stop();
         }
-        let cell = f.gov.file_session_halt();
         let before = f.evidence.records().len();
-        let result = f.gov.resume_with_halt(&*f.owner, Some(&cell));
+        let result = f.lift();
         assert!(matches!(result, Err(AuthorityError::Unavailable(_))));
         assert_eq!(
             f.evidence.records().len(),
@@ -183,13 +264,8 @@ fn decision10_host_lift_is_unavailable_before_any_native_record() {
     }
 }
 
-fn selected() -> Fx {
-    let mut f = Fx::new();
-    let attached = f.door.file_port().unwrap().attach().unwrap();
-    f.door.claim_file_session(&attached).unwrap();
-    f.run = f.door.open_file_run(&attached).unwrap();
-    f.door.admit_files(f.run, HASH, LABEL).unwrap();
-    f
+fn selected() -> HostFx {
+    HostFx::new()
 }
 
 #[test]
@@ -210,12 +286,12 @@ fn decision10_review4_prune_between_admission_and_commitment() {
     });
     let (door, run) = (f.door.clone(), f.run);
     let worker = std::thread::spawn(move || {
-        door.agent_action(
+        door.create_file(
             run,
-            &Intent::File(FileCreate {
+            &FileCreate {
                 name: NAME.into(),
                 content: CONTENT.into(),
-            }),
+            },
         )
     });
     gate.reached();
@@ -242,7 +318,7 @@ fn decision10_review4_prune_between_admission_and_commitment() {
 
 #[test]
 fn decision10_unknown_run_cell_and_stage_fail_closed() {
-    let f = Fx::new();
+    let f = HostFx::new();
     let unknown = RunId::fresh();
     assert!(
         matches!(
@@ -281,7 +357,7 @@ fn decision11_undo_ingress_after_last_broker_check_reports_actual_removal() {
         .arm("files.undo_kernel_boundary", move || {
             ingress.engage_emergency()
         });
-    let result = f.gov.files_undo_with_halt(&*f.owner, Some(&cell)).unwrap();
+    let result = f.undo().unwrap();
     assert!(
         !f.ws.join(NAME).exists(),
         "already confirmed kernel handoff may finish"
@@ -298,13 +374,13 @@ fn decision11_undo_ingress_after_last_broker_check_reports_actual_removal() {
         .iter()
         .any(|r| r.phase == EvidencePhase::EmergencyStop));
     assert!(cell.is_engaged());
-    assert!(f.door.open_run().is_err());
+    assert!(f.door.open_file_run(&f.attachment).is_err());
 }
 
 #[test]
 fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
     use std::os::unix::fs::PermissionsExt;
-    let f = Fx::new();
+    let f = HostFx::new();
     f.propose(NAME, CONTENT).unwrap();
     let staging = f.state().join("coding-runs").join(&f.staged()[0]);
     let _ = f.door.cancel_run(f.run).unwrap().write();
@@ -318,7 +394,7 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
         .files()
         .hooks()
         .arm(at::FILE_DISCARD, move || ingress.engage_emergency());
-    let retry = f.gov.files_retry_cleanup_with_halt(Some(&cell)).unwrap();
+    let retry = f.cleanup().unwrap();
     assert_eq!((retry.settled, retry.still_owed), (1, 0));
     assert!(!staging.exists());
     f.gov.emergency_stop();
@@ -327,24 +403,20 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
         .records()
         .iter()
         .any(|r| r.phase == EvidencePhase::EmergencyStop));
-    assert!(f.door.open_run().is_err());
+    assert!(f.door.open_file_run(&f.attachment).is_err());
 }
 
 #[test]
 fn decision11_host_lift_cannot_reach_a_kernel_handoff() {
     for point in ["resume.kernel_boundary", "resume.kernel_returned"] {
-        let f = Fx::new();
+        let f = HostFx::new();
         f.gov.emergency_stop();
-        let cell = f.gov.file_session_halt();
         let reached = Arc::new(AtomicUsize::new(0));
         let seen = reached.clone();
         f.gov.authority().hooks().arm(point, move || {
             seen.fetch_add(1, Ordering::SeqCst);
         });
-        assert!(matches!(
-            f.gov.resume_with_halt(&*f.owner, Some(&cell)),
-            Err(AuthorityError::Unavailable(_))
-        ));
+        assert!(matches!(f.lift(), Err(AuthorityError::Unavailable(_))));
         assert_eq!(reached.load(Ordering::SeqCst), 0);
         assert!(f.gov.stop_snapshot().kernel_stopped);
         assert!(f.gov.stop_snapshot().broker_stopped);
@@ -371,7 +443,7 @@ fn decision10_cancelled_session_run_retained_before_commitment_pin() {
 
 #[test]
 fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
-    let f = Fx::new();
+    let f = HostFx::new();
     f.propose(NAME, CONTENT).unwrap();
     let staging = f.state().join("coding-runs").join(&f.staged()[0]);
     let _ = f.door.cancel_run(f.run).unwrap().write();
@@ -382,7 +454,8 @@ fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
         .files()
         .hooks()
         .arm(at::FILE_CLEANUP, move || ingress.engage_emergency());
-    let result = f.gov.files_undo_with_halt(&*f.owner, Some(&cell));
+    assert!(f.undo().is_err(), "no published undo target exists");
+    let result = f.cleanup();
     assert!(
         matches!(result, Err(AuthorityError::Halted)),
         "ingress at deferred cleanup must refuse the recovery request: {result:?}"
@@ -397,10 +470,7 @@ fn decision11_undo_deferred_cleanup_rechecks_ingress_and_retains_tail() {
         "no recording worker ran"
     );
     // No new request can drain after emergency; the unattempted tail stays.
-    assert!(matches!(
-        f.gov.files_undo_with_halt(&*f.owner, Some(&cell)),
-        Err(AuthorityError::Halted)
-    ));
+    assert!(matches!(f.undo(), Err(AuthorityError::Halted)));
     assert!(staging.exists());
     assert_eq!(f.gov.files().deferred_for_test(), 1);
 }

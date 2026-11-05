@@ -138,6 +138,27 @@ impl HaltCell {
     pub(crate) fn host(&self) -> bool {
         matches!(self.mode(), CellMode::Host(_))
     }
+    pub(crate) fn admit_recovery(
+        &self,
+        request: Option<&Self>,
+        close_allowed: bool,
+    ) -> Result<(), super::AuthorityError> {
+        let Some(request) = request else {
+            return Err(super::AuthorityError::Halted);
+        };
+        if !self.same(request) {
+            return Err(super::AuthorityError::Halted);
+        }
+        match request.mode() {
+            CellMode::Host(Some(scope)) if scope.recovery(close_allowed) => request.admit(),
+            _ => Err(super::AuthorityError::Halted),
+        }
+    }
+    pub(crate) fn fail_session(&self) {
+        if let CellMode::Host(Some(scope)) = self.mode() {
+            scope.fail();
+        }
+    }
     pub(crate) fn scoped(&self, scope: Arc<crate::host_session::RequestScope>) -> Self {
         assert!(
             self.host(),
@@ -287,7 +308,13 @@ impl RecoveryCheck {
         check.check()?;
         Ok(check)
     }
+    pub(crate) fn cell(&self) -> Option<&HaltCell> {
+        self.cell.as_ref()
+    }
     pub(crate) fn check(&self) -> Result<(), super::AuthorityError> {
+        if let Some(cell) = self.cell.as_ref().filter(|cell| cell.host()) {
+            return cell.admit_recovery(Some(cell), true);
+        }
         if self.cell.as_ref().is_some_and(|cell| {
             self.snapshot & EPOCH_MASK == EPOCH_MASK
                 || cell.0.load(Ordering::SeqCst) != self.snapshot

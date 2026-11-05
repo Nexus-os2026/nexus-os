@@ -67,9 +67,7 @@ fn session_native_death_child() {
     });
     let pending = f.pending();
     f.approve(pending).unwrap();
-    f.gov
-        .files_undo_with_halt(&Yes, Some(&f.gov.file_session_halt()))
-        .unwrap();
+    f.undo().unwrap();
     panic!("registered boundary was not reached: {point}");
 }
 

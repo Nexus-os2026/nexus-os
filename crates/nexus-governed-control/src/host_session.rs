@@ -30,6 +30,16 @@ pub(crate) struct RequestScope {
     next_step: AtomicU64,
 }
 impl RequestScope {
+    pub(crate) fn fail(&self) {
+        if let Some(core) = self.core.upgrade() {
+            SessionIngress { core }.fail();
+        }
+    }
+
+    pub(crate) fn recovery(&self, close_allowed: bool) -> bool {
+        matches!(self.kind, ScopeKind::Restoration)
+            || (close_allowed && matches!(self.kind, ScopeKind::CloseCleanup))
+    }
     pub(crate) fn live(&self, word: u64) -> bool {
         word == self.snapshot && self.eligible()
     }
@@ -411,9 +421,19 @@ impl HostSession {
         if request.kind != CommandKind::Run {
             return Err(SessionError::Restricted);
         }
+        self.grant_files(request, grant_lifetime)?;
+        self.activate_file_door(request)
+    }
+
+    fn grant_files(
+        &self,
+        request: &SessionRequest,
+        grant_lifetime: Duration,
+    ) -> Result<crate::authority::ids::GrantId, SessionError> {
         let context = self.context(request)?;
         let workspace = self.control.workspace().ok_or(SessionError::Unavailable)?;
-        self.control
+        let grant = self
+            .control
             .request_grant_with_halt(
                 &crate::governed::GrantRequest::Files {
                     workspace: workspace.id,
@@ -423,6 +443,11 @@ impl HostSession {
                 Some(&context.cell),
             )
             .map_err(|error| SessionError::Backend(error.class()))?;
+        Ok(grant)
+    }
+
+    fn activate_file_door(&self, request: &SessionRequest) -> Result<SessionDoor, SessionError> {
+        let context = self.context(request)?;
         let door = self
             .control
             .issue_agent_door_with_halt(
@@ -436,6 +461,36 @@ impl HostSession {
             context,
             core: self.core.clone(),
         })
+    }
+
+    pub fn cleanup(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<crate::files::CleanupRetry, SessionFailure> {
+        if !Arc::ptr_eq(&self.core, &request.core) || request.kind != CommandKind::Cleanup {
+            return Err(crate::authority::AuthorityError::Halted.into());
+        }
+        let cell = self.core.cell.scoped(request.scope.clone());
+        self.control
+            .files_retry_cleanup_with_halt(Some(&cell))
+            .map_err(Into::into)
+    }
+
+    pub fn undo(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<crate::files::UndoReport, SessionFailure> {
+        if !Arc::ptr_eq(&self.core, &request.core)
+            || request.kind != CommandKind::Undo
+            || request.target == 0
+            || request.target != self.core.undo_context.load(Ordering::SeqCst)
+        {
+            return Err(crate::authority::AuthorityError::Halted.into());
+        }
+        let cell = self.core.cell.scoped(request.scope.clone());
+        self.control
+            .files_undo_with_halt(&*self.confirmer, Some(&cell))
+            .map_err(Into::into)
     }
 
     pub fn approve_file(
@@ -461,9 +516,13 @@ impl HostSession {
         self.control
             .authorize(target.commitment, &agent, target.run, &*self.confirmer)?;
         cell.admit()?;
-        self.control
-            .execute(target.commitment, &agent, target.run)
-            .map_err(Into::into)
+        let result = self.control.execute(target.commitment, &agent, target.run);
+        if result.is_ok() && cell.admit().is_ok() {
+            self.core
+                .undo_context
+                .store(target.identity, Ordering::SeqCst);
+        }
+        result.map_err(Into::into)
     }
 }
 
@@ -611,6 +670,26 @@ impl SessionDoor {
 
 #[cfg(test)]
 impl HostSession {
+    pub(crate) fn pending_for_test(&self) -> Option<crate::authority::ids::CommitmentId> {
+        self.core
+            .pending
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|target| target.commitment)
+    }
+    pub(crate) fn grant_for_test(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<crate::authority::ids::GrantId, SessionError> {
+        self.grant_files(request, Duration::from_secs(60))
+    }
+    pub(crate) fn activate_for_test(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<SessionDoor, SessionError> {
+        self.activate_file_door(request)
+    }
     pub(crate) fn control_for_test(&self) -> Arc<crate::governed::GovernedControl> {
         self.control.clone()
     }

@@ -42,6 +42,10 @@ pub struct EffectOutput {
 
 /// An effect prepared by a domain actuator, waiting for its commitment.
 pub(crate) trait PendingEffect: Send {
+    fn bind_commitment(&self, _id: CommitmentId) -> Result<(), AuthorityError> {
+        Ok(())
+    }
+
     /// Resolve the target again, immediately before the effect, and return
     /// its identity digest (it must equal the committed one).
     fn revalidate(&self) -> Result<Digest, AuthorityError>;
@@ -114,7 +118,7 @@ impl PendingTable {
 
 /// A place held for one proposal while it is prepared: filled by its
 /// effect, or given back when dropped (the preparation was refused).
-struct Place<'a> {
+pub(crate) struct Place<'a> {
     control: &'a Control,
     run: RunId,
     held: bool,
@@ -224,11 +228,46 @@ impl Control {
     }
 
     /// Commit to a prepared effect for `agent` in `run`. Nothing happens yet.
+    pub(crate) fn reserve_host_proposal(
+        &self,
+        run: RunId,
+    ) -> Result<(Place<'_>, crate::authority::commitment::PreparationSlot), AuthorityError> {
+        self.authority.runs().admit_file_stage(run)?;
+        let limit = match self.authority.runs().class(run) {
+            Some(RunClass::Owner) => MAX_PENDING,
+            Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
+            None => return Err(AuthorityError::UnknownRun),
+        };
+        let place = self.place(run, limit).ok_or(AuthorityError::Capacity)?;
+        let slot = self.authority.commitments().reserve_preparation()?;
+        Ok((place, slot))
+    }
+
+    pub(crate) fn propose_reserved(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        preparation: Preparation,
+        reservation: (Place<'_>, crate::authority::commitment::PreparationSlot),
+    ) -> Result<CommitmentView, AuthorityError> {
+        self.propose_with_reservation(agent, run, preparation, Some(reservation))
+    }
+
     pub(crate) fn propose(
         &self,
         agent: &AgentId,
         run: RunId,
         preparation: Preparation,
+    ) -> Result<CommitmentView, AuthorityError> {
+        self.propose_with_reservation(agent, run, preparation, None)
+    }
+
+    fn propose_with_reservation(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        preparation: Preparation,
+        reservation: Option<(Place<'_>, crate::authority::commitment::PreparationSlot)>,
     ) -> Result<CommitmentView, AuthorityError> {
         let Preparation {
             action,
@@ -259,22 +298,39 @@ impl Control {
         if let Err(error) = crate::authority::file_session::check_halt(halt.as_ref()) {
             return refuse(error);
         }
-        let place = match self.place(run, limit) {
-            Some(place) => place,
+        let (place, slot) = match reservation {
+            Some((place, slot)) if std::ptr::eq(place.control, self) && place.run == run => {
+                (place, Some(slot))
+            }
+            Some(_) => return refuse(AuthorityError::Halted),
             None => {
-                self.prune();
-                match self.place(run, limit) {
+                let place = match self.place(run, limit) {
                     Some(place) => place,
-                    None => return refuse(AuthorityError::Capacity),
-                }
+                    None => {
+                        self.prune();
+                        match self.place(run, limit) {
+                            Some(place) => place,
+                            None => return refuse(AuthorityError::Capacity),
+                        }
+                    }
+                };
+                (place, None)
             }
         };
-        // The place is held while the commitment is prepared (and its
-        // preparation recorded) with no lock held.
-        let view = self
-            .authority
-            .commitments()
-            .prepare(agent, run, action, ttl)?;
+        let view = match slot {
+            Some(slot) => self
+                .authority
+                .commitments()
+                .prepare_reserved(agent, run, action, ttl, slot)?,
+            None => self
+                .authority
+                .commitments()
+                .prepare(agent, run, action, ttl)?,
+        };
+        if let Err(error) = effect.bind_commitment(view.id) {
+            self.authority.commitments().refuse_pending_install(view.id);
+            return Err(error);
+        }
         if let Err(error) = place.fill(
             view.id,
             Pending {
