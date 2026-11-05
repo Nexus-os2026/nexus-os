@@ -88,11 +88,11 @@ use nexus_governed_control::authority::AuthorityError;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};
+mod lite;
+mod lite_intent;
 #[cfg(test)]
 #[path = "oracles/m2e_budget.rs"]
 mod m2e_budget;
-mod lite;
-mod lite_intent;
 mod session_close;
 pub use session_close::PreparedSessionEnd;
 #[cfg(test)]
@@ -1307,6 +1307,16 @@ impl<P: EffectPort> Coordinator<P> {
     /// an unanswered question is named by its index; its id is the Owner's
     /// working detail.
     pub fn submit(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        if self
+            .lanes
+            .by_role
+            .values()
+            .any(|lane| lane.max_model_calls() > 0)
+        {
+            return Err(CoordinatorError::Contract(
+                ContractError::ModelLaneUnavailable,
+            ));
+        }
         self.step(|inner| {
             inner.clear_detail(id);
             let mission = inner.mission(id)?;

@@ -222,6 +222,9 @@ impl Runtime {
             last: None,
         });
         let contract = MissionContract {
+            model: None,
+            notes: vec![],
+            deliverable: None,
             owner_words: format!("Create {} with {} UTF-8 bytes, shown in full at the separate File approval.", self.config.name, self.config.text.len()),
             restatement: format!("Create one approved top-level text file named {}. One File mission per fresh process; no in-process replacement. Emergency ends mission work.", self.config.name),
             requested_folder: Some(workspace.name),

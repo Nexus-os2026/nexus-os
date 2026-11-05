@@ -374,6 +374,9 @@ pub(crate) fn p0_lanes(
 /// canaries, and whose restatement also carries `markers`.
 pub(crate) fn canary_contract(cs: &Canaries, markers: &str) -> MissionContract {
     MissionContract {
+        model: None,
+        notes: vec![],
+        deliverable: None,
         owner_words: format!("Make the site {} and {}", cs.c, cs.cl),
         restatement: format!("Restated {} {} {markers}", cs.c, cs.cl)
             .trim_end()
