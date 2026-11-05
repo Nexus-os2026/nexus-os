@@ -834,11 +834,7 @@ impl nexus_governed_control::files::OwnerView for OwnerScreen {
     }
 }
 
-fn show_recovery(
-    home: &SessionServices,
-    screen: &Shared,
-    prior_primary: bool,
-) -> Result<(), &'static str> {
+fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static str> {
     let sources = home.session.startup_report();
     screen.emit(&format!(
         "SOURCES mother_verified={} resources_verified={} primary_latched={} primary_owed={} primary_recovery_required={} primary_unsettled={} primary_unclean_sessions={}\n",
@@ -851,10 +847,10 @@ fn show_recovery(
         sources.primary.unclean_sessions
     ));
     // Presentation only: never infer authority or readiness from this label.
-    // An existing primary store may contain prior sessions even when Mother
-    // has no mission records (including a process lost during bootstrap).
-    let fresh = !prior_primary
-        && sources.ready()
+    // Every clean Hands close records a Mother session end. Lost sessions
+    // appear in primary recovery health. Keep host filesystem access behind
+    // the existing adapter and use only these verified backend observations.
+    let fresh = sources.ready()
         && sources.mother.as_ref().is_ok_and(|m| m.records == 0)
         && sources.resources.as_ref().is_ok_and(Vec::is_empty);
     if fresh {
@@ -1004,13 +1000,6 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let mut startup = std::thread::Builder::new()
         .name("hands-startup".into())
         .spawn(move || {
-            // Snapshot before opening this session, which itself creates a
-            // primary store. Missing is distinct from unreadable/unknown.
-            let prior_primary =
-                match std::fs::metadata(config.home.join("broker/p3-evidence/evidence.sqlite3")) {
-                    Ok(metadata) => metadata.len() != 0,
-                    Err(error) => error.kind() != std::io::ErrorKind::NotFound,
-                };
             #[cfg(test)]
             hands_tests::review2_startup("home");
             #[cfg(test)]
@@ -1029,7 +1018,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             }
             #[cfg(test)]
             hands_tests::review2_startup("recovery");
-            let report = show_recovery(&home, &startup_screen, prior_primary);
+            let report = show_recovery(&home, &startup_screen);
             if report.is_err() {
                 home.session.ingress().fail();
             }
