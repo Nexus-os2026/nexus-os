@@ -44,8 +44,8 @@ There is no live-tree fallback, old-or-new acceptance or missing-file skip.
 | Oracle | Activation and current evidence preserved |
 |---|---|
 | F7 | K05–K21 cumulatively prohibit exact retired roots and alternate file/directory spellings, root declarations, imports and exports. K11/K12/K14/K15/K17/K19 add runtime-type prohibitions. Free-api/orchestration/delegation bans remain at every stage. Current m0_f7_legacy_supervisor_cut.rs remains active throughout K01. |
-| Dependency closure | production-paths.txt fixes 327 source seeds; manifest files and extraction homes enter/leave with the selected stage. Every expected seed must be present; unknown renamed modules/files and Cargo dependency aliases/wrappers fail. Extraction destinations enter only at their stage. cargo-manifests.json retains the ten required manifest paths, while manifests selected by current workspace membership are also checked. Retired package identities (including aliases and workspace declarations) and paths under retirement roots are forbidden in every dependency kind and target. kernel-dependency-names.json caps the kernel dependency names at the 39-name base set; later stages may shrink it. Unrelated non-kernel dependency changes do not require fixture edits. |
-| Logging | K11 replaces loop-source obligations with its absence and no replacement execution route. K12 removes actuator source obligations. logging.jsonl freezes 22 retained logging macro expressions; missing, changed or extra sinks fail, including raw result/error aliases and appended logging. Mother/broker live privacy oracles remain required. |
+| Dependency closure | production-paths.txt fixes 327 source seeds; manifest files and extraction homes enter/leave with the selected stage. Every expected seed must be present. Exact source/module inventories apply to kernel/ only; outside it, unrelated modules/files may grow while retired contacts and Cargo dependency aliases/wrappers fail. Extraction destinations enter only at their stage. cargo-manifests.json retains the ten required manifest paths, while manifests selected by current workspace membership are also checked. Retired package identities (including aliases and workspace declarations) and paths under retirement roots are forbidden in every dependency kind and target. kernel-dependency-names.json caps the kernel dependency names at the 39-name base set; later stages may shrink it. Unrelated non-kernel dependency changes do not require fixture edits. |
+| Logging | K11 replaces loop-source obligations with its absence and no replacement execution route. K12 removes actuator source obligations. logging.jsonl freezes the six retained kernel logging macro expressions and contexts; missing, changed or extra kernel sinks fail, including rebinding and appended logging. Non-kernel sinks may grow. Mother/broker/host P0 privacy and isolation scanners retain sole ownership of their privacy policy. |
 | Web search | Through K11, preserve F3's source prohibition plus the independently runnable kernel_retirement_web_search binary's direct default/backend/registry refusal, no-connection and injected-backend checks. K03 moves its PlannedAction import to action_types; its complete source is pinned by web-search-guard.rs.txt. K11 retires only the executor checks with their subject. K12 retires this actuator-dependent binary and switches to actuator/registry/backend absence, including renamed search modules/process sinks; no curl exception remains. broker-classifier.sha256 freezes the exhaustive classifier and refusal vocabulary independently of imports. WebSearch stays inert. Existing broker egress, credentials and proxy tests remain required. |
 | HM prompt/writers/separation | K11 removes exactly six prompt-content exceptions, three AgentMemoryManager writers and the world-model separation row. hm-rows.jsonl names sites/routes; the full 26-route no-handoff vocabulary and raw SQL/write/content-read plants survive. |
 | HM model/transport | K11 removes planner/world-model classifications; K12 removes image/tts errata; K13 removes vision/model-list classifications and both transport exceptions. Broker speech remains a separate governed route. Existing unknown-model, AR/XS/LATENT, five-path transport and A2 tests stay active. |
@@ -69,8 +69,9 @@ There is no live-tree fallback, old-or-new acceptance or missing-file skip.
    comparisons; do not replace its model/authority/data-flow predicates with a
    weaker text predicate. The registered HM row sets specify only narrowing.
 4. Run the synthetic controls plus actual live-tree checks at that candidate.
-   New source paths/import edges/dependencies/sinks need explicit reviewed
-   registration, not a permissive directory-prefix exception.
+   Kernel source paths/import edges/dependencies/sinks need reviewed registration.
+   Under R-5, unrelated non-kernel growth requires no K01 inventory amendment;
+   non-kernel retirement contacts still fail, including path overrides and aliases.
 
 Owner-approved F7 policy: **absent and cannot return**, replacing “retained but
 isolated” only as each removal lands. This policy successor needs independent
@@ -117,21 +118,22 @@ fails. The existing test_support cfg remains exact. The narrow declaration
 reader ignores comments, literal contents and unexpanded macro bodies; unknown
 changes require reviewed registration, not a guessed cfg evaluation.
 
-Each of the 22 logging entries also pins its containing production function's
+Each of the six kernel logging entries pins its containing production function's
 literal-preserving text, including parameters, branches and local bindings.
-Controls mutate Mother's real main_entry sink and rebind `e` while leaving its
-macro expression unchanged. This protects that bounded diagnostic context; it
-is not an interprocedural privacy proof. Existing behavioral privacy guards
-remain required. All twelve SourceKind persisted names have exact assertions,
+Controls mutate the real kernel audit-retention sink and rebind `e` while leaving
+its macro expression unchanged. R-5 supersedes the original 22-entry cross-crate
+freeze and Mother main_entry control. Existing non-kernel privacy guards remain
+unchanged and required; K01 does not duplicate them. All twelve SourceKind
+persisted names have exact assertions,
 including DbMemoryStore -> `db_memory_store`.
 
-The four retained Mother review scaffolds stay scanned under R-4. Their private
-self-spawn helpers are registered by exact whole-file hashes in
-`retained-test-process-files.json`, with their current cfg(test) loading edges
-pinned separately. This permits their existing test executable only; any source
-change or additional process call loses that registration. These are not new
-production process boundaries or file exclusions. Source-policy registration
-still does not prove arbitrary caller/data-flow equivalence.
+The four retained Mother review scaffolds remain scanner inputs. R-5 removes
+K01's whole-file self-spawn hashes: unrelated changes to these non-kernel files
+must pass. Their registered cfg(test) loading contracts remain specific acceptance
+predecessor subjects; promoting a helper into production still changes that
+contract. K01's process/network/Stop/SQLite/HM effect predicates now apply only
+inside kernel/. Their existing component guards are unchanged. Retirement
+contacts remain forbidden throughout the production inventory.
 
 ## Fix round 2 registration
 
@@ -241,3 +243,67 @@ bounded logging context and four self-spawn scaffolds are deliberate
 security/behavior registrations with mutation controls. No other byte drift of
 registered files was found. LIVE_STAGE remains 1; no existing guard or trust
 boundary is changed. No phase advancement or integration is authorized here.
+
+## Fix round 5 (Ruling R-5)
+
+`test(oracle-fix)` — Old: "freeze repository-wide modules, source files and logs".
+New: "freeze kernel retirement subjects; reject retired contacts elsewhere".
+R-5 confines exact inventories to kernel/ and specific named predecessor subjects.
+No kernel fixture entry, sink expression or context hash was added or rehashed.
+The 95 kernel module entries are identical and all six kernel sink rows are
+byte-preserved from 55e08245; only the 57 non-kernel module rows and 16 non-kernel sinks are removed.
+LIVE_STAGE stays 1.
+
+Complete sweep of K01 registrations and their disposition:
+
+1. Live module inventory and staged module subset: kernel/ only. New non-kernel
+   declarations are checked for retired contacts instead of inventory equality.
+2. Staged source-path closure: kernel/ only for unknown-file rejection. The
+   current scanner still discovers and loads every non-kernel production file;
+   unknown non-kernel paths are scanned, not excluded. Original seed existence
+   requirements remain, as required by the preceding dependency ruling.
+3. Live and staged logging inventories/context hashes: kernel/ only. The real
+   sink/rebinding control now targets audit/retention.rs. Typed-code diagnostics
+   and new unrelated non-kernel sinks pass without updating fixtures.
+4. Four non-kernel self-spawn whole-file hashes: removed, with the duplicate
+   broad process/network/inference/Stop/SQLite/HM predicates scoped to kernel/.
+   Scaffold comments pass; renamed retired imports fail. The prior desktop Stop
+   plant now exercises the same prohibited claim inside kernel/. Existing P0
+   privacy, Stop, Mother isolation and other component guards are untouched.
+5. Broker classifier: retained as the named PlannedAction/F3 classification
+   subject, bounded to `classify` only. Appending unrelated helpers passes; the
+   unchanged digest still rejects tag/refusal mutations. No snapshot rehash.
+6. Acceptance successor: 159 named predecessor tests and eight loading contracts
+   remain exact (155 kernel tests, four persistence HM guard tests). They protect
+   the specific predecessor subjects, not all functions/modules in their files;
+   unrelated additions pass. Missing declarations, changed cfg/ignore/loading
+   contracts and source promotion still fail.
+7. Cargo manifests: already use shared absence/dependency policy, with a narrowing
+   39-name kernel dependency cap. Ten required manifest paths and 327 source
+   seeds are presence minima, not an equality against the evolving repository.
+   No count of newly discovered non-kernel files or members is frozen.
+8. Retirement roots/declarations/reexports/items, extraction anchors, KEEP/counts,
+   HM rows, codec/default/error/SourceKind goldens, and the frozen direct F3 guard:
+   all subjects are in kernel/. Their existing inventories and bytes stay exact.
+   The shared HM scanner's own regression tests remain unchanged.
+
+The shared live/staged contact check rejects retired declarations, direct/grouped
+imports/reexports, renamed module and kernel-namespace aliases, `extern crate`
+aliases, root re-export symbols, retired crate spellings, ordinary/raw-string
+`#[path]`, conditional path attributes and `include!` paths. Local non-kernel
+modules may reuse a name without reaching the retired subject. Flat generated
+`OUT_DIR` includes are recognized structurally outside kernel/, without a filename
+inventory. Paths are lexically resolved through traversal and absolute checkout
+paths,
+including nonexistent retired targets. Known retired runtime symbols and original
+F7 prohibitions still apply, including a renamed wrapper around a legacy runtime.
+Static source checks do not prove arbitrary semantic equivalence; existing resolved
+graph and behavioral guards remain required.
+
+New controls exercise all K02–K22 stages with fresh scanner reachability: an
+unrelated non-kernel module/new file, local reused module name, generated include
+and typed-code logs pass; retired contacts through declarations, aliases and path
+overrides fail at the exact planted
+subject; new kernel module/file/sink growth fails. Existing omission, source
+promotion, F3, F7, HM, logging rebinding and dependency controls remain active.
+No production code, dependency, existing guard or trust boundary changes.

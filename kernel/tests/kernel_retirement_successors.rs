@@ -234,6 +234,145 @@ fn referenced_modules(code: &str, namespace: &str) -> BTreeSet<String> {
     }
     modules
 }
+// Shared by live registration and every staged successor. Outside kernel this
+// replaces closed-world module inventories, rather than extending their lists.
+fn retired_reference(stage: u8, path: &str, code: &str, text: &str) -> bool {
+    let historical = ["free_api_registry", "orchestration", "delegation"];
+    let retired: BTreeSet<_> = historical
+        .into_iter()
+        .chain(
+            stages()
+                .iter()
+                .filter(|r| r.stage <= stage)
+                .flat_map(|r| &r.declarations)
+                .map(|d| d.trim_start_matches("pub mod ").trim_end_matches(';')),
+        )
+        .collect();
+    // Root re-exports can name a retired symbol without its old module prefix.
+    // Same-type payloads explicitly extracted by earlier rows are still live.
+    let extracted: BTreeSet<_> = stages()
+        .iter()
+        .filter(|r| r.stage <= stage)
+        .flat_map(|r| &r.extract)
+        .flat_map(|e| &e.payload)
+        .collect();
+    let mut retired_exports = BTreeSet::new();
+    for export in stages()
+        .iter()
+        .filter(|r| r.stage <= stage)
+        .flat_map(|r| &r.reexports)
+    {
+        if let Some((_, body)) = export.split_once('{') {
+            for token in pattern(r"\b\w+\b").find_iter(body) {
+                if !extracted.iter().any(|p| p.as_str() == token.as_str()) {
+                    retired_exports.insert(token.as_str().to_owned());
+                }
+            }
+        }
+    }
+    if dependencies::RETIRED
+        .iter()
+        .any(|(name, _)| identifier(code, &name.replace('-', "_")))
+    {
+        return true;
+    }
+    // Resolve renamed imports of the kernel namespace, including extern crate.
+    // A grouped module import (including `as`) is checked at its original path.
+    let mut namespaces = BTreeSet::from(["nexus_kernel".to_owned()]);
+    loop {
+        let mut added = BTreeSet::new();
+        for namespace in &namespaces {
+            for alias in pattern(&format!(
+                r"\b(?:use|extern\s+crate)\s+{}\s*(?:::\s*\{{\s*self\s+|\s+)as\s+(?:r#)?(\w+)",
+                regex::escape(namespace)
+            ))
+            .captures_iter(code)
+            {
+                added.insert(alias[1].to_owned());
+            }
+        }
+        let old = namespaces.len();
+        namespaces.extend(added);
+        if namespaces.len() == old {
+            break;
+        }
+    }
+    if namespaces.iter().any(|namespace| {
+        referenced_modules(code, namespace)
+            .iter()
+            .any(|m| retired.contains(m.as_str()) || retired_exports.contains(m))
+    }) || (within(path, "kernel")
+        && module_names(code)
+            .iter()
+            .any(|m| retired.contains(m.as_str())))
+    {
+        return true;
+    }
+    // A path override may hide the module's original name. Inspect attributes
+    // and include! paths with literal-preserving text, resolving traversal even
+    // after a retired file has disappeared. Ordinary strings/comments are inert.
+    let reaches_retired = |value: &str| {
+        dependencies::dependency_path(path, value).is_some_and(|resolved| {
+            dependencies::RETIRED
+                .iter()
+                .map(|(_, root)| *root)
+                .chain(F7_ABSENT.iter().copied())
+                .chain(
+                    stages()
+                        .iter()
+                        .filter(|r| r.stage <= stage)
+                        .flat_map(|r| &r.roots)
+                        .map(String::as_str),
+                )
+                .any(|root| {
+                    let stem = root.trim_end_matches(".rs");
+                    within(&resolved, stem) || resolved == format!("{stem}.rs")
+                })
+        })
+    };
+    let literal = |at: usize| -> Option<String> {
+        let tail = text[at..].trim_start();
+        let value = pattern(r##"^(?:"(?:\\.|[^"\\])*"|r#*"[^"]*"#*)"##)
+            .find(tail)?
+            .as_str();
+        if value.starts_with('r') {
+            let quote = value.find('"')?;
+            let marks = quote - 1;
+            Some(value[quote + 1..value.len() - marks - 1].into())
+        } else {
+            serde_json::from_str(value).ok()
+        }
+    };
+    for attr in pattern(r"#\s*!?\s*\[").find_iter(code) {
+        let open = attr.end() - 1;
+        let end = source::close_of(code, open);
+        for key in pattern(r"\bpath\s*=").find_iter(&code[open..end]) {
+            if literal(open + key.end()).is_none_or(|v| reaches_retired(&v)) {
+                return true;
+            }
+        }
+    }
+    for include in pattern(r"\binclude\s*!\s*\(").find_iter(code) {
+        if let Some(value) = literal(include.end()) {
+            if reaches_retired(&value) {
+                return true;
+            }
+        } else {
+            // Cargo-generated, flat OUT_DIR source is not a retired checkout
+            // path. This structural case is not a frozen file/name inventory.
+            let end = source::close_of(code, include.end() - 1);
+            let expression = compact(&text[include.end()..end - 1]);
+            let generated = !within(path, "kernel")
+                && pattern(r#"^concat!\(env!\("OUT_DIR"\),"/[A-Za-z0-9_.-]+\.rs"\)$"#)
+                    .is_match(&expression);
+            if !generated {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn logging_sinks(path: &str, raw: &str) -> Vec<LogSink> {
     let (code, text) = prod(raw);
     let functions = coverage::declarations(&text);
@@ -253,12 +392,13 @@ fn logging_sinks(path: &str, raw: &str) -> Vec<LogSink> {
         }).collect()
 }
 fn classifier_bytes(raw: &str) -> Option<String> {
-    // Freeze the entire body, including literal whitespace/refusal vocabulary.
-    // The import block can move independently; only checkout line endings vary.
-    Some(
-        raw.get(raw.find("pub fn classify(")?..)?
-            .replace("\r\n", "\n"),
-    )
+    // This named predecessor subject is the classifier function only. Unrelated
+    // helpers before/after it may grow; its original body/refusal bytes may not.
+    let code = source::mask(raw, false);
+    let start = code.find("pub fn classify(")?;
+    let open = start + code[start..].find('{')?;
+    let end = source::close_of(&code, open);
+    Some(format!("{}\n", raw.get(start..end)?.replace("\r\n", "\n")))
 }
 fn classifier_ok(raw: &str) -> bool {
     classifier_bytes(raw).is_some_and(|s| {
@@ -479,7 +619,7 @@ fn registered_f3_split_pins_the_live_direct_guard_until_k12() {
 }
 
 #[test]
-fn registered_module_edges_name_todays_exact_declarations() {
+fn registered_kernel_module_edges_name_todays_exact_declarations() {
     // This witnesses registration against the unchanged K01 baseline only.
     // Later stages are checked by the live successor against staged edges.
     if LIVE_STAGE != 1 {
@@ -487,7 +627,10 @@ fn registered_module_edges_name_todays_exact_declarations() {
     }
     let edges = module_edges(1);
     let mut mismatches = Vec::new();
-    for path in production_paths() {
+    for path in production_paths()
+        .into_iter()
+        .filter(|p| within(p, "kernel"))
+    {
         let code = source::mask(&read(&path), false);
         let actual = module_names(&code);
         if actual != edges.get(&path).cloned().unwrap_or_default() {
@@ -498,15 +641,16 @@ fn registered_module_edges_name_todays_exact_declarations() {
 }
 
 #[test]
-fn registered_logging_sinks_match_current_production_views() {
+fn registered_kernel_logging_sinks_match_current_production_views() {
     if LIVE_STAGE != 1 {
         return;
     }
     let mut actual = BTreeMap::<String, Vec<LogSink>>::new();
     for file in source::production_files() {
-        if stages()
-            .iter()
-            .any(|r| r.roots.iter().any(|p| within(&file.rel, p)))
+        if !within(&file.rel, "kernel")
+            || stages()
+                .iter()
+                .any(|r| r.roots.iter().any(|p| within(&file.rel, p)))
         {
             continue;
         }
@@ -520,6 +664,21 @@ fn registered_logging_sinks_match_current_production_views() {
         expected.entry(sink.path.clone()).or_default().push(sink);
     }
     assert_eq!(actual, expected, "production logging registration");
+}
+
+#[test]
+fn non_kernel_registration_enforces_retirement_contacts_only() {
+    for file in source::production_files()
+        .into_iter()
+        .filter(|f| !within(&f.rel, "kernel"))
+    {
+        let (code, text) = prod(&file.text);
+        assert!(
+            !retired_reference(LIVE_STAGE, &file.rel, &code, &text),
+            "{}",
+            file.rel
+        );
+    }
 }
 
 // Keep the full 26-route no-handoff vocabulary. No world-model exception after K11.
@@ -552,7 +711,7 @@ const NO_HANDOFF: [&str; 26] = [
     "task_context",
 ];
 
-/// An exhaustive closed input inventory plus narrow source predicates. This is
+/// Kernel inventories plus repository-wide retirement absence/dependency rules. This is
 /// a source oracle, not a semantic Rust/data-flow proof. Existing authority,
 /// labelled-write, transport, broker, privacy and resolved-graph guards remain.
 fn successor(stage: u8, tree: &Tree) -> Findings {
@@ -651,7 +810,7 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         if !path.ends_with(".rs") || tree.test_only.contains(path) {
             continue;
         }
-        if !expected.contains(path) {
+        if within(path, "kernel") && !expected.contains(path) {
             found.insert(("f7-dependency", path.clone()));
         }
         if raw.is_empty() {
@@ -691,9 +850,12 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
                 }
             }
         }
-        // Exact preregistered module edges catch renamed inline runtimes too.
+        if retired_reference(stage, path, &code, &text) {
+            found.insert(("f7-dependency", path.clone()));
+        }
+        // R-5: exact module inventories cover the retirement subject only.
         let allowed = module_edges(stage).get(path).cloned().unwrap_or_default();
-        if !module_names(&code).is_subset(&allowed) {
+        if within(path, "kernel") && !module_names(&code).is_subset(&allowed) {
             found.insert(("f7-dependency", path.clone()));
         }
         // The predecessor protects these subjects until each subject disappears.
@@ -751,37 +913,23 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
                 found.insert(("f7-dependency", path.clone()));
             }
         }
+        // R-5: other components retain their own process/network/privacy guards.
+        // K01 may reject their legacy contacts above, not new unrelated effects.
+        if !within(path, "kernel") {
+            continue;
+        }
         let process_boundary = path == "kernel/src/resource_limiter.rs"
-            || path.starts_with("kernel/src/resource_limiter/")
-            || path == "crates/nexus-verifier-sandbox/src/launcher.rs"
-            || path == "crates/nexus-governed-control/src/launcher.rs"
-            || path.starts_with("crates/nexus-governed-control/src/launcher/")
-            || path.starts_with("crates/nexus-governed-control/src/tool/");
-        // These four retained private test scaffolds self-spawn the test
-        // executable. Their entire source is fixed, not a path-prefix/process
-        // exemption. The cfg(test) loading edges remain independently required.
-        let test_processes: BTreeMap<String, String> =
-            serde_json::from_str(include_str!("retirement/retained-test-process-files.json"))
-                .unwrap();
-        let unchanged_test_helper = test_processes
-            .get(path)
-            .is_some_and(|hash| digest(raw.replace("\r\n", "\n").as_bytes()) == *hash);
-        if !process_boundary
-            && !unchanged_test_helper
-            && pattern(r"\bCommand\s*::\s*new\s*\(").is_match(&code)
-        {
+            || path.starts_with("kernel/src/resource_limiter/");
+        if !process_boundary && pattern(r"\bCommand\s*::\s*new\s*\(").is_match(&code) {
             found.insert(("raw-process", path.clone()));
         }
-        let network_boundary = path.starts_with("kernel/src/inference/")
-            || path.starts_with("crates/nexus-governed-control/src/egress")
-            || path.starts_with("crates/nexus-governed-control/src/browser/");
+        let network_boundary = path.starts_with("kernel/src/inference/");
         if !network_boundary
             && pattern(r"\b(?:reqwest|TcpStream|UdpSocket|TcpSocket)\s*::").is_match(&code)
         {
             found.insert(("raw-network", path.clone()));
         }
-        let inference_boundary = path.starts_with("kernel/src/inference/")
-            || path == "crates/nexus-governed-control/src/inference.rs";
+        let inference_boundary = path.starts_with("kernel/src/inference/");
         if !inference_boundary
             && [
                 "/api/generate",
@@ -803,28 +951,10 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         // Split the identifier so the unchanged Stop scanner still rejects
         // new literal claimants even in a test fixture file.
         let claim = concat!("claim_global_", "controller");
-        if identifier(&code, claim)
-            && ![
-                "kernel/src/emergency_stop.rs",
-                "crates/nexus-governed-control/src/governed.rs",
-            ]
-            .contains(&path.as_str())
-        {
+        if identifier(&code, claim) && path != "kernel/src/emergency_stop.rs" {
             found.insert(("stop-seal", path.clone()));
         }
-        if path.starts_with("mother/desktop/src/")
-            && pattern(r"\b(?:StopController|claim_global_|resume|lift_if)\b").is_match(&code)
-        {
-            found.insert(("desktop-controller", path.clone()));
-        }
-        if ![
-            "persistence/src/lib.rs",
-            "persistence/src/coding_run_ledger.rs",
-            "crates/nexus-governed-control/src/evidence_store.rs",
-        ]
-        .contains(&path.as_str())
-            && pattern(r"\bConnection\s*::\s*open(?:_with_flags|_in_memory)?\s*\(").is_match(&code)
-        {
+        if pattern(r"\bConnection\s*::\s*open(?:_with_flags|_in_memory)?\s*\(").is_match(&code) {
             found.insert(("hm-sqlite", path.clone()));
         }
         if squashed.contains("NexusDatabase::open(")
@@ -834,10 +964,7 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         {
             found.insert(("hm-sqlite", path.clone()));
         }
-        if stage >= 11
-            && !path.starts_with("persistence/src/")
-            && !path.starts_with("kernel/src/hm")
-        {
+        if stage >= 11 && !path.starts_with("kernel/src/hm") {
             for name in [
                 "save_memory",
                 "save_task",
@@ -880,7 +1007,7 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
             }
         }
     }
-    // Full retained sink expressions are frozen. Unknown or omitted sinks fail.
+    // R-5: full retained kernel sink expressions/contexts remain frozen.
     let mut expected_logs: BTreeMap<String, Vec<LogSink>> = BTreeMap::new();
     for sink in logs() {
         expected_logs
@@ -888,10 +1015,12 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
             .or_default()
             .push(sink);
     }
-    for (path, raw) in tree
-        .iter()
-        .filter(|(p, _)| expected.contains(*p) && !retiring(p, stage))
-    {
+    for (path, raw) in tree.iter().filter(|(p, _)| {
+        within(p, "kernel")
+            && p.ends_with(".rs")
+            && !tree.test_only.contains(*p)
+            && !retiring(p, stage)
+    }) {
         let mut actual = logging_sinks(path, raw);
         let mut wanted = expected_logs.remove(path).unwrap_or_default();
         actual.sort();
@@ -1204,9 +1333,9 @@ fn boundary_stop_hm_desktop_and_logging_mutations_have_specific_red_oracles() {
             r#"fn run(){PromptBuilder::new(c).text(row.field("value_json"));}"#,
         ),
         (
-            "desktop-controller",
-            "mother/desktop/src/status.rs",
-            "pub fn control(c: StopController) { c.lift_if(ok); }",
+            "stop-seal",
+            "kernel/src/privacy.rs",
+            concat!("fn control(){outside::claim_global_", "controller();}"),
         ),
         (
             "logging",

@@ -4,19 +4,3 @@
 {"path":"kernel/src/secrets/migrate.rs","expression":"eprintln!(\"secrets audit append failed (event=secrets_format_upgraded): {e}\")","context_sha256":"3150cde82b0602443397e8b0673554442b184c4ab765590517e93031fbc5a7aa"}
 {"path":"kernel/src/secrets/mod.rs","expression":"eprintln!(\"secrets audit append failed (event={event_kind} scope={scope}): {e}\")","context_sha256":"7f5fbb794d0da83487aa939f748a6e0b5d8b12cc88d9672f9803e4058fca2ba7"}
 {"path":"kernel/src/secrets/mod.rs","expression":"eprintln!(\"credential resolved: {} source={}\", scope, source.as_str())","context_sha256":"c26808b85b93a705d9b28442d11a30a024c8f529d44f34424a9aaf266b81d6e5"}
-{"path":"mother/desktop/src/app.rs","expression":"eprintln!(\"nexus-mother: {e}\")","context_sha256":"c4316d9cc527ba76f170ea173a7eb5a1fff0645c8fdb180b3c71b856669885a3"}
-{"path":"mother/desktop/src/app.rs","expression":"eprintln!(\"nexus-mother: {e}\")","context_sha256":"c4316d9cc527ba76f170ea173a7eb5a1fff0645c8fdb180b3c71b856669885a3"}
-{"path":"mother/desktop/src/app.rs","expression":"eprintln!(\"nexus-mother: {}\", outcome.report())","context_sha256":"c4316d9cc527ba76f170ea173a7eb5a1fff0645c8fdb180b3c71b856669885a3"}
-{"path":"mother/desktop/src/window.rs","expression":"eprintln!(\"nexus-mother: a {what} callback panicked; it was contained\")","context_sha256":"255623c92e536925706139fc9eeda75bf5099b07f1b8bd5b3410bc6fa40b688c"}
-{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-matrix:{count} pairs\")","context_sha256":"c784fce8df5a730e0704840bc9c24459fcfe36eb4e591f3d2e75c4e220ed17d7"}
-{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-pair:{pair}\")","context_sha256":"c784fce8df5a730e0704840bc9c24459fcfe36eb4e591f3d2e75c4e220ed17d7"}
-{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-pair:{pair}\")","context_sha256":"c784fce8df5a730e0704840bc9c24459fcfe36eb4e591f3d2e75c4e220ed17d7"}
-{"path":"mother/src/adapter/lite_review3.rs","expression":"println!(\"review3-pair:{pair}\")","context_sha256":"c784fce8df5a730e0704840bc9c24459fcfe36eb4e591f3d2e75c4e220ed17d7"}
-{"path":"mother/src/adapter/lite_review4.rs","expression":"println!(\"review4-matrix:{count} cases\")","context_sha256":"40f927db296e95cd7ced8a2e0017b7e05e49a1ad3d9a4c3d0ba428a3d2e87077"}
-{"path":"mother/src/adapter/lite_review4.rs","expression":"println!(\"review4:{case}\")","context_sha256":"cb5f870b88291a60d7099c695eb2acf12b647090aedf14470177b4e8aeaeebf4"}
-{"path":"mother/src/adapter/lite_review4.rs","expression":"println!(\"review4:{case}\")","context_sha256":"64dc5ddd11943e1f553d072342009c9990392a00cafa9ec26365e55fbc0223c1"}
-{"path":"mother/src/adapter/lite_review5.rs","expression":"println!(\"review5-matrix:{count} cases\")","context_sha256":"b46b224abec16ad11bb71a2fbb59e4cf8e8e40c3c41d096544f233ea83b9b71a"}
-{"path":"mother/src/adapter/lite_review5.rs","expression":"println!(\"review5:{case}\")","context_sha256":"c1eee4b84c5d563cfe67f65f9db04cc74f44c19e8312e14e8f26c396d4f5dcce"}
-{"path":"mother/src/adapter/lite_review6.rs","expression":"println!(\"review6-matrix:{count} cases\")","context_sha256":"5215a996dad465cb509bd9699ebe1280446a01e7c9cc3543d7f76edf8837996d"}
-{"path":"mother/src/adapter/lite_review6.rs","expression":"println!(\"review6:{case}\")","context_sha256":"5215a996dad465cb509bd9699ebe1280446a01e7c9cc3543d7f76edf8837996d"}
-{"path":"persistence/src/lib.rs","expression":"eprintln!(\"idempotency lazy eviction sweep failed: {e}\")","context_sha256":"9086296a39e43dbfb883998bd7d30ef664ff521a98389d5f2fe9b028d08a8624"}

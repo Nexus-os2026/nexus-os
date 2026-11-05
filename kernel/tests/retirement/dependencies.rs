@@ -8,7 +8,7 @@ use toml::Value;
 const KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 // Package identities and roots from the already merged crate retirements.
 // The K02–K22 module roots additionally come directly from manifest.jsonl.
-const RETIRED: [(&str, &str); 6] = [
+pub const RETIRED: [(&str, &str); 6] = [
     ("nexus-outcome-eval", "crates/nexus-outcome-eval"),
     ("nexus-self-improve", "crates/nexus-self-improve"),
     ("nexus-memory", "crates/nexus-memory"),
@@ -56,7 +56,7 @@ pub fn load_manifests() -> BTreeMap<String, String> {
 // Lexically resolve even nonexistent retired paths, including traversal and
 // absolute paths inside this checkout. Live source inventory separately rejects
 // symlink aliases; synthetic trees have no filesystem-dependent path authority.
-fn dependency_path(manifest: &str, raw: &str) -> Option<String> {
+pub fn dependency_path(manifest: &str, raw: &str) -> Option<String> {
     let raw = raw.replace('\\', "/");
     let path = Path::new(&raw);
     let joined = if path.is_absolute() {

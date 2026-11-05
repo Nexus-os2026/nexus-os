@@ -455,9 +455,14 @@ fn registered_test_contracts_preserve_real_declarations_cfg_scopes_and_ignore_po
 
 #[test]
 fn actual_retained_logging_sink_and_unchanged_expression_rebinding_are_red() {
-    let path = "mother/desktop/src/app.rs";
+    let path = "kernel/src/audit/retention.rs";
     let raw = read(path);
-    let sink = "eprintln!(\"nexus-mother: {e}\")";
+    let sink = logs()
+        .into_iter()
+        .find(|l| l.path == path)
+        .unwrap()
+        .expression;
+    let sink = sink.as_str();
     assert!(logs()
         .iter()
         .any(|l| l.path == path && l.expression == sink));
@@ -512,27 +517,26 @@ fn module_matching_uses_complete_components_in_direct_and_grouped_paths() {
 }
 
 #[test]
-fn registered_self_spawn_scaffolds_allow_only_the_unchanged_test_source() {
-    let helpers: BTreeMap<String, String> =
-        serde_json::from_str(include_str!("retained-test-process-files.json")).unwrap();
-    assert_eq!(helpers.len(), 4);
-    for (path, hash) in helpers {
-        let raw = read(&path);
-        assert_eq!(digest(raw.replace("\r\n", "\n").as_bytes()), hash);
+fn non_kernel_scaffolds_allow_unrelated_changes_but_reject_legacy_contacts() {
+    // R-5 removes whole-file hash freezes; acceptance's named test/loading
+    // contracts still apply, and a renamed legacy import remains forbidden.
+    for path in [
+        "mother/src/adapter/lite_review3.rs",
+        "mother/src/adapter/lite_review4.rs",
+        "mother/src/adapter/lite_review5.rs",
+        "mother/src/adapter/lite_review6.rs",
+    ] {
         let mut tree = clean_tree(22);
-        let mutant = raw.replacen(
-            "Command::new(std::env::current_exe().unwrap())",
-            "Command::new(\"sh\")",
-            1,
+        tree.insert(
+            path.into(),
+            format!("{}\n// unrelated maintenance\n", read(path)),
         );
-        assert_ne!(raw, mutant);
-        tree.insert(path.clone(), mutant);
-        rejected(22, &tree, "raw-process", &path);
-        let mut tree = clean_tree(22);
-        tree.get_mut(&path)
+        tree.prove_fixture();
+        assert_eq!(successor(22, &tree), Findings::new(), "{path}");
+        tree.get_mut(path)
             .unwrap()
-            .push_str("fn planted(){ Command::new(\"sh\"); }");
-        rejected(22, &tree, "raw-process", &path);
+            .push_str("use nexus_kernel::cognitive::CognitiveRuntime as FreshRunner;");
+        rejected(22, &tree, "f7-dependency", path);
     }
 }
 
@@ -558,4 +562,151 @@ fn manifest_policy_is_shared_by_every_staged_successor() {
             .push_str("\n[build-dependencies.new_kernel_dependency]\nversion = '1'\n");
         rejected(stage, &tree, "f7-dependency", "kernel/Cargo.toml");
     }
+}
+
+#[test]
+fn r5_unrelated_non_kernel_modules_files_and_typed_code_logs_are_green() {
+    for stage in 2..=22 {
+        let mut tree = clean_tree(stage);
+        let parent = "mother/src/lib.rs";
+        let child = "mother/src/unrelated_diagnostics.rs";
+        tree.get_mut(parent)
+            .unwrap()
+            .push_str("\npub mod unrelated_diagnostics;\n");
+        tree.insert(
+            child.into(),
+            r#"
+mod formatting { pub fn label() {} }
+// A local name alone is not contact with the retired kernel scheduler.
+mod scheduler { pub fn unrelated() {} }
+include!(concat!(env!("OUT_DIR"), "/unrelated_generated.rs"));
+enum Diagnostic { Unavailable }
+impl Diagnostic { fn code(&self) -> &'static str { "unavailable" } }
+pub fn report() { eprintln!("{}", Diagnostic::Unavailable.code()); }
+"#
+            .into(),
+        );
+        // Exercise growth in already registered non-kernel files as well.
+        tree.get_mut("mother/src/coordinator/lite.rs")
+            .unwrap()
+            .push_str(
+                "\nmod unrelated_session {}\nfn typed(code: &str) { eprintln!(\"{code}\"); }\n",
+            );
+        let fixture = tree.write_fixture();
+        let loaded = load_tree_in(fixture.path());
+        assert!(loaded.contains_key(child));
+        assert!(!loaded.test_only.contains(child));
+        assert_eq!(successor(stage, &loaded), Findings::new(), "K{stage}");
+    }
+}
+
+#[test]
+fn r5_non_kernel_retired_declarations_paths_imports_and_aliases_are_red() {
+    for row in stages().iter().filter(|r| !r.roots.is_empty()) {
+        let stage = row.stage;
+        let path = "mother/src/lib.rs";
+        for declaration in &row.declarations {
+            let module = declaration
+                .trim_start_matches("pub mod ")
+                .trim_end_matches(';');
+            for plant in [
+                format!("#[path = \"../../{}\"] mod {module};", row.roots[0]),
+                format!("use nexus_kernel::{module}::Old as FreshRunner;"),
+                format!("pub use nexus_kernel::{{{module} as unrelated}};"),
+                format!("use nexus_kernel as renamed; use renamed::{module}::Old;"),
+                format!("extern crate nexus_kernel as renamed; use renamed::{module}::Old;"),
+                format!("use nexus_kernel::{{self as renamed}}; use renamed::{module}::Old;"),
+            ] {
+                let mut tree = clean_tree(stage);
+                tree.get_mut(path).unwrap().push_str(&plant);
+                rejected(stage, &tree, "f7-dependency", path);
+            }
+        }
+        for root in &row.roots {
+            let target = if root.ends_with(".rs") {
+                root.clone()
+            } else {
+                format!("{root}/mod.rs")
+            };
+            for value in [
+                format!("../../{target}"),
+                retirement::root()
+                    .join(&target)
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            ] {
+                for plant in [
+                    format!("#[path = {value:?}] mod unrelated;"),
+                    format!("#[path = r#\"{value}\"#] mod unrelated;"),
+                    format!("#[cfg_attr(target_os = \"never\", path = {value:?})] mod unrelated;"),
+                    format!("include!({value:?});"),
+                ] {
+                    let mut tree = clean_tree(stage);
+                    tree.get_mut(path).unwrap().push_str(&plant);
+                    rejected(stage, &tree, "f7-dependency", path);
+                }
+            }
+        }
+    }
+    for plant in [
+        "pub use nexus_kernel::CognitivePlanner as FreshPlanner;",
+        "use nexus_kernel as old; pub use old::CognitiveRuntime as FreshRunner;",
+        "use nexus_sdk::Client as NewClient;",
+    ] {
+        let mut tree = clean_tree(22);
+        let path = "mother/src/lib.rs";
+        tree.get_mut(path).unwrap().push_str(plant);
+        rejected(22, &tree, "f7-dependency", path);
+    }
+    // Renaming the wrapper does not excuse its contact with the retired runtime.
+    let mut tree = clean_tree(22);
+    let path = "mother/src/lib.rs";
+    tree.get_mut(path)
+        .unwrap()
+        .push_str("struct FreshRunner(nexus_kernel::cognitive::CognitiveRuntime);");
+    rejected(22, &tree, "f7-dependency", path);
+}
+
+#[test]
+fn r5_kernel_module_file_and_logging_growth_still_require_registration() {
+    for stage in 2..=22 {
+        for (path, plant, oracle) in [
+            (
+                "kernel/src/privacy.rs",
+                "mod unrelated_session {}",
+                "f7-dependency",
+            ),
+            (
+                "kernel/src/new_module.rs",
+                "pub fn harmless() {}",
+                "f7-dependency",
+            ),
+            (
+                "kernel/src/privacy.rs",
+                "fn typed(code: &str) { eprintln!(\"{code}\"); }",
+                "logging",
+            ),
+            (
+                "kernel/src/new_module.rs",
+                "fn typed(code: &str) { eprintln!(\"{code}\"); }",
+                "logging",
+            ),
+        ] {
+            let mut tree = clean_tree(stage);
+            tree.entry(path.into()).or_default().push_str(plant);
+            rejected(stage, &tree, oracle, path);
+        }
+    }
+}
+
+#[test]
+fn r5_classifier_subject_allows_unrelated_helpers_but_keeps_refusal_bytes() {
+    let raw = read("crates/nexus-governed-control/src/planned.rs");
+    assert!(classifier_ok(&format!(
+        "mod unrelated {{}}\n{raw}\nfn helper() {{}}\n"
+    )));
+    assert!(!classifier_ok(
+        &raw.replace("agent file reads stay closed", "allowed")
+    ));
 }
