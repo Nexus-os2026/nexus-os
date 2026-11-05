@@ -288,3 +288,17 @@ fn session_close_requires_prior_sources_and_retains_native_record_debt() {
         child(case);
     }
 }
+
+#[test]
+fn session_failed_observation_has_owned_lifetime_without_work_permission() {
+    let seed = SessionSeed::new().unwrap();
+    let ingress = seed.ingress();
+    ingress.fail();
+    let report = ingress.producer(ProducerKind::Observation).unwrap();
+    assert!(ingress.accept(CommandKind::Run, 1).is_err());
+    assert!(ingress.producer(ProducerKind::Work).is_err());
+    assert!(ingress.accept(CommandKind::Evidence, 2).is_ok());
+    report.joined();
+    ingress.accept(CommandKind::Quit, 3).unwrap();
+    assert!(ingress.producer(ProducerKind::Observation).is_err(), "closing admits no new reporting producer");
+}
