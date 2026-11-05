@@ -387,12 +387,19 @@ impl Mission {
         }
     }
 
+    /// End the invocation without erasing its pending settlement evidence,
+    /// charged total or declared budgets. Dropping live state revokes its
+    /// retained atomic observers before this owning boundary is released.
+    fn invalidate_calls(&mut self) {
+        self.lane_calls = None;
+        self.call_accounting = None;
+    }
+
     /// Take a transition the table accepted. A consent's token is set by
     /// the caller: live from the broker's approval, on replay from the
     /// verified journal.
     fn apply(&mut self, trigger: &Trigger, to: MissionState, mono_now: u64) {
-        self.lane_calls = None;
-        self.call_accounting = None;
+        self.invalidate_calls();
         let mut dispatched = false;
         // Round 4: the waited File, resolved by its approval, a denial or a
         // lapse (each confirmed not published, or published cleanly): its
@@ -652,6 +659,12 @@ impl Inner {
         self.details.push_back((id, detail));
     }
 
+    fn invalidate_calls(&mut self) {
+        for mission in self.missions.values_mut() {
+            mission.invalidate_calls();
+        }
+    }
+
     fn write(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
         self.write_record(mission, event, true)
     }
@@ -690,6 +703,22 @@ impl Inner {
         if work {
             self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
         }
+        // Deny memory-only observers before journal I/O/terminal intent,
+        // while this boundary still owns the coordinator lock. A failed
+        // append cannot restore the old invocation's authority.
+        match &entry.event {
+            Event::SessionOpened | Event::SessionClosed => self.invalidate_calls(),
+            Event::LaneReturned { .. }
+            | Event::LaneOvertaken { .. }
+            | Event::Transition { .. }
+            | Event::SettlementStarted { .. }
+            | Event::Held { .. } => {
+                if let Some(mission) = self.missions.get_mut(&mission) {
+                    mission.invalidate_calls();
+                }
+            }
+            _ => {}
+        }
         // Serialization and refused work admission are not terminal intent.
         // Retain an attempt only once this exact append has been admitted;
         // an entered append which fails must still report recording unknown.
@@ -712,6 +741,7 @@ impl Inner {
             // Fenced at the authority first, under this same lock: nothing
             // reserved before the break can run at the broker after it.
             self.broken = true;
+            self.invalidate_calls();
             let owed = (self.fence)();
             self.owed.extend(owed);
             #[cfg(test)]
@@ -1823,8 +1853,7 @@ impl<P: EffectPort> Coordinator<P> {
                     )?;
                     let m = inner.mission(id)?;
                     m.pending_lane = None;
-                    m.lane_calls = None;
-                    m.call_accounting = None;
+                    m.invalidate_calls();
                     return Err(CoordinatorError::Stopped);
                 }
                 inner.append(
@@ -1836,8 +1865,7 @@ impl<P: EffectPort> Coordinator<P> {
                 )?;
                 let mission = inner.mission(id)?;
                 mission.pending_lane = None;
-                mission.lane_calls = None;
-                mission.call_accounting = None;
+                mission.invalidate_calls();
                 mission.prior_outputs.push(hash.clone());
                 Ok(mission.contract()?.clone())
             })?;
@@ -2567,6 +2595,7 @@ impl<P: EffectPort> Coordinator<P> {
                 if !mission.state.is_terminal() && mission.held.is_none() {
                     // A new hold: journaled with the session's opening, even if
                     // an earlier hold (since resumed) was journaled.
+                    mission.invalidate_calls();
                     mission.held = Some(HeldReason::UncleanShutdown);
                     mission.held_journaled = false;
                 }
@@ -3014,7 +3043,7 @@ fn replay(
             // A session boundary ends the invocation's charging lifetime.
             // Keep totals, declarations and pending-lane settlement evidence.
             for mission in missions.values_mut() {
-                mission.call_accounting = None;
+                mission.invalidate_calls();
             }
             if *session != Session::Closed {
                 // After a session with no clean close, every unfinished
@@ -3046,7 +3075,7 @@ fn replay(
             // A session boundary ends the invocation's charging lifetime.
             // Keep totals, declarations and pending-lane settlement evidence.
             for mission in missions.values_mut() {
-                mission.call_accounting = None;
+                mission.invalidate_calls();
             }
             *session = Session::Closed;
             return Ok(());

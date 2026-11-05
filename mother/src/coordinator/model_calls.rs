@@ -10,10 +10,6 @@ use std::sync::{
 /// Memory-only deny latch for one invocation; never replayed or reset.
 /// This observation seam grants no permission of its own.
 #[derive(Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "private future session bridge seam")
-)]
 pub(crate) struct InvocationLiveness(Arc<AtomicBool>);
 #[cfg_attr(
     not(test),
@@ -94,6 +90,14 @@ pub(super) struct LaneCalls {
     in_flight: bool,
     at_mono_ms: u64,
     at_wall_ms: u64,
+}
+
+// Dropping the live invocation denies every retained observer, including
+// coordinator teardown. The atomic has no route back to false.
+impl Drop for LaneCalls {
+    fn drop(&mut self) {
+        self.liveness.0.store(true, Ordering::Release);
+    }
 }
 
 /// The sole live reservation step, also used by the in-process oracle caller.
@@ -222,11 +226,11 @@ impl<P: EffectPort> CallMeter for ModelMeter<P> {
             {
                 return Ok(());
             }
-            let Some(live) = m
-                .lane_calls
-                .as_ref()
-                .filter(|l| l.invocation == self.invocation && l.generation == self.generation)
-            else {
+            let Some(live) = m.lane_calls.as_ref().filter(|l| {
+                l.invocation == self.invocation
+                    && l.generation == self.generation
+                    && !l.liveness.is_revoked()
+            }) else {
                 return Ok(());
             };
             let Some(a) = m.call_accounting.as_ref() else {
