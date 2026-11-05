@@ -782,3 +782,53 @@ mod diagnostic_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod summary_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn other_summary_confirmations_debug_redact() {
+        let summary = vec!["C1_OTHER_SUMMARY_CANARY 面包🍞".into()];
+        let action = ActionConfirmation {
+            commitment: "commitment-1".into(),
+            class: EffectClass::R2,
+            kind: CapabilityKind::Synthetic,
+            operation: "probe".into(),
+            target: "none".into(),
+            agent: "mother".into(),
+            run: "run-1".into(),
+            summary: summary.clone(),
+            expires_in_secs: 60,
+            binding_short: "abcd".into(),
+        };
+        let resume = MissionResumeConfirmation {
+            mission: "mission-1".into(),
+            contract_hash: "ab".repeat(32),
+            request: "request-1".into(),
+            held_reason: "unclean shutdown".into(),
+            summary,
+        };
+        for display in [action.message(), resume.message()] {
+            assert!(
+                display.contains("C1_OTHER_SUMMARY_CANARY 面包🍞"),
+                "full native summary display"
+            );
+        }
+        for debug in [
+            format!("{action:?}"),
+            format!("{action:#?}"),
+            format!("{resume:?}"),
+            format!("{resume:#?}"),
+        ] {
+            assert!(
+                !debug.contains("C1_OTHER_SUMMARY_CANARY"),
+                "all native summary diagnostics redact content"
+            );
+            assert!(
+                !debug.contains("面包"),
+                "all native summary diagnostics redact Unicode"
+            );
+        }
+    }
+}

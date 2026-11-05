@@ -1012,3 +1012,37 @@ fn c1_s4_uncertain_append_never_grants_a_charge() {
         assert!(w.port.effects().is_empty());
     }
 }
+
+#[test]
+fn e_o41b_held_resume_request_redacts_notes() {
+    let w = world();
+    let mut c = contract();
+    c.notes = vec![note("C1_RESUME_NOTE_CANARY 面包🍞")];
+    let id = w.approved(c);
+    w.mother.with_lock(|i| {
+        i.missions.get_mut(&id).unwrap().held = Some(HeldReason::UncleanShutdown);
+    });
+    let request = w.mother.resume_request(id).unwrap();
+    let cached = w.mother.peek(|i| i.missions[&id].resume_asking.clone());
+    assert!(
+        request.0.message().contains("C1_RESUME_NOTE_CANARY 面包🍞"),
+        "resume display remains complete"
+    );
+    for debug in [
+        format!("{:?}", request.0),
+        format!("{:#?}", request.0),
+        format!("{request:?}"),
+        format!("{request:#?}"),
+        format!("{cached:?}"),
+        format!("{cached:#?}"),
+    ] {
+        assert!(
+            !debug.contains("C1_RESUME_NOTE_CANARY"),
+            "held resume diagnostics redact notes"
+        );
+        assert!(
+            !debug.contains("面包"),
+            "held resume diagnostics redact Unicode notes"
+        );
+    }
+}
