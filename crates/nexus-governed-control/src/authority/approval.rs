@@ -243,7 +243,7 @@ impl ConfirmationAnswer {
             Self::Invalidated => "confirmation_invalidated",
             Self::ProtocolFailed => "confirmation_protocol_failed",
         };
-        record.failure = Some("unavailable".into());
+        record.failure = Some("unavailable");
         record.detail.push(("reason".into(), reason.into()));
         Some(AuthorityError::Unavailable(reason))
     }
