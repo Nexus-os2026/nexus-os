@@ -4,8 +4,9 @@
 //!   metadata and `docs/` excluded).
 //! - Test code is excluded: test files (`tests/`, `*_tests.rs`,
 //!   `*/tests.rs`, `benches/`, `examples/`, `build.rs`), every module file
-//!   declared under `#[cfg(test)]` (and everything below it), and every
-//!   `#[cfg(test)]` item inside a production file.
+//!   declared under a cfg predicate proved to require `test` (and everything
+//!   below it), and every such item inside a production file. Unknown cfg
+//!   syntax stays production.
 //! - Two views of a production file: `code` (comments and the contents of
 //!   string and char literals blanked) and `text` (comments blanked,
 //!   literals kept). Both keep every byte offset and line.
@@ -309,6 +310,19 @@ pub fn close_of(code: &str, open: usize) -> usize {
     b.len()
 }
 
+/// The `[` of an outer attribute; Rust permits whitespace after `#`.
+fn outer_attribute_open(code: &str, at: usize) -> Option<usize> {
+    let b = code.as_bytes();
+    if b.get(at) != Some(&b'#') {
+        return None;
+    }
+    let mut open = at + 1;
+    while b.get(open).is_some_and(u8::is_ascii_whitespace) {
+        open += 1;
+    }
+    (b.get(open) == Some(&b'[')).then_some(open)
+}
+
 /// Skips whitespace and outer attributes from `i`.
 fn skip_attributes(code: &str, mut i: usize) -> usize {
     let b = code.as_bytes();
@@ -316,22 +330,270 @@ fn skip_attributes(code: &str, mut i: usize) -> usize {
         while i < b.len() && b[i].is_ascii_whitespace() {
             i += 1;
         }
-        if b[i..].starts_with(b"#[") {
-            i = close_of(code, i + 1);
+        if let Some(open) = outer_attribute_open(code, i) {
+            i = close_of(code, open);
             continue;
         }
         return i;
     }
 }
 
-/// Whether the attribute starting at `at` (`#[cfg(...)]`) gates on `test`.
-fn cfg_test_attribute(code: &str, at: usize) -> Option<usize> {
-    let end = close_of(code, at + 1);
-    let attr: String = code[at..end].split_whitespace().collect();
-    let gated = attr.starts_with("#[cfg(test)")
-        || attr.starts_with("#[cfg(all(test")
-        || attr.starts_with("#[cfg(all(any(test");
-    gated.then_some(end)
+/// Boolean cfg syntax. Other options are independent atoms: ignoring target
+/// relationships over-approximates production and cannot hide a live item.
+#[derive(Clone)]
+enum Cfg {
+    Atom(String),
+    All(Vec<Cfg>),
+    Any(Vec<Cfg>),
+    Not(Box<Cfg>),
+}
+
+impl Cfg {
+    fn atoms(&self, out: &mut BTreeSet<String>) {
+        match self {
+            Self::Atom(name) if name != "test" => {
+                out.insert(name.clone());
+            }
+            Self::All(children) | Self::Any(children) => {
+                for child in children {
+                    child.atoms(out);
+                }
+            }
+            Self::Not(child) => child.atoms(out),
+            Self::Atom(_) => {}
+        }
+    }
+
+    fn eval(&self, values: &BTreeMap<&str, bool>) -> bool {
+        match self {
+            Self::Atom(name) => name != "test" && values[name.as_str()],
+            Self::All(children) => children.iter().all(|child| child.eval(values)),
+            Self::Any(children) => children.iter().any(|child| child.eval(values)),
+            Self::Not(child) => !child.eval(values),
+        }
+    }
+
+    fn requires_test(&self) -> bool {
+        let mut atoms = BTreeSet::new();
+        self.atoms(&mut atoms);
+        // Bound the proof cost. Beyond the bound, uncertainty is production.
+        if atoms.len() > 16 {
+            return false;
+        }
+        let names: Vec<_> = atoms.iter().map(String::as_str).collect();
+        for valuation in 0..(1usize << names.len()) {
+            let values = names
+                .iter()
+                .enumerate()
+                .map(|(i, &name)| (name, valuation & (1 << i) != 0))
+                .collect();
+            if self.eval(&values) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+struct CfgParser<'a> {
+    src: &'a str,
+    at: usize,
+}
+
+impl<'a> CfgParser<'a> {
+    fn ws(&mut self) {
+        while self
+            .src
+            .as_bytes()
+            .get(self.at)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            self.at += 1;
+        }
+    }
+
+    fn eat(&mut self, token: &str) -> bool {
+        self.ws();
+        if self.src[self.at..].starts_with(token) {
+            self.at += token.len();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn ident(&mut self) -> Option<String> {
+        self.ws();
+        let start = self.at;
+        if self.src[self.at..].starts_with("r#") {
+            self.at += 2;
+        }
+        let name = self.at;
+        let first = self.src[self.at..].chars().next()?;
+        if !(first.is_alphabetic() || first == '_') {
+            self.at = start;
+            return None;
+        }
+        self.at += self.src[self.at..]
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .map(char::len_utf8)
+            .sum::<usize>();
+        Some(self.src[name..self.at].to_string())
+    }
+
+    fn string(&mut self) -> Option<&'a str> {
+        self.ws();
+        let start = self.at;
+        let b = self.src.as_bytes();
+        let (prefix, mut quote) = if b.get(start) == Some(&b'"') {
+            ("", start)
+        } else if b.get(start) == Some(&b'r') {
+            ("r", start + 1)
+        } else {
+            return None;
+        };
+        let marks = quote;
+        while b.get(quote) == Some(&b'#') {
+            quote += 1;
+        }
+        if b.get(quote) != Some(&b'"') {
+            return None;
+        }
+        self.at = string_literal(self.src, start, prefix, quote, quote - marks).end;
+        Some(&self.src[start..self.at])
+    }
+
+    fn predicate(&mut self, depth: usize) -> Option<Cfg> {
+        if depth > 64 {
+            return None;
+        }
+        let name = self.ident()?;
+        if self.eat("(") {
+            if !matches!(name.as_str(), "all" | "any" | "not") {
+                return None;
+            }
+            let mut children = Vec::new();
+            if !self.eat(")") {
+                loop {
+                    children.push(self.predicate(depth + 1)?);
+                    if self.eat(")") {
+                        break;
+                    }
+                    if !self.eat(",") {
+                        return None;
+                    }
+                    if self.eat(")") {
+                        break;
+                    }
+                }
+            }
+            return match name.as_str() {
+                "all" => Some(Cfg::All(children)),
+                "any" => Some(Cfg::Any(children)),
+                "not" if children.len() == 1 => Some(Cfg::Not(Box::new(children.remove(0)))),
+                _ => None,
+            };
+        }
+        if self.eat("=") {
+            return Some(Cfg::Atom(format!("{name}={}", self.string()?)));
+        }
+        Some(Cfg::Atom(name))
+    }
+
+    /// Skip an ordinary non-gating attribute's token tree, already checked
+    /// by literal masking. A mismatch stays uncertain rather than excluding.
+    fn group(&mut self) -> Option<()> {
+        self.ws();
+        let code = mask(&self.src[self.at..], false);
+        let mut stack = Vec::new();
+        for (offset, byte) in code.bytes().enumerate() {
+            match byte {
+                b'(' => stack.push(b')'),
+                b'[' => stack.push(b']'),
+                b'{' => stack.push(b'}'),
+                b')' | b']' | b'}' => {
+                    if stack.pop()? != byte {
+                        return None;
+                    }
+                    if stack.is_empty() {
+                        self.at += offset + 1;
+                        return Some(());
+                    }
+                }
+                _ => {}
+            }
+            if stack.len() > 64 {
+                return None;
+            }
+        }
+        None
+    }
+
+    fn attribute(&mut self, depth: usize) -> Option<Cfg> {
+        if depth > 64 {
+            return None;
+        }
+        match self.ident()?.as_str() {
+            "cfg" => {
+                if !self.eat("(") {
+                    return None;
+                }
+                let predicate = self.predicate(depth + 1)?;
+                if !self.eat(")") {
+                    return None;
+                }
+                Some(predicate)
+            }
+            "cfg_attr" => {
+                if !self.eat("(") {
+                    return None;
+                }
+                let condition = self.predicate(depth + 1)?;
+                if !self.eat(",") {
+                    return None;
+                }
+                let mut effects = vec![self.attribute(depth + 1)?];
+                while !self.eat(")") {
+                    if !self.eat(",") {
+                        return None;
+                    }
+                    if self.eat(")") {
+                        break;
+                    }
+                    effects.push(self.attribute(depth + 1)?);
+                }
+                // If the condition holds, all nested cfg effects apply.
+                Some(Cfg::Any(vec![
+                    Cfg::Not(Box::new(condition)),
+                    Cfg::All(effects),
+                ]))
+            }
+            _ => {
+                self.ws();
+                if self.src.as_bytes().get(self.at) == Some(&b'(') {
+                    self.group()?;
+                } else if self.eat("=") {
+                    self.string()?;
+                }
+                Some(Cfg::All(Vec::new()))
+            }
+        }
+    }
+}
+
+/// An outer attribute excludes source only after a bounded proof that it is
+/// false for every assignment with `test=false`. Unknown syntax is production.
+fn cfg_test_attribute(code: &str, text: &str, at: usize) -> Option<usize> {
+    let open = outer_attribute_open(code, at)?;
+    let end = close_of(code, open);
+    let mut parser = CfgParser {
+        src: &text[open + 1..end.checked_sub(1)?],
+        at: 0,
+    };
+    let predicate = parser.attribute(0)?;
+    parser.ws();
+    (parser.at == parser.src.len() && predicate.requires_test()).then_some(end)
 }
 
 /// Byte ranges `(start, end)` of a file.
@@ -340,17 +602,18 @@ pub type Ranges = Vec<(usize, usize)>;
 /// `mod NAME;` declarations, each with its `#[path]` if any.
 pub type ModuleDecls = Vec<(String, Option<String>)>;
 
-/// The byte ranges of the `#[cfg(test)]` items of `code` (attribute
-/// included), and the names of the `#[cfg(test)] mod NAME;` declarations
-/// with their `#[path]`, if any.
+/// The byte ranges of items proved to require `test` (attribute included),
+/// and the corresponding `mod NAME;` declarations with any `#[path]`.
+/// Ordinary cfg atoms are free booleans, and unparseable attributes remain
+/// production. `cfg_attr(C, A)` imposes `!C || A`, including nested effects.
 pub fn cfg_test_items(code: &str, text: &str) -> (Ranges, ModuleDecls) {
     let mut ranges = Vec::new();
     let mut modules = Vec::new();
     let mut from = 0;
-    while let Some(p) = code[from..].find("#[cfg(") {
+    while let Some(p) = code[from..].find('#') {
         let at = from + p;
         from = at + 1;
-        let Some(attr_end) = cfg_test_attribute(code, at) else {
+        let Some(attr_end) = cfg_test_attribute(code, text, at) else {
             continue;
         };
         let item = skip_attributes(code, attr_end);
