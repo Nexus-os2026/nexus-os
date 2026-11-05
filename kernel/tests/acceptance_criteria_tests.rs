@@ -247,8 +247,8 @@ fn test_health_endpoint_fields_complete() {
 }
 
 // ── 5. Circuit breaker thresholds ───────────────────────────────────────────
-// Note: ProviderCircuitBreaker is in nexus-connectors-llm, not nexus-kernel.
-// We test the kernel-level equivalent: SafetySupervisor three-strike acts as
+// Mother Nexus cleanup (2026-11-05): the legacy provider circuit breaker
+// was retired with connectors/llm. SafetySupervisor three-strike remains
 // the kernel's circuit breaker. See test_three_strike_safety below.
 
 // ── 6. Trust promotion / demotion thresholds ────────────────────────────────

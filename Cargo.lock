@@ -2243,23 +2243,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
-name = "nexus-connectors-llm"
-version = "10.6.0"
-dependencies = [
- "aes-gcm",
- "hmac",
- "nexus-kernel",
- "nexus-sdk",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "nexus-crypto"
 version = "0.1.0"
 dependencies = [
