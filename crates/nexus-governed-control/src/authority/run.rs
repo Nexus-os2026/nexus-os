@@ -993,6 +993,8 @@ impl RunRegistry {
         request: Option<&HaltCell>,
     ) -> Result<(), AuthorityError> {
         let runs = self.runs.lock().map_err(|_| AuthorityError::Halted)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("request.final_hold");
         let entry = runs.get(&run).ok_or(AuthorityError::Halted)?;
         host_prerequisites(&runs, entry, self.stop_number.load(Ordering::SeqCst))?;
         if entry.file_cell.is_some()

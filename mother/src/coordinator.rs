@@ -1799,6 +1799,8 @@ impl<P: EffectPort> Coordinator<P> {
             }
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("before", "lane_invoke");
+            #[cfg(all(test, target_os = "linux"))]
+            lite::session_budget_fix1::before_admit();
             if let Some(context) = self.port.session_context() {
                 context
                     .admit(nexus_governed_control::host_session::MotherStep::LaneInvocation)

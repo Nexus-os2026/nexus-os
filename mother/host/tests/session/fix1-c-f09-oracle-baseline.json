@@ -1,0 +1,45 @@
+{
+  "production_base": "c4245ca84e64f58ea227556d8c5874be5ccfb74c",
+  "findings": [
+    "F04",
+    "F09"
+  ],
+  "baseline": {
+    "F04": "wall and monotonic expiry after final Mother budget check each starts a real lane: RED; no-interference control GREEN. Broker final-hold oracle separately fails unavailable original-deadline API; not counted as behavioral reproduction.",
+    "F09": "entered lane plus append and poison failure: readable Start incorrectly returned as terminal first intent; readable failed terminal append incorrectly marked recording known. Both RED; healthy terminal control GREEN."
+  },
+  "fixture_limits": [
+    "Readable-unsynced JournalStore fixture durably appends underlying bytes then returns Injected to model a readable append whose caller received a durability failure; it does not force a physical filesystem sync syscall failure.",
+    "Earlier fixture diagnostics (wrong initial advance, only counting Verifier rather than resumed Sentinel, wrong exact broker child name) are excluded from detection receipts."
+  ],
+  "receipts": [
+    {
+      "path": "fix1-C/red-wall.log",
+      "sha256": "c0331f7a12b271d4736c47a5cec970cb615f12c6b01c82336ac7ed40328c0640"
+    },
+    {
+      "path": "fix1-C/red-mono.log",
+      "sha256": "d41c782dce96d267c01d31421da2064cf0e9b8ffc6c888c3a2b59041baf3bd94"
+    },
+    {
+      "path": "fix1-C/red-control.log",
+      "sha256": "639cd715cfd426c6463ee993a3f9350c9e5a2421f87f80ce0962c03665daa41d"
+    },
+    {
+      "path": "fix1-C/red-final-hold-unavailable.log",
+      "sha256": "5cafdb504346eacafed7e4d990fe77ae85482874b9447f15fecb50e105d952ae"
+    },
+    {
+      "path": "fix1-F09/red-prefix.log",
+      "sha256": "650233bfc813e307472d8ee1fc80407b40071c9371cf97f491b32abeda26f99d"
+    },
+    {
+      "path": "fix1-F09/red-readable-unsynced.log",
+      "sha256": "d17edc3d442da0a3813b4385150b12d172ab738c8c54c3890c1325aa9523c066"
+    },
+    {
+      "path": "fix1-F09/red-control.log",
+      "sha256": "26fc6b86aad52892b36102d2cdffb704b2d5e9c0c35ee3186d5831366e8d1e4c"
+    }
+  ]
+}

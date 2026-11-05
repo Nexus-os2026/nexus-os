@@ -75,6 +75,16 @@ mod session_continuation_oracles;
 #[cfg(test)]
 mod session_close_oracles;
 
+#[path = "../adapter/session_result_fix1_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_result_fix1;
+
+#[path = "../adapter/session_budget_fix1_tests.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+pub(super) mod session_budget_fix1;
+
 impl<P: EffectPort> Coordinator<P> {
     /// Consume the legacy interface before selecting File mode. This cannot
     /// race a call through another shared coordinator reference: ownership is
