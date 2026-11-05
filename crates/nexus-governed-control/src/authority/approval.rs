@@ -58,10 +58,19 @@ fn fitted_lines(lines: &[String]) -> Vec<String> {
 /// `↳ ` lines), shown in a scrolled region of their own that the window
 /// marks as the request's content: nothing in them shares the header's
 /// place.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ConfirmationText {
     pub header: Vec<(&'static str, String)>,
     pub details: Vec<String>,
+}
+
+impl fmt::Debug for ConfirmationText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConfirmationText")
+            .field("header_rows", &self.header.len())
+            .field("details_lines", &self.details.len())
+            .finish()
+    }
 }
 
 impl ConfirmationText {
@@ -465,7 +474,7 @@ pub const MAX_MISSION_REQUEST: usize = 64;
 /// and at most `MAX_FIELD` characters. The broker shows them; it does not
 /// judge the summary against the hash (the agent built both), it binds the
 /// owner's answer to the hash and the request.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MissionConfirmation {
     /// The contract's SHA-256: 64 lowercase hex digits.
     pub contract_hash: String,
@@ -521,6 +530,17 @@ impl fmt::Debug for FactsView {
             .field("name_chars", &self.name.chars().count())
             .field("hours_lines", &self.hours.len())
             .field("phone_chars", &self.phone.chars().count())
+            .finish()
+    }
+}
+
+impl fmt::Debug for MissionConfirmation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MissionConfirmation")
+            .field("contract_hash", &self.contract_hash)
+            .field("request", &self.request)
+            .field("summary_lines", &self.summary.len())
+            .field("page_facts_present", &self.page_facts.is_some())
             .finish()
     }
 }
