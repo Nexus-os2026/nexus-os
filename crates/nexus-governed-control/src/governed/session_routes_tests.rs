@@ -623,6 +623,21 @@ fn session_r27_normal_restore_admission_and_post_return_no_discard() {
             );
             let before = captured.lock().unwrap().take().unwrap();
             let after = events(&f.ledger_path());
+            // request_restore is itself mutating, including a declined
+            // dialogue. Absence of a completed restore cannot prove that
+            // this earlier call was refused before entry.
+            let dialogue_records = |records: &[(String, serde_json::Value)]| {
+                matching(records, "restore.approved", None)
+                    + matching(records, "restore.declined", None)
+            };
+            let dialogue_delta = dialogue_records(&after) - dialogue_records(&before);
+            if hook == "session.before.request_restore" {
+                assert_eq!(
+                    dialogue_delta,
+                    usize::from(ingress_count == 0),
+                    "request_restore must not record even a decline after ingress"
+                );
+            }
             let restored = matching(&after, "restore.completed", None);
             let discarded = matching(&after, "staging.discarded", None)
                 - matching(&before, "staging.discarded", None);
