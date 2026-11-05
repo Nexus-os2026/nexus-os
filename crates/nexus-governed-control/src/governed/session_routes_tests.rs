@@ -2882,3 +2882,6 @@ fn session_reservation_transfer_releases_exactly_its_own_capacity() {
         );
     }
 }
+
+#[path = "session_lifecycle_fix1_tests.rs"]
+mod lifecycle_fix1;

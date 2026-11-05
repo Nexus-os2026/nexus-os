@@ -271,6 +271,8 @@ impl HostSession {
     }
     pub fn settle_close_authority(&self, request: &SessionRequest) -> Result<(), SessionError> {
         self.close_request(request)?;
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&self.core.cell), "close.authority.native");
         self.control.close_session_authority().map_err(|e| {
             self.ingress().fail();
             SessionError::Backend(e.class())
