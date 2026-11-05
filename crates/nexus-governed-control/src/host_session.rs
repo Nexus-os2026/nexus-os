@@ -132,6 +132,8 @@ impl RequestScope {
         if resources.len() == 256 {
             return Err(crate::authority::AuthorityError::Capacity);
         }
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "registry.resource_reserve.before");
         self.admit(&core.cell)?;
         let resource = Arc::new(ResourceState {
             request: self.request,
@@ -140,6 +142,8 @@ impl RequestScope {
             private: std::sync::Mutex::new(None),
         });
         resources.push(resource.clone());
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "registry.resource_reserve.after");
         Ok(ResourceReservation(resource))
     }
 }
@@ -1101,8 +1105,18 @@ impl SessionDoor {
                 return Err(crate::authority::AuthorityError::Capacity.into());
             }
             let slot = actions.len();
+            #[cfg(test)]
+            crate::authority::file_session::probe(
+                Some(&self.context.cell),
+                "registry.action_reserve.before",
+            );
             self.context.cell.admit()?;
             actions.push(action);
+            #[cfg(test)]
+            crate::authority::file_session::probe(
+                Some(&self.context.cell),
+                "registry.action_reserve.after",
+            );
             slot
         };
         let outcome = self

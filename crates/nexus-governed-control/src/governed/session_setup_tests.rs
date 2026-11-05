@@ -482,6 +482,7 @@ fn session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control() {
     let mut count = 0;
     for route in [
         "hold_configure",
+        "project_select",
         "workspace_install",
         "grant_confirm",
         "grant_issue",
@@ -503,7 +504,10 @@ fn session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control() {
             }
             let owner = Arc::new(SetupAnswers::default());
             let f = Bare::with_confirmer(owner.clone());
-            let bootstrap = matches!(route, "hold_configure" | "workspace_install");
+            let bootstrap = matches!(
+                route,
+                "hold_configure" | "project_select" | "workspace_install"
+            );
             let granting = route.starts_with("grant_");
             let issuing = route.starts_with("door_");
             if !bootstrap {
@@ -548,9 +552,15 @@ fn session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control() {
             let compares = Arc::new(AtomicUsize::new(0));
             let compared = compares.clone();
             let cell = f.gov.file_session_halt();
+            let native_calls = Arc::new(AtomicUsize::new(0));
+            let selected_calls = native_calls.clone();
+            cell.1.every("setup.project_select.entered", move || {
+                selected_calls.fetch_add(1, Ordering::SeqCst);
+            });
             let schedule = cell.clone();
             let point = match route {
                 "hold_configure" => "setup.hold_configure",
+                "project_select" => "setup.project_select",
                 "workspace_install" => "setup.workspace_install",
                 "grant_confirm" => "setup.grant_confirm",
                 "grant_issue" => "setup.grant_issue",
@@ -583,7 +593,7 @@ fn session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control() {
             });
             let success = match route {
                 "hold_configure" => f.session.bootstrap_hold(Duration::from_millis(7)).is_ok(),
-                "workspace_install" => f.register().is_ok(),
+                "project_select" | "workspace_install" => f.register().is_ok(),
                 "grant_confirm" | "grant_issue" | "grant_install" => f.grant().is_ok(),
                 "door_confirm" | "door_activate" => f.door().is_ok(),
                 "port_issue" => door.as_ref().unwrap().file_port().is_ok(),
@@ -615,6 +625,9 @@ fn session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control() {
                 conforms &= compares.load(Ordering::SeqCst) == 1;
             }
             match route {
+                "project_select" => {
+                    conforms &= native_calls.load(Ordering::SeqCst) == usize::from(admitted)
+                }
                 "grant_confirm" => {
                     conforms &=
                         owner.grant.load(Ordering::SeqCst) - grant_before == usize::from(admitted)
@@ -661,7 +674,7 @@ fn session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control() {
             }
         }
     }
-    assert_eq!(count, if selected.is_some() { 1 } else { 56 });
+    assert_eq!(count, if selected.is_some() { 1 } else { 60 });
     assert!(
         failures.is_empty(),
         "{count} executed final setup schedules: {failures:?}"

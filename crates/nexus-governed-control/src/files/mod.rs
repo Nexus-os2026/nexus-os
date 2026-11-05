@@ -584,11 +584,15 @@ impl Kernel {
         trees.push(runtime_root);
         let projects = ProjectRegistry::reserving(Arc::clone(&authority), &trees);
         let picked = Picked(root.to_path_buf());
+        #[cfg(test)]
+        crate::authority::file_session::probe(halt, "setup.project_select");
         crate::authority::file_session::admit_host(halt)?;
         if let Some(cell) = halt {
             cell.native_entered(NativeCall::ProjectSelect);
         }
         let selected = projects.select(&picked);
+        #[cfg(test)]
+        crate::authority::file_session::probe(halt, "setup.project_select.entered");
         if let Some(cell) = halt {
             cell.native_returned(NativeCall::ProjectSelect, selected.is_err());
         }
@@ -2473,6 +2477,8 @@ struct UndoBridge<'a> {
     /// Whether the undo's lifetime still holds: checked before the Owner
     /// is asked (H4).
     live: &'a dyn Fn() -> bool,
+    #[cfg(test)]
+    cell: Option<&'a HaltCell>,
 }
 
 #[cfg(target_os = "linux")]
@@ -2489,14 +2495,17 @@ impl OwnerConfirmer for UndoBridge<'_> {
         {
             return false;
         }
-        self.confirmer.confirm_undo(&UndoConfirmation {
+        let answer = self.confirmer.confirm_undo(&UndoConfirmation {
             workspace: self.workspace.to_string(),
             file: self.name.to_string(),
             bytes: self.bytes,
             sha256: self.sha256.to_string(),
             device: identity.dev,
             inode: identity.ino,
-        })
+        });
+        #[cfg(test)]
+        crate::authority::file_session::probe(self.cell, "registry.undo_confirm.after");
+        answer
     }
 }
 
@@ -3619,7 +3628,14 @@ impl Files {
             }
             closed
         };
-        let live = || lifetime.check(authority).is_ok();
+        let live = || {
+            #[cfg(test)]
+            crate::authority::file_session::probe(
+                lifetime.recovery.cell(),
+                "registry.undo_confirm.before",
+            );
+            lifetime.check(authority).is_ok()
+        };
         let bridge = UndoBridge {
             confirmer,
             workspace: &applied.workspace.info.name,
@@ -3628,6 +3644,8 @@ impl Files {
             sha256: &applied.sha256,
             review_hash: applied.review_hash,
             live: &live,
+            #[cfg(test)]
+            cell: lifetime.recovery.cell(),
         };
         #[cfg(test)]
         self.shared.fire("session.before.request_restore");
@@ -4241,7 +4259,11 @@ impl Files {
         }
         #[cfg(test)]
         self.hooks().fire("files.before_stage");
+        #[cfg(test)]
+        crate::authority::file_session::probe(request, "registry.preparation_validate.before");
         authority.runs().admit_file_request(run, request)?;
+        #[cfg(test)]
+        crate::authority::file_session::probe(request, "registry.preparation_validate.after");
         #[cfg(target_os = "linux")]
         return self.stage(
             control,

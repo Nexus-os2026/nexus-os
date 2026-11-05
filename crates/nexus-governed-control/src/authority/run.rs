@@ -1088,8 +1088,12 @@ impl RunRegistry {
                 .retained
                 .checked_add(1)
                 .ok_or(AuthorityError::Capacity)?;
+            #[cfg(test)]
+            crate::authority::file_session::probe(token.1.as_ref(), "registry.retention.before");
             token.admit_host()?;
             entry.retained = retained;
+            #[cfg(test)]
+            crate::authority::file_session::probe(token.1.as_ref(), "registry.retention.after");
         }
         Ok((token, owner))
     }

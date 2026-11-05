@@ -2631,3 +2631,161 @@ fn session_retry_cleanup_handoff_and_successor_are_independently_admitted() {
         after.len()
     );
 }
+
+/// Count actual mutation/callback completions, even if a subsequent check
+/// refuses the overall operation. Original ingress runs no native Stop worker.
+#[test]
+fn session_registry_each_final_mutation_has_an_independent_admission() {
+    let selected = std::env::var("M2DD_REGISTRY_FINAL").ok();
+    let mut failures = Vec::new();
+    let mut executed = 0;
+    for (route, before, after, ordinal, approving) in [
+        (
+            "pending_reserve",
+            "registry.pending_reserve.before",
+            "registry.pending_reserve.after",
+            1,
+            false,
+        ),
+        (
+            "undo_confirm",
+            "registry.undo_confirm.before",
+            "registry.undo_confirm.after",
+            1,
+            false,
+        ),
+        (
+            "action_reserve",
+            "registry.action_reserve.before",
+            "registry.action_reserve.after",
+            1,
+            false,
+        ),
+        (
+            "preparation_reserve",
+            "registry.preparation_reserve.before",
+            "registry.preparation_reserve.after",
+            1,
+            false,
+        ),
+        (
+            "preparation_validate",
+            "registry.preparation_validate.before",
+            "registry.preparation_validate.after",
+            1,
+            false,
+        ),
+        (
+            "preparation_retention",
+            "registry.retention.before",
+            "registry.retention.after",
+            1,
+            false,
+        ),
+        (
+            "resource_reserve",
+            "registry.resource_reserve.before",
+            "registry.resource_reserve.after",
+            1,
+            false,
+        ),
+        (
+            "commitment_create",
+            "registry.retention.before",
+            "registry.retention.after",
+            2,
+            false,
+        ),
+        (
+            "pending_install",
+            "registry.pending_install.before",
+            "registry.pending_install.after",
+            1,
+            false,
+        ),
+        (
+            "action_confirm",
+            "registry.action_confirm.before",
+            "registry.action_confirm.after",
+            1,
+            true,
+        ),
+        (
+            "token_issue",
+            "registry.token_issue.before",
+            "registry.token_issue.after",
+            1,
+            true,
+        ),
+        (
+            "authorize",
+            "registry.authorize.before",
+            "registry.authorize.after",
+            1,
+            true,
+        ),
+        (
+            "commitment_start",
+            "registry.commitment_start.before",
+            "registry.commitment_start.after",
+            1,
+            true,
+        ),
+    ] {
+        for ingresses in 0..=3 {
+            let key = format!("{route}/{ingresses}");
+            if selected.as_ref().is_some_and(|value| value != &key) {
+                continue;
+            }
+            let f = Fixture::new();
+            let id = approving.then(|| f.pending());
+            if route == "undo_confirm" {
+                let id = f.pending();
+                f.approve(id).unwrap();
+            }
+            let before_count = Arc::new(AtomicUsize::new(0));
+            let after_count = Arc::new(AtomicUsize::new(0));
+            let cell = f.gov.file_session_halt();
+            let stop = cell.clone();
+            let called = before_count.clone();
+            cell.1.every(before, move || {
+                if called.fetch_add(1, Ordering::SeqCst) + 1 == ordinal {
+                    for _ in 0..ingresses {
+                        stop.engage_emergency();
+                    }
+                }
+            });
+            let entered = after_count.clone();
+            cell.1.every(after, move || {
+                entered.fetch_add(1, Ordering::SeqCst);
+            });
+            let success = if route == "undo_confirm" {
+                f.undo().is_ok()
+            } else if let Some(id) = id {
+                f.approve(id).is_ok()
+            } else {
+                f.propose().is_ok()
+            };
+            let reached = before_count.load(Ordering::SeqCst) >= ordinal;
+            let observed = after_count.load(Ordering::SeqCst);
+            let permitted = if ingresses == 0 {
+                observed >= ordinal && success
+            } else {
+                observed == ordinal - 1 && !success
+            };
+            let conforms = reached && permitted;
+            assert!(!f.gov.stop_snapshot().broker_stopped);
+            assert!(!f.gov.stop_snapshot().kernel_stopped);
+            println!("REGISTRY-FINAL/{key}: actual_mutations={observed} boundary={ordinal} native_workers=0 conforms={conforms}");
+            if !conforms {
+                failures.push(key);
+            }
+            executed += 1;
+        }
+    }
+    assert_eq!(executed, if selected.is_some() { 1 } else { 52 });
+    assert!(
+        failures.is_empty(),
+        "{executed} actual registry schedules: {failures:?}"
+    );
+}

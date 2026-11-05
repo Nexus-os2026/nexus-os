@@ -853,6 +853,25 @@ impl CommitmentRegistry {
                     if live.is_ok() {
                         self.fire(crate::test_hooks::at::COMPLETE_CHECKED);
                     }
+                    #[cfg(test)]
+                    let point = match entry.reserved.expect("reserved transition").transition {
+                        Transition::Approve => {
+                            ("registry.token_issue.before", "registry.token_issue.after")
+                        }
+                        Transition::Authorize => {
+                            ("registry.authorize.before", "registry.authorize.after")
+                        }
+                        Transition::Start => (
+                            "registry.commitment_start.before",
+                            "registry.commitment_start.after",
+                        ),
+                    };
+                    #[cfg(test)]
+                    let cell = entry.request.clone();
+                    #[cfg(test)]
+                    if live.is_ok() {
+                        crate::authority::file_session::probe(cell.as_ref(), point.0);
+                    }
                     // The run token was read before grant validation. Read
                     // its optional deny-only cell again in this same hold,
                     // immediately before approval/authorization/dispatch.
@@ -884,6 +903,7 @@ impl CommitmentRegistry {
                     let finalized = live.map(|cancel| finalize(entry, cancel));
                     #[cfg(test)]
                     if finalized.is_ok() {
+                        crate::authority::file_session::probe(cell.as_ref(), point.1);
                         self.fire(crate::test_hooks::at::COMPLETE_FINALIZED);
                     }
                     finalized
@@ -934,7 +954,11 @@ impl CommitmentRegistry {
         if entries.len() + reserved >= self.capacity() {
             return Err(AuthorityError::Capacity);
         }
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&cell), "registry.preparation_reserve.before");
         self.0.preparations.store(reserved + 1, Ordering::SeqCst);
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&cell), "registry.preparation_reserve.after");
         Ok(PreparationSlot {
             registry: self.clone(),
             held: true,
@@ -1274,6 +1298,11 @@ impl CommitmentRegistry {
         let (request, binding) = asked?;
         self.session_confirmation_handoff(id, agent, run, binding)?;
         let confirmed = confirmer.confirm_action(&request);
+        #[cfg(test)]
+        crate::authority::file_session::probe(
+            self.0.runs.session_cell(run).ok().flatten().as_ref(),
+            "registry.action_confirm.after",
+        );
         let mut deferred = Deferred::default();
         let now = self.now();
         let answered = {
@@ -1347,7 +1376,14 @@ impl CommitmentRegistry {
                 return Err(AuthorityError::NotPending);
             }
             self.live_check(id, entry, agent, run, now, &mut deferred)
-                .and_then(|cancel| cancel.admit_host())
+                .and_then(|cancel| {
+                    #[cfg(test)]
+                    crate::authority::file_session::probe(
+                        entry.request.as_ref(),
+                        "registry.action_confirm.before",
+                    );
+                    cancel.admit_host()
+                })
         };
         if result.is_err() {
             self.flush(deferred);

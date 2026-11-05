@@ -150,9 +150,13 @@ impl Place<'_> {
                 .authority
                 .hooks()
                 .fire("decision8.pending_validated");
+            #[cfg(test)]
+            crate::authority::file_session::probe(halt, "registry.pending_install.before");
             let refused = crate::authority::file_session::check_halt(halt).err();
             if unconsumed && refused.is_none() {
                 table.held.insert(id, pending);
+                #[cfg(test)]
+                crate::authority::file_session::probe(halt, "registry.pending_install.after");
                 (None, None)
             } else {
                 (Some(pending), refused)
@@ -217,8 +221,14 @@ impl Control {
         if table.held.len() + table.reserved >= limit || in_run >= MAX_PENDING_PER_RUN {
             return None;
         }
+        #[cfg(test)]
+        let cell = self.authority.runs().session_cell(run).ok().flatten();
+        #[cfg(test)]
+        crate::authority::file_session::probe(cell.as_ref(), "registry.pending_reserve.before");
         table.reserved += 1;
         *table.reserved_by_run.entry(run).or_default() += 1;
+        #[cfg(test)]
+        crate::authority::file_session::probe(cell.as_ref(), "registry.pending_reserve.after");
         Some(Place {
             control: self,
             run,
