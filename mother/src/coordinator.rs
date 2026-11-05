@@ -2467,7 +2467,19 @@ impl<P: EffectPort> Coordinator<P> {
             match loaded {
                 Ok((contract, rest)) => {
                     self.step(|inner| {
+                        let line = inner.next_seq as usize + 1;
                         let mission = inner.mission(id)?;
+                        if mission
+                            .declared_model_budgets
+                            .iter()
+                            .any(|b| *b != contract.budget.max_model_calls)
+                            || mission.model_calls > contract.budget.max_model_calls
+                        {
+                            return Err(CoordinatorError::Journal(JournalError::Inconsistent {
+                                line,
+                                code: ReplayViolation::ModelBudgetMismatch,
+                            }));
+                        }
                         mission.contract = Some(contract);
                         if let Some(waiting) = mission.waiting.as_mut() {
                             waiting.rest = rest;
@@ -3195,8 +3207,25 @@ fn replay(
                 mission.consent = Some(Consent::minted(*hash));
             }
         }
-        Event::ModelCallCharged { .. } => return Err(V::ModelChargeOutOfPlace),
-        Event::LaneInvoked { invocation, .. } => {
+        Event::ModelCallCharged { invocation, call } => {
+            if mission.pending_lane != Some(*invocation)
+                || !mission.state.is_working()
+                || mission.settlement.is_some()
+            {
+                return Err(V::ModelChargeOutOfPlace);
+            }
+            mission
+                .call_accounting
+                .as_mut()
+                .ok_or(V::ModelChargeOutOfPlace)?
+                .charge(*invocation, *call, &mut mission.model_calls)?;
+        }
+        Event::LaneInvoked {
+            invocation,
+            model_cap,
+            model_budget,
+            ..
+        } => {
             if mission.settlement.is_some() {
                 return Err(V::SettlementConflict);
             }
@@ -3209,8 +3238,17 @@ fn replay(
             {
                 return Err(V::LaneOutOfPlace);
             }
+            mission.call_accounting =
+                CallAccounting::reserved(mission, *invocation, *model_cap, *model_budget)?;
+            // Evidence only. Replay never constructs a live LaneCalls or meter.
+            if *model_cap > 0 {
+                mission.declared_model_budgets.push(*model_budget);
+            }
             mission.pending_lane = Some(*invocation);
-            mission.model_calls = mission.model_calls.saturating_add(1);
+            mission.model_calls = mission
+                .model_calls
+                .checked_add(1)
+                .ok_or(V::ModelChargeOutOfPlace)?;
             mission.awaiting_settled = None;
         }
         Event::LaneReturned {
@@ -3221,6 +3259,7 @@ fn replay(
                 return Err(V::LaneAnswerWithoutCall);
             }
             mission.pending_lane = None;
+            mission.call_accounting = None;
             mission.prior_outputs.push(output_hash.clone());
         }
         Event::LaneOvertaken { invocation } => {
@@ -3228,6 +3267,7 @@ fn replay(
                 return Err(V::LaneAnswerWithoutCall);
             }
             mission.pending_lane = None;
+            mission.call_accounting = None;
         }
         Event::EffectDispatched { effect, kind, .. } => {
             if !mission.state.is_working()
