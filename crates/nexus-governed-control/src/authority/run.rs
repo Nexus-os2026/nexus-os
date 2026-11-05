@@ -628,6 +628,8 @@ impl RunRegistry {
         self.review2_hooks.fire("run.before_insert");
         // Final same-word comparison is the admission linearization point,
         // under the same hold as insertion, after all validation/pruning.
+        #[cfg(test)]
+        super::file_session::probe(entry.file_cell.as_ref(), "setup.run_create");
         super::file_session::check_halt(entry.file_cell.as_ref())?;
         runs.insert(id, entry);
         if let Some(door) = group.and_then(|group| runs.doors.get_mut(&group)) {
@@ -688,6 +690,8 @@ impl RunRegistry {
         match runs.doors.get_mut(&group) {
             Some(door) if door.alive() => {
                 // Decision 8: activation and its final check share this hold.
+                #[cfg(test)]
+                super::file_session::probe(halt, "setup.door_activate");
                 super::file_session::check_halt(halt)?;
                 door.file_cell = halt.cloned();
                 door.active = true;
@@ -1359,6 +1363,8 @@ impl RunRegistry {
         if door.consents.len().saturating_add(door.pending_consents) >= MAX_CONSENTS {
             return Err(AuthorityError::Capacity);
         }
+        #[cfg(test)]
+        super::file_session::probe(door.file_cell.as_ref(), "setup.mission_confirm");
         super::file_session::admit_host(door.file_cell.as_ref())?;
         door.pending_consents += 1;
         Ok(ConsentSlot {
@@ -1473,6 +1479,8 @@ impl RunRegistry {
             }
             Some(_) => Err(AuthorityError::AlreadyAdmitted),
             None => {
+                #[cfg(test)]
+                super::file_session::probe(entry.file_cell.as_ref(), "setup.file_binding");
                 super::file_session::admit_host(entry.file_cell.as_ref())?;
                 entry.files_admission = Some(admission.clone());
                 Ok(admission)
@@ -1777,6 +1785,8 @@ impl ConsentSlot<'_> {
             life: self.life,
             page_facts,
         };
+        #[cfg(test)]
+        super::file_session::probe(door.file_cell.as_ref(), "setup.consent_cache");
         super::file_session::admit_host(door.file_cell.as_ref())?;
         door.consents.push(consent);
         Ok(())

@@ -3912,6 +3912,8 @@ impl Files {
             ));
         }
         let ms = u64::try_from(hold.as_millis()).unwrap_or(u64::MAX);
+        #[cfg(test)]
+        crate::authority::file_session::probe(cell, "setup.hold_configure");
         crate::authority::file_session::admit_host(cell)?;
         self.shared.hold_ms.store(ms, Ordering::SeqCst);
         Ok(())
@@ -4090,6 +4092,8 @@ impl Files {
         #[cfg(test)]
         self.hooks().fire("files.before_register");
         let mut workspace = self.workspace.lock().expect("files");
+        #[cfg(test)]
+        crate::authority::file_session::probe(halt, "setup.workspace_install");
         crate::authority::file_session::check_halt(halt)?;
         *workspace = Some(Arc::new(Workspace {
             info: info.clone(),

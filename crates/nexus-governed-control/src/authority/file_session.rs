@@ -119,6 +119,13 @@ pub(crate) fn admit_host(cell: Option<&HaltCell>) -> Result<(), super::Authority
 }
 
 #[cfg(test)]
+pub(crate) fn probe(cell: Option<&HaltCell>, point: &'static str) {
+    if let Some(cell) = cell {
+        cell.1.fire(point);
+    }
+}
+
+#[cfg(test)]
 impl std::fmt::Debug for HaltCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
@@ -445,6 +452,11 @@ impl FileSessions {
         }
         Ok(())
     }
+    #[cfg(test)]
+    pub(crate) fn counts_for_test(&self) -> (u64, u64, bool) {
+        let h = self.lock().unwrap();
+        (h.ports, h.attachments, h.selected)
+    }
     pub(crate) fn port(
         self: &Arc<Self>,
         group: GroupId,
@@ -461,6 +473,8 @@ impl FileSessions {
             if !self.state.same(request) {
                 return Err(FileSessionError::WrongOwner);
             }
+            #[cfg(test)]
+            probe(Some(request), "setup.port_issue");
             request
                 .admit()
                 .map_err(|_| FileSessionError::EmergencyHistory)?;
@@ -485,6 +499,8 @@ impl FileSessions {
             return Err(FileSessionError::AlreadySelected);
         }
         self.fresh()?;
+        #[cfg(test)]
+        probe(attachment.request.as_ref(), "setup.file_select");
         if self.state.host() {
             attachment
                 .request
@@ -569,6 +585,8 @@ impl FilePort {
             .attachments
             .checked_add(1)
             .ok_or(FileSessionError::Capacity)?;
+        #[cfg(test)]
+        probe(self.request.as_ref(), "setup.attachment_claim");
         if self.sessions.state.host() {
             self.request
                 .as_ref()

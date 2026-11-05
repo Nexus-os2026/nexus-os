@@ -788,6 +788,8 @@ impl GovernedControl {
             advisory,
         };
         // Reservation/advisory reads can wait; check again before the dialogue.
+        #[cfg(test)]
+        crate::authority::file_session::probe(halt.as_ref(), "setup.door_confirm");
         check(Some(&core.id))?;
         let yes = confirmer.confirm_agent_door(&request);
         #[cfg(test)]
