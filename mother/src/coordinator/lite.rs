@@ -37,7 +37,7 @@ impl FileLife {
 
 /// Owns the coordinator exclusively. Its Stop calls return recording errors.
 pub struct FileSession<P: EffectPort> {
-    coordinator: Coordinator<P>,
+    pub(super) coordinator: Coordinator<P>,
 }
 
 #[path = "../adapter/lite_review3.rs"]
@@ -233,7 +233,7 @@ impl<P: EffectPort> FileSession<P> {
         panic!("lite coordinator poison");
     }
 
-    fn life(&self) -> &FileLife {
+    pub(super) fn life(&self) -> &FileLife {
         self.coordinator
             .file
             .as_ref()
@@ -242,7 +242,7 @@ impl<P: EffectPort> FileSession<P> {
 
     /// Also catches a poisoned later stage or an unwinding external callback:
     /// the original cell remains engaged, and a typed error reaches the caller.
-    fn call<T>(
+    pub(super) fn call<T>(
         &self,
         body: impl FnOnce(&Coordinator<P>) -> Result<T, CoordinatorError>,
     ) -> Result<T, CoordinatorError> {

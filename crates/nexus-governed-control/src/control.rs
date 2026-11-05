@@ -523,6 +523,14 @@ impl Control {
     /// The effects of an emergency stop, its records not yet written: every
     /// run cancelled, every unconsumed commitment ended, the generation
     /// moved, every pending effect dropped.
+    pub(crate) fn close_ready(&self) -> bool {
+        self.stop_metadata_known()
+            && self
+                .pending
+                .lock()
+                .is_ok_and(|p| p.held.is_empty() && p.reserved == 0 && p.reserved_by_run.is_empty())
+    }
+
     pub(crate) fn stop_metadata_known(&self) -> bool {
         !self.pending.is_poisoned()
             && self.authority.runs().stop_metadata_known()

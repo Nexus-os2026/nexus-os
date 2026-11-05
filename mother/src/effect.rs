@@ -127,7 +127,7 @@ pub struct EffectRefusal {
 /// made it, once that call holds no Mother lock, or by no one, and then the
 /// broker counts its records lost. It has no `Drop` of its own.
 #[derive(Default)]
-pub struct Owed(Vec<RecordBatch>);
+pub struct Owed(Vec<RecordBatch>, bool);
 
 impl Owed {
     /// Typed File lifecycle record result. Try every batch; an owed or
@@ -137,7 +137,7 @@ impl Owed {
         if !self.is_empty() {
             held::assert_none();
         }
-        let mut failed = false;
+        let mut failed = self.1;
         for batch in self.0 {
             // The batch owns its records. On unwind its Drop counts the
             // in-flight record uncertain and the remainder lost. Preserve
@@ -156,7 +156,11 @@ impl Owed {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.iter().all(RecordBatch::is_empty)
+        !self.1 && self.0.iter().all(RecordBatch::is_empty)
+    }
+
+    pub(crate) fn refuse(&mut self) {
+        self.1 = true;
     }
 
     pub(crate) fn push(&mut self, batch: RecordBatch) {
@@ -164,6 +168,7 @@ impl Owed {
     }
 
     pub(crate) fn extend(&mut self, other: Owed) {
+        self.1 |= other.1;
         self.0.extend(other.0);
     }
 

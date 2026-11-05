@@ -21,7 +21,9 @@ impl ControlConfirmer for No {
     fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
         true
     }
-    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool { true }
+    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
+        true
+    }
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
         false
     }
@@ -64,7 +66,14 @@ fn child(case: &str) {
     );
     let expected_end = u64::from(matches!(
         case,
-        "normal" | "idle_emergency" | "producer" | "ingress_after_seal" | "retained_door" | "pending_batch" | "foreign_end" | "missing_end"
+        "normal"
+            | "idle_emergency"
+            | "producer"
+            | "ingress_after_seal"
+            | "retained_door"
+            | "pending_batch"
+            | "foreign_end"
+            | "missing_end"
     ));
     let expected_stop = u64::from(case == "idle_emergency");
     assert_eq!(
@@ -123,8 +132,13 @@ fn session_close_facade_enforces_the_complete_order() {
         Arc::new(No),
     )
     .unwrap();
-    if case != "source_unchecked" { assert!(session.startup_report().ready()); }
-    let retained = if matches!(case.as_str(), "retained_door" | "pending_batch" | "lost_batch") {
+    if case != "source_unchecked" {
+        assert!(session.startup_report().ready());
+    }
+    let retained = if matches!(
+        case.as_str(),
+        "retained_door" | "pending_batch" | "lost_batch"
+    ) {
         let workspace = root.join("workspace");
         create_private(&workspace).unwrap();
         session.bootstrap_workspace(&workspace, &[]).unwrap();
@@ -135,12 +149,18 @@ fn session_close_facade_enforces_the_complete_order() {
         door.claim_file_session(&attachment).unwrap();
         let run = door.open_file_run(&attachment).unwrap();
         Some((door, run))
-    } else { None };
+    } else {
+        None
+    };
     let mut batch = if matches!(case.as_str(), "pending_batch" | "lost_batch") {
         let (door, run) = retained.as_ref().unwrap();
         Some(door.cancel_run(*run).unwrap())
-    } else { None };
-    if case == "lost_batch" { drop(batch.take()); }
+    } else {
+        None
+    };
+    if case == "lost_batch" {
+        drop(batch.take());
+    }
     let mut journal = FileJournal::open(&root.join("mother-journal.jsonl")).unwrap();
     let opening = Entry::chained(0, GENESIS, SESSION, Event::SessionOpened);
     journal.append(&opening.to_line()).unwrap();
@@ -187,10 +207,16 @@ fn session_close_facade_enforces_the_complete_order() {
                 .unwrap();
         }
         if case == "pending_batch" {
-            assert!(session.seal_close(&request).is_err(), "an unwritten native batch is independent record debt");
+            assert!(
+                session.seal_close(&request).is_err(),
+                "an unwritten native batch is independent record debt"
+            );
             assert_eq!(batch.take().unwrap().write().recorded, 1);
         }
-        if matches!(case.as_str(), "pending_stop" | "incomplete_history" | "lost_batch" | "source_unchecked") {
+        if matches!(
+            case.as_str(),
+            "pending_stop" | "incomplete_history" | "lost_batch" | "source_unchecked"
+        ) {
             assert!(session.seal_close(&request).is_err());
         } else {
             let seal = session.seal_close(&request).unwrap();
@@ -202,11 +228,19 @@ fn session_close_facade_enforces_the_complete_order() {
             ));
             assert!(session.seal_close(&request).is_err(), "one finalizer only");
             if case == "foreign_end" {
-                assert!(seal.begin_mother_end(SessionSeed::new().unwrap().identity()).is_err());
+                assert!(seal
+                    .begin_mother_end(SessionSeed::new().unwrap().identity())
+                    .is_err());
             }
             if let Some((door, run)) = &retained {
-                assert!(door.cancel_run(*run).is_err(), "a retained door cannot create settlement records after seal");
-                assert!(door.finish_when_settled(*run).is_err(), "no retained post-seal finishing route");
+                assert!(
+                    door.cancel_run(*run).is_err(),
+                    "a retained door cannot create settlement records after seal"
+                );
+                assert!(
+                    door.finish_when_settled(*run).is_err(),
+                    "no retained post-seal finishing route"
+                );
             }
             if case == "lost_finalizer" {
                 drop(seal);
@@ -218,7 +252,10 @@ fn session_close_facade_enforces_the_complete_order() {
                 seal.begin_mother_end(session.identity()).unwrap();
                 assert_eq!(session.close_records().mother, FinalStatus::Unknown);
                 if case == "missing_end" {
-                    assert!(session.observe_mother_end(&seal).is_err(), "beginning a Mother end is not its durable proof");
+                    assert!(
+                        session.observe_mother_end(&seal).is_err(),
+                        "beginning a Mother end is not its durable proof"
+                    );
                     assert!(session.close_primary(&seal).is_err());
                 }
                 let ending = Entry::chained(1, &opening.hash, SESSION, Event::SessionClosed);
@@ -241,5 +278,13 @@ fn session_close_facade_enforces_the_complete_order() {
 
 #[test]
 fn session_close_requires_prior_sources_and_retains_native_record_debt() {
-    for case in ["source_unchecked", "pending_batch", "lost_batch", "foreign_end", "missing_end"] { child(case); }
+    for case in [
+        "source_unchecked",
+        "pending_batch",
+        "lost_batch",
+        "foreign_end",
+        "missing_end",
+    ] {
+        child(case);
+    }
 }

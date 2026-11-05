@@ -96,6 +96,9 @@ pub struct StopObservation {
 }
 
 impl Stops {
+    pub(super) fn quiescent(&self) -> bool {
+        self.active.load(Ordering::SeqCst) == 0
+    }
     pub(super) fn register(
         &self,
         core: &Arc<Core>,

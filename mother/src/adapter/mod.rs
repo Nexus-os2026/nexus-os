@@ -356,10 +356,13 @@ impl GovernedPort {
                 let mut runs = poisoned.into_inner();
                 runs.fenced = true;
                 let mut owed = Owed::default();
-                if let Ok(batch) = catch_unwind(AssertUnwindSafe(|| {
+                if let Ok(result) = catch_unwind(AssertUnwindSafe(|| {
                     self.door.halt(HaltReason::JournalFailed)
                 })) {
-                    owed.push(batch);
+                    match result {
+                        Ok(batch) => owed.push(batch),
+                        Err(_) => owed.refuse(),
+                    }
                 }
                 let _ = self.sweep(&mut runs, &mut owed);
                 (runs, owed)
@@ -783,8 +786,13 @@ impl EffectPort for GovernedPort {
                 self.door.halt(HaltReason::JournalFailed)
             }));
             let first = match halted {
-                Ok(batch) => {
+                Ok(Ok(batch)) => {
                     owed.push(batch);
+                    None
+                }
+                Ok(Err(_)) => {
+                    self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                    owed.refuse();
                     None
                 }
                 Err(panic) => {

@@ -108,10 +108,10 @@ impl PortDoor {
             Self::Session(door) => door.finish_when_settled(run).map_err(Into::into),
         }
     }
-    pub(super) fn halt(&self, reason: HaltReason) -> RecordBatch {
+    pub(super) fn halt(&self, reason: HaltReason) -> Result<RecordBatch, AuthorityError> {
         match self {
-            Self::Legacy(door) => door.halt(reason),
-            Self::Session(door) => door.halt(reason),
+            Self::Legacy(door) => Ok(door.halt(reason)),
+            Self::Session(door) => door.halt(reason).map_err(Into::into),
         }
     }
     pub(super) fn clock(&self) -> Arc<dyn nexus_governed_control::authority::clock::Clock> {

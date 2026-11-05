@@ -544,6 +544,43 @@ impl GovernedControl {
         self.control.cancel_run(run)
     }
 
+    /// Session narrowing has no implicit Files drain and returns a typed
+    /// failure if any registry ownership or pending reservation is unknown.
+    pub(crate) fn close_session_authority(&self) -> Result<(), AuthorityError> {
+        if !self.control.stop_metadata_known() {
+            return Err(AuthorityError::Halted);
+        }
+        let runs = self.authority().runs();
+        runs.close();
+        for run in runs.views() {
+            if !run.cancelled && !run.finished {
+                self.control.cancel_run(run.id)?;
+            }
+        }
+        for grant in self.authority().grants().all() {
+            if !grant.revoked {
+                self.authority().grants().revoke(grant.id)?;
+            }
+        }
+        self.control.prune();
+        if !self.control.close_ready()
+            || !runs.is_closed()
+            || runs.views().iter().any(|run| {
+                (!run.cancelled && !run.finished)
+                    || self
+                        .authority()
+                        .commitments()
+                        .views_of_run(run.id)
+                        .iter()
+                        .any(|c| !c.state.is_final())
+            })
+            || self.authority().grants().all().iter().any(|g| !g.revoked)
+        {
+            return Err(AuthorityError::Halted);
+        }
+        Ok(())
+    }
+
     /// The desktop is quitting: no run opens any more, and every open run
     /// is cancelled (recorded). Returns how many were cancelled.
     pub fn shut_down(&self) -> usize {

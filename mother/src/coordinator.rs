@@ -90,6 +90,8 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 mod lite;
 mod lite_intent;
+mod session_close;
+pub use session_close::PreparedSessionEnd;
 #[cfg(test)]
 mod lite_oracles;
 mod lite_settle;

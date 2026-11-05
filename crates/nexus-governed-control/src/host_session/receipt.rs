@@ -173,6 +173,36 @@ impl History {
         self.verify_root()
     }
 
+    pub(super) fn verify_end(&self, count: usize, previous: &str) -> Result<(), AuthorityError> {
+        let (file, lines) = self.read()?;
+        if lines.len() != count + 1
+            || count == 0
+            || lines[count - 1].hash != previous
+            || lines[count].mission != 0
+            || lines[count].event["event"] != "session_closed"
+        {
+            return Err(unavailable());
+        }
+        file.sync_all().map_err(|_| unavailable())?;
+        self.verify_root()?;
+        if !same(
+            &file.metadata().map_err(|_| unavailable())?,
+            &std::fs::symlink_metadata(self.root.join("mother-journal.jsonl"))
+                .map_err(|_| unavailable())?,
+        ) {
+            return Err(unavailable());
+        }
+        let parent = File::open(&self.root).map_err(|_| unavailable())?;
+        if !same(
+            &parent.metadata().map_err(|_| unavailable())?,
+            &self.identity,
+        ) {
+            return Err(unavailable());
+        }
+        parent.sync_all().map_err(|_| unavailable())?;
+        self.verify_root()
+    }
+
     fn terminal(
         &self,
         action: &Action,
@@ -296,7 +326,7 @@ fn unavailable() -> AuthorityError {
 pub(super) struct Line {
     pub(super) mission: u64,
     sequence: u64,
-    hash: String,
+    pub(super) hash: String,
     pub(super) event: Value,
 }
 #[derive(Clone)]
@@ -353,6 +383,11 @@ pub(super) struct Action {
     receipt: Option<Receipt>,
 }
 impl Action {
+    pub(super) fn acknowledged(&self) -> bool {
+        self.receipt.as_ref().is_some_and(|receipt| {
+            receipt.released && receipt.terminal.hash != [0; 32] && receipt.terminal.sequence > 0
+        })
+    }
     #[allow(clippy::too_many_arguments)]
     pub(super) fn reserved(
         session: SessionIdentity,

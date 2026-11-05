@@ -9,6 +9,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 pub mod approval;
+pub mod close;
 mod receipt;
 pub mod recovery;
 pub mod stop;
@@ -314,6 +315,9 @@ struct Core {
     resources: std::sync::Mutex<Vec<Arc<ResourceState>>>,
     history: OnceLock<receipt::History>,
     close: OnceLock<CloseIdentity>,
+    producers: std::sync::Mutex<close::Producers>,
+    finals: OnceLock<close::Finals>,
+    authority_closed: std::sync::atomic::AtomicBool,
     created: Instant,
 }
 
@@ -1075,6 +1079,7 @@ impl SessionDoor {
         &self,
         run: crate::authority::ids::RunId,
     ) -> Result<crate::governed::RecordBatch, SessionFailure> {
+        let call = close::settlement(&self.core)?;
         {
             let pending = self.core.pending.lock().map_err(|_| {
                 self.context.fail();
@@ -1084,16 +1089,27 @@ impl SessionDoor {
                 self.core.pending_context.store(0, Ordering::SeqCst);
             }
         }
-        self.door.cancel_run(run).map_err(Into::into)
+        let result = self.door.cancel_run(run).map_err(Into::into);
+        call.joined();
+        result
     }
     pub fn finish_when_settled(
         &self,
         run: crate::authority::ids::RunId,
     ) -> Result<(), SessionFailure> {
-        self.door.finish_when_settled(run).map_err(Into::into)
+        let call = close::settlement(&self.core)?;
+        let result = self.door.finish_when_settled(run).map_err(Into::into);
+        call.joined();
+        result
     }
-    pub fn halt(&self, reason: crate::governed::HaltReason) -> crate::governed::RecordBatch {
-        self.door.halt(reason)
+    pub fn halt(
+        &self,
+        reason: crate::governed::HaltReason,
+    ) -> Result<crate::governed::RecordBatch, SessionFailure> {
+        let call = close::settlement(&self.core)?;
+        let result = self.door.halt(reason);
+        call.joined();
+        Ok(result)
     }
     pub fn clock(&self) -> Arc<dyn crate::authority::clock::Clock> {
         self.door.clock()
@@ -1129,7 +1145,10 @@ impl SessionDoor {
         &self,
         id: crate::authority::ids::CommitmentId,
     ) -> Result<(), SessionFailure> {
-        receipt::ack(self, id).map_err(Into::into)
+        let call = close::settlement(&self.core)?;
+        let result = receipt::ack(self, id).map_err(Into::into);
+        call.joined();
+        result
     }
 }
 
@@ -1199,6 +1218,9 @@ impl SessionSeed {
                 resources: std::sync::Mutex::new(Vec::with_capacity(256)),
                 history: OnceLock::new(),
                 close: OnceLock::new(),
+                producers: std::sync::Mutex::default(),
+                finals: OnceLock::new(),
+                authority_closed: std::sync::atomic::AtomicBool::new(false),
                 created: Instant::now(),
             }),
         })

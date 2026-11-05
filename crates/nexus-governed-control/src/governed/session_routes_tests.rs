@@ -2074,15 +2074,25 @@ fn close_opening(f: &Fixture) -> (std::path::PathBuf, String) {
     let event = r#"{"event":"session_opened"}"#;
     let mut hash = Sha256::new();
     hash.update(b"nexus-mother-journal-v2\n");
-    for part in [previous.as_bytes(), &[2], &0u64.to_be_bytes(), &0u64.to_be_bytes(), event.as_bytes()] {
-        hash.update((part.len() as u64).to_be_bytes()); hash.update(part);
+    for part in [
+        previous.as_bytes(),
+        &[2],
+        &0u64.to_be_bytes(),
+        &0u64.to_be_bytes(),
+        event.as_bytes(),
+    ] {
+        hash.update((part.len() as u64).to_be_bytes());
+        hash.update(part);
     }
     let hash = hex::encode(hash.finalize());
     let line = format!("{{\"format\":2,\"seq\":0,\"prev\":\"{previous}\",\"mission\":0,\"event\":{event},\"hash\":\"{hash}\"}}\n");
     let path = f._root.0.path().join("mother-journal.jsonl");
     std::fs::write(&path, &line).unwrap();
     std::fs::File::open(&path).unwrap().sync_all().unwrap();
-    std::fs::File::open(f._root.0.path()).unwrap().sync_all().unwrap();
+    std::fs::File::open(f._root.0.path())
+        .unwrap()
+        .sync_all()
+        .unwrap();
     (path, line)
 }
 
@@ -2098,23 +2108,57 @@ fn session_final_seal_orders_against_ingress_and_reassesses_the_exact_event() {
         if interferes {
             let received = received.clone();
             let late = ingress.clone();
-            f.gov.file_session_halt().1.arm("session.before_compare", move || {
-                *received.lock().unwrap() = Some(late.emergency().unwrap());
-            });
+            f.gov
+                .file_session_halt()
+                .1
+                .arm("session.before_compare", move || {
+                    *received.lock().unwrap() = Some(late.emergency().unwrap());
+                });
         }
         let sealed = f._session.seal_close(&quit);
-        assert_eq!(sealed.is_ok(), !interferes, "ingress between assessment and seal invalidates the old proof");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), line, "assessment/seal writes neither end record");
+        assert_eq!(
+            sealed.is_ok(),
+            !interferes,
+            "ingress between assessment and seal invalidates the old proof"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            line,
+            "assessment/seal writes neither end record"
+        );
         if interferes {
-            assert_eq!(f._session.state(), crate::host_session::SessionState::ClosingRestricted);
+            assert_eq!(
+                f._session.state(),
+                crate::host_session::SessionState::ClosingRestricted
+            );
             let event = received.lock().unwrap().take().unwrap();
             f._session.record_stop(&event).unwrap();
-            assert_eq!(f.primary.store().rows().iter().filter(|row| row.phase == "emergency_stop").count(), 1);
-            let seal = f._session.seal_close(&quit).expect("fresh proof after exact Stop settlement may seal idle emergency");
-            assert_eq!(ingress.emergency(), Err(crate::host_session::SessionError::SessionEnded));
+            assert_eq!(
+                f.primary
+                    .store()
+                    .rows()
+                    .iter()
+                    .filter(|row| row.phase == "emergency_stop")
+                    .count(),
+                1
+            );
+            let seal = f
+                ._session
+                .seal_close(&quit)
+                .expect("fresh proof after exact Stop settlement may seal idle emergency");
+            assert_eq!(
+                ingress.emergency(),
+                Err(crate::host_session::SessionError::SessionEnded)
+            );
             drop(seal);
-        } else { drop(sealed.unwrap()); }
-        assert_eq!(f._session.state(), crate::host_session::SessionState::ClosedUnclean, "dropping the finalizer cannot manufacture either end or delivery");
+        } else {
+            drop(sealed.unwrap());
+        }
+        assert_eq!(
+            f._session.state(),
+            crate::host_session::SessionState::ClosedUnclean,
+            "dropping the finalizer cannot manufacture either end or delivery"
+        );
     }
 }
 
@@ -2127,7 +2171,9 @@ fn session_close_keeps_private_resource_and_exact_ack_debt_independent() {
             let path = f._root.0.path().join("retained-private-temp");
             let obligation = f.door.context().reserve_private(&path, None).unwrap();
             std::fs::write(&path, b"owned private material").unwrap();
-            obligation.observe_created(std::fs::metadata(&path).unwrap()).unwrap();
+            obligation
+                .observe_created(std::fs::metadata(&path).unwrap())
+                .unwrap();
             drop(obligation);
             path
         } else {
@@ -2141,11 +2187,27 @@ fn session_close_keeps_private_resource_and_exact_ack_debt_independent() {
         assert!(inventory.entries.iter().all(|e| e.discharged));
         f._session.settle_close_authority(&request).unwrap();
         let resources = f._session.resource_obligations().unwrap();
-        if private_debt { assert_eq!(resources.private_unresolved, 1); }
-        else { assert_eq!(resources.unresolved, 0, "native resource closure does not discharge the missing exact Mother acknowledgement"); }
-        assert!(f._session.seal_close(&request).is_err(), "independent {} debt must refuse seal", if private_debt { "private resource" } else { "exact acknowledgement" });
+        if private_debt {
+            assert_eq!(resources.private_unresolved, 1);
+        } else {
+            assert_eq!(resources.unresolved, 0, "native resource closure does not discharge the missing exact Mother acknowledgement");
+        }
+        assert!(
+            f._session.seal_close(&request).is_err(),
+            "independent {} debt must refuse seal",
+            if private_debt {
+                "private resource"
+            } else {
+                "exact acknowledgement"
+            }
+        );
         assert_eq!(std::fs::read(&expected_file).unwrap(), before);
         assert_eq!(std::fs::read_to_string(path).unwrap(), opening);
-        assert!(!f.primary.store().rows().iter().any(|r| r.phase == "session_closed"));
+        assert!(!f
+            .primary
+            .store()
+            .rows()
+            .iter()
+            .any(|r| r.phase == "session_closed"));
     }
 }
