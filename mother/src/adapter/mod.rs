@@ -536,7 +536,8 @@ impl GovernedPort {
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
         let asked_at = self.door.clock().monotonic_ms();
-        match self.door.agent_action(run, &intent) {
+        let effect_number = self.with_runs(|runs| runs.file_effects.get(&mission).copied());
+        match self.door.agent_action(run, &intent, effect_number) {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
@@ -1212,3 +1213,6 @@ mod lite_review5_port;
 
 #[cfg(test)]
 mod host_decision9_tests;
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) mod session_support;

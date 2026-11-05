@@ -1,16 +1,10 @@
 //! A3: independently selected work records, with before/after append ordering.
 //! All durable prefixes are replayed, including the interrupted prefix.
 use super::*;
-use crate::adapter::m2c_support::{port_for, Home};
-use crate::adapter::{create_private, mother_agent};
-use crate::journal::MemoryJournal;
-use crate::oracles::lite_support::{files_lanes, FilesOwner};
+use crate::oracles::lite_support::files_lanes;
 use crate::oracles::m2c_confirmers::answering;
 use crate::oracles::{contract_with, Yes};
-use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::authority::file_session::HaltCell;
-use nexus_governed_control::authority::ids::{CommitmentId, RunId};
-use nexus_governed_control::governed::GrantRequest;
 use std::cell::RefCell;
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -121,25 +115,15 @@ fn child(case: &str) {
     assert!(SINKS.contains(&sink));
     assert!(matches!(when, "before" | "after"));
     assert!(nexus_governed_control::files::make_non_dumpable());
-    let home = Home::fresh_temp("session-append").unwrap();
-    let workspace = home.dir.join("workspace");
-    create_private(&workspace).unwrap();
-    let info = home.control.register_workspace(&workspace, &[]).unwrap();
-    let owner = FilesOwner::default();
-    home.control
-        .request_grant(
-            &GrantRequest::Files { workspace: info.id },
-            Duration::from_secs(600),
-            &owner,
-        )
-        .unwrap();
-    let port = Arc::new(port_for(&home.control, true).with_workspace(info.name.clone()));
-    let journal = MemoryJournal::default();
+    let home = crate::adapter::session_support::Fixture::new("append");
+    let workspace = home.workspace.clone();
+    let info = home.session.workspace().unwrap();
+    let port = home.port.clone();
     let m = Coordinator::open(
-        journal.clone(),
+        home.journal(),
         port.clone(),
         Lanes::new(files_lanes()).unwrap(),
-        Arc::new(ManualClock::default()),
+        home.clock.clone(),
         home.private(),
     )
     .unwrap()
@@ -150,7 +134,7 @@ fn child(case: &str) {
             sink: sink.into(),
             when: when.into(),
             count: ingresses,
-            cell: home.control.file_session_halt(),
+            cell: m.cell_for_test(),
             boundary: None,
             last_seq: 0,
             calls: 0,
@@ -169,15 +153,7 @@ fn child(case: &str) {
                 return Ok(());
             }
             if m.state(id)? == Some(MissionState::AwaitingApproval) && !approved {
-                let pending = port.pending(id).unwrap();
-                let run = RunId::parse(&pending.run).unwrap();
-                let action = CommitmentId::parse(&pending.commitment).unwrap();
-                home.control
-                    .authorize(action, &mother_agent(), run, &owner)
-                    .map_err(|_| CoordinatorError::Stopped)?;
-                home.control
-                    .execute(action, &mother_agent(), run)
-                    .map_err(|_| CoordinatorError::Stopped)?;
+                home.approve().map_err(|_| CoordinatorError::Stopped)?;
                 approved = true;
             }
             m.advance(id)?;
@@ -208,14 +184,14 @@ fn child(case: &str) {
         }
     }
     assert!(
-        !home.control.stop_snapshot().broker_stopped,
+        !home.session.stop_snapshot().broker_stopped,
         "native Stop worker unscheduled"
     );
     assert!(
-        !home.control.stop_snapshot().kernel_stopped,
+        !home.session.stop_snapshot().kernel_stopped,
         "native Stop worker unscheduled"
     );
-    let lines = journal.lines();
+    let lines = home.lines();
     let entries = verify(&lines).unwrap();
     for count in 0..=entries.len() {
         let mut missions = BTreeMap::new();

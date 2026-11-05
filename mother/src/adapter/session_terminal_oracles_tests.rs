@@ -2,15 +2,10 @@
 //! The baseline fixture is legacy File mode; migrate the fixture to the
 //! mandatory session facade, preserving these primitive inputs and answers.
 use super::*;
-use crate::adapter::m2c_support::{port_for, Home};
-use crate::adapter::{create_private, mother_agent};
-use crate::journal::MemoryJournal;
 use crate::lane::{Lane, LaneIdentity, LaneOutput};
-use crate::oracles::lite_support::{files_lanes, FilesOwner};
+use crate::oracles::lite_support::files_lanes;
 use crate::oracles::m2c_confirmers::answering;
-use crate::oracles::{contract_with, No, Yes};
-use nexus_governed_control::authority::clock::ManualClock;
-use nexus_governed_control::governed::GrantRequest;
+use crate::oracles::{contract_with, Yes};
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -77,28 +72,18 @@ fn child(case: &str) {
     let initial = STATES[row];
     assert!(row < 13 && column < 4);
     assert!(nexus_governed_control::files::make_non_dumpable());
-    let home = Home::fresh_temp("session-literal-state").unwrap();
-    let workspace = home.dir.join("workspace");
-    create_private(&workspace).unwrap();
-    let info = home.control.register_workspace(&workspace, &[]).unwrap();
-    let owner = FilesOwner::default();
-    home.control
-        .request_grant(
-            &GrantRequest::Files { workspace: info.id },
-            Duration::from_secs(86400),
-            &owner,
-        )
-        .unwrap();
-    let port = Arc::new(port_for(&home.control, true).with_workspace(info.name.clone()));
+    let home = crate::adapter::session_support::Fixture::new("literal");
+    let workspace = home.workspace.clone();
+    let info = home.session.workspace().unwrap();
+    let port = home.port.clone();
     let mut lanes = files_lanes();
     if initial == "Failed" {
         lanes.retain(|lane| lane.identity().role != LaneRole::Verifier);
         lanes.push(Arc::new(FailVerifier));
     }
-    let clock = Arc::new(ManualClock::default());
-    let journal = MemoryJournal::default();
+    let clock = home.clock.clone();
     let m = Coordinator::open(
-        journal.clone(),
+        home.journal(),
         port.clone(),
         Lanes::new(lanes).unwrap(),
         clock.clone(),
@@ -139,19 +124,13 @@ fn child(case: &str) {
                     break;
                 }
                 if actual == "AwaitingApproval" {
-                    let pending = port.pending(id).unwrap();
-                    let run = RunId::parse(&pending.run).unwrap();
-                    let action = CommitmentId::parse(&pending.commitment).unwrap();
+                    home.owner
+                        .decline
+                        .store(initial == "Denied", std::sync::atomic::Ordering::SeqCst);
                     if initial == "Denied" {
-                        assert!(home
-                            .control
-                            .authorize(action, &mother_agent(), run, &No)
-                            .is_err());
+                        assert!(home.approve().is_err());
                     } else {
-                        home.control
-                            .authorize(action, &mother_agent(), run, &owner)
-                            .unwrap();
-                        home.control.execute(action, &mother_agent(), run).unwrap();
+                        home.approve().unwrap();
                     }
                 }
                 m.advance(id).unwrap();
@@ -163,7 +142,7 @@ fn child(case: &str) {
         initial,
         "fixture must reach its literal input state"
     );
-    let before = journal.lines();
+    let before = home.lines();
     replay_all_prefixes(&before);
     let file = workspace.join("session.txt");
     let physical = std::fs::read(&file).ok();
@@ -177,7 +156,7 @@ fn child(case: &str) {
             m.stop(id).unwrap();
         }
         "emergency" => {
-            home.control.file_session_halt().engage_emergency();
+            m.cell_for_test().engage_emergency();
             m.state(id).unwrap();
         }
         "budget" => {
@@ -202,7 +181,7 @@ fn child(case: &str) {
         physical,
         "terminal touch never changes the published Owner file"
     );
-    let after = journal.lines();
+    let after = home.lines();
     replay_all_prefixes(&after);
     if row >= 8 {
         assert_eq!(
@@ -210,19 +189,19 @@ fn child(case: &str) {
             "terminal history cannot be rewritten by a later cause"
         );
     }
-    home.control.file_session_halt().engage_emergency();
+    m.cell_for_test().engage_emergency();
     m.stop(id).unwrap();
     assert_eq!(
         format!("{:?}", m.state(id).unwrap().unwrap()),
         format!("{expected:?}")
     );
     assert_eq!(
-        journal.lines(),
+        home.lines(),
         after,
         "later cause creates no duplicate terminal transition"
     );
     assert!(
-        !home.control.stop_snapshot().kernel_stopped,
+        !home.session.stop_snapshot().kernel_stopped,
         "native worker remains unscheduled"
     );
     println!(

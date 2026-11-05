@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
+mod receipt;
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ScopeKind {
     Bootstrap,
@@ -172,6 +174,8 @@ struct Core {
     undo_context: AtomicU64,
     next_target: AtomicU64,
     pending: std::sync::Mutex<Option<PendingContext>>,
+    actions: std::sync::Mutex<Vec<receipt::Action>>,
+    history: OnceLock<receipt::History>,
     close: OnceLock<CloseIdentity>,
     created: Instant,
 }
@@ -309,6 +313,32 @@ impl HostSession {
         clock: Arc<dyn crate::authority::clock::Clock>,
         confirmer: Arc<dyn crate::authority::approval::ControlConfirmer + Send + Sync>,
     ) -> Result<Self, SessionError> {
+        Self::open_with_history(seed, root, root, evidence, clock, confirmer)
+    }
+
+    /// Bind both stores at construction. The history root is an owned Home
+    /// directory, never a path obtained from an action or a journal record.
+    pub fn open_with_history(
+        seed: SessionSeed,
+        root: &std::path::Path,
+        history_root: &std::path::Path,
+        evidence: Arc<crate::evidence_store::PrimaryEvidence>,
+        clock: Arc<dyn crate::authority::clock::Clock>,
+        confirmer: Arc<dyn crate::authority::approval::ControlConfirmer + Send + Sync>,
+    ) -> Result<Self, SessionError> {
+        let history = receipt::History::bind(history_root)
+            .map_err(|_| SessionError::Backend("mother_history"))?;
+        let canonical = root.canonicalize().map_err(|_| SessionError::Unavailable)?;
+        let parent = history_root
+            .canonicalize()
+            .map_err(|_| SessionError::Unavailable)?;
+        if canonical != parent && canonical.parent() != Some(parent.as_path()) {
+            return Err(SessionError::Restricted);
+        }
+        seed.core
+            .history
+            .set(history)
+            .map_err(|_| SessionError::Unavailable)?;
         let sessions = Arc::new(crate::authority::file_session::FileSessions::host(
             seed.core.cell.clone(),
         ));
@@ -404,6 +434,10 @@ impl HostSession {
 
     pub fn workspace(&self) -> Option<crate::files::WorkspaceInfo> {
         self.control.workspace()
+    }
+
+    pub fn stop_snapshot(&self) -> crate::governed::StopSnapshot {
+        self.control.stop_snapshot()
     }
 
     pub fn open_file_door(&self, request: &SessionRequest) -> Result<SessionDoor, SessionError> {
@@ -582,6 +616,26 @@ impl SessionDoor {
         run: crate::authority::ids::RunId,
         file: &crate::files::FileCreate,
     ) -> Result<crate::governed::AgentOutcome, SessionFailure> {
+        self.create_file_numbered(run, file, None)
+    }
+
+    /// A Mother effect's number is only correlation data: the original
+    /// consent, run, door and terminal journal must independently match it.
+    pub fn create_file_effect(
+        &self,
+        run: crate::authority::ids::RunId,
+        file: &crate::files::FileCreate,
+        effect: u64,
+    ) -> Result<crate::governed::AgentOutcome, SessionFailure> {
+        self.create_file_numbered(run, file, Some(effect))
+    }
+
+    fn create_file_numbered(
+        &self,
+        run: crate::authority::ids::RunId,
+        file: &crate::files::FileCreate,
+        effect: Option<u64>,
+    ) -> Result<crate::governed::AgentOutcome, SessionFailure> {
         let identity = self
             .core
             .next_target
@@ -591,11 +645,41 @@ impl SessionDoor {
                 SessionFailure::from(crate::authority::AuthorityError::Capacity)
             })?
             + 1;
+        // Retain the outcome/ack fields before any native allocation. A
+        // failed preparation consumes its reserved entry; it cannot erase
+        // uncertainty or evict a previous successful receipt.
+        let action = receipt::Action::reserved(
+            self.core.identity,
+            self.context.request(),
+            identity,
+            self.door.origin(),
+            run,
+            self.door.mission_request(run)?,
+            effect,
+        );
+        let slot = {
+            let mut actions = self.core.actions.lock().map_err(|_| {
+                self.context.fail();
+                SessionFailure::from(crate::authority::AuthorityError::Halted)
+            })?;
+            if actions.len() == 256 {
+                return Err(crate::authority::AuthorityError::Capacity.into());
+            }
+            let slot = actions.len();
+            self.context.cell.admit()?;
+            actions.push(action);
+            slot
+        };
         let outcome = self
             .door
             .agent_action(run, &crate::governed::Intent::File(file.clone()))
             .map_err(SessionFailure::from)?;
         if let crate::governed::AgentOutcome::AwaitingApproval(view) = &outcome {
+            self.core.actions.lock().map_err(|_| {
+                self.context.fail();
+                SessionFailure::from(crate::authority::AuthorityError::Halted)
+            })?[slot]
+                .commitment = Some(view.id);
             let mut pending = self.core.pending.lock().map_err(|_| {
                 self.context.fail();
                 SessionFailure::from(crate::authority::AuthorityError::Halted)
@@ -660,11 +744,9 @@ impl SessionDoor {
     }
     pub fn ack_commitment(
         &self,
-        _id: crate::authority::ids::CommitmentId,
+        id: crate::authority::ids::CommitmentId,
     ) -> Result<(), SessionFailure> {
-        // A legacy boolean ack cannot establish the mandatory durable Mother
-        // reference. The exact receipt path supplies that proof separately.
-        Err(crate::authority::AuthorityError::EvidenceUnavailable.into())
+        receipt::ack(self, id).map_err(Into::into)
     }
 }
 
@@ -725,6 +807,8 @@ impl SessionSeed {
                 undo_context: AtomicU64::new(0),
                 next_target: AtomicU64::new(0),
                 pending: std::sync::Mutex::new(None),
+                actions: std::sync::Mutex::new(Vec::with_capacity(256)),
+                history: OnceLock::new(),
                 close: OnceLock::new(),
                 created: Instant::now(),
             }),

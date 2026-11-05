@@ -1,0 +1,364 @@
+//! Session-only acknowledgement proof. No journal path, record hash or caller
+//! boolean is accepted by ack. The original Home binding and retained native
+//! action select the record; the backend verifies and synchronizes it itself.
+use super::{SessionDoor, SessionIdentity, SEALED};
+use crate::authority::commitment::{CommitmentState, PublicationClass};
+use crate::authority::ids::{CommitmentId, RunId};
+use crate::authority::run::GroupId;
+use crate::authority::AuthorityError;
+use crate::governed::Lookup;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::fs::{File, Metadata, OpenOptions};
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+pub(super) struct History {
+    root: PathBuf,
+    identity: Metadata,
+}
+impl History {
+    pub(super) fn bind(root: &Path) -> Result<Self, AuthorityError> {
+        let root = root.canonicalize().map_err(|_| unavailable())?;
+        let identity = std::fs::symlink_metadata(&root).map_err(|_| unavailable())?;
+        if !identity.is_dir() {
+            return Err(unavailable());
+        }
+        Ok(Self { root, identity })
+    }
+    fn verify_root(&self) -> Result<(), AuthorityError> {
+        let now = std::fs::symlink_metadata(&self.root).map_err(|_| unavailable())?;
+        if !now.is_dir() || !same(&now, &self.identity) {
+            return Err(unavailable());
+        }
+        Ok(())
+    }
+    fn read(&self) -> Result<(File, Vec<Line>), AuthorityError> {
+        self.verify_root()?;
+        match std::fs::symlink_metadata(self.root.join("mother-journal.jsonl.poisoned")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => return Err(unavailable()),
+        }
+        let path = self.root.join("mother-journal.jsonl");
+        let metadata = std::fs::symlink_metadata(&path).map_err(|_| unavailable())?;
+        if !metadata.is_file() {
+            return Err(unavailable());
+        }
+        let mut options = OpenOptions::new();
+        options.read(true).write(true);
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        }
+        let mut file = options.open(path).map_err(|_| unavailable())?;
+        if !same(&metadata, &file.metadata().map_err(|_| unavailable())?) {
+            return Err(unavailable());
+        }
+        let mut text = String::new();
+        file.read_to_string(&mut text).map_err(|_| unavailable())?;
+        self.verify_root()?;
+        if !text.ends_with('\n') {
+            return Err(unavailable());
+        }
+        let mut previous = "0".repeat(64);
+        let mut lines = Vec::new();
+        for (sequence, raw) in text.split_terminator('\n').enumerate() {
+            let value: Value = serde_json::from_str(raw).map_err(|_| unavailable())?;
+            let mission = value["mission"].as_u64().ok_or_else(unavailable)?;
+            let hash = value["hash"].as_str().ok_or_else(unavailable)?;
+            // Preserve the canonical event's field order in its hash input.
+            // The outer canonical shape rules out duplicate top-level fields.
+            let prefix = format!("{{\"format\":2,\"seq\":{sequence},\"prev\":\"{previous}\",\"mission\":{mission},\"event\":");
+            let suffix = format!(",\"hash\":\"{hash}\"}}");
+            let event = raw
+                .strip_prefix(&prefix)
+                .and_then(|s| s.strip_suffix(&suffix))
+                .ok_or_else(unavailable)?;
+            let mut digest = Sha256::new();
+            digest.update(b"nexus-mother-journal-v2\n");
+            for part in [
+                previous.as_bytes(),
+                &[2],
+                &(sequence as u64).to_be_bytes(),
+                &mission.to_be_bytes(),
+                event.as_bytes(),
+            ] {
+                digest.update((part.len() as u64).to_be_bytes());
+                digest.update(part);
+            }
+            if hex::encode(digest.finalize()) != hash {
+                return Err(unavailable());
+            }
+            previous = hash.to_owned();
+            lines.push(Line {
+                mission,
+                sequence: sequence as u64,
+                hash: previous.clone(),
+                event: value["event"].clone(),
+            });
+        }
+        Ok((file, lines))
+    }
+    fn terminal(
+        &self,
+        action: &Action,
+        publication: &PublicationClass,
+        state: CommitmentState,
+    ) -> Result<Terminal, AuthorityError> {
+        let (file, lines) = self.read()?;
+        let mission = action.mission.ok_or_else(unavailable)?;
+        let effect = action.effect.ok_or_else(unavailable)?;
+        let commitment = action.commitment.ok_or_else(unavailable)?.to_string();
+        let run = action.run.to_string();
+        let mut pending = false;
+        let mut terminal = None;
+        for line in lines {
+            if line.mission != mission {
+                continue;
+            }
+            let e = &line.event;
+            if e["event"] == "approval_pending" && e["effect"] == effect {
+                if pending || e["pending"]["run"] != run || e["pending"]["commitment"] != commitment
+                {
+                    return Err(unavailable());
+                }
+                pending = true;
+            }
+            let t = &e["trigger"];
+            if e["event"] != "transition" || t["effect"] != effect {
+                continue;
+            }
+            let kind = t["trigger"].as_str().unwrap_or("");
+            let matches = match kind {
+                "action_approved" => {
+                    pending
+                        && matches!(publication, PublicationClass::Published { recovery_required: false, interrupted } if interrupted.is_empty())
+                }
+                "action_denied" => {
+                    pending
+                        && state == CommitmentState::Denied
+                        && *publication == PublicationClass::ConfirmedNotPublished
+                }
+                "approval_lapsed" => {
+                    pending && *publication == PublicationClass::ConfirmedNotPublished
+                }
+                "settled" => {
+                    let exact =
+                        t["action"]["run"] == run && t["action"]["commitment"] == commitment;
+                    exact && outcome_matches(&t["outcome"], publication)
+                }
+                _ => continue,
+            };
+            if !matches || terminal.is_some() {
+                return Err(unavailable());
+            }
+            terminal = Some(Terminal {
+                sequence: line.sequence,
+                hash: hex::decode(line.hash)
+                    .map_err(|_| unavailable())?
+                    .try_into()
+                    .map_err(|_| unavailable())?,
+            });
+        }
+        let terminal = terminal.ok_or_else(unavailable)?;
+        // Reading a line is not its durability proof. The same opened file and
+        // its identity-checked parent are synchronized before receipt install.
+        file.sync_all().map_err(|_| unavailable())?;
+        self.verify_root()?;
+        if !same(
+            &file.metadata().map_err(|_| unavailable())?,
+            &std::fs::symlink_metadata(self.root.join("mother-journal.jsonl"))
+                .map_err(|_| unavailable())?,
+        ) {
+            return Err(unavailable());
+        }
+        let parent = File::open(&self.root).map_err(|_| unavailable())?;
+        if !same(
+            &parent.metadata().map_err(|_| unavailable())?,
+            &self.identity,
+        ) {
+            return Err(unavailable());
+        }
+        parent.sync_all().map_err(|_| unavailable())?;
+        self.verify_root()?;
+        Ok(terminal)
+    }
+}
+fn outcome_matches(value: &Value, publication: &PublicationClass) -> bool {
+    match publication {
+        PublicationClass::ConfirmedNotPublished => value["outcome"] == "not_published",
+        PublicationClass::Published {
+            recovery_required,
+            interrupted,
+        } => {
+            value["outcome"] == "published"
+                && value["recovery_required"] == *recovery_required
+                && value["interrupted"].as_array().is_some_and(|causes| {
+                    causes.len() == interrupted.len()
+                        && causes
+                            .iter()
+                            .zip(interrupted)
+                            .all(|(a, b)| a.as_str() == Some(*b))
+                })
+        }
+        _ => false,
+    }
+}
+fn same(a: &Metadata, b: &Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        a.dev() == b.dev() && a.ino() == b.ino()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (a, b);
+        false
+    }
+}
+fn unavailable() -> AuthorityError {
+    AuthorityError::EvidenceUnavailable
+}
+struct Line {
+    mission: u64,
+    sequence: u64,
+    hash: String,
+    event: Value,
+}
+struct Terminal {
+    sequence: u64,
+    hash: [u8; 32],
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Conclusive {
+    NotPublished,
+    Published {
+        recovery: bool,
+        interrupted: [Option<&'static str>; 8],
+    },
+}
+impl Conclusive {
+    fn of(publication: &PublicationClass) -> Result<Self, AuthorityError> {
+        match publication {
+            PublicationClass::ConfirmedNotPublished => Ok(Self::NotPublished),
+            PublicationClass::Published {
+                recovery_required,
+                interrupted,
+            } if interrupted.len() <= 8 => {
+                let mut causes = [None; 8];
+                for (slot, cause) in causes.iter_mut().zip(interrupted) {
+                    *slot = Some(*cause);
+                }
+                Ok(Self::Published {
+                    recovery: *recovery_required,
+                    interrupted: causes,
+                })
+            }
+            _ => Err(unavailable()),
+        }
+    }
+}
+struct Receipt {
+    outcome: Conclusive,
+    terminal: Terminal,
+    released: bool,
+}
+pub(super) struct Action {
+    session: SessionIdentity,
+    request: u64,
+    preparation: u64,
+    door: GroupId,
+    run: RunId,
+    mission: Option<u64>,
+    effect: Option<u64>,
+    pub(super) commitment: Option<CommitmentId>,
+    receipt: Option<Receipt>,
+}
+impl Action {
+    pub(super) fn reserved(
+        session: SessionIdentity,
+        request: u64,
+        preparation: u64,
+        door: GroupId,
+        run: RunId,
+        consent: String,
+        effect: Option<u64>,
+    ) -> Self {
+        let mission = consent
+            .split('/')
+            .next()
+            .and_then(|s| s.strip_prefix("msn-"))
+            .and_then(|s| s.parse().ok());
+        Self {
+            session,
+            request,
+            preparation,
+            door,
+            run,
+            mission,
+            effect,
+            commitment: None,
+            receipt: None,
+        }
+    }
+}
+pub(super) fn ack(door: &SessionDoor, id: CommitmentId) -> Result<(), AuthorityError> {
+    if door.core.cell.session_word() & SEALED != 0 {
+        return Err(AuthorityError::Halted);
+    }
+    let mut actions = door.core.actions.lock().map_err(|_| {
+        door.context.fail();
+        unavailable()
+    })?;
+    let action = actions
+        .iter_mut()
+        .find(|a| a.commitment == Some(id))
+        .ok_or(AuthorityError::UnknownCommitment)?;
+    if action.session != door.core.identity
+        || action.door != door.door.origin()
+        || action.request != door.context.request()
+        || action.preparation == 0
+    {
+        return Err(AuthorityError::NotMember);
+    }
+    if let Some(receipt) = &action.receipt {
+        if receipt.released && receipt.terminal.hash != [0; 32] && receipt.terminal.sequence > 0 {
+            return Ok(());
+        }
+    }
+    let Lookup::Mine((view, publication)) = door.door.file_observation(id)? else {
+        return Err(AuthorityError::UnknownCommitment);
+    };
+    if view.run != action.run
+        || !view.state.is_final()
+        || matches!(
+            publication,
+            PublicationClass::Pending | PublicationClass::Uncertain
+        )
+    {
+        return Err(unavailable());
+    }
+    if action.receipt.is_none() {
+        let outcome = Conclusive::of(&publication)?;
+        let terminal = door.core.history.get().ok_or_else(unavailable)?.terminal(
+            action,
+            &publication,
+            view.state,
+        )?;
+        action.receipt = Some(Receipt {
+            outcome,
+            terminal,
+            released: false,
+        });
+    }
+    let receipt = action.receipt.as_mut().ok_or_else(unavailable)?;
+    if receipt.outcome != Conclusive::of(&publication)? {
+        return Err(unavailable());
+    }
+    // Receipt and unresolved transfer survive an error or unwind. The native
+    // registry's exact ack is idempotent; no other action's pin is released.
+    door.door.ack_commitment(id)?;
+    receipt.released = true;
+    Ok(())
+}

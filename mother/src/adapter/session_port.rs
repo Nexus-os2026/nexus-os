@@ -79,11 +79,17 @@ impl PortDoor {
         &self,
         run: RunId,
         intent: &Intent,
+        effect: Option<u64>,
     ) -> Result<AgentOutcome, AuthorityError> {
         match self {
             Self::Legacy(door) => door.agent_action(run, intent),
             Self::Session(door) => match intent {
-                Intent::File(file) => door.create_file(run, file).map_err(Into::into),
+                Intent::File(file) => match effect {
+                    Some(number) => door
+                        .create_file_effect(run, file, number)
+                        .map_err(Into::into),
+                    None => Err(AuthorityError::NotAdmitted),
+                },
                 _ => Err(AuthorityError::Unavailable(
                     "only File creation is a session effect",
                 )),
@@ -148,7 +154,7 @@ impl PortDoor {
     pub(super) fn ack_commitment(&self, id: CommitmentId) -> Result<(), AuthorityError> {
         match self {
             Self::Legacy(door) => door.ack_commitment(id),
-            Self::Session(_) => Err(AuthorityError::EvidenceUnavailable),
+            Self::Session(door) => door.ack_commitment(id).map_err(Into::into),
         }
     }
 }

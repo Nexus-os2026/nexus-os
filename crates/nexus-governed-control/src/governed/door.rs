@@ -91,6 +91,19 @@ impl fmt::Debug for AgentDoor {
 }
 
 impl AgentDoor {
+    pub(crate) fn origin(&self) -> GroupId {
+        self.core.group
+    }
+
+    pub(crate) fn mission_request(&self, run: RunId) -> Result<String, AuthorityError> {
+        let runs = self.control.authority().runs();
+        if !runs.is_member(run, self.core.group) {
+            return Err(AuthorityError::NotMember);
+        }
+        runs.files_admission(run)
+            .map(|admission| admission.request)
+            .ok_or(AuthorityError::NotAdmitted)
+    }
     /// Only the front door's issue, after the owner's recorded yes.
     pub(crate) fn new(
         control: Arc<GovernedControl>,
