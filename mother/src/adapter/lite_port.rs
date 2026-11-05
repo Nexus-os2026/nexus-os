@@ -84,9 +84,12 @@ impl GovernedPort {
             .admit_files(run, &admission.contract_hash, &admission.consent_request)
             .map_err(|e| refused_by(e.class()))?;
         self.file_enter()?;
-        self.file_runs()?
-            .file_admissions
-            .insert(mission, admission.clone());
+        let mut runs = self.file_runs()?;
+        #[cfg(test)]
+        session_port::session_projection_tests::at("file_binding_project", "before");
+        runs.file_admissions.insert(mission, admission.clone());
+        #[cfg(test)]
+        session_port::session_projection_tests::at("file_binding_project", "after");
         Ok(())
     }
 

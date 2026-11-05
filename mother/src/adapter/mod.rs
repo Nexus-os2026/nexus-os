@@ -458,7 +458,11 @@ impl GovernedPort {
             } else if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
                 Some(BrokerClass::MissionCancelled)
             } else {
+                #[cfg(test)]
+                session_port::session_projection_tests::at("run_project", "before");
                 runs.open.insert(mission, run);
+                #[cfg(test)]
+                session_port::session_projection_tests::at("run_project", "after");
                 None
             }
         });
@@ -546,7 +550,12 @@ impl GovernedPort {
         // lifetime, so a deadline from this reading is never later.
         let asked_at = self.door.clock().monotonic_ms();
         let effect_number = self.with_runs(|runs| runs.file_effects.get(&mission).copied());
-        match self.door.agent_action(run, &intent, effect_number) {
+        #[cfg(test)]
+        session_port::session_projection_tests::at("effect_dispatch", "before");
+        let result = self.door.agent_action(run, &intent, effect_number);
+        #[cfg(test)]
+        session_port::session_projection_tests::at("effect_dispatch", "after");
+        match result {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
@@ -639,8 +648,12 @@ impl EffectPort for GovernedPort {
             }
             // Reserve before entering the broker. A read during proposal is
             // uncertain, never proof that the effect was not published.
+            #[cfg(test)]
+            session_port::session_projection_tests::at("file_effect_select", "before");
             runs.file_effects.insert(mission, number);
             runs.waiting.remove(&mission);
+            #[cfg(test)]
+            session_port::session_projection_tests::at("file_effect_select", "after");
         }
         self.perform_inner(mission, effect)
     }

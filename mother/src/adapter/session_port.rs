@@ -1,6 +1,9 @@
 //! Mandatory File-only session port. Legacy doors remain a separate variant;
 //! no session variant can adopt or invoke another effect domain.
 use super::*;
+#[cfg(test)]
+#[path = "session_projection_tests.rs"]
+pub(super) mod session_projection_tests;
 use nexus_governed_control::host_session::{SessionContext, SessionDoor};
 
 pub(super) enum PortDoor {
