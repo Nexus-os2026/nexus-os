@@ -514,6 +514,7 @@ impl Mission {
 }
 
 struct Inner {
+    session_context: Option<nexus_governed_control::host_session::SessionContext>,
     file_cell: Option<nexus_governed_control::authority::file_session::HaltCell>,
     store: Box<dyn JournalStore>,
     head: String,
@@ -555,6 +556,15 @@ struct Inner {
 mod session_journal_oracles;
 
 impl Inner {
+    fn admit_session(
+        &self,
+        step: nexus_governed_control::host_session::MotherStep,
+    ) -> Result<(), CoordinatorError> {
+        if let Some(context) = &self.session_context {
+            context.admit(step).map_err(|_| CoordinatorError::Stopped)?;
+        }
+        Ok(())
+    }
     /// Journal one record, after this session's opening and any hold not
     /// journaled yet.
     fn append(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
@@ -650,9 +660,42 @@ impl Inner {
             }));
         }
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
+        let work = match &entry.event {
+            Event::Drafted { .. }
+            | Event::FileModeSelected
+            | Event::LaneInvoked { .. }
+            | Event::LaneReturned { .. }
+            | Event::EffectDispatched { .. }
+            | Event::EffectSettled { .. }
+            | Event::ApprovalPending { .. }
+            | Event::Resumed => true,
+            Event::Transition { trigger } => matches!(
+                trigger,
+                Trigger::Revise { .. }
+                    | Trigger::Submit { .. }
+                    | Trigger::Consent { .. }
+                    | Trigger::Start
+                    | Trigger::PhaseDone
+                    | Trigger::VerifyPass
+                    | Trigger::AwaitApproval { .. }
+                    | Trigger::ActionApproved { .. }
+            ),
+            Event::ConsentRefused { .. }
+            | Event::LaneOvertaken { .. }
+            | Event::EffectRefused { .. }
+            | Event::ApprovalClosed { .. }
+            | Event::SessionOpened
+            | Event::SessionClosed
+            | Event::Held { .. }
+            | Event::SettlementStarted { .. } => false,
+        };
+        let line = entry.to_line();
         #[cfg(all(test, target_os = "linux"))]
         session_journal_oracles::at("before", &entry);
-        if let Err(e) = self.store.append(&entry.to_line()) {
+        if work {
+            self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
+        }
+        if let Err(e) = self.store.append(&line) {
             // Fail closed, durably: a journal that may have lost a
             // transition (a Stop) must not be reopened as if it had not.
             // If poisoning fails too, the journal reopens, but its session
@@ -994,11 +1037,12 @@ impl<P: EffectPort> Coordinator<P> {
         let coordinator = Self {
             file_attachment,
             file: None,
-            port,
+            port: port.clone(),
             lanes,
             clock,
             private: Arc::new(private),
             inner: Mutex::new(Inner {
+                session_context: port.session_context(),
                 file_cell: None,
                 store: Box::new(store),
                 head: entries
@@ -1297,6 +1341,7 @@ impl<P: EffectPort> Coordinator<P> {
             let (seq, number) = (inner.next_seq, inner.next_request);
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("before", "consent_reserve");
+            inner.admit_session(nexus_governed_control::host_session::MotherStep::ConsentReservation)?;
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "consent_reserve");
             inner.next_request += 1;
@@ -1464,9 +1509,15 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 other => phase_roles(other),
             };
+            let context = inner.session_context.clone();
             let mission = inner.mission(id)?;
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("before", "phase_reserve");
+            if let Some(context) = context {
+                context
+                    .admit(nexus_governed_control::host_session::MotherStep::PhaseReservation)
+                    .map_err(|_| CoordinatorError::Stopped)?;
+            }
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "phase_reserve");
             mission.busy = true;
@@ -1744,6 +1795,11 @@ impl<P: EffectPort> Coordinator<P> {
             }
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("before", "lane_invoke");
+            if let Some(context) = self.port.session_context() {
+                context
+                    .admit(nexus_governed_control::host_session::MotherStep::LaneInvocation)
+                    .map_err(|_| CoordinatorError::Stopped)?;
+            }
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "lane_invoke");
             let output = lane.invoke(&input);
@@ -2021,6 +2077,11 @@ impl<P: EffectPort> Coordinator<P> {
         let bytes = serde_json::to_vec(rest).expect("effect requests serialise");
         #[cfg(all(test, target_os = "linux"))]
         session_journal_oracles::call("before", "paused_store");
+        if let Some(context) = self.port.session_context() {
+            context
+                .admit(nexus_governed_control::host_session::MotherStep::PrivateWrite)
+                .map_err(|_| CoordinatorError::Stopped)?;
+        }
         #[cfg(all(test, target_os = "linux"))]
         session_journal_oracles::call("entered", "paused_store");
         let stored = self.private.put(ContentKind::PausedPhase, &bytes);

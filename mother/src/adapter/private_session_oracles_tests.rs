@@ -2,7 +2,7 @@
 //! fixture invokes the old store. Migration changes its adapter, not these
 //! expected filesystem facts. Probe callbacks are test-only and thread-local.
 use super::*;
-use nexus_governed_control::host_session::SessionSeed;
+use nexus_governed_control::host_session::{CommandKind, HostSession, SessionSeed};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -104,6 +104,7 @@ fn snapshot(root: &Path) -> Snapshot {
 
 #[test]
 fn session_r37_each_private_call_and_error_removal_has_its_own_boundary() {
+    let selected = std::env::var("M2DD_PRIVATE_CASE").ok();
     let mut failures = Vec::new();
     let mut executed = 0;
     for kind in [ContentKind::Contract, ContentKind::PausedPhase] {
@@ -118,10 +119,46 @@ fn session_r37_each_private_call_and_error_removal_has_its_own_boundary() {
         ] {
             for when in ["before", "after"] {
                 for ingresses in 0..=3 {
+                    let key = format!("{kind:?}/{sink}/{when}/{ingresses}");
+                    if let Some(selected) = &selected {
+                        if selected != &key {
+                            continue;
+                        }
+                    } else {
+                        let passed = run_child(&key);
+                        if !passed {
+                            failures.push(key);
+                        }
+                        executed += 1;
+                        continue;
+                    }
                     let dir = Scenario::new();
-                    let store = FilePrivate::open(&dir.0.join("private")).unwrap();
                     let seed = SessionSeed::new().unwrap();
                     let ingress = seed.ingress();
+                    let broker = dir.0.join("broker");
+                    let evidence = nexus_governed_control::evidence_store::PrimaryEvidence::open(
+                        &broker.join("p3-evidence/evidence.sqlite3"),
+                        vec![],
+                    )
+                    .unwrap();
+                    let session = HostSession::open(
+                        seed,
+                        &broker,
+                        evidence,
+                        Arc::new(nexus_governed_control::authority::clock::SystemClock::default()),
+                        Arc::new(crate::oracles::lite_support::FilesOwner::default()),
+                    )
+                    .unwrap();
+                    let workspace = dir.0.join("workspace");
+                    crate::adapter::create_private(&workspace).unwrap();
+                    session.bootstrap_workspace(&workspace, &[]).unwrap();
+                    session.finish_bootstrap().unwrap();
+                    let request = ingress.accept(CommandKind::Run, 1).unwrap();
+                    let store = FilePrivate::open_session(
+                        &dir.0.join("private"),
+                        session.context(&request).unwrap(),
+                    )
+                    .unwrap();
                     let observed = Arc::new(Mutex::new(None));
                     let captured = observed.clone();
                     let root = dir.0.clone();
@@ -178,10 +215,53 @@ fn session_r37_each_private_call_and_error_removal_has_its_own_boundary() {
             }
         }
     }
-    assert_eq!(executed, 112);
+    assert_eq!(executed, if selected.is_some() { 1 } else { 112 });
     assert!(
         failures.is_empty(),
         "executed {executed} private-store schedules; forbidden continuations: {}",
         failures.join(", ")
     );
+}
+
+fn run_child(case: &str) -> bool {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary", "--nocapture"])
+        .env("M2DD_PRIVATE_CASE", case)
+        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    let out = std::thread::spawn(move || {
+        let mut text = String::new();
+        stdout.read_to_string(&mut text).unwrap();
+        text
+    });
+    let err = std::thread::spawn(move || {
+        let mut text = String::new();
+        stderr.read_to_string(&mut text).unwrap();
+        text
+    });
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let stdout = out.join().unwrap();
+    let stderr = err.join().unwrap();
+    let reached = stdout.lines().any(|line| line.starts_with("R37/"));
+    let passed = status.is_some_and(|status| status.success()) && reached;
+    print!("{stdout}");
+    if !passed {
+        eprintln!("private child {case} failed: {stderr}");
+    }
+    passed
 }

@@ -37,13 +37,33 @@
 
 use crate::journal::IoKind;
 use crate::private::{ContentId, ContentKind, PrivateError, PrivateStore, MAX_CONTENT_BYTES};
+use nexus_governed_control::host_session::{MotherStep, SessionContext};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+enum PrivateMode {
+    Legacy,
+    Session(SessionContext),
+}
+impl PrivateMode {
+    fn admit(&self, step: MotherStep) -> std::io::Result<()> {
+        match self {
+            Self::Legacy => Ok(()),
+            Self::Session(context) => context.admit(step).map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "session private sink refused",
+                )
+            }),
+        }
+    }
+}
+
 /// Mother's private store on disk.
 pub struct FilePrivate {
+    mode: PrivateMode,
     /// The store's directory, canonical.
     dir: PathBuf,
     /// The owner of the store's directory (Unix), which every directory
@@ -61,15 +81,18 @@ fn io(e: std::io::Error) -> PrivateError {
 
 /// Sync a directory (its entries durable). Tests see every call and can
 /// make one fail ([`seam`]).
-fn sync_dir(dir: &Path) -> std::io::Result<()> {
+fn sync_dir(dir: &Path, mode: &PrivateMode) -> std::io::Result<()> {
     #[cfg(test)]
     session_probe::before("private_parent_sync");
     #[cfg(test)]
     seam::sync(dir)?;
+    #[cfg(unix)]
+    let directory = std::fs::File::open(dir)?;
+    mode.admit(MotherStep::PrivateParentSync)?;
     #[cfg(test)]
     session_probe::entered("private_parent_sync");
     #[cfg(unix)]
-    std::fs::File::open(dir)?.sync_all()?;
+    directory.sync_all()?;
     #[cfg(test)]
     session_probe::after("private_parent_sync");
     Ok(())
@@ -93,7 +116,7 @@ fn parent_of(dir: &Path) -> &Path {
 
 /// Create every missing level of `dir`, each on its own (0700), each
 /// synced with its parent as it is created. Every failure is returned.
-fn create_levels(dir: &Path) -> Result<(), PrivateError> {
+fn create_levels(dir: &Path, mode: &PrivateMode) -> Result<(), PrivateError> {
     let mut missing = Vec::new();
     let mut at = dir;
     loop {
@@ -118,6 +141,7 @@ fn create_levels(dir: &Path) -> Result<(), PrivateError> {
         }
         #[cfg(test)]
         session_probe::before("private_mkdir");
+        mode.admit(MotherStep::PrivateDirectory).map_err(io)?;
         #[cfg(test)]
         session_probe::entered("private_mkdir");
         match builder.create(level) {
@@ -130,8 +154,8 @@ fn create_levels(dir: &Path) -> Result<(), PrivateError> {
         seam::created(level);
         #[cfg(test)]
         session_probe::after("private_mkdir");
-        sync_dir(level).map_err(io)?;
-        sync_dir(parent_of(level)).map_err(io)?;
+        sync_dir(level, mode).map_err(io)?;
+        sync_dir(parent_of(level), mode).map_err(io)?;
     }
     Ok(())
 }
@@ -209,16 +233,29 @@ mod session_probe;
 impl FilePrivate {
     /// The store at `dir` (created private if absent), its chain synced.
     pub fn open(dir: &Path) -> Result<Self, PrivateError> {
-        create_levels(dir)?;
+        Self::open_mode(dir, PrivateMode::Legacy)
+    }
+
+    pub fn open_session(dir: &Path, context: SessionContext) -> Result<Self, PrivateError> {
+        Self::open_mode(dir, PrivateMode::Session(context))
+    }
+
+    fn open_mode(dir: &Path, mode: PrivateMode) -> Result<Self, PrivateError> {
+        create_levels(dir, &mode)?;
         // The path as given: a link is refused before it is resolved.
         let owner = private_dir(dir, None)?;
         let dir = std::fs::canonicalize(dir).map_err(io)?;
         private_dir(&dir, Some(owner))?;
         let chain = chain_of(&dir, owner)?;
         for level in chain.iter().rev() {
-            sync_dir(level).map_err(io)?;
+            sync_dir(level, &mode).map_err(io)?;
         }
-        Ok(Self { dir, owner, chain })
+        Ok(Self {
+            dir,
+            owner,
+            chain,
+            mode,
+        })
     }
 
     pub fn dir(&self) -> &Path {
@@ -230,7 +267,7 @@ impl FilePrivate {
     fn kind_dir(&self, kind: ContentKind) -> Result<PathBuf, PrivateError> {
         private_dir(&self.dir, Some(self.owner))?;
         let dir = self.dir.join(kind.as_str());
-        create_levels(&dir)?;
+        create_levels(&dir, &self.mode)?;
         private_dir(&dir, Some(self.owner))?;
         Ok(dir)
     }
@@ -247,6 +284,7 @@ impl FilePrivate {
         }
         #[cfg(test)]
         session_probe::before("private_temp_create");
+        self.mode.admit(MotherStep::PrivateTemporary)?;
         #[cfg(test)]
         session_probe::entered("private_temp_create");
         let mut file = options.open(temp)?;
@@ -254,6 +292,7 @@ impl FilePrivate {
         session_probe::after("private_temp_create");
         #[cfg(test)]
         session_probe::before("private_write");
+        self.mode.admit(MotherStep::PrivateWrite)?;
         #[cfg(test)]
         session_probe::entered("private_write");
         #[cfg(test)]
@@ -263,6 +302,7 @@ impl FilePrivate {
         session_probe::after("private_write");
         #[cfg(test)]
         session_probe::before("private_sync");
+        self.mode.admit(MotherStep::PrivateSync)?;
         #[cfg(test)]
         session_probe::entered("private_sync");
         file.sync_all()?;
@@ -271,15 +311,16 @@ impl FilePrivate {
         drop(file);
         #[cfg(test)]
         session_probe::before("private_rename");
+        self.mode.admit(MotherStep::PrivateRename)?;
         #[cfg(test)]
         session_probe::entered("private_rename");
         std::fs::rename(temp, target)?;
         #[cfg(test)]
         session_probe::after("private_rename");
         for level in self.chain.iter().rev() {
-            sync_dir(level)?;
+            sync_dir(level, &self.mode)?;
         }
-        sync_dir(dir)?;
+        sync_dir(dir, &self.mode)?;
         Ok(())
     }
 }
@@ -304,11 +345,13 @@ impl PrivateStore for FilePrivate {
         if written.is_err() {
             #[cfg(test)]
             session_probe::before("private_error_remove");
-            #[cfg(test)]
-            session_probe::entered("private_error_remove");
-            let _ = std::fs::remove_file(&temp);
-            #[cfg(test)]
-            session_probe::after("private_error_remove");
+            if self.mode.admit(MotherStep::PrivateErrorRemoval).is_ok() {
+                #[cfg(test)]
+                session_probe::entered("private_error_remove");
+                let _ = std::fs::remove_file(&temp);
+                #[cfg(test)]
+                session_probe::after("private_error_remove");
+            }
         }
         written.map_err(io)?;
         Ok(id)
