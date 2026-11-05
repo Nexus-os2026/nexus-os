@@ -92,14 +92,16 @@ impl LineBuffer {
             return None;
         }
         if byte == b'\r' || byte == b'\n' {
-            let answer = if !self.overflow && self.bytes == b"stop" {
+            let answer = if self.bytes == b"stop" {
                 Some(Line::Stop)
-            } else if !self.overflow && self.bytes == b"quit" {
+            } else if self.bytes == b"quit" {
                 Some(Line::Quit)
             } else if self.stale {
                 None
             } else if self.overflow {
                 Some(Line::Answer(None))
+            } else if self.bytes.is_empty() {
+                None
             } else {
                 Some(Line::Answer(String::from_utf8(self.bytes.clone()).ok()))
             };
@@ -108,12 +110,47 @@ impl LineBuffer {
             self.stale = false;
             return answer;
         }
+        match byte {
+            0x7f | 0x08 => {
+                self.bytes.pop();
+                return None;
+            }
+            0x15 => {
+                self.bytes.clear();
+                // Editing cannot turn stale or overflowed input into approval.
+                return None;
+            }
+            _ => {}
+        }
         if self.bytes.len() < 64 {
             self.bytes.push(byte);
         } else {
             self.overflow = true;
         }
         None
+    }
+    /// Only accepted printable ASCII and host-generated editing/newline bytes.
+    /// Called before push; stale input never acquires a visible answer line.
+    fn echo(&self, byte: u8, out: &mut String) {
+        if self.stale {
+            return;
+        }
+        match byte {
+            b'\n' if self.after_cr => {}
+            b'\r' | b'\n' => out.push('\n'),
+            0x7f | 0x08 => {
+                if self.bytes.last().is_some_and(|b| (b' '..=b'~').contains(b)) {
+                    out.push_str("\x08 \x08");
+                }
+            }
+            0x15 => {
+                for _ in self.bytes.iter().filter(|b| (b' '..=b'~').contains(b)) {
+                    out.push_str("\x08 \x08");
+                }
+            }
+            b' '..=b'~' if self.bytes.len() < 64 && !self.overflow => out.push(byte as char),
+            _ => {} // Never echo supplied control bytes or invalid UTF-8.
+        }
     }
 }
 
@@ -169,6 +206,7 @@ pub(crate) struct Input {
     pub(crate) boundary: u64,
     pub(crate) acknowledged: u64,
     pub(crate) active: bool,
+    typing: bool,
     pub(crate) fatal: Option<Failure>,
     pub(crate) eof: bool,
     pub(crate) quit: Option<SessionRequest>,
@@ -215,6 +253,20 @@ impl Shared {
             self.fail(Failure::Renderer);
             return Err(Failure::Renderer);
         }
+        self.queue_frame(text)
+    }
+    // The sole renderer owns echo as well as ordinary frames. Never wait on
+    // output from the ingress reader; full output queues fail closed.
+    fn queue_frame(&self, text: String) -> Result<mpsc::Receiver<Result<(), Failure>>, Failure> {
+        let result = self.enqueue_frame(text);
+        if result.is_err() {
+            self.fail(Failure::Output);
+        }
+        result
+    }
+    // Does not acquire input or call fail, so readiness and marker ordering
+    // can be published while holding the input metadata lock.
+    fn enqueue_frame(&self, text: String) -> Result<mpsc::Receiver<Result<(), Failure>>, Failure> {
         let (tx, rx) = mpsc::channel();
         if self
             .queued_output
@@ -222,7 +274,6 @@ impl Shared {
             .is_err()
             || self.output.try_send(Frame { text, ack: tx }).is_err()
         {
-            self.fail(Failure::Output);
             return Err(Failure::Output);
         }
         Ok(rx)
@@ -302,6 +353,9 @@ impl Shared {
                 self.changed.notify_all();
             }
             Line::Answer(text) => {
+                if text.as_deref() == Some("") {
+                    return;
+                }
                 let Some(next) = self.next() else {
                     self.fail(Failure::Capacity);
                     return;
@@ -487,7 +541,11 @@ impl TerminalConfirmer {
                 return false;
             }
         };
-        self.shared.input().active = true;
+        {
+            let mut input = self.shared.input();
+            input.active = true;
+            input.typing = false;
+        }
         self.answered(AnswerState::Awaiting);
         let answer = self.ask_inner(title, text, deadline, epoch, recovery);
         if self.answer() == AnswerState::Awaiting {
@@ -607,7 +665,18 @@ impl TerminalConfirmer {
             }
             self.shared.wait();
         }
-        self.shared.emit("INPUT READY\n");
+        let ready = {
+            let mut input = self.shared.input();
+            // Queue the marker before permitting any answer echo. The reader
+            // keeps invalidating partial input throughout the display gap.
+            let queued = self.shared.enqueue_frame("INPUT READY\n".into());
+            input.typing = queued.is_ok();
+            queued
+        };
+        if ready.is_err() {
+            self.shared.fail(Failure::Output);
+            return false;
+        }
         loop {
             if !self.valid(deadline, epoch, recovery) {
                 return false;
@@ -999,10 +1068,34 @@ fn read_input(shared: Arc<Shared>) {
                 break;
             }
             Ok(n) => {
+                let discard = {
+                    let input = shared.input();
+                    boundary.is_some()
+                        || input.boundary != input.acknowledged
+                        || (input.active && !input.typing)
+                };
+                if discard {
+                    buffer.invalidate();
+                }
+                let mut echo = String::new();
                 for b in &bytes[..n] {
-                    if let Some(line) = buffer.push(*b) {
-                        shared.receive(line, boundary.is_some());
+                    if !discard {
+                        buffer.echo(*b, &mut echo);
                     }
+                    if let Some(line) = buffer.push(*b) {
+                        // Emergency/close ingress always precedes echo queueing.
+                        // Ordinary lines are echoed before waking their consumer.
+                        if matches!(line, Line::Answer(_)) && !echo.is_empty() {
+                            let _queued = shared.queue_frame(std::mem::take(&mut echo));
+                        }
+                        shared.receive(line, discard);
+                    }
+                    if discard {
+                        buffer.invalidate();
+                    }
+                }
+                if !echo.is_empty() {
+                    let _queued = shared.queue_frame(echo);
                 }
                 if shared.ended() {
                     break;
