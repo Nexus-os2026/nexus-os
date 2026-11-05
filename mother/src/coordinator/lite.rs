@@ -71,7 +71,8 @@ mod session_terminal_oracles;
 mod session_continuation_oracles;
 
 #[path = "../adapter/session_close_oracles_tests.rs"]
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod session_close_oracles;
 
 impl<P: EffectPort> Coordinator<P> {
