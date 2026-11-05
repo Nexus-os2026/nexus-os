@@ -1,0 +1,102 @@
+[
+  {
+    "source": "kernel/src/lib.rs",
+    "module": "audit",
+    "target": "kernel/src/audit/mod.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [],
+      "head": "pubmodaudit;"
+    }
+  },
+  {
+    "source": "kernel/src/lib.rs",
+    "module": "workspace_authority",
+    "target": "kernel/src/workspace_authority.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [],
+      "head": "pubmodworkspace_authority;"
+    }
+  },
+  {
+    "source": "kernel/src/audit/mod.rs",
+    "module": "writer_tests",
+    "target": "kernel/src/audit/writer_tests.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [
+        "#[cfg(test)]"
+      ],
+      "head": "modwriter_tests;"
+    }
+  },
+  {
+    "source": "kernel/src/workspace_authority.rs",
+    "module": "tests",
+    "target": "kernel/src/workspace_authority/tests.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [
+        "#[cfg(test)]"
+      ],
+      "head": "modtests;"
+    }
+  },
+  {
+    "source": "mother/src/coordinator/lite.rs",
+    "module": "review3",
+    "target": "mother/src/adapter/lite_review3.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [
+        "#[path=\"../adapter/lite_review3.rs\"]",
+        "#[cfg(target_os=\"linux\")]",
+        "#[cfg(test)]"
+      ],
+      "head": "modreview3;"
+    }
+  },
+  {
+    "source": "mother/src/coordinator/lite.rs",
+    "module": "review4",
+    "target": "mother/src/adapter/lite_review4.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [
+        "#[path=\"../adapter/lite_review4.rs\"]",
+        "#[cfg(target_os=\"linux\")]",
+        "#[cfg(test)]"
+      ],
+      "head": "modreview4;"
+    }
+  },
+  {
+    "source": "mother/src/coordinator/lite.rs",
+    "module": "review5",
+    "target": "mother/src/adapter/lite_review5.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [
+        "#[path=\"../adapter/lite_review5.rs\"]",
+        "#[cfg(target_os=\"linux\")]",
+        "#[cfg(test)]"
+      ],
+      "head": "modreview5;"
+    }
+  },
+  {
+    "source": "mother/src/coordinator/lite.rs",
+    "module": "review6",
+    "target": "mother/src/adapter/lite_review6.rs",
+    "contract": {
+      "scopes": [],
+      "attributes": [
+        "#[path=\"../adapter/lite_review6.rs\"]",
+        "#[cfg(target_os=\"linux\")]",
+        "#[cfg(test)]"
+      ],
+      "head": "modreview6;"
+    }
+  }
+]

@@ -1,0 +1,7 @@
+{"kind":"navigate","url":"https://example.invalid/"}
+{"kind":"click","selector":"#a"}
+{"kind":"fill","selector":"#a","text":"α\ntext"}
+{"kind":"press","selector":"#a","key":"Enter"}
+{"kind":"wait_for","selector":null,"timeout_ms":null}
+{"kind":"extract_text","selector":"#a"}
+{"kind":"wait_for","selector":"#a","timeout_ms":18446744073709551615}
