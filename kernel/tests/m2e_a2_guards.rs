@@ -236,20 +236,157 @@ fn literal_sites(files: &[ProdFile], needle: &str) -> Vec<(String, usize)> {
         .collect()
 }
 
-/// E-O65: the problems with the route guard in these production files.
-fn route_guard_findings(files: &[ProdFile]) -> Vec<String> {
+/// Exact production identifier inventory, measured through `production_files()`.
+/// Doc comments and literal contents do not confer permission to name the trait.
+const MODEL_TRANSPORT_ALLOWLIST: [(&str, usize); 4] = [
+    ("kernel/src/inference/mod.rs", 1),
+    ("kernel/src/inference/ollama.rs", 2),
+    ("kernel/src/coding_run/local_model.rs", 1),
+    ("crates/nexus-governed-control/src/inference.rs", 1),
+];
+
+/// Tokens from the masked code view. Keep punctuation so paths and generic
+/// arguments can be read independently of whitespace; normalize raw identifiers.
+fn route_tokens(code: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut at = 0;
+    while at < code.len() {
+        let ch = code[at..].chars().next().unwrap();
+        if ch.is_whitespace() {
+            at += ch.len_utf8();
+            continue;
+        }
+        if code[at..].starts_with("r#")
+            && code[at + 2..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_alphabetic() || ch == '_')
+        {
+            at += 2;
+        }
+        let start = at;
+        if code[at..].starts_with("::") || code[at..].starts_with("->") {
+            at += 2;
+        } else {
+            let ch = code[at..].chars().next().unwrap();
+            at += ch.len_utf8();
+            if ch.is_alphanumeric() || ch == '_' {
+                while let Some(ch) = code[at..].chars().next() {
+                    if !(ch.is_alphanumeric() || ch == '_') {
+                        break;
+                    }
+                    at += ch.len_utf8();
+                }
+            }
+        }
+        tokens.push(&code[start..at]);
+    }
+    tokens
+}
+
+/// Skip a balanced generic argument/parameter list or delimiter group.
+/// Arrows are single tokens; comparisons inside const blocks cannot close `<`.
+fn route_group_end(tokens: &[&str], start: usize) -> Option<usize> {
+    let close = match *tokens.get(start)? {
+        "<" => ">",
+        "(" => ")",
+        "[" => "]",
+        "{" => "}",
+        _ => return None,
+    };
+    let mut at = start + 1;
+    while let Some(&token) = tokens.get(at) {
+        if token == close {
+            return Some(at + 1);
+        }
+        if matches!(token, "(" | "[" | "{") || (close == ">" && token == "<") {
+            at = route_group_end(tokens, at)?;
+        } else {
+            at += 1;
+        }
+    }
+    None
+}
+
+/// Read the trait path after `impl` and optional generics. Only the final
+/// segment before `for` decides trait identity, never an exact header spelling.
+fn model_transport_impl(tokens: &[&str], mut at: usize) -> bool {
+    if tokens.get(at) == Some(&"<") {
+        let Some(end) = route_group_end(tokens, at) else {
+            return false;
+        };
+        at = end;
+    }
+    if tokens.get(at) == Some(&"!") {
+        at += 1;
+    }
+    if tokens.get(at) == Some(&"::") {
+        at += 1;
+    }
+    loop {
+        let Some(&segment) = tokens.get(at) else {
+            return false;
+        };
+        at += 1;
+        // Type paths also allow `segment::<Args>`.
+        if tokens.get(at..at + 2) == Some(&["::", "<"]) {
+            at += 1;
+        }
+        if tokens.get(at) == Some(&"<") {
+            let Some(end) = route_group_end(tokens, at) else {
+                return false;
+            };
+            at = end;
+        }
+        match tokens.get(at) {
+            Some(&"::") => at += 1,
+            Some(&"for") => return segment == "ModelTransport",
+            _ => return false,
+        }
+    }
+}
+
+/// E-O65 (stricter oracle amendment): every impl header naming a trait path
+/// ending in ModelTransport counts, including qualified/raw/generic spellings.
+/// Exactly one implementation, in ollama.rs, is allowed. Trait renaming is
+/// forbidden; every identifier occurrence also needs an exact file/count entry.
+fn model_transport_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
-    let impls: Vec<String> = files
-        .iter()
-        .flat_map(|f| {
-            f.code
-                .match_indices("impl ModelTransport for")
-                .map(move |_| f.rel.clone())
-        })
-        .collect();
+    let mut impls = Vec::new();
+    for file in files {
+        let tokens = route_tokens(&file.code);
+        let count = tokens.iter().filter(|&&t| t == "ModelTransport").count();
+        let expected = MODEL_TRANSPORT_ALLOWLIST
+            .iter()
+            .find(|&&(rel, _)| rel == file.rel)
+            .map_or(0, |&(_, count)| count);
+        if count != expected {
+            out.push(format!(
+                "{}: ModelTransport identifiers: {count}, exact allowlist count {expected}",
+                file.rel
+            ));
+        }
+        for (at, &token) in tokens.iter().enumerate() {
+            if token == "impl" && model_transport_impl(&tokens, at + 1) {
+                impls.push(file.rel.clone());
+            }
+            if token == "ModelTransport" && tokens.get(at + 1) == Some(&"as") {
+                out.push(format!(
+                    "{}: ModelTransport renaming is forbidden",
+                    file.rel
+                ));
+            }
+        }
+    }
     if impls != ["kernel/src/inference/ollama.rs"] {
         out.push(format!("ModelTransport implementations: {impls:?}"));
     }
+    out
+}
+
+/// E-O65: the problems with the route guard in these production files.
+fn route_guard_findings(files: &[ProdFile]) -> Vec<String> {
+    let mut out = model_transport_findings(files);
     for f in files {
         if f.code.contains("qualification_seam") {
             out.push(format!("{}: the test seam in production code", f.rel));
@@ -445,7 +582,7 @@ fn m2e_a2_scanners_flag_planted_violations() {
     let ollama = |call: &str| {
         planted(
             "kernel/src/inference/ollama.rs",
-            &format!("impl ModelTransport for VerifiedOllama {{ fn call(&self) {{ {call} }} }}"),
+            &format!("use super::ModelTransport; impl ModelTransport for VerifiedOllama {{ fn call(&self) {{ {call} }} }}"),
         )
     };
     let unguarded = [ollama(
@@ -462,7 +599,7 @@ fn m2e_a2_scanners_flag_planted_violations() {
         "kernel/src/inference/mod.rs",
         "fn qualification_override() -> bool { qualification_seam::is_open() }",
     )];
-    assert_eq!(route_guard_findings(&leaked).len(), 3);
+    assert_eq!(route_guard_findings(&leaked).len(), 4);
     let legacy = [planted(
         "kernel/src/coding_run/local_model.rs",
         "impl LocalOllama { fn bind() { conversation_route_open() } fn complete() { let u = \"api/chat\"; } }",
@@ -482,6 +619,121 @@ fn m2e_a2_scanners_flag_planted_violations() {
         ),
     ];
     assert_eq!(grammar_findings(&twice).len(), 5);
+}
+
+#[test]
+fn e_o65_model_transport_inventory_rejects_alternate_spellings_and_aliases() {
+    let approved = || {
+        planted(
+            "kernel/src/inference/ollama.rs",
+            "use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+        )
+    };
+    assert!(model_transport_findings(&[approved()]).is_empty());
+    // Reviewer's bypass: qualification, metering and Stop are absent.
+    let qualified = r#"
+impl crate::inference::ModelTransport for Alternate {
+    fn call(&self) { self.client.post(&self.endpoint).send(); }
+}
+"#;
+    for header in [
+        qualified,
+        "impl<T> ModelTransport for Wrapper<T> {}",
+        "impl ::nexus_kernel::inference::ModelTransport for X {}",
+        "impl\n crate :: inference ::\n ModelTransport\n for X {}",
+        "impl r#ModelTransport for X {}",
+        "impl<T: Fn() -> Vec<U>, U> crate::inference::r#ModelTransport for Wrapper<T> {}",
+        "impl<T> crate::ModelTransport<Vec<T>> for Wrapper<T> {}",
+        "impl<T> crate::module::<T>::ModelTransport::<T> for Wrapper<T> {}",
+        "impl<const N: bool = { 1 < 2 }> ModelTransport for X {}",
+    ] {
+        let found =
+            model_transport_findings(&[approved(), planted("sdk/src/alternate.rs", header)]);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.contains("ModelTransport implementations:")),
+            "implementation must count: {header}: {found:?}"
+        );
+    }
+    let renamed = "use crate::inference::ModelTransport as Mt; impl Mt for X {}";
+    let found = model_transport_findings(&[approved(), planted("sdk/src/alternate.rs", renamed)]);
+    assert!(found.iter().any(|f| f.contains("renaming is forbidden")));
+    assert!(found
+        .iter()
+        .any(|f| f.contains("identifiers: 1, exact allowlist count 0")));
+    // Renaming also fails at the exact allowed identifier count, in its owner.
+    let found = model_transport_findings(&[planted(
+        "kernel/src/inference/ollama.rs",
+        "use super::ModelTransport as Mt; impl ModelTransport for X {}",
+    )]);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].contains("renaming is forbidden"));
+
+    for src in [
+        "use crate::inference::ModelTransport;",
+        "type T = dyn r#ModelTransport;",
+    ] {
+        let found = model_transport_findings(&[approved(), planted("sdk/src/new.rs", src)]);
+        assert_eq!(found.len(), 1, "merely naming the trait: {src}");
+        assert!(found[0].contains("exact allowlist count 0"));
+    }
+    for src in [
+        "/// ModelTransport\n/** r#ModelTransport */",
+        "// impl ModelTransport for X {}",
+        "const S: &str = \"impl ModelTransport for X {}\";",
+        "const S: &str = r#\"ModelTransport as Mt\"#;",
+        "impl OtherModelTransport for X {} impl ModelTransportSuffix for Y {}",
+    ] {
+        assert!(
+            model_transport_findings(&[approved(), planted("sdk/src/new.rs", src)]).is_empty(),
+            "must ignore: {src}"
+        );
+    }
+    let found = model_transport_findings(&[
+        approved(),
+        planted(
+            "sdk/src/new.rs",
+            "impl crate::ModelTransport::Other for X {}",
+        ),
+    ]);
+    assert_eq!(
+        found.len(),
+        1,
+        "only the final path segment decides impl identity"
+    );
+    assert!(found[0].contains("exact allowlist count 0"));
+    // Exactly one occurrence, even in the approved implementation file.
+    let found = model_transport_findings(&[planted(
+        "kernel/src/inference/ollama.rs",
+        "impl ModelTransport for X {} impl ModelTransport for Y {}",
+    )]);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].contains("ModelTransport implementations:"));
+}
+
+#[test]
+fn e_o65_model_transport_allowlist_matches_masked_production_counts() {
+    let files = production_files();
+    assert!(model_transport_findings(&files).is_empty());
+    for (rel, expected) in MODEL_TRANSPORT_ALLOWLIST {
+        let file = files.iter().find(|file| file.rel == rel).unwrap();
+        let count = route_tokens(&file.code)
+            .iter()
+            .filter(|&&t| t == "ModelTransport")
+            .count();
+        assert_eq!(count, expected, "{rel}");
+        println!("ModelTransport production inventory: {rel}: {count}");
+        // Each real allowlisted file is green at its exact count and red when
+        // that count decreases or increases. No doc-comment allowance is used.
+        for code in [
+            file.code.replace("ModelTransport", "OtherTransport"),
+            format!("{} use crate::ModelTransport;", file.code),
+        ] {
+            let found = model_transport_findings(&[planted(rel, &code)]);
+            assert!(found.iter().any(|f| f.contains("exact allowlist count")));
+        }
+    }
 }
 
 #[test]
