@@ -382,12 +382,20 @@ fn d_o18_home_reserved_and_symlink_selection_refused_without_sweep() {
             .args(["--name", "hello.txt", "--text", "data"]);
         let mut p = Pty::start(command);
         assert!(!p.finish().success());
-        // Oracle amendment U3, Owner: "Make these 5 fixes don't keep pending."
-        // Old on a fresh home: "RECOVERY REPORT only; no sweep".
-        // New: "Fresh start: no earlier session in this home; nothing to recover."
-        assert!(p
-            .output
-            .contains("Fresh start: no earlier session in this home; nothing to recover."));
+        // Review-1 H1, Owner: fresh wording ONLY with pre-initialization proof
+        // of no prior state. The unlinked fixture creates home/selected before
+        // launch, so its old blanket fresh expectation must retain recovery.
+        // Workspace refusal, nonzero exit, no-sweep and no-publication stay.
+        let fresh = "Fresh start: no earlier session in this home; nothing to recover.";
+        if linked {
+            assert!(p.output.contains(fresh));
+        } else {
+            assert!(!p.output.contains(fresh));
+            assert!(p.output.contains("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence."));
+            assert!(p
+                .output
+                .contains("RECOVERY REPORT only; no sweep or workspace restoration\n"));
+        }
         assert!(p.output.contains("workspace_refused"));
         assert!(selected.exists(), "selection was not swept");
         f.empty();
