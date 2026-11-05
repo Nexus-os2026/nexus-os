@@ -490,7 +490,7 @@ impl Runtime {
                     self.screen.emit(&format!(
                         "phase={phase} cancelled={} failure={} reason={}\n",
                         record.cancelled,
-                        record.failure.as_deref().unwrap_or("none"),
+                        record.failure.unwrap_or("none"),
                         reason
                     ));
                 }

@@ -300,6 +300,26 @@
       "sha256": "13c72654a91fe65ad1c2b1fbaa2a96ef6fdf03467687aeb72b111b1830248a81",
       "head": "da20ccc0037cbd49393d5028776f46cce639dd06",
       "results": []
+    },
+    "green-host-lint": {
+      "command": [
+        "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+        "cargo",
+        "clippy",
+        "-p",
+        "nexus-mother-host",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 70.27,
+      "sha256": "27d68efcd1a35b5bcb1b1a561e4052580d1828d7f68bda5a28c62a572c75be44",
+      "head": "c54244311a415e9653e0f569b3849e6ff2293892",
+      "results": []
     }
   },
   "plants_restored": {
