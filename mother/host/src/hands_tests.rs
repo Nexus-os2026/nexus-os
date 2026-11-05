@@ -3,7 +3,7 @@ use crate::hands::run;
 use crate::stop::StopRoute;
 use crate::stop_tests::support::{Fixture, Pty};
 use crate::terminal::Shared;
-use crate::session_home::SessionHome;
+use crate::session_home::SessionServices;
 use nexus_governed_control::host_session::SessionSeed;
 use nexus_governed_control::authority::evidence::EvidencePhase;
 use nexus_governed_control::authority::evidence::{EvidenceProjection, EvidenceRecord};
@@ -18,7 +18,7 @@ use std::sync::Arc;
 const CHILD: &str = "M2DD_REVIEW1_CHILD";
 static ENGAGED: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn before_internal_admission(screen: &Shared, home: &SessionHome) {
+pub(crate) fn before_internal_admission(screen: &Shared, home: &SessionServices) {
     if std::env::var(CHILD).as_deref() == Ok("admission") && !ENGAGED.swap(true, Ordering::SeqCst) {
         assert!(!screen.stop.ingress.emergency_seen());
         // The outer Mission check has succeeded. Perform exactly the first
@@ -40,7 +40,7 @@ pub(crate) fn before_internal_dispatch(route: &StopRoute, role: LaneRole) {
     }
 }
 
-pub(crate) fn after_internal_admission(port: &SessionPort, home: &SessionHome, id: MissionId) {
+pub(crate) fn after_internal_admission(port: &SessionPort, home: &SessionServices, id: MissionId) {
     let scenario = std::env::var(CHILD).unwrap_or_default();
     if scenario != "admission" && !(scenario == "dispatch" && ENGAGED.load(Ordering::SeqCst)) {
         return;
@@ -98,11 +98,11 @@ pub(crate) fn open_home(
     seed: SessionSeed,
     path: &std::path::Path,
     confirmer: crate::Confirmer,
-) -> Result<SessionHome, crate::HomeError> {
+) -> Result<SessionServices, crate::HomeError> {
     if std::env::var(CHILD).as_deref() != Ok("panic") {
-        SessionHome::open(seed, path, confirmer)
+        SessionServices::open(seed, path, confirmer)
     } else {
-        SessionHome::open_projected(seed, path, confirmer, vec![Arc::new(PanicRecording)])
+        SessionServices::open_projected(seed, path, confirmer, vec![Arc::new(PanicRecording)])
     }
 }
 
@@ -208,7 +208,7 @@ fn review1_internal_dispatch_after_lane_reservation() {
 
 // Decision 6: Stop uses the actual reader ingress with its worker unscheduled.
 const REVIEW2: &str = "M2DD_REVIEW2_CHILD";
-pub(crate) fn review2_before_step(screen: &Shared, home: &SessionHome, step: &str) {
+pub(crate) fn review2_before_step(screen: &Shared, home: &SessionServices, step: &str) {
     if std::env::var(REVIEW2).as_deref() != Ok(step) {
         return;
     }
@@ -218,7 +218,7 @@ pub(crate) fn review2_before_step(screen: &Shared, home: &SessionHome, step: &st
     assert!(!home.session.stop_snapshot().broker_stopped);
     assert!(!home.session.stop_snapshot().kernel_stopped);
 }
-pub(crate) fn review2_after_step(screen: &Shared, home: &SessionHome, step: &str, refused: bool) {
+pub(crate) fn review2_after_step(screen: &Shared, home: &SessionServices, step: &str, refused: bool) {
     if std::env::var(REVIEW2).as_deref() != Ok(step) {
         return;
     }
@@ -411,7 +411,7 @@ fn review2_recording_panics_before_startup_finishes_are_receipted() {
 // Decision 11: inject reader ingress immediately after a real Owner route
 // returns. The Stop worker is held until the command has reported its result.
 const REVIEW4: &str = "M2DD_REVIEW4_CHILD";
-pub(crate) fn review4_returned(screen: &Shared, home: &SessionHome, route: &str) {
+pub(crate) fn review4_returned(screen: &Shared, home: &SessionServices, route: &str) {
     let scenario = std::env::var(REVIEW4).unwrap_or_default();
     if scenario.split('-').next() != Some(route) {
         return;
@@ -422,7 +422,7 @@ pub(crate) fn review4_returned(screen: &Shared, home: &SessionHome, route: &str)
     assert_eq!(screen.stop.receipt().outstanding, 1);
 }
 
-pub(crate) fn review4_reported(screen: &Shared, home: &SessionHome, route: &str) {
+pub(crate) fn review4_reported(screen: &Shared, home: &SessionServices, route: &str) {
     let scenario = std::env::var(REVIEW4).unwrap_or_default();
     if scenario.split('-').next() != Some(route) {
         return;

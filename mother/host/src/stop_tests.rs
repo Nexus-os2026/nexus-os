@@ -54,7 +54,7 @@ fn m2dd_stop_cap_timeout_release_join_and_reaping() {
     let seed = SessionSeed::new().unwrap();
     let route = StopRoute::new(seed.ingress());
     let held = Arc::new((Mutex::new((0usize, false)), Condvar::new()));
-    let home = crate::session_home::SessionHome::open_projected(seed, &f.home, Arc::new(No), vec![Arc::new(Held(held.clone()))]).unwrap();
+    let home = crate::session_home::SessionServices::open_projected(seed, &f.home, Arc::new(No), vec![Arc::new(Held(held.clone()))]).unwrap();
     assert!(route.bind(home.session.clone()));
     for _ in 0..5 { route.press(); }
     route.dispatch_pending();
@@ -115,7 +115,7 @@ fn m2dd_real_store_timeout_then_release_joins_and_records() {
     if let Some(home) = std::env::var_os("M2DD_STOP_CHILD_HOME") {
         let seed = SessionSeed::new().unwrap();
         let route = StopRoute::new(seed.ingress());
-        let home = crate::session_home::SessionHome::open(seed, std::path::Path::new(&home), Arc::new(NoDialogs)).unwrap();
+        let home = crate::session_home::SessionServices::open(seed, std::path::Path::new(&home), Arc::new(NoDialogs)).unwrap();
         assert!(route.bind(home.session.clone()));
         std::fs::write(std::env::var_os("M2DD_ARM").unwrap(), b"armed").unwrap();
         route.press();
