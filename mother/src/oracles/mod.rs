@@ -662,6 +662,9 @@ pub fn keyed_lanes() -> Vec<Arc<dyn Lane>> {
 /// A complete contract whose restatement carries `markers`.
 pub fn contract_with(markers: &str) -> MissionContract {
     MissionContract {
+        model: None,
+        notes: vec![],
+        deliverable: None,
         owner_words: "  Make me a small website for my bakery, \"Rosa's\".\n  Keep it simple!  "
             .into(),
         restatement: format!("A one-page site for Rosa's bakery {markers}")

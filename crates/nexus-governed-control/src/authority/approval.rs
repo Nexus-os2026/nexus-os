@@ -58,10 +58,19 @@ fn fitted_lines(lines: &[String]) -> Vec<String> {
 /// `↳ ` lines), shown in a scrolled region of their own that the window
 /// marks as the request's content: nothing in them shares the header's
 /// place.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ConfirmationText {
     pub header: Vec<(&'static str, String)>,
     pub details: Vec<String>,
+}
+
+impl fmt::Debug for ConfirmationText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConfirmationText")
+            .field("header_rows", &self.header.len())
+            .field("details_lines", &self.details.len())
+            .finish()
+    }
 }
 
 impl ConfirmationText {
@@ -135,7 +144,7 @@ fn who_may_use(kind: CapabilityKind) -> &'static str {
 /// What the owner is asked to approve: one R2 commitment. Every line is
 /// computed by the backend from the commitment it approves; nothing here is
 /// a secret.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ActionConfirmation {
     pub commitment: String,
     pub class: EffectClass,
@@ -149,6 +158,16 @@ pub struct ActionConfirmation {
     /// The first digits of the binding digest, so that two look-alike
     /// requests are visibly different.
     pub binding_short: String,
+}
+
+impl fmt::Debug for ActionConfirmation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ActionConfirmation")
+            .field("class", &self.class)
+            .field("kind", &self.kind)
+            .field("summary_lines", &self.summary.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ActionConfirmation {
@@ -383,7 +402,7 @@ impl AgentDoorConfirmation {
 /// M2c): the mission's label, its exact contract hash, the agent's label
 /// for this request, why it is held, and the mission's summary, each line
 /// plain. The broker binds the answer to the hash and the request.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MissionResumeConfirmation {
     pub mission: String,
     /// The contract's SHA-256: 64 lowercase hex digits.
@@ -392,6 +411,17 @@ pub struct MissionResumeConfirmation {
     pub request: String,
     pub held_reason: String,
     pub summary: Vec<String>,
+}
+
+impl fmt::Debug for MissionResumeConfirmation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MissionResumeConfirmation")
+            .field("mission", &self.mission)
+            .field("contract_hash", &self.contract_hash)
+            .field("request", &self.request)
+            .field("summary_lines", &self.summary.len())
+            .finish()
+    }
 }
 
 impl MissionResumeConfirmation {
@@ -465,7 +495,7 @@ pub const MAX_MISSION_REQUEST: usize = 64;
 /// and at most `MAX_FIELD` characters. The broker shows them; it does not
 /// judge the summary against the hash (the agent built both), it binds the
 /// owner's answer to the hash and the request.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MissionConfirmation {
     /// The contract's SHA-256: 64 lowercase hex digits.
     pub contract_hash: String,
@@ -521,6 +551,17 @@ impl fmt::Debug for FactsView {
             .field("name_chars", &self.name.chars().count())
             .field("hours_lines", &self.hours.len())
             .field("phone_chars", &self.phone.chars().count())
+            .finish()
+    }
+}
+
+impl fmt::Debug for MissionConfirmation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MissionConfirmation")
+            .field("contract_hash", &self.contract_hash)
+            .field("request", &self.request)
+            .field("summary_lines", &self.summary.len())
+            .field("page_facts_present", &self.page_facts.is_some())
             .finish()
     }
 }
@@ -719,5 +760,96 @@ impl R2Approval {
 
     pub fn binding(&self) -> &Digest {
         &self.binding
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn mission_confirmation_debug_redacts_summary_and_facts() {
+        let request = MissionConfirmation {
+            contract_hash: "ab".repeat(32),
+            request: "mission-consent-1".into(),
+            summary: vec!["C1_NATIVE_NOTE_CANARY 面包🍞".into()],
+            page_facts: Some(FactsView {
+                name: "C1_FACT_CANARY".into(),
+                hours: vec!["Monday 09:00-17:00".into()],
+                phone: "+44 20 1234 5678".into(),
+            }),
+        };
+        let display = request.text();
+        assert!(request.message().contains("C1_NATIVE_NOTE_CANARY"));
+        assert!(display.plain().contains("C1_FACT_CANARY"));
+        for debug in [
+            format!("{request:?}"),
+            format!("{request:#?}"),
+            format!("{display:?}"),
+            format!("{display:#?}"),
+        ] {
+            assert!(
+                !debug.contains("C1_NATIVE_NOTE_CANARY"),
+                "native debug redacts summary"
+            );
+            assert!(
+                !debug.contains("面包"),
+                "native debug redacts Unicode summary"
+            );
+            assert!(
+                !debug.contains("C1_FACT_CANARY"),
+                "native debug redacts facts"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod summary_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn other_summary_confirmations_debug_redact() {
+        let summary = vec!["C1_OTHER_SUMMARY_CANARY 面包🍞".into()];
+        let action = ActionConfirmation {
+            commitment: "commitment-1".into(),
+            class: EffectClass::R2,
+            kind: CapabilityKind::Synthetic,
+            operation: "probe".into(),
+            target: "none".into(),
+            agent: "mother".into(),
+            run: "run-1".into(),
+            summary: summary.clone(),
+            expires_in_secs: 60,
+            binding_short: "abcd".into(),
+        };
+        let resume = MissionResumeConfirmation {
+            mission: "mission-1".into(),
+            contract_hash: "ab".repeat(32),
+            request: "request-1".into(),
+            held_reason: "unclean shutdown".into(),
+            summary,
+        };
+        for display in [action.message(), resume.message()] {
+            assert!(
+                display.contains("C1_OTHER_SUMMARY_CANARY 面包🍞"),
+                "full native summary display"
+            );
+        }
+        for debug in [
+            format!("{action:?}"),
+            format!("{action:#?}"),
+            format!("{resume:?}"),
+            format!("{resume:#?}"),
+        ] {
+            assert!(
+                !debug.contains("C1_OTHER_SUMMARY_CANARY"),
+                "all native summary diagnostics redact content"
+            );
+            assert!(
+                !debug.contains("面包"),
+                "all native summary diagnostics redact Unicode"
+            );
+        }
     }
 }
