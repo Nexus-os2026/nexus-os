@@ -869,7 +869,15 @@ impl RunResource {
                     "op.prepared" => {
                         let value: serde_json::Value = serde_json::from_str(&record.payload)
                             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
-                        allocation_attempted |= value["op"] == "allocate_staging";
+                        // Native op.prepared separates its numeric sequence from
+                        // the operation kind. Invalid evidence cannot discharge debt.
+                        value["op"]
+                            .as_u64()
+                            .ok_or(AuthorityError::EvidenceUnavailable)?;
+                        let kind = value["kind"]
+                            .as_str()
+                            .ok_or(AuthorityError::EvidenceUnavailable)?;
+                        allocation_attempted |= kind == "allocate_staging";
                     }
                     "run.granted" => {
                         allocated = true;
@@ -902,7 +910,7 @@ impl RunResource {
             proof.private_absent_or_retained =
                 proof.intentionally_retained || backend.absent(&format!("{}.apply", run.id()))?;
             proof.grants_closed &= !allocated || staging_closed;
-            proof.cleanup_recorded = !allocation_attempted || discard_recorded;
+            proof.cleanup_recorded = !(allocation_attempted || allocated) || discard_recorded;
             if allocation_attempted && run.cleanup_status() != CleanupStatus::Discarded {
                 return Ok(false);
             }
