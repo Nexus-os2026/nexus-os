@@ -2,7 +2,31 @@
 //! no production meter constructor or model lane admission.
 use super::*;
 use nexus_governed_control::inference::{CallMeter, Charged, MeterRefusal};
-use std::sync::Weak;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Weak,
+};
+
+/// Memory-only deny latch for one invocation; never replayed or reset.
+/// This observation seam grants no permission of its own.
+#[derive(Clone)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "private future session bridge seam")
+)]
+pub(crate) struct InvocationLiveness(Arc<AtomicBool>);
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "private future session bridge seam")
+)]
+impl InvocationLiveness {
+    fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+    pub(crate) fn is_revoked(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
 
 pub(super) struct CallAccounting {
     invocation: InvocationId,
@@ -64,6 +88,7 @@ impl CallAccounting {
     expect(dead_code, reason = "C1a exposes no production model caller")
 )]
 pub(super) struct LaneCalls {
+    pub(super) liveness: InvocationLiveness,
     invocation: InvocationId,
     generation: u64,
     in_flight: bool,
@@ -116,6 +141,7 @@ pub(super) fn reserve_lane(
     let accounting = CallAccounting::reserved(m, invocation, cap, declared)
         .map_err(|_| CoordinatorError::Contract(ContractError::ModelCapOutOfRange))?;
     let live = (cap > 0).then(|| LaneCalls {
+        liveness: InvocationLiveness::new(),
         invocation,
         generation,
         in_flight: false,

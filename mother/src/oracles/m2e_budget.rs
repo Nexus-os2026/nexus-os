@@ -312,6 +312,139 @@ fn e_o30c_retained_meters_and_settlement() {
         "old settlement cannot reopen new invocation"
     );
 }
+// Probe the actual journal/fence boundary while the coordinator mutex is
+// still held. Reading the retained latch must not acquire that mutex.
+struct LivenessProbeJournal {
+    journal: MemoryJournal,
+    probe: Option<Box<dyn FnOnce() + Send>>,
+}
+impl JournalStore for LivenessProbeJournal {
+    fn load(&self) -> Result<Vec<String>, JournalError> {
+        self.journal.load()
+    }
+    fn append(&mut self, line: &str) -> Result<(), JournalError> {
+        if let Some(probe) = self.probe.take() {
+            probe();
+        }
+        self.journal.append(line)
+    }
+    fn poison(&mut self) -> Result<(), JournalError> {
+        self.journal.poison()
+    }
+}
+
+#[test]
+fn e_o30d_liveness_revoked_before_boundary_release() {
+    for boundary in [
+        "return",
+        "overtake",
+        "transition",
+        "intent",
+        "fence",
+        "close",
+    ] {
+        let (w, id) = ready(4);
+        let meter = reserve(&w, id, 2).unwrap();
+        let latch = w.mother.peek(|i| {
+            i.missions[&id]
+                .lane_calls
+                .as_ref()
+                .unwrap()
+                .liveness
+                .clone()
+        });
+        assert!(!latch.is_revoked(), "fresh invocation starts live");
+        meter.charge().unwrap();
+        meter.settle(1);
+        assert!(
+            !latch.is_revoked(),
+            "charge and settlement do not revoke or establish continuing liveness"
+        );
+        let seen = Arc::new(Mutex::new(None));
+        let observation = {
+            let mother = w.mother.clone();
+            let latch = latch.clone();
+            let seen = seen.clone();
+            move || {
+                let lock_still_held = mother.inner.try_lock().is_err();
+                let revoked = latch.is_revoked();
+                *seen.lock().unwrap() = Some((revoked, lock_still_held));
+            }
+        };
+        if boundary == "fence" {
+            w.mother.with_lock(|i| {
+                let fence = std::mem::replace(&mut i.fence, Box::new(Owed::default));
+                i.fence = Box::new(move || {
+                    observation();
+                    fence()
+                });
+            });
+            w.journal.fail_after(0);
+            assert_eq!(meter.charge(), Err(MeterRefusal::NotRecorded));
+        } else {
+            w.mother.with_lock(|i| {
+                i.store = Box::new(LivenessProbeJournal {
+                    journal: w.journal.clone(),
+                    probe: Some(Box::new(observation)),
+                });
+            });
+            match boundary {
+                "return" | "overtake" => returned(&w, &meter, boundary == "overtake"),
+                "transition" => {
+                    w.mother
+                        .step(|i| i.fire(id, Trigger::PhaseDone, 0))
+                        .unwrap();
+                }
+                // Append only: terminal intent has begun, but apply has NOT
+                // run. Clearing the latch only in apply is too late.
+                "intent" => {
+                    w.mother
+                        .step(|i| {
+                            i.append(
+                                id,
+                                Event::Transition {
+                                    trigger: Trigger::Stop {
+                                        reason: StopReason::Owner,
+                                    },
+                                },
+                            )
+                        })
+                        .unwrap();
+                }
+                "close" => w.mother.close_ref().unwrap(),
+                _ => unreachable!(),
+            }
+        }
+        assert_eq!(
+            *seen.lock().unwrap(),
+            Some((true, true)),
+            "revocation precedes boundary release: {boundary}"
+        );
+        assert!(
+            latch.is_revoked(),
+            "retained latch stays denied: {boundary}"
+        );
+        assert_eq!(totals(&w, id), 1, "invalidation does not refund");
+        if matches!(boundary, "return" | "overtake") {
+            let new_meter = reserve(&w, id, 2).unwrap();
+            let new_latch = w.mother.peek(|i| {
+                i.missions[&id]
+                    .lane_calls
+                    .as_ref()
+                    .unwrap()
+                    .liveness
+                    .clone()
+            });
+            assert!(!new_latch.is_revoked());
+            assert!(
+                latch.is_revoked(),
+                "new invocation never reactivates old latch"
+            );
+            assert_eq!(new_meter.charge().unwrap().call, 1);
+        }
+    }
+}
+
 #[test]
 fn e_o31_full_cap_and_invalid_caps() {
     for cap in [0, 1, 2, 4] {
