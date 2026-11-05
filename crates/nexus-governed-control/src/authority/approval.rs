@@ -144,7 +144,7 @@ fn who_may_use(kind: CapabilityKind) -> &'static str {
 /// What the owner is asked to approve: one R2 commitment. Every line is
 /// computed by the backend from the commitment it approves; nothing here is
 /// a secret.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ActionConfirmation {
     pub commitment: String,
     pub class: EffectClass,
@@ -158,6 +158,16 @@ pub struct ActionConfirmation {
     /// The first digits of the binding digest, so that two look-alike
     /// requests are visibly different.
     pub binding_short: String,
+}
+
+impl fmt::Debug for ActionConfirmation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ActionConfirmation")
+            .field("class", &self.class)
+            .field("kind", &self.kind)
+            .field("summary_lines", &self.summary.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ActionConfirmation {
@@ -392,7 +402,7 @@ impl AgentDoorConfirmation {
 /// M2c): the mission's label, its exact contract hash, the agent's label
 /// for this request, why it is held, and the mission's summary, each line
 /// plain. The broker binds the answer to the hash and the request.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MissionResumeConfirmation {
     pub mission: String,
     /// The contract's SHA-256: 64 lowercase hex digits.
@@ -401,6 +411,17 @@ pub struct MissionResumeConfirmation {
     pub request: String,
     pub held_reason: String,
     pub summary: Vec<String>,
+}
+
+impl fmt::Debug for MissionResumeConfirmation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MissionResumeConfirmation")
+            .field("mission", &self.mission)
+            .field("contract_hash", &self.contract_hash)
+            .field("request", &self.request)
+            .field("summary_lines", &self.summary.len())
+            .finish()
+    }
 }
 
 impl MissionResumeConfirmation {
