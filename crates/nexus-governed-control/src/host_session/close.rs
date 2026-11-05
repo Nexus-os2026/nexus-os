@@ -91,7 +91,21 @@ impl SessionIngress {
         self.core.cell.session_word() & EMERGENCY != 0
     }
     pub fn close_deadline(&self) -> Option<Instant> {
-        self.core.close.get().map(|c| c.deadline)
+        let nanos = self.core.shutdown_nanos.load(Ordering::SeqCst);
+        (nanos != 0).then(|| self.core.created + Duration::from_nanos(nanos))
+    }
+    pub(super) fn begin_shutdown(&self, accepted: Instant) -> Instant {
+        let nanos = accepted
+            .duration_since(self.core.created)
+            .as_nanos()
+            .min(u128::from(u64::MAX - 3_000_000_000)) as u64
+            + 3_000_000_000;
+        let first = self
+            .core
+            .shutdown_nanos
+            .compare_exchange(0, nanos, Ordering::SeqCst, Ordering::SeqCst)
+            .unwrap_or_else(|existing| existing);
+        self.core.created + Duration::from_nanos(if first == 0 { nanos } else { first })
     }
     pub fn producer(&self, kind: ProducerKind) -> Result<Producer, SessionError> {
         self.register(kind, false)
@@ -269,16 +283,34 @@ impl HostSession {
         }
         Ok(())
     }
-    pub fn settle_close_authority(&self, request: &SessionRequest) -> Result<(), SessionError> {
+    pub(super) fn close_operation(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<Producer, SessionError> {
+        // Registration and seal share the producer hold. Revalidate the exact
+        // close lifetime after registration, before any native call.
         self.close_request(request)?;
+        let operation = self.ingress().register(ProducerKind::Work, true)?;
+        if let Err(error) = self.close_request(request) {
+            operation.joined();
+            return Err(error);
+        }
+        Ok(operation)
+    }
+    pub fn settle_close_authority(&self, request: &SessionRequest) -> Result<(), SessionError> {
+        let operation = self.close_operation(request)?;
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&self.core.cell), "close.authority.native");
-        self.control.close_session_authority().map_err(|e| {
+        let result = self.control.close_session_authority();
+        let result = result.map_err(|e| {
             self.ingress().fail();
             SessionError::Backend(e.class())
-        })?;
-        self.core.authority_closed.store(true, Ordering::SeqCst);
-        Ok(())
+        });
+        if result.is_ok() {
+            self.core.authority_closed.store(true, Ordering::SeqCst);
+        }
+        operation.joined();
+        result
     }
     pub fn seal_close(&self, request: &SessionRequest) -> Result<CloseSeal, SessionError> {
         self.close_request(request)?;

@@ -326,6 +326,7 @@ struct Core {
     resources: std::sync::Mutex<Vec<Arc<ResourceState>>>,
     history: OnceLock<receipt::History>,
     close: OnceLock<CloseIdentity>,
+    shutdown_nanos: AtomicU64,
     producers: std::sync::Mutex<close::Producers>,
     finals: OnceLock<close::Finals>,
     authority_closed: std::sync::atomic::AtomicBool,
@@ -824,20 +825,23 @@ impl HostSession {
         &self,
         request: &SessionRequest,
     ) -> Result<crate::files::SessionInventory, SessionFailure> {
-        if !Arc::ptr_eq(&self.core, &request.core) || request.kind != CommandKind::Quit {
-            return Err(crate::authority::AuthorityError::Halted.into());
-        }
+        let operation = self
+            .close_operation(request)
+            .map_err(|_| crate::authority::AuthorityError::Halted)?;
         let cell = self.core.cell.scoped(request.scope.clone());
         let normal = self.state() == SessionState::ClosingNormal;
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&self.core.cell), "close.resources.native");
-        self.control
+        let result = self
+            .control
             .files()
-            .close_resources(normal.then_some(&cell))
-            .map_err(|error| {
-                self.ingress().fail();
-                error.into()
-            })
+            .close_resources(normal.then_some(&cell));
+        let result = result.map_err(|error| {
+            self.ingress().fail();
+            error.into()
+        });
+        operation.joined();
+        result
     }
 
     pub fn undo(
@@ -1309,6 +1313,7 @@ impl SessionSeed {
                 resources: std::sync::Mutex::new(Vec::with_capacity(256)),
                 history: OnceLock::new(),
                 close: OnceLock::new(),
+                shutdown_nanos: AtomicU64::new(0),
                 producers: std::sync::Mutex::default(),
                 finals: OnceLock::new(),
                 authority_closed: std::sync::atomic::AtomicBool::new(false),
@@ -1334,7 +1339,7 @@ impl SessionSeed {
         self.core.cell.session_word() & EMERGENCY != 0
     }
     pub fn close_deadline(&self) -> Option<Instant> {
-        self.core.close.get().map(|close| close.deadline)
+        self.ingress().close_deadline()
     }
 }
 
@@ -1391,7 +1396,12 @@ impl SessionIngress {
     }
 
     pub fn fail(&self) {
-        let deadline = Instant::now() + Duration::from_secs(3);
+        if self.core.cell.session_word() & SEALED != 0 {
+            return;
+        }
+        // A lock-free first-trigger timestamp is published before exposing the
+        // restriction. Competing Quit/EOF callers can never refresh or miss it.
+        let deadline = self.begin_shutdown(Instant::now());
         loop {
             let old = self.core.cell.session_word();
             if old & SEALED != 0 || old & FAILED != 0 {
@@ -1440,10 +1450,11 @@ impl SessionIngress {
         if kind == CommandKind::Quit {
             // Publish the first shutdown identity exactly once. Input has one
             // producer; concurrent fatal shutdown can only narrow this close.
+            let deadline = self.begin_shutdown(accepted);
             let close = self.core.close.get_or_init(|| CloseIdentity {
                 sequence,
                 generation: snapshot / EPOCH_STEP,
-                deadline: accepted + Duration::from_secs(3),
+                deadline,
             });
             let mut current = snapshot;
             loop {
