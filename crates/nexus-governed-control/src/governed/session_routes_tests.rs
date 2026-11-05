@@ -1632,42 +1632,41 @@ fn session_discharge_requires_separate_sync_and_keeps_the_owner_file() {
 
 #[test]
 fn session_undo_grant_has_its_own_original_request_handoff() {
-    for interrupt in [false, true] {
-        let f = Fixture::new();
-        let id = f.pending();
-        f.approve(id).unwrap();
-        let entered = Arc::new(AtomicUsize::new(0));
-        let seen = entered.clone();
-        f.gov
-            .files()
-            .hooks()
-            .arm("session.entered.undo_grant", move || {
-                seen.fetch_add(1, Ordering::SeqCst);
-            });
-        if interrupt {
-            let ingress = f._session.ingress();
+    for point in ["session.before.undo_grant", "session.reserved.undo_grant"] {
+        for interrupt in [false, true] {
+            let f = Fixture::new();
+            let id = f.pending();
+            f.approve(id).unwrap();
+            let entered = Arc::new(AtomicUsize::new(0));
+            let seen = entered.clone();
             f.gov
                 .files()
                 .hooks()
-                .arm("session.before.undo_grant", move || {
+                .arm("session.entered.undo_grant", move || {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                });
+            if interrupt {
+                let ingress = f._session.ingress();
+                f.gov.files().hooks().arm(point, move || {
                     ingress.emergency().unwrap();
                 });
+            }
+            let result = f.undo();
+            assert_eq!(result.is_ok(), !interrupt);
+            assert_eq!(entered.load(Ordering::SeqCst), usize::from(!interrupt));
+            assert_eq!(
+                f._dirs
+                    .0
+                    .path()
+                    .join("selected/workspace/session.txt")
+                    .exists(),
+                interrupt
+            );
+            assert_eq!(
+                matching(&events(&f.ledger_path()), "restore.completed", None),
+                usize::from(!interrupt)
+            );
         }
-        let result = f.undo();
-        assert_eq!(result.is_ok(), !interrupt);
-        assert_eq!(entered.load(Ordering::SeqCst), usize::from(!interrupt));
-        assert_eq!(
-            f._dirs
-                .0
-                .path()
-                .join("selected/workspace/session.txt")
-                .exists(),
-            interrupt
-        );
-        assert_eq!(
-            matching(&events(&f.ledger_path()), "restore.completed", None),
-            usize::from(!interrupt)
-        );
     }
 }
 
@@ -2508,4 +2507,127 @@ fn session_result_retains_each_entered_native_call_separately() {
     f._session.cleanup(&cleanup).unwrap();
     calls(&f, &cleanup, &["discard_staging", "finalization_sync"]);
     assert!(resources(&f.gov.files().state_dir_for_test().join("coding-runs")).is_empty());
+}
+
+/// Actual owed restore temporary removal, separated from staging discard.
+#[test]
+fn session_retry_cleanup_handoff_and_successor_are_independently_admitted() {
+    const NAME: &str = "governed::session_routes::session_retry_cleanup_handoff_and_successor_are_independently_admitted";
+    let Ok(stop_at) = std::env::var("M2DD_RETRY_CASE") else {
+        let root = temp_root("session-retry-preload");
+        let lib = root.0.path().join("faults.so");
+        let build = std::process::Command::new("cc")
+            .args([
+                "-shared", "-fPIC", "-std=c11", "-Wall", "-Wextra", "-Werror", "-o",
+            ])
+            .arg(&lib)
+            .arg(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../mother/host/tests/support/faults.c"),
+            )
+            .args(["-ldl"])
+            .output()
+            .unwrap();
+        assert!(
+            build.status.success(),
+            "{}",
+            String::from_utf8_lossy(&build.stderr)
+        );
+        for point in [
+            "none",
+            "session.before.retry_cleanup",
+            "session.after.retry_cleanup",
+        ] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", NAME, "--nocapture"])
+                .env("LD_PRELOAD", &lib)
+                .env("M2DD_FAULT", "restore-owed")
+                .env("M2DD_RETRY_CASE", point)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            let until = std::time::Instant::now() + Duration::from_secs(20);
+            while child.try_wait().unwrap().is_none() {
+                if std::time::Instant::now() >= until {
+                    child.kill().unwrap();
+                    child.wait().unwrap();
+                    panic!("bounded retry child: {point}");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{point}: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+        }
+        return;
+    };
+    let f = Fixture::new();
+    let id = f.pending();
+    f.approve(id).unwrap();
+    let workspace = f._dirs.0.path().join("selected/workspace");
+    assert!(f.undo().is_err());
+    let before = resources(&workspace);
+    assert!(
+        !before.is_empty(),
+        "failed native restore retains actual owned temporary"
+    );
+    assert!(!workspace.join("session.txt").exists());
+    let entered = Arc::new(AtomicUsize::new(0));
+    let seen = entered.clone();
+    f.gov
+        .files()
+        .hooks()
+        .arm("session.entered.retry_cleanup", move || {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+    let discards = Arc::new(AtomicUsize::new(0));
+    let seen = discards.clone();
+    f.gov
+        .files()
+        .hooks()
+        .arm("session.entered.discard_staging", move || {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+    if stop_at != "none" {
+        let ingress = f._session.ingress();
+        let point = if stop_at == "session.before.retry_cleanup" {
+            "session.before.retry_cleanup"
+        } else {
+            "session.after.retry_cleanup"
+        };
+        f.gov.files().hooks().arm(point, move || {
+            ingress.emergency().unwrap();
+        });
+    }
+    // Close retires the old undo index; only its already-owned temporary is
+    // eligible. It cannot call restore or remove a published Owner path.
+    let quit = f._session.ingress().accept(CommandKind::Quit, 10).unwrap();
+    let _result = f._session.settle_close_resources(&quit);
+    let expected_retry = usize::from(stop_at != "session.before.retry_cleanup");
+    assert_eq!(entered.load(Ordering::SeqCst), expected_retry, "{stop_at}");
+    assert_eq!(
+        discards.load(Ordering::SeqCst),
+        usize::from(stop_at == "none"),
+        "{stop_at}: retry permission cannot authorize discard"
+    );
+    let after = resources(&workspace);
+    if expected_retry == 0 {
+        assert_eq!(before, after);
+    } else {
+        assert!(after.is_empty());
+    }
+    assert_eq!(
+        matching(&events(&f.ledger_path()), "restore.completed", None),
+        expected_retry
+    );
+    println!(
+        "RETRY/{stop_at}: native_workers=0 retry={expected_retry} remaining_temporaries={}",
+        after.len()
+    );
 }

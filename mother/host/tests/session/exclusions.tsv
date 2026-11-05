@@ -12,3 +12,7 @@ R14-display	HostSession File-only port	unsupported_host_route	frozen native disp
 R31-lift	HostSession command kind typed unavailable	unsupported_host_route	unchanged cell-less Decision 10 legacy lift and undo control	seal-lift
 R32-inference_binding	HostSession File-only port	unsupported_host_route	frozen configured local-model admission fixtures	seal-inference
 R32-model_attempt	HostSession File-only port	unsupported_host_route	frozen configured model attempt and live inference fixtures	seal-model-attempt
+R23-obsolete_undo_cleanup	Non-owning undo replacement retains the old inventory entry; only explicit fixed cleanup selects it	no_filesystem_sink	session_undo_index_replacement_conserves_both_runs_after_the_second_handoff plus legacy replacement controls	seal-obsolete-undo-cleanup
+R28-undo_prior_cleanup	Session undo does not drain; cleanup is its own original command or close capability	no_filesystem_sink	m2d_b2_r1_h4_the_undo_lifetime_is_taken_before_its_cleanup remains unchanged	seal-undo-prior-cleanup
+R30-implicit_drain	Session terminal wrappers transfer ownership and do not reach native drain	no_such_authority	m2d_b2_r2_row5_stop_transfers_a_pending_effect_without_cleanup remains unchanged	seal-implicit-drain
+R30-implicit_retire	Host retire marks the inventory entry without removing native objects	no_such_authority	m2d_b2_r1_m1_a_failed_staging_cleanup_stays_owned_reported_and_retried remains unchanged	seal-implicit-retire

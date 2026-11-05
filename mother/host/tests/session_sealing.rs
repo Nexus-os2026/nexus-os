@@ -138,7 +138,7 @@ fn session_sealed_exclusion_registry_preserves_legacy_controls_and_bypass_plant_
                 | "unreachable_lifecycle"
         ));
     }
-    assert_eq!(seen.len(), 13);
+    assert_eq!(seen.len(), 17);
 }
 
 #[test]
@@ -195,6 +195,36 @@ fn session_literal_oracle_provenance_is_frozen_independently_of_product_classifi
             std::str::from_utf8(&output.stdout).unwrap().trim(),
             expected,
             "frozen literal oracle changed: {file}"
+        );
+    }
+}
+
+// The death harness is itself an oracle. Freeze its successful native report,
+// torn-line, and exact receipt checks so a weakening cannot green itself.
+#[test]
+fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitutions() {
+    for (file, expected) in [
+        (
+            "mother/host/tests/session_protocol.rs",
+            "c707a7359fc2122f01e80893f135e2b38ced6aa1eafb7f1066ff2b7f66c51d89",
+        ),
+        (
+            "mother/host/tests/support/faults.rs",
+            "d2e637a4a287bb02301a776403ab63ef2eb4ea47a9d6f83ff8543b43b82ba53d",
+        ),
+        (
+            "mother/host/tests/support/faults.c",
+            "6b371e57ce313bb824a1466165b8ff6a8a710b600f59b47e0f5032ac1e30ffd3",
+        ),
+    ] {
+        let output = std::process::Command::new("python3")
+            .args(["-c", "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())"])
+            .arg(root().join(file)).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            std::str::from_utf8(&output.stdout).unwrap().trim(),
+            expected,
+            "death harness oracle changed: {file}; separately reviewed amendment required"
         );
     }
 }

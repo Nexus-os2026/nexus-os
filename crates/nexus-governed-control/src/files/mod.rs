@@ -1109,6 +1109,8 @@ impl CodingRun {
         });
         grants.undo.push(reserved.clone());
         let mut slot = reserved.grant.lock().map_err(|_| AuthorityError::Halted)?;
+        #[cfg(test)]
+        _shared.fire("session.reserved.undo_grant");
         entry.binding.cell.admit_recovery(Some(request), false)?;
         request.native_entered(NativeCall::UndoGrant);
         #[cfg(test)]
@@ -1199,6 +1201,10 @@ impl CodingRun {
                 let Some(run) = borrowed.native.as_mut() else {
                     return Err(refused());
                 };
+                #[cfg(test)]
+                if matches!(call_kind, NativeCall::RetryCleanup) {
+                    entry.hooks.fire("session.before.retry_cleanup");
+                }
                 let admitted = match mode {
                     NativeStep::Work => entry.admit(),
                     NativeStep::Recovery { cell, cleanup } => {

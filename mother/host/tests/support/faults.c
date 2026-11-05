@@ -170,6 +170,12 @@ ssize_t read(int fd, void *data, size_t size) {
 int unlinkat(int fd, const char *name, int flags) {
     int (*real)(int,const char *,int) = dlsym(RTLD_NEXT, "unlinkat");
     char path[4096];
+    /* Native session oracle: one real restore temporary removal fails. The
+     * child then observes the retained inode and exercises a fresh retry. */
+    if (mode("restore-owed") && path_of(fd, path, sizeof(path)) &&
+        strstr(path, "/selected/workspace") && !atomic_exchange(&held, 1)) {
+        errno = EIO; return -1;
+    }
     if (path_of(fd, path, sizeof(path)) && strstr(path, "/coding-runs/") &&
         !strcmp(name, "hello.txt")) {
         if (mode("cleanup")) boundary("cleanup", path, NULL, 0);
@@ -187,6 +193,10 @@ int unlink(const char *name) {
     int (*real)(const char *) = dlsym(RTLD_NEXT, "unlink");
     int fd;
     char tail[128], path[4096];
+    if (mode("restore-owed") &&
+        sscanf(name, "/proc/self/fd/%d/%127s", &fd, tail) == 2 &&
+        path_of(fd, path, sizeof(path)) && strstr(path, "/selected/workspace") &&
+        !atomic_exchange(&held, 1)) { errno = EIO; return -1; }
     if (sscanf(name, "/proc/self/fd/%d/%127s", &fd, tail) == 2 &&
         path_of(fd, path, sizeof(path)) && strstr(path, "/coding-runs/") &&
         !strcmp(tail, "hello.txt")) {
