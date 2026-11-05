@@ -180,7 +180,12 @@ fn h1_shutdown_with_storage_held_is_bounded_and_unclean() {
     let _receipt = fault.reached();
     p.expect("kernel_stopped=true broker_stopped=true");
     p.line("quit");
-    p.expect("UNCLEAN outstanding=");
+    p.expect("UNCLEAN EXIT: this process did not complete the full clean-close protocol. Some session-end records may already be durable; any unverified recording or resource obligations are listed separately. No cleanup or recording is promised after this process exits.\n");
+    p.expect("MOTHER END Unknown (not attempted)\n");
+    p.expect("PRIMARY END Unknown (not attempted)\n");
+    p.expect("FINAL DELIVERY Unknown (not attempted)\n");
+    p.expect("CLOSE OBLIGATIONS resource_snapshot=unknown in_flight_or_unknown=true\n");
+    p.expect("PRODUCERS outstanding=1\n");
     assert!(!p.finish().success());
     assert!(!p.output.contains("SESSION CLOSED recorded"));
 }

@@ -796,3 +796,19 @@ is part of a commit.
   112 private-store schedules with conserved-obligation expectations
   (dabfe107), and one real native execution unwind. These are additional
   receipts, not the planned Cartesian schedule count.
+
+## Fix round 2 — held storage close notice (R2 local gate)
+
+The frozen A12 text requires “UNCLEAN EXIT: this process did not complete the
+full clean-close protocol” and says to “state which end record is established
+Recorded, Failed or Unknown.” A6 says “All startup, input, work, Stop,
+settlement, cleanup, recording, rendering and join helpers use” the original
+three-second deadline. The old `UNCLEAN outstanding=` assertion predates the
+F07 correction that separates producer count from actual resource debt.
+
+`h1_shutdown_with_storage_held_is_bounded_and_unclean` now requires the entire
+A12 notice, all three not-attempted/Unknown final obligations, explicit unknown
+resource accounting, and exactly one outstanding producer. Its existing
+bounded PTY deadline, held storage, nonzero exit and absence of a successful
+close remain required. This strengthens the oracle; no production notice is
+changed to recover the obsolete subtotal wording.
