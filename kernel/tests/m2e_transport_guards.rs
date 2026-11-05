@@ -43,12 +43,11 @@ const TRANSPORT_PATHS: [&str; 5] = [
 ];
 
 /// Classified providers: `(file or directory, fn or "*", why)`.
-const CLASSIFIED: [(&str, &str, &str); 3] = [
-    (
-        "connectors/llm/src/providers/",
-        "*",
-        "A-S4 class T: the provider transport behind LlmProvider",
-    ),
+/// Mother Nexus cleanup (2026-11-05): the retired
+/// (`connectors/llm/src/providers/`, `*`,
+/// `A-S4 class T: the provider transport behind LlmProvider`) row was removed.
+/// Two rows remain; every production API-path site retains the same scan.
+const CLASSIFIED: [(&str, &str, &str); 2] = [
     (
         "kernel/src/computer_control.rs",
         "query_vision_model",

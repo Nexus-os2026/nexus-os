@@ -1,7 +1,7 @@
 //! M2e-A2 guards (design v2 §14; N1 spec E-O65): E-O65 in a non-test
 //! build of the kernel, where no test seam exists, and the source guards
-//! E-O12 (the worker's grammar is defined once), E-O15 (the gateway's local
-//! predicates are the kernel's) and E-O65 (the qualification seam is
+//! E-O12 (the worker's grammar is defined once), E-O15 (local-model predicates
+//! are defined only in kernel inference) and E-O65 (the qualification seam is
 //! test-only; the transport call boundary guards the route first; the
 //! legacy chat route is gone).
 //!
@@ -214,13 +214,6 @@ fn squeeze(code: &str) -> String {
     code.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-fn file<'a>(files: &'a [ProdFile], rel: &str) -> &'a ProdFile {
-    files
-        .iter()
-        .find(|f| f.rel == rel)
-        .unwrap_or_else(|| panic!("no production file {rel}"))
-}
-
 /// The body (between its braces) of the first `fn NAME(` after `after` in
 /// `code`, or `None`.
 fn fn_body<'a>(code: &'a str, after: &str, name: &str) -> Option<&'a str> {
@@ -347,32 +340,38 @@ fn grammar_findings(files: &[ProdFile]) -> Vec<String> {
     out
 }
 
-/// E-O15: the problems with the gateway's re-export of the predicates.
-fn gateway_findings(gateway: &ProdFile) -> Vec<String> {
+/// E-O15: local-model predicates must stay in the kernel inference lane.
+/// Mother Nexus cleanup (2026-11-05): the old subject was
+/// `gateway_findings(file(&files, "connectors/llm/src/gateway.rs"))`, with
+/// two forbidden local definitions and two required re-exports. The one
+/// replacement guard scans every production file outside kernel inference
+/// for all four canonical/legacy predicate names; no file gets a local copy.
+fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
-    for local in [
-        "fn ollama_model_name_is_cloud",
-        "fn ollama_show_names_remote",
-    ] {
-        if gateway.code.contains(local) {
-            out.push(format!("the gateway defines {local}"));
+    for file in files {
+        if file.rel.starts_with("kernel/src/inference/") {
+            continue;
         }
-    }
-    let code = squeeze(&gateway.code);
-    for export in [
-        "name_is_cloudasollama_model_name_is_cloud",
-        "show_names_remoteasollama_show_names_remote",
-    ] {
-        let re_exported = code
-            .split("pubusenexus_kernel::inference::ollama::{")
-            .skip(1)
-            .any(|rest| {
-                rest.split('}')
-                    .next()
-                    .is_some_and(|list| list.contains(export))
-            });
-        if !re_exported {
-            out.push(format!("the gateway does not re-export {export}"));
+        // Token boundaries allow arbitrary whitespace (and raw identifiers)
+        // without matching calls, re-exports, comments or literal contents.
+        let tokens: Vec<&str> = file
+            .code
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '#'))
+            .filter(|token| !token.is_empty())
+            .collect();
+        for pair in tokens.windows(2) {
+            let name = pair[1].strip_prefix("r#").unwrap_or(pair[1]);
+            if pair[0] == "fn"
+                && matches!(
+                    name,
+                    "name_is_cloud"
+                        | "show_names_remote"
+                        | "ollama_model_name_is_cloud"
+                        | "ollama_show_names_remote"
+                )
+            {
+                out.push(format!("{} defines its own {name}", file.rel));
+            }
         }
     }
     out
@@ -429,16 +428,45 @@ fn m2e_a2_scanners_flag_planted_violations() {
     ];
     assert_eq!(grammar_findings(&twice).len(), 5);
 
-    let local = planted(
-        "connectors/llm/src/gateway.rs",
+    // Mother Nexus cleanup (2026-11-05): the old local/re-export plants
+    // used `connectors/llm/src/gateway.rs`. Both controls now use an SDK
+    // path; five more controls exercise both canonical names, the other
+    // legacy name, ignored text, and the kernel inference owner.
+    let local = [planted(
+        "sdk/src/local_model.rs",
         "pub fn ollama_model_name_is_cloud(m: &str) -> bool { false }",
-    );
-    assert_eq!(gateway_findings(&local).len(), 3);
-    let exported = planted(
-        "connectors/llm/src/gateway.rs",
+    )];
+    assert_eq!(predicate_findings(&local).len(), 1);
+    let exported = [planted(
+        "sdk/src/local_model.rs",
         "pub use nexus_kernel::inference::ollama::{\n    name_is_cloud as ollama_model_name_is_cloud,\n    show_names_remote as ollama_show_names_remote,\n};",
-    );
-    assert!(gateway_findings(&exported).is_empty());
+    )];
+    assert!(predicate_findings(&exported).is_empty());
+    for predicate in [
+        "name_is_cloud",
+        "show_names_remote",
+        "ollama_show_names_remote",
+    ] {
+        let local = [planted(
+            "sdk/src/local_model.rs",
+            &format!("pub fn\n r#{predicate} () -> bool {{ false }}"),
+        )];
+        assert_eq!(
+            predicate_findings(&local).len(),
+            1,
+            "local definition of {predicate} must be rejected"
+        );
+    }
+    let ignored = [planted(
+        "sdk/src/local_model.rs",
+        "// fn name_is_cloud() {}\nconst TEXT: &str = \"fn show_names_remote() {}\"; fn uses_kernel() { nexus_kernel::inference::ollama::name_is_cloud(\"x\"); }",
+    )];
+    assert!(predicate_findings(&ignored).is_empty());
+    let owner = [planted(
+        "kernel/src/inference/ollama.rs",
+        "pub fn name_is_cloud() {} pub fn show_names_remote() {}",
+    )];
+    assert!(predicate_findings(&owner).is_empty());
 }
 
 // ── E-O65, E-O12, E-O15 on the workspace ────────────────────────────────────
@@ -458,8 +486,38 @@ fn e_o12_the_worker_grammar_is_defined_once() {
 }
 
 #[test]
-fn e_o15_the_gateway_predicates_are_the_kernels() {
+fn e_o15_local_model_predicates_are_defined_only_in_kernel_inference() {
     let files = production_files();
-    let findings = gateway_findings(file(&files, "connectors/llm/src/gateway.rs"));
+    let findings = predicate_findings(&files);
     assert!(findings.is_empty(), "{}", findings.join("\n"));
+}
+
+/// Mother Nexus cleanup (2026-11-05): two absence guards keep the retired
+/// `connectors/llm` provider/gateway stack and its workspace membership gone.
+#[test]
+fn m2e_a2_retired_llm_connectors_directory_is_absent() {
+    let path = source::workspace_root().join("connectors/llm");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired connectors/llm path must remain absent"
+    );
+}
+
+#[test]
+fn m2e_a2_retired_llm_connectors_are_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            std::path::Path::new(member.as_str().expect("workspace member path"))
+                != std::path::Path::new("connectors/llm")
+        }),
+        "the retired connectors/llm must not be a workspace member"
+    );
 }
