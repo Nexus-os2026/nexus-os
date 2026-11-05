@@ -1,8 +1,22 @@
 //! The approved K02–K22 inventory, checked before any production extraction.
 #[allow(dead_code)]
+#[path = "retirement/coverage.rs"]
+mod coverage;
+#[allow(dead_code)]
 mod retirement;
+#[allow(dead_code)]
+#[path = "hm_m3_guards/source.rs"]
+mod source;
 use retirement::*;
 use std::collections::BTreeSet;
+
+fn module_attributes(declaration: &str) -> Vec<String> {
+    if declaration == "pub mod test_support;" {
+        vec!["#[cfg(any(test,feature=\"test-utils\"))]".into()]
+    } else {
+        Vec::new()
+    }
+}
 
 fn rust_files(path: &std::path::Path, out: &mut BTreeSet<String>) {
     let meta = std::fs::symlink_metadata(path).expect("registered path readable");
@@ -68,22 +82,32 @@ fn exact_retirement_manifest_matches_current_tree_and_keep_boundary() {
                 .collect::<BTreeSet<_>>()
                 .len()
         );
-        let lib = compact(&read("kernel/src/lib.rs"));
+        let lib = read("kernel/src/lib.rs");
         for declaration in &row.declarations {
             assert_eq!(
-                lib.contains(&compact(declaration)),
+                coverage::root_module(
+                    &lib,
+                    declaration
+                        .trim_start_matches("pub mod ")
+                        .trim_end_matches(';')
+                )
+                .is_some_and(|c| c.attributes == module_attributes(declaration)
+                    && c.head == compact(declaration)),
                 row.stage > LIVE_STAGE,
                 "{declaration}"
             );
         }
         for export in &row.reexports {
             if row.stage > LIVE_STAGE {
-                assert!(compact(&read("kernel/src/cognitive/mod.rs")).contains(&compact(export)));
+                assert!(
+                    compact(&source::mask(&read("kernel/src/cognitive/mod.rs"), false))
+                        .contains(&compact(export))
+                );
             }
         }
         for item in &row.items {
             assert_eq!(
-                read(&item.path).contains(&item.anchor),
+                coverage::active_anchor(&read(&item.path), &item.anchor),
                 row.stage > LIVE_STAGE,
                 "{}",
                 item.anchor
@@ -128,7 +152,7 @@ fn every_extraction_payload_and_temporary_export_has_a_named_home() {
             };
             let text = read(path);
             if row.stage <= LIVE_STAGE && root().join(&extraction.source).is_file() {
-                let old = compact(&read(&extraction.source));
+                let old = compact(&source::mask(&read(&extraction.source), false));
                 for export in &extraction.transitional_exports {
                     assert!(
                         old.contains(&compact(export)),
@@ -137,7 +161,10 @@ fn every_extraction_payload_and_temporary_export_has_a_named_home() {
                 }
             }
             for anchor in &extraction.anchors {
-                assert!(text.contains(anchor), "{path}: missing {anchor}");
+                assert!(
+                    coverage::active_anchor(&text, anchor),
+                    "{path}: missing {anchor}"
+                );
             }
             for temporary in &extraction.temporary {
                 temporary_helpers += 1;
@@ -147,7 +174,7 @@ fn every_extraction_payload_and_temporary_export_has_a_named_home() {
                     "last helper consumer retires with actuators"
                 );
                 assert_eq!(
-                    text.contains(&temporary.anchor),
+                    coverage::active_anchor(&text, &temporary.anchor),
                     LIVE_STAGE < temporary.until
                 );
             }
@@ -206,5 +233,86 @@ fn retained_production_seeds_and_dependency_manifests_are_present() {
             expected,
             "dependency policy changed: {path}"
         );
+    }
+}
+
+#[test]
+fn manifest_presence_requires_real_ungated_declarations() {
+    assert!(coverage::root_module(
+        "#[cfg(any(test, feature = \"test - utils\"))] pub mod test_support;",
+        "test_support"
+    )
+    .is_none_or(|c| c.attributes != module_attributes("pub mod test_support;")));
+    let baseline = "#[cfg(target_os = \"linux\")] #[test] fn protected() {}";
+    assert_ne!(
+        coverage::test_contract(baseline, "protected"),
+        coverage::test_contract(&baseline.replace("linux", "lin ux"), "protected")
+    );
+    for row in stages() {
+        for extraction in &row.extract {
+            for anchor in &extraction.anchors {
+                assert!(
+                    coverage::active_anchor(&read(&extraction.source), anchor),
+                    "{anchor}"
+                );
+            }
+        }
+        for declaration in &row.declarations {
+            let name = declaration
+                .trim_start_matches("pub mod ")
+                .trim_end_matches(';');
+            let present = |raw: &str| {
+                coverage::root_module(raw, name).is_some_and(|c| {
+                    c.attributes == module_attributes(declaration) && c.head == compact(declaration)
+                })
+            };
+            let live = format!("{} {declaration}", module_attributes(declaration).join(" "));
+            assert!(present(&live));
+            for mutant in [
+                format!("// {declaration}"),
+                format!("/* {declaration} */"),
+                format!("#[cfg(any())] {declaration}"),
+                format!("#![cfg(any())] {declaration}"),
+                format!("const NOTE: &str = \"{declaration}\";"),
+                format!("macro_rules! unused {{ () => {{ {declaration} }} }}"),
+            ] {
+                assert!(!present(&mutant), "{mutant}");
+            }
+        }
+    }
+}
+
+#[test]
+fn payload_presence_rejects_comments_literals_macros_and_disabling_cfg() {
+    for (declaration, anchor) in [
+        ("pub enum IdentityExtra {}", "pub enum Identity"),
+        ("fn deserialize_disabled() {}", "fn deserialize"),
+        ("impl Default for RegionExtra {}", "impl Default for Region"),
+    ] {
+        assert!(!coverage::active_anchor(declaration, anchor));
+    }
+    for (declaration, anchor) in [
+        ("pub enum Identity { A }", "pub enum Identity"),
+        ("pub struct Region { x: u32 }", "pub struct Region"),
+        ("pub type AgentId = Uuid;", "pub type AgentId = Uuid;"),
+        (
+            "impl Default for Region { fn default() -> Self { todo!() } }",
+            "impl Default for Region",
+        ),
+        (
+            "pub(crate) mod codec { pub fn deserialize() {} }",
+            "pub fn deserialize",
+        ),
+    ] {
+        assert!(coverage::active_anchor(declaration, anchor));
+        for mutant in [
+            format!("/* {declaration} */"),
+            format!("#[cfg(any())] {declaration}"),
+            format!("#![cfg(any())] {declaration}"),
+            format!("const NOTE: &str = {declaration:?};"),
+            format!("macro_rules! unused {{ () => {{ {declaration} }} }}"),
+        ] {
+            assert!(!coverage::active_anchor(&mutant, anchor), "{mutant}");
+        }
     }
 }

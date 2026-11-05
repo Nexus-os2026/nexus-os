@@ -76,3 +76,57 @@ fresh-context security review before activation. Static source predicates do not
 prove arbitrary semantic equivalence or data flow; existing runtime, resolved-
 graph, containment, grant, privacy, refusal and tamper tests remain indispensable.
 No GitHub/CI or installed physical capability is claimed by this registration.
+
+## Fix round 1 registration
+
+The exclusions now carry the current HM scanner's intersected proof, not the
+baseline seed inventory. A changed in-memory tree invalidates its exclusions;
+uncertainty scans. Disk-backed promotion controls remove `cfg(test)` from the
+real workspace-authority test loading declaration and plant production effects
+in its real target. Registered loading edges pin their targets and attributes.
+
+F7 preserves the original twelve reference prohibitions on each surviving
+cognitive/actuator subject before applying any legacy exemption. Its original
+checkpoint exception remains local to computer_use. All six historically absent
+roots (including the three removed actuators), their alternate spellings and
+empty directories stay absent. Guard declarations and consent/autonomy/supervisor
+contacts survive until each subject's deletion. The original F7 reference plants
+run at every stage: the reference is forbidden while its subject exists, and the
+subject is forbidden afterwards.
+
+The no-handoff successor reads both masked code and literal-preserving text,
+including SQL SELECTs. The original world-model rule applies before K11; the
+post-K11 retained-producer rule keeps both views. The retained verifier-sandbox
+launcher is an explicit process boundary. Complete module components distinguish
+`workspace` from `workspace_authority` and `workspace_permissions`.
+
+Every green stage now includes representative actual retained source: the
+verifier launcher, workspace authority, governed paths, coding-run apply, broker
+Files, mixed audit code/tests and every registered logging source. Only the
+preregistered AgentId, workspace permission and configuration schema contacts
+move to their same-type homes at their extraction stages in these fixtures. These are source-policy fixtures, not evidence of a compiling
+future deletion, runtime data flow or readiness to advance LIVE_STAGE.
+
+`retained-test-policy.json` pins all 159 real function declarations, their file
+and inline-module attributes, platform cfgs and baseline ignores. The eight
+external loading edges are pinned in `retained-test-edges.json`. Commenting out,
+wrapping in a disabled scope, changing cfg, removing an edge or adding an ignore
+fails. The existing test_support cfg remains exact. The narrow declaration
+reader ignores comments, literal contents and unexpanded macro bodies; unknown
+changes require reviewed registration, not a guessed cfg evaluation.
+
+Each of the 22 logging entries also pins its containing production function's
+literal-preserving text, including parameters, branches and local bindings.
+Controls mutate Mother's real main_entry sink and rebind `e` while leaving its
+macro expression unchanged. This protects that bounded diagnostic context; it
+is not an interprocedural privacy proof. Existing behavioral privacy guards
+remain required. All twelve SourceKind persisted names have exact assertions,
+including DbMemoryStore -> `db_memory_store`.
+
+The four retained Mother review scaffolds stay scanned under R-4. Their private
+self-spawn helpers are registered by exact whole-file hashes in
+`retained-test-process-files.json`, with their current cfg(test) loading edges
+pinned separately. This permits their existing test executable only; any source
+change or additional process call loses that registration. These are not new
+production process boundaries or file exclusions. Source-policy registration
+still does not prove arbitrary caller/data-flow equivalence.

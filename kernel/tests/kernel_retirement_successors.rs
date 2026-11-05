@@ -10,7 +10,65 @@ use retirement::*;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-type Tree = BTreeMap<String, String>;
+#[allow(dead_code)]
+#[path = "retirement/coverage.rs"]
+mod coverage;
+
+/// Exclusions are a CURRENT scanner proof, never baseline inventory membership.
+/// Any in-memory mutation invalidates that proof: uncertain inputs are scanned.
+#[derive(Clone, Default)]
+struct Tree {
+    files: BTreeMap<String, String>,
+    test_only: BTreeSet<String>,
+}
+impl Tree {
+    fn new() -> Self {
+        Self::default()
+    }
+    fn prove_test_only_in(&mut self, workspace: &std::path::Path) {
+        let production: BTreeSet<_> = source::production_files_in(workspace)
+            .into_iter()
+            .map(|f| f.rel)
+            .collect();
+        self.test_only = self
+            .files
+            .keys()
+            .filter(|p| p.ends_with(".rs") && !production.contains(*p))
+            .cloned()
+            .collect();
+    }
+    fn write_fixture(&self) -> tempfile::TempDir {
+        let fixture = tempfile::tempdir().unwrap();
+        for (rel, raw) in &self.files {
+            if !rel.ends_with(".rs") && !rel.ends_with("Cargo.toml") {
+                continue;
+            }
+            let path = fixture.path().join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, raw).unwrap();
+        }
+        fixture
+    }
+    fn prove_fixture(&mut self) {
+        let fixture = self.write_fixture();
+        self.prove_test_only_in(fixture.path());
+    }
+}
+impl std::ops::Deref for Tree {
+    type Target = BTreeMap<String, String>;
+    fn deref(&self) -> &Self::Target {
+        &self.files
+    }
+}
+impl std::ops::DerefMut for Tree {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.test_only.clear();
+        &mut self.files
+    }
+}
+#[path = "retirement/controls.rs"]
+mod controls;
+
 type Findings = BTreeSet<(&'static str, String)>;
 
 #[derive(Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -22,10 +80,12 @@ struct HmRow {
     site: Option<String>,
     route: Option<String>,
 }
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(deny_unknown_fields)]
 struct LogSink {
     path: String,
     expression: String,
+    context_sha256: String,
 }
 fn hm_rows(stage: u8) -> BTreeSet<HmRow> {
     include_str!("retirement/hm-rows.jsonl")
@@ -46,7 +106,30 @@ fn required_tests() -> BTreeSet<String> {
         .map(str::to_owned)
         .collect()
 }
+fn required_test_policy() -> BTreeMap<String, coverage::Contract> {
+    serde_json::from_str(include_str!("retirement/retained-test-policy.json")).unwrap()
+}
+#[derive(Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct TestEdge {
+    source: String,
+    module: String,
+    target: String,
+    contract: coverage::Contract,
+}
+fn test_edges() -> Vec<TestEdge> {
+    serde_json::from_str(include_str!("retirement/retained-test-edges.json")).unwrap()
+}
 fn prod(raw: &str) -> (String, String) {
+    type Cache = std::sync::Mutex<BTreeMap<String, (String, String)>>;
+    static CACHE: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
+    let mut cache = CACHE.get_or_init(Cache::default).lock().unwrap();
+    if let Some(views) = cache.get(raw) {
+        return views.clone();
+    }
+    if cache.len() >= 64 {
+        cache.clear();
+    }
     let mut code = source::mask(raw, false).into_bytes();
     let mut text = source::mask(raw, true).into_bytes();
     let (ranges, _) = source::cfg_test_items(
@@ -61,10 +144,12 @@ fn prod(raw: &str) -> (String, String) {
             }
         }
     }
-    (
+    let views = (
         String::from_utf8(code).unwrap(),
         String::from_utf8(text).unwrap(),
-    )
+    );
+    cache.insert(raw.into(), views.clone());
+    views
 }
 fn retiring(path: &str, stage: u8) -> bool {
     stages()
@@ -83,12 +168,54 @@ fn pattern(re: &str) -> std::sync::Arc<regex::Regex> {
 fn identifier(code: &str, word: &str) -> bool {
     pattern(&format!(r"\b{}\b", regex::escape(word))).is_match(code)
 }
-fn log_expressions(raw: &str) -> Vec<String> {
+fn referenced_modules(code: &str, namespace: &str) -> BTreeSet<String> {
+    let mut modules = BTreeSet::new();
+    let add = |at: usize, modules: &mut BTreeSet<String>| {
+        if let Some(name) = pattern(r"^(?:r#)?(\w+)").captures(&code[at..]) {
+            modules.insert(name[1].into());
+        }
+    };
+    for prefix in pattern(&format!(r"\b{}\s*::\s*", regex::escape(namespace))).find_iter(code) {
+        let mut at = prefix.end();
+        if code.as_bytes().get(at) != Some(&b'{') {
+            add(at, &mut modules);
+            continue;
+        }
+        let end = source::close_of(code, at);
+        at += 1;
+        while at < end - 1 {
+            while at < end - 1 && code.as_bytes()[at].is_ascii_whitespace() {
+                at += 1;
+            }
+            add(at, &mut modules);
+            while at < end - 1 && code.as_bytes()[at] != b',' {
+                if matches!(code.as_bytes()[at], b'{' | b'(' | b'[') {
+                    at = source::close_of(code, at);
+                } else {
+                    at += 1;
+                }
+            }
+            at += 1;
+        }
+    }
+    modules
+}
+fn logging_sinks(path: &str, raw: &str) -> Vec<LogSink> {
     let (code, text) = prod(raw);
+    let functions = coverage::declarations(&text);
     pattern(r"\b(?:(?:tracing|log)::(?:trace|debug|info|warn|error)|eprintln|println|eprint|print|dbg)!\s*[({\[]")
         .find_iter(&code).map(|m| {
             let open = m.end()-1;
-            text[m.start()..source::close_of(&code, open)].replace("\r\n", "\n")
+            let context = functions.iter().filter(|d| d.kind == "fn" && d.span.0 <= m.start() && m.start() < d.span.1)
+                .min_by_key(|d| d.span.1 - d.span.0);
+            LogSink {
+                path: path.into(),
+                expression: text[m.start()..source::close_of(&code, open)].replace("\r\n", "\n"),
+                // Freeze the entire containing function, including parameters,
+                // bindings and branches. No interprocedural data-flow claim.
+                context_sha256: context.map_or_else(|| "unbounded-context".into(), |d|
+                    digest(text[d.span.0..d.span.1].replace("\r\n", "\n").as_bytes())),
+            }
         }).collect()
 }
 fn classifier_bytes(raw: &str) -> Option<String> {
@@ -163,7 +290,22 @@ fn build_module_edges(stage: u8) -> BTreeMap<String, BTreeSet<String>> {
 fn load_live_tree() -> Tree {
     load_tree_in(&root())
 }
+// Every historical F7 absent root remains absent, including empty directories.
+const F7_ABSENT: [&str; 6] = [
+    "kernel/src/free_api_registry",
+    "kernel/src/orchestration",
+    "kernel/src/delegation",
+    "kernel/src/actuators/self_evolution",
+    "kernel/src/actuators/governance_policy",
+    "kernel/src/actuators/cognitive_param",
+];
 fn retired_spelling(rel: &str) -> bool {
+    if F7_ABSENT
+        .iter()
+        .any(|stem| within(rel, stem) || rel == format!("{stem}.rs"))
+    {
+        return true;
+    }
     stages().iter().flat_map(|r| &r.roots).any(|p| {
         let stem = p.trim_end_matches(".rs");
         within(rel, stem) || rel == format!("{stem}.rs")
@@ -237,14 +379,16 @@ fn load_tree_in(workspace: &std::path::Path) -> Tree {
             .replace('\\', "/");
         if path.is_dir() || (retired_spelling(&rel) && path.extension().is_none_or(|e| e != "rs")) {
             tree.insert(rel, String::new());
-        } else if rel.ends_with("Cargo.toml") || test_paths.contains(&rel) {
+        } else if rel.ends_with("Cargo.toml")
+            || test_paths.contains(&rel)
+            || production.contains_key(&rel)
+        {
             tree.insert(rel, std::fs::read_to_string(path).unwrap());
-        } else if let Some(text) = production.get(&rel) {
-            tree.insert(rel, text.clone());
         } else if known.contains(&rel) || retired_spelling(&rel) {
             tree.insert(rel, String::new());
         } // PROVED test-only file exists
     }
+    tree.prove_test_only_in(workspace);
     tree
 }
 
@@ -307,7 +451,7 @@ fn registered_logging_sinks_match_current_production_views() {
     if LIVE_STAGE != 1 {
         return;
     }
-    let mut actual = BTreeMap::<String, Vec<String>>::new();
+    let mut actual = BTreeMap::<String, Vec<LogSink>>::new();
     for file in source::production_files() {
         if stages()
             .iter()
@@ -315,14 +459,14 @@ fn registered_logging_sinks_match_current_production_views() {
         {
             continue;
         }
-        let sinks = log_expressions(&file.text);
+        let sinks = logging_sinks(&file.rel, &file.text);
         if !sinks.is_empty() {
             actual.insert(file.rel, sinks);
         }
     }
-    let mut expected = BTreeMap::<String, Vec<String>>::new();
+    let mut expected = BTreeMap::<String, Vec<LogSink>>::new();
     for sink in logs() {
-        expected.entry(sink.path).or_default().push(sink.expression);
+        expected.entry(sink.path.clone()).or_default().push(sink);
     }
     assert_eq!(actual, expected, "production logging registration");
 }
@@ -364,7 +508,6 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
     assert!((2..=22).contains(&stage));
     let mut found = Findings::new();
     let expected = paths_at(stage);
-    let production_seeds = production_paths();
     let manifests = cargo_manifests();
     let named_tests = required_tests();
     let test_files: BTreeSet<_> = named_tests
@@ -388,6 +531,14 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
             found.insert(("f7-dependency", path));
         }
     }
+    for stem in F7_ABSENT {
+        if tree
+            .keys()
+            .any(|p| within(p, stem) || p == &format!("{stem}.rs"))
+        {
+            found.insert(("f7-absence", stem.into()));
+        }
+    }
     for row in stages().iter().filter(|r| r.stage <= stage) {
         for root in &row.roots {
             if tree.keys().any(|p| within(p, root)) {
@@ -404,9 +555,44 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
             }
         }
     }
-    for (path, raw) in tree {
-        if !path.ends_with(".rs") || (test_files.contains(path) && !production_seeds.contains(path))
+    // F7's retained guards and their security contacts survive until their
+    // respective approved subject deletion, not just until the first cut.
+    for (until, module) in [
+        (19, "policy_engine"),
+        (17, "time_machine"),
+        (15, "speculative"),
+        (19, "consent"),
+        (19, "autonomy"),
+        (14, "supervisor"),
+    ] {
+        if stage < until
+            && tree
+                .get("kernel/src/lib.rs")
+                .and_then(|raw| coverage::root_module(raw, module))
+                .is_none_or(|c| !c.attributes.is_empty() || c.head != format!("pubmod{module};"))
         {
+            found.insert(("f7-presence", module.into()));
+        }
+    }
+    for (until, path, contact) in [
+        (19, "kernel/src/consent.rs", "usecrate::policy_engine::"),
+        (19, "kernel/src/autonomy.rs", "usecrate::policy_engine::"),
+        (
+            14,
+            "kernel/src/supervisor.rs",
+            "usecrate::time_machine::TimeMachine;",
+        ),
+    ] {
+        if stage < until
+            && tree
+                .get(path)
+                .is_none_or(|raw| !compact(&prod(raw).0).contains(contact))
+        {
+            found.insert(("f7-presence", path.into()));
+        }
+    }
+    for (path, raw) in tree.iter() {
+        if !path.ends_with(".rs") || tree.test_only.contains(path) {
             continue;
         }
         if !expected.contains(path) {
@@ -430,17 +616,17 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
                 found.insert(("f7-dependency", path.clone()));
             }
         }
+        let kernel_contacts = referenced_modules(&code, "nexus_kernel");
+        let local_contacts = referenced_modules(&code, "crate");
         for row in stages().iter().filter(|r| r.stage <= stage) {
             for declaration in &row.declarations {
                 let module = declaration
                     .trim_start_matches("pub mod ")
                     .trim_end_matches(';');
-                for prefix in ["crate::", "nexus_kernel::", "nexus_kernel::{"] {
-                    if squashed.contains(&format!("{prefix}{module}"))
-                        && (prefix != "crate::" || path.starts_with("kernel/"))
-                    {
-                        found.insert(("f7-dependency", path.clone()));
-                    }
+                if kernel_contacts.contains(module)
+                    || (path.starts_with("kernel/") && local_contacts.contains(module))
+                {
+                    found.insert(("f7-dependency", path.clone()));
                 }
                 if path == "kernel/src/lib.rs"
                     && pattern(&format!(r"\bmod\s+{}\b", regex::escape(module))).is_match(&code)
@@ -454,9 +640,46 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         if !module_names(&code).is_subset(&allowed) {
             found.insert(("f7-dependency", path.clone()));
         }
+        // The predecessor protects these subjects until each subject disappears.
+        // Apply BEFORE the legacy exemption: K11 cannot retire the cognitive
+        // walk while weakening the still-live actuators' prohibitions.
+        if within(path, "kernel/src/cognitive") || within(path, "kernel/src/actuators") {
+            const FORBIDDEN: [&str; 12] = [
+                "free_api_registry",
+                "orchestration::",
+                "Orchestrator",
+                "delegation::",
+                "DelegationEngine",
+                "DelegationConstraints",
+                "speculative::",
+                "SpeculativeEngine",
+                "time_machine::",
+                "TimeMachine",
+                "policy_engine::",
+                "PolicyEngine",
+            ];
+            // Retain the original code-line predicate as well as masked checks:
+            // F7 also sees literal references on non-comment lines.
+            for line in raw.lines().filter(|l| !l.trim_start().starts_with("//")) {
+                if FORBIDDEN.iter().any(|token| {
+                    line.contains(token)
+                        && !(matches!(*token, "time_machine::" | "TimeMachine")
+                            && path == "kernel/src/actuators/computer_use.rs")
+                }) {
+                    found.insert(("f7-dependency", path.clone()));
+                }
+            }
+        }
+        if path == "kernel/src/cognitive/algorithms/world_model.rs"
+            && NO_HANDOFF
+                .iter()
+                .any(|word| identifier(&code, word) || identifier(&text, word))
+        {
+            found.insert(("hm-no-handoff", path.clone()));
+        }
         if retiring(path, stage) {
             continue;
-        } // legacy subjects still under their CURRENT guards
+        } // Other legacy predicates remain under their unchanged current guards.
         for (n, token) in [
             (11, "CognitiveRuntime"),
             (11, "RegistryExecutor"),
@@ -474,10 +697,23 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         }
         let process_boundary = path == "kernel/src/resource_limiter.rs"
             || path.starts_with("kernel/src/resource_limiter/")
+            || path == "crates/nexus-verifier-sandbox/src/launcher.rs"
             || path == "crates/nexus-governed-control/src/launcher.rs"
             || path.starts_with("crates/nexus-governed-control/src/launcher/")
             || path.starts_with("crates/nexus-governed-control/src/tool/");
-        if !process_boundary && pattern(r"\bCommand\s*::\s*new\s*\(").is_match(&code) {
+        // These four retained private test scaffolds self-spawn the test
+        // executable. Their entire source is fixed, not a path-prefix/process
+        // exemption. The cfg(test) loading edges remain independently required.
+        let test_processes: BTreeMap<String, String> =
+            serde_json::from_str(include_str!("retirement/retained-test-process-files.json"))
+                .unwrap();
+        let unchanged_test_helper = test_processes
+            .get(path)
+            .is_some_and(|hash| digest(raw.replace("\r\n", "\n").as_bytes()) == *hash);
+        if !process_boundary
+            && !unchanged_test_helper
+            && pattern(r"\bCommand\s*::\s*new\s*\(").is_match(&code)
+        {
             found.insert(("raw-process", path.clone()));
         }
         let network_boundary = path.starts_with("kernel/src/inference/")
@@ -573,7 +809,10 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
             {
                 found.insert(("hm-writer", path.clone()));
             }
-            if NO_HANDOFF.iter().any(|word| identifier(&code, word)) {
+            if NO_HANDOFF
+                .iter()
+                .any(|word| identifier(&code, word) || identifier(&text, word))
+            {
                 found.insert(("hm-no-handoff", path.clone()));
             }
             if identifier(&code, "PromptBuilder")
@@ -586,18 +825,18 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
         }
     }
     // Full retained sink expressions are frozen. Unknown or omitted sinks fail.
-    let mut expected_logs: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut expected_logs: BTreeMap<String, Vec<LogSink>> = BTreeMap::new();
     for sink in logs() {
         expected_logs
-            .entry(sink.path)
+            .entry(sink.path.clone())
             .or_default()
-            .push(sink.expression.replace("\r\n", "\n"));
+            .push(sink);
     }
     for (path, raw) in tree
         .iter()
         .filter(|(p, _)| expected.contains(*p) && !retiring(p, stage))
     {
-        let mut actual = log_expressions(raw);
+        let mut actual = logging_sinks(path, raw);
         let mut wanted = expected_logs.remove(path).unwrap_or_default();
         actual.sort();
         wanted.sort();
@@ -608,42 +847,145 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
     for path in expected_logs.keys() {
         found.insert(("logging", path.clone()));
     }
+    let policies = required_test_policy();
+    let mut actual_tests = BTreeMap::new();
+    for path in &test_files {
+        if let Some(raw) = tree.get(path) {
+            for declaration in coverage::declarations(raw)
+                .into_iter()
+                .filter(|d| d.kind == "fn")
+            {
+                let name = format!("{path}::{}", declaration.name);
+                if named_tests.contains(&name)
+                    && actual_tests
+                        .insert(name.clone(), declaration.contract)
+                        .is_some()
+                {
+                    found.insert(("acceptance-inventory", name));
+                }
+            }
+        }
+    }
     for name in named_tests {
-        let (path, function) = name.rsplit_once("::").unwrap();
-        if tree.get(path).is_none_or(|raw| {
-            !pattern(&format!(
-                r"#\[(?:tokio::)?test(?:\([^\]]*\))?\](?:\s*#\[[^\]]*\])*\s*(?:async\s+)?fn\s+{}\b",
-                regex::escape(function)
-            ))
-            .is_match(raw)
-        }) {
+        if actual_tests.get(&name) != policies.get(&name) || !policies.contains_key(&name) {
             found.insert(("acceptance-inventory", name));
+        }
+    }
+    for edge in test_edges() {
+        if !tree.contains_key(&edge.target)
+            || tree
+                .get(&edge.source)
+                .and_then(|raw| coverage::root_module(raw, &edge.module))
+                .as_ref()
+                != Some(&edge.contract)
+        {
+            found.insert(("acceptance-inventory", format!("{}::load", edge.target)));
         }
     }
     found
 }
 
-/// Explicitly synthetic, deliberately no subject code is read from disk here.
-/// Empty source slots represent unchanged, effect-free fixture modules.
+/// Effect-free staged slots plus representative RETAINED source. This is not a
+/// simulated deletion build: actual stage PRs must still pass the live gate.
 fn clean_tree(stage: u8) -> Tree {
-    let mut tree: Tree = paths_at(stage)
-        .into_iter()
-        .map(|p| (p, String::new()))
-        .collect();
+    static CLEAN: std::sync::OnceLock<Vec<Tree>> = std::sync::OnceLock::new();
+    CLEAN.get_or_init(|| (2..=22).map(build_clean_tree).collect())[usize::from(stage - 2)].clone()
+}
+fn build_clean_tree(stage: u8) -> Tree {
+    let mut tree = Tree {
+        files: paths_at(stage)
+            .into_iter()
+            .map(|p| (p, String::new()))
+            .collect(),
+        ..Tree::default()
+    };
     for (path, _) in cargo_manifests() {
         tree.insert(path.clone(), read(&path));
     }
     for test in required_tests() {
-        let (path, function) = test.rsplit_once("::").unwrap();
-        tree.entry(path.into())
-            .or_default()
-            .push_str(&format!("#[test]\nfn {function}() {{}}\n"));
+        let (path, _) = test.rsplit_once("::").unwrap();
+        tree.insert(path.into(), read(path));
+    }
+    // Real loading declarations are needed to prove both test-only exclusions
+    // and retained test reachability. Extraction imports use their same-type home.
+    let mut lib = "pub mod audit; pub mod workspace_authority;".to_owned();
+    for (until, module) in [
+        (19, "policy_engine"),
+        (17, "time_machine"),
+        (15, "speculative"),
+        (19, "consent"),
+        (19, "autonomy"),
+        (14, "supervisor"),
+    ] {
+        if stage < until {
+            lib.push_str(&format!("pub mod {module};"));
+        }
+    }
+    tree.insert("kernel/src/lib.rs".into(), lib);
+    for (until, path, contact) in [
+        (
+            19,
+            "kernel/src/consent.rs",
+            "use crate::policy_engine::{EvaluationContext, PolicyDecision, PolicyEngine};",
+        ),
+        (
+            19,
+            "kernel/src/autonomy.rs",
+            "use crate::policy_engine::{EvaluationContext, PolicyDecision, PolicyEngine};",
+        ),
+        (
+            14,
+            "kernel/src/supervisor.rs",
+            "use crate::time_machine::TimeMachine;",
+        ),
+    ] {
+        if stage < until {
+            tree.insert(path.into(), contact.into());
+        }
+    }
+    tree.insert(
+        "kernel/src/workspace_authority.rs".into(),
+        read("kernel/src/workspace_authority.rs")
+            .replace("crate::manifest::", "crate::workspace_permissions::")
+            .replace(
+                "crate::supervisor::AgentId",
+                "crate::agent_identity::AgentId",
+            ),
+    );
+    for path in [
+        "crates/nexus-verifier-sandbox/src/launcher.rs",
+        "kernel/src/governed_path.rs",
+        "kernel/src/coding_run/apply.rs",
+        "crates/nexus-governed-control/src/files/mod.rs",
+        "mother/src/coordinator/lite.rs",
+    ] {
+        tree.insert(
+            path.into(),
+            read(path).replace("crate::manifest::", "crate::workspace_permissions::"),
+        );
     }
     for sink in logs() {
-        tree.entry(sink.path)
-            .or_default()
-            .push_str(&format!("{};\n", sink.expression));
+        let mut raw = read(&sink.path);
+        if stage >= 4 && sink.path == "kernel/src/config.rs" {
+            for kind in [
+                "BackupScheduleConfig",
+                "RateLimitConfig",
+                "ApiHardeningConfig",
+            ] {
+                let old = if kind == "BackupScheduleConfig" {
+                    "backup"
+                } else {
+                    "rate_limit"
+                };
+                raw = raw.replace(
+                    &format!("crate::{old}::{kind}"),
+                    &format!("crate::config::schema_compat::{kind}"),
+                );
+            }
+        }
+        tree.insert(sink.path.clone(), raw);
     }
+    tree.prove_fixture();
     tree
 }
 fn rejected(stage: u8, tree: &Tree, oracle: &'static str) {
