@@ -1,6 +1,7 @@
 //! A6: the real facade owns producer debt and the ordered final obligations.
 #![deny(unsafe_code)]
 #![cfg(target_os = "linux")]
+mod support;
 use nexus_governed_control::authority::approval::*;
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
@@ -20,9 +21,10 @@ impl ControlConfirmer for No {
     fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool { false }
 }
 fn child(case: &str) {
+    let fixture = support::Fixture::new();
     let mut child = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "session_close_facade_enforces_the_complete_order", "--nocapture"])
-        .env("M2DD_CLOSE_FACADE", case)
+        .env("M2DD_CLOSE_FACADE", case).env("M2DD_CLOSE_ROOT", &fixture.home)
         .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);
     while child.try_wait().unwrap().is_none() {
@@ -34,6 +36,14 @@ fn child(case: &str) {
     let result = child.wait_with_output().unwrap();
     assert!(result.status.success(), "{case}: {}{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
     assert!(String::from_utf8_lossy(&result.stdout).contains(&format!("CLOSE FACADE VERIFIED {case}")));
+    let expected_end = u64::from(matches!(case, "normal" | "idle_emergency" | "producer" | "ingress_after_seal"));
+    let expected_stop = u64::from(case == "idle_emergency");
+    assert_eq!(support::evidence::counts(&fixture), [expected_stop, 1, expected_end], "independently verified primary records for {case}");
+    if case != "incomplete_history" {
+        let raw = std::fs::read_to_string(fixture.home.join("mother-journal.jsonl")).unwrap();
+        let entries = nexus_mother::journal::verify(&raw.lines().map(str::to_owned).collect::<Vec<_>>()).unwrap();
+        assert_eq!(entries.iter().filter(|entry| matches!(entry.event, Event::SessionClosed)).count(), expected_end as usize + usize::from(case == "missing_primary"));
+    }
 }
 #[test]
 fn session_close_facade_enforces_the_complete_order() {
@@ -42,7 +52,7 @@ fn session_close_facade_enforces_the_complete_order() {
         return;
     };
     assert!(nexus_governed_control::files::make_non_dumpable());
-    let root = std::env::temp_dir().join(format!("close-facade-{}", std::process::id()));
+    let root = std::path::PathBuf::from(std::env::var_os("M2DD_CLOSE_ROOT").unwrap());
     create_private(&root).unwrap();
     let seed = SessionSeed::new().unwrap();
     let ingress = seed.ingress();
@@ -62,7 +72,8 @@ fn session_close_facade_enforces_the_complete_order() {
     let repeated = ingress.accept(CommandKind::Quit, 2).unwrap();
     assert_eq!(repeated.deadline(), deadline, "repeated Quit must not restart shutdown");
     assert_eq!(repeated.close_identity(), request.close_identity());
-    assert!(session.seal_close(&request).is_err(), "unjoined input producer blocks seal");
+    session.settle_close_authority(&request).unwrap();
+    assert!(session.seal_close(&request).is_err(), "unjoined input producer blocks seal after authority closure");
     if case == "lost_producer" {
         drop(producer);
         assert!(session.seal_close(&request).is_err());
@@ -74,7 +85,6 @@ fn session_close_facade_enforces_the_complete_order() {
         }
         session.settle_close_authority(&request).unwrap();
         if case == "incomplete_history" {
-            std::fs::OpenOptions::new().append(true).open(root.join("mother-journal.jsonl")).unwrap();
             use std::io::Write;
             std::fs::OpenOptions::new().append(true).open(root.join("mother-journal.jsonl")).unwrap().write_all(b"{torn").unwrap();
         }
