@@ -1214,5 +1214,6 @@ mod lite_review5_port;
 #[cfg(test)]
 mod host_decision9_tests;
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 pub(crate) mod session_support;

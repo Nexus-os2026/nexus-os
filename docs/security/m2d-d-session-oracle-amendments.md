@@ -760,3 +760,39 @@ must retain immediate native entry observations; reported admission counters
 are never substitute primitive observations. Ownership-transfer plants are
 applied to each final transfer location, then byte-exactly reverted. No plant
 is part of a commit.
+
+
+### Native discharge and execution unwind addendum (2026-11-05)
+
+- `decision11_cleanup_ingress_after_handoff_preserves_actual_outcome`: old
+  `cleanup().unwrap(); (settled, still_owed) == (1, 0)`. New: the entered
+  discard removes the real staging directory, but the command returns
+  `Halted`, the native entry is not discharged and the original session has
+  unresolved resource debt. §5 explicitly amends this host-bound family;
+  A8 requires a separately admitted parent synchronization and independent
+  recording/authority proof. The physical post-handoff assertion is retained.
+- `structure_the_effect_port_is_sealed_to_the_adapter`: old sealed production
+  implementer list contains only `GovernedPort`; new list contains that legacy
+  adapter and the closed `SessionPort`, plus the unchanged test-only
+  `RecordingPort`. §4 requires the session-bound Mother port without exposing
+  raw authority. The trait and sealing module remain private at the same
+  boundary. This structural expectation was missed when the port was added;
+  this process deviation is disclosed, not rewritten.
+- The shared test fixture's memory-only confirmer now resides in the existing
+  test-only oracle tree. Its filesystem operations remain in the adapter,
+  whose test module uses the scanner's recognized `cfg(test)` declaration.
+  No privacy scanner exemption or production confirmer is added.
+- `session_execution_guard_unwind_retains_the_unrecorded_outcome` reads actual
+  primary evidence rows and actual native resources. After a controlled
+  execution unwind it expects one started row, zero finished rows, a pinned
+  Executing commitment, and identical staging after all owners drop. Restoring
+  the old destructor recording body is red: `finished` is 1, expected 0.
+  Restored control passes. The first probe used an independent SQLite
+  connection and failed on the store's exclusive lock in both variants; that
+  harness failure is not counted as a detected plant. The final probe reads
+  the existing primary connection's rows, not a production classifier.
+- Additional executed schedules before the inventory implementation checkpoint:
+  four close/final-sync races and two undo-grant handoffs (422553e1), the same
+  112 private-store schedules with conserved-obligation expectations
+  (dabfe107), and one real native execution unwind. These are additional
+  receipts, not the planned Cartesian schedule count.

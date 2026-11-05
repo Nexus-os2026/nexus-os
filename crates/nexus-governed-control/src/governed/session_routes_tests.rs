@@ -43,6 +43,7 @@ impl ControlConfirmer for Yes {
 
 struct Fixture {
     gov: Arc<GovernedControl>,
+    primary: Arc<crate::evidence_store::PrimaryEvidence>,
     door: Arc<SessionDoor>,
     _session: Arc<HostSession>,
     sequence: AtomicUsize,
@@ -73,7 +74,14 @@ impl Fixture {
         )
         .unwrap();
         let session = Arc::new(
-            HostSession::open(seed, root.0.path(), evidence, clock.clone(), Arc::new(Yes)).unwrap(),
+            HostSession::open(
+                seed,
+                root.0.path(),
+                evidence.clone(),
+                clock.clone(),
+                Arc::new(Yes),
+            )
+            .unwrap(),
         );
         let workspace = dirs.0.path().join("selected/workspace");
         std::fs::create_dir_all(&workspace).unwrap();
@@ -95,6 +103,7 @@ impl Fixture {
         let run = door.open_file_run(&attachment).unwrap();
         door.admit_files(run, HASH, CONSENT).unwrap();
         Self {
+            primary: evidence,
             gov,
             door: Arc::new(door),
             _session: session,
@@ -1645,4 +1654,59 @@ fn session_undo_grant_has_its_own_original_request_handoff() {
             usize::from(!interrupt)
         );
     }
+}
+
+#[test]
+fn session_execution_guard_unwind_retains_the_unrecorded_outcome() {
+    let f = Fixture::new();
+    let id = f.pending();
+    f.gov.files().hooks().arm("files.before_final", || {
+        panic!("registered in-flight native unwind");
+    });
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f.approve(id))).is_err());
+    // Read actual primary-store rows under its existing connection hold;
+    // this store deliberately excludes an independent SQLite connection.
+    let rows = f.primary.store().rows();
+    let count = |phase: &str| -> usize {
+        rows.iter()
+            .filter(|row| {
+                row.commitment.as_deref() == Some(id.to_string().as_str()) && row.phase == phase
+            })
+            .count()
+    };
+    assert_eq!(
+        count("started"),
+        1,
+        "positive control: actual execution started"
+    );
+    assert_eq!(
+        count("finished"),
+        0,
+        "a session guard destructor must not create an outcome record"
+    );
+    assert!(f.gov.authority().commitments().pinned_for_test(id));
+    assert_eq!(
+        f.gov.authority().commitments().view(id).unwrap().state,
+        crate::authority::commitment::CommitmentState::Executing
+    );
+    let staging = f.gov.files().state_dir_for_test().join("coding-runs");
+    let before = resources(&staging);
+    assert!(!before.is_empty());
+    let Fixture {
+        gov,
+        door,
+        _session,
+        _root,
+        _dirs,
+        ..
+    } = f;
+    drop(door);
+    drop(gov);
+    drop(_session);
+    assert_eq!(
+        resources(&staging),
+        before,
+        "uncertain ownership survives every last-owner drop"
+    );
+    drop((_root, _dirs));
 }

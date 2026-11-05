@@ -1,37 +1,13 @@
 //! Real mandatory session fixture. No raw backend authority is exported.
-use super::{create_private, FileJournal, FilePrivate, SessionPort};
+use crate::adapter::{create_private, FileJournal, FilePrivate, SessionPort};
 use crate::journal::JournalStore;
-use nexus_governed_control::authority::approval::*;
+use crate::oracles::session_support::Owner;
 use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::host_session::{CommandKind, HostSession, SessionSeed};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-#[derive(Default)]
-pub(crate) struct Owner {
-    pub decline: AtomicBool,
-}
-impl ControlConfirmer for Owner {
-    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
-        !self.decline.load(Ordering::SeqCst)
-    }
-    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
-        true
-    }
-    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
-        false
-    }
-    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
-        false
-    }
-    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
-        true
-    }
-    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
-        true
-    }
-}
 pub(crate) struct Fixture {
     pub dir: PathBuf,
     pub workspace: PathBuf,

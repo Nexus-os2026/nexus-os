@@ -394,9 +394,17 @@ fn decision11_cleanup_ingress_after_handoff_preserves_actual_outcome() {
         .files()
         .hooks()
         .arm(at::FILE_DISCARD, move || ingress.engage_emergency());
-    let retry = f.cleanup().unwrap();
-    assert_eq!((retry.settled, retry.still_owed), (1, 0));
-    assert!(!staging.exists());
+    assert!(matches!(f.cleanup(), Err(AuthorityError::Halted)));
+    assert!(
+        !staging.exists(),
+        "the entered discard really removed staging"
+    );
+    let inventory = f.session.inventory().unwrap();
+    assert!(inventory.entries.iter().any(|entry| !entry.discharged));
+    assert!(
+        f.session.resource_obligations().unwrap().unresolved > 0,
+        "removal alone does not establish the separately admitted parent sync"
+    );
     f.gov.emergency_stop();
     assert!(f
         .evidence
