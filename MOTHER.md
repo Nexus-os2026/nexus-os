@@ -24,6 +24,7 @@ She must grow along the one main pathway, each rung of agency paid for by its gu
 the safety core: an intelligence nobody can trust or stop is not super; the safety core is what lets her grow powerful.
 She is not a Super Hybrid Intelligence today; nothing is claimed before it is proven. Today's status remains as
 [README’s “Built and merged”](README.md#built-and-merged) and [“Still to build and prove”](README.md#still-to-build-and-prove) sections say.
+Mother's skills map: [SKILLS.md](SKILLS.md).
 
 **ONE PLATFORM. No new features beside the main pathway:** goal → plan →
 governed execution → verified proof → teaching. Other ideas stay one-line
