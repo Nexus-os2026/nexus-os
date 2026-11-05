@@ -754,7 +754,7 @@ impl GovernedControl {
     ) -> Result<AgentDoor, AuthorityError> {
         let authority = self.authority();
         let check = |door| {
-            if halt.as_ref().is_some_and(|cell| cell.is_engaged()) {
+            if crate::authority::file_session::check_halt(halt.as_ref()).is_err() {
                 authority.record_door_halt_refusal(&agent, door);
                 Err(AuthorityError::Halted)
             } else {
