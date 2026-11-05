@@ -153,6 +153,43 @@ fn whole_file_unresolved_paths_cannot_hide_another_declarations_target() {
 }
 
 #[test]
+fn whole_file_crate_roots_remain_production_when_also_loaded_by_tests() {
+    let files = inventory(&[
+        ("lib.rs", "fn production() {}"),
+        ("main.rs", "fn main() {}"),
+        ("test_loader.rs", "#[cfg(test)] #[path = \"lib.rs\"] mod library; #[cfg(test)] #[path = \"main.rs\"] mod binary;"),
+    ]);
+    assert!(files.contains("lib.rs"));
+    assert!(files.contains("main.rs"));
+}
+
+#[test]
+fn whole_file_path_loaded_children_keep_ambiguous_directory_contexts() {
+    // rustc resolves default children of a #[path]-loaded renamed.rs from
+    // its containing directory. The scanner keeps both possible contexts
+    // when the physical file can also be loaded by its default name.
+    let files = inventory(&[
+        ("lib.rs", "#[path = \"renamed.rs\"] mod alias; #[cfg(test)] #[path = \"child.rs\"] mod fixture;"),
+        ("renamed.rs", "pub(crate) mod child;"),
+        ("child.rs", ""),
+        ("renamed/child.rs", ""),
+    ]);
+    assert!(files.contains("child.rs"));
+    assert!(files.contains("renamed/child.rs"));
+}
+
+#[test]
+fn whole_file_raw_identifiers_whitespace_paths_and_uncertain_cfg_stay_scanned() {
+    let files = inventory(&[
+        ("lib.rs", "# [ path = r#\"shared.rs\"# ] pub ( crate ) mod r#live; #[cfg(test)] #[path = \"shared.rs\"] mod fixture; #[cfg(any(test, unix))] mod uncertain;"),
+        ("shared.rs", ""),
+        ("uncertain.rs", ""),
+    ]);
+    assert!(files.contains("shared.rs"));
+    assert!(files.contains("uncertain.rs"));
+}
+
+#[test]
 fn real_tree_retains_legacy_production_inventory_except_proved_test_files() {
     // Captured by running the scanner from fe5328afdb04732b9aa9bf9eb854b01823f8d352
     // over this real tree. Check identities as well as the reviewer's count.
