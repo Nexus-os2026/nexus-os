@@ -1,35 +1,23 @@
 ---
 name: Bug Report
-about: Report a reproducible defect in NexusOS
+about: Report a reproducible defect in Mother Nexus
 title: "[Bug] "
 labels: bug
 assignees: ""
 ---
 
-## Description
+## Description and evidence
 
-Describe the problem clearly.
+What failed? Include the build/commit, component and exact result label.
+Do not include secrets, private journal content or sensitive paths. Report
+vulnerabilities privately using SECURITY.md.
 
-## Steps to Reproduce
+## Reproduction
 
-1. 
-2. 
-3. 
+List bounded steps, expected behavior and actual observations.
 
-## Expected Behavior
+## Environment
 
-What should happen?
-
-## Actual Behavior
-
-What actually happened?
-
-## Platform
-
-- [ ] Windows
-- [ ] macOS
-- [ ] Linux
-
-## Version
-
-Example: `v2.0.0`
+Linux distribution, session/display and relevant installed-build qualification.
+Windows and macOS are unvalidated; identify a report from those platforms
+explicitly. A passing unit test is not physical acceptance.

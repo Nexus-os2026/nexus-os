@@ -1,13 +1,21 @@
-## What does this PR do?
+## User benefit and resulting behavior
 
-Describe the change and scope.
+Describe the concrete problem, final change and main-pathway scope.
 
-## How was it tested?
+## Files and boundaries
 
-List commands, environments, and results.
+List affected components, trust invariants, non-goals and remaining limits.
 
-## Checklist
+## Evidence
 
-- [ ] Tests pass
-- [ ] No warnings
-- [ ] Docs updated
+Give the base and candidate, actual test commands/counts, failed or omitted
+gates, CI on the exact SHA when authorized, and installed evidence if required.
+Do not present implementation or local green as physical acceptance.
+
+## Review and authority
+
+- [ ] Within the approved Mother mission; no adjacent feature or phase advancement
+- [ ] Permanent engineering rules and isolation guards preserved
+- [ ] Pre-registered oracles unchanged, or explicit amendment authority documented
+- [ ] Required local gates passed; every limitation reported
+- [ ] Independent review and Owner integration/acceptance still required

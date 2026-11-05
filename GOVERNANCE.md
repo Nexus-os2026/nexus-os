@@ -1,36 +1,33 @@
-# Nexus OS Governance
+# Mother Nexus governance
 
-## Project Structure
+The Owner controls goals, approvals, integration and physical acceptance.
+Claude Code is the Mother Architect and executor. Independent review and
+pre-registered evidence constrain that combined role; review never substitutes
+for the Owner's decision. [MOTHER.md](MOTHER.md) defines the roles and
+Owner-only approvals, and [AGENTS.md](AGENTS.md) is the permanent engineering
+constitution.
 
-Nexus OS is maintained by Suresh Karicheti (@nexaiceo) as the sole maintainer
-and benevolent dictator for life (BDFL) during the project's early phase.
+## Decisions and contributions
 
-## Decision Making
+Work starts from an explicit, bounded mission on the main pathway: goal → plan
+→ governed execution → verified proof → teaching. No old roadmap, open issue,
+model suggestion or green test authorizes another feature or a phase change.
+The Owner merges. Security-core changes require the charter's independent
+checks and Owner approval. Never weaken a guard to obtain green CI.
 
-- **Technical decisions**: Made by the maintainer, informed by community feedback
-- **Security decisions**: Made by the maintainer with input from security advisors
-- **Release decisions**: Made by the maintainer based on CI status and audit results
+Contributors use a scoped branch, establish provenance, preserve unexpected
+work, run the mission's gates and submit reviewable evidence. The Architect
+inspects the candidate and runs CI on the exact SHA. Follow
+[CONTRIBUTING.md](CONTRIBUTING.md) and the mission's explicit Git permissions;
+permission to commit does not imply permission to push or integrate.
 
-## Contributing
+## Repository and communication
 
-1. Fork the repository
-2. Create a feature branch
-3. Submit a merge request
-4. All MRs require maintainer review
-5. CI must pass before merge
+The authoritative repository is `Nexus-os2026/nexus-os` on GitHub. Always use
+the remote and ref the mission explicitly names; a local remote's name or
+configured upstream is not evidence of authority. Public issues are suitable
+for reproducible non-sensitive bugs and scoped proposals. Use
+[SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-## Canonical Repository
-
-The canonical repository is: https://gitlab.com/nexaiceo/nexus-os
-
-Issues, merge requests, and releases are managed on GitLab.
-
-## Communication
-
-- GitLab Issues: Bug reports and feature requests
-- GitLab MRs: Code contributions
-- Discord: Community discussion (coming soon)
-
-## Security
-
-See SECURITY.md for vulnerability reporting procedures.
+Legacy mirrors, old services and archived plans are not sources of current
+product direction. Mother is one platform; unrelated ideas stay parked.

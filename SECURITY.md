@@ -1,270 +1,129 @@
-# Security Policy
+# Mother Nexus security policy
 
-## Reporting Vulnerabilities
+## Reporting vulnerabilities
 
-**Do NOT open public issues for security vulnerabilities.**
+**Do not put vulnerabilities, secrets or private reproduction data in public
+issues.** The existing project contact is **security@nexus-os.dev**. Contact
+delivery and response times are not verified by this repository; no response SLA
+or security-supported release is claimed. Send a minimal description, affected
+build, reproduction and impact without live credentials.
 
-Email: **security@nexus-os.dev** (or open a confidential issue on GitLab)
+Reports include authority forged through strings, paths or saved records;
+closed routes becoming reachable; grant, Stop, halt, revocation or expiry
+bypasses; false success after uncertain effects; privacy leaks; and audit or
+journal integrity failures. A successful-looking UI must never conceal a
+failed trust operation.
 
-We will acknowledge receipt within 48 hours and provide an initial assessment within 7 days.
+## Current boundary
 
-Include: description, reproduction steps, potential impact, and suggested fix if any.
+Mother Nexus is Linux-first and is not production-ready. Implementation,
+local tests, CI, installed-host qualification and Owner physical acceptance
+are separate evidence. Current acceptance comes from the approved mission and
+Git, not a copied phase table, version number or old release. No external audit,
+SOC 2, NIST or EU AI Act certification is claimed.
 
-### Scope
+A working unsafe feature is worse than an unavailable safe feature.
 
-Reports are welcome for any way to obtain authority the system should not
-grant, for example:
+A string is never authority. The coordinator has a sealed effect port; the host
+owns the broker and issues an Owner-confirmed agent door. Consent binds the
+mission contract but does not create an effect grant. Each effect still requires
+its backend authority, current binding, budget and approval. Missing or uncertain
+authority refuses; there is no compatibility route to the retired application.
+The old Nexus must never break Mother Nexus.
 
-- a caller, model output, webview script or stored record obtaining
-  authority from a string, path, flag or identifier it supplies;
-- reaching a surface that Phase Zero closes or withdraws (a closed command,
-  a withdrawn binary or recipe);
-- bypassing a grant's narrowing, revocation, expiry or workspace
-  containment;
-- governance bypass (capability checks, human-approval steps, resource
-  bounds);
-- audit trail tampering or integrity violation;
-- secret or credential exposure, encryption weaknesses, and authentication
-  or authorization bypass.
+The native GTK4 status window has Stop but declines mission, door and resume
+dialogs until they are implemented. It embeds no browser engine. Native
+confirmation is not authenticated secure attention against a hostile same-user
+desktop client or synthetic input. Root/admin and a compromised kernel are
+outside the isolation claim.
 
----
+## Stop, Files and recovery
 
-## Current status: Phases Zero, One, Two and Three complete — Linux support profile
+Halt and Stop prevent subsequent admission before waiting for records; errors
+remain observable. Cancellation is cooperative at executing actuators and
+cannot undo effects already performed, a request already sent or bytes already
+published. Cancellation is not containment.
 
-- The Phase Zero trust-boundary rebuild is complete for the validated Linux
-  support profile ("PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE", declared
-  by the project Architect on 2026-09-29 for commit
-  `f727f5c39fab8d5c729a55eb28ad576d3d56ce47`). The recorded limitations and
-  non-claims below remain in force; completion does not turn them into
-  guarantees.
-- Phase One, one governed coding workflow, is complete for the same Linux
-  support profile ("PHASE ONE COMPLETE — LINUX SUPPORT PROFILE", declared by
-  the project Architect on 2026-09-30 for commit
-  `14270a9a38770ac84456c1f812042d2967edec42`). See
-  [Governed coding (Phase One)](#governed-coding-phase-one) below.
-- That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
-  completion evidence is the `evidence/phase1-closure` branch at
-  `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
-  it: status documentation and the generated ACL schema and test hygiene
-  commit `6f3d64360dd21aa8d717c3995c46e48f396148b9` (`main` after Phase One
-  completion), then the entry hardening described in
-  [Hardening since the Phase One checkpoint](#hardening-since-the-phase-one-checkpoint).
-- Phase Two, governed verification execution, is complete for the same Linux
-  support profile ("PHASE TWO COMPLETE — LINUX SUPPORT PROFILE", declared by
-  the project Architect on 2026-10-04 for commit
-  `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc`). That checkpoint stays frozen
-  on `rebuild/phase2-governed-verification`. Its completion evidence is the
-  `evidence/phase2-closure` branch at
-  `4966a295e395703fc8ff823413b63a32f3d069e0`. `main` contains the Phase Two
-  implementation; see
-  [Governed verification (Phase Two)](#governed-verification-phase-two).
-- Phase Three, governed real-world control, is complete for the same Linux
-  support profile ("PHASE THREE COMPLETE — LINUX SUPPORT PROFILE", declared
-  by the Owner on 2026-10-22 for the frozen commit
-  `51af45efc70dfe2551db29991f074c4a00d836de`, N2, with all recorded
-  limitations; see the
-  [Phase Three Owner completion record](docs/phase3/c11/PHASE-THREE-OWNER-COMPLETION-2026-10-22.md)).
-  Its implementation is Phase Three Candidate 11 (candidate commit
-  `7f48a407155f250bb09e109dfcb4f736fe363cc5`), which contains the work
-  developed on `implement/p3-governed-real-world-control` for the
-  pull-request-governed `phase3/governed-real-world-control` line. Phase
-  Three is not production-ready: there is no supported release, installer,
-  deployment or unrestricted operation, and no claim beyond its recorded
-  evidence; see
-  [Governed real-world control (Phase Three)](#governed-real-world-control-phase-three).
-- Linux is the active validation target for all four completed phases.
-  Windows and macOS portability validation is deferred, and no Phase Zero,
-  Phase One, Phase Two or Phase Three security or phase-completion claim is
-  made for them.
-- No Phase Zero production release, and no security-supported release, has
-  been declared yet. This policy therefore lists no supported versions.
-  Releases, tags and version numbers published before the rebuild predate
-  Phase Zero and are not a statement of current support.
-- The current engineering evidence, including explicit non-claims, is in the
-  [Phase Zero Final-Gate dossier](docs/security/phase0-final-gate-dossier.md),
-  the
-  [Phase Zero authority inventory](docs/security/phase0-c5-authority-inventory.md)
-  and, for Phase One and Phase Two, the completion records on the
-  `evidence/phase1-closure` and `evidence/phase2-closure` branches. They are
-  internal engineering evidence, not an external audit or a certification.
+Files has separate session admission, publication, settlement and acknowledgement.
+An unknown or interrupted publication remains uncertain; it must not become
+ordinary approval, lapse or clean success. Unsettled obligations are retained,
+not evicted to admit new work. Recovery refuses ambiguity. Multi-file mutation
+is not an atomic filesystem transaction. No blanket automatic rollback,
+restart-safe authority or general shell permission is claimed.
 
-### Historical checkpoints and current dependency support
+## Privacy and evidence
 
-- **Historical checkpoint validity.** The frozen Phase Zero and Phase One
-  checkpoints remain complete historical engineering checkpoints. Neither is
-  reopened, and their completion, evidence and recorded claims stand as
-  recorded for the bytes validated at each declaration.
-- **Historical dependency state.** The frozen Phase Zero and Phase One bytes
-  are not current shippable bytes and are not a current release candidate.
-  Their lockfiles resolve Wasmtime 43.0.2, which RUSTSEC-2026-0327 affects.
-  Release or deployment work must not ship directly from those historical
-  snapshots. The frozen Phase Two checkpoint resolves Wasmtime 36.0.17; the
-  later same-line updates, to 36.0.18 and then 36.0.19, were made after it on
-  the Phase Three line.
-- **Current Wasmtime.** `main` resolves Wasmtime 36.0.19 through the single
-  workspace pin in `Cargo.toml`. As that pin's comment records,
-  RUSTSEC-2026-0327 (component async-lifted callbacks) affects 39.0.0 and
-  later only; 36.0.19 carries the 36.x fixes for RUSTSEC-2026-0114, -0222,
-  -0269, -0316, -0363, -0379 and -0380, and predates the 43.0.0 Linker
-  use-after-free (RUSTSEC-2026-0090). Nexus uses core Wasm only (no component
-  model, async or WASI). This does not reopen or redefine any frozen
-  checkpoint.
+Journals and broker evidence record bounded identifiers, hashes, sizes, counts
+and closed codes. Contracts and working text live in Mother's permission-checked
+private store instead. Missing or corrupt private content stops the mission;
+content never becomes authority. The private store is **not encrypted**, and
+retention/purge is not implemented.
 
-## Governed verification (Phase Two)
+Hash chains are **unkeyed**. They detect malformed or altered linked records,
+but a writer who replaces the entire chain or truncates to an earlier valid
+head can evade that check. They are not authenticated memory or an external
+anchor. Low-entropy digests can be guessed. Historical in-memory audit facilities
+are not proof of durable Mother evidence; use the actual journal/evidence
+receipts for the build under test.
 
-Phase Two's design record is
-[docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md),
-with its authority inventory and non-claims. In short: project test code runs
-only in a dedicated trusted helper's sandbox (new user, PID, network, IPC,
-UTS and cgroup namespaces; strict Landlock at ABI ≥ 6; a seccomp allow-list;
-no network; a backend-owned cgroup v2 scope with memory, swap, process, CPU
-and wall limits; sealed descriptors and environment), from a verified
-materialized candidate and a verified packaged toolchain, after the owner's
-native approval of that exact launch. The result is advisory and bound into
-the owner's review. If any required layer is missing, verification is
-unavailable; there is no fallback. It does not claim a private mount view,
-metadata confidentiality, a private `/proc`, or protection against kernel
-vulnerabilities, root, or malicious same-uid processes.
+## Model and page boundaries
 
-## Governed real-world control (Phase Three)
+The local transport pins loopback endpoint, model and runtime identity,
+local-only configuration, limits and cancellation. The conversation route
+remains shut until installed qualification. A local inference allowance is not
+permission for external egress. Cloud escalation is not enabled by the presence
+of legacy provider code: it requires its own implemented broker route, explicit
+consent and budget, never a silent fallback. Model output and project instruction
+files are data, never authority.
 
-The candidate's design record, bypass-closure inventory and non-claims are in
-[docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
-In short: every real-world effect a Phase Three route can cause (contained
-tool processes, network requests, browser sessions, observation of and input
-to an isolated agent display, connector operations with brokered vault
-credentials) is an action commitment bound to its agent, run, target and
-exact parameters. It needs the owner's natively confirmed grant, and an R2
-(sensitive or irreversible) effect also needs the owner's native approval of
-that exact commitment. (Phase Four amendment P4-UAT05, adopted by the Owner:
-one owner-only synthetic approval probe takes the R2 approval path with no
-external effect; its records are labelled `synthetic` and are never evidence
-of a real-world effect.) It is revalidated immediately before it happens, runs
-once, is cancellable, and is recorded in the hash-chained audit trail before
-and after. Credentials stay in the vault and reach a request only through a
-lease bound to that commitment and origin. Every production real-world
-mechanism in the workspace is pinned by a structural guard to one of four
-classes (Phase Three governed, existing stronger governed, intentionally
-closed, non-production). Microphone capture, the owner's own desktop,
-Windows and macOS stay outside it.
+Typed decisions T1 is a pure advisory core. It does not call a model, authorize
+an effect or make a failed deterministic check pass. A confidence value is not
+permission or proof of correctness.
 
-## Security model (as far as Phase Zero establishes it)
+The page checker accepts a bounded inert language, extracts facts and compares
+an independent reader. A pass is **not rendered** and does not prove layout,
+viewport appearance, every sentence or the complete site mission.
 
-The governing principle is that **a string is never authority**. Authority
-is meant to be held by the backend and given through explicit grants that
-can be narrowed and revoked. Surfaces that cannot yet be governed fail
-closed instead.
+## Retained foundation and non-claims
 
-This is being established surface by surface. It is not yet a system-wide
-guarantee. Where the dossier and inventory record a surface as governed,
-closed or withdrawn, they say so; where they record a limit or non-claim,
-that limit applies.
+Path validation is not an OS sandbox. Workspace grants are not subprocess
+confinement; process groups are not filesystem or network isolation. No general
+agent sandbox, blanket absence of ambient authority, universal cryptographic
+action signatures or unrestricted host protection is claimed.
 
-Not claimed in Phase Zero:
+The retained verifier requires **all** mandatory Linux layers, a qualified host,
+verified packaged toolchain and installed helper. Otherwise it is unavailable,
+with no degraded mode. It does not claim a private mount view, private `/proc`,
+host-path metadata confidentiality, or protection against root, kernel compromise
+or malicious same-UID host processes outside retained identities. Mother has not
+thereby acquired a general-purpose code-execution capability. See
+[verifier boundary](docs/security/phase2-governed-verification.md),
+[broker boundary](docs/security/phase3-governed-real-world-control.md) and
+[THREAT_MODEL.md](THREAT_MODEL.md).
 
-- no general operating-system or WebAssembly sandbox isolates agents or
-  their tools;
-- no blanket "no ambient authority" property for the whole system;
-- no claim that every action is cryptographically signed;
-- no layered-defence guarantee beyond what the dossier records.
+Windows and macOS are deferred, unvalidated targets. Frozen historical
+checkpoints and their lockfiles are not current shippable bytes; their historical
+evidence is not reopened or redefined by this cleanup. Retired release,
+installer and update mechanisms are not supported Mother distribution paths.
 
-## Governed coding (Phase One)
+## Dependencies and releases
 
-Phase One adds one governed coding workflow to the desktop, on Linux:
+Use `Cargo.toml`, `Cargo.lock`, `deny.toml`, the audit script and the required
+CI on the exact candidate for dependency evidence. Do not copy a transient
+version or advisory list into this policy. A passing audit means no unaccepted
+finding under that run's reviewed policy, not zero dependency debt.
 
-- **Native project selection.** The backend opens the native folder picker
-  itself; a path sent by the frontend is not authority. Projects and runs are
-  referred to by opaque ids that grant nothing.
-- **Run-bound authority.** Each run gets a fresh, read-only grant bound to
-  that run. Writes to the owner's project use a separate short-lived write
-  grant for one apply or restore. It is closed after each attempt, and a
-  clean result requires that closure to be confirmed.
-- **Local-only model path.** Coding runs use a model installed in a local
-  Ollama on a loopback address, pinned into the run. There is no cloud
-  fallback, and no proxy or redirect is followed.
-- **Capability-bounded worker.** The model's output can only become typed,
-  bounded edit proposals. The worker has no shell, process, git or approval
-  capability, and no network destination other than the pinned loopback
-  model. Project content, including instruction files, is task data.
-- **Staged mutation and protected inputs.** Proposals change only a private
-  staging copy. Paths outside the write scope, protected inputs and `.git`
-  are refused.
-- **Candidate-bound verification and review.** Structural verification and
-  the backend-computed review are bound to the exact run, base and candidate.
-- **Native owner approval.** Apply requires a backend-invoked native
-  confirmation of that exact binding. A frontend or model claim of approval
-  grants nothing.
-- **Stale-safe apply.** Before any write to the owner's project, apply
-  preflight rejects stale base files, a moved or replaced project folder,
-  symlinks or other redirects, out-of-scope changes and a changed candidate.
-  An owner edit that races the actual write is detected after a write may
-  already have happened. Nexus puts the owner's version back where it safely
-  can, or reports recovery required. It never silently overwrites the
-  concurrent version and never reports clean success for an unresolved
-  conflict.
-- **Truthful rollback and recovery.** Pre-images are saved before the first
-  write. A failure is rolled back where safe or reported as needing recovery.
-  No clean success is reported without its durable ledger record.
-- **Single-run restore.** A restore undoes exactly one applied run. It is
-  refused if the owner changed any applied file since.
-- **Time Machine "what if" closed.** It no longer changes agent fuel, agent
-  state or Warden review configuration.
+Security-core changes require independent review and Owner approval under
+[MOTHER.md](MOTHER.md). A release, tag, deployment or host change requires its
+own explicit authorization. No workflow or guard may be weakened to manufacture
+green. This documentation makes no claim about current remote rulesets or
+published artifact integrity without verified evidence.
 
-Not claimed for governed coding:
-
-- Structural verification is not semantic verification or test execution.
-  It does not show that the code is correct.
-- There is no general shell, process or git authority in governed coding,
-  and no cloud coding model.
-- Multi-file apply is not an atomic filesystem transaction. An interrupted
-  apply or restore needs manual recovery.
-- Coding-run authority does not survive a restart.
-- Governed coding is not supported on Windows or macOS.
-
-### Hardening since the Phase One checkpoint
-
-These changes follow the frozen Phase One checkpoint and precede the Phase
-Two mission. They do not redefine the checkpoint.
-
-- **Run read grant revoked when no longer needed.** A run revokes its
-  read-only project grant as soon as it no longer needs project read
-  authority: when structural verification passes (until then the run
-  re-checks its project before each step), or when the run ends earlier. The
-  bounded four-hour expiry remains only as a backstop. If the revocation
-  fails, the run requires recovery; it is never reported as a clean outcome.
-- **Time Machine replay closed.** Undo, redo and undo-to-checkpoint no longer
-  restore agent state, fuel, memories or Warden review configuration. Like
-  "what if", they only deny, and no Time Machine path can force an agent's
-  state past the lifecycle state machine.
-
-### Hardening after the Phase Two checkpoint (XA-R4)
-
-These changes are on the post-Phase-Two forward line. They do not redefine
-the frozen checkpoints.
-
-- **Verifier workspaces reserved.** A folder that contains or lies within
-  the verifier's workspaces (`/run/user/<uid>/nexus-verifier`) cannot be
-  selected as a project, just as the Nexus state directory cannot, so an
-  approved apply can never write into a live verification workspace.
-- **Approval names the reviewed identity.** The native confirmation names
-  the review identity the app shows beside the reviewed changes, with the
-  candidate and base identities, and the approval binds that exact review.
-  The native confirmation is a bounded summary the backend computes: the
-  counts, up to twelve paths, and those identities. The diff itself is
-  display data, rendered in the app's privileged webview. Approval binds the
-  exact candidate; reviewing the diff's content relies on that webview.
-- **Release authority.** No one can create, move or delete a `v*` release
-  tag: a server-side ruleset blocks it, with no bypass. The release workflow
-  is disabled, every workflow run must use actions pinned by full commit SHA,
-  and a published release is immutable. A release needs a governed release
-  mission in which the Owner re-enables the release workflow and permits that
-  one tag through a recorded ruleset change, read back before and after. The
-  tag is then pushed on the approved commit, and both changes are reverted
-  afterwards.
-
-### Dependencies
-
-The Linux security gate runs pinned `cargo-audit` and `cargo-deny` with one
-reviewed set of accepted advisories, recorded with reasons in `deny.toml`.
-A passing gate means no advisory outside that reviewed set; it does not mean
-there is no dependency debt.
+The inherited release discipline remains a requirement: no creating, moving or
+deleting `v*` release tags outside an Owner-authorized release mission; release
+workflows stay disabled until that mission explicitly re-enables them; actions
+must be pinned by full commit SHA; published releases are immutable. Any temporary
+ruleset/workflow exception must be recorded, read back before and after, limited
+to the one approved tag/commit, then reverted. This is a constraint, not a claim
+that this session has inspected remote settings. Historical release evidence
+cannot authorize a Mother release.
