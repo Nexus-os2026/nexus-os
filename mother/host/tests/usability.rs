@@ -264,9 +264,11 @@ fn ux_u4_run_approve_undo_cleanup_and_quit_have_truthful_owner_results() {
         "Cleanup",
     );
     p.quit();
+    // Review-1 H2 amendment: Owner requires wording limited to established
+    // facts before terminal.finish and seal.finish_delivery complete.
     assert!(p
         .output
-        .contains("RESULT: closed cleanly.\nSESSION CLOSED recorded\n"));
+        .contains("RESULT: closing; the final close status follows.\nSESSION CLOSED recorded\n"));
 }
 
 #[test]
