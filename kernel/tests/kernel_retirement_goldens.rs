@@ -134,27 +134,102 @@ fn all_46_actions_keep_json_labels_and_hash_input_bytes() {
 
 #[test]
 fn browser_actions_keep_all_tags_fields_and_u64_timeout() {
-    let mut kinds = BTreeSet::new();
-    for json in include_str!("retirement/browser.jsonl").lines() {
-        let _: BrowserAction = roundtrip(json);
-        let v: serde_json::Value = serde_json::from_str(json).unwrap();
-        kinds.insert(v["kind"].as_str().unwrap().to_owned());
+    use BrowserAction::*;
+    // Independent Rust constructions bind fixture order/tags to actual variants.
+    let expected = [
+        Navigate {
+            url: "https://example.invalid/".into(),
+        },
+        Click {
+            selector: "#a".into(),
+        },
+        Fill {
+            selector: "#a".into(),
+            text: "α\ntext".into(),
+        },
+        Press {
+            selector: "#a".into(),
+            key: "Enter".into(),
+        },
+        WaitFor {
+            selector: None,
+            timeout_ms: None,
+        },
+        ExtractText {
+            selector: "#a".into(),
+        },
+        WaitFor {
+            selector: Some("#a".into()),
+            timeout_ms: Some(u64::MAX),
+        },
+    ];
+    let rows: Vec<_> = include_str!("retirement/browser.jsonl").lines().collect();
+    assert_eq!(rows.len(), expected.len());
+    for (json, expected) in rows.into_iter().zip(expected) {
+        let decoded: BrowserAction = roundtrip(json);
+        assert!(
+            browser_golden_matches(json, &expected, &decoded),
+            "{json}: {decoded:?}"
+        );
     }
-    assert_eq!(
-        kinds,
-        BTreeSet::from(
-            [
-                "navigate",
-                "click",
-                "fill",
-                "press",
-                "wait_for",
-                "extract_text"
-            ]
-            .map(str::to_owned)
-        )
-    );
     assert!(serde_json::from_str::<BrowserAction>(r#"{"kind":"WaitFor"}"#).is_err());
+}
+
+// Exhaustive and independent of serde tags: every field and Rust variant counts.
+fn browser_fields(
+    action: &BrowserAction,
+) -> (&'static str, Option<&str>, Option<&str>, Option<u64>) {
+    match action {
+        BrowserAction::Navigate { url } => ("Navigate", Some(url), None, None),
+        BrowserAction::Click { selector } => ("Click", Some(selector), None, None),
+        BrowserAction::Fill { selector, text } => ("Fill", Some(selector), Some(text), None),
+        BrowserAction::Press { selector, key } => ("Press", Some(selector), Some(key), None),
+        BrowserAction::WaitFor {
+            selector,
+            timeout_ms,
+        } => ("WaitFor", selector.as_deref(), None, *timeout_ms),
+        BrowserAction::ExtractText { selector } => ("ExtractText", Some(selector), None, None),
+    }
+}
+fn browser_golden_matches(json: &str, expected: &BrowserAction, decoded: &BrowserAction) -> bool {
+    browser_fields(decoded) == browser_fields(expected)
+        && serde_json::to_vec(expected).unwrap() == json.as_bytes()
+}
+
+#[test]
+fn browser_tag_swap_roundtrips_but_fails_the_variant_golden() {
+    // A mutant codec swaps compatible selector-only variants. Byte round-trips
+    // remain green, but the same semantic oracle used above rejects both tags.
+    #[derive(Serialize, Deserialize)]
+    #[serde(tag = "kind")]
+    enum Swapped {
+        #[serde(rename = "extract_text")]
+        Click { selector: String },
+        #[serde(rename = "click")]
+        ExtractText { selector: String },
+    }
+    for (json, expected) in [
+        (
+            r##"{"kind":"click","selector":"#a"}"##,
+            BrowserAction::Click {
+                selector: "#a".into(),
+            },
+        ),
+        (
+            r##"{"kind":"extract_text","selector":"#a"}"##,
+            BrowserAction::ExtractText {
+                selector: "#a".into(),
+            },
+        ),
+    ] {
+        let mutant: Swapped = roundtrip(json);
+        let decoded = match mutant {
+            Swapped::Click { selector } => BrowserAction::Click { selector },
+            Swapped::ExtractText { selector } => BrowserAction::ExtractText { selector },
+        };
+        assert!(!browser_golden_matches(json, &expected, &decoded));
+        assert_ne!(serde_json::to_vec(&decoded).unwrap(), json.as_bytes());
+    }
 }
 
 #[test]
