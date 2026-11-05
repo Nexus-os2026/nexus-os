@@ -443,7 +443,8 @@ pub(crate) fn review4_reported(screen: &Shared, home: &SessionServices, route: &
 fn review4_outcome(scenario: &str, test: &str) {
     if std::env::var(REVIEW4).is_ok() {
         let args = std::env::var("M2DD_REVIEW4_ARGS").unwrap();
-        assert!(run(args.split('\n').map(str::to_owned)));
+        let clean = run(args.split('\n').map(str::to_owned));
+        assert_eq!(clean, !scenario.starts_with("undo"), "post-undo emergency retains resource debt");
         return;
     }
     let f = Fixture::new();
@@ -513,7 +514,16 @@ fn review4_outcome(scenario: &str, test: &str) {
     p.expect("EVIDENCE HEALTH");
     p.line("run");
     p.expect("REFUSED recovery_only");
-    p.quit();
+    if scenario.starts_with("undo") {
+        let staging = f.home.join("broker/files/coding-runs");
+        let retained = crate::stop_tests::support::privacy::files_under(&staging, None);
+        assert!(!retained.is_empty(), "native resources remain after completed/refused restore");
+        p.line("quit");
+        assert!(p.finish().success(), "child must verify nonzero host result: {}", p.output);
+        assert!(p.output.contains("UNCLEAN EXIT:"));
+        assert!(!p.output.contains("SESSION CLOSED recorded"));
+        assert_eq!(crate::stop_tests::support::privacy::files_under(&staging, None), retained, "restricted close/destruction must retain resources");
+    } else { p.quit(); }
 }
 #[test]
 fn decision11_host_undo_completed_is_honest() {
