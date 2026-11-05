@@ -1,7 +1,7 @@
 //! M2e-A2 guards (design v2 §14; N1 spec E-O65): E-O65 in a non-test
 //! build of the kernel, where no test seam exists, and the source guards
 //! E-O12 (the worker's grammar is defined once), E-O15 (local-model predicates
-//! are defined only in kernel inference) and E-O65 (the qualification seam is
+//! occur only in kernel inference) and E-O65 (the qualification seam is
 //! test-only; the transport call boundary guards the route first; the
 //! legacy chat route is gone).
 //!
@@ -340,37 +340,46 @@ fn grammar_findings(files: &[ProdFile]) -> Vec<String> {
     out
 }
 
-/// E-O15: local-model predicates must stay in the kernel inference lane.
-/// Mother Nexus cleanup (2026-11-05): the old subject was
-/// `gateway_findings(file(&files, "connectors/llm/src/gateway.rs"))`, with
-/// two forbidden local definitions and two required re-exports. The one
-/// replacement guard scans every production file outside kernel inference
-/// for all four canonical/legacy predicate names; no file gets a local copy.
+/// E-O15: local-model predicate identifiers must stay in kernel inference.
+/// Mother Nexus cleanup (2026-11-05), fix round 1: the old rule rejected
+/// only adjacent `fn` + protected-name tokens. The stricter rule rejects ANY
+/// protected identifier occurrence outside kernel inference, including macro
+/// arguments/bodies, calls, imports and raw identifiers. Comments and literal
+/// contents remain masked by the existing production source scanner.
+///
+/// Legitimate-reference allowlist: EMPTY. `git grep` verified that today's
+/// production references all live in kernel inference; no external call or
+/// `use` needs an exact-file/exact-count exemption. Fail closed for new uses.
 fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
     for file in files {
         if file.rel.starts_with("kernel/src/inference/") {
             continue;
         }
-        // Token boundaries allow arbitrary whitespace (and raw identifiers)
-        // without matching calls, re-exports, comments or literal contents.
+        // `#` is a separator so both ordinary and raw identifiers are caught,
+        // including names next to macro/attribute punctuation.
         let tokens: Vec<&str> = file
             .code
-            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '#'))
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
             .filter(|token| !token.is_empty())
             .collect();
-        for pair in tokens.windows(2) {
-            let name = pair[1].strip_prefix("r#").unwrap_or(pair[1]);
-            if pair[0] == "fn"
-                && matches!(
-                    name,
-                    "name_is_cloud"
-                        | "show_names_remote"
-                        | "ollama_model_name_is_cloud"
-                        | "ollama_show_names_remote"
-                )
-            {
-                out.push(format!("{} defines its own {name}", file.rel));
+        for (i, &name) in tokens.iter().enumerate() {
+            if matches!(
+                name,
+                "name_is_cloud"
+                    | "show_names_remote"
+                    | "ollama_model_name_is_cloud"
+                    | "ollama_show_names_remote"
+            ) {
+                // Retain the old direct-definition diagnostic, also for r#name.
+                let definition = i > 0 && tokens[i - 1] == "fn"
+                    || i > 1 && tokens[i - 1] == "r" && tokens[i - 2] == "fn";
+                let detail = if definition {
+                    "defines its own"
+                } else {
+                    "contains protected predicate identifier"
+                };
+                out.push(format!("{} {detail} {name}", file.rel));
             }
         }
     }
@@ -427,45 +436,59 @@ fn m2e_a2_scanners_flag_planted_violations() {
         ),
     ];
     assert_eq!(grammar_findings(&twice).len(), 5);
+}
 
-    // Mother Nexus cleanup (2026-11-05): the old local/re-export plants
-    // used `connectors/llm/src/gateway.rs`. Both controls now use an SDK
-    // path; five more controls exercise both canonical names, the other
-    // legacy name, ignored text, and the kernel inference owner.
-    let local = [planted(
-        "sdk/src/local_model.rs",
-        "pub fn ollama_model_name_is_cloud(m: &str) -> bool { false }",
-    )];
-    assert_eq!(predicate_findings(&local).len(), 1);
-    let exported = [planted(
-        "sdk/src/local_model.rs",
-        "pub use nexus_kernel::inference::ollama::{\n    name_is_cloud as ollama_model_name_is_cloud,\n    show_names_remote as ollama_show_names_remote,\n};",
-    )];
-    assert!(predicate_findings(&exported).is_empty());
+#[test]
+fn e_o15_scanner_fails_closed_on_protected_identifiers() {
+    let findings = |src: &str| predicate_findings(&[planted("sdk/src/local_model.rs", src)]);
     for predicate in [
         "name_is_cloud",
         "show_names_remote",
+        "ollama_model_name_is_cloud",
         "ollama_show_names_remote",
     ] {
-        let local = [planted(
-            "sdk/src/local_model.rs",
-            &format!("pub fn\n r#{predicate} () -> bool {{ false }}"),
-        )];
-        assert_eq!(
-            predicate_findings(&local).len(),
-            1,
-            "local definition of {predicate} must be rejected"
-        );
+        for spelling in [predicate.to_string(), format!("r#{predicate}")] {
+            let local = findings(&format!("pub fn\n {spelling} () -> bool {{ false }}"));
+            assert_eq!(local.len(), 1, "definition of {spelling}");
+            assert!(local[0].contains("defines its own"));
+            for code in [
+                format!("define_predicate!({spelling});"),
+                format!("impl Local {{ fn {spelling}(&self) -> bool {{ false }} }}"),
+                format!("fn caller() {{ nexus_kernel::inference::ollama::{spelling}(\"x\"); }}"),
+                format!("use nexus_kernel::inference::ollama::{spelling};"),
+            ] {
+                assert_eq!(findings(&code).len(), 1, "must reject {code}");
+            }
+        }
     }
-    let ignored = [planted(
-        "sdk/src/local_model.rs",
-        "// fn name_is_cloud() {}\nconst TEXT: &str = \"fn show_names_remote() {}\"; fn uses_kernel() { nexus_kernel::inference::ollama::name_is_cloud(\"x\"); }",
-    )];
-    assert!(predicate_findings(&ignored).is_empty());
-    let owner = [planted(
-        "kernel/src/inference/ollama.rs",
-        "pub fn name_is_cloud() {} pub fn show_names_remote() {}",
-    )];
+    // Reviewer's parameterized macro: the protected name is only an argument.
+    let generated = r#"
+macro_rules! define_predicate {
+    ($name:ident) => { pub fn $name(_: &str) -> bool { false } };
+}
+define_predicate!(ollama_model_name_is_cloud);
+"#;
+    assert_eq!(findings(generated).len(), 1);
+    assert_eq!(
+        findings("macro_rules! define_predicate { () => { pub fn show_names_remote() {} }; }")
+            .len(),
+        1
+    );
+    // Imports/re-exports and calls are not exempt: today's allowlist is empty.
+    assert_eq!(
+        findings("pub use nexus_kernel::inference::ollama::{name_is_cloud as ollama_model_name_is_cloud, show_names_remote as ollama_show_names_remote};").len(),
+        4
+    );
+    for ignored in [
+        "// name_is_cloud\n/* r#show_names_remote */",
+        "const TEXT: &str = \"ollama_model_name_is_cloud\";",
+        "const TEXT: &str = r#\"ollama_show_names_remote\"#;",
+        "const C: char = 'n';",
+        "fn name_is_cloud_suffix() {} fn prefix_show_names_remote() {}",
+    ] {
+        assert!(findings(ignored).is_empty(), "must ignore {ignored}");
+    }
+    let owner = [planted("kernel/src/inference/ollama.rs", generated)];
     assert!(predicate_findings(&owner).is_empty());
 }
 
