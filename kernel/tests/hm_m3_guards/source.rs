@@ -76,19 +76,134 @@ pub fn is_test_path(rel: &str) -> bool {
         || rel.ends_with("/build.rs")
 }
 
+/// A classified literal's content and end offsets. Prefixes and delimiters
+/// remain visible, while only the content is masked in the code view.
+struct Literal {
+    body: usize,
+    body_end: usize,
+    end: usize,
+}
+
+fn string_literal(text: &str, at: usize, prefix: &str, quote: usize, hashes: usize) -> Literal {
+    let b = text.as_bytes();
+    let body = quote + 1;
+    let mut end = body;
+    let raw = matches!(prefix, "r" | "br" | "cr");
+    while end < b.len() {
+        if b[end] == b'"'
+            && (!raw
+                || b.get(end + 1..end + 1 + hashes)
+                    .is_some_and(|s| s.iter().all(|&c| c == b'#')))
+        {
+            return Literal {
+                body,
+                body_end: end,
+                end: end + 1 + hashes,
+            };
+        }
+        if !raw && b[end] == b'\\' {
+            assert!(
+                end + 1 < b.len(),
+                "source scan: unterminated string escape at byte {at}"
+            );
+            end += 2;
+        } else {
+            end += 1;
+        }
+    }
+    panic!("source scan: unterminated string literal at byte {at}");
+}
+
+/// `None` is a lifetime; a recognized character literal must close exactly.
+fn character_literal(text: &str, at: usize, quote: usize, byte: bool) -> Option<Literal> {
+    let b = text.as_bytes();
+    let body = quote + 1;
+    let first = *b
+        .get(body)
+        .unwrap_or_else(|| panic!("source scan: incomplete character at byte {at}"));
+    let mut end = body;
+    if first == b'\\' {
+        end += 1;
+        match b.get(end) {
+            Some(b'u') if !byte => {
+                end += 1;
+                assert_eq!(
+                    b.get(end),
+                    Some(&b'{'),
+                    "source scan: unclassified Unicode character escape at byte {at}"
+                );
+                end += 1;
+                let digits = end;
+                while b
+                    .get(end)
+                    .is_some_and(|c| c.is_ascii_hexdigit() || *c == b'_')
+                {
+                    end += 1;
+                }
+                assert!(
+                    end > digits && b.get(end) == Some(&b'}'),
+                    "source scan: unterminated Unicode character escape at byte {at}"
+                );
+                end += 1;
+            }
+            Some(b'x') => {
+                end += 1;
+                assert!(
+                    b.get(end..end + 2)
+                        .is_some_and(|s| s.iter().all(u8::is_ascii_hexdigit)),
+                    "source scan: unclassified hex character escape at byte {at}"
+                );
+                end += 2;
+            }
+            Some(b'n' | b'r' | b't' | b'\\' | b'0' | b'\'' | b'"') => end += 1,
+            _ => panic!("source scan: unclassified character escape at byte {at}"),
+        }
+    } else {
+        let c = text[body..].chars().next().expect("character content");
+        end += c.len_utf8();
+        if b.get(end) != Some(&b'\'') && !byte && (c.is_alphanumeric() || c == '_') {
+            // Identifier-shaped tokens beginning with an apostrophe are
+            // lifetimes. A later apostrophe in the same identifier is an
+            // invalid character literal, not permission to skip the token.
+            let tail = text[end..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .map(char::len_utf8)
+                .sum::<usize>();
+            assert_ne!(
+                b.get(end + tail),
+                Some(&b'\''),
+                "source scan: unclassified character literal at byte {at}"
+            );
+            return None;
+        }
+    }
+    assert_eq!(
+        b.get(end),
+        Some(&b'\''),
+        "source scan: unterminated character literal at byte {at}"
+    );
+    Some(Literal {
+        body,
+        body_end: end,
+        end: end + 1,
+    })
+}
+
 /// `text` with comments blanked and, when `literals` is false, the contents
-/// of string and char literals blanked too. Newlines are kept.
+/// of every Rust string/character literal blanked too. Newlines are kept.
+/// Unknown prefixes and unterminated tokens abort the scan: they must never
+/// turn later production code into silently masked literal content.
 pub fn mask(text: &str, literals: bool) -> String {
     let b = text.as_bytes();
     let mut out = b.to_vec();
     let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
-        for byte in out.iter_mut().take(to).skip(from) {
+        for byte in &mut out[from..to] {
             if *byte != b'\n' {
                 *byte = b' ';
             }
         }
     };
-    let ident = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
     let mut i = 0;
     while i < b.len() {
         if b[i..].starts_with(b"//") {
@@ -98,101 +213,81 @@ pub fn mask(text: &str, literals: bool) -> String {
                 .map_or(b.len(), |p| i + p);
             blank(&mut out, i, end);
             i = end;
-        } else if b[i..].starts_with(b"/*") {
-            let (mut depth, mut j) = (1, i + 2);
-            while j < b.len() && depth > 0 {
-                if b[j..].starts_with(b"/*") {
+            continue;
+        }
+        if b[i..].starts_with(b"/*") {
+            let (mut depth, mut end) = (1, i + 2);
+            while end < b.len() && depth > 0 {
+                if b[end..].starts_with(b"/*") {
                     depth += 1;
-                    j += 2;
-                } else if b[j..].starts_with(b"*/") {
+                    end += 2;
+                } else if b[end..].starts_with(b"*/") {
                     depth -= 1;
-                    j += 2;
+                    end += 2;
                 } else {
-                    j += 1;
+                    end += 1;
                 }
             }
-            blank(&mut out, i, j);
-            i = j;
-        } else if (b[i] == b'r' || (b[i] == b'b' && b.get(i + 1) == Some(&b'r')))
-            && (i == 0 || !ident(b[i - 1]))
-            && {
-                let k = if b[i] == b'b' { i + 2 } else { i + 1 };
-                let mut h = k;
-                while b.get(h) == Some(&b'#') {
-                    h += 1;
-                }
-                b.get(h) == Some(&b'"')
-            }
-        {
-            let k = if b[i] == b'b' { i + 2 } else { i + 1 };
-            let mut h = k;
-            while b[h] == b'#' {
-                h += 1;
-            }
-            let hashes = h - k;
-            let body = h + 1;
-            let mut j = body;
-            let end = loop {
-                if j >= b.len() {
-                    break b.len();
-                }
-                if b[j] == b'"'
-                    && b[j + 1..]
-                        .iter()
-                        .take(hashes)
-                        .filter(|&&c| c == b'#')
-                        .count()
-                        == hashes
-                    && b.len() >= j + 1 + hashes
-                {
-                    break j;
-                }
-                j += 1;
-            };
-            if !literals {
-                blank(&mut out, body, end);
-            }
-            i = (end + 1 + hashes).min(b.len());
-        } else if b[i] == b'"' {
-            let mut j = i + 1;
-            while j < b.len() && b[j] != b'"' {
-                j += if b[j] == b'\\' { 2 } else { 1 };
-            }
-            if !literals {
-                blank(&mut out, i + 1, j.min(b.len()));
-            }
-            i = j + 1;
+            assert_eq!(
+                depth, 0,
+                "source scan: unterminated block comment at byte {i}"
+            );
+            blank(&mut out, i, end);
+            i = end;
+            continue;
+        }
+        let literal;
+        if b[i] == b'"' {
+            literal = Some(string_literal(text, i, "", i, 0));
         } else if b[i] == b'\'' {
-            // A char literal ('x', '\n', '\u{..}'); a lifetime is left alone.
-            if b.get(i + 1) == Some(&b'\\') {
-                if let Some(p) = b[i + 2..].iter().take(10).position(|&c| c == b'\'') {
-                    if !literals {
-                        blank(&mut out, i + 1, i + 2 + p);
-                    }
-                    i = i + 3 + p;
-                    continue;
-                }
-            } else if b.get(i + 2) == Some(&b'\'') {
-                if !literals {
-                    blank(&mut out, i + 1, i + 2);
-                }
-                i += 3;
-                continue;
-            } else if let Some(len) = text[i + 1..].chars().next().map(char::len_utf8) {
-                if len > 1 && b.get(i + 1 + len) == Some(&b'\'') {
-                    if !literals {
-                        blank(&mut out, i + 1, i + 1 + len);
-                    }
-                    i += 2 + len;
-                    continue;
-                }
-            }
-            i += 1;
+            literal = character_literal(text, i, i, false);
         } else {
-            i += 1;
+            let c = text[i..].chars().next().expect("source character");
+            if c.is_alphabetic() || c == '_' {
+                let len = text[i..]
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .map(char::len_utf8)
+                    .sum::<usize>();
+                let end = i + len;
+                let prefix = &text[i..end];
+                let mut quote = end;
+                while b.get(quote) == Some(&b'#') {
+                    quote += 1;
+                }
+                let hashes = quote - end;
+                if b.get(quote) == Some(&b'"') {
+                    assert!(
+                        matches!(prefix, "r" | "br" | "cr")
+                            || (hashes == 0 && matches!(prefix, "b" | "c")),
+                        "source scan: unclassified string prefix at byte {i}"
+                    );
+                    literal = Some(string_literal(text, i, prefix, quote, hashes));
+                } else if b.get(end) == Some(&b'\'') {
+                    assert_eq!(
+                        prefix, "b",
+                        "source scan: unclassified character prefix at byte {i}"
+                    );
+                    literal = character_literal(text, i, end, true);
+                } else {
+                    i = end;
+                    continue;
+                }
+            } else {
+                i += c.len_utf8();
+                continue;
+            }
+        }
+        if let Some(literal) = literal {
+            if !literals {
+                blank(&mut out, literal.body, literal.body_end);
+            }
+            i = literal.end;
+        } else {
+            i += 1; // A lifetime's apostrophe.
         }
     }
-    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+    String::from_utf8(out).expect("source masking preserves UTF-8")
 }
 
 /// The end (exclusive) of the bracket group opening at `open` in `code`.
