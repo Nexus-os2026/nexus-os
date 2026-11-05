@@ -47,17 +47,22 @@ Never automatically:
 - redesign neighboring systems;
 - migrate deferred commands;
 - add unrelated refactors;
-- change frontend in a backend-only mission;
+- change the UI in a backend-only mission;
 - change kernel primitives unless authorized;
 - begin the next checkpoint because the current one finished.
 
 One bounded trust boundary/root cause per mission unless explicitly expanded by the Owner.
 
+Build only Mother Nexus on the main pathway in `MOTHER.md`. Old code, services,
+state and archived plans must never become a dependency of Mother. Use only the
+mission's worktree; never touch the Owner's other worktrees. Park other ideas;
+do not turn a command, lesson or roadmap note into feature authorization.
+
 ## Trust boundaries
 Prefer fail closed.
 
 Do not treat these as authority unless the approved architecture explicitly does:
-- frontend/caller strings;
+- UI/caller strings;
 - caller paths, returned paths, saved JSON or model output;
 - UUID syntax alone;
 - `HOME`, cwd, `.`, `/tmp`, repo root, or fallback raw paths;
@@ -88,7 +93,7 @@ Do not merge validation PRs unless explicitly authorized.
 Provenance:
 - use the remote and ref the mission names, explicitly, for every fetch, push and comparison;
 - never assume a bare `git push` or `git pull`, or a branch's configured upstream, targets the authoritative remote (`origin` may be a stale mirror);
-- Phase Two work uses the `github` remote unless a later Owner-approved mission says otherwise.
+- use the Mother mission's explicit repository/ref; never use a legacy mirror or another worktree by assumption.
 
 ## Autonomous loop
 Inside an approved implementation mission:
@@ -118,11 +123,13 @@ Before commit, normally run the applicable subset:
 - mission-required regressions;
 - `cargo fmt --all -- --check`;
 - appropriate Clippy for changed crates;
-- frontend tests/TypeScript/build when frontend changes;
+- native GTK4 checks and live desktop tests when the Mother UI changes;
 - Python tests when relevant;
 - `git diff --check`.
 
-Native Linux, Windows, macOS, Frontend, and Python evidence is required for trust-boundary completion when the mission requires it.
+Mother is Linux-first. Run every platform and language gate the mission requires;
+Windows and macOS remain deferred and need their own native evidence. The UI
+is native GTK4 only, with no embedded browser engine.
 
 Never:
 - replace a real security assertion with a mock solely for portability;
@@ -144,7 +151,7 @@ For subprocess work:
 - treat Drop as defense in depth only.
 
 ## Locks and audit
-Do not hold authority/catalog/process/lifecycle locks across audit callbacks, provider calls, filesystem mutation, process spawn/wait/termination, network operations, or frontend delivery.
+Do not hold authority/catalog/process/lifecycle locks across audit callbacks, provider calls, filesystem mutation, process spawn/wait/termination, network operations, or UI delivery.
 
 Prefer:
 snapshot/reserve → unlock → native operation → generation/identity re-check → bounded state transition → unlock → completion → audit.
