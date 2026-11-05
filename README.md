@@ -8,6 +8,15 @@ The AI proposes, a deterministic broker controls effects, and the Owner decides
 what matters. Most of the intelligence and the complete user journey are still
 unavailable. This is not production-ready or a claim of a passed physical gate.
 
+The goal of Mother Nexus is to become a **Super Hybrid Intelligence** — her nine intelligence systems:
+Mission Brain, Research Council, Discovery Engine, Invention Lab, Governed Hands, Guardian+Verifier,
+Evidence Memory, Evolution Engine and Teaching Intelligence, working together at the top of the agency ladder,
+with the Owner, the AI and the deterministic rules each making the others stronger, while remaining trustworthy and stoppable.
+She must grow along the one main pathway, each rung of agency paid for by its guardrail first, never by weakening
+the safety core: an intelligence nobody can trust or stop is not super; the safety core is what lets her grow powerful.
+She is not a Super Hybrid Intelligence today; nothing is claimed before it is proven. Today's status remains as
+the [“Built and merged”](#built-and-merged) and [“Still to build and prove”](#still-to-build-and-prove) sections below say.
+
 ## Built and merged
 
 The repository contains these implemented components. Implementation and tests
