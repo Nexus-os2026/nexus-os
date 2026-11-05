@@ -20,6 +20,12 @@ pub mod hands;
 #[cfg(test)]
 mod hands_tests;
 #[cfg(target_os = "linux")]
+mod legacy_stop;
+#[cfg(target_os = "linux")]
+pub mod legacy_terminal;
+#[cfg(target_os = "linux")]
+mod session_home;
+#[cfg(target_os = "linux")]
 mod stop;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
@@ -200,16 +206,6 @@ impl Home {
     pub fn door(&self) -> Result<AgentDoor, AuthorityError> {
         self.control
             .issue_agent_door(mother_agent(), self.confirmer.clone())
-    }
-
-    /// A door narrowed by the terminal session's original deny-only cell.
-    /// The desktop and legacy callers keep `door` and native resume semantics.
-    pub fn door_with_halt(&self) -> Result<AgentDoor, AuthorityError> {
-        self.control.issue_agent_door_with_halt(
-            mother_agent(),
-            self.confirmer.clone(),
-            Some(self.control.file_session_halt()),
-        )
     }
 
     /// A clean shutdown's last step (M2b-A decision 2): the evidence store

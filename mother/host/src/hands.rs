@@ -1,15 +1,19 @@
 //! Deterministic, one-mission Hands host. Raw Owner handles never escape it.
-use crate::stop::{Gate, Route};
+use crate::session_home::SessionServices;
 use crate::terminal::{Shared, Terminal};
-use crate::Home;
 use nexus_governed_control::authority::clock::SystemClock;
-use nexus_governed_control::authority::evidence::{EndStatus, EvidencePhase};
-use nexus_governed_control::authority::ids::{CommitmentId, RunId};
+use nexus_governed_control::authority::evidence::EvidencePhase;
+use nexus_governed_control::authority::ids::CommitmentId;
 use nexus_governed_control::files::{FileCreate, RecoveryFinding};
-use nexus_governed_control::governed::GrantRequest;
-use nexus_mother::adapter::{mother_agent, GovernedPort};
+use nexus_governed_control::host_session::{
+    close::{CloseSeal, Producer, ProducerKind},
+    CommandKind, SessionRequest, SessionSeed, SessionState,
+};
+use nexus_mother::adapter::SessionPort;
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion};
-use nexus_mother::coordinator::{Coordinator, CoordinatorError, FileSession, Lanes};
+use nexus_mother::coordinator::{
+    Coordinator, CoordinatorError, FileSession, Lanes, PreparedSessionEnd,
+};
 use nexus_mother::effect::{EffectPort, EffectRequest};
 use nexus_mother::journal::MissionId;
 use nexus_mother::lane::{
@@ -18,7 +22,7 @@ use nexus_mother::lane::{
 use nexus_mother::state::MissionState;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -100,40 +104,33 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
     })
 }
 
-struct GatedLane {
-    gate: Arc<Gate>,
+// The coordinator performs actual lane admission. This test-only observer
+// retains the original pause after a real scripted lane returns.
+struct ObservedLane {
+    route: Arc<crate::stop::StopRoute>,
     lane: ScriptedLane,
 }
-impl Lane for GatedLane {
+impl Lane for ObservedLane {
     fn identity(&self) -> LaneIdentity {
         self.lane.identity()
     }
     fn invoke(&self, input: &LaneInput) -> LaneOutput {
-        // Dispatch linearizes at this last memory-only admission check.
-        if !self.gate.admit(Route::Lane) {
-            return LaneOutput {
-                text: String::new(),
-                effects: vec![],
-                verdict: Verdict::Halt {
-                    reason: "recovery_only".into(),
-                },
-            };
-        }
         let output = self.lane.invoke(input);
         #[cfg(test)]
-        hands_tests::before_internal_dispatch(&self.gate, self.lane.identity().role);
+        hands_tests::before_internal_dispatch(&self.route, self.lane.identity().role);
+        let _session = &self.route;
         output
     }
 }
 
 struct Mission {
-    session: FileSession<GovernedPort>,
-    port: Arc<GovernedPort>,
+    session: FileSession<SessionPort>,
+    port: Arc<SessionPort>,
     id: Option<MissionId>,
     last: Option<CommitmentId>,
 }
 struct Runtime {
-    home: Arc<Home>,
+    home: Arc<SessionServices>,
     config: Config,
     screen: Arc<Shared>,
     confirmer: Arc<crate::terminal::TerminalConfirmer>,
@@ -141,59 +138,30 @@ struct Runtime {
     mission: Option<Mission>,
 }
 impl Runtime {
-    fn allowed(&self, route: Route) -> bool {
-        if self.screen.stop.gate.admit(route) {
-            true
-        } else {
-            self.screen.emit("REFUSED recovery_only\n");
-            false
-        }
-    }
-    fn run(&mut self) {
-        if !self.allowed(Route::Mission) {
-            return;
-        }
+    fn run(&mut self, request: &SessionRequest) {
         if self.used {
             self.screen.emit("REFUSED file_session_used\n");
             return;
         }
         self.used = true;
-        let Some(workspace) = self.home.owner().workspace() else {
+        let Some(workspace) = self.home.session.workspace() else {
             self.screen.emit("REFUSED workspace_unavailable\n");
             return;
         };
-        if !self.allowed(Route::Files) {
-            return;
-        }
-        if let Err(e) = self.home.owner().request_grant_with_halt(
-            &GrantRequest::Files {
-                workspace: workspace.id,
-            },
-            Duration::from_secs(300),
-            &*self.confirmer,
-            Some(&self.home.owner().file_session_halt()),
-        ) {
-            self.screen.emit(&format!("GRANT REFUSED {}\n", e.class()));
-            return;
-        }
-        if !self.allowed(Route::Door) {
-            return;
-        }
-        let door = match self.home.door_with_halt() {
-            Ok(d) => d,
-            Err(e) => {
-                self.screen.emit(&format!("DOOR REFUSED {}\n", e.class()));
+        let confirmation = self.confirmer.for_request(request);
+        let door = match self
+            .home
+            .session
+            .open_confirmed_file_door(request, confirmation)
+        {
+            Ok(door) => door,
+            Err(_) => {
+                self.screen.emit("DOOR REFUSED request_unavailable\n");
                 return;
             }
         };
-        if !self.allowed(Route::Run) {
-            return;
-        }
-        let port = Arc::new(
-            GovernedPort::new(door)
-                .with_admission_gate(self.screen.stop.gate.port.clone())
-                .with_workspace(workspace.name.clone()),
-        );
+        let context = door.context();
+        let port = Arc::new(SessionPort::new(door, workspace.name.clone()));
         let lanes: Vec<Arc<dyn Lane>> = LaneRole::ALL
             .into_iter()
             .map(|role| {
@@ -212,8 +180,8 @@ impl Runtime {
                         content: self.config.text.clone(),
                     })]);
                 }
-                Arc::new(GatedLane {
-                    gate: self.screen.stop.gate.clone(),
+                Arc::new(ObservedLane {
+                    route: self.screen.stop.clone(),
                     lane,
                 }) as Arc<dyn Lane>
             })
@@ -222,7 +190,7 @@ impl Runtime {
             let journal = self.home.journal().map_err(|_| "journal_unavailable")?;
             let private = self
                 .home
-                .private()
+                .private(context.clone())
                 .map_err(|_| "private_store_unavailable")?;
             let lanes = Lanes::new(lanes).map_err(|_| "lane_configuration")?;
             let coordinator = Coordinator::open(
@@ -233,9 +201,6 @@ impl Runtime {
                 private,
             )
             .map_err(|_| "coordinator_unavailable")?;
-            if !self.screen.stop.gate.admit(Route::Files) {
-                return Err("recovery_only");
-            }
             coordinator
                 .into_file_session()
                 .map_err(|_| "file_session_unavailable")
@@ -253,9 +218,6 @@ impl Runtime {
             id: None,
             last: None,
         });
-        if !self.allowed(Route::Mission) {
-            return;
-        }
         let contract = MissionContract {
             owner_words: format!("Create {} with {} UTF-8 bytes, shown in full at the separate File approval.", self.config.name, self.config.text.len()),
             restatement: format!("Create one approved top-level text file named {}. One File mission per fresh process; no in-process replacement. Emergency ends mission work.", self.config.name),
@@ -292,10 +254,6 @@ impl Runtime {
     }
     fn progress(&mut self) {
         for _ in 0..32 {
-            if !self.allowed(Route::Mission) {
-                self.observe();
-                return;
-            }
             let Some(mission) = self.mission.as_ref() else {
                 return;
             };
@@ -342,71 +300,70 @@ impl Runtime {
                 }
             }
         }
-        self.screen.stop.gate.fail();
+        self.screen.stop.ingress.fail();
         self.screen.emit("REFUSED progress_bound\n");
     }
-    fn approve(&mut self) {
-        if !self.allowed(Route::Files) {
-            return;
-        }
+    fn approve(&mut self, request: &SessionRequest) {
         let Some(mission) = self.mission.as_mut() else {
             self.screen.emit("REFUSED no_mission\n");
             return;
         };
-        let Some(pending) = mission.id.and_then(|id| mission.port.pending(id)) else {
-            self.screen.emit("REFUSED no_pending_action\n");
-            return;
-        };
-        let (Some(id), Some(run)) = (
-            CommitmentId::parse(&pending.commitment),
-            RunId::parse(&pending.run),
-        ) else {
-            self.screen.stop.gate.fail();
-            return;
-        };
-        mission.last = Some(id);
-        let owner = self.home.owner();
-        if let Err(error) = owner.authorize(id, &mother_agent(), run, &*self.confirmer) {
-            // Deny only this retained mission action. Revoked/stopped actions
-            // remain ended; a failed deny is not reported as successful.
-            let denied = owner.deny(id, &mother_agent(), run);
-            if let Err(e) = denied {
-                self.screen.emit(&format!(
-                    "DENIAL RECORD {} original={}\n",
-                    e.class(),
-                    error.class()
-                ));
+        mission.last = mission
+            .id
+            .and_then(|id| mission.port.pending(id))
+            .and_then(|p| CommitmentId::parse(&p.commitment));
+        let confirmation = self.confirmer.for_request(request);
+        let result = self
+            .home
+            .session
+            .approve_file_confirmed(request, &*confirmation);
+        let affirmative = confirmation.answer() == crate::terminal::AnswerState::Affirmative;
+        if result.is_ok() {
+            let continuation = self.home.session.approval_continuation(request);
+            if let Ok(continuation) = continuation {
+                let old = self.mission.take().expect("installed mission");
+                match old.session.continue_approval(continuation) {
+                    Ok(session) => self.mission = Some(Mission { session, ..old }),
+                    Err(e) => {
+                        self.screen.stop.ingress.fail();
+                        self.screen.emit(&format!(
+                            "ACTION OUTCOME UNCERTAIN continuation={}\n",
+                            mother_code(&e)
+                        ));
+                        return;
+                    }
+                }
             }
-            if self.screen.stop.gate.admit(Route::Mission) {
-                self.progress();
-            } else {
-                self.observe();
-            }
-            // This receipt promises Mother has consumed the denial. Quit may
-            // close admission immediately after the Owner sees it.
-            self.screen.emit("ACTION DENIED\n");
-            return;
         }
-        if !self.allowed(Route::Files) {
-            self.observe();
-            return;
-        }
-        match self.home.owner().execute(id, &mother_agent(), run) {
-            Ok(output) => self.screen.emit(&format!(
+        if let Ok(output) = &result {
+            self.screen.emit(&format!(
                 "ACTION FINISHED {}\n",
                 output
                     .evidence
+                    .as_ref()
                     .map(|e| e.to_string())
                     .unwrap_or_else(|| "evidence unavailable".into())
-            )),
-            Err(e) => self
-                .screen
-                .emit(&format!("ACTION FINISHED refused={}\n", e.class())),
+            ));
         }
-        if self.screen.stop.gate.admit(Route::Mission) {
-            self.progress();
-        } else {
-            self.observe();
+        // Advance/reconcile the real Mother outcome. There is no automatic deny
+        // conversion on an authorization failure.
+        self.progress();
+        let consumed_decline = confirmation.answer() == crate::terminal::AnswerState::Declined
+            && self
+                .mission
+                .as_ref()
+                .and_then(|m| m.id.map(|id| (m, id)))
+                .is_some_and(|(m, id)| {
+                    matches!(m.session.state(id), Ok(Some(MissionState::Denied)))
+                });
+        match result {
+            Ok(_) => {}
+            Err(_) if consumed_decline => self.screen.emit("ACTION DENIED\n"),
+            Err(e) => self.screen.emit(&format!(
+                "ACTION REFUSED {} affirmative={}\n",
+                e.class(),
+                affirmative
+            )),
         }
     }
     fn observe(&self) {
@@ -427,95 +384,62 @@ impl Runtime {
             }
         }
     }
-    fn command(&mut self, command: &str) {
-        match command {
-            "run" => self.run(),
-            "approve" => self.approve(),
-            "lift-for-undo" => {
-                if !self.screen.stop.gate.recovery() {
-                    self.screen.emit("REFUSED recovery_only_lift\n");
-                    return;
-                }
-                if self.screen.stop.receipt().outstanding != 0 {
-                    self.screen.emit("REFUSED stop_workers_outstanding\n");
-                    return;
-                }
-                let cell = self.home.owner().file_session_halt();
-                let epoch = cell.ingress_epoch();
-                let result = self
-                    .home
-                    .owner()
-                    .resume_with_halt(&*self.confirmer, Some(&cell));
+    fn command(&mut self, request: SessionRequest) {
+        match request.kind() {
+            CommandKind::Run => self.run(&request),
+            CommandKind::Approve => self.approve(&request),
+            CommandKind::Undo => {
+                let confirmation = self.confirmer.for_request(&request);
+                let result = self.home.session.undo_confirmed(&request, &*confirmation);
                 #[cfg(test)]
-                crate::hands_tests::review4_returned(&self.screen, &self.home, "lift");
-                if cell.ingress_epoch() != epoch {
-                    // Cover ingress between the broker's return and the host's
-                    // next action too. Native engagement precedes recording.
-                    self.home.owner().emergency_stop();
-                    self.screen.emit("Stop received while your confirmed lift was finishing; the native halt is re-engaged.\n");
+                hands_tests::review4_returned(&self.screen, &self.home, "undo");
+                let facts = request.restore_observation();
+                use nexus_governed_control::host_session::outcome::RestoreOutcome;
+                if confirmation.answer() != crate::terminal::AnswerState::Affirmative
+                    && !facts.handed_off
+                {
                     self.screen
-                        .emit("LIFT REFUSED halted; request fresh consent\n");
-                } else {
-                    match result {
-                        Ok(()) => self
-                            .screen
-                            .emit("LIFTED recovery only; missions remain stopped\n"),
-                        Err(e) => self.screen.emit(&format!(
-                            "LIFT REFUSED {} (recovery acknowledgement unsupported)\n",
-                            e.class()
-                        )),
-                    }
+                        .emit("Undo was not confirmed. No restore was handed off.\n");
                 }
-            }
-            "undo" => {
-                let cell = self.home.owner().file_session_halt();
-                let epoch = cell.ingress_epoch();
-                let result = self
-                    .home
-                    .owner()
-                    .files_undo_with_halt(&*self.confirmer, Some(&cell));
-                #[cfg(test)]
-                crate::hands_tests::review4_returned(&self.screen, &self.home, "undo");
-                if cell.ingress_epoch() != epoch {
-                    let outcome = match &result {
-                        Ok(_) => "completed",
-                        Err(
-                            nexus_governed_control::authority::AuthorityError::RecoveryRequired,
-                        ) => "outcome is uncertain; recovery is required",
-                        Err(_) => "was refused",
-                    };
-                    self.screen.emit(&format!("Stop received while your confirmed undo was finishing; the undo {outcome}.\n"));
+                if facts.interrupted {
+                    self.screen.emit(match facts.outcome {
+                        RestoreOutcome::NotEntered => "Stop received before undo handoff. The restore did not start.\n",
+                        RestoreOutcome::Completed => "Stop received after undo handoff. The restore completed; remaining obligations are reported separately.\n",
+                        RestoreOutcome::Refused => "Stop received after undo handoff. The restore was refused.\n",
+                        RestoreOutcome::Pending | RestoreOutcome::Uncertain => "Stop received after undo handoff. The restore outcome is uncertain; recovery is required.\n",
+                    });
                 }
+                self.screen.emit(&format!(
+                    "UNDO FACTS request={} handoff={} physical={:?} grant={:?}\n",
+                    facts.request, facts.handed_off, facts.outcome, facts.grant
+                ));
                 match result {
-                    Ok(report) => show_undo(&self.screen, report),
-                    Err(nexus_governed_control::authority::AuthorityError::RecoveryRequired) => {
-                        self.screen
-                            .emit("UNDO OUTCOME UNCERTAIN recovery_required\n")
+                    Ok(report) => {
+                        show_undo(&self.screen, report);
                     }
                     Err(e) => self.screen.emit(&format!("UNDO REFUSED {}\n", e.class())),
                 }
-            }
-            "cleanup" => {
-                let cell = self.home.owner().file_session_halt();
-                let epoch = cell.ingress_epoch();
-                let result = self.home.owner().files_retry_cleanup_with_halt(Some(&cell));
                 #[cfg(test)]
-                crate::hands_tests::review4_returned(&self.screen, &self.home, "cleanup");
-                if cell.ingress_epoch() != epoch {
-                    match &result {
-                        Ok(report) => self.screen.emit(&format!("Stop received while your confirmed cleanup was finishing; cleanup settled={} still_owed={}.\n", report.settled, report.still_owed)),
-                        Err(_) => self.screen.emit("Stop received while your confirmed cleanup was finishing; cleanup was refused or failed. Earlier confirmed removals may have finished; remaining obligations are retained.\n"),
-                    }
-                }
+                hands_tests::review4_reported(&self.screen, &self.home, "undo");
+            }
+            CommandKind::Cleanup => {
+                let result = self.home.session.cleanup(&request);
+                #[cfg(test)]
+                hands_tests::review4_returned(&self.screen, &self.home, "cleanup");
                 match result {
                     Ok(report) => self.screen.emit(&format!(
-                        "CLEANUP settled={} still_owed={}\n",
+                        "Cleanup requested.\nCLEANUP settled={} still_owed={}\n",
                         report.settled, report.still_owed
                     )),
-                    Err(e) => self.screen.emit(&format!("CLEANUP FAILED {}\n", e.class())),
+                    Err(e) => self
+                        .screen
+                        .emit(&format!("CLEANUP REFUSED {}\n", e.class())),
                 }
+                self.inventory();
+                #[cfg(test)]
+                hands_tests::review4_reported(&self.screen, &self.home, "cleanup");
             }
-            "evidence" => {
+            CommandKind::Evidence => {
                 self.screen.emit("RECENT EVIDENCE bounded\n");
                 for record in self.home.recent_evidence() {
                     let phase = if record.phase == EvidencePhase::EmergencyStop {
@@ -528,109 +452,95 @@ impl Runtime {
                 }
                 let health = self.home.evidence_health();
                 self.screen.emit(&format!("latched={} owed={} recovery_required={} unsettled={} unclean_sessions={}\nEVIDENCE HEALTH\n", health.latched, health.owed, health.recovery_required, health.unsettled, health.unclean_sessions));
+                self.inventory();
             }
-            "detail" => {
+            CommandKind::Detail => {
+                if self.home.session.state() != SessionState::Normal {
+                    self.screen.emit("REFUSED recovery_only\n");
+                    return;
+                }
                 let mut view = OwnerScreen(self.screen.clone());
-                if let Some(mission) = &self.mission {
-                    if let Some(id) = mission.id {
-                        match mission.session.working_detail(id) {
-                            Ok(Some(detail)) => detail.show(&mut view),
-                            Err(e) => self
-                                .screen
-                                .emit(&format!("DETAIL FAILED {}\n", mother_code(&e))),
-                            _ => {}
-                        }
-                    }
-                    if let Some(detail) = mission
-                        .last
-                        .and_then(|id| self.home.owner().files_working_detail(id))
-                    {
-                        detail.show(&mut view);
+                if let Some((m, id)) = self.mission.as_ref().and_then(|m| m.id.map(|id| (m, id))) {
+                    match m.session.working_detail(id) {
+                        Ok(Some(detail)) => detail.show(&mut view),
+                        Err(e) => self
+                            .screen
+                            .emit(&format!("DETAIL FAILED {}\n", mother_code(&e))),
+                        _ => {}
                     }
                 }
             }
-            _ => self.screen.emit("REFUSED unknown_command\n"),
+            _ => self.screen.emit("REFUSED unavailable_command\n"),
         }
-        #[cfg(test)]
-        crate::hands_tests::review4_reported(
-            &self.screen,
-            &self.home,
-            if command == "lift-for-undo" {
-                "lift"
-            } else {
-                command
-            },
-        );
     }
-    fn close(
-        self,
-        owner: Arc<nexus_governed_control::governed::GovernedControl>,
-        stop_body: Option<Arc<dyn Fn() + Send + Sync>>,
-    ) -> bool {
-        if self.screen.stop.gate.failed() {
-            self.screen.emit("UNCLEAN host_failure\n");
-            return false;
-        }
-        if let Some(mission) = &self.mission {
-            if let Err(e) = mission.session.close() {
-                self.screen
-                    .emit(&format!("UNCLEAN file_session={}\n", mother_code(&e)));
-                return false;
+    fn inventory(&self) {
+        match self.home.session.inventory() {
+            Ok(inventory) => {
+                let entries = &inventory.entries;
+                self.screen.emit(&format!(
+                    "INVENTORY entries={} in_flight={} uncertain={} unresolved={}\n",
+                    entries.len(),
+                    entries.iter().filter(|e| e.in_flight).count(),
+                    entries.iter().filter(|e| e.uncertain).count(),
+                    entries.iter().filter(|e| !e.discharged).count()
+                ));
+                self.screen.emit(&format!(
+                    "CLEANUP EXCLUSIONS preparing={} current_undo={} retained={} excluded={}\n",
+                    entries.iter().filter(|e| e.preparing).count(),
+                    entries.iter().filter(|e| e.current_undo).count(),
+                    entries.iter().filter(|e| e.intentionally_retained).count(),
+                    entries
+                        .iter()
+                        .filter(|e| e.preparing
+                            || e.in_flight
+                            || e.current_undo
+                            || e.uncertain
+                            || e.intentionally_retained)
+                        .count()
+                ));
+                self.screen.emit(&format!("RESOURCE FACTS observed_absent={} finalization_unverified={} grants_unclosed={} cleanup_record_unverified={}\n", entries.iter().filter(|e| e.staging_absent).count(), entries.iter().filter(|e| !e.private_finalization_established || !e.parent_synced).count(), entries.iter().filter(|e| !e.grants_closed).count(), entries.iter().filter(|e| !e.cleanup_recorded).count()));
+                match self.home.session.resource_obligations() {
+                    Ok(resources) => self.screen.emit(&format!("RESERVATIONS total={} unresolved={} uncertain={} private={} private_unresolved={}\n", resources.reserved, resources.unresolved, resources.uncertain, resources.private, resources.private_unresolved)),
+                    Err(_) => self.screen.emit("RESERVATIONS unknown\n"),
+                }
+                self.screen.emit("INVENTORY END\n");
             }
+            Err(_) => self.screen.emit("INVENTORY unknown\n"),
         }
-        self.home.owner().shut_down();
-        match self
-            .home
-            .owner()
-            .files_retry_cleanup_with_halt(Some(&self.home.owner().file_session_halt()))
-        {
-            Ok(report) if report.still_owed == 0 => {}
-            _ => {
-                self.screen.emit("UNCLEAN cleanup_owed\n");
-                return false;
-            }
-        }
-        let health = self.home.evidence_health();
-        if health.latched || health.owed != 0 || health.recovery_required {
-            self.screen.emit("UNCLEAN evidence_obligations\n");
-            return false;
-        }
-        // Backend destruction can perform defensive staging cleanup. Keep
-        // it on this owned worker and before closing primary evidence.
-        let Self {
-            home,
-            screen,
-            mission,
-            ..
-        } = self;
-        drop(mission);
-        drop(stop_body);
-        drop(owner);
-        let Ok(home) = Arc::try_unwrap(home) else {
-            screen.emit("UNCLEAN home_still_owned\n");
-            return false;
+    }
+    fn close(self, request: SessionRequest) -> Option<CloseSeal> {
+        let end = match self.mission {
+            Some(mission) => mission.session.prepare_session_end(),
+            None => self
+                .home
+                .journal()
+                .map_err(CoordinatorError::Journal)
+                .and_then(|j| PreparedSessionEnd::idle(j, self.home.session.identity())),
         };
-        let Home {
-            control, evidence, ..
-        } = home;
-        drop(control);
-        let health = evidence.health();
-        if health.latched || health.owed != 0 || health.recovery_required {
-            screen.emit("UNCLEAN evidence_obligations\n");
-            return false;
-        }
-        match evidence.close_session() {
-            EndStatus::Recorded { .. } => {
-                screen.emit("SESSION CLOSED recorded\n");
-                true
+        let end = match end {
+            Ok(end) => end,
+            Err(e) => {
+                self.screen
+                    .emit(&format!("UNCLEAN mother_settlement={}\n", mother_code(&e)));
+                return None;
             }
-            status => {
-                screen.emit(&format!("UNCLEAN evidence_close={}\n", status.as_str()));
-                false
-            }
+        };
+        if self.home.session.settle_close_resources(&request).is_err()
+            || self.home.session.settle_close_authority(&request).is_err()
+        {
+            return None;
         }
+        let seal = self.home.session.seal_close(&request).ok()?;
+        if end.record(&seal).is_err()
+            || self.home.session.observe_mother_end(&seal).is_err()
+            || self.home.session.close_primary(&seal).is_err()
+        {
+            return None;
+        }
+        Some(seal)
     }
 }
+
 struct OwnerScreen(Arc<Shared>);
 impl nexus_mother::evidence::OwnerView for OwnerScreen {
     fn line(&mut self, label: &str, value: &str) {
@@ -643,11 +553,26 @@ impl nexus_governed_control::files::OwnerView for OwnerScreen {
     }
 }
 
-fn show_recovery(home: &Home, screen: &Shared) -> Result<(), &'static str> {
-    let report = home
-        .owner()
-        .files_recovery_report()
-        .map_err(|_| "recovery_report_unavailable")?;
+fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static str> {
+    let sources = home.session.startup_report();
+    screen.emit(&format!(
+        "SOURCES mother_verified={} resources_verified={} primary_latched={} primary_owed={}\n",
+        sources.mother.is_ok(),
+        sources.resources.is_ok(),
+        sources.primary.latched,
+        sources.primary.owed
+    ));
+    screen.emit("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence.\n");
+    if sources.mother.is_err() {
+        screen.emit("RECOVERY FAILED mother_history\n");
+    }
+    if sources.resources.is_err() {
+        screen.emit("RECOVERY FAILED kernel_resources\n");
+    }
+    let report = sources.kernel.map_err(|_| {
+        screen.emit("RECOVERY FAILED kernel_ledger\n");
+        "recovery_report_unavailable"
+    })?;
     screen.emit("RECOVERY REPORT only; no sweep or workspace restoration\n");
     for entry in report {
         screen.emit(&format!("run={}\n", entry.run));
@@ -700,7 +625,7 @@ fn join<T>(handle: &mut Option<JoinHandle<T>>, deadline: Instant, screen: &Share
     }
 }
 
-/// Run one Linux process session. The binary maps false to nonzero exit.
+/// Run one process using the original seed created before terminal input.
 pub fn run(args: impl Iterator<Item = String>) -> bool {
     let config = match parse(args) {
         Ok(c) => c,
@@ -709,7 +634,12 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             return false;
         }
     };
-    let mut terminal = match Terminal::open() {
+    let seed = match SessionSeed::new() {
+        Ok(seed) => seed,
+        Err(_) => return false,
+    };
+    let ingress = seed.ingress();
+    let mut terminal = match Terminal::open(ingress.clone()) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("{}", e.code());
@@ -717,133 +647,139 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         }
     };
     if !nexus_governed_control::files::make_non_dumpable() {
-        terminal.shared.emit("process_non_dumpable_unavailable\n");
+        terminal.shared.fail(crate::terminal::Failure::Input);
         return false;
     }
     let screen = terminal.shared.clone();
     let confirmer = terminal.confirmer.clone();
-    let (tx, rx) = mpsc::channel();
+    let startup_debt = match ingress.producer(ProducerKind::Startup) {
+        Ok(p) => p,
+        Err(_) => {
+            ingress.fail();
+            return false;
+        }
+    };
     let startup_screen = screen.clone();
-    let mut startup = match std::thread::Builder::new()
+    let mut startup = std::thread::Builder::new()
         .name("hands-startup".into())
         .spawn(move || {
             #[cfg(test)]
             hands_tests::review2_startup("home");
             #[cfg(test)]
-            let opened = hands_tests::open_home(&config.home, confirmer.clone());
+            let opened = hands_tests::open_home(seed, &config.home, confirmer.clone());
             #[cfg(not(test))]
-            let opened = Home::open(&config.home, confirmer.clone());
-            let opened = opened.map(Arc::new).map_err(|e| {
-                startup_screen.emit(&format!("Home unavailable: {}\n", e.0));
-                "home_unavailable"
-            });
-            let runtime = opened.and_then(|home| {
-                if !startup_screen.stop.bind(home.owner().clone()) {
-                    return Err("stop_binding_failed");
-                }
-                #[cfg(test)]
-                hands_tests::review2_startup("recovery");
-                show_recovery(&home, &startup_screen)?;
-                if startup_screen.stop.gate.admit(Route::Files) {
-                    home.owner()
-                        .hold_files_before_publish(config.hold)
-                        .map_err(|_| "hold_refused")?;
-                    home.owner()
-                        .register_workspace_with_halt(
-                            &config.workspace,
-                            &[home.dir()],
-                            Some(&home.owner().file_session_halt()),
-                        )
-                        .map_err(|_| "workspace_refused")?;
-                }
-                Ok(Runtime {
-                    home,
-                    config,
-                    screen: startup_screen,
-                    confirmer,
-                    used: false,
-                    mission: None,
-                })
-            });
-            let _sent = tx.send(runtime);
-        }) {
-        Ok(h) => Some(h),
-        Err(_) => {
-            screen.stop.gate.fail();
-            return false;
-        }
-    };
-    let runtime = loop {
-        match rx.try_recv() {
-            Ok(Ok(runtime)) => break Some(Arc::new(Mutex::new(runtime))),
-            Ok(Err(code)) => {
-                screen.emit(&format!("STARTUP REFUSED {code}\n"));
-                break None;
+            let opened = SessionServices::open(seed, &config.home, confirmer.clone());
+            let home = Arc::new(opened.map_err(|_| "home_unavailable")?);
+            if !startup_screen.stop.bind(home.session.clone()) {
+                return Err("stop_binding_failed");
             }
-            Err(mpsc::TryRecvError::Disconnected) => {
-                screen.stop.gate.fail();
-                break None;
+            #[cfg(test)]
+            hands_tests::review2_startup("recovery");
+            let report = show_recovery(&home, &startup_screen);
+            if report.is_err() {
+                home.session.ingress().fail();
             }
-            Err(mpsc::TryRecvError::Empty) => {}
-        }
-        if screen.ended() || screen.stop.gate.failed() || screen.input().quit {
-            break None;
+            if home.session.state() == SessionState::Bootstrap
+                && home.session.startup_report().ready()
+            {
+                let setup = home
+                    .session
+                    .bootstrap_hold(config.hold)
+                    .map_err(|_| "hold_refused")
+                    .and_then(|()| {
+                        home.session
+                            .bootstrap_workspace(&config.workspace, &[home.dir()])
+                            .map(|_| ())
+                            .map_err(|_| "workspace_refused")
+                    })
+                    .and_then(|()| {
+                        home.session
+                            .finish_bootstrap()
+                            .map_err(|_| "readiness_refused")
+                    });
+                if let Err(code) = setup {
+                    startup_screen.emit(&format!("STARTUP REFUSED {code}\n"));
+                    if !home.session.ingress().emergency_seen()
+                        && home.session.ingress().close_deadline().is_none()
+                    {
+                        home.session.ingress().fail();
+                    }
+                }
+            }
+            Ok::<_, &'static str>(Runtime {
+                home,
+                config,
+                screen: startup_screen,
+                confirmer,
+                used: false,
+                mission: None,
+            })
+        })
+        .ok();
+    if startup.is_none() {
+        ingress.fail();
+    }
+    while startup.as_ref().is_some_and(|h| !h.is_finished()) {
+        if screen.ended()
+            || screen.input().quit.is_some()
+            || ingress
+                .close_deadline()
+                .is_some_and(|d| Instant::now() >= d)
+        {
+            break;
         }
         screen.wait();
+    }
+    let deadline = ingress.close_deadline().unwrap_or_else(Instant::now);
+    let started = join(&mut startup, deadline, &screen);
+    if startup.is_none() {
+        startup_debt.joined();
+    } else {
+        std::mem::forget(startup_debt);
+    }
+    let runtime = match started {
+        Some(Ok(runtime)) => Arc::new(Mutex::new(runtime)),
+        Some(Err(code)) => {
+            screen.emit(&format!("STARTUP REFUSED {code}\n"));
+            ingress.fail();
+            return failed_startup(terminal, startup);
+        }
+        None => {
+            ingress.fail();
+            return failed_startup(terminal, startup);
+        }
     };
-    let Some(runtime) = runtime else {
-        screen.stop.gate.close();
-        let deadline = Instant::now() + Duration::from_secs(3);
-        let started = join(&mut startup, deadline, &screen).is_some();
-        let stopped = screen.stop.join_until(deadline);
-        if started && stopped {
-            // A late startup result and the Stop callback may own the final
-            // backend reference. Their destruction can perform cleanup too.
-            let owned = std::mem::ManuallyDrop::new((rx, screen.stop.take_body()));
-            let mut dispose = std::thread::Builder::new()
-                .name("hands-startup-close".into())
-                .spawn(move || drop(std::mem::ManuallyDrop::into_inner(owned)))
-                .ok();
-            let _disposed = join(&mut dispose, deadline, &screen);
+    let session = runtime.lock().unwrap().home.session.clone();
+    if !matches!(
+        session.state(),
+        SessionState::ClosingNormal | SessionState::ClosingRestricted
+    ) {
+        screen.emit(if session.state() == SessionState::Normal {
+            "One File mission per fresh process. Emergency ends mission work.\nHANDS READY\n"
+        } else if session.state() == SessionState::Emergency {
+            "Report only; no work authority is available.\nHANDS READY\n"
         } else {
-            std::mem::forget(rx);
-            std::mem::forget(screen.stop.clone());
-        }
-        let _terminal = terminal.finish(deadline);
-        return false;
-    };
-    let _started = join(
-        &mut startup,
-        Instant::now() + Duration::from_secs(3),
-        &screen,
-    );
-    let owner = runtime.lock().unwrap().home.owner().clone();
-    screen.emit("One File mission per fresh process. Emergency ends mission work.\nHANDS READY\n");
+            "HANDS REPORT ONLY; sources or startup obligations prevent readiness\n"
+        });
+    }
     let mut work: Option<JoinHandle<()>> = None;
+    let mut work_debt: Option<Producer> = None;
     let mut queued = std::collections::VecDeque::new();
-    let mut last_epoch = 0;
-    let mut snapshot = owner.stop_snapshot();
     loop {
-        screen.stop.reap();
-        if work.as_ref().is_some_and(|w| w.is_finished())
-            && join(&mut work, Instant::now(), &screen).is_none()
+        if work.as_ref().is_some_and(|h| h.is_finished()) {
+            if join(&mut work, Instant::now(), &screen).is_none() {
+                ingress.fail();
+            }
+            if let Some(debt) = work_debt.take() {
+                debt.joined();
+            }
+        }
+        if screen.ended()
+            || screen.input().quit.is_some()
+            || ingress
+                .close_deadline()
+                .is_some_and(|d| Instant::now() >= d)
         {
-            screen.stop.gate.fail();
-        }
-        let receipt = screen.stop.receipt();
-        let current = owner.stop_snapshot();
-        if current != snapshot || receipt.epoch != last_epoch {
-            screen.emit(&format!(
-                "kernel_stopped={} broker_stopped={} stop_number={} generation={}\n",
-                current.kernel_stopped,
-                current.broker_stopped,
-                current.stop_number,
-                current.policy_generation
-            ));
-        }
-        last_epoch = receipt.epoch;
-        snapshot = current;
-        if screen.ended() || screen.stop.gate.failed() || screen.input().quit {
             break;
         }
         let command = if work.is_none() && !queued.is_empty() {
@@ -852,87 +788,160 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             screen.command()
         };
         if let Some(command) = command {
-            if command == "quit" {
-                break;
-            }
-            if command == "status" {
-                screen.emit(&format!("host_recovery_only={}\nkernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP WORKERS outstanding={}\n", screen.stop.gate.recovery(), current.kernel_stopped, current.broker_stopped, current.stop_number, current.policy_generation, receipt.outstanding));
-                screen.emit("Mother lifecycle is the last worker receipt; status does not wait for journal I/O\n");
-                let [mission, door, run, files, lane, inference, model] =
-                    screen.stop.gate.admitted();
-                screen.emit(&format!("ADMITTED mission={mission} door={door} run={run} files={files} lane={lane} inference={inference} model={model}\n"));
-                screen.emit("STATUS END\n");
-            } else if command == "lift-for-undo" && receipt.outstanding > 0 {
-                screen.emit("REFUSED stop_workers_outstanding\n");
-            } else if matches!(command.as_str(), "run" | "approve") && screen.stop.gate.recovery() {
-                screen.emit("REFUSED recovery_only\n");
+            if let Some(reason) = command.refusal {
+                let subject = if command.name == "undo" { "UNDO " } else { "" };
+                screen.emit(&format!("{subject}REFUSED {reason}\n"));
+            } else if command.name == "status" {
+                let current = session.stop_snapshot();
+                let receipt = screen.stop.receipt();
+                screen.emit(&format!("host_recovery_only={}\nsession={:?}\nkernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP WORKERS outstanding={}\nSTATUS END\n", ingress.emergency_seen(), session.state(), current.kernel_stopped, current.broker_stopped, current.stop_number, current.policy_generation, receipt.outstanding));
             } else if work.is_some() {
                 if queued.len() == 64 {
-                    screen.stop.gate.fail();
+                    ingress.fail();
                 } else {
                     queued.push_back(command);
                 }
-            } else {
-                let runtime = runtime.clone();
-                match std::thread::Builder::new()
-                    .name("hands-work".into())
-                    .spawn(move || match runtime.lock() {
-                        Ok(mut runtime) => runtime.command(&command),
-                        Err(p) => p.into_inner().screen.stop.gate.fail(),
-                    }) {
-                    Ok(h) => work = Some(h),
-                    Err(_) => screen.stop.gate.fail(),
+            } else if let Some(request) = command.request {
+                let kind = if request.kind() == CommandKind::Evidence {
+                    ProducerKind::Observation
+                } else {
+                    ProducerKind::Work
+                };
+                match ingress.producer(kind) {
+                    Ok(debt) => {
+                        let runtime = runtime.clone();
+                        match std::thread::Builder::new().name("hands-work".into()).spawn(
+                            move || match runtime.lock() {
+                                Ok(mut runtime) => runtime.command(request),
+                                Err(p) => p.into_inner().screen.stop.ingress.fail(),
+                            },
+                        ) {
+                            Ok(handle) => {
+                                work = Some(handle);
+                                work_debt = Some(debt);
+                            }
+                            Err(_) => {
+                                ingress.fail();
+                                drop(debt);
+                            }
+                        }
+                    }
+                    Err(_) => screen.emit("REFUSED session_restricted\n"),
                 }
             }
         }
         screen.wait();
     }
-    screen.stop.gate.close();
-    if (screen.ended() || screen.stop.gate.failed()) && !screen.stop.gate.recovery() {
-        screen.stop.press();
+    let request = screen.input().quit.take();
+    if request.is_none() {
+        ingress.fail();
     }
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = ingress
+        .close_deadline()
+        .expect("first shutdown trigger established deadline");
     let reader_done = terminal.stop_reader(deadline);
-    let had_work = work.is_some();
-    let work_done = join(&mut work, deadline, &screen).is_some() || !had_work;
+    let work_done = work.is_none() || join(&mut work, deadline, &screen).is_some();
+    if work.is_none() {
+        if let Some(debt) = work_debt.take() {
+            debt.joined();
+        }
+    }
     let stops_done = screen.stop.join_until(deadline);
-    let mut clean = false;
-    if reader_done && work_done && stops_done && !screen.ended() && !screen.stop.gate.failed() {
-        let body = screen.stop.take_body();
-        // If spawning fails, dropping the rejected closure must not run the
-        // last backend destructor on the deadline thread.
-        let owned = std::mem::ManuallyDrop::new((runtime, owner, body));
-        let mut close = std::thread::Builder::new()
-            .name("hands-close".into())
-            .spawn(move || {
-                let (runtime, owner, body) = std::mem::ManuallyDrop::into_inner(owned);
-                match Arc::try_unwrap(runtime)
-                    .ok()
-                    .and_then(|r| r.into_inner().ok())
-                {
-                    Some(runtime) => runtime.close(owner, body),
-                    None => false,
-                }
-            })
-            .ok();
-        clean = join(&mut close, deadline, &screen).unwrap_or(false);
-        if close.is_some() {
-            screen.emit("UNCLEAN outstanding=close\n");
+    let producers_done = terminal.quiesce(deadline);
+    let mut seal = None;
+    if reader_done
+        && work_done
+        && stops_done
+        && producers_done
+        && !screen.ended()
+        && !ingress.failed()
+    {
+        if let Some(request) = request {
+            let owned = std::mem::ManuallyDrop::new(runtime);
+            let mut close = std::thread::Builder::new()
+                .name("hands-close".into())
+                .spawn(move || {
+                    let runtime = std::mem::ManuallyDrop::into_inner(owned);
+                    Arc::try_unwrap(runtime)
+                        .ok()
+                        .and_then(|r| r.into_inner().ok())
+                        .and_then(|r| r.close(request))
+                })
+                .ok();
+            // Reserve the last part of the original three-second budget for
+            // truthful timeout delivery and terminal finalization. No clock
+            // or authority is refreshed; the append may remain Unknown.
+            let recording_until = deadline
+                .checked_sub(Duration::from_millis(100))
+                .unwrap_or(deadline);
+            seal = join(&mut close, recording_until, &screen).flatten();
+            if close.is_some() {
+                std::mem::forget(close);
+            }
+        } else {
+            std::mem::forget(runtime);
         }
     } else {
-        screen.emit(&format!(
-            "UNCLEAN outstanding={}\n",
-            screen.stop.receipt().outstanding + usize::from(!work_done)
-        ));
-        // Unclean bounded process exit: these references deliberately stay
-        // owned for the process lifetime. Destructors must not turn a timeout
-        // into an unbounded main-thread filesystem wait. No post-exit records
-        // or cleanup are promised; the operating system reclaims the process.
         std::mem::forget(runtime);
-        std::mem::forget(owner);
     }
-    let terminal_done = terminal.finish(deadline);
-    clean && terminal_done && !screen.stop.gate.failed()
+    let modes_ok = terminal.restore_modes(deadline);
+    if let Some(seal) = seal {
+        if modes_ok {
+            let delivered = screen.delivered("SESSION CLOSED recorded\n", deadline);
+            let finished = terminal.finish(deadline);
+            if delivered && finished {
+                return seal.finish_delivery();
+            }
+        }
+        drop(seal);
+    }
+    let records = session.close_records();
+    let status = |value| match value {
+        nexus_governed_control::host_session::close::FinalStatus::Pending => {
+            "Unknown (not attempted)"
+        }
+        nexus_governed_control::host_session::close::FinalStatus::Unknown => "Unknown",
+        nexus_governed_control::host_session::close::FinalStatus::Recorded => "Recorded",
+        nexus_governed_control::host_session::close::FinalStatus::Failed => "Failed",
+    };
+    let _delivered = screen.delivered(
+        &format!(
+            "{}\nMOTHER END {}\nPRIMARY END {}\nFINAL DELIVERY {}\nUNCLEAN outstanding={}\n",
+            crate::terminal::UNCLEAN_NOTICE,
+            status(records.mother),
+            status(records.primary),
+            status(records.delivery),
+            screen.stop.receipt().outstanding + usize::from(!work_done)
+        ),
+        deadline,
+    );
+    let _finished = terminal.finish(deadline);
+    // Retained payloads and native owners cannot run final destructors after an
+    // unverified bounded exit. No post-exit work or record is promised.
+    std::mem::forget(work);
+    std::mem::forget(work_debt);
+    std::mem::forget(session);
+    std::mem::forget(screen);
+    false
+}
+fn failed_startup(
+    mut terminal: Terminal,
+    startup: Option<JoinHandle<Result<Runtime, &'static str>>>,
+) -> bool {
+    let screen = terminal.shared.clone();
+    screen.stop.ingress.fail();
+    let deadline = screen
+        .stop
+        .ingress
+        .close_deadline()
+        .expect("failure deadline");
+    let _input = terminal.stop_reader(deadline);
+    let _stops = screen.stop.join_until(deadline);
+    screen.emit(&format!("{}\n", crate::terminal::UNCLEAN_NOTICE));
+    let _terminal = terminal.finish(deadline);
+    std::mem::forget(startup);
+    std::mem::forget(screen);
+    false
 }
 
 /// Keep successful removal and its possible grant interruption distinct.

@@ -1,13 +1,18 @@
 //! Linux terminal protocol: one reader, one renderer and one active dialogue.
 //! The reader owns freshness acknowledgement; backend ingress is atomic only.
-use crate::stop::{Gate, StopRoute};
+use crate::session_home::DoorPrompt;
+use crate::stop::StopRoute;
 use nexus_governed_control::authority::approval::{
-    AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ConfirmationText,
-    ControlConfirmer, GrantConfirmation, MissionConfirmation, MissionResumeConfirmation,
-    ResumeConfirmation, UndoConfirmation,
+    AcknowledgementConfirmation, ActionConfirmation, ConfirmationText, ControlConfirmer,
+    GrantConfirmation, MissionConfirmation, MissionResumeConfirmation, ResumeConfirmation,
+    UndoConfirmation,
 };
 use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
 use nexus_governed_control::authority::evidence::{escaped, is_plain, shown};
+use nexus_governed_control::host_session::{
+    close::{Producer, ProducerKind},
+    CommandKind, SessionIngress, SessionRequest, SessionState,
+};
 use nix::poll::{poll, PollFd, PollFlags};
 use nix::sys::termios::{
     self, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices, Termios,
@@ -15,7 +20,7 @@ use nix::sys::termios::{
 use std::collections::VecDeque;
 use std::io::{IsTerminal, Write};
 use std::os::fd::{AsFd, AsRawFd};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -149,16 +154,24 @@ pub(crate) fn render(title: &str, text: &ConfirmationText, code: &str) -> Result
     Ok(frame)
 }
 
+pub(crate) const EMERGENCY_NOTICE: &str = "Emergency Stop received. Mother will admit no new work, undo or cleanup in this session. An operation already handed to the kernel may still finish, including its internal cleanup. You can view status and evidence, or quit. Restart only reports surviving evidence and uncertainty; it does not clean up or restore undo.";
+pub(crate) const UNCLEAN_NOTICE: &str = "UNCLEAN EXIT: this process did not complete the full clean-close protocol. Some session-end records may already be durable; any unverified recording or resource obligations are listed separately. No cleanup or recording is promised after this process exits.";
+
+pub(crate) struct Command {
+    pub name: String,
+    pub request: Option<SessionRequest>,
+    pub refusal: Option<&'static str>,
+}
 #[derive(Default)]
 pub(crate) struct Input {
-    pub(crate) sequence: u64,
     pub(crate) lines: VecDeque<(u64, Option<String>)>,
+    pub(crate) commands: VecDeque<Command>,
     pub(crate) boundary: u64,
     pub(crate) acknowledged: u64,
     pub(crate) active: bool,
     pub(crate) fatal: Option<Failure>,
     pub(crate) eof: bool,
-    pub(crate) quit: bool,
+    pub(crate) quit: Option<SessionRequest>,
 }
 pub(crate) struct Frame {
     pub(crate) text: String,
@@ -167,53 +180,76 @@ pub(crate) struct Frame {
 pub(crate) struct Shared {
     pub(crate) stop: Arc<StopRoute>,
     pub(crate) input: Mutex<Input>,
+    pub(crate) sequence: AtomicU64,
     pub(crate) changed: Condvar,
     pub(crate) output: mpsc::SyncSender<Frame>,
     pub(crate) end: AtomicBool,
     pub(crate) input_end: AtomicBool,
     pub(crate) dialogue: Mutex<()>,
+    pub(crate) queued_output: AtomicU64,
+    pub(crate) delivered_output: AtomicU64,
+    pub(crate) output_failed: AtomicBool,
 }
 impl Shared {
     pub(crate) fn input(&self) -> MutexGuard<'_, Input> {
         self.input.lock().unwrap_or_else(|p| {
-            self.stop.gate.fail();
+            self.stop.ingress.fail();
             let mut input = p.into_inner();
             input.fatal = Some(Failure::Input);
             input
         })
     }
-    fn fail(&self, failure: Failure) {
-        self.stop.gate.fail();
+    pub(crate) fn fail(&self, failure: Failure) {
+        self.stop.ingress.fail();
+        if matches!(failure, Failure::Output | Failure::Renderer) {
+            self.output_failed.store(true, Ordering::SeqCst);
+        }
         self.input().fatal.get_or_insert(failure);
         self.changed.notify_all();
     }
-    fn send(&self, text: String) -> Result<mpsc::Receiver<Result<(), Failure>>, Failure> {
+    pub(crate) fn send(
+        &self,
+        text: String,
+    ) -> Result<mpsc::Receiver<Result<(), Failure>>, Failure> {
         if text.chars().any(|c| c != '\n' && !shown(c)) {
             self.fail(Failure::Renderer);
             return Err(Failure::Renderer);
         }
         let (tx, rx) = mpsc::channel();
-        if self.output.try_send(Frame { text, ack: tx }).is_err() {
+        if self
+            .queued_output
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
+            .is_err()
+            || self.output.try_send(Frame { text, ack: tx }).is_err()
+        {
             self.fail(Failure::Output);
             return Err(Failure::Output);
         }
         Ok(rx)
     }
     pub(crate) fn emit(&self, text: &str) {
-        // Every arbitrary value is escaped, line by line; fixed newlines alone
-        // delimit output. This also bounds combining stacks in lane text.
         let frame = text.split('\n').map(escaped).collect::<Vec<_>>().join("\n");
         let _queued = self.send(frame);
     }
-    pub(crate) fn command(&self) -> Option<String> {
+    pub(crate) fn delivered(&self, text: &str, deadline: Instant) -> bool {
+        let text = text.split('\n').map(escaped).collect::<Vec<_>>().join("\n");
+        let Ok(ack) = self.send(text) else {
+            return false;
+        };
+        match ack.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(Ok(())) => !self.output_failed.load(Ordering::SeqCst),
+            _ => {
+                self.fail(Failure::Output);
+                false
+            }
+        }
+    }
+    pub(crate) fn command(&self) -> Option<Command> {
         let mut input = self.input();
         if input.active {
             return None;
         }
-        input
-            .lines
-            .pop_front()
-            .map(|(_, text)| text.unwrap_or_default())
+        input.commands.pop_front()
     }
     pub(crate) fn ended(&self) -> bool {
         let input = self.input();
@@ -222,6 +258,18 @@ impl Shared {
     pub(crate) fn wait(&self) {
         let _wait = self.changed.wait_timeout(self.input(), SLICE);
     }
+    fn next(&self) -> Option<u64> {
+        match self
+            .sequence
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
+        {
+            Ok(n) if n < u64::MAX - 1 => Some(n + 1),
+            _ => {
+                self.stop.ingress.fail();
+                None
+            }
+        }
+    }
     pub(crate) fn receive(&self, line: Line, discard: bool) {
         match line {
             Line::Stop => {
@@ -229,31 +277,72 @@ impl Shared {
                 self.changed.notify_all();
             }
             Line::Quit => {
-                self.stop.gate.close();
-                self.input().quit = true;
+                // Closing precedes the input metadata lock and queue access.
+                let request = self
+                    .next()
+                    .and_then(|seq| self.stop.ingress.accept(CommandKind::Quit, seq).ok());
+                if let Some(request) = request {
+                    self.input().quit.get_or_insert(request);
+                } else {
+                    self.fail(Failure::Capacity);
+                }
                 self.changed.notify_all();
             }
             Line::Eof => {
                 self.stop.press();
+                self.stop.ingress.fail();
                 self.input().eof = true;
-                self.stop.gate.close();
                 self.changed.notify_all();
             }
             Line::Answer(text) => {
-                let mut input = self.input();
-                let Some(next) = input.sequence.checked_add(1) else {
-                    drop(input);
+                let Some(next) = self.next() else {
                     self.fail(Failure::Capacity);
                     return;
                 };
-                input.sequence = next;
+                let mut input = self.input();
                 if !discard {
-                    if input.lines.len() >= QUEUE {
+                    if input.lines.len() + input.commands.len() >= QUEUE {
                         drop(input);
                         self.fail(Failure::Capacity);
                         return;
                     }
-                    input.lines.push_back((next, text));
+                    let kind = match text.as_deref() {
+                        Some("run") => Some(CommandKind::Run),
+                        Some("approve") => Some(CommandKind::Approve),
+                        Some("undo") => Some(CommandKind::Undo),
+                        Some("cleanup") => Some(CommandKind::Cleanup),
+                        Some("detail") => Some(CommandKind::Detail),
+                        Some("status") => Some(CommandKind::Status),
+                        Some("evidence") => Some(CommandKind::Evidence),
+                        Some("lift-for-undo") => Some(CommandKind::Lift),
+                        _ => None,
+                    };
+                    if input.active && kind.is_none() {
+                        input.lines.push_back((next, text));
+                    } else {
+                        let name = text.unwrap_or_default();
+                        let (request, refusal) = match kind {
+                            Some(kind) => match self.stop.ingress.accept(kind, next) {
+                                Ok(request) => (Some(request), None),
+                                Err(_) => (
+                                    None,
+                                    Some(if kind == CommandKind::Lift {
+                                        "unavailable"
+                                    } else if self.stop.ingress.emergency_seen() {
+                                        "recovery_only"
+                                    } else {
+                                        "request_unavailable"
+                                    }),
+                                ),
+                            },
+                            None => (None, Some("unknown_command")),
+                        };
+                        input.commands.push_back(Command {
+                            name,
+                            request,
+                            refusal,
+                        });
+                    }
                 }
                 self.changed.notify_all();
             }
@@ -261,12 +350,77 @@ impl Shared {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum AnswerState {
+    NotAsked,
+    Awaiting,
+    Declined,
+    Affirmative,
+    Invalidated,
+    ProtocolFailed,
+}
+#[derive(Clone, Copy)]
+struct RequestFacts {
+    sequence: u64,
+    generation: u64,
+    accepted: Instant,
+    deadline: Instant,
+}
 /// The one production terminal confirmer. Unknown requests and recovery
 /// acknowledgement deny. The broker's binding remains authoritative.
 pub struct TerminalConfirmer {
     pub(crate) shared: Arc<Shared>,
+    facts: Option<RequestFacts>,
+    answer: AtomicU8,
 }
 impl TerminalConfirmer {
+    pub(crate) fn new(shared: Arc<Shared>) -> Self {
+        Self {
+            shared,
+            facts: None,
+            answer: AtomicU8::new(AnswerState::NotAsked as u8),
+        }
+    }
+    pub(crate) fn for_request(&self, request: &SessionRequest) -> Arc<Self> {
+        let seconds = if matches!(request.kind(), CommandKind::Run | CommandKind::Approve) {
+            300
+        } else {
+            120
+        };
+        Arc::new(Self {
+            shared: self.shared.clone(),
+            facts: Some(RequestFacts {
+                sequence: request.sequence(),
+                generation: request.generation(),
+                accepted: request.deadline() - Duration::from_secs(seconds),
+                deadline: request.deadline(),
+            }),
+            answer: AtomicU8::new(AnswerState::NotAsked as u8),
+        })
+    }
+    pub(crate) fn answer(&self) -> AnswerState {
+        match self.answer.load(Ordering::SeqCst) {
+            0 => AnswerState::NotAsked,
+            1 => AnswerState::Awaiting,
+            2 => AnswerState::Declined,
+            3 => AnswerState::Affirmative,
+            4 => AnswerState::Invalidated,
+            _ => AnswerState::ProtocolFailed,
+        }
+    }
+    fn answered(&self, answer: AnswerState) {
+        self.answer.store(answer as u8, Ordering::SeqCst);
+    }
+    #[cfg(test)]
+    pub(crate) fn request_sequence(&self) -> Option<u64> {
+        self.facts.map(|f| f.sequence)
+    }
+    #[cfg(test)]
+    pub(crate) fn request_deadline(&self) -> Option<Instant> {
+        self.facts.map(|f| f.deadline)
+    }
+
     pub(crate) fn ask(
         &self,
         received: Instant,
@@ -275,29 +429,47 @@ impl TerminalConfirmer {
         seconds: u64,
         recovery: bool,
     ) -> bool {
-        let deadline = received + Duration::from_secs(seconds);
-        let gate = &self.shared.stop.gate;
-        let epoch = gate.epoch();
-        if seconds == 0
-            || Instant::now() >= deadline
-            || gate.closing()
-            || gate.failed()
-            || (!recovery && (gate.backend_halted() || gate.recovery()))
-        {
+        let ingress = &self.shared.stop.ingress;
+        let (deadline, epoch) = match self.facts {
+            Some(facts) => {
+                debug_assert!(facts.sequence > 0);
+                (
+                    (facts.accepted + Duration::from_secs(seconds)).min(facts.deadline),
+                    facts.generation,
+                )
+            }
+            None => (
+                received + Duration::from_secs(seconds),
+                ingress.generation(),
+            ),
+        };
+        if seconds == 0 || !self.valid(deadline, epoch, recovery) {
+            self.answered(AnswerState::Invalidated);
             return false;
         }
         // try_lock denies overlapping dialogue rather than queuing a request
         // with an old lifetime behind another Owner decision.
         let _dialogue = match self.shared.dialogue.try_lock() {
             Ok(lock) => lock,
-            Err(std::sync::TryLockError::WouldBlock) => return false,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                self.answered(AnswerState::ProtocolFailed);
+                return false;
+            }
             Err(std::sync::TryLockError::Poisoned(_)) => {
                 self.shared.fail(Failure::Input);
                 return false;
             }
         };
         self.shared.input().active = true;
+        self.answered(AnswerState::Awaiting);
         let answer = self.ask_inner(title, text, deadline, epoch, recovery);
+        if self.answer() == AnswerState::Awaiting {
+            self.answered(if self.shared.ended() {
+                AnswerState::ProtocolFailed
+            } else {
+                AnswerState::Invalidated
+            });
+        }
         let mut input = self.shared.input();
         input.active = false;
         // Preserve commands typed after this answer. A subsequent dialogue
@@ -306,12 +478,16 @@ impl TerminalConfirmer {
         answer
     }
     fn valid(&self, deadline: Instant, epoch: u64, recovery: bool) -> bool {
-        let gate = &self.shared.stop.gate;
+        let ingress = &self.shared.stop.ingress;
+        let _ = recovery; // Hands has no recovery dialogue.
         Instant::now() < deadline
-            && epoch == gate.epoch()
-            && !gate.closing()
-            && !gate.failed()
-            && (recovery || (!gate.backend_halted() && !gate.recovery()))
+            && epoch == ingress.generation()
+            && !ingress.emergency_seen()
+            && !ingress.failed()
+            && matches!(
+                ingress.state(),
+                SessionState::Bootstrap | SessionState::Normal
+            )
     }
     fn protocol_valid(
         &self,
@@ -323,10 +499,13 @@ impl TerminalConfirmer {
         if self.valid(deadline, epoch, recovery) {
             return true;
         }
-        let gate = &self.shared.stop.gate;
+        let ingress = &self.shared.stop.ingress;
         // An interrupted dialogue is normal denial. A terminal protocol that
         // cannot acknowledge within the original lifetime is a host failure.
-        if Instant::now() >= deadline && gate.epoch() == epoch && !gate.closing() {
+        if Instant::now() >= deadline
+            && ingress.generation() == epoch
+            && ingress.close_deadline().is_none()
+        {
             self.shared.fail(failure);
         }
         false
@@ -408,47 +587,55 @@ impl TerminalConfirmer {
             }
             let line = self.shared.input().lines.pop_front();
             if let Some((_, line)) = line {
-                return line.as_deref() == Some(code.as_str())
-                    && self.valid(deadline, epoch, recovery);
+                if !self.valid(deadline, epoch, recovery) {
+                    self.answered(AnswerState::Invalidated);
+                    return false;
+                }
+                match line.as_deref() {
+                    Some(answer) if answer == code => {
+                        self.answered(AnswerState::Affirmative);
+                        return true;
+                    }
+                    Some("no") => {
+                        self.answered(AnswerState::Declined);
+                        return false;
+                    }
+                    _ => {
+                        self.answered(AnswerState::ProtocolFailed);
+                        self.shared.fail(Failure::Input);
+                        return false;
+                    }
+                }
             }
             self.shared.wait();
         }
+    }
+    fn confirmed(&self, title: &str, text: ConfirmationText, seconds: u64) -> bool {
+        if self.facts.is_none() {
+            return false;
+        }
+        self.ask(Instant::now(), title, text, seconds, false)
     }
     fn action(&self, r: &ActionConfirmation) -> bool {
         r.kind == CapabilityKind::Files
             && r.class == EffectClass::R2
             && r.operation == "create"
-            && self.ask(
-                Instant::now(),
-                r.title(),
-                r.text(),
-                r.expires_in_secs.min(300),
-                false,
-            )
+            && self.confirmed(r.title(), r.text(), r.expires_in_secs.min(300))
     }
     fn grant(&self, r: &GrantConfirmation) -> bool {
-        r.kind == CapabilityKind::Files && self.ask(Instant::now(), r.title(), r.text(), 120, false)
+        r.kind == CapabilityKind::Files && self.confirmed(r.title(), r.text(), 120)
     }
     fn mission(&self, r: &MissionConfirmation) -> bool {
-        self.ask(Instant::now(), r.title(), r.text(), 300, false)
+        self.confirmed(r.title(), r.text(), 300)
     }
-    fn door(&self, r: &AgentDoorConfirmation) -> bool {
-        self.ask(Instant::now(), r.title(), r.text(), 120, false)
-    }
-    fn held(&self, r: &MissionResumeConfirmation) -> bool {
-        self.ask(Instant::now(), r.title(), r.text(), 300, false)
+    fn door(&self, r: &DoorPrompt) -> bool {
+        self.confirmed(r.title(), r.text(), 120)
     }
     fn undo(&self, r: &UndoConfirmation) -> bool {
-        self.ask(Instant::now(), r.title(), r.text(), 120, true)
-    }
-    fn resume(&self, r: &ResumeConfirmation) -> bool {
-        self.shared.stop.gate.recovery() && self.shared.stop.receipt().outstanding == 0
-            && self.ask(Instant::now(), "Recovery only; missions remain stopped", ConfirmationText {
-                header: vec![("Stop number", r.stop_number.to_string()), ("Runs cancelled", r.runs_cancelled_by_the_stop.to_string())],
-                details: vec!["Only lift the core halt for Owner undo. Missions remain stopped for this process.".into()],
-            }, 120, true)
+        self.confirmed(r.title(), r.text(), 120)
     }
 }
+
 impl ControlConfirmer for TerminalConfirmer {
     fn confirm_action(&self, request: &ActionConfirmation) -> bool {
         self.action(request)
@@ -456,8 +643,8 @@ impl ControlConfirmer for TerminalConfirmer {
     fn confirm_grant(&self, request: &GrantConfirmation) -> bool {
         self.grant(request)
     }
-    fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
-        self.resume(request)
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
     }
     fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
         false
@@ -465,11 +652,11 @@ impl ControlConfirmer for TerminalConfirmer {
     fn confirm_mission(&self, request: &MissionConfirmation) -> bool {
         self.mission(request)
     }
-    fn confirm_agent_door(&self, request: &AgentDoorConfirmation) -> bool {
+    fn confirm_agent_door(&self, request: &DoorPrompt) -> bool {
         self.door(request)
     }
-    fn confirm_held_mission(&self, request: &MissionResumeConfirmation) -> bool {
-        self.held(request)
+    fn confirm_held_mission(&self, _: &MissionResumeConfirmation) -> bool {
+        false
     }
     fn confirm_undo(&self, request: &UndoConfirmation) -> bool {
         self.undo(request)
@@ -487,9 +674,13 @@ pub struct Terminal {
     reporter_end: Arc<AtomicBool>,
     modes: Option<(Termios, Termios)>,
     finish_deadline: Option<Instant>,
+    render_crlf: Arc<AtomicBool>,
+    finalization_ok: bool,
+    reader_debt: Option<Producer>,
+    reporter_debt: Option<Producer>,
 }
 impl Terminal {
-    pub fn open() -> Result<Self, Failure> {
+    pub fn open(ingress: SessionIngress) -> Result<Self, Failure> {
         let stdin = std::io::stdin();
         let stdout = std::io::stdout();
         if !stdin.is_terminal() || !stdout.is_terminal() {
@@ -522,12 +713,21 @@ impl Terminal {
             let _restored = termios::tcsetattr(stdin.as_fd(), SetArg::TCSANOW, &before_in);
             return Err(Failure::TerminalControl);
         }
-        let gate = Arc::new(Gate::default());
-        let stop = StopRoute::new(gate);
+        let reader_debt = ingress
+            .producer(ProducerKind::Input)
+            .map_err(|_| Failure::Thread)?;
+        let reporter_debt = ingress
+            .producer(ProducerKind::Reporter)
+            .map_err(|_| Failure::Thread)?;
+        let stop = StopRoute::new(ingress);
         let (tx, rx) = mpsc::sync_channel::<Frame>(QUEUE);
         let shared = Arc::new(Shared {
             stop,
             input: Mutex::default(),
+            sequence: AtomicU64::new(0),
+            queued_output: AtomicU64::new(0),
+            delivered_output: AtomicU64::new(0),
+            output_failed: AtomicBool::new(false),
             changed: Condvar::new(),
             output: tx,
             end: AtomicBool::new(false),
@@ -535,9 +735,7 @@ impl Terminal {
             dialogue: Mutex::new(()),
         });
         let mut terminal = Self {
-            confirmer: Arc::new(TerminalConfirmer {
-                shared: shared.clone(),
-            }),
+            confirmer: Arc::new(TerminalConfirmer::new(shared.clone())),
             shared,
             reader: None,
             writer: None,
@@ -545,8 +743,13 @@ impl Terminal {
             reporter_end: Arc::new(AtomicBool::new(false)),
             modes: Some((before_in, before_out)),
             finish_deadline: None,
+            render_crlf: Arc::new(AtomicBool::new(true)),
+            finalization_ok: true,
+            reader_debt: Some(reader_debt),
+            reporter_debt: Some(reporter_debt),
         };
         let s = terminal.shared.clone();
+        let render_crlf = terminal.render_crlf.clone();
         terminal.writer = Some(
             std::thread::Builder::new()
                 .name("hands-screen".into())
@@ -557,7 +760,17 @@ impl Terminal {
                             Ok(frame) => {
                                 // Release stdout before waiting for another frame;
                                 // the walk also writes ordinary progress lines.
-                                let result = write_frame(&mut stdout.lock(), &frame.text);
+                                let result = if render_crlf.load(Ordering::SeqCst) {
+                                    write_frame(&mut stdout.lock(), &frame.text)
+                                } else {
+                                    let mut out = stdout.lock();
+                                    out.write_all(frame.text.as_bytes())
+                                        .and_then(|()| out.flush())
+                                        .map_err(|_| Failure::Output)
+                                };
+                                if result.is_ok() {
+                                    s.delivered_output.fetch_add(1, Ordering::SeqCst);
+                                }
                                 let _ack = frame.ack.send(result);
                                 if let Err(e) = result {
                                     s.fail(e);
@@ -589,8 +802,25 @@ impl Terminal {
         );
         Ok(terminal)
     }
-    pub fn bind_stop(&self, owner: Arc<nexus_governed_control::governed::GovernedControl>) -> bool {
-        self.shared.stop.bind(owner)
+    pub(crate) fn quiesce(&mut self, deadline: Instant) -> bool {
+        let mut ok = self.stop_reader(deadline);
+        self.reporter_end.store(true, Ordering::SeqCst);
+        self.shared.changed.notify_all();
+        while self.reporter.as_ref().is_some_and(|h| !h.is_finished()) && Instant::now() < deadline
+        {
+            self.shared.wait();
+        }
+        if self.reporter.as_ref().is_some_and(|h| h.is_finished()) {
+            ok &= self.reporter.take().is_some_and(|h| h.join().is_ok());
+            if let Some(debt) = self.reporter_debt.take() {
+                debt.joined();
+            }
+        } else if self.reporter.is_some() {
+            ok = false;
+        }
+        ok && self.shared.delivered("", deadline)
+            && self.shared.queued_output.load(Ordering::SeqCst)
+                == self.shared.delivered_output.load(Ordering::SeqCst)
     }
     pub fn finish(&mut self, deadline: Instant) -> bool {
         let deadline = *self.finish_deadline.get_or_insert(deadline);
@@ -623,11 +853,34 @@ impl Terminal {
                 ok = false;
             }
         }
-        if let Some((input, output)) = self.modes.take() {
-            ok &= termios::tcsetattr(std::io::stdin().as_fd(), SetArg::TCSANOW, &input).is_ok();
-            ok &= termios::tcsetattr(std::io::stdout().as_fd(), SetArg::TCSANOW, &output).is_ok();
+        if self.reporter.is_none() {
+            if let Some(debt) = self.reporter_debt.take() {
+                debt.joined();
+            }
         }
-        ok
+        let modes_ok = self.restore_modes(deadline);
+        ok && modes_ok
+            && !self.shared.output_failed.load(Ordering::SeqCst)
+            && Instant::now() < deadline
+    }
+    /// Input and ordinary output have quiesced. Restore modes before any
+    /// successful close receipt; the reserved renderer remains for delivery.
+    pub(crate) fn restore_modes(&mut self, deadline: Instant) -> bool {
+        if let Some((input, output)) = self.modes.take() {
+            self.finalization_ok &= Instant::now() < deadline;
+            self.finalization_ok &=
+                termios::tcsetattr(std::io::stdin().as_fd(), SetArg::TCSANOW, &input).is_ok();
+            let restored =
+                termios::tcsetattr(std::io::stdout().as_fd(), SetArg::TCSANOW, &output).is_ok();
+            self.finalization_ok &= restored;
+            if restored {
+                let translated = output
+                    .output_flags
+                    .contains(OutputFlags::OPOST | OutputFlags::ONLCR);
+                self.render_crlf.store(!translated, Ordering::SeqCst);
+            }
+        }
+        self.finalization_ok && Instant::now() < deadline
     }
     pub(crate) fn stop_reader(&mut self, deadline: Instant) -> bool {
         self.shared.input_end.store(true, Ordering::SeqCst);
@@ -635,7 +888,11 @@ impl Terminal {
             self.shared.wait();
         }
         if self.reader.as_ref().is_some_and(|h| h.is_finished()) {
-            self.reader.take().is_some_and(|h| h.join().is_ok())
+            let ok = self.reader.take().is_some_and(|h| h.join().is_ok());
+            if let Some(debt) = self.reader_debt.take() {
+                debt.joined();
+            }
+            ok
         } else {
             self.reader.is_none()
         }
@@ -643,7 +900,12 @@ impl Terminal {
 }
 impl Drop for Terminal {
     fn drop(&mut self) {
-        let _joined = self.finish(Instant::now() + Duration::from_millis(100));
+        if self.modes.is_some() {
+            self.shared.stop.ingress.fail();
+            if let Some(deadline) = self.shared.stop.ingress.close_deadline() {
+                let _joined = self.finish(deadline);
+            }
+        }
     }
 }
 

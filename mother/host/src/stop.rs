@@ -1,144 +1,29 @@
-//! Memory-only host admission and separately owned synchronous Stop workers.
-use nexus_governed_control::authority::file_session::HaltCell;
-use nexus_governed_control::governed::{GovernedControl, StopSnapshot};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+//! The reader only engages the original ingress. The reporter owns dispatch,
+//! bounded native workers, exact event receipts, and acknowledged delivery.
+use nexus_governed_control::host_session::{
+    close::{Producer, ProducerKind},
+    stop::StopPhase,
+    HostSession, SessionIngress,
+};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
-pub(crate) enum Route {
-    Mission,
-    Door,
-    Run,
-    Files,
-    Lane,
-    Inference,
-    Model,
-}
-impl Route {
-    #[cfg(test)]
-    pub(crate) const ALL: [Self; 7] = [
-        Self::Mission,
-        Self::Door,
-        Self::Run,
-        Self::Files,
-        Self::Lane,
-        Self::Inference,
-        Self::Model,
-    ];
-}
-
-#[derive(Default)]
-pub(crate) struct Gate {
-    pub(crate) port: Arc<nexus_mother::adapter::AdmissionGate>,
-    backend: OnceLock<HaltCell>,
-    recovery: AtomicBool,
-    closing: AtomicBool,
-    failed: AtomicBool,
-    epoch: AtomicU64,
-    admitted: [AtomicU64; 7],
-}
-impl Gate {
-    pub(crate) fn admit(&self, route: Route) -> bool {
-        if self.backend_halted()
-            || self.port.is_closed()
-            || self.recovery()
-            || self.closing()
-            || self.failed()
-        {
-            return false;
-        }
-        // Counts successful host admission boundaries, not backend success.
-        // A dispatch admitted before emergency may finish after it; the
-        // backend's native final checks still govern publication.
-        if self.admitted[route as usize]
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
-            .is_err()
-        {
-            self.fail();
-            return false;
-        }
-        true
-    }
-    pub(crate) fn backend_halted(&self) -> bool {
-        self.backend.get().is_some_and(HaltCell::is_engaged)
-    }
-    fn engage_backend(&self) {
-        if let Some(cell) = self.backend.get() {
-            cell.engage_emergency();
-        }
-    }
-    fn bind_backend(&self, cell: HaltCell) -> bool {
-        if self.backend.set(cell).is_err() {
-            self.fail();
-            return false;
-        }
-        // No admission is offered before bind returns. Together with the
-        // second read in emergency(), this covers ingress during startup bind.
-        if self.recovery() {
-            self.engage_backend();
-        }
-        true
-    }
-    pub(crate) fn admitted(&self) -> [u64; 7] {
-        std::array::from_fn(|i| self.admitted[i].load(Ordering::SeqCst))
-    }
-    pub(crate) fn recovery(&self) -> bool {
-        self.recovery.load(Ordering::SeqCst)
-    }
-    pub(crate) fn closing(&self) -> bool {
-        self.closing.load(Ordering::SeqCst)
-    }
-    pub(crate) fn failed(&self) -> bool {
-        self.failed.load(Ordering::SeqCst)
-    }
-    pub(crate) fn epoch(&self) -> u64 {
-        self.epoch.load(Ordering::SeqCst)
-    }
-    pub(crate) fn close(&self) {
-        self.port.close();
-        self.closing.store(true, Ordering::SeqCst);
-    }
-    pub(crate) fn fail(&self) {
-        self.failed.store(true, Ordering::SeqCst);
-        self.close();
-    }
-    pub(crate) fn emergency(&self) {
-        // The backend is the authority; the host flags only mirror it.
-        // This atomic ingress precedes every lock and worker reservation.
-        self.engage_backend();
-        self.port.close();
-        self.recovery.store(true, Ordering::SeqCst);
-        // An ingress before/during bind must reach the newly installed cell.
-        self.engage_backend();
-        if self
-            .epoch
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
-            .is_err()
-        {
-            self.fail();
-        }
-    }
-}
-
 struct Worker {
-    id: u64,
-    spawning: bool,
-    handle: Option<JoinHandle<bool>>,
+    generation: u64,
+    handle: JoinHandle<bool>,
+    producer: Producer,
 }
 #[derive(Default)]
 struct State {
-    next: u64,
     workers: Vec<Worker>,
-    coalesced: u64,
+    deferred: Vec<u64>,
     finished: u64,
     failed_workers: u64,
     failed: bool,
-    snapshot: Option<StopSnapshot>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Receipt {
     pub epoch: u64,
     pub outstanding: usize,
@@ -146,270 +31,195 @@ pub(crate) struct Receipt {
     pub finished: u64,
     pub failed_workers: u64,
     pub failed: bool,
-    pub snapshot: Option<StopSnapshot>,
 }
-type Body = Arc<dyn Fn() + Send + Sync>;
-
 pub(crate) struct StopRoute {
-    pub(crate) gate: Arc<Gate>,
-    body: Mutex<Option<Body>>,
-    bound: AtomicBool,
+    pub(crate) ingress: SessionIngress,
+    session: OnceLock<Arc<HostSession>>,
     state: Mutex<State>,
-    changed: Condvar,
     #[cfg(test)]
     pub(crate) hold_dispatch: AtomicBool,
 }
 impl StopRoute {
-    pub(crate) fn new(gate: Arc<Gate>) -> Arc<Self> {
+    pub(crate) fn new(ingress: SessionIngress) -> Arc<Self> {
         Arc::new(Self {
-            gate,
-            body: Mutex::new(None),
-            bound: AtomicBool::new(false),
+            ingress,
+            session: OnceLock::new(),
             state: Mutex::default(),
-            changed: Condvar::new(),
             #[cfg(test)]
             hold_dispatch: AtomicBool::new(false),
         })
     }
-    #[cfg(test)]
-    pub(crate) fn with_body(gate: Arc<Gate>, body: Body) -> Arc<Self> {
-        let route = Self::new(gate);
-        *route.body.lock().unwrap() = Some(body);
-        route.bound.store(true, Ordering::SeqCst);
-        route
-    }
-    fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|p| {
-            self.gate.fail();
-            let mut state = p.into_inner();
-            state.failed = true;
-            state
-        })
-    }
-    pub(crate) fn bind(self: &Arc<Self>, owner: Arc<GovernedControl>) -> bool {
-        if self.bound.swap(true, Ordering::SeqCst) {
-            self.gate.fail();
+    pub(crate) fn bind(&self, session: Arc<HostSession>) -> bool {
+        if self.session.set(session).is_err() {
+            self.ingress.fail();
             return false;
         }
-        if !self.gate.bind_backend(owner.file_session_halt()) {
-            return false;
-        }
-        let Ok(mut body) = self.body.lock() else {
-            self.gate.fail();
-            return false;
-        };
-        let route = Arc::downgrade(self);
-        *body = Some(Arc::new(move || {
-            owner.emergency_stop();
-            let snapshot = owner.stop_snapshot();
-            if let Some(route) = route.upgrade() {
-                route.lock().snapshot = Some(snapshot);
-            }
-        }));
-        drop(body);
-        self.dispatch_pending();
         true
     }
-    pub(crate) fn press(self: &Arc<Self>) {
-        self.gate.emergency();
-        {
-            let mut state = self.lock();
-            if state.workers.len() >= 4 {
-                match state.coalesced.checked_add(1) {
-                    Some(n) => state.coalesced = n,
-                    None => {
-                        state.failed = true;
-                        self.gate.fail();
-                    }
-                }
-                self.changed.notify_all();
-                return;
-            }
-            let Some(id) = state.next.checked_add(1) else {
-                state.failed = true;
-                self.gate.fail();
-                return;
-            };
-            state.next = id;
-            state.workers.push(Worker {
-                id,
-                spawning: false,
-                handle: None,
-            });
-        }
-        self.dispatch_pending();
+    pub(crate) fn press(&self) {
+        // No broker, metadata hold, spawn, rendering, or I/O on the reader.
+        let _event = self.ingress.emergency();
     }
-    pub(crate) fn dispatch_pending(self: &Arc<Self>) {
+    pub(crate) fn dispatch_pending(&self) {
         #[cfg(test)]
         if self.hold_dispatch.load(Ordering::SeqCst) {
             return;
         }
-        let body = match self.body.lock() {
-            Ok(body) => body.clone(),
-            Err(_) => {
-                self.gate.fail();
-                self.lock().failed = true;
-                return;
-            }
-        };
-        let Some(body) = body else {
+        let Some(session) = self.session.get() else {
             return;
         };
-        loop {
-            let id = {
-                let mut state = self.lock();
-                let Some(worker) = state.workers.iter_mut().find(|w| !w.spawning) else {
+        let Ok(events) = session.stop_events() else {
+            self.ingress.fail();
+            return;
+        };
+        let Ok(mut state) = self.state.lock() else {
+            self.ingress.fail();
+            return;
+        };
+        for observed in events {
+            if observed.phase != StopPhase::Pending
+                || state
+                    .workers
+                    .iter()
+                    .any(|w| w.generation == observed.event.generation())
+            {
+                continue;
+            }
+            if state.workers.len() == 4 {
+                if !state.deferred.contains(&observed.event.generation()) {
+                    state.deferred.push(observed.event.generation());
+                }
+                continue;
+            }
+            let producer = match self.ingress.producer(ProducerKind::StopWorker) {
+                Ok(p) => p,
+                Err(_) => {
+                    self.ingress.fail();
+                    state.failed = true;
                     return;
-                };
-                worker.spawning = true;
-                worker.id
+                }
             };
-            let route = self.clone();
-            let body = body.clone();
-            let handle = std::thread::Builder::new()
+            let owner = session.clone();
+            let event = observed.event;
+            match std::thread::Builder::new()
                 .name("hands-stop".into())
                 .spawn(move || {
-                    let ok =
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body())).is_ok();
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        owner.record_stop(&event)
+                    }));
+                    let ok = matches!(result, Ok(Ok(_)));
                     if !ok {
-                        route.gate.fail();
-                        route.lock().failed = true;
+                        owner.ingress().fail();
                     }
-                    route.changed.notify_all();
                     ok
-                });
-            let mut state = self.lock();
-            match handle {
-                Ok(handle) => {
-                    // The reserved entry cannot be reaped until this owned
-                    // handle is registered AND reports completion.
-                    if let Some(worker) = state.workers.iter_mut().find(|w| w.id == id) {
-                        worker.handle = Some(handle);
-                    } else {
-                        state.failed = true;
-                        self.gate.fail();
-                    }
-                }
+                }) {
+                Ok(handle) => state.workers.push(Worker {
+                    generation: event.generation(),
+                    handle,
+                    producer,
+                }),
                 Err(_) => {
-                    state.workers.retain(|w| w.id != id);
-                    state.failed_workers = state.failed_workers.saturating_add(1);
+                    let _failed = session.stop_spawn_failed(&event);
                     state.failed = true;
-                    self.gate.fail();
+                    state.failed_workers += 1;
+                    drop(producer);
                 }
-            }
-            self.changed.notify_all();
-        }
-    }
-    /// Only after stdin and every Stop worker have joined. Transfer the
-    /// backend reference into the owned cleanup worker before process exit.
-    pub(crate) fn take_body(&self) -> Option<Body> {
-        match self.body.lock() {
-            Ok(mut body) => body.take(),
-            Err(p) => {
-                self.gate.fail();
-                p.into_inner().take()
             }
         }
     }
     pub(crate) fn reap(&self) {
-        // Finished handles join without waiting for work. Retain the small
-        // memory hold through accounting so no observer sees an empty worker
-        // table before its last failure/completion is accounted for.
-        let mut state = self.lock();
+        let Ok(mut state) = self.state.lock() else {
+            self.ingress.fail();
+            return;
+        };
         let mut at = 0;
         while at < state.workers.len() {
-            if !state.workers[at]
-                .handle
-                .as_ref()
-                .is_some_and(|h| h.is_finished())
-            {
+            if !state.workers[at].handle.is_finished() {
                 at += 1;
                 continue;
             }
             let worker = state.workers.remove(at);
-            let ok = worker.handle.is_some_and(|h| matches!(h.join(), Ok(true)));
-            if !ok {
-                state.failed = true;
-                self.gate.fail();
-            }
-            let count = if ok {
-                &mut state.finished
+            let ok = matches!(worker.handle.join(), Ok(true));
+            worker.producer.joined();
+            if ok {
+                state.finished += 1;
             } else {
-                &mut state.failed_workers
-            };
-            match count.checked_add(1) {
-                Some(n) => *count = n,
-                None => {
-                    state.failed = true;
-                    self.gate.fail();
-                }
+                state.failed_workers += 1;
+                state.failed = true;
+                self.ingress.fail();
             }
         }
     }
     pub(crate) fn receipt(&self) -> Receipt {
-        let state = self.lock();
-        Receipt {
-            epoch: self.gate.epoch(),
-            outstanding: state.workers.len(),
-            coalesced: state.coalesced,
-            finished: state.finished,
-            failed_workers: state.failed_workers,
-            failed: state.failed,
-            snapshot: state.snapshot,
+        let epoch = self.ingress.generation();
+        match self.state.lock() {
+            Ok(state) => Receipt {
+                epoch,
+                outstanding: epoch.saturating_sub(state.finished + state.failed_workers) as usize,
+                coalesced: state.deferred.len() as u64,
+                finished: state.finished,
+                failed_workers: state.failed_workers,
+                failed: state.failed,
+            },
+            Err(_) => {
+                self.ingress.fail();
+                Receipt {
+                    epoch,
+                    failed: true,
+                    outstanding: epoch as usize,
+                    ..Receipt::default()
+                }
+            }
         }
     }
     pub(crate) fn join_until(&self, deadline: Instant) -> bool {
         loop {
             self.reap();
-            let state = self.lock();
-            if state.workers.is_empty() {
-                return !state.failed;
+            self.dispatch_pending();
+            let receipt = self.receipt();
+            if receipt.outstanding == 0 {
+                return !receipt.failed;
             }
             if Instant::now() >= deadline {
                 return false;
             }
-            let wait = deadline
-                .saturating_duration_since(Instant::now())
-                .min(Duration::from_millis(10));
-            let _wait = self.changed.wait_timeout(state, wait);
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
     #[cfg(test)]
     pub(crate) fn retained_handles(&self) -> usize {
-        self.lock().workers.len()
+        self.state.lock().unwrap().workers.len()
     }
 }
 
-/// Owns the receipt cursor from process start. Cumulative counters are replayed
-/// individually, never sampled away when startup completes or events coalesce.
 pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<AtomicBool>) {
-    let mut last = Receipt {
-        epoch: 0,
-        outstanding: 0,
-        coalesced: 0,
-        finished: 0,
-        failed_workers: 0,
-        failed: false,
-        snapshot: None,
-    };
+    use crate::terminal::Failure;
+    use std::sync::mpsc;
+    let mut received = 0;
+    let mut snapshot = None;
+    let mut coalesced = 0;
+    let mut outcomes = [false; 256];
+    let mut deliveries = Vec::<mpsc::Receiver<Result<(), Failure>>>::new();
     loop {
         screen.stop.reap();
+        screen.stop.dispatch_pending();
         let receipt = screen.stop.receipt();
-        for previous in last.epoch..receipt.epoch {
-            let epoch = previous + 1;
-            screen.emit(&format!(
-                "STOP REQUEST RECEIVED epoch={epoch}\nRECOVERY ONLY\n"
+        let mut frames = Vec::new();
+        while received < receipt.epoch {
+            received += 1;
+            frames.push(format!(
+                "STOP REQUEST RECEIVED epoch={received}\n{}\nRECOVERY ONLY\n",
+                crate::terminal::EMERGENCY_NOTICE
             ));
         }
-        for _ in last.coalesced..receipt.coalesced {
-            screen.emit("STOP COALESCED\n");
+        while coalesced < receipt.coalesced {
+            coalesced += 1;
+            frames.push("STOP COALESCED; recording remains pending\n".into());
         }
-        // A completed worker captured this memory-only backend observation.
-        // Emit it before its completion receipt; no backend handle is held by
-        // the reporter and no evidence/cleanup can delay ingress reporting.
-        if receipt.finished != last.finished {
-            if let Some(current) = receipt.snapshot {
-                screen.emit(&format!(
+        if let Some(session) = screen.stop.session.get() {
+            let current = session.stop_snapshot();
+            if snapshot != Some(current) && (current.kernel_stopped || current.broker_stopped) {
+                frames.push(format!(
                     "kernel_stopped={} broker_stopped={} stop_number={} generation={}\n",
                     current.kernel_stopped,
                     current.broker_stopped,
@@ -417,23 +227,65 @@ pub(crate) fn report_receipts(screen: Arc<crate::terminal::Shared>, end: Arc<Ato
                     current.policy_generation
                 ));
             }
+            snapshot = Some(current);
+            match session.stop_events() {
+                Ok(events) => {
+                    for observed in events {
+                        let at = observed.event.generation().saturating_sub(1) as usize;
+                        if at >= outcomes.len() {
+                            screen.fail(Failure::Capacity);
+                            break;
+                        }
+                        if outcomes[at] {
+                            continue;
+                        }
+                        let text = match observed.phase {
+                        StopPhase::Finished(result) => format!("kernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP RECORDING COMPLETED count={} (synchronous phase returned)\nSTOP RECORD durability={:?} owed={} uncertain={}\nSTOP WORKERS outstanding={}\n", result.snapshot.kernel_stopped, result.snapshot.broker_stopped, result.native_stop_number, result.snapshot.policy_generation, observed.event.generation(), result.record, result.consequences.owed, result.consequences.uncertain, receipt.outstanding),
+                        StopPhase::Failed | StopPhase::Uncertain => format!("STOP RECORDING FAILED event={} outstanding={}\n", observed.event.generation(), receipt.outstanding),
+                        _ => continue,
+                    };
+                        outcomes[at] = true;
+                        frames.push(text);
+                    }
+                }
+                Err(_) => screen.fail(Failure::Input),
+            }
         }
-        for previous in last.finished..receipt.finished {
-            let count = previous + 1;
-            screen.emit(&format!("STOP RECORDING COMPLETED count={count} (durability requires evidence health)\nSTOP WORKERS outstanding={}\n", receipt.outstanding));
+        for text in frames {
+            match screen.send(text) {
+                Ok(ack) => deliveries.push(ack),
+                Err(_) => return, // fatal delivery debt remains in Shared
+            }
         }
-        for previous in last.failed_workers..receipt.failed_workers {
-            let count = previous + 1;
-            screen.emit(&format!(
-                "STOP RECORDING FAILED failed_workers={count} outstanding={}\n",
-                receipt.outstanding
-            ));
+        let mut at = 0;
+        while at < deliveries.len() {
+            match deliveries[at].try_recv() {
+                Ok(Ok(())) => {
+                    deliveries.swap_remove(at);
+                }
+                Err(mpsc::TryRecvError::Empty) => at += 1,
+                _ => {
+                    screen.fail(Failure::Output);
+                    return;
+                }
+            }
         }
-        if receipt.failed && !last.failed && receipt.failed_workers == 0 {
-            screen.emit("STOP ROUTE FAILED\n");
+        if deliveries.len() > 64 {
+            screen.fail(Failure::Capacity);
+            return;
         }
-        last = receipt;
-        if end.load(Ordering::SeqCst) {
+        if end.load(Ordering::SeqCst) && deliveries.is_empty() {
+            break;
+        }
+        if screen
+            .stop
+            .ingress
+            .close_deadline()
+            .is_some_and(|d| Instant::now() >= d)
+        {
+            if !deliveries.is_empty() {
+                screen.fail(Failure::Output);
+            }
             break;
         }
         screen.wait();

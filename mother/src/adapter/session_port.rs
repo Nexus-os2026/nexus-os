@@ -206,6 +206,12 @@ impl SessionPort {
         }
         Ok((Self { inner }, cell))
     }
+    pub fn performed(&self) -> usize {
+        self.inner.performed()
+    }
+    pub fn file_binding_count(&self) -> usize {
+        self.inner.file_binding_count()
+    }
     pub fn context(&self) -> SessionContext {
         match &self.inner.door {
             PortDoor::Session(door) => door.context(),

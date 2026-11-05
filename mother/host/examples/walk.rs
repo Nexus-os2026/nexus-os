@@ -50,7 +50,7 @@ mod walk {
     /// A stand-in for the broker's native dialogs, at this terminal (the walk
     /// only): it asks the Owner about a door, a mission and a held mission, and
     /// declines everything else.
-    struct OwnerAtTheTerminal(Arc<nexus_mother_host::terminal::TerminalConfirmer>);
+    struct OwnerAtTheTerminal(Arc<nexus_mother_host::legacy_terminal::WalkConfirmer>);
 
     impl ControlConfirmer for OwnerAtTheTerminal {
         fn confirm_action(&self, _: &ActionConfirmation) -> bool {
@@ -251,7 +251,7 @@ mod walk {
     }
 
     pub fn run() {
-        let terminal = match nexus_mother_host::terminal::Terminal::open() {
+        let terminal = match nexus_mother_host::legacy_terminal::Terminal::open() {
             Ok(terminal) => terminal,
             Err(error) => {
                 eprintln!("{}", error.code());
