@@ -301,14 +301,17 @@ fn death_in_cleanup(point: &'static str) {
         .filter(|path| path.is_dir())
         .collect();
     assert_eq!(dirs.len(), 1);
-    // Both the legacy baseline's implicit cleanup and the required explicit
-    // cleanup see the same retained native object. The temporary refusal is
-    // undone before the target cleanup is handed off.
+    // The old baseline attempted cleanup during denial. The session route
+    // never does so: explicitly establish that same failed-cleanup prefix
+    // before the independently armed target handoff.
     std::fs::set_permissions(&dirs[0], std::fs::Permissions::from_mode(0o500)).unwrap();
     p.line("approve");
     p.code();
     p.line("no");
     p.expect("ACTION DENIED");
+    p.line("cleanup");
+    p.expect("still_owed=1");
+    assert!(dirs[0].is_dir(), "failed explicit cleanup retains the exact directory");
     std::fs::set_permissions(&dirs[0], std::fs::Permissions::from_mode(0o700)).unwrap();
     fault.arm();
     p.line("cleanup");
