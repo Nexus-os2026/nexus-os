@@ -1,0 +1,12 @@
+{
+  "Cargo.toml": "3c9ebf7cdf06e58f1c6ae099e1e4dcbf1c2e0fe54647da5d261d93741eefef77",
+  "kernel/Cargo.toml": "88ad98de8b1b269f89306a93f811f7784ddfc99bc21352146cc2a91922fe2593",
+  "persistence/Cargo.toml": "85adbceac908a6cdfdd20cf2ed38fdb1beca5f362ca20a135e53db08c8b507e1",
+  "mother/Cargo.toml": "83a3425ad36d6c7b7a78e50e639eaa649449354684a61785190672f5eb33662f",
+  "mother/host/Cargo.toml": "99da651c00e2e8cf04cee70a5eee3cac3e904b64a5ff24d284f07273bfacd35f",
+  "mother/desktop/Cargo.toml": "2f1d092c061a6d3068136f26bb83bab75425aa00d0e9b81a263308e60ccfdf21",
+  "crates/nexus-governed-control/Cargo.toml": "f6f0f4c2c89f7a1bf279dacd65bc170581a35703e5aa94a073ebae54c5f22e54",
+  "crates/nexus-crypto/Cargo.toml": "8d015923f7832882cf508fe37a1a33c451ab4d49f19ca7f788ae77b895321a38",
+  "crates/nexus-verifier-sandbox/Cargo.toml": "cac54de3cd535db1bf7a062ac47af33f3ebeaf467765c6b5862b5f02978d33f1",
+  "crates/nexus-typed-decision/Cargo.toml": "f46cc8b21878d4b312a30f63b012e2ca7d20d3823ff71f17d1a3e34b71203f3d"
+}
