@@ -1207,6 +1207,33 @@ impl JournalStore for FileJournal {
     }
 }
 
+/// Observe whether an absolute home has no prior entries, before its caller
+/// initializes any stores. A missing directory or an observed empty directory
+/// proves this only along an existing, link-free directory ancestry. Any other
+/// state or observation failure is unproven. This is presentation provenance,
+/// never permission, readiness, or a substitute for backend recovery checks.
+pub fn home_has_no_prior_state(dir: &Path) -> bool {
+    use std::path::Component;
+    if !dir.is_absolute()
+        || dir
+            .components()
+            .any(|c| !matches!(c, Component::RootDir | Component::Normal(_)))
+    {
+        return false;
+    }
+    let mut current = PathBuf::new();
+    for component in dir.components() {
+        current.push(component);
+        match std::fs::symlink_metadata(&current) {
+            Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => {}
+            Ok(_) => return false,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+            Err(_) => return false,
+        }
+    }
+    std::fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_none())
+}
+
 /// Create `dir` and any missing directory above it private to this user
 /// (0700): the broker refuses a root below a directory others can change.
 /// (The host builds the broker's home with it, and so do Mother's tests.)

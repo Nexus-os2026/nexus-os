@@ -289,8 +289,12 @@ impl Runtime {
                         return;
                     }
                     if report.to.is_terminal() {
-                        self.screen
-                            .emit(&format!("MISSION {}\n", report.to.as_str()));
+                        // Done is emitted by observe, together with its notice.
+                        // Preserve every other existing technical line.
+                        if report.to != MissionState::Done {
+                            self.screen
+                                .emit(&format!("MISSION {}\n", report.to.as_str()));
+                        }
                         self.observe();
                         return;
                     }
@@ -531,6 +535,22 @@ impl Runtime {
     ) {
         let answer = confirmation.answer();
         let [grant, door, mission, action, undo] = confirmation.answers();
+        // One observation supplies both the Owner result and technical block.
+        let observation = self.home.session.operation_observation(request);
+        let terminal = self
+            .mission
+            .as_ref()
+            .and_then(|m| m.id.map(|id| m.session.terminal_facts(id)));
+        self.screen.emit(&format!(
+            "RESULT: {}\n",
+            owner_result(
+                request.kind(),
+                answer,
+                observation.as_ref().ok(),
+                terminal.as_ref().and_then(|t| t.as_ref().ok()),
+                &self.config.name,
+            )
+        ));
         self.screen.emit(&format!(
             "OPERATION {:?} request={} target={:?} answer={answer:?}\n",
             request.kind(),
@@ -538,7 +558,7 @@ impl Runtime {
             request.context()
         ));
         self.screen.emit(&format!("ANSWERS grant={grant:?} door={door:?} mission={mission:?} action={action:?} undo={undo:?}\n"));
-        match self.home.session.operation_observation(request) {
+        match observation {
             Ok(facts) => {
                 self.screen.emit(&format!("ADMISSION steps={} apply_handoff={} restore_handoff={} generation_changes={} first_restriction={:?}\n",
                     facts.admitted_steps, facts.apply_handed_off, facts.restore.handed_off, facts.ingresses, facts.first_restriction));
@@ -567,8 +587,8 @@ impl Runtime {
             }
             Err(_) => self.screen.emit("OPERATION FACTS unknown\n"),
         }
-        if let Some((mission, id)) = self.mission.as_ref().and_then(|m| m.id.map(|id| (m, id))) {
-            match mission.session.terminal_facts(id) {
+        if let Some(terminal) = terminal {
+            match terminal {
                 Ok(facts) => {
                     if facts.recording_unknown {
                         self.screen.stop.ingress.fail();
@@ -691,6 +711,114 @@ impl Runtime {
     }
 }
 
+/// Plain-language projection only; no authority, reconciliation or new reads.
+fn owner_result(
+    kind: CommandKind,
+    answer: crate::terminal::AnswerState,
+    facts: Option<&nexus_governed_control::host_session::outcome::OperationObservation>,
+    terminal: Option<&nexus_mother::coordinator::TerminalFacts>,
+    name: &str,
+) -> String {
+    use crate::terminal::AnswerState;
+    use nexus_governed_control::authority::commitment::PublicationClass;
+    use nexus_governed_control::host_session::outcome::{
+        Acknowledgement, GrantClosure, RecordingStatus, RestoreOutcome,
+    };
+    let Some(facts) = facts else {
+        return "the operation outcome is uncertain; facts are unavailable.".into();
+    };
+    let healthy = !facts.primary_health.latched
+        && facts.primary_health.owed == 0
+        && !facts.primary_health.recovery_required
+        && facts.primary_health.unsettled == 0
+        && facts.inventory.is_some()
+        && facts.resources.is_some();
+    let terminal_recorded =
+        terminal.is_some_and(|t| !t.recording_unknown && t.recorded_sequence.is_some());
+    match kind {
+        CommandKind::Run
+            if healthy
+                && terminal.is_some_and(|t| {
+                    t.state == Some(MissionState::AwaitingApproval) && !t.recording_unknown
+                }) =>
+        {
+            format!("waiting for your approval of {name} (type approve).")
+        }
+        CommandKind::Approve => {
+            if !facts.apply_handed_off
+                && facts.actions.iter().all(|a| {
+                    matches!(
+                        a.publication,
+                        PublicationClass::ConfirmedNotPublished | PublicationClass::Pending
+                    )
+                })
+            {
+                return "refused - nothing was created.".into();
+            }
+            let published = facts.actions.len() == 1
+                && matches!(facts.actions[0].publication, PublicationClass::Published { recovery_required: false, ref interrupted } if interrupted.is_empty());
+            let done = terminal.is_some_and(|t| t.state == Some(MissionState::Done));
+            if published {
+                let action = &facts.actions[0];
+                if done
+                    && healthy
+                    && facts.kernel == RecordingStatus::Recorded
+                    && answer == AnswerState::Affirmative
+                    && terminal_recorded
+                    && facts.primary == RecordingStatus::Recorded
+                    && action.mother == RecordingStatus::Recorded
+                    && action.acknowledgement == Acknowledgement::Verified
+                {
+                    return format!("{name} was created, recorded and verified.");
+                }
+                return "the file was created, but is not yet fully recorded and acknowledged; verification is uncertain."
+                    .into();
+            }
+            if facts
+                .actions
+                .iter()
+                .all(|a| a.publication == PublicationClass::ConfirmedNotPublished)
+                && !facts.actions.is_empty()
+            {
+                return "refused - nothing was created.".into();
+            }
+            "the file outcome is uncertain; recovery or recording obligations remain.".into()
+        }
+        CommandKind::Undo => match facts.restore.outcome {
+            RestoreOutcome::Completed
+                if facts.restore.grant == GrantClosure::Closed
+                    && facts.kernel == RecordingStatus::Recorded
+                    && healthy =>
+            {
+                if facts.primary == RecordingStatus::Recorded {
+                    "the approved file was removed; restore completed and was recorded.".into()
+                } else {
+                    "the approved file was removed; restore completed, but other recording status is uncertain.".into()
+                }
+            }
+            RestoreOutcome::Completed => {
+                "the approved file was removed; grant closure or recording is uncertain.".into()
+            }
+            RestoreOutcome::NotEntered => "undo was refused; no restore was handed off.".into(),
+            RestoreOutcome::Refused => {
+                "the restore was refused; remaining obligations are reported below.".into()
+            }
+            RestoreOutcome::Pending | RestoreOutcome::Uncertain => {
+                "the restore outcome is uncertain; recovery is required.".into()
+            }
+        },
+        CommandKind::Cleanup => {
+            "cleanup was requested; resource and recording obligations are reported below.".into()
+        }
+        CommandKind::Run if !facts.apply_handed_off => "refused - nothing was created.".into(),
+        CommandKind::Evidence => {
+            "the available evidence and its recording health are shown above.".into()
+        }
+        CommandKind::Detail => "the available working detail is shown above.".into(),
+        _ => "the operation outcome is uncertain; see the facts below.".into(),
+    }
+}
+
 const CLOSE_UNKNOWN: &str =
     "CLOSE OBLIGATIONS resource_snapshot=unknown in_flight_or_unknown=true\n";
 
@@ -718,7 +846,19 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
         sources.primary.unsettled,
         sources.primary.unclean_sessions
     ));
-    screen.emit("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence.\n");
+    // Presentation only: never infer authority or readiness from this label.
+    // Pre-open provenance is required: healthy post-open sources can still
+    // contain primary-only history or a schema committed before session_opened.
+    // Unproven freshness always retains both recovery disclosures.
+    let fresh = home.initially_empty
+        && sources.ready()
+        && sources.mother.as_ref().is_ok_and(|m| m.records == 0)
+        && sources.resources.as_ref().is_ok_and(Vec::is_empty);
+    if fresh {
+        screen.emit("Fresh start: no earlier session in this home; nothing to recover.\n");
+    } else {
+        screen.emit("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence.\n");
+    }
     if sources.mother.is_err() {
         screen.emit("RECOVERY FAILED mother_history\n");
     }
@@ -761,7 +901,9 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
         screen.emit("RECOVERY FAILED kernel_ledger\n");
         "recovery_report_unavailable"
     })?;
-    screen.emit("RECOVERY REPORT only; no sweep or workspace restoration\n");
+    if !fresh {
+        screen.emit("RECOVERY REPORT only; no sweep or workspace restoration\n");
+    }
     for entry in report {
         screen.emit(&format!("run={}\n", entry.run));
         for finding in entry.findings {
@@ -987,7 +1129,16 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         if let Some(command) = command {
             if let Some(reason) = command.refusal {
                 let subject = if command.name == "undo" { "UNDO " } else { "" };
+                if matches!(
+                    command.name.as_str(),
+                    "run" | "approve" | "undo" | "cleanup"
+                ) {
+                    screen.emit("RESULT: request refused; no new operation was admitted.\n");
+                }
                 screen.emit(&format!("{subject}REFUSED {reason}\n"));
+                if reason == "unknown_command" {
+                    screen.emit("Valid commands: run, approve, status, evidence, detail, stop, undo, cleanup, quit\n");
+                }
             } else if command.name == "status" {
                 let current = session.stop_snapshot();
                 let receipt = screen.stop.receipt();
@@ -1079,7 +1230,12 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let modes_ok = terminal.restore_modes(deadline);
     if let Some(seal) = seal {
         if modes_ok {
-            let delivered = screen.delivered("SESSION CLOSED recorded\n", deadline);
+            // Both end records are durable. Delivery, renderer finalization
+            // and the seal's final deadline check still have to succeed.
+            let delivered = screen.delivered(
+                "RESULT: closing; the final close status follows.\nSESSION CLOSED recorded\n",
+                deadline,
+            );
             let finished = terminal.finish(deadline);
             if delivered && finished {
                 return seal.finish_delivery();
@@ -1098,7 +1254,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     };
     let _delivered = screen.delivered(
         &format!(
-            "{}\nMOTHER END {}\nPRIMARY END {}\nFINAL DELIVERY {}\n{}PRODUCERS outstanding={}\n",
+            "RESULT: close is uncertain; the full clean-close protocol did not complete.\n{}\nMOTHER END {}\nPRIMARY END {}\nFINAL DELIVERY {}\n{}PRODUCERS outstanding={}\n",
             crate::terminal::UNCLEAN_NOTICE,
             status(records.mother),
             status(records.primary),
@@ -1132,7 +1288,13 @@ fn failed_startup(
     let _input = terminal.stop_reader(producers_until);
     let _stops = screen.stop.join_until(producers_until);
     let _modes = terminal.restore_modes(deadline);
-    let _delivered = screen.delivered(&format!("{}\n", crate::terminal::UNCLEAN_NOTICE), deadline);
+    let _delivered = screen.delivered(
+        &format!(
+            "RESULT: close is uncertain; the full clean-close protocol did not complete.\n{}\n",
+            crate::terminal::UNCLEAN_NOTICE
+        ),
+        deadline,
+    );
     let _terminal = terminal.finish(deadline);
     std::mem::forget(startup);
     std::mem::forget(screen);

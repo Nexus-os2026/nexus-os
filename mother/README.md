@@ -504,8 +504,10 @@ Type `run`, then answer each Files grant, Mother door and mission-consent
 dialogue with its own eight-character lowercase hexadecimal code. The grant
 lasts 300 seconds. When `FILE PENDING` appears, type `approve`; inspect all
 facts and the complete fenced content before typing the new code. Every answer
-is exact. `no` is an explicit decline; whitespace, an empty line, a wrong code
-or an overlong line fails the protocol and ends the host without approval.
+is exact. `no` is an explicit decline. An empty line (Enter alone) is ignored;
+Hands keeps waiting within the original deadline. Any other nonempty answer,
+including whitespace, a wrong code or an overlong line, fails the protocol
+and ends the host without approval.
 A code inside content is data. Codes are random, checked against the
 fixed display for collisions, and regenerated per dialogue.
 
@@ -518,9 +520,21 @@ dialogues allow 120 seconds; mission dialogues allow
 300. These limits start at the original command acceptance, including queue
 and display time. File approval also respects both original backend deadlines.
 A new display code never refreshes request authority. Input accumulation and
-queues are bounded. Terminal
-echo, canonical input and newline translation are disabled while Hands owns
-the terminal; orderly exit restores the prior modes. Ctrl-C is not intercepted.
+queues are bounded. Hands visibly echoes accepted printable ASCII while you
+type a command or, after `INPUT READY`, an answer. Both Backspace forms delete
+the last character; Ctrl-U clears the line. Erasure is drawn by Hands. Supplied
+control characters are never echoed, and echo goes only to the terminal, never
+to the journal, evidence or private store. Editing does not make stale input
+fresh or repair an overflowed line; finish that line with Enter. Stop, Quit
+and Ctrl-D remain active during typing even if output is blocked.
+
+Terminal ECHO, canonical input and newline translation remain disabled while
+Hands owns the terminal; orderly exit restores the prior modes. Ctrl-C is not
+intercepted. Unknown commands retain their refusal and list the valid commands.
+After an operation, one `RESULT:` line explains the observed outcome before
+the technical `OPERATION` block. Uncertainty and incomplete recording remain
+explicit; keep the technical facts when reviewing a result. A successful
+mission prints `MISSION done` once.
 
 | Command | Meaning |
 |---|---|
@@ -564,7 +578,16 @@ The exact uncertainty notice is:
 > A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.
 
 Startup verifies the kernel ledger, Mother history and primary evidence before
-workspace selection or work. It does not sweep staging, restore permission,
+workspace selection or work. “Fresh start: no earlier session in this home;
+nothing to recover.” appears only when the adapter observed the Home absent
+or completely empty, through link-free directory ancestors, before creating
+the Home or opening any session store, and all startup sources verify ready.
+Every session store is beneath that Home. Any prior entry or history retains
+both recovery-report disclosures, even after a clean exit, including primary-only
+sessions and a schema/identity committed before the first session record.
+Unproven freshness also retains both disclosures; post-open record counts
+alone never establish a fresh start.
+Startup does not sweep staging, restore permission,
 recreate acknowledgement capabilities or restore undo. Unresolved or invalid
 sources keep the Home report-only. A repeated start does not certify cleanup
 or permit retrying an uncertain write. Facts absent from durable evidence are
@@ -578,7 +601,9 @@ resource/recording/acknowledgement accounting, an atomic seal, durable Mother
 then primary end records, terminal restoration and acknowledged final delivery.
 After sealing, retained handles refuse and ingress returns `SessionEnded`.
 
-`SESSION CLOSED recorded` is the final receipt; zero exit additionally requires
+While finalization is pending, the result says “closing; the final close status
+follows.” It does not claim clean closure. `SESSION CLOSED recorded` is the
+durable-end receipt; zero exit additionally requires
 its successful delivery and renderer finalization before the same deadline.
 A blocked append remains Unknown. Failure can leave one or both end records
 durable while the full close fails; their statuses are reported separately.

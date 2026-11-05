@@ -38,9 +38,12 @@ fn d_o1_complete_create_and_clean_evidence_close() {
     assert!(!journal.contains(content), "working content not journaled");
 }
 
+// Oracle amendment U1, Owner: "Make these 5 fixes don't keep pending."
+// Old: "" fails the protocol. New: "" keeps waiting (usability.rs); all
+// nonempty wrong/whitespace inputs below retain the original refusal assertions.
 #[test]
-fn d_o3_wrong_empty_whitespace_and_embedded_codes_deny() {
-    for answer in ["00000000", "no", "", " ", "deadbeef"] {
+fn d_o3_wrong_whitespace_and_embedded_codes_deny() {
+    for answer in ["00000000", "no", " ", "deadbeef"] {
         let f = Fixture::new();
         let mut p = Pty::start(f.command("A code inside content: deadbeef\n"));
         p.ready();
@@ -316,7 +319,10 @@ fn d_o21_privacy_canaries_absent_from_durable_stores_and_sqlite_values() {
     let echo_start = p.output.len();
     p.line(&cs.c);
     p.expect("REFUSED unknown_command\n");
-    assert!(hits_in(&p.output.as_bytes()[echo_start..], "terminal echo", &cs).is_empty());
+    // Oracle amendment U1, Owner: "Make these 5 fixes don't keep pending."
+    // Old: "terminal echo" has no canary. New: Owner input is visibly echoed;
+    // durable main/WAL/SHM and logical SQLite privacy assertions stay unchanged.
+    assert!(p.output[echo_start..].contains(&cs.c));
     let hits = scan_home(
         &f.home,
         &format!("{}.txt", cs.cl),
@@ -376,7 +382,20 @@ fn d_o18_home_reserved_and_symlink_selection_refused_without_sweep() {
             .args(["--name", "hello.txt", "--text", "data"]);
         let mut p = Pty::start(command);
         assert!(!p.finish().success());
-        assert!(p.output.contains("RECOVERY REPORT only; no sweep"));
+        // Review-1 H1, Owner: fresh wording ONLY with pre-initialization proof
+        // of no prior state. The unlinked fixture creates home/selected before
+        // launch, so its old blanket fresh expectation must retain recovery.
+        // Workspace refusal, nonzero exit, no-sweep and no-publication stay.
+        let fresh = "Fresh start: no earlier session in this home; nothing to recover.";
+        if linked {
+            assert!(p.output.contains(fresh));
+        } else {
+            assert!(!p.output.contains(fresh));
+            assert!(p.output.contains("Recovery report only. Mother has not removed files or staging, restored workspace permission, or restored undo. Some unfinished work may be known only from incomplete evidence."));
+            assert!(p
+                .output
+                .contains("RECOVERY REPORT only; no sweep or workspace restoration\n"));
+        }
         assert!(p.output.contains("workspace_refused"));
         assert!(selected.exists(), "selection was not swept");
         f.empty();
