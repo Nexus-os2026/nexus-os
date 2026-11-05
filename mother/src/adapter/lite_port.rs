@@ -87,6 +87,7 @@ impl GovernedPort {
         let mut runs = self.file_runs()?;
         #[cfg(test)]
         session_port::session_projection_tests::at("file_binding_project", "before");
+        self.admit_host()?;
         runs.file_admissions.insert(mission, admission.clone());
         #[cfg(test)]
         session_port::session_projection_tests::at("file_binding_project", "after");

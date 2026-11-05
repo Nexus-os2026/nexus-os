@@ -460,6 +460,9 @@ impl GovernedPort {
             } else {
                 #[cfg(test)]
                 session_port::session_projection_tests::at("run_project", "before");
+                if let Err(error) = self.admit_host() {
+                    return Some(error.class);
+                }
                 runs.open.insert(mission, run);
                 #[cfg(test)]
                 session_port::session_projection_tests::at("run_project", "after");
@@ -552,6 +555,7 @@ impl GovernedPort {
         let effect_number = self.with_runs(|runs| runs.file_effects.get(&mission).copied());
         #[cfg(test)]
         session_port::session_projection_tests::at("effect_dispatch", "before");
+        self.admit_host()?;
         let result = self.door.agent_action(run, &intent, effect_number);
         #[cfg(test)]
         session_port::session_projection_tests::at("effect_dispatch", "after");
@@ -650,6 +654,7 @@ impl EffectPort for GovernedPort {
             // uncertain, never proof that the effect was not published.
             #[cfg(test)]
             session_port::session_projection_tests::at("file_effect_select", "before");
+            self.admit_host()?;
             runs.file_effects.insert(mission, number);
             runs.waiting.remove(&mission);
             #[cfg(test)]
