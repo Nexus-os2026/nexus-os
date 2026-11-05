@@ -22,6 +22,10 @@ mod cfg_tests;
 #[path = "source_literals_tests.rs"]
 mod source_literals_tests;
 
+#[cfg(test)]
+#[path = "source_reachability_tests.rs"]
+mod source_reachability_tests;
+
 pub fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -733,9 +737,18 @@ fn module_file(declaring: &Path, name: &str, path: Option<&str>) -> Option<PathB
 /// Every production file of the workspace.
 pub fn production_files() -> Vec<ProdFile> {
     let root = workspace_root();
+    production_files_in(&root)
+}
+
+/// The same whole-file scan for an isolated workspace fixture.
+pub fn production_files_in(root: &Path) -> Vec<ProdFile> {
     let mut paths = Vec::new();
-    walk(&root, &mut paths);
-    paths.retain(|p| !relative(p).starts_with("docs/"));
+    walk(root, &mut paths);
+    paths.retain(|p| {
+        !p.strip_prefix(root)
+            .expect("workspace path")
+            .starts_with("docs")
+    });
     paths.sort();
     let mut raw: BTreeMap<PathBuf, String> = BTreeMap::new();
     for p in &paths {
@@ -798,7 +811,11 @@ pub fn production_files() -> Vec<ProdFile> {
             }
         }
         out.push(ProdFile {
-            rel: relative(p),
+            rel: p
+                .strip_prefix(root)
+                .expect("workspace path")
+                .to_string_lossy()
+                .replace('\\', "/"),
             code: String::from_utf8_lossy(&code).into_owned(),
             text: String::from_utf8_lossy(&text).into_owned(),
         });

@@ -1351,6 +1351,28 @@ fn e_o15_local_model_predicates_are_defined_only_in_kernel_inference() {
     assert!(findings.is_empty(), "{}", findings.join("\n"));
 }
 
+#[test]
+fn e_o15_whole_file_reviewer_probe_keeps_two_findings() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("lib.rs"), "#[path = \"config.rs\"]\nmod live;\n\n#[path = \"fixture.rs\"]\n#[cfg(all(unix, test))]\nmod config;\n").unwrap();
+    std::fs::write(
+        root.path().join("config.rs"),
+        "pub fn name_is_cloud() -> bool { false }\npub const P: &str = \"cloud\";\n",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("fixture.rs"), "fn genuine_test() {}\n").unwrap();
+    let files = source::production_files_in(root.path());
+    let findings = predicate_findings(&files);
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert!(findings
+        .iter()
+        .any(|f| f.contains("defines its own name_is_cloud")));
+    assert!(findings
+        .iter()
+        .any(|f| f.contains("predicate literal \"cloud\"")));
+    assert!(!files.iter().any(|f| f.rel == "fixture.rs"));
+}
+
 /// Mother Nexus cleanup (2026-11-05): two absence guards keep the retired
 /// `connectors/llm` provider/gateway stack and its workspace membership gone.
 #[test]
