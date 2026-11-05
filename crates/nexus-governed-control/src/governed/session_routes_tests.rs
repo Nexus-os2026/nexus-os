@@ -1067,6 +1067,19 @@ fn session_all_256_retained_entries_precede_refusal_of_the_257th_native_allocati
         directories, 256,
         "settlement and denial do not discard session resources"
     );
+    // Stop receipts and native narrowing have an independent fixed reserve.
+    let event = f._session.ingress().emergency().unwrap();
+    let stop = f._session.record_stop(&event).unwrap();
+    assert!(matches!(
+        stop.record,
+        crate::authority::evidence::EndStatus::Recorded { .. }
+    ));
+    assert_eq!(f._session.stop_obligations().unwrap().recorded, 1);
+    assert_eq!(
+        resources(&staging),
+        before,
+        "Stop settlement never consumes cleanup ownership"
+    );
 }
 
 #[test]
@@ -1709,4 +1722,195 @@ fn session_execution_guard_unwind_retains_the_unrecorded_outcome() {
         "uncertain ownership survives every last-owner drop"
     );
     drop((_root, _dirs));
+}
+
+#[test]
+fn session_stop_workers_record_exact_ingress_without_minting_another_event() {
+    for count in [1, 4, 5] {
+        let f = Fixture::new();
+        let ingress = f._session.ingress();
+        let events: Vec<_> = (0..count).map(|_| ingress.emergency().unwrap()).collect();
+        assert_eq!(events.last().unwrap().generation(), count as u64);
+        let mut sequences = std::collections::BTreeSet::new();
+        for event in &events {
+            let receipt = f._session.record_stop(event).unwrap();
+            assert_eq!(receipt.event, *event);
+            assert!(receipt.snapshot.kernel_stopped && receipt.snapshot.broker_stopped);
+            let crate::authority::evidence::EndStatus::Recorded { seq } = receipt.record else {
+                panic!("real positive control requires the actual durable record");
+            };
+            assert!(
+                sequences.insert(seq),
+                "each event has its own existing-schema record"
+            );
+            let rows = f.primary.store().rows();
+            let row = rows.iter().find(|row| row.seq == seq).unwrap();
+            assert_eq!(row.phase, "emergency_stop");
+            let body: serde_json::Value = serde_json::from_str(&row.body).unwrap();
+            assert_eq!(
+                body["detail"]["stop_number"],
+                receipt.native_stop_number.to_string()
+            );
+            assert_eq!(receipt.consequences.owed, 0);
+            assert_eq!(receipt.consequences.uncertain, 0);
+            let before = f.primary.store().rows();
+            assert_eq!(f._session.record_stop(event).unwrap(), receipt);
+            assert_eq!(
+                f.primary.store().rows(),
+                before,
+                "duplicate is the exact retained receipt"
+            );
+        }
+        let rows = f.primary.store().rows();
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.phase == "emergency_stop")
+                .count(),
+            count
+        );
+        assert_eq!(
+            ingress.accept(CommandKind::Status, 2).unwrap().generation(),
+            count as u64,
+            "native narrowing must not issue another session ingress"
+        );
+        let ledger = f._session.stop_obligations().unwrap();
+        assert_eq!(
+            (
+                ledger.received,
+                ledger.recorded,
+                ledger.pending,
+                ledger.in_flight
+            ),
+            (count, count, 0, 0)
+        );
+    }
+}
+
+#[test]
+fn session_stop_unknown_receipt_and_failed_record_remain_unsettled() {
+    let f = Fixture::new();
+    let other = Fixture::new();
+    let foreign = other._session.ingress().emergency().unwrap();
+    let before = f.primary.store().rows();
+    assert!(f._session.record_stop(&foreign).is_err());
+    assert_eq!(
+        f.primary.store().rows(),
+        before,
+        "foreign ingress cannot narrow or record"
+    );
+    let event = f._session.ingress().emergency().unwrap();
+    f.primary.store().refuse_inserts(true);
+    let receipt = f._session.record_stop(&event).unwrap();
+    assert!(receipt.snapshot.kernel_stopped && receipt.snapshot.broker_stopped);
+    assert_eq!(receipt.record, crate::authority::evidence::EndStatus::Owed);
+    let debt = f._session.stop_obligations().unwrap();
+    assert_eq!((debt.received, debt.recorded, debt.owed), (1, 0, 1));
+    assert!(!f
+        .primary
+        .store()
+        .rows()
+        .iter()
+        .any(|row| row.phase == "emergency_stop"));
+    f.primary.store().refuse_inserts(false);
+}
+
+#[test]
+fn session_stop_four_workers_leave_the_fifth_event_as_recording_debt() {
+    let f = Fixture::new();
+    let gates: Arc<Vec<_>> = Arc::new((0..4).map(|_| crate::test_hooks::Gate::new()).collect());
+    let reached = Arc::new(AtomicUsize::new(0));
+    let observe = reached.clone();
+    let held = gates.clone();
+    f.gov
+        .authority()
+        .hooks()
+        .every("session.stop.started", move || {
+            let index = observe.fetch_add(1, Ordering::SeqCst);
+            if let Some(gate) = held.get(index) {
+                gate.hold();
+            }
+        });
+    let mut workers = Vec::new();
+    for index in 0..4 {
+        let event = f._session.ingress().emergency().unwrap();
+        let session = f._session.clone();
+        workers.push(std::thread::spawn(move || session.record_stop(&event)));
+        gates[index].reached();
+    }
+    let fifth = f._session.ingress().emergency().unwrap();
+    let refused = f._session.record_stop(&fifth);
+    let held_debt = f._session.stop_obligations().unwrap();
+    // Release before assertions, so even a detected plant leaves no held worker.
+    for gate in gates.iter() {
+        gate.open();
+    }
+    for worker in workers {
+        worker.join().unwrap().unwrap();
+    }
+    assert!(refused.is_err());
+    assert_eq!(
+        (held_debt.received, held_debt.in_flight, held_debt.pending),
+        (5, 4, 1)
+    );
+    assert_eq!(held_debt.recorded, 0);
+    f._session.record_stop(&fifth).unwrap();
+    let rows = f.primary.store().rows();
+    assert_eq!(
+        rows.iter()
+            .filter(|row| row.phase == "emergency_stop")
+            .count(),
+        5
+    );
+    assert_eq!(reached.load(Ordering::SeqCst), 5);
+    assert_eq!(f._session.stop_obligations().unwrap().recorded, 5);
+}
+
+#[test]
+fn session_stop_lost_worker_result_is_unknown_even_after_actual_record_commit() {
+    let f = Fixture::new();
+    let event = f._session.ingress().emergency().unwrap();
+    f.gov.authority().hooks().arm("session.stop.returned", || {
+        panic!("lost result after native Stop")
+    });
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f
+        ._session
+        .record_stop(&event)))
+    .is_err());
+    let rows = f.primary.store().rows();
+    assert_eq!(
+        rows.iter()
+            .filter(|row| row.phase == "emergency_stop")
+            .count(),
+        1
+    );
+    let debt = f._session.stop_obligations().unwrap();
+    assert_eq!(
+        (debt.received, debt.uncertain, debt.recorded, debt.in_flight),
+        (1, 1, 0, 0)
+    );
+    assert!(
+        f._session.record_stop(&event).is_err(),
+        "an unknown result is not a successful duplicate"
+    );
+    assert_eq!(f.primary.store().rows(), rows);
+}
+
+#[test]
+fn session_stop_receipts_are_bounded_without_losing_overflow_denial() {
+    let f = Fixture::new();
+    for number in 1..=256 {
+        assert_eq!(
+            f._session.ingress().emergency().unwrap().generation(),
+            number
+        );
+    }
+    assert!(f._session.ingress().emergency().is_err());
+    let debt = f._session.stop_obligations().unwrap();
+    assert_eq!((debt.received, debt.pending, debt.recorded), (256, 256, 0));
+    assert!(debt.overflowed);
+    assert_eq!(
+        f._session.state(),
+        crate::host_session::SessionState::Failed
+    );
+    assert!(f._session.ingress().accept(CommandKind::Run, 2).is_err());
 }
