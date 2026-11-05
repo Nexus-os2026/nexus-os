@@ -64,7 +64,7 @@ fn child(case: &str) {
     );
     let expected_end = u64::from(matches!(
         case,
-        "normal" | "idle_emergency" | "producer" | "ingress_after_seal" | "retained_door" | "pending_batch" | "foreign_end"
+        "normal" | "idle_emergency" | "producer" | "ingress_after_seal" | "retained_door" | "pending_batch" | "foreign_end" | "missing_end"
     ));
     let expected_stop = u64::from(case == "idle_emergency");
     assert_eq!(
@@ -217,6 +217,10 @@ fn session_close_facade_enforces_the_complete_order() {
             } else {
                 seal.begin_mother_end(session.identity()).unwrap();
                 assert_eq!(session.close_records().mother, FinalStatus::Unknown);
+                if case == "missing_end" {
+                    assert!(session.observe_mother_end(&seal).is_err(), "beginning a Mother end is not its durable proof");
+                    assert!(session.close_primary(&seal).is_err());
+                }
                 let ending = Entry::chained(1, &opening.hash, SESSION, Event::SessionClosed);
                 journal.append(&ending.to_line()).unwrap();
                 session.observe_mother_end(&seal).unwrap();
@@ -237,5 +241,5 @@ fn session_close_facade_enforces_the_complete_order() {
 
 #[test]
 fn session_close_requires_prior_sources_and_retains_native_record_debt() {
-    for case in ["source_unchecked", "pending_batch", "lost_batch", "foreign_end"] { child(case); }
+    for case in ["source_unchecked", "pending_batch", "lost_batch", "foreign_end", "missing_end"] { child(case); }
 }
