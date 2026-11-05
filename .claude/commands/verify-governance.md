@@ -10,4 +10,7 @@ advice. Preserve security oracles. Run only the mission's authorized checks and
 report evidence, limits and every blocker; no fixes, acceptance or new authority
 are implied by this review command.
 
-Legacy kernel, SDK and connector code still in the workspace keeps its existing checks and tests until an Owner-approved retirement removes it; it is not a pattern for new Mother code, and new Mother code must not be built on it.
+Retained legacy kernel code keeps its existing checks and tests until an
+Owner-approved retirement removes it; it is not a pattern for new Mother code,
+and new Mother code must not be built on it. The six retired legacy crates,
+including the old agent SDK, remain recoverable from Git history.

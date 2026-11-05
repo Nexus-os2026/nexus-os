@@ -74,6 +74,40 @@ fn hm_m3_retired_web_builder_is_not_a_workspace_member() {
     );
 }
 
+/// Mother Nexus cleanup (2026-11-05): the old agent SDK must not return;
+/// Mother coordinates through its sealed broker port, not NexusAgent.
+#[test]
+fn hm_m3_retired_sdk_directory_is_absent() {
+    let path = source::workspace_root().join("sdk");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired sdk path must remain absent (including dangling symlinks)"
+    );
+}
+
+#[test]
+fn hm_m3_retired_sdk_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            let path = std::path::Path::new(member.as_str().expect("workspace member path"));
+            let normalized: std::path::PathBuf = path
+                .components()
+                .filter(|part| *part != std::path::Component::CurDir)
+                .collect();
+            normalized != std::path::Path::new("sdk")
+        }),
+        "the retired sdk must not be a workspace member"
+    );
+}
+
 // ── A-S4: every production model call is classified (§12.1, §12.2, 04) ────
 
 /// The model-call shapes of A-S4: the call names and the known HTTP model
@@ -783,16 +817,13 @@ fn hm_m3_n5_a_s3_single_issuer_attestation_admission_and_store() {
     );
     desktop_tripwire::assert_no_desktop();
     assert_desktop_scanned(&files);
-    // Transport evidence only from `attest_route` (connectors), besides its
-    // definition in `nexus_kernel::hm`.
+    // Mother Nexus cleanup (2026-11-05): the sole transport-evidence
+    // exception, `connectors/llm/src/attest.rs`, was retired. Zero exceptions
+    // remain; every production file outside HM still receives the same scan.
     for f in files.iter().filter(|f| !is_hm_module(&f.rel)) {
         let evidence = f.code.matches("TransportEvidence::").count()
             + f.code.matches("from_transport_evidence(").count();
-        if f.rel == "connectors/llm/src/attest.rs" {
-            assert!(evidence > 0);
-        } else {
-            assert_eq!(evidence, 0, "{}: transport evidence", f.rel);
-        }
+        assert_eq!(evidence, 0, "{}: transport evidence", f.rel);
     }
     // Admission and reply acceptance only in the dispatch module (calls of
     // the issuer's `admit(ctx, build)` and `accept_reply(ctx, admission,
@@ -884,11 +915,10 @@ const NO_HANDOFF: [&str; 26] = [
 /// The subsystems of §12.8, by whole file (`dir/` prefix or file) or by
 /// function (`file::fn`).
 /// Mother Nexus cleanup (2026-11-05): the `agents/web-builder/` row
-/// named the retired builder. Two remaining files retain the same scan.
-const SEPARATED_FILES: [&str; 2] = [
-    "connectors/llm/src/rag.rs",
-    "kernel/src/cognitive/algorithms/world_model.rs",
-];
+/// named the retired builder.
+/// Mother Nexus cleanup (2026-11-05): the `connectors/llm/src/rag.rs`
+/// row named the retired connectors crate. One file retains the same scan.
+const SEPARATED_FILES: [&str; 1] = ["kernel/src/cognitive/algorithms/world_model.rs"];
 /// Mother Nexus cleanup (2026-10-31): every by-function entry was a desktop
 /// function (`app/src-tauri/src/...`), removed with the desktop.
 const SEPARATED_FNS: [(&str, &str); 0] = [];
@@ -1086,9 +1116,12 @@ fn hm_m3_n5_i4_no_checkpoint_memory_is_written_back() {
 /// Mother Nexus cleanup (2026-11-05): the `crates/nexus-memory/src/` row
 /// named the deleted memory crate.
 /// Mother Nexus cleanup (2026-11-05): the four `agents/web-builder/src/`
-/// rows named the retired builder. Eight rows remain; every remaining
+/// rows named the retired builder.
+/// Mother Nexus cleanup (2026-11-05): the five `connectors/llm/src/`
+/// rows (`gateway.rs`, `rag.rs`, `governance_slm.rs`, `inference_queue.rs`,
+/// `routing.rs`) named the retired crate. Three rows remain; every remaining
 /// production model call must still be classified.
-const CLASSIFIED: [(&str, &str, &str, &str); 8] = [
+const CLASSIFIED: [(&str, &str, &str, &str); 3] = [
     // Mother Nexus cleanup (2026-10-31): the desktop (§12.2) rows, the
     // dreams, simulation, conductor and coder rows, the removed web-builder
     // modules and the swarm, capability-measurement and self-improve rows
@@ -1107,27 +1140,6 @@ const CLASSIFIED: [(&str, &str, &str, &str); 8] = [
         "AR, latent",
         "04 K10",
     ),
-    // Connectors (04 §K).
-    (
-        "connectors/llm/src/gateway.rs",
-        "*",
-        "common sink",
-        "04 K11",
-    ),
-    ("connectors/llm/src/rag.rs", "*", "XS", "04 K17"),
-    (
-        "connectors/llm/src/governance_slm.rs",
-        "*",
-        "latent",
-        "04 K18",
-    ),
-    (
-        "connectors/llm/src/inference_queue.rs",
-        "*",
-        "latent",
-        "04 K18",
-    ),
-    ("connectors/llm/src/routing.rs", "*", "latent", "04 K18"),
 ];
 
 // ── A-S4 errata E-M3-1 (AMENDMENT 3 A3.1): the sites §12.2 and 04 do not name
@@ -1136,10 +1148,11 @@ const CLASSIFIED: [(&str, &str, &str, &str); 8] = [
 /// `LlmProvider::query`/`embed` and their `Box`/`Arc` forwarding. Not
 /// dispatch sites: every production call of `query`/`embed` outside these
 /// files is itself a classified site (asserted in A-S4).
-const TRANSPORT: [(&str, &str); 2] = [
-    ("connectors/llm/src/providers/", "*"),
-    ("connectors/llm/src/attest.rs", "VerifiedLocalOllama::query"),
-];
+/// Mother Nexus cleanup (2026-11-05): the two retired rows were
+/// (`connectors/llm/src/providers/`, `*`) and
+/// (`connectors/llm/src/attest.rs`, `VerifiedLocalOllama::query`). Zero rows
+/// remain; the complete model-call inventory still requires classification.
+const TRANSPORT: [(&str, &str); 0] = [];
 
 /// The E-M3-1 classes XS, SY and AR CLOSED: `(file, fn or "*", class,
 /// rule)`. XS: a production caller, and the crate reaches no HM content
@@ -1453,23 +1466,13 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
     );
     // Mother Nexus cleanup (2026-11-05): the assertion for the deleted
     // `crates/nexus-memory/src/embedding.rs` `embed_batch` site was removed.
-    assert_eq!(
-        class_of(
-            "connectors/llm/src/providers/ollama.rs",
-            "OllamaProvider::embed"
-        ),
-        Some("T")
-    );
-    assert_eq!(
-        class_of("connectors/llm/src/attest.rs", "VerifiedLocalOllama::query"),
-        Some("T")
-    );
+    // Mother Nexus cleanup (2026-11-05): the three retired controls were
+    // (`connectors/llm/src/providers/ollama.rs`, `OllamaProvider::embed`) => T,
+    // (`connectors/llm/src/attest.rs`, `VerifiedLocalOllama::query`) => T and
+    // (`connectors/llm/src/attest.rs`, `verify_local_ollama`) => None.
+    // Zero connectors controls remain; kept classifications are still tested.
     // Mother Nexus cleanup (2026-11-05): the assertion for the retired
     // `agents/web-builder/src/plan.rs` `generate_plan_with_model` site was removed.
-    assert_eq!(
-        class_of("connectors/llm/src/attest.rs", "verify_local_ollama"),
-        None
-    );
     let planted_latent: [LatentEntry; 1] = [(
         "planted/src/strategy.rs",
         "StrategySynthesizer::synthesize",
@@ -1526,16 +1529,12 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         .filter(|(f, g, shape)| !shape.starts_with("endpoint") && class_of(f, g) == Some("T"))
         .map(|(f, g, _)| (f.clone(), g.clone()))
         .collect();
-    let forwarding: Vec<(String, String)> = [
-        ("connectors/llm/src/attest.rs", "VerifiedLocalOllama::query"),
-        ("connectors/llm/src/providers/mod.rs", "Arc::embed"),
-        ("connectors/llm/src/providers/mod.rs", "Arc::query"),
-        ("connectors/llm/src/providers/mod.rs", "Box::embed"),
-        ("connectors/llm/src/providers/mod.rs", "Box::query"),
-    ]
-    .iter()
-    .map(|(f, g)| (f.to_string(), g.to_string()))
-    .collect();
+    // Mother Nexus cleanup (2026-11-05): the five forwarding entries named
+    // `connectors/llm/src/attest.rs` `VerifiedLocalOllama::query` and
+    // `connectors/llm/src/providers/mod.rs` `Arc::embed`, `Arc::query`,
+    // `Box::embed`, `Box::query`. Zero entries remain; the complete scanned
+    // transport-call inventory must now be empty.
+    let forwarding: Vec<(String, String)> = Vec::new();
     assert_eq!(
         transport_calls, forwarding,
         "dispatch inside a transport file"
