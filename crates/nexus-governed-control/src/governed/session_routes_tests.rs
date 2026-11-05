@@ -2342,3 +2342,80 @@ fn session_undo_acceptance_has_no_busy_target_and_returned_slot_has_new_version(
         1
     );
 }
+
+#[test]
+fn session_result_facts_are_exact_observations_not_authority_or_generic_success() {
+    use crate::host_session::outcome::RecordingStatus;
+    for (hook, after) in [
+        ("session.before.apply", false),
+        ("session.after.apply", true),
+    ] {
+        for interfere in [false, true] {
+            let f = Fixture::new();
+            let id = f.pending();
+            let request = f
+                ._session
+                .ingress()
+                .accept(CommandKind::Approve, 2)
+                .unwrap();
+            let before = f._session.operation_observation(&request).unwrap();
+            assert_eq!(before.session, f._session.identity());
+            assert_eq!(before.request, 2);
+            assert_eq!(before.target, request.context());
+            assert_eq!(before.admitted_steps, 0, "acceptance is not admission");
+            assert!(!before.apply_handed_off);
+            let ingress = f._session.ingress();
+            f.gov.files().hooks().arm(hook, move || {
+                if interfere {
+                    ingress.emergency().unwrap();
+                }
+            });
+            let _returned = f._session.approve_file(&request);
+            let facts = f._session.operation_observation(&request).unwrap();
+            let published = !interfere || after;
+            assert_eq!(facts.apply_handed_off, published);
+            assert!(facts.admitted_steps > 0);
+            assert_eq!(facts.ingresses, u64::from(interfere));
+            assert_eq!(facts.actions.len(), 1);
+            assert_eq!(facts.actions[0].commitment, Some(id));
+            assert_eq!(facts.actions[0].run, f.run);
+            assert_eq!(
+                facts.actions[0].mother,
+                RecordingStatus::Unknown,
+                "the native-only fixture has no Mother terminal record"
+            );
+            assert_ne!(
+                facts.actions[0].acknowledgement,
+                crate::host_session::outcome::Acknowledgement::Verified
+            );
+            assert_eq!(
+                std::fs::read(f._dirs.0.path().join("selected/workspace/session.txt")).ok(),
+                published.then(|| b"session oracle\n".to_vec())
+            );
+            assert_eq!(
+                matching(&events(&f.ledger_path()), "apply.completed", None),
+                usize::from(published)
+            );
+            if published {
+                assert_eq!(facts.kernel, RecordingStatus::Recorded);
+                assert_eq!(facts.primary, RecordingStatus::Recorded);
+                assert!(matches!(
+                    facts.actions[0].publication,
+                    crate::authority::commitment::PublicationClass::Published {
+                        recovery_required: false,
+                        ..
+                    }
+                ));
+            } else {
+                assert_ne!(facts.kernel, RecordingStatus::Recorded);
+            }
+            assert!(!facts.inventory.as_ref().unwrap().entries.is_empty());
+            assert!(facts.resources.as_ref().unwrap().reserved > 0);
+            let other = Fixture::new();
+            assert!(
+                other._session.operation_observation(&request).is_err(),
+                "foreign request cannot select observations"
+            );
+        }
+    }
+}

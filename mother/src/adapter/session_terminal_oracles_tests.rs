@@ -142,6 +142,20 @@ fn child(case: &str) {
         initial,
         "fixture must reach its literal input state"
     );
+    if let Some(expected_intent) = match initial {
+        "Done" => Some("phase_done"),
+        "Stopped" => Some("stop"),
+        "Denied" => Some("action_denied"),
+        "Failed" => Some("verify_fail"),
+        "Blocked" => Some("block"),
+        _ => None,
+    } {
+        assert_eq!(
+            m.terminal_facts(id).unwrap().first_code(),
+            expected_intent,
+            "ordinary terminal intent must not be rendered as generic Fence"
+        );
+    }
     let before = home.lines();
     replay_all_prefixes(&before);
     let file = workspace.join("session.txt");
@@ -189,8 +203,14 @@ fn child(case: &str) {
             "terminal history cannot be rewritten by a later cause"
         );
     }
+    let established_intent = m.terminal_facts(id).unwrap().first_code();
     m.cell_for_test().engage_emergency();
     m.stop(id).unwrap();
+    assert_eq!(
+        m.terminal_facts(id).unwrap().first_code(),
+        established_intent,
+        "late emergency cannot rewrite established terminal intent"
+    );
     assert_eq!(
         format!("{:?}", m.state(id).unwrap().unwrap()),
         format!("{expected:?}")

@@ -1,0 +1,36 @@
+{
+  "base": "959db37a9d7f1ebbd335bc7df28420edf8e2a418",
+  "kind": "executed audit and A12 preimplementation baseline; not final gate",
+  "workspace": {
+    "passed": 5457,
+    "failed": 1,
+    "ignored_existing": 68,
+    "binary_results": 114,
+    "failure": "h1_shutdown_with_storage_held_is_bounded_and_unclean: expected UNCLEAN outstanding= after blocked Stop worker spent final delivery budget",
+    "log_sha256": "6843e403d2244c73ff513133316c5d1cb75ae0f648c943d02a5012cc9ee18b08"
+  },
+  "a12_host": {
+    "executed": [
+      {
+        "affirmative": false,
+        "expected": "answer=Declined followed by independently established physical/Mother/ack facts",
+        "observed": "missing answer=Declined after ACTION DENIED",
+        "outcome": "behavioral red"
+      }
+    ],
+    "not_reached": [
+      "affirmative=true",
+      "normal undo"
+    ],
+    "log_sha256": "2e0291c260697e1ce46c18c7c2b24ff54ca289044b58fe3d0932975e5f9dc036"
+  },
+  "a12_native_and_mother": {
+    "outcome": "API unavailable; not behavioral red",
+    "compiler_errors": 8,
+    "log_sha256": "4e554faadcfcfb4da000ee357ad5c0119a90ce55461754ad543f1ccad0982dd5"
+  },
+  "deviations": [
+    "First uncommitted PTY fixture used invalid yes/no-code format; corrected to fresh code / literal no before this baseline.",
+    "A12 result projection oracles were added late, after other component production commits. R-1 requires disclosure and continuation; these oracles precede their own production repair."
+  ]
+}
