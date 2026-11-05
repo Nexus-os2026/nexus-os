@@ -7,6 +7,19 @@ use nexus_mother::state::Trigger;
 use support::faults::Fault;
 use support::{Fixture, Pty};
 
+fn directory_identities(root: &std::path::Path) -> Vec<(std::ffi::OsString, u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let mut result: Vec<_> = std::fs::read_dir(root)
+        .unwrap()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            let m = entry.metadata().unwrap();
+            (entry.file_name(), m.dev(), m.ino())
+        })
+        .collect();
+    result.sort();
+    result
+}
 fn reap(p: &mut Pty) {
     p.child.kill().unwrap();
     assert!(!p.child.wait().unwrap().success());
@@ -41,6 +54,7 @@ fn fix1_e_restart_lists_allocation_before_snapshot_and_prepared_only() {
         drop(p);
         let staging = f.home.join("broker/files/coding-runs");
         let before = support::privacy::files_under(&staging, None);
+        let before_directories = directory_identities(&staging);
         assert!(
             std::fs::read_dir(&staging).unwrap().next().is_some(),
             "real allocated staging directory at {point}"
@@ -63,6 +77,11 @@ fn fix1_e_restart_lists_allocation_before_snapshot_and_prepared_only() {
                 support::privacy::files_under(&staging, None),
                 before,
                 "report-only restart preserves staging"
+            );
+            assert_eq!(
+                directory_identities(&staging),
+                before_directories,
+                "including empty staging directory identities"
             );
             f.empty();
         }

@@ -149,15 +149,27 @@ fn fix1_d_direct_broker_refuses_invalid_session_order() {
     const CASE: &str = "M2DD_FIX1_DIRECT_RECOVERY";
     let Ok(case) = std::env::var(CASE) else {
         for case in ["singleton", "duplicate"] {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "fix1_d_direct_broker_refuses_invalid_session_order",
                     "--nocapture",
                 ])
                 .env(CASE, case)
-                .output()
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
                 .unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            while child.try_wait().unwrap().is_none() {
+                if std::time::Instant::now() >= deadline {
+                    child.kill().unwrap();
+                    child.wait().unwrap();
+                    panic!("bounded direct broker child {case}");
+                }
+                std::thread::yield_now();
+            }
+            let output = child.wait_with_output().unwrap();
             assert!(
                 output.status.success(),
                 "{case}: {}{}",
@@ -224,4 +236,50 @@ fn fix1_d_direct_broker_refuses_invalid_session_order() {
     assert!(session.bootstrap_workspace(&f.workspace, &[]).is_err());
     assert!(session.workspace().is_none());
     println!("FIX1 D direct={case} canonical_source_refused=true workspace_registered=false");
+}
+
+#[test]
+fn fix1_d_changed_history_snapshot_never_installs_readiness() {
+    let f = Fixture::new();
+    nexus_mother::adapter::create_private(&f.home).unwrap();
+    let path = f.home.join("mother-journal.jsonl");
+    let original = format!(
+        "{}\n",
+        lines(vec![
+            (SESSION, Event::SessionOpened),
+            (SESSION, Event::SessionClosed)
+        ])
+        .join("\n")
+    );
+    std::fs::write(&path, &original).unwrap();
+    let fault = support::faults::Fault::new(&f, "history-snapshot");
+    let mut command = f.command("history changed during source inspection");
+    fault.attach(&f, &mut command);
+    fault.arm();
+    let mut p = Pty::start(command);
+    let receipt = fault.reached();
+    assert_eq!(
+        receipt.bytes,
+        original.as_bytes(),
+        "exact old valid source captured before replacement"
+    );
+    std::fs::write(
+        &path,
+        format!(
+            "{}\n",
+            lines(vec![(SESSION, Event::SessionClosed)]).join("\n")
+        ),
+    )
+    .unwrap();
+    receipt.release();
+    p.line("quit");
+    assert!(!p.finish().success());
+    assert!(
+        p.output.contains("RECOVERY FAILED mother_history"),
+        "changed source is typed and denied before exposing readiness: {}",
+        p.output
+    );
+    assert!(!p.output.contains("HANDS READY"));
+    f.empty();
+    println!("FIX1 D source_snapshot_changed captured_old_valid=true readiness=false");
 }

@@ -190,7 +190,12 @@ ssize_t read(int fd, void *data, size_t size) {
     ssize_t (*real)(int,void *,size_t) = dlsym(RTLD_NEXT, "read");
     if (fd == STDIN_FILENO && (mode("read-fail") ||
         (mode("held-read-error") && atomic_load(&held)))) { errno = EIO; return -1; }
-    return real(fd, data, size);
+    ssize_t result = real(fd, data, size);
+    char path[4096];
+    if (result > 0 && mode("history-snapshot") && path_of(fd, path, sizeof(path)) &&
+        strstr(path, "/mother-journal.jsonl"))
+        boundary("history-snapshot", path, data, (size_t)result);
+    return result;
 }
 
 int unlinkat(int fd, const char *name, int flags) {
