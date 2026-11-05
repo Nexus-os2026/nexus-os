@@ -1,6 +1,6 @@
 [package]
 name = "nexus-connectors-llm"
-description = "LLM provider connectors (OpenAI, Anthropic, local models) for Nexus OS"
+description = "Retained model provider connectors; Mother Nexus local transport and any cloud route require separate qualification and authority"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
