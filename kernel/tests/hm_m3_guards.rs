@@ -74,6 +74,40 @@ fn hm_m3_retired_web_builder_is_not_a_workspace_member() {
     );
 }
 
+/// Mother Nexus cleanup (2026-11-05): the old agent SDK must not return;
+/// Mother coordinates through its sealed broker port, not NexusAgent.
+#[test]
+fn hm_m3_retired_sdk_directory_is_absent() {
+    let path = source::workspace_root().join("sdk");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired sdk path must remain absent (including dangling symlinks)"
+    );
+}
+
+#[test]
+fn hm_m3_retired_sdk_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            let path = std::path::Path::new(member.as_str().expect("workspace member path"));
+            let normalized: std::path::PathBuf = path
+                .components()
+                .filter(|part| *part != std::path::Component::CurDir)
+                .collect();
+            normalized != std::path::Path::new("sdk")
+        }),
+        "the retired sdk must not be a workspace member"
+    );
+}
+
 // ── A-S4: every production model call is classified (§12.1, §12.2, 04) ────
 
 /// The model-call shapes of A-S4: the call names and the known HTTP model
