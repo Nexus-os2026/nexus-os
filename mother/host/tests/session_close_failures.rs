@@ -101,7 +101,10 @@ fn session_terminal_finalization_failure_keeps_ends_without_clean_receipt() {
     assert!(!p.finish().success());
     assert_eq!(mother_end(&f), 1);
     assert_eq!(support::evidence::counts(&f), [0, 1, 1]);
-    assert!(!p.output.contains("SESSION CLOSED recorded"), "terminal finalization is part of the close proof");
+    assert!(
+        !p.output.contains("SESSION CLOSED recorded"),
+        "terminal finalization is part of the close proof"
+    );
     assert!(p.output.contains(UNCLEAN));
     assert!(p.output.contains("MOTHER END Recorded"));
     assert!(p.output.contains("PRIMARY END Recorded"));
@@ -119,7 +122,13 @@ fn session_inventory_reports_current_undo_exclusion_beside_actual_staging() {
     p.expect("current_undo=1");
     p.expect("excluded=1");
     p.expect("INVENTORY END");
-    assert_eq!(support::privacy::files_under(&f.home.join("broker/files/coding-runs"), None), before);
-    assert_eq!(std::fs::read(f.workspace.join("hello.txt")).unwrap(), b"retained current undo\n");
+    assert_eq!(
+        support::privacy::files_under(&f.home.join("broker/files/coding-runs"), None),
+        before
+    );
+    assert_eq!(
+        std::fs::read(f.workspace.join("hello.txt")).unwrap(),
+        b"retained current undo\n"
+    );
     p.quit();
 }

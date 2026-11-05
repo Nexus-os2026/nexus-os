@@ -65,7 +65,10 @@ fn d_o3_wrong_empty_whitespace_and_embedded_codes_deny() {
             p.expect("ACTION REFUSED");
             f.empty();
             p.line("quit");
-            assert!(!p.finish().success(), "invalid answer is a failed protocol, not Owner decline");
+            assert!(
+                !p.finish().success(),
+                "invalid answer is a failed protocol, not Owner decline"
+            );
             assert!(!p.output.contains("ACTION DENIED"));
         }
     }
@@ -85,7 +88,10 @@ fn d_o4_overlong_and_invalid_utf8_are_not_answers() {
         p.expect("ACTION REFUSED");
         f.empty();
         p.line("quit");
-        assert!(!p.finish().success(), "invalid UTF-8/overlong input cannot certify a decline or clean exit");
+        assert!(
+            !p.finish().success(),
+            "invalid UTF-8/overlong input cannot certify a decline or clean exit"
+        );
         assert!(!p.output.contains("ACTION DENIED"));
     }
 }
@@ -260,9 +266,15 @@ fn normal_quit_settles_pending_file_work_without_owner_publication() {
     p.quit();
     f.empty();
     let raw = std::fs::read_to_string(f.home.join("mother-journal.jsonl")).unwrap();
-    let entries = nexus_mother::journal::verify(&raw.lines().map(str::to_owned).collect::<Vec<_>>()).unwrap();
-    assert!(entries.iter().any(|entry| matches!(entry.event, nexus_mother::journal::Event::SessionClosed)));
-    assert!(raw.contains("settled"), "normal Quit must actually settle the pending action before the end");
+    let entries =
+        nexus_mother::journal::verify(&raw.lines().map(str::to_owned).collect::<Vec<_>>()).unwrap();
+    assert!(entries
+        .iter()
+        .any(|entry| matches!(entry.event, nexus_mother::journal::Event::SessionClosed)));
+    assert!(
+        raw.contains("settled"),
+        "normal Quit must actually settle the pending action before the end"
+    );
 }
 
 #[test]

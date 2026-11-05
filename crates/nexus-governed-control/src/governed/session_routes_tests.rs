@@ -2226,28 +2226,52 @@ fn session_undo_reports_native_handoff_and_physical_result_independently() {
             f.approve(id).unwrap();
             let request = f._session.ingress().accept(CommandKind::Undo, 3).unwrap();
             let ingress = f._session.ingress();
-            f.gov.files().hooks().arm(hook, move || { if interfere { ingress.emergency().unwrap(); } });
+            f.gov.files().hooks().arm(hook, move || {
+                if interfere {
+                    ingress.emergency().unwrap();
+                }
+            });
             let _result = f._session.undo(&request);
             let facts = request.restore_observation();
             assert_eq!(facts.request, 3);
             assert_eq!(facts.target, request.context());
             assert_eq!(facts.handed_off, !interfere || entered);
-            assert_eq!(facts.outcome, if !interfere || entered { RestoreOutcome::Completed } else { RestoreOutcome::NotEntered });
+            assert_eq!(
+                facts.outcome,
+                if !interfere || entered {
+                    RestoreOutcome::Completed
+                } else {
+                    RestoreOutcome::NotEntered
+                }
+            );
             assert_eq!(facts.interrupted, interfere);
             let target = f._dirs.0.path().join("selected/workspace/session.txt");
-            assert_eq!(target.exists(), interfere && !entered, "primitive target observation independently checks completion");
-            assert_eq!(matching(&events(&f.ledger_path()), "restore.completed", None), usize::from(!interfere || entered));
-            if !interfere || entered { assert_eq!(facts.grant, GrantClosure::Closed); }
+            assert_eq!(
+                target.exists(),
+                interfere && !entered,
+                "primitive target observation independently checks completion"
+            );
+            assert_eq!(
+                matching(&events(&f.ledger_path()), "restore.completed", None),
+                usize::from(!interfere || entered)
+            );
+            if !interfere || entered {
+                assert_eq!(facts.grant, GrantClosure::Closed);
+            }
         }
     }
     let f = Fixture::new();
-    let id = f.pending(); f.approve(id).unwrap();
+    let id = f.pending();
+    f.approve(id).unwrap();
     let target = f._dirs.0.path().join("selected/workspace/session.txt");
     std::fs::write(&target, b"Owner changed bytes").unwrap();
     let request = f._session.ingress().accept(CommandKind::Undo, 3).unwrap();
     assert!(f._session.undo(&request).is_err());
     let facts = request.restore_observation();
-    assert!(facts.handed_off, "native restore was entered and refused its changed target");
+    assert!(
+        facts.handed_off,
+        "native restore was entered and refused its changed target"
+    );
     assert_eq!(facts.outcome, RestoreOutcome::Refused);
     assert_eq!(facts.grant, GrantClosure::Closed);
     assert_eq!(std::fs::read(target).unwrap(), b"Owner changed bytes");
@@ -2261,28 +2285,60 @@ fn session_undo_acceptance_has_no_busy_target_and_returned_slot_has_new_version(
         accepted: AtomicBool,
     }
     impl ControlConfirmer for DeclineWhileQueued {
-        fn confirm_action(&self, _: &ActionConfirmation) -> bool { false }
-        fn confirm_grant(&self, _: &GrantConfirmation) -> bool { false }
-        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool { false }
-        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool { false }
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            false
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            false
+        }
+        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+            false
+        }
         fn confirm_undo(&self, _: &UndoConfirmation) -> bool {
-            self.accepted.store(self.ingress.accept(CommandKind::Undo, 5).is_ok(), Ordering::SeqCst);
+            self.accepted.store(
+                self.ingress.accept(CommandKind::Undo, 5).is_ok(),
+                Ordering::SeqCst,
+            );
             false
         }
     }
     let f = Fixture::new();
-    let id = f.pending(); f.approve(id).unwrap();
+    let id = f.pending();
+    f.approve(id).unwrap();
     let ingress = f._session.ingress();
     let first = ingress.accept(CommandKind::Undo, 3).unwrap();
     let queued = ingress.accept(CommandKind::Undo, 4).unwrap();
     assert_eq!(first.context(), queued.context());
-    let confirmation = DeclineWhileQueued { ingress: ingress.clone(), accepted: AtomicBool::new(false) };
+    let confirmation = DeclineWhileQueued {
+        ingress: ingress.clone(),
+        accepted: AtomicBool::new(false),
+    };
     assert!(f._session.undo_confirmed(&first, &confirmation).is_err());
-    assert!(!confirmation.accepted.load(Ordering::SeqCst), "reader cannot bind undo while the exact slot is borrowed");
-    assert!(f._session.undo(&queued).is_err(), "returned slot is a new version, not the queued command's target");
+    assert!(
+        !confirmation.accepted.load(Ordering::SeqCst),
+        "reader cannot bind undo while the exact slot is borrowed"
+    );
+    assert!(
+        f._session.undo(&queued).is_err(),
+        "returned slot is a new version, not the queued command's target"
+    );
     let fresh = ingress.accept(CommandKind::Undo, 6).unwrap();
     assert_ne!(fresh.context(), first.context());
-    assert!(f._session.undo(&fresh).is_ok(), "fresh same-session normal undo remains available after decline");
-    assert!(!f._dirs.0.path().join("selected/workspace/session.txt").exists());
-    assert_eq!(matching(&events(&f.ledger_path()), "restore.completed", None), 1);
+    assert!(
+        f._session.undo(&fresh).is_ok(),
+        "fresh same-session normal undo remains available after decline"
+    );
+    assert!(!f
+        ._dirs
+        .0
+        .path()
+        .join("selected/workspace/session.txt")
+        .exists());
+    assert_eq!(
+        matching(&events(&f.ledger_path()), "restore.completed", None),
+        1
+    );
 }

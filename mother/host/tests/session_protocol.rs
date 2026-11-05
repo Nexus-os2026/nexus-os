@@ -311,7 +311,10 @@ fn death_in_cleanup(point: &'static str) {
     p.expect("ACTION DENIED");
     p.line("cleanup");
     p.expect("still_owed=1");
-    assert!(dirs[0].is_dir(), "failed explicit cleanup retains the exact directory");
+    assert!(
+        dirs[0].is_dir(),
+        "failed explicit cleanup retains the exact directory"
+    );
     std::fs::set_permissions(&dirs[0], std::fs::Permissions::from_mode(0o700)).unwrap();
     fault.arm();
     p.line("cleanup");

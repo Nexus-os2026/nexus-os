@@ -85,7 +85,9 @@ fn in_hands_tests(rel: &str) -> bool {
 /// binary return. No process, filesystem, networking or FFI exemption.
 fn without_hands_items(rel: &str, text: &str) -> String {
     let allowed: &[&str] = match rel {
-        "host/src/terminal.rs" | "host/src/legacy_terminal.rs" => &["use std::os::fd::{AsFd, AsRawFd};"],
+        "host/src/terminal.rs" | "host/src/legacy_terminal.rs" => {
+            &["use std::os::fd::{AsFd, AsRawFd};"]
+        }
         "host/src/bin/mother-hands.rs" => &["use std::process::ExitCode;"],
         _ => &[],
     };
@@ -327,7 +329,10 @@ fn scan_no_production_consent_confirmer() {
             continue;
         }
         if rel == "host/src/legacy_terminal.rs" {
-            assert!(walk_terminal_confirmer(&rel, &text), "walk terminal contract");
+            assert!(
+                walk_terminal_confirmer(&rel, &text),
+                "walk terminal contract"
+            );
             legacy_terminal_impls += impls;
             continue;
         }
@@ -394,8 +399,14 @@ fn scan_no_production_consent_confirmer() {
         "the walk example's terminal confirmer, exactly once"
     );
     assert_eq!(desktop_impls, 1, "the desktop's confirmer, exactly once");
-    assert_eq!(terminal_impls, 1, "M2d-D: exactly one session terminal confirmer");
-    assert_eq!(legacy_terminal_impls, 1, "exactly one isolated walk terminal confirmer");
+    assert_eq!(
+        terminal_impls, 1,
+        "M2d-D: exactly one session terminal confirmer"
+    );
+    assert_eq!(
+        legacy_terminal_impls, 1,
+        "exactly one isolated walk terminal confirmer"
+    );
     // The eighth method stays denied by default outside Hands.
     for rel in ["desktop/src/confirm.rs", "host/examples/walk.rs"] {
         let text = code(&std::fs::read_to_string(crate_root().join(rel)).unwrap());
@@ -500,7 +511,13 @@ fn hands_confirmer(rel: &str, text: &str) -> bool {
             return false;
         }
     }
-    ["confirm_acknowledgement", "confirm_resume", "confirm_held_mission"].iter().all(|method| bodies_of(text, method) == vec!["false".to_string()])
+    [
+        "confirm_acknowledgement",
+        "confirm_resume",
+        "confirm_held_mission",
+    ]
+    .iter()
+    .all(|method| bodies_of(text, method) == vec!["false".to_string()])
 }
 
 #[test]
@@ -529,9 +546,7 @@ fn scan_m2dd_terminal_confirmer_negative_controls() {
         "host/src/terminal.rs",
         &fixture.replace("TerminalConfirmer", "Other")
     ));
-    for delegate in [
-        "action", "grant", "mission", "door", "undo",
-    ] {
+    for delegate in ["action", "grant", "mission", "door", "undo"] {
         assert!(!hands_confirmer(
             "host/src/terminal.rs",
             &fixture.replace(&format!("self.{delegate}(request)"), "true")
@@ -798,37 +813,94 @@ fn scan_m2b_no_desktop_outside_the_registered_package() {
 fn walk_terminal_confirmer(rel: &str, text: &str) -> bool {
     let implementation = ["impl", "ControlConfirmer", "for", "WalkConfirmer"].join(" ");
     let needle = ["ControlConfirmer", "for"].join(" ");
-    rel == "host/src/legacy_terminal.rs" && text.matches(&needle).count() == 1 && text.contains(&implementation)
-        && [("confirm_mission", "mission"), ("confirm_agent_door", "door"), ("confirm_held_mission", "held")].iter().all(|(method, delegate)| bodies_of(text, method) == vec![format!("self.{delegate}(request)")])
-        && ["confirm_action", "confirm_grant", "confirm_resume", "confirm_acknowledgement", "confirm_undo"].iter().all(|method| bodies_of(text, method) == vec!["false".to_string()])
+    rel == "host/src/legacy_terminal.rs"
+        && text.matches(&needle).count() == 1
+        && text.contains(&implementation)
+        && [
+            ("confirm_mission", "mission"),
+            ("confirm_agent_door", "door"),
+            ("confirm_held_mission", "held"),
+        ]
+        .iter()
+        .all(|(method, delegate)| {
+            bodies_of(text, method) == vec![format!("self.{delegate}(request)")]
+        })
+        && [
+            "confirm_action",
+            "confirm_grant",
+            "confirm_resume",
+            "confirm_acknowledgement",
+            "confirm_undo",
+        ]
+        .iter()
+        .all(|method| bodies_of(text, method) == vec!["false".to_string()])
 }
 
 #[test]
 fn scan_isolated_walk_confirmer_keeps_only_legacy_permissions() {
     let prefix = ["impl", "ControlConfirmer", "for", "WalkConfirmer"].join(" ");
     let mut fixture = format!("{prefix} {{");
-    for (method, delegate) in [("mission", "mission"), ("agent_door", "door"), ("held_mission", "held")] {
-        fixture.push_str(&format!("fn confirm_{method}(&self, request: &R) -> bool {{ self.{delegate}(request) }}"));
+    for (method, delegate) in [
+        ("mission", "mission"),
+        ("agent_door", "door"),
+        ("held_mission", "held"),
+    ] {
+        fixture.push_str(&format!(
+            "fn confirm_{method}(&self, request: &R) -> bool {{ self.{delegate}(request) }}"
+        ));
     }
     for method in ["action", "grant", "resume", "acknowledgement", "undo"] {
-        fixture.push_str(&format!("fn confirm_{method}(&self, _: &R) -> bool {{ false }}"));
+        fixture.push_str(&format!(
+            "fn confirm_{method}(&self, _: &R) -> bool {{ false }}"
+        ));
     }
     fixture.push('}');
-    assert!(walk_terminal_confirmer("host/src/legacy_terminal.rs", &fixture));
-    for path in ["host/src/terminal.rs", "host/src/hands.rs", "host/src/other.rs"] {
+    assert!(walk_terminal_confirmer(
+        "host/src/legacy_terminal.rs",
+        &fixture
+    ));
+    for path in [
+        "host/src/terminal.rs",
+        "host/src/hands.rs",
+        "host/src/other.rs",
+    ] {
         assert!(!walk_terminal_confirmer(path, &fixture));
     }
-    for (old, new) in [("WalkConfirmer", "Other"), ("false", "true"), ("self.mission(request)", "true"), ("self.door(request)", "true"), ("self.held(request)", "true")] {
-        assert!(!walk_terminal_confirmer("host/src/legacy_terminal.rs", &fixture.replace(old, new)));
+    for (old, new) in [
+        ("WalkConfirmer", "Other"),
+        ("false", "true"),
+        ("self.mission(request)", "true"),
+        ("self.door(request)", "true"),
+        ("self.held(request)", "true"),
+    ] {
+        assert!(!walk_terminal_confirmer(
+            "host/src/legacy_terminal.rs",
+            &fixture.replace(old, new)
+        ));
     }
-    assert!(!walk_terminal_confirmer("host/src/legacy_terminal.rs", &format!("{fixture}{fixture}")));
+    assert!(!walk_terminal_confirmer(
+        "host/src/legacy_terminal.rs",
+        &format!("{fixture}{fixture}")
+    ));
 }
 
 #[test]
 fn scan_hands_services_cannot_import_the_walk_or_raw_authority() {
-    for rel in ["host/src/hands.rs", "host/src/terminal.rs", "host/src/stop.rs", "host/src/session_home.rs"] {
+    for rel in [
+        "host/src/hands.rs",
+        "host/src/terminal.rs",
+        "host/src/stop.rs",
+        "host/src/session_home.rs",
+    ] {
         let text = code(&std::fs::read_to_string(crate_root().join(rel)).unwrap());
-        for forbidden in ["legacy_terminal", "legacy_stop", "GovernedControl", "GovernedPort", ".owner()", "Home::"] {
+        for forbidden in [
+            "legacy_terminal",
+            "legacy_stop",
+            "GovernedControl",
+            "GovernedPort",
+            ".owner()",
+            "Home::",
+        ] {
             assert!(!text.contains(forbidden), "{rel}: {forbidden}");
         }
     }

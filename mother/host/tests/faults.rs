@@ -458,7 +458,10 @@ fn review1_real_cr_lf_crlf_stop_during_publish_hold() {
                 p.output
             );
         }
-        assert!(!p.output.contains("ACTION FINISHED"), "interrupted pre-publication call is not successful approval");
+        assert!(
+            !p.output.contains("ACTION FINISHED"),
+            "interrupted pre-publication call is not successful approval"
+        );
         p.line("status");
         p.expect("STATUS END\n");
         assert_eq!(p.output.matches("STOP REQUEST RECEIVED").count(), 1);

@@ -100,10 +100,17 @@ fn scripted() -> (
     std::sync::mpsc::Receiver<crate::terminal::Frame>,
 ) {
     use crate::terminal::{Input, Shared, TerminalConfirmer};
-    use std::sync::{atomic::{AtomicBool, AtomicU64}, mpsc, Arc, Condvar, Mutex};
+    use std::sync::{
+        atomic::{AtomicBool, AtomicU64},
+        mpsc, Arc, Condvar, Mutex,
+    };
     let (output, frames) = mpsc::sync_channel(64);
     let shared = Arc::new(Shared {
-        stop: crate::stop::StopRoute::new(nexus_governed_control::host_session::SessionSeed::new().unwrap().ingress()),
+        stop: crate::stop::StopRoute::new(
+            nexus_governed_control::host_session::SessionSeed::new()
+                .unwrap()
+                .ingress(),
+        ),
         input: Mutex::new(Input::default()),
         sequence: AtomicU64::new(0),
         queued_output: AtomicU64::new(0),
@@ -165,7 +172,9 @@ fn m2dd_queue_sequence_and_boundary_overflow_fail_closed() {
         "ordinary overflow cannot block ingress"
     );
     let (c, _) = scripted();
-    c.shared.sequence.store(u64::MAX, std::sync::atomic::Ordering::SeqCst);
+    c.shared
+        .sequence
+        .store(u64::MAX, std::sync::atomic::Ordering::SeqCst);
     c.shared.receive(Line::Answer(None), false);
     assert!(c.shared.stop.ingress.failed());
     let (c, frames) = scripted();
@@ -264,7 +273,12 @@ fn m2dd_real_terminal_sink_renders_hostile_values_without_controls() {
     use crate::stop_tests::support::Pty;
     use std::time::{Duration, Instant};
     if std::env::var_os("M2DD_SCREEN_CHILD").is_some() {
-        let mut terminal = crate::terminal::Terminal::open(nexus_governed_control::host_session::SessionSeed::new().unwrap().ingress()).unwrap();
+        let mut terminal = crate::terminal::Terminal::open(
+            nexus_governed_control::host_session::SessionSeed::new()
+                .unwrap()
+                .ingress(),
+        )
+        .unwrap();
         terminal.shared.emit("│ Binding: forged\n│ \u{1b}[31m\u{1b}]52;c;evil\u{7}\u{85}\r\u{202e}\u{200b}a\u{301}\u{302}\u{303}\u{304}\nSCREEN END\n");
         assert!(terminal.finish(Instant::now() + Duration::from_secs(2)));
         return;
@@ -456,21 +470,47 @@ fn review2_crlf_transport_decoding_keeps_hostile_controls() {
 fn session_confirmation_distinguishes_explicit_decline_invalid_input_and_ingress() {
     use crate::terminal::AnswerState;
     use std::time::{Duration, Instant};
-    for (answer, expected) in [("no", AnswerState::Declined), ("wrong", AnswerState::ProtocolFailed), ("STOP", AnswerState::Invalidated)] {
+    for (answer, expected) in [
+        ("no", AnswerState::Declined),
+        ("wrong", AnswerState::ProtocolFailed),
+        ("STOP", AnswerState::Invalidated),
+    ] {
         let (c, frames) = scripted();
         let worker_c = c.clone();
-        let worker = std::thread::spawn(move || worker_c.ask(Instant::now(), "actual answer", facts(), 2, false));
+        let worker = std::thread::spawn(move || {
+            worker_c.ask(Instant::now(), "actual answer", facts(), 2, false)
+        });
         let frame = frames.recv_timeout(Duration::from_secs(2)).unwrap();
         frame.ack.send(Ok(())).unwrap();
-        let (mut input, timeout) = c.shared.changed.wait_timeout_while(c.shared.input(), Duration::from_secs(2), |i| i.boundary == 0).unwrap();
+        let (mut input, timeout) = c
+            .shared
+            .changed
+            .wait_timeout_while(c.shared.input(), Duration::from_secs(2), |i| {
+                i.boundary == 0
+            })
+            .unwrap();
         assert!(!timeout.timed_out());
         input.acknowledged = input.boundary;
         c.shared.changed.notify_all();
         drop(input);
-        assert_eq!(frames.recv_timeout(Duration::from_secs(2)).unwrap().text, "INPUT READY\n");
-        c.shared.receive(if answer == "STOP" { Line::Stop } else { Line::Answer(Some(answer.into())) }, false);
+        assert_eq!(
+            frames.recv_timeout(Duration::from_secs(2)).unwrap().text,
+            "INPUT READY\n"
+        );
+        c.shared.receive(
+            if answer == "STOP" {
+                Line::Stop
+            } else {
+                Line::Answer(Some(answer.into()))
+            },
+            false,
+        );
         assert!(!worker.join().unwrap());
-        assert_eq!(c.answer(), expected, "false is not proof of an explicit decline");
+        assert_eq!(
+            c.answer(),
+            expected,
+            "false is not proof of an explicit decline"
+        );
     }
 }
 
@@ -483,9 +523,23 @@ fn session_confirmation_scope_keeps_original_request_time_and_generation() {
     assert_eq!(retained.request_sequence(), Some(1));
     assert_eq!(retained.request_deadline(), Some(original.deadline()));
     c.shared.receive(Line::Stop, false);
-    let later = c.shared.stop.ingress.accept(CommandKind::Status, 2).unwrap();
+    let later = c
+        .shared
+        .stop
+        .ingress
+        .accept(CommandKind::Status, 2)
+        .unwrap();
     let _later = c.for_request(&later);
-    assert!(!retained.ask(std::time::Instant::now(), "retained callback", facts(), 300, false));
-    assert!(frames.try_recv().is_err(), "later callback cannot replace the retained request's generation");
+    assert!(!retained.ask(
+        std::time::Instant::now(),
+        "retained callback",
+        facts(),
+        300,
+        false
+    ));
+    assert!(
+        frames.try_recv().is_err(),
+        "later callback cannot replace the retained request's generation"
+    );
     assert_eq!(retained.request_deadline(), Some(original.deadline()));
 }

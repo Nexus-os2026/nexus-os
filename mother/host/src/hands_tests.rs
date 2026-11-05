@@ -1,13 +1,13 @@
 //! Review 1: deterministic production-path schedules, test-only child hooks.
 use crate::hands::run;
+use crate::session_home::SessionServices;
 use crate::stop::StopRoute;
 use crate::stop_tests::support::{Fixture, Pty};
 use crate::terminal::Shared;
-use crate::session_home::SessionServices;
-use nexus_governed_control::host_session::SessionSeed;
 use nexus_governed_control::authority::evidence::EvidencePhase;
 use nexus_governed_control::authority::evidence::{EvidenceProjection, EvidenceRecord};
 use nexus_governed_control::files::FileCreate;
+use nexus_governed_control::host_session::SessionSeed;
 use nexus_mother::adapter::SessionPort;
 use nexus_mother::effect::{EffectPort, EffectRequest};
 use nexus_mother::journal::MissionId;
@@ -218,7 +218,12 @@ pub(crate) fn review2_before_step(screen: &Shared, home: &SessionServices, step:
     assert!(!home.session.stop_snapshot().broker_stopped);
     assert!(!home.session.stop_snapshot().kernel_stopped);
 }
-pub(crate) fn review2_after_step(screen: &Shared, home: &SessionServices, step: &str, refused: bool) {
+pub(crate) fn review2_after_step(
+    screen: &Shared,
+    home: &SessionServices,
+    step: &str,
+    refused: bool,
+) {
     if std::env::var(REVIEW2).as_deref() != Ok(step) {
         return;
     }
@@ -226,10 +231,7 @@ pub(crate) fn review2_after_step(screen: &Shared, home: &SessionServices, step: 
         refused,
         "{step}: Stop ingress must refuse mission admission before any worker runs"
     );
-    assert!(
-        home.session.run_count() == 0,
-        "zero backend runs"
-    );
+    assert!(home.session.run_count() == 0, "zero backend runs");
     assert!(
         !home
             .recent_evidence()
@@ -434,7 +436,10 @@ pub(crate) fn review4_reported(screen: &Shared, home: &SessionServices, route: &
         );
     }
     assert!(screen.stop.ingress.emergency_seen());
-    assert_ne!(home.session.state(), nexus_governed_control::host_session::SessionState::Normal);
+    assert_ne!(
+        home.session.state(),
+        nexus_governed_control::host_session::SessionState::Normal
+    );
     screen.stop.hold_dispatch.store(false, Ordering::SeqCst);
     screen.stop.dispatch_pending();
     screen.emit("REVIEW4 NO LATER WORK\n");
@@ -444,7 +449,11 @@ fn review4_outcome(scenario: &str, test: &str) {
     if std::env::var(REVIEW4).is_ok() {
         let args = std::env::var("M2DD_REVIEW4_ARGS").unwrap();
         let clean = run(args.split('\n').map(str::to_owned));
-        assert_eq!(clean, !scenario.starts_with("undo"), "post-undo emergency retains resource debt");
+        assert_eq!(
+            clean,
+            !scenario.starts_with("undo"),
+            "post-undo emergency retains resource debt"
+        );
         return;
     }
     let f = Fixture::new();
@@ -517,13 +526,26 @@ fn review4_outcome(scenario: &str, test: &str) {
     if scenario.starts_with("undo") {
         let staging = f.home.join("broker/files/coding-runs");
         let retained = crate::stop_tests::support::privacy::files_under(&staging, None);
-        assert!(!retained.is_empty(), "native resources remain after completed/refused restore");
+        assert!(
+            !retained.is_empty(),
+            "native resources remain after completed/refused restore"
+        );
         p.line("quit");
-        assert!(p.finish().success(), "child must verify nonzero host result: {}", p.output);
+        assert!(
+            p.finish().success(),
+            "child must verify nonzero host result: {}",
+            p.output
+        );
         assert!(p.output.contains("UNCLEAN EXIT:"));
         assert!(!p.output.contains("SESSION CLOSED recorded"));
-        assert_eq!(crate::stop_tests::support::privacy::files_under(&staging, None), retained, "restricted close/destruction must retain resources");
-    } else { p.quit(); }
+        assert_eq!(
+            crate::stop_tests::support::privacy::files_under(&staging, None),
+            retained,
+            "restricted close/destruction must retain resources"
+        );
+    } else {
+        p.quit();
+    }
 }
 #[test]
 fn decision11_host_undo_completed_is_honest() {

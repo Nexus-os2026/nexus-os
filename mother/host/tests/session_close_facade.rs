@@ -300,5 +300,8 @@ fn session_failed_observation_has_owned_lifetime_without_work_permission() {
     assert!(ingress.accept(CommandKind::Evidence, 2).is_ok());
     report.joined();
     ingress.accept(CommandKind::Quit, 3).unwrap();
-    assert!(ingress.producer(ProducerKind::Observation).is_err(), "closing admits no new reporting producer");
+    assert!(
+        ingress.producer(ProducerKind::Observation).is_err(),
+        "closing admits no new reporting producer"
+    );
 }
