@@ -98,7 +98,7 @@ fn session_pending_quit_prepares_terminal_ack_without_recording_an_end() {
     assert!(!home.workspace.join("never.txt").exists());
 }
 
-#[path = "session_native_record_fix1_tests.rs"]
-mod native_record_fix1;
 #[path = "session_lifecycle_fix1_tests.rs"]
 mod lifecycle_fix1;
+#[path = "session_native_record_fix1_tests.rs"]
+mod native_record_fix1;

@@ -2883,12 +2883,12 @@ fn session_reservation_transfer_releases_exactly_its_own_capacity() {
     }
 }
 
+#[path = "session_lifecycle_fix1_tests.rs"]
+mod lifecycle_fix1;
 #[path = "session_native_record_fix1_tests.rs"]
 mod native_record_fix1;
 #[path = "session_ack_fix1_tests.rs"]
 mod session_ack_fix1_tests;
-#[path = "session_lifecycle_fix1_tests.rs"]
-mod lifecycle_fix1;
 
 #[path = "session_budget_fix1_tests.rs"]
 mod budget_fix1;

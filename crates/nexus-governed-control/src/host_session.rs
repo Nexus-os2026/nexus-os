@@ -1399,7 +1399,10 @@ impl SessionIngress {
             }
             if self.core.cell.session_compare(old, old | FAILED).is_ok() {
                 #[cfg(test)]
-                crate::authority::file_session::probe(Some(&self.core.cell), "close.failed.published");
+                crate::authority::file_session::probe(
+                    Some(&self.core.cell),
+                    "close.failed.published",
+                );
                 self.core.close.get_or_init(|| CloseIdentity {
                     sequence: self.core.sequence.load(Ordering::SeqCst),
                     generation: old / EPOCH_STEP,
