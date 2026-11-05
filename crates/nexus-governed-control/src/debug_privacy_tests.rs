@@ -367,7 +367,7 @@ fn a_commitment_view_of_a_file_action_prints_no_file_content() {
     assert_surface(
         "the commitment view's summary",
         &flow.view.summary.join("\n"),
-        &flow.content.trim_end().to_string(),
+        flow.content.trim_end(),
     );
     assert_surface(
         "the commitment view's target",
