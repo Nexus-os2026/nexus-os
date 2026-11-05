@@ -18,6 +18,10 @@ fn dialogue(stage: usize, input: &str, answer: &str, reason: &str) {
     p.line(input);
     if matches!(input, "stop" | "no") {
         p.expect("ANSWERS ");
+        if input == "stop" {
+            p.line("evidence");
+            p.expect("EVIDENCE HEALTH\n");
+        }
         p.line("quit");
     }
     let status = p.finish();
@@ -34,6 +38,16 @@ fn dialogue(stage: usize, input: &str, answer: &str, reason: &str) {
         "the real terminal retains the exact answer: {}",
         p.output
     );
+    if input == "stop" {
+        let phase = ["grant_declined", "agent_door_declined", "mission_declined"][stage];
+        let row = p
+            .output
+            .lines()
+            .find(|line| line.starts_with(&format!("phase={phase} ")))
+            .expect("the live evidence command includes the exact native result");
+        assert!(row.contains("failure=unavailable") && row.contains(&format!("reason={reason}")),
+            "Owner evidence must not project an interrupted answer back to an unqualified decline: {row}");
+    }
     let output = Command::new("python3")
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .arg(concat!(
