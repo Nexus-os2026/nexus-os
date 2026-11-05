@@ -14,7 +14,8 @@ fn fix1_a_discard_record_failure_keeps_exact_acked_resource_debt() {
                 .env("M2DD_FIX1_A", case)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
-                .spawn().unwrap();
+                .spawn()
+                .unwrap();
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
             while child.try_wait().unwrap().is_none() {
                 if std::time::Instant::now() >= deadline {
@@ -25,27 +26,52 @@ fn fix1_a_discard_record_failure_keeps_exact_acked_resource_debt() {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
             let output = child.wait_with_output().unwrap();
-            println!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            println!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
             assert!(output.status.success(), "F01 child {case} failed");
         }
         return;
     };
-    assert!(matches!(case.as_str(), "control" | "discard_record_failure"));
+    assert!(matches!(
+        case.as_str(),
+        "control" | "discard_record_failure"
+    ));
     assert!(nexus_governed_control::files::make_non_dumpable());
     let home = Fixture::new("fix1-discard-record");
-    let file = Coordinator::open(home.journal(), home.port.clone(), Lanes::new(files_lanes()).unwrap(), home.clock.clone(), home.private()).unwrap().into_file_session().unwrap();
+    let file = Coordinator::open(
+        home.journal(),
+        home.port.clone(),
+        Lanes::new(files_lanes()).unwrap(),
+        home.clock.clone(),
+        home.private(),
+    )
+    .unwrap()
+    .into_file_session()
+    .unwrap();
     let mut contract = contract_with("MKFILE:declined.txt");
     contract.requested_folder = Some(home.session.workspace().unwrap().name);
     let id = file.draft(contract).unwrap();
     file.submit(id).unwrap();
     answering(&Yes, || file.request_consent(id)).unwrap();
     for _ in 0..8 {
-        if file.state(id).unwrap() == Some(MissionState::AwaitingApproval) { break; }
+        if file.state(id).unwrap() == Some(MissionState::AwaitingApproval) {
+            break;
+        }
         file.advance(id).unwrap();
     }
-    assert_eq!(file.state(id).unwrap(), Some(MissionState::AwaitingApproval));
+    assert_eq!(
+        file.state(id).unwrap(),
+        Some(MissionState::AwaitingApproval)
+    );
     home.owner.decline.store(true, Ordering::SeqCst);
-    let approval = home.session.ingress().accept(CommandKind::Approve, 2).unwrap();
+    let approval = home
+        .session
+        .ingress()
+        .accept(CommandKind::Approve, 2)
+        .unwrap();
     assert!(home.session.approve_file(&approval).is_err());
     file.advance(id).unwrap();
     assert_eq!(file.state(id).unwrap(), Some(MissionState::Denied));
@@ -62,7 +88,11 @@ con = sqlite3.connect(sys.argv[1])
 con.execute("CREATE TRIGGER fix1_discard_record_failure BEFORE INSERT ON coding_run_ledger WHEN NEW.event_kind='staging.discarded' BEGIN SELECT RAISE(ABORT, 'injected discard record failure'); END")
 con.commit()
 "#).arg(&ledger).output().unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     let quit = home.session.ingress().accept(CommandKind::Quit, 3).unwrap();
     let ending = file.prepare_session_end().unwrap();
@@ -73,14 +103,22 @@ con.commit()
     assert!(entry.staging_absent);
     assert!(!home.workspace.join("declined.txt").exists());
     let staging = home.dir.join("broker/files/coding-runs");
-    assert_eq!(std::fs::read_dir(staging).unwrap().count(), 0, "actual physical staging removal completed");
+    assert_eq!(
+        std::fs::read_dir(staging).unwrap().count(),
+        0,
+        "actual physical staging removal completed"
+    );
     let output = std::process::Command::new("python3").arg("-c").arg(r#"
 import sqlite3, sys
 con = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
 print(con.execute("SELECT count(*) FROM coding_run_ledger WHERE event_kind='staging.discarded'").fetchone()[0])
 "#).arg(&ledger).output().unwrap();
     assert!(output.status.success());
-    let recorded: usize = String::from_utf8(output.stdout).unwrap().trim().parse().unwrap();
+    let recorded: usize = String::from_utf8(output.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
     let debt = home.session.resource_obligations().unwrap();
     let seal = home.session.seal_close(&quit);
     let expected_recorded = case == "control";
