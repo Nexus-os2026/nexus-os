@@ -705,6 +705,20 @@ impl Inner {
         if work {
             self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
         }
+        // Serialization and refused work admission are not terminal intent.
+        // Retain an attempt only once this exact append has been admitted;
+        // an entered append which fails must still report recording unknown.
+        if let Event::Transition { trigger } = &entry.event {
+            if self
+                .missions
+                .get(&mission)
+                .is_some_and(|m| transition(m.state, trigger).is_ok_and(|to| to.is_terminal()))
+            {
+                self.mission(mission)?
+                    .terminal_record
+                    .get_or_insert((trigger.clone(), None));
+            }
+        }
         if let Err(e) = self.store.append(&line) {
             // Fail closed, durably: a journal that may have lost a
             // transition (a Stop) must not be reopened as if it had not.
@@ -780,21 +794,14 @@ impl Inner {
     ) -> Result<MissionState, CoordinatorError> {
         let from = self.mission(id)?.state;
         let to = transition(from, &trigger).map_err(|e| refusal(from, e))?;
-        if to.is_terminal() {
-            self.mission(id)?
-                .terminal_record
-                .get_or_insert((trigger.clone(), None));
-        }
         let sequence = self.append(
             id,
             Event::Transition {
                 trigger: trigger.clone(),
             },
         )?;
-        if let Some((intent, recorded)) = &mut self.mission(id)?.terminal_record {
-            if *intent == trigger {
-                *recorded = Some(sequence);
-            }
+        if to.is_terminal() {
+            self.mission(id)?.terminal_record = Some((trigger.clone(), Some(sequence)));
         }
         self.mission(id)?.apply(&trigger, to, mono_now);
         Ok(to)
