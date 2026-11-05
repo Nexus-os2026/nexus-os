@@ -46,6 +46,7 @@ struct Fixture {
     primary: Arc<crate::evidence_store::PrimaryEvidence>,
     door: Arc<SessionDoor>,
     _session: Arc<HostSession>,
+    request: crate::host_session::SessionRequest,
     sequence: AtomicUsize,
     run: RunId,
     clock: Arc<ManualClock>,
@@ -107,6 +108,7 @@ impl Fixture {
             gov,
             door: Arc::new(door),
             _session: session,
+            request,
             sequence: AtomicUsize::new(1),
             run,
             clock,
@@ -2418,4 +2420,89 @@ fn session_result_facts_are_exact_observations_not_authority_or_generic_success(
             );
         }
     }
+}
+
+#[test]
+fn session_result_retains_each_entered_native_call_separately() {
+    const PAGE: &str = include_str!("../../../../kernel/src/inert_page/fixtures/reference.html");
+    fn calls(f: &Fixture, request: &crate::host_session::SessionRequest, expected: &[&str]) {
+        let facts = f._session.operation_observation(request).unwrap();
+        let actual: std::collections::BTreeMap<_, _> = facts
+            .calls
+            .iter()
+            .map(|c| (c.call, (c.entered, c.returned, c.failed)))
+            .collect();
+        let expected: std::collections::BTreeMap<_, _> =
+            expected.iter().map(|name| (*name, (1, 1, 0))).collect();
+        assert_eq!(
+            actual, expected,
+            "each returned real native call has its own retained fact"
+        );
+    }
+    for page in [false, true] {
+        let f = Fixture::new();
+        let name = if page { "index.html" } else { "session.txt" };
+        let bytes = if page { PAGE } else { "native result oracle\n" };
+        f.propose_content(name, bytes).unwrap();
+        let mut preparation = vec![
+            "read_grant",
+            "run_construct",
+            "staging_grant",
+            "snapshot",
+            "edit",
+            "structural_verify",
+            "review",
+        ];
+        if page {
+            preparation.push("page_verify");
+        }
+        calls(&f, &f.request, &preparation);
+        let approval = f
+            ._session
+            .ingress()
+            .accept(CommandKind::Approve, 2)
+            .unwrap();
+        f._session.approve_file(&approval).unwrap();
+        let mut execution = vec![
+            "revalidation_review",
+            "request_approval",
+            "write_grant",
+            "apply",
+        ];
+        if page {
+            execution.push("page_recheck");
+        }
+        calls(&f, &approval, &execution);
+        assert_eq!(
+            std::fs::read(f._dirs.0.path().join("selected/workspace").join(name)).unwrap(),
+            bytes.as_bytes()
+        );
+        let undo = f._session.ingress().accept(CommandKind::Undo, 3).unwrap();
+        f._session.undo(&undo).unwrap();
+        calls(&f, &undo, &["request_restore", "undo_grant", "restore"]);
+        assert!(!f
+            ._dirs
+            .0
+            .path()
+            .join("selected/workspace")
+            .join(name)
+            .exists());
+        assert_eq!(
+            matching(&events(&f.ledger_path()), "restore.completed", None),
+            1
+        );
+    }
+    let f = Fixture::new();
+    f.pending();
+    let recorded = f.door.cancel_run(f.run).unwrap().write();
+    assert_eq!((recorded.owed, recorded.uncertain), (0, 0));
+    f.gov.settle();
+    let cleanup = f
+        ._session
+        .ingress()
+        .accept(CommandKind::Cleanup, 2)
+        .unwrap();
+    f._session.cleanup(&cleanup).unwrap();
+    calls(&f, &cleanup, &["discard_staging", "finalization_sync"]);
+    assert!(resources(&f.gov.files().state_dir_for_test().join("coding-runs")).is_empty());
 }

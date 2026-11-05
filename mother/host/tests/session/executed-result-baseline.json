@@ -32,5 +32,14 @@
   "deviations": [
     "First uncommitted PTY fixture used invalid yes/no-code format; corrected to fresh code / literal no before this baseline.",
     "A12 result projection oracles were added late, after other component production commits. R-1 requires disclosure and continuation; these oracles precede their own production repair."
-  ]
+  ],
+  "additional_result_facts": {
+    "base": "7cdc4117 with uncommitted first result projection",
+    "native": "one unavailable calls field; corrected fixture RecordBatch::write API before baseline; not behavioral red",
+    "host": "actual three affirmative dialogues then missing ANSWERS grant=Affirmative door=Affirmative mission=Affirmative action=NotAsked undo=NotAsked",
+    "logs": {
+      "result-calls-baseline-corrected.log": "b2deaa48edebbc37c6451a9c86557c8383fe56133cfb24714b6d26fa697c3ece",
+      "result-answers-baseline.log": "b41e51221dd87d75d1ca24cb4185a4459503b30a25a2c588a034211cef8988d9"
+    }
+  }
 }

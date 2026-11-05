@@ -13,6 +13,8 @@ fn session_result_envelope_preserves_answer_physical_records_and_exact_ack() {
         let mut p = Pty::start(f.command("result oracle\n"));
         p.ready();
         p.mission();
+        p.expect("ANSWERS grant=Affirmative door=Affirmative mission=Affirmative action=NotAsked undo=NotAsked\n");
+        p.expect("OPERATION END\n");
         p.line("approve");
         let code = p.code();
         p.line(if affirmative { &code } else { "no" });
