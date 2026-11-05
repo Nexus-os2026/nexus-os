@@ -650,6 +650,8 @@ pub mod tool;
 pub use nexus_kernel::inert_page;
 
 #[cfg(test)]
+mod debug_privacy_tests;
+#[cfg(test)]
 mod harness_tests;
 #[cfg(test)]
 pub(crate) mod test_hooks;
