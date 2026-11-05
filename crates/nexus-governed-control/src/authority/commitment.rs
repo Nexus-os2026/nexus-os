@@ -36,6 +36,7 @@ use super::evidence::{
     bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy,
     INTERRUPTIONS,
 };
+use super::file_session::HaltCell;
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
@@ -224,6 +225,9 @@ pub struct CommitmentView {
 }
 
 struct Entry {
+    /// A separately accepted approval root, bound only by the session facade.
+    /// Retained Run contexts stay immutable and are never refreshed.
+    request: Option<super::file_session::HaltCell>,
     agent: AgentId,
     run: RunId,
     /// P0: its run's privacy class, copied when it is created and never
@@ -402,6 +406,7 @@ impl LeaseEnd for NoLeases {
 
 pub(crate) struct Inner {
     entries: Mutex<HashMap<CommitmentId, Entry>>,
+    preparations: std::sync::atomic::AtomicUsize,
     generation: Arc<PolicyGeneration>,
     grants: Arc<GrantStore>,
     runs: Arc<RunRegistry>,
@@ -415,6 +420,28 @@ pub(crate) struct Inner {
     hooks: Arc<crate::test_hooks::Hooks>,
     #[cfg(test)]
     capacity: AtomicU64,
+}
+
+/// Capacity reserved before a host action creates any native resource.
+/// The count is changed only while the entries hold is owned.
+pub(crate) struct PreparationSlot {
+    registry: CommitmentRegistry,
+    held: bool,
+    cell: HaltCell,
+}
+impl Drop for PreparationSlot {
+    fn drop(&mut self) {
+        if self.held {
+            // Dropping a reservation cannot lose capacity accounting on
+            // poison; it performs no evidence or native cleanup.
+            match self.registry.0.entries.lock() {
+                Ok(_entries) => {
+                    self.registry.0.preparations.fetch_sub(1, Ordering::SeqCst);
+                }
+                Err(_) => self.cell.fail_session(),
+            }
+        }
+    }
 }
 
 /// Where revocation records go: an unwritten list (the emergency stop), or
@@ -488,6 +515,7 @@ struct Reserved<'a> {
     registry: &'a CommitmentRegistry,
     id: CommitmentId,
     token: u64,
+    cell: Option<HaltCell>,
 }
 
 impl Drop for Reserved<'_> {
@@ -499,6 +527,8 @@ impl Drop for Reserved<'_> {
                     entry.reserved = None;
                 }
             }
+        } else if let Some(cell) = &self.cell {
+            cell.fail_session();
         }
     }
 }
@@ -513,6 +543,7 @@ impl CommitmentRegistry {
     ) -> Self {
         Self(Arc::new(Inner {
             entries: Mutex::new(HashMap::new()),
+            preparations: std::sync::atomic::AtomicUsize::new(0),
             generation,
             grants,
             runs,
@@ -640,6 +671,55 @@ impl CommitmentRegistry {
         self.0.entries.lock().expect("commitments")
     }
 
+    pub(crate) fn bind_session_request(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        run: RunId,
+        request: &super::file_session::HaltCell,
+    ) -> Result<(), AuthorityError> {
+        let mut entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
+        let entry = entries
+            .get_mut(&id)
+            .ok_or(AuthorityError::UnknownCommitment)?;
+        if &entry.agent != agent
+            || entry.run != run
+            || !entry.pinned
+            || entry.request.is_some()
+            || entry.state != CommitmentState::Prepared
+            || entry.reserved.is_some()
+        {
+            return Err(AuthorityError::NotPending);
+        }
+        let cancel = self.0.runs.check_request(run, agent, Some(request))?;
+        cancel.admit_host()?;
+        entry.request = Some(request.clone());
+        Ok(())
+    }
+
+    pub(crate) fn session_request(
+        &self,
+        id: CommitmentId,
+        run: RunId,
+    ) -> Result<super::file_session::HaltCell, AuthorityError> {
+        let entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
+        let entry = entries.get(&id).ok_or(AuthorityError::UnknownCommitment)?;
+        if entry.run != run || !entry.pinned {
+            return Err(AuthorityError::WrongRun);
+        }
+        if entry.state.is_final()
+            || entry.generation != self.0.generation.current()
+            || entry
+                .prepared
+                .grants
+                .iter()
+                .any(|id| self.0.grants.live(*id).is_none())
+        {
+            return Err(AuthorityError::Stale);
+        }
+        entry.request.clone().ok_or(AuthorityError::NotAdmitted)
+    }
+
     fn now(&self) -> Now {
         Now {
             monotonic_ms: self.0.clock.monotonic_ms(),
@@ -673,6 +753,24 @@ impl CommitmentRegistry {
             last = Some(write_end(&*self.0.evidence, record));
         }
         last
+    }
+
+    pub(crate) fn stop_metadata_known(&self) -> bool {
+        !self.0.entries.is_poisoned() && !self.0.leases.is_poisoned()
+    }
+
+    /// Session callers retain the result of every consequence, not only the
+    /// final append. Legacy callers keep their existing last-result contract.
+    pub(crate) fn write_ends_observed(&self, records: Unwritten) -> super::halt::BatchOutcome {
+        let mut outcome = super::halt::BatchOutcome::default();
+        for record in &records.0 {
+            match write_end(&*self.0.evidence, record) {
+                EndStatus::Recorded { .. } => outcome.recorded += 1,
+                EndStatus::Owed => outcome.owed += 1,
+                EndStatus::Uncertain => outcome.uncertain += 1,
+            }
+        }
+        outcome
     }
 
     fn base_record(
@@ -750,15 +848,62 @@ impl CommitmentRegistry {
                     self.fire(crate::test_hooks::at::COMPLETE_BEFORE_CHECK);
                     // Checked while still reserved: an end it finds records
                     // the transition it interrupted.
-                    let live = self.live_check(id, entry, agent, run, now, &mut deferred);
-                    entry.reserved = None;
+                    #[cfg(test)]
+                    let point = match entry.reserved.expect("reserved transition").transition {
+                        Transition::Approve => {
+                            ("registry.token_issue.before", "registry.token_issue.after")
+                        }
+                        Transition::Authorize => {
+                            ("registry.authorize.before", "registry.authorize.after")
+                        }
+                        Transition::Start => (
+                            "registry.commitment_start.before",
+                            "registry.commitment_start.after",
+                        ),
+                    };
+                    #[cfg(test)]
+                    let cell = entry.request.clone();
+                    let mut live = self.live_check(id, entry, agent, run, now, &mut deferred);
                     #[cfg(test)]
                     if live.is_ok() {
                         self.fire(crate::test_hooks::at::COMPLETE_CHECKED);
                     }
+                    #[cfg(test)]
+                    if live.is_ok() {
+                        crate::authority::file_session::probe(cell.as_ref(), point.0);
+                    }
+                    // The run token was read before grant validation. Read
+                    // its optional deny-only cell again in this same hold,
+                    // immediately before approval/authorization/dispatch.
+                    if live
+                        .as_ref()
+                        .is_ok_and(|cancel| cancel.admit_host().is_err())
+                    {
+                        let reason = match entry.reserved.expect("reserved transition").transition {
+                            Transition::Approve => "approval_refused_halted",
+                            Transition::Authorize => "authorization_refused_halted",
+                            Transition::Start => "execution_dispatch_refused_halted",
+                        };
+                        self.end_entry(
+                            id,
+                            entry,
+                            CommitmentState::Revoked,
+                            EvidencePhase::Revoked,
+                            now,
+                            &mut deferred,
+                            |record| {
+                                record.failure = Some("halted");
+                                record.cancelled = true;
+                                record.detail.push(("reason".into(), reason.into()));
+                            },
+                        );
+                        live = Err(AuthorityError::Halted);
+                    }
+                    entry.reserved = None;
                     let finalized = live.map(|cancel| finalize(entry, cancel));
                     #[cfg(test)]
                     if finalized.is_ok() {
+                        crate::authority::file_session::probe(cell.as_ref(), point.1);
                         self.fire(crate::test_hooks::at::COMPLETE_FINALIZED);
                     }
                     finalized
@@ -797,6 +942,50 @@ impl CommitmentRegistry {
         owed.leases(&entry.prepared.leases);
     }
 
+    pub(crate) fn reserve_preparation(
+        &self,
+        cell: HaltCell,
+    ) -> Result<PreparationSlot, AuthorityError> {
+        let mut entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
+        let reserved = self.0.preparations.load(Ordering::SeqCst);
+        if entries.len() + reserved >= self.capacity() {
+            entries.retain(|_, entry| !entry.state.is_final() || entry.pinned);
+        }
+        if entries.len() + reserved >= self.capacity() {
+            return Err(AuthorityError::Capacity);
+        }
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&cell), "registry.preparation_reserve.before");
+        cell.admit()?;
+        self.0.preparations.store(reserved + 1, Ordering::SeqCst);
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&cell), "registry.preparation_reserve.after");
+        Ok(PreparationSlot {
+            registry: self.clone(),
+            held: true,
+            cell,
+        })
+    }
+
+    pub(crate) fn prepare_reserved(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        prepared: PreparedAction,
+        ttl: Duration,
+        slot: PreparationSlot,
+    ) -> Result<CommitmentView, AuthorityError> {
+        if !Arc::ptr_eq(&self.0, &slot.registry.0) || !slot.held {
+            return Err(AuthorityError::Halted);
+        }
+        let leases = prepared.leases.clone();
+        let result = self.prepare_leased(agent, run, prepared, ttl, Some(slot));
+        if result.is_err() {
+            self.end_leases(&leases);
+        }
+        result
+    }
+
     /// Record a commitment for `agent` in `run`. The run must be active and
     /// every grant the action relies on live. Nothing happens yet.
     pub(crate) fn prepare(
@@ -807,7 +996,7 @@ impl CommitmentRegistry {
         ttl: Duration,
     ) -> Result<CommitmentView, AuthorityError> {
         let leases = prepared.leases.clone();
-        let result = self.prepare_leased(agent, run, prepared, ttl);
+        let result = self.prepare_leased(agent, run, prepared, ttl, None);
         if result.is_err() {
             // A refused preparation leaves no credential lease behind.
             self.end_leases(&leases);
@@ -821,8 +1010,11 @@ impl CommitmentRegistry {
         run: RunId,
         prepared: PreparedAction,
         ttl: Duration,
+        mut slot: Option<PreparationSlot>,
     ) -> Result<CommitmentView, AuthorityError> {
-        self.0.runs.check(run, agent)?;
+        self.0
+            .runs
+            .check_request(run, agent, slot.as_ref().map(|slot| &slot.cell))?;
         // Fixed now, from the class the run was admitted with (a run gone
         // meanwhile is Restricted), and kept for the commitment's life.
         let privacy = self.0.runs.privacy(run);
@@ -864,6 +1056,7 @@ impl CommitmentRegistry {
             &[&nonce, prepared.parameters.as_bytes()],
         );
         let entry = Entry {
+            request: None,
             agent: agent.clone(),
             run,
             privacy,
@@ -899,29 +1092,58 @@ impl CommitmentRegistry {
         let now = self.now();
         let refused = {
             let mut entries = self.entries();
-            if entries.len() >= self.capacity() {
+            if let Some(slot) = slot.as_mut() {
+                self.0.preparations.fetch_sub(1, Ordering::SeqCst);
+                slot.held = false;
+            }
+            let reserved = self.0.preparations.load(Ordering::SeqCst);
+            if entries.len() + reserved >= self.capacity() {
                 entries.retain(|_, e| !e.state.is_final() || e.pinned);
             }
             // The run is checked again under the lock that cancelling and
             // stopping take, so a run ended meanwhile gets no live
             // commitment: its recorded preparation ends as revoked.
             let files = entry.prepared.kind == CapabilityKind::Files;
-            let retained = if entries.len() >= self.capacity() {
+            let retained = if entries.len() + reserved >= self.capacity() {
                 Err(AuthorityError::Capacity)
             } else {
-                self.0.runs.check_retaining(run, agent, files)
+                self.0.runs.check_request_retaining(
+                    run,
+                    agent,
+                    files,
+                    slot.as_ref().map(|slot| &slot.cell),
+                )
             };
             match retained {
                 Err(error) => {
                     let mut entry = entry;
-                    self.end_unconsumed(
-                        id,
-                        &mut entry,
-                        CommitmentState::Revoked,
-                        &error,
-                        now,
-                        &mut deferred,
-                    );
+                    if error == AuthorityError::Halted && self.0.runs.session_halted(run) {
+                        self.end_entry(
+                            id,
+                            &mut entry,
+                            CommitmentState::Revoked,
+                            EvidencePhase::Revoked,
+                            now,
+                            &mut deferred,
+                            |record| {
+                                record.failure = Some("halted");
+                                record.cancelled = true;
+                                record.detail.push((
+                                    "reason".into(),
+                                    "commitment_prepare_refused_halted".into(),
+                                ));
+                            },
+                        );
+                    } else {
+                        self.end_unconsumed(
+                            id,
+                            &mut entry,
+                            CommitmentState::Revoked,
+                            &error,
+                            now,
+                            &mut deferred,
+                        );
+                    }
                     Some(error)
                 }
                 Ok((_, owner)) => {
@@ -960,7 +1182,11 @@ impl CommitmentRegistry {
         if entry.run != run {
             return Err(AuthorityError::WrongRun);
         }
-        let token = match self.0.runs.check(run, agent) {
+        let token = match self
+            .0
+            .runs
+            .check_request(run, agent, entry.request.as_ref())
+        {
             Ok(token) => token,
             Err(error) => {
                 self.end_unconsumed(id, entry, CommitmentState::Revoked, &error, now, deferred);
@@ -975,6 +1201,8 @@ impl CommitmentRegistry {
             } else if self.0.generation.current() != entry.generation {
                 Some((CommitmentState::Revoked, AuthorityError::Stale))
             } else if entry.prepared.grants.iter().any(|grant| {
+                #[cfg(test)]
+                self.fire("decision7.grant_validation");
                 self.0
                     .grants
                     .live_at(*grant, now.monotonic_ms, now.wall_ms)
@@ -1007,7 +1235,21 @@ impl CommitmentRegistry {
         } else {
             EvidencePhase::Revoked
         };
+        // Preserve legacy no-cell evidence. Session refusals also identify
+        // the particular admission whose earlier evidence could not take effect.
+        let route = if *reason == AuthorityError::Halted && self.0.runs.session_halted(entry.run) {
+            entry.reserved.map(|r| match r.transition {
+                Transition::Approve => "approval_refused_halted",
+                Transition::Authorize => "authorization_refused_halted",
+                Transition::Start => "execution_dispatch_refused_halted",
+            })
+        } else {
+            None
+        };
         self.end_entry(id, entry, state, phase, now, owed, |record| {
+            if let Some(route) = route {
+                record.detail.push(("reason".into(), route.into()));
+            }
             record.failure = Some(reason.class());
             record.cancelled = matches!(
                 reason,
@@ -1055,7 +1297,13 @@ impl CommitmentRegistry {
         };
         self.flush(deferred);
         let (request, binding) = asked?;
+        self.session_confirmation_handoff(id, agent, run, binding)?;
         let confirmed = confirmer.confirm_action(&request);
+        #[cfg(test)]
+        crate::authority::file_session::probe(
+            self.0.runs.session_cell(run).ok().flatten().as_ref(),
+            "registry.action_confirm.after",
+        );
         let mut deferred = Deferred::default();
         let now = self.now();
         let answered = {
@@ -1087,21 +1335,61 @@ impl CommitmentRegistry {
                         let token = self.reserve(entry, Transition::Approve);
                         let mut record = self.base_record(EvidencePhase::Approved, id, entry, now);
                         record.approval = Some(binding.short());
-                        Ok((token, record))
+                        Ok((token, record, entry.request.clone()))
                     }),
             }
         };
         self.flush(deferred);
-        let (token, record) = answered?;
+        let (token, record, cell) = answered?;
         let _reserved = Reserved {
             registry: self,
             id,
             token,
+            cell,
         };
         // Evidence first: an unrecorded approval is never given.
         self.record(&record)?;
         self.complete(id, token, CommitmentState::Prepared, agent, run, |_, _| ())?;
         Ok(R2Approval::confirmed(id, binding))
+    }
+
+    fn session_confirmation_handoff(
+        &self,
+        id: CommitmentId,
+        agent: &AgentId,
+        run: RunId,
+        binding: Digest,
+    ) -> Result<(), AuthorityError> {
+        let mut deferred = Deferred::default();
+        let now = self.now();
+        let result = {
+            let mut entries = self.entries();
+            let entry = entries
+                .get_mut(&id)
+                .ok_or(AuthorityError::UnknownCommitment)?;
+            if entry.request.is_none() {
+                return Ok(());
+            }
+            if entry.binding != binding
+                || entry.state != CommitmentState::Prepared
+                || entry.reserved.is_some()
+            {
+                return Err(AuthorityError::NotPending);
+            }
+            self.live_check(id, entry, agent, run, now, &mut deferred)
+                .and_then(|cancel| {
+                    #[cfg(test)]
+                    crate::authority::file_session::probe(
+                        entry.request.as_ref(),
+                        "registry.action_confirm.before",
+                    );
+                    cancel.admit_host()
+                })
+        };
+        if result.is_err() {
+            self.flush(deferred);
+        }
+        result
     }
 
     /// What the owner is asked to approve, read under the lock.
@@ -1154,17 +1442,20 @@ impl CommitmentRegistry {
             let mut entries = self.entries();
             match entries.get_mut(&id) {
                 None => Err(AuthorityError::UnknownCommitment),
-                Some(entry) => {
-                    self.authorization(id, entry, agent, run, approval, now, &mut deferred)
-                }
+                Some(entry) => self
+                    .authorization(id, entry, agent, run, approval, now, &mut deferred)
+                    .map(|(token, approved, record)| {
+                        (token, approved, record, entry.request.clone())
+                    }),
             }
         };
         self.flush(deferred);
-        let (token, approved, record) = reserved?;
+        let (token, approved, record, cell) = reserved?;
         let _reserved = Reserved {
             registry: self,
             id,
             token,
+            cell,
         };
         self.record(&record)?;
         #[cfg(test)]
@@ -1234,23 +1525,26 @@ impl CommitmentRegistry {
             let mut entries = self.entries();
             match entries.get_mut(&id) {
                 None => Err(AuthorityError::UnknownCommitment),
-                Some(entry) => self.start(
-                    id,
-                    entry,
-                    agent,
-                    run,
-                    (revalidated, parameters),
-                    now,
-                    &mut deferred,
-                ),
+                Some(entry) => self
+                    .start(
+                        id,
+                        entry,
+                        agent,
+                        run,
+                        (revalidated, parameters),
+                        now,
+                        &mut deferred,
+                    )
+                    .map(|(token, record)| (token, record, entry.request.clone())),
             }
         };
         self.flush(deferred);
-        let (token, record) = reserved?;
+        let (token, record, cell) = reserved?;
         let _reserved = Reserved {
             registry: self,
             id,
             token,
+            cell,
         };
         let started_wall_ms = now.wall_ms;
         let start = self.record(&record)?;
@@ -1665,6 +1959,34 @@ impl CommitmentRegistry {
 
     /// Whether a commitment can still be authorized or started (it is
     /// prepared or authorized; liveness is checked when it is used).
+    /// A host-session pending installation refused after prepare. The
+    /// commitment may already have ended; no terminal result is overwritten.
+    pub(crate) fn refuse_pending_install(&self, id: CommitmentId) {
+        let mut deferred = Deferred::default();
+        let now = self.now();
+        {
+            let mut entries = self.entries();
+            if let Some(entry) = entries.get_mut(&id).filter(|e| !e.state.is_final()) {
+                self.end_entry(
+                    id,
+                    entry,
+                    CommitmentState::Revoked,
+                    EvidencePhase::Revoked,
+                    now,
+                    &mut deferred,
+                    |record| {
+                        record.failure = Some("halted");
+                        record.cancelled = true;
+                        record
+                            .detail
+                            .push(("reason".into(), "pending_effect_refused_halted".into()));
+                    },
+                );
+            }
+        }
+        self.flush(deferred);
+    }
+
     pub fn is_unconsumed(&self, id: CommitmentId) -> bool {
         self.entries().get(&id).is_some_and(|e| {
             matches!(
@@ -1688,6 +2010,8 @@ impl CommitmentRegistry {
     ) -> T {
         let entries = self.entries();
         let view = entries.get(&id).map(|e| e.view(id));
+        #[cfg(test)]
+        self.fire("decision8.adopt_view");
         let result = f(view);
         drop(entries);
         result
@@ -1879,17 +2203,28 @@ impl ExecutionGuard {
     /// during the effect is recorded beside the outcome. Returns what became
     /// of its end record (EL-1 §8).
     pub fn finish(mut self, outcome: Outcome) -> EndStatus {
-        self.finished = true;
+        // Host recording remains an owned obligation until its result
+        // returns. A panic must engage denial without a destructor retry.
+        self.finished = !self.cancel.host();
         let cancelled = self.cancel.is_cancelled();
         let handoff = self.handoff.load(Ordering::SeqCst);
-        self.registry
-            .finish(self.id, self.started_wall_ms, outcome, cancelled, handoff)
+        let status =
+            self.registry
+                .finish(self.id, self.started_wall_ms, outcome, cancelled, handoff);
+        self.finished = true;
+        status
     }
 }
 
 impl Drop for ExecutionGuard {
     fn drop(&mut self) {
         if !self.finished {
+            if self.cancel.abandon_host() {
+                // The exact commitment remains Executing and pinned. Its
+                // outcome/record obligation cannot disappear on unwind.
+                // This destructor performs no recording or cleanup.
+                return;
+            }
             // No caller is left to report to: the store keeps the end
             // record owed, or latched, and the interface shows it.
             self.registry.finish(

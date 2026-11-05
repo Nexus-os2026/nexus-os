@@ -67,6 +67,7 @@ fn structure_the_effect_port_is_sealed_to_the_adapter() {
         sealed,
         [
             "impl Sealed for crate::adapter::GovernedPort {}",
+            "impl Sealed for crate::adapter::SessionPort {}",
             "impl Sealed for crate::oracles::RecordingPort {}"
         ]
     );

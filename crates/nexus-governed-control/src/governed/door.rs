@@ -58,6 +58,7 @@ pub(crate) struct DoorCore {
     pub(crate) agent: AgentId,
     pub(crate) group: GroupId,
     pub(crate) file_cell: std::sync::OnceLock<HaltCell>,
+    pub(crate) session_cell: Option<HaltCell>,
 }
 
 /// What a door may say about a commitment.
@@ -90,6 +91,23 @@ impl fmt::Debug for AgentDoor {
 }
 
 impl AgentDoor {
+    pub(crate) fn session_backend(&self) -> std::sync::Weak<GovernedControl> {
+        Arc::downgrade(&self.control)
+    }
+
+    pub(crate) fn origin(&self) -> GroupId {
+        self.core.group
+    }
+
+    pub(crate) fn mission_request(&self, run: RunId) -> Result<String, AuthorityError> {
+        let runs = self.control.authority().runs();
+        if !runs.is_member(run, self.core.group) {
+            return Err(AuthorityError::NotMember);
+        }
+        runs.files_admission(run)
+            .map(|admission| admission.request)
+            .ok_or(AuthorityError::NotAdmitted)
+    }
     /// Only the front door's issue, after the owner's recorded yes.
     pub(crate) fn new(
         control: Arc<GovernedControl>,
@@ -116,7 +134,9 @@ impl AgentDoor {
     /// Register a port before any coordinator attachment or replay.
     /// Its history survives dropping every caller handle.
     pub fn file_port(&self) -> Result<FilePort, FileSessionError> {
-        self.control.file_sessions.port(self.core.group)
+        self.control
+            .file_sessions
+            .port(self.core.group, self.core.session_cell.as_ref())
     }
 
     /// Select the original File session once, with its broker-owned cell.
@@ -170,10 +190,13 @@ impl AgentDoor {
         self.control
             .hooks()
             .fire(crate::test_hooks::at::OPEN_SETTLED);
-        let run = self
-            .control
-            .authority()
-            .open_run_in(self.core.agent.clone(), self.core.group)?;
+        let authority = self.control.authority();
+        let run = match &self.core.session_cell {
+            Some(cell) => {
+                authority.open_file_run_in(self.core.agent.clone(), self.core.group, cell.clone())
+            }
+            None => authority.open_run_in(self.core.agent.clone(), self.core.group),
+        }?;
         #[cfg(test)]
         self.control
             .hooks()
@@ -183,7 +206,12 @@ impl AgentDoor {
 
     /// PR-B: refused once this door is halted (read under the runs lock).
     fn not_halted(&self) -> Result<(), AuthorityError> {
-        if self.core.file_cell.get().is_some_and(HaltCell::is_engaged)
+        if self
+            .core
+            .session_cell
+            .as_ref()
+            .is_some_and(HaltCell::is_engaged)
+            || self.core.file_cell.get().is_some_and(HaltCell::is_engaged)
             || self
                 .control
                 .authority()
@@ -231,6 +259,36 @@ impl AgentDoor {
         self.control.agent_action(&self.core.agent, run, intent)
     }
 
+    pub(crate) fn admit_session_request(
+        &self,
+        run: RunId,
+        cell: &HaltCell,
+    ) -> Result<(), AuthorityError> {
+        if !self
+            .control
+            .authority()
+            .runs()
+            .is_member(run, self.core.group)
+        {
+            return Err(AuthorityError::NotMember);
+        }
+        self.control
+            .authority()
+            .runs()
+            .admit_file_request(run, Some(cell))
+    }
+    pub(crate) fn session_file_action(
+        &self,
+        run: RunId,
+        file: &crate::files::FileCreate,
+        cell: &HaltCell,
+    ) -> Result<AgentOutcome, AuthorityError> {
+        self.admit_session_request(run, cell)?;
+        self.control
+            .propose_session_file(&self.core.agent, run, file, cell)
+            .map(AgentOutcome::AwaitingApproval)
+    }
+
     /// Cancel one of this door's runs, also once the door is halted (a
     /// cancellation only stops effects). PR-B: in memory; the records of
     /// what this call did are returned, to write once no lock is held.
@@ -255,8 +313,9 @@ impl AgentDoor {
     /// Take back a waiting action of this agent's: the commitment must be
     /// this agent's and `run`'s, and `run` a live agent run of this agent
     /// in this registry, with room for one more group. Then `run` joins
-    /// this door's group (membership only grows). It never cancels
-    /// anything, and any refusal changes nothing.
+    /// this door's group (membership only grows). A session-cell door only
+    /// accepts runs it originally opened with that same cell; it never takes
+    /// over another run. It never cancels anything, and any refusal changes nothing.
     pub fn adopt(
         &self,
         run: RunId,
@@ -374,16 +433,41 @@ impl AgentDoor {
             .fire(crate::test_hooks::at::MISSION_RECORDED);
         // After the record: it says the owner said yes; no approval exists
         // if this door was halted, or a stop came, meanwhile.
-        self.not_halted()?;
-        authority.mission_admissible()?;
-        self.cache(
-            slot,
-            approval.contract_hash(),
-            approval.request(),
-            (approval.evidence_seq(), recorded_ms),
-            (ConsentKind::Mission, facts),
-        )?;
+        let cached = (|| {
+            self.not_halted()?;
+            authority.mission_admissible()?;
+            self.cache(
+                slot,
+                approval.contract_hash(),
+                approval.request(),
+                (approval.evidence_seq(), recorded_ms),
+                (ConsentKind::Mission, facts),
+            )
+        })();
+        self.consent_result(cached, ConsentKind::Mission)?;
         Ok(approval)
+    }
+
+    fn consent_result(
+        &self,
+        result: Result<(), AuthorityError>,
+        kind: ConsentKind,
+    ) -> Result<(), AuthorityError> {
+        if matches!(result, Err(AuthorityError::Halted))
+            && (self
+                .core
+                .session_cell
+                .as_ref()
+                .is_some_and(HaltCell::is_engaged)
+                || self.core.file_cell.get().is_some_and(HaltCell::is_engaged))
+        {
+            self.control.authority().record_consent_halt_refusal(
+                &self.core.agent,
+                &self.core.id,
+                kind,
+            );
+        }
+        result
     }
 
     /// M2d-B1 (H1′): cache the Owner's recorded yes in this door's table,
@@ -588,14 +672,17 @@ impl AgentDoor {
             .hooks()
             .fire(crate::test_hooks::at::HELD_RECORDED);
         // After the record (§2.6 step 6): no approval if halted meanwhile.
-        self.not_halted()?;
-        self.cache(
-            slot,
-            approval.contract_hash(),
-            approval.request(),
-            (approval.evidence_seq(), recorded_ms),
-            (ConsentKind::Resume, None),
-        )?;
+        let cached = (|| {
+            self.not_halted()?;
+            self.cache(
+                slot,
+                approval.contract_hash(),
+                approval.request(),
+                (approval.evidence_seq(), recorded_ms),
+                (ConsentKind::Resume, None),
+            )
+        })();
+        self.consent_result(cached, ConsentKind::Resume)?;
         Ok(approval)
     }
 }

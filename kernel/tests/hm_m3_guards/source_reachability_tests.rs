@@ -26,6 +26,24 @@ fn assert_monotonic(root: &Path) -> BTreeSet<String> {
     current
 }
 
+fn assert_surviving_baseline(
+    root: &Path,
+    fixture: &BTreeSet<String>,
+    legacy: &BTreeSet<String>,
+    current: &BTreeSet<String>,
+) {
+    for rel in fixture.iter().filter(|rel| root.join(rel).is_file()) {
+        assert!(
+            legacy.contains(rel),
+            "still-existing baseline file missing from legacy scanner: {rel}"
+        );
+        assert!(
+            current.contains(rel),
+            "still-existing baseline file missing from current scanner: {rel}"
+        );
+    }
+}
+
 fn inventory(files: &[(&str, &str)]) -> BTreeSet<String> {
     let root = tempfile::tempdir().unwrap();
     for (rel, text) in files {
@@ -243,15 +261,81 @@ fn real_tree_production_set_is_a_superset_of_fe5328af() {
         .into_iter()
         .map(|file| file.rel)
         .collect();
-    assert_eq!(legacy, fixture, "historical oracle drifted");
+    // test(oracle-fix). Old: "live legacy inventory equals the frozen fixture".
+    // New: "surviving baseline files stay in both scans; live coverage is monotonic".
     let current = assert_monotonic(&root);
-    assert!(fixture.is_subset(&current));
+    assert_surviving_baseline(&root, &fixture, &legacy, &current);
     assert!(current.contains("mother/src/contract.rs"));
     println!(
         "production inventory: legacy={} current={}",
-        fixture.len(),
+        legacy.len(),
         current.len()
     );
+}
+
+#[test]
+#[should_panic(expected = "still-existing baseline file missing from current scanner: baseline.rs")]
+fn surviving_baseline_excluded_by_current_scanner_is_rejected() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("baseline.rs"), "fn production() {}").unwrap();
+    let fixture = BTreeSet::from(["baseline.rs".to_string()]);
+    let legacy = fe5328af::production_files_in(root.path())
+        .into_iter()
+        .map(|file| file.rel)
+        .collect();
+    let mut current = assert_monotonic(root.path());
+    // Mutate only the new scanner's result to model a coverage regression.
+    assert!(current.remove("baseline.rs"));
+    assert_surviving_baseline(root.path(), &fixture, &legacy, &current);
+}
+
+#[test]
+#[should_panic(expected = "still-existing baseline file missing from legacy scanner: baseline.rs")]
+fn surviving_baseline_excluded_by_both_scanners_is_rejected() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("lib.rs"), "#[cfg(test)] mod baseline;").unwrap();
+    std::fs::write(root.path().join("baseline.rs"), "fn production() {}").unwrap();
+    let fixture = BTreeSet::from(["baseline.rs".to_string()]);
+    let legacy = fe5328af::production_files_in(root.path())
+        .into_iter()
+        .map(|file| file.rel)
+        .collect();
+    let current = assert_monotonic(root.path());
+    assert!(!current.contains("baseline.rs"));
+    assert_surviving_baseline(root.path(), &fixture, &legacy, &current);
+}
+
+#[test]
+fn added_production_file_is_scanned_by_both_scanners() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("baseline.rs"), "fn production() {}").unwrap();
+    let fixture = BTreeSet::from(["baseline.rs".to_string()]);
+    std::fs::write(root.path().join("added.rs"), "fn added() {}").unwrap();
+    let legacy: BTreeSet<_> = fe5328af::production_files_in(root.path())
+        .into_iter()
+        .map(|file| file.rel)
+        .collect();
+    let current = assert_monotonic(root.path());
+    assert!(legacy.contains("added.rs"));
+    assert!(current.contains("added.rs"));
+    assert_surviving_baseline(root.path(), &fixture, &legacy, &current);
+}
+
+#[test]
+fn deleted_baseline_file_is_allowed_to_be_absent() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("baseline.rs");
+    std::fs::write(&path, "fn production() {}").unwrap();
+    let fixture = BTreeSet::from(["baseline.rs".to_string()]);
+    std::fs::remove_file(&path).unwrap();
+    let legacy: BTreeSet<_> = fe5328af::production_files_in(root.path())
+        .into_iter()
+        .map(|file| file.rel)
+        .collect();
+    let current = assert_monotonic(root.path());
+    assert!(!legacy.contains("baseline.rs"));
+    assert!(!current.contains("baseline.rs"));
+    assert_surviving_baseline(root.path(), &fixture, &legacy, &current);
 }
 
 #[test]

@@ -29,6 +29,7 @@
 use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::{quoted, DIALOG_COLUMNS};
 use super::ids::{CommitmentId, Digest};
+use super::AuthorityError;
 use crate::inert_page::{ApprovedFacts, FactCode};
 use std::fmt;
 
@@ -211,6 +212,43 @@ impl GrantConfirmation {
     }
 }
 
+/// The native dialogue's actual outcome. Only an explicit negative answer is
+/// a decline; invalidation and protocol failures carry no Owner decision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfirmationAnswer {
+    NotAsked,
+    Awaiting,
+    Declined,
+    Affirmative,
+    Invalidated,
+    ProtocolFailed,
+}
+impl ConfirmationAnswer {
+    fn legacy(yes: bool) -> Self {
+        if yes {
+            Self::Affirmative
+        } else {
+            Self::Declined
+        }
+    }
+    pub(crate) fn refusal(
+        self,
+        record: &mut super::evidence::EvidenceRecord,
+    ) -> Option<AuthorityError> {
+        let reason = match self {
+            Self::Affirmative => return None,
+            Self::Declined => return Some(AuthorityError::Declined),
+            Self::NotAsked => "confirmation_not_asked",
+            Self::Awaiting => "confirmation_awaiting",
+            Self::Invalidated => "confirmation_invalidated",
+            Self::ProtocolFailed => "confirmation_protocol_failed",
+        };
+        record.failure = Some("unavailable");
+        record.detail.push(("reason".into(), reason.into()));
+        Some(AuthorityError::Unavailable(reason))
+    }
+}
+
 /// The backend's native confirmation. `true` only if the owner confirmed.
 /// Everything that raises authority asks through it: a grant, an R2
 /// approval, and lifting an emergency stop; and the owner's acknowledgement
@@ -218,6 +256,17 @@ impl GrantConfirmation {
 /// the owner's consent to an agent's mission (which grants nothing either:
 /// it lets the agent ask for actions under the owner's grants).
 pub trait ControlConfirmer {
+    // Legacy clients retain their exact bool contract. Hosts with a typed
+    // protocol override these methods and preserve every non-answer state.
+    fn confirm_grant_answer(&self, request: &GrantConfirmation) -> ConfirmationAnswer {
+        ConfirmationAnswer::legacy(self.confirm_grant(request))
+    }
+    fn confirm_agent_door_answer(&self, request: &AgentDoorConfirmation) -> ConfirmationAnswer {
+        ConfirmationAnswer::legacy(self.confirm_agent_door(request))
+    }
+    fn confirm_mission_answer(&self, request: &MissionConfirmation) -> ConfirmationAnswer {
+        ConfirmationAnswer::legacy(self.confirm_mission(request))
+    }
     fn confirm_action(&self, request: &ActionConfirmation) -> bool;
     fn confirm_grant(&self, request: &GrantConfirmation) -> bool;
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool;

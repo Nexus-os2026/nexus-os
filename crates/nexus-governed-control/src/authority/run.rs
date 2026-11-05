@@ -25,7 +25,7 @@
 //! Nothing here reads evidence: consent is never reconstructed from it.
 
 use super::evidence::{EvidencePhase, EvidenceRecord, Privacy};
-use super::file_session::HaltCell;
+use super::file_session::{HaltCell, RecoveryCheck};
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
@@ -42,7 +42,47 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 #[derive(Clone, Debug)]
 pub struct CancelToken(Arc<AtomicBool>, Option<HaltCell>);
 
+fn request_cell<'a>(
+    original: Option<&'a HaltCell>,
+    request: Option<&'a HaltCell>,
+) -> Result<Option<&'a HaltCell>, AuthorityError> {
+    match request {
+        None => Ok(original),
+        Some(request)
+            if original.is_some_and(|original| original.host() && original.same(request))
+                && request.host() =>
+        {
+            Ok(Some(request))
+        }
+        Some(_) => Err(AuthorityError::Halted),
+    }
+}
+
 impl CancelToken {
+    pub(crate) fn host(&self) -> bool {
+        self.1.as_ref().is_some_and(HaltCell::host)
+    }
+    pub(crate) fn abandon_host(&self) -> bool {
+        if let Some(cell) = self.1.as_ref().filter(|cell| cell.host()) {
+            self.0.store(true, Ordering::SeqCst);
+            cell.fail_session();
+            true
+        } else {
+            false
+        }
+    }
+    pub(crate) fn admit_host(&self) -> Result<(), AuthorityError> {
+        match &self.1 {
+            Some(cell) if cell.host() => {
+                if self.0.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::RunCancelled);
+                }
+                cell.admit()
+            }
+            Some(cell) if cell.is_engaged() => Err(AuthorityError::Halted),
+            _ => Ok(()),
+        }
+    }
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst) || self.1.as_ref().is_some_and(HaltCell::is_engaged)
     }
@@ -252,6 +292,43 @@ impl DoorEntry {
     }
 }
 
+/// Host work checks its original live door and the native consent binding,
+/// independently of whichever accepted request owns this particular step.
+fn host_prerequisites(
+    table: &Table,
+    entry: &RunEntry,
+    stop_epoch: u64,
+) -> Result<(), AuthorityError> {
+    if !entry.file_cell.as_ref().is_some_and(HaltCell::host) {
+        return Ok(());
+    }
+    let group = entry.opened_by.ok_or(AuthorityError::NotMember)?;
+    let door = table.doors.get(&group).ok_or(AuthorityError::NotMember)?;
+    if !door.active
+        || !door.alive()
+        || door.halted
+        || door.agent != entry.view.agent
+        || !door.members.contains(&entry.view.id)
+        || !entry.groups.contains(&group)
+    {
+        return Err(AuthorityError::NotMember);
+    }
+    if let Some(admission) = &entry.files_admission {
+        if !door.consents.iter().any(|consent| {
+            consent.contract_hash == admission.contract_hash
+                && consent.request == admission.request
+                && consent.evidence_seq == admission.evidence_seq
+                && consent.page_facts == admission.page_facts
+                && consent.life.stop_epoch == stop_epoch
+                && !consent.life.halted
+                && !consent.life.closed
+        }) {
+            return Err(AuthorityError::NoConsent);
+        }
+    }
+    Ok(())
+}
+
 /// What the runs lock holds: the runs, and the doors' groups.
 #[derive(Default)]
 struct Table {
@@ -306,7 +383,14 @@ impl Table {
         let ended: Vec<RunId> = self
             .runs
             .iter()
-            .filter(|(_, e)| (e.view.cancelled || e.view.finished) && e.retained == 0)
+            .filter(|(_, e)| {
+                (e.view.cancelled || e.view.finished)
+                    && e.retained == 0
+                    // Keep an admitted session's provenance even before its
+                    // first commitment pin. Bounded by RUN_CAPACITY; capacity
+                    // pressure refuses new runs, never erases the cell.
+                    && !(e.file_cell.is_some() && e.files_admission.is_some())
+            })
             .map(|(id, _)| *id)
             .collect();
         for run in ended {
@@ -332,6 +416,8 @@ impl Table {
 /// refusal or a status.
 #[derive(Default)]
 pub struct RunRegistry {
+    #[cfg(test)]
+    pub(crate) review2_hooks: crate::test_hooks::Hooks,
     runs: Mutex<Table>,
     /// M2c: the next door group's number. It never wraps in practice and
     /// is never reused.
@@ -407,6 +493,8 @@ pub(crate) enum Lift {
 /// Why the registry refuses a resume. Only a lift changes anything.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Refusal {
+    /// A session ingress invalidated the Owner recovery request.
+    Halted,
     /// A newer emergency stop came after the stop the owner confirmed.
     Superseded,
     /// The stop number is exhausted: the registry stays stopped.
@@ -536,6 +624,13 @@ impl RunRegistry {
                 return Err(AuthorityError::Capacity);
             }
         }
+        #[cfg(test)]
+        self.review2_hooks.fire("run.before_insert");
+        // Final same-word comparison is the admission linearization point,
+        // under the same hold as insertion, after all validation/pruning.
+        #[cfg(test)]
+        super::file_session::probe(entry.file_cell.as_ref(), "setup.run_create");
+        super::file_session::check_halt(entry.file_cell.as_ref())?;
         runs.insert(id, entry);
         if let Some(door) = group.and_then(|group| runs.doors.get_mut(&group)) {
             door.members.insert(id);
@@ -581,10 +676,24 @@ impl RunRegistry {
 
     /// M2c, a door issue's registration (after the owner's recorded yes):
     /// the reserved group becomes the issued door's, empty.
+    #[cfg(test)]
     pub(crate) fn activate_door(&self, group: GroupId) -> Result<(), AuthorityError> {
+        self.activate_door_with_halt(group, None)
+    }
+
+    pub(crate) fn activate_door_with_halt(
+        &self,
+        group: GroupId,
+        halt: Option<&HaltCell>,
+    ) -> Result<(), AuthorityError> {
         let mut runs = self.runs.lock().expect("runs");
         match runs.doors.get_mut(&group) {
             Some(door) if door.alive() => {
+                // Decision 8: activation and its final check share this hold.
+                #[cfg(test)]
+                super::file_session::probe(halt, "setup.door_activate");
+                super::file_session::check_halt(halt)?;
+                door.file_cell = halt.cloned();
                 door.active = true;
                 Ok(())
             }
@@ -666,9 +775,16 @@ impl RunRegistry {
             .doors
             .get_mut(&group)
             .ok_or(AuthorityError::NotMember)?;
-        if door.file_cell.is_some() {
+        // A host may already have attached this exact deny-only session
+        // cell at issuance. File selection never replaces another cell.
+        if door
+            .file_cell
+            .as_ref()
+            .is_some_and(|bound| !bound.same(&cell))
+        {
             return Err(AuthorityError::Halted);
         }
+        super::file_session::check_halt(Some(&cell))?;
         door.file_cell = Some(cell);
         Ok(())
     }
@@ -772,7 +888,8 @@ impl RunRegistry {
     ) -> Result<(), AuthorityError> {
         let mut guard = self.runs.lock().expect("runs");
         let table = &mut *guard;
-        table.prune_doors();
+        #[cfg(test)]
+        self.review2_hooks.fire("run.before_join");
         match table.doors.get(&group) {
             Some(door)
                 if door.halted || door.file_cell.as_ref().is_some_and(HaltCell::is_engaged) =>
@@ -782,6 +899,25 @@ impl RunRegistry {
             Some(door) if door.active && door.alive() && &door.agent == agent => {}
             _ => return Err(AuthorityError::NotMember),
         }
+        let session_cell = table
+            .doors
+            .get(&group)
+            .and_then(|door| door.file_cell.clone());
+        // A session constraint must exist at run/token issuance. Never retrofit
+        // it through adoption: existing guards and preparation may hold None.
+        // Check immutable origin AND cell identity before even pruning state.
+        if let Some(cell) = &session_cell {
+            let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+            if entry.opened_by != Some(group)
+                || !entry
+                    .file_cell
+                    .as_ref()
+                    .is_some_and(|bound| bound.same(cell))
+            {
+                return Err(AuthorityError::NotMember);
+            }
+        }
+        table.prune_doors();
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
@@ -804,6 +940,7 @@ impl RunRegistry {
         if entry.groups.len() >= MAX_GROUPS_PER_RUN {
             return Err(AuthorityError::Capacity);
         }
+        super::file_session::check_halt(session_cell.as_ref())?;
         entry.groups.push(group);
         if let Some(door) = table.doors.get_mut(&group) {
             door.members.insert(run);
@@ -823,6 +960,70 @@ impl RunRegistry {
             .is_some_and(|entry| entry.groups.contains(&group)))
     }
 
+    /// Copy only the optional deny-only cell, never authority. Used to
+    /// carry the same session constraint through slow commitment preparation.
+    pub(crate) fn session_cell(&self, run: RunId) -> Result<Option<HaltCell>, AuthorityError> {
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
+        Ok(runs
+            .get(&run)
+            .ok_or(AuthorityError::Halted)?
+            .file_cell
+            .clone())
+    }
+
+    /// Missing, pruned and poisoned authority are halted, never cell-less.
+    pub(crate) fn session_halted(&self, run: RunId) -> bool {
+        self.session_cell(run)
+            .map_or(true, |cell| cell.as_ref().is_some_and(HaltCell::is_engaged))
+    }
+
+    /// Final staging admission, under the same table hold as the lookup.
+    /// Session runs retain provenance through the pre-commitment interval.
+    #[cfg(test)]
+    pub(crate) fn admit_file_stage(&self, run: RunId) -> Result<(), AuthorityError> {
+        self.admit_file_request(run, None)
+    }
+
+    pub(crate) fn admit_file_request(
+        &self,
+        run: RunId,
+        request: Option<&HaltCell>,
+    ) -> Result<(), AuthorityError> {
+        let runs = self.runs.lock().map_err(|_| AuthorityError::Halted)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("request.final_hold");
+        let entry = runs.get(&run).ok_or(AuthorityError::Halted)?;
+        host_prerequisites(&runs, entry, self.stop_number.load(Ordering::SeqCst))?;
+        if entry.file_cell.is_some()
+            && (entry.view.cancelled
+                || entry.view.finished
+                || entry.cancelled.load(Ordering::SeqCst)
+                || runs.in_halted_group(entry)
+                || self.stopped.load(Ordering::SeqCst)
+                || self.closed.load(Ordering::SeqCst))
+        {
+            return Err(AuthorityError::Halted);
+        }
+        let cell = request_cell(entry.file_cell.as_ref(), request)?;
+        super::file_session::check_halt(cell)
+    }
+
+    /// Memory-only native-lift handoff. No I/O or evidence callback is allowed
+    /// in `lift`; the native kernel mutex is acquired only after this check.
+    pub(crate) fn recovery_boundary(
+        &self,
+        recovery: &RecoveryCheck,
+        lift: impl FnOnce(),
+    ) -> Result<(), AuthorityError> {
+        let _runs = self.runs.lock().map_err(|_| AuthorityError::Halted)?;
+        recovery.check()?;
+        lift();
+        Ok(())
+    }
+
     /// The run exists, belongs to `agent`, is not cancelled or finished, and
     /// no emergency stop is in force.
     pub(crate) fn check(&self, run: RunId, agent: &AgentId) -> Result<CancelToken, AuthorityError> {
@@ -838,6 +1039,26 @@ impl RunRegistry {
         agent: &AgentId,
         retain: bool,
     ) -> Result<(CancelToken, Option<GroupId>), AuthorityError> {
+        self.check_request_retaining(run, agent, retain, None)
+    }
+
+    pub(crate) fn check_request(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        request: Option<&HaltCell>,
+    ) -> Result<CancelToken, AuthorityError> {
+        self.check_request_retaining(run, agent, false, request)
+            .map(|(token, _)| token)
+    }
+
+    pub(crate) fn check_request_retaining(
+        &self,
+        run: RunId,
+        agent: &AgentId,
+        retain: bool,
+        request: Option<&HaltCell>,
+    ) -> Result<(CancelToken, Option<GroupId>), AuthorityError> {
         let mut runs = self
             .runs
             .lock()
@@ -849,8 +1070,9 @@ impl RunRegistry {
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) || runs.in_halted_group(entry)
-        {
+        let cell = request_cell(entry.file_cell.as_ref(), request)?;
+        host_prerequisites(&runs, entry, self.stop_number.load(Ordering::SeqCst))?;
+        if cell.is_some_and(HaltCell::is_engaged) || runs.in_halted_group(entry) {
             return Err(AuthorityError::Halted);
         }
         if entry.view.finished {
@@ -860,14 +1082,20 @@ impl RunRegistry {
             return Err(AuthorityError::RunCancelled);
         }
         let owner = entry.opened_by;
-        let token = CancelToken(entry.cancelled.clone(), entry.file_cell.clone());
+        let token = CancelToken(entry.cancelled.clone(), cell.cloned());
         if retain {
             owner.ok_or(AuthorityError::NotMember)?;
             let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
-            entry.retained = entry
+            let retained = entry
                 .retained
                 .checked_add(1)
                 .ok_or(AuthorityError::Capacity)?;
+            #[cfg(test)]
+            crate::authority::file_session::probe(token.1.as_ref(), "registry.retention.before");
+            token.admit_host()?;
+            entry.retained = retained;
+            #[cfg(test)]
+            crate::authority::file_session::probe(token.1.as_ref(), "registry.retention.after");
         }
         Ok((token, owner))
     }
@@ -911,6 +1139,10 @@ impl RunRegistry {
     /// Whether the desktop is quitting (see `close`).
     pub fn is_closed(&self) -> bool {
         self.closed.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn stop_metadata_known(&self) -> bool {
+        !self.runs.is_poisoned()
     }
 
     /// The emergency stop: cancel every run and refuse new work until a
@@ -1043,6 +1275,33 @@ impl RunRegistry {
         Ok(Lift::Lifted)
     }
 
+    pub(crate) fn lift_with_recovery(
+        &self,
+        number: u64,
+        recovery: &RecoveryCheck,
+    ) -> Result<Lift, Refusal> {
+        let Ok(_runs) = self.runs.lock() else {
+            return Err(Refusal::Unavailable);
+        };
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(Refusal::TooLate);
+        }
+        if self.exhausted.load(Ordering::SeqCst) {
+            return Err(Refusal::Exhausted);
+        }
+        if self.stop_number.load(Ordering::SeqCst) != number {
+            return Err(Refusal::Superseded);
+        }
+        if !self.stopped.load(Ordering::SeqCst) {
+            return Ok(Lift::AlreadyLifted);
+        }
+        recovery.check().map_err(|_| Refusal::Halted)?;
+        self.stopped.store(false, Ordering::SeqCst);
+        self.last_lifted.store(number, Ordering::SeqCst);
+        self.cancelled_by_stop.store(0, Ordering::SeqCst);
+        Ok(Lift::Lifted)
+    }
+
     pub(crate) fn cancelled_by_stop(&self) -> usize {
         self.cancelled_by_stop.load(Ordering::SeqCst)
     }
@@ -1110,6 +1369,9 @@ impl RunRegistry {
         if door.consents.len().saturating_add(door.pending_consents) >= MAX_CONSENTS {
             return Err(AuthorityError::Capacity);
         }
+        #[cfg(test)]
+        super::file_session::probe(door.file_cell.as_ref(), "setup.mission_confirm");
+        super::file_session::admit_host(door.file_cell.as_ref())?;
         door.pending_consents += 1;
         Ok(ConsentSlot {
             registry: self,
@@ -1120,6 +1382,7 @@ impl RunRegistry {
                 closed: false,
             },
             held: true,
+            cell: door.file_cell.clone(),
         })
     }
 
@@ -1191,6 +1454,16 @@ impl RunRegistry {
             .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("files.before_install");
+        if table
+            .runs
+            .get(&run)
+            .and_then(|entry| entry.file_cell.as_ref())
+            .is_some_and(HaltCell::is_engaged)
+        {
+            return Err(AuthorityError::Halted);
+        }
         let admission = FilesAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1212,6 +1485,9 @@ impl RunRegistry {
             }
             Some(_) => Err(AuthorityError::AlreadyAdmitted),
             None => {
+                #[cfg(test)]
+                super::file_session::probe(entry.file_cell.as_ref(), "setup.file_binding");
+                super::file_session::admit_host(entry.file_cell.as_ref())?;
                 entry.files_admission = Some(admission.clone());
                 Ok(admission)
             }
@@ -1239,6 +1515,16 @@ impl RunRegistry {
             .map_err(|_| AuthorityError::Unavailable("the broker cannot read its runs"))?;
         let table = &mut *guard;
         let consent = self.admissible(table, run, agent, group, contract_hash, request)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("inference.before_install");
+        if table
+            .runs
+            .get(&run)
+            .and_then(|entry| entry.file_cell.as_ref())
+            .is_some_and(HaltCell::is_engaged)
+        {
+            return Err(AuthorityError::Halted);
+        }
         let admission = InferenceAdmission {
             contract_hash: consent.contract_hash,
             request: consent.request,
@@ -1304,6 +1590,11 @@ impl RunRegistry {
             return Err(AuthorityError::ModelCall(ModelError::OverBudget));
         }
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        #[cfg(test)]
+        self.review2_hooks.fire("model.before_attempt");
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) {
+            return Err(AuthorityError::Halted);
+        }
         entry.model_attempts += 1;
         Ok(CallTicket {
             token: CancelToken(entry.cancelled.clone(), entry.file_cell.clone()),
@@ -1441,6 +1732,7 @@ pub(crate) struct ConsentSlot<'a> {
     group: GroupId,
     life: Life,
     held: bool,
+    cell: Option<HaltCell>,
 }
 
 impl ConsentSlot<'_> {
@@ -1490,7 +1782,7 @@ impl ConsentSlot<'_> {
         if door.consents.len() >= MAX_CONSENTS {
             return Err(AuthorityError::Capacity);
         }
-        door.consents.push(Consent {
+        let consent = Consent {
             contract_hash: contract_hash.to_string(),
             request: request.to_string(),
             evidence_seq,
@@ -1498,7 +1790,11 @@ impl ConsentSlot<'_> {
             at_wall_ms,
             life: self.life,
             page_facts,
-        });
+        };
+        #[cfg(test)]
+        super::file_session::probe(door.file_cell.as_ref(), "setup.consent_cache");
+        super::file_session::admit_host(door.file_cell.as_ref())?;
+        door.consents.push(consent);
         Ok(())
     }
 }
@@ -1512,6 +1808,8 @@ impl Drop for ConsentSlot<'_> {
                 if let Some(door) = runs.doors.get_mut(&self.group) {
                     door.pending_consents = door.pending_consents.saturating_sub(1);
                 }
+            } else if let Some(cell) = &self.cell {
+                cell.fail_session();
             }
         }
     }
@@ -1535,5 +1833,27 @@ fn cancel_one(entry: &mut RunEntry, wall_ms: u64, generation: u64, batch: &mut R
         record.agent = Some(entry.view.agent.to_string());
         record.cancelled = true;
         batch.push(record);
+    }
+}
+
+// Decision 6: observation of real backend state, never an adapter map.
+#[cfg(test)]
+impl RunRegistry {
+    pub(crate) fn review2_counts(&self) -> [usize; 4] {
+        let table = self.runs.lock().unwrap();
+        [
+            table.runs.len(),
+            table
+                .runs
+                .values()
+                .filter(|r| r.files_admission.is_some())
+                .count(),
+            table
+                .runs
+                .values()
+                .filter(|r| r.inference_admission.is_some())
+                .count(),
+            table.runs.values().map(|r| r.model_attempts as usize).sum(),
+        ]
     }
 }

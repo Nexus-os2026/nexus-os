@@ -1,0 +1,17 @@
+{
+  "finding": "F13",
+  "mechanism": "J",
+  "baseline": "c4245ca84e64f58ea227556d8c5874be5ccfb74c",
+  "command": "cargo test -p nexus-mother-host --locked --test session_sealing fix1_f13_published_hands_build_is_self_contained -- --exact --nocapture",
+  "environment": {
+    "CARGO_TARGET_DIR": "/tmp/claude-1000/m2dd-fix1-target",
+    "CARGO_INCREMENTAL": "0",
+    "TMPDIR": "/home/nexus/.m2d"
+  },
+  "exit_code": 101,
+  "passed": 0,
+  "failed": 1,
+  "log": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/m2dd/session/fix1-J/red.log",
+  "sha256": "96fb1b21dc8ca8cd5bba36ffe3e93f065df5d1b612a0589a8b2dddacb004daaa",
+  "failure": "published build requires transient absolute scratch cargo-slot.sh"
+}

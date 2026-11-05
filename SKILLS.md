@@ -128,8 +128,12 @@ needs its definition and proof, and browser rendering is unproved.
   Creates are bounded to an admitted workspace and full review; publication
   and settlement distinguish uncertainty. Broker undo is conditional, once
   for the last create in the process. No general file/shell authority follows.
-  The complete terminal mission host and live page workflow are **not built**.
-- **NEXT:** rung 1, M2d-D terminal host, M2e-C/M3 drafting and wiring;
+  [M2d-D's Linux terminal host](mother/README.md#run-hands-m2d-d-candidate-linux-only)
+  implements deterministic File missions through one broker-owned session. After
+  emergency only status, evidence and Quit remain; entered kernel calls may finish.
+  Restart is report-only, with neither cleanup permission nor undo restored.
+  Automated tests are not Owner acceptance; the live page workflow is **not built**.
+- **NEXT:** rung 1, M2e-C/M3 drafting and wiring;
   M2b-B later presents the proven flows in native dialogs.
 - **SUPER — goal:** execute complex plans through explicitly supported,
   broker-offered tools while keeping consent, inspection and recovery usable.

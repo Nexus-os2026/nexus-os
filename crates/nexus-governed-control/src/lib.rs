@@ -635,6 +635,7 @@ pub mod evidence_store;
 pub mod executable;
 pub mod files;
 pub mod governed;
+pub mod host_session;
 pub mod inference;
 pub mod ingress;
 mod launcher;

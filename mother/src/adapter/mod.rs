@@ -50,9 +50,12 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 mod lite_port;
+mod session_port;
+use session_port::PortDoor;
+pub use session_port::{SessionHistoryInspector, SessionPort};
 
 #[cfg(test)]
 mod expiry_tests;
@@ -145,6 +148,22 @@ struct Runs {
     file_admissions: BTreeMap<MissionId, Admission>,
 }
 
+/// An optional host restriction shared with the actual coordinator port.
+/// Closing is memory-only and irreversible. This can only deny authority;
+/// it neither replaces nor lifts any broker or File-session halt.
+#[derive(Default)]
+pub struct AdmissionGate {
+    closed: AtomicBool,
+}
+impl AdmissionGate {
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+    }
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
+}
+
 /// The EffectPort over the governed-control broker, through one agent door.
 pub struct GovernedPort {
     #[cfg(test)]
@@ -152,16 +171,17 @@ pub struct GovernedPort {
     #[cfg(test)]
     pub(crate) file_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
     /// M2c: the port's only broker handle.
-    door: AgentDoor,
-    file_port: Result<FilePort, FileSessionError>,
+    door: PortDoor,
+    file_port: Arc<Result<FilePort, FileSessionError>>,
     file_session: OnceLock<(Arc<FileAttachment>, HaltCell)>,
     workspace: Option<String>,
+    admission_gate: Option<Arc<AdmissionGate>>,
     /// M2a-S: `fenced` and every run registration are under this mutex, so
     /// a run registers either before the fence (which cancels it) or after
     /// (and cancels itself); every broker call checks `fenced` first.
-    runs: Mutex<Runs>,
-    performed: AtomicUsize,
-    cancel_failures: AtomicUsize,
+    runs: Arc<Mutex<Runs>>,
+    performed: Arc<AtomicUsize>,
+    cancel_failures: Arc<AtomicUsize>,
     #[cfg(test)]
     file_acks_tried: AtomicUsize,
     #[cfg(test)]
@@ -208,7 +228,17 @@ pub struct GovernedPort {
 impl GovernedPort {
     /// A port over `door`, which the host issued after the Owner's yes.
     pub fn new(door: AgentDoor) -> Self {
-        let file_port = door.file_port();
+        Self::from_door(PortDoor::Legacy(door))
+    }
+
+    fn from_door(door: PortDoor) -> Self {
+        let file_port = Arc::new(door.file_port());
+        Self::from_registered_door(door, file_port)
+    }
+    fn from_registered_door(
+        door: PortDoor,
+        file_port: Arc<Result<FilePort, FileSessionError>>,
+    ) -> Self {
         Self {
             file_port,
             #[cfg(test)]
@@ -217,10 +247,11 @@ impl GovernedPort {
             file_engagement: Default::default(),
             file_session: OnceLock::new(),
             workspace: None,
+            admission_gate: None,
             door,
-            runs: Mutex::new(Runs::default()),
-            performed: AtomicUsize::new(0),
-            cancel_failures: AtomicUsize::new(0),
+            runs: Arc::new(Mutex::new(Runs::default())),
+            performed: Arc::new(AtomicUsize::new(0)),
+            cancel_failures: Arc::new(AtomicUsize::new(0)),
             #[cfg(test)]
             file_acks_tried: AtomicUsize::new(0),
             #[cfg(test)]
@@ -248,6 +279,30 @@ impl GovernedPort {
         }
     }
 
+    /// Install a narrowing gate before sharing this port with a coordinator.
+    /// There is no setter on a shared port and no way to reopen the gate.
+    /// A host-gated port never adopts replayed work from a surviving broker.
+    pub fn with_admission_gate(mut self, gate: Arc<AdmissionGate>) -> Self {
+        self.admission_gate = Some(gate);
+        self
+    }
+
+    fn admit_host(&self) -> Result<(), EffectRefusal> {
+        if let Some(context) = self.door.context() {
+            context
+                .admit(nexus_governed_control::host_session::MotherStep::PortProjection)
+                .map_err(|_| refused(BrokerClass::Halted))?;
+        }
+        if self
+            .admission_gate
+            .as_ref()
+            .is_some_and(|gate| gate.is_closed())
+        {
+            return Err(refused(BrokerClass::Halted));
+        }
+        Ok(())
+    }
+
     /// A requested registered workspace label, never workspace authority.
     pub fn with_workspace(mut self, name: String) -> Self {
         self.workspace = Some(name);
@@ -262,6 +317,12 @@ impl GovernedPort {
     /// How many effects Mother has handed to this port.
     pub fn performed(&self) -> usize {
         self.performed.load(Ordering::SeqCst)
+    }
+
+    /// Successful File bindings retained by this port, for host diagnostics.
+    /// Observation only: this exposes no admission or broker authority.
+    pub fn file_binding_count(&self) -> usize {
+        self.with_runs(|runs| runs.file_admissions.len())
     }
 
     /// How many run cancellations the broker refused.
@@ -295,10 +356,13 @@ impl GovernedPort {
                 let mut runs = poisoned.into_inner();
                 runs.fenced = true;
                 let mut owed = Owed::default();
-                if let Ok(batch) = catch_unwind(AssertUnwindSafe(|| {
+                if let Ok(result) = catch_unwind(AssertUnwindSafe(|| {
                     self.door.halt(HaltReason::JournalFailed)
                 })) {
-                    owed.push(batch);
+                    match result {
+                        Ok(batch) => owed.push(batch),
+                        Err(_) => owed.refuse(),
+                    }
                 }
                 let _ = self.sweep(&mut runs, &mut owed);
                 (runs, owed)
@@ -369,6 +433,7 @@ impl GovernedPort {
     /// ended meanwhile gets no run either (the one just opened is
     /// cancelled).
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
+        self.admit_host()?;
         self.enter()?;
         let known = self.with_runs(|runs| {
             if runs.ended.contains(&mission) {
@@ -381,6 +446,7 @@ impl GovernedPort {
         }
         #[cfg(test)]
         self.before_open_run.fire();
+        self.admit_host()?;
         let run = match self.file_session.get() {
             Some((attachment, _)) => self.door.open_file_run(attachment),
             None => self.door.open_run(),
@@ -392,7 +458,14 @@ impl GovernedPort {
             } else if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
                 Some(BrokerClass::MissionCancelled)
             } else {
+                #[cfg(test)]
+                session_port::session_projection_tests::at("run_project", "before");
+                if let Err(error) = self.admit_host() {
+                    return Some(error.class);
+                }
                 runs.open.insert(mission, run);
+                #[cfg(test)]
+                session_port::session_projection_tests::at("run_project", "after");
                 None
             }
         });
@@ -446,6 +519,7 @@ impl GovernedPort {
         mission: MissionId,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
+        self.admit_host()?;
         if self.file_session.get().is_some() {
             self.file_enter()?;
             let runs = self.file_runs()?;
@@ -473,11 +547,19 @@ impl GovernedPort {
         self.enter()?;
         #[cfg(test)]
         self.in_broker_action.fire();
+        self.admit_host()?;
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
         let asked_at = self.door.clock().monotonic_ms();
-        match self.door.agent_action(run, &intent) {
+        let effect_number = self.with_runs(|runs| runs.file_effects.get(&mission).copied());
+        #[cfg(test)]
+        session_port::session_projection_tests::at("effect_dispatch", "before");
+        self.admit_host()?;
+        let result = self.door.agent_action(run, &intent, effect_number);
+        #[cfg(test)]
+        session_port::session_projection_tests::at("effect_dispatch", "after");
+        match result {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
             Ok(AgentOutcome::AwaitingApproval(view)) => {
                 let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
@@ -491,15 +573,22 @@ impl GovernedPort {
 }
 
 impl EffectPort for GovernedPort {
+    fn session_context(&self) -> Option<nexus_governed_control::host_session::SessionContext> {
+        self.door.context()
+    }
     fn file_workspace(&self) -> Option<&str> {
         self.workspace.as_deref()
     }
     fn file_attach(&self) -> Result<Option<Arc<FileAttachment>>, FileSessionError> {
+        self.admit_host()
+            .map_err(|_| FileSessionError::EmergencyHistory)?;
         Ok(Some(Arc::new(
-            self.file_port.as_ref().map_err(|e| *e)?.attach()?,
+            self.file_port.as_ref().as_ref().map_err(|e| *e)?.attach()?,
         )))
     }
     fn file_claim(&self, attachment: Arc<FileAttachment>) -> Result<HaltCell, FileSessionError> {
+        self.admit_host()
+            .map_err(|_| FileSessionError::EmergencyHistory)?;
         let cell = self.door.claim_file_session(&attachment)?;
         #[cfg(test)]
         if self.file_duplicate_claim.load(Ordering::SeqCst) {
@@ -563,8 +652,13 @@ impl EffectPort for GovernedPort {
             }
             // Reserve before entering the broker. A read during proposal is
             // uncertain, never proof that the effect was not published.
+            #[cfg(test)]
+            session_port::session_projection_tests::at("file_effect_select", "before");
+            self.admit_host()?;
             runs.file_effects.insert(mission, number);
             runs.waiting.remove(&mission);
+            #[cfg(test)]
+            session_port::session_projection_tests::at("file_effect_select", "after");
         }
         self.perform_inner(mission, effect)
     }
@@ -710,8 +804,13 @@ impl EffectPort for GovernedPort {
                 self.door.halt(HaltReason::JournalFailed)
             }));
             let first = match halted {
-                Ok(batch) => {
+                Ok(Ok(batch)) => {
                     owed.push(batch);
+                    None
+                }
+                Ok(Err(_)) => {
+                    self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                    owed.refuse();
                     None
                 }
                 Err(panic) => {
@@ -747,7 +846,10 @@ impl EffectPort for GovernedPort {
         &self,
         request: &MissionConfirmation,
     ) -> Result<MissionApproval, AuthorityError> {
-        self.door.confirm_mission(request)
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
+        let answer = self.door.confirm_mission(request)?;
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
+        Ok(answer)
     }
 
     /// Asked through the door, as [`EffectPort::confirm_mission`].
@@ -755,9 +857,11 @@ impl EffectPort for GovernedPort {
         &self,
         request: &MissionResumeConfirmation,
     ) -> Result<MissionResumeApproval, AuthorityError> {
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
         let answer = self.door.confirm_held_mission(request);
         #[cfg(test)]
         self.after_held_answer.fire();
+        self.admit_host().map_err(|_| AuthorityError::Halted)?;
         answer
     }
 
@@ -839,7 +943,12 @@ impl EffectPort for GovernedPort {
         let Ok(()) = self.enter() else {
             return;
         };
-        self.adopt_inside(mission, pending);
+        // Hands has no surviving-broker replacement or replay adoption. Keep
+        // the handed-back obligation above so withdrawal never fakes success;
+        // only legacy ports may recover membership through this route.
+        if self.admission_gate.is_none() {
+            self.adopt_inside(mission, pending);
+        }
     }
 }
 
@@ -1009,6 +1118,27 @@ impl FileJournal {
             }
             Err(e) => return Err(store_error(e)),
         }
+        // M2d-D V8: another handle may have created this entry without
+        // syncing it. Establish both the file and its directory entry on
+        // every open, not only when this handle was the creator. No record
+        // can be acknowledged through this handle before both succeed.
+        OpenOptions::new()
+            .append(true)
+            .open(path)
+            .and_then(|file| file.sync_all())
+            .map_err(store_error)?;
+        #[cfg(unix)]
+        {
+            let parent =
+                path.parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .ok_or(JournalError::Store(StoreFailure::Io(IoKind::of(
+                        std::io::ErrorKind::InvalidInput,
+                    ))))?;
+            std::fs::File::open(parent)
+                .and_then(|dir| dir.sync_all())
+                .map_err(store_error)?;
+        }
         Ok(Self {
             path: path.to_path_buf(),
         })
@@ -1107,4 +1237,15 @@ mod lite_crash;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+mod session_death_oracles_tests;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod lite_review5_port;
+
+#[cfg(test)]
+mod host_decision9_tests;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+pub(crate) mod session_support;

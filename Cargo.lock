@@ -2055,6 +2055,8 @@ version = "0.1.0"
 dependencies = [
  "nexus-governed-control",
  "nexus-mother",
+ "nix",
+ "uuid",
 ]
 
 [[package]]

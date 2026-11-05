@@ -1,0 +1,2392 @@
+{
+  "scope": "Detected independent plant executions; the same admission mechanism may be exercised again by a stronger oracle. Failed compile/filter/fixture experiments are excluded, not hidden; their original receipts remain in the builder scratch archive. No planted production source was committed. Restored controls and final-HEAD gates are recorded separately.",
+  "detected_executions": 189,
+  "plants": [
+    {
+      "group": "model",
+      "plant": "absence_is_durable",
+      "detected": true,
+      "receipt": "model-plant-receipts.json",
+      "receipt_sha256": "ad551213e5df5ce0ee9aa521b79a3f72558f5349fcb537e923276788a4567720",
+      "oracle": "independent_close_and_ack_controls_and_negative_cases",
+      "red_log": "plant-model-absence_is_durable-red.log",
+      "red_log_sha256": "a1929a1587777e39d3e2a296172f06c255f7d98f4a8240626d58f75297503044"
+    },
+    {
+      "group": "model",
+      "plant": "unknown_ack_duplicate",
+      "detected": true,
+      "receipt": "model-plant-receipts.json",
+      "receipt_sha256": "ad551213e5df5ce0ee9aa521b79a3f72558f5349fcb537e923276788a4567720",
+      "oracle": "independent_close_and_ack_controls_and_negative_cases",
+      "red_log": "plant-model-unknown_ack_duplicate-red.log",
+      "red_log_sha256": "ed1868421891b3ceff8728f6bd529220cf7b4f0aaed2dea3fef0171d3a13d304"
+    },
+    {
+      "group": "model",
+      "plant": "coalesced_event_covered",
+      "detected": true,
+      "receipt": "model-plant-receipts.json",
+      "receipt_sha256": "ad551213e5df5ce0ee9aa521b79a3f72558f5349fcb537e923276788a4567720",
+      "oracle": "independent_close_and_ack_controls_and_negative_cases",
+      "red_log": "plant-model-coalesced_event_covered-red.log",
+      "red_log_sha256": "e4d80d8a5bb1998843a67b8616049d597e66cebfa38bebd9bc2b33a0b0e8beec"
+    },
+    {
+      "group": "model",
+      "plant": "omitted_done_row",
+      "detected": true,
+      "receipt": "model-plant-receipts.json",
+      "receipt_sha256": "ad551213e5df5ce0ee9aa521b79a3f72558f5349fcb537e923276788a4567720",
+      "oracle": "literal_mission_table_covers_terminal_states_with_debt",
+      "red_log": "plant-model-omitted_done_row-red.log",
+      "red_log_sha256": "54435ea62d0024d984fdf5e9f9923137cd386fd07d15f8e02e8f8f0f50f4e499"
+    },
+    {
+      "group": "model",
+      "plant": "blanket_admission_denial",
+      "detected": true,
+      "receipt": "model-plant-receipts.json",
+      "receipt_sha256": "ad551213e5df5ce0ee9aa521b79a3f72558f5349fcb537e923276788a4567720",
+      "oracle": "enumerate_three_actors_and_three_interfering_events",
+      "red_log": "plant-model-blanket_admission_denial-red.log",
+      "red_log_sha256": "5e1d4965e753ad6e6b4fcc534339d513a9383a44262ce59669bde1f567384a67"
+    },
+    {
+      "group": "native",
+      "plant": "staging_grant",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r17_executed_staging_schedules_compare_verified_ledger_events",
+      "red_log": "plant-native-staging_grant-red.log",
+      "red_log_sha256": "21a7dd6140168219f3a2ee180e8570d42a3596b7e043fae66150a1a1aec1a2a8"
+    },
+    {
+      "group": "native",
+      "plant": "snapshot",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r17_executed_staging_schedules_compare_verified_ledger_events",
+      "red_log": "plant-native-snapshot-red.log",
+      "red_log_sha256": "ca71d531bcffc5f3d1bf9fa81a1ba24758eee01eb7e29542e0aa6c75a8a0940e"
+    },
+    {
+      "group": "native",
+      "plant": "edit",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r17_executed_staging_schedules_compare_verified_ledger_events",
+      "red_log": "plant-native-edit-red.log",
+      "red_log_sha256": "23f7bb29437e7f63c3b9520659e787f263c60a9f4896fa00da487c8eb116de60"
+    },
+    {
+      "group": "native",
+      "plant": "structural_verify",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r17_executed_staging_schedules_compare_verified_ledger_events",
+      "red_log": "plant-native-structural_verify-red.log",
+      "red_log_sha256": "dfef5fb2d75a36fcaa748bce5e57323cc085ca6e71ae3bc9ad75e6f42b270c7e"
+    },
+    {
+      "group": "native",
+      "plant": "review",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r17_executed_staging_schedules_compare_verified_ledger_events",
+      "red_log": "plant-native-review-red.log",
+      "red_log_sha256": "408b8e6a138f483973f40d55fcff7eba78fdaac6c2fc63a05c7c0cca9448ca9e"
+    },
+    {
+      "group": "native",
+      "plant": "page_verify",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_inert_page_check_and_recheck_are_separate_mutating_calls",
+      "red_log": "plant-native-page_verify-red.log",
+      "red_log_sha256": "d1d556c2599b71ebe38a7f58b59475fa235c1584d3a567d1530fe68d236591fe"
+    },
+    {
+      "group": "native",
+      "plant": "page_recheck",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_inert_page_check_and_recheck_are_separate_mutating_calls",
+      "red_log": "plant-native-page_recheck-red.log",
+      "red_log_sha256": "15337dfe44bec52756112ee67047f793da92ba3a6a0af58be4a8587febd3913d"
+    },
+    {
+      "group": "native",
+      "plant": "revalidation_review",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r21_r22_call_admissions_check_native_ledger_independently",
+      "red_log": "plant-native-revalidation_review-red.log",
+      "red_log_sha256": "6c23afb46a51a5207be9111c4e02dd6e1790fbd2ae453daee7e7b991f2d5ce55"
+    },
+    {
+      "group": "native",
+      "plant": "request_approval",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r21_r22_call_admissions_check_native_ledger_independently",
+      "red_log": "plant-native-request_approval-red.log",
+      "red_log_sha256": "8be1b14772b3fdec7c4d698a0e9e6af5a34b00c02d67f700c816028279e13c46"
+    },
+    {
+      "group": "native",
+      "plant": "apply",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r21_r22_call_admissions_check_native_ledger_independently",
+      "red_log": "plant-native-apply-red.log",
+      "red_log_sha256": "d30f66d05caa1b0c1be12a8e778b83133cc63a895fa65eb915e831cd66ee149a"
+    },
+    {
+      "group": "native",
+      "plant": "request_restore",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r27_normal_restore_admission_and_post_return_no_discard",
+      "red_log": "plant-native-request_restore-red.log",
+      "red_log_sha256": "4112a8052ace9343e341841f0393c3daa15289e7de6957b4df2304a489b8dae4"
+    },
+    {
+      "group": "native",
+      "plant": "restore",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_r27_normal_restore_admission_and_post_return_no_discard",
+      "red_log": "plant-native-restore-red.log",
+      "red_log_sha256": "0660e91ff299457cf953d80373f60e1a4ae7bd72bbe33592e0ed230f0944a755"
+    },
+    {
+      "group": "native",
+      "plant": "discard_staging",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_discard_after_normal_cleanup_reservation_rechecks_original_lifetime",
+      "red_log": "plant-native-discard_staging-red.log",
+      "red_log_sha256": "919a4bfde3edcbc6cd92482e989f0b031753cd74e51e1810fdcbb88e8e91d363"
+    },
+    {
+      "group": "native",
+      "plant": "read_grant",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_read_constructor_and_write_grant_require_individual_handoffs",
+      "red_log": "plant-native-read_grant-red.log",
+      "red_log_sha256": "2d503fd4074d7fb4e6fffd8d6218a7b28bbdff53067cb03df1f868ef1dd597e7"
+    },
+    {
+      "group": "native",
+      "plant": "write_grant",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_read_constructor_and_write_grant_require_individual_handoffs",
+      "red_log": "plant-native-write_grant-red.log",
+      "red_log_sha256": "bc0010f86d71ab6d9bf97e21ec9d9bd08554c837c3759bf5fedd25698437038a"
+    },
+    {
+      "group": "native",
+      "plant": "run_construct",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_read_constructor_and_write_grant_require_individual_handoffs",
+      "red_log": "plant-native-run_construct-red.log",
+      "red_log_sha256": "c0395a92bbb87d61cf282878e0436116aa548ae4397f0a1c618f08c3ac96028c"
+    },
+    {
+      "group": "native",
+      "plant": "project_select",
+      "detected": true,
+      "receipt": "native-plant-receipts.json",
+      "receipt_sha256": "a28233a5ff7b7dcefcc7e42d4feb9335dc35c1ab1de1bb6bf1ce8364f7b60b10",
+      "oracle": "session_project_selection_itself_is_admitted_before_broker_installation",
+      "red_log": "plant-native-project_select-red.log",
+      "red_log_sha256": "25d2cf6e3dd2d10eaf931a0b50b7c63bf725776df09fdfa696c75612cd416a2a"
+    },
+    {
+      "group": "stop",
+      "plant": "duplicate_ingress",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_workers_record_exact_ingress_without_minting_another_event",
+      "red_log": "stop-plant-duplicate_ingress.log",
+      "red_log_sha256": "53eb858782d86f59c5613d1a9de0b7891efe1c3cd54fff49fa9611185c9772bc"
+    },
+    {
+      "group": "stop",
+      "plant": "foreign_session",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_unknown_receipt_and_failed_record_remain_unsettled",
+      "red_log": "stop-plant-foreign_session.log",
+      "red_log_sha256": "04e905c06dda84576b06f4de8e6011a7016f010096c45b258a8f5f472a91aff0"
+    },
+    {
+      "group": "stop",
+      "plant": "fifth_worker",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_four_workers_leave_the_fifth_event_as_recording_debt",
+      "red_log": "stop-plant-fifth_worker.log",
+      "red_log_sha256": "8853edc9d2ed9923f0e5e3b8505b31eed309bf55a9b6e59d8547a35810968614"
+    },
+    {
+      "group": "stop",
+      "plant": "uncovered_pending",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_four_workers_leave_the_fifth_event_as_recording_debt",
+      "red_log": "stop-plant-uncovered_pending.log",
+      "red_log_sha256": "4184270a7e643f07350cca745d3c048f584442ac052d73ce7e153ac54118dc58"
+    },
+    {
+      "group": "stop",
+      "plant": "lost_result_completed",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_lost_worker_result_is_unknown_even_after_actual_record_commit",
+      "red_log": "stop-plant-lost_result_completed.log",
+      "red_log_sha256": "1766cbe5e471dc65f881a35706631c33a68ad365a7fc6ebba0de83046f185b1e"
+    },
+    {
+      "group": "stop",
+      "plant": "owed_as_recorded",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_unknown_receipt_and_failed_record_remain_unsettled",
+      "red_log": "stop-plant-owed_as_recorded.log",
+      "red_log_sha256": "8fddd5dff5bb7af648c271b8cad62669af09cfb2083c064eb4c1f5f2b9e309b7"
+    },
+    {
+      "group": "stop",
+      "plant": "poison_as_completed",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_poison_cannot_be_reported_as_completed_recording",
+      "red_log": "stop-plant-poison_as_completed.log",
+      "red_log_sha256": "499901b06ffd71a96cf979f2fc1582405dcabcf6604cc928237d0d81cf7b6496"
+    },
+    {
+      "group": "stop",
+      "plant": "only_last_consequence",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_keeps_every_consequence_status_beside_the_final_record",
+      "red_log": "stop-plant-only_last_consequence.log",
+      "red_log_sha256": "09dad615ca40b61c86e71207a87ad82d6965402be6c8e9545aa9cd6516f7e762"
+    },
+    {
+      "group": "stop",
+      "plant": "spawn_as_completed",
+      "detected": true,
+      "receipt": "stop-plant-receipts.json",
+      "receipt_sha256": "07c28da0ff9abc63e38eed92782c86cf43a46c4f9ba91b5222565e89530fb26c",
+      "oracle": "session_stop_spawn_failure_retains_the_unrecorded_event",
+      "red_log": "stop-plant-spawn_as_completed.log",
+      "red_log_sha256": "4dfa2fa2bc2cc8319bb52cbe4bb405922168222e4bb6a0b75a893657c37c9f6c"
+    },
+    {
+      "group": "continuation",
+      "plant": "early_target",
+      "detected": true,
+      "receipt": "continuation-plant-receipts.json",
+      "receipt_sha256": "543e9528e9a84f40c247c9d75e0a2b2c865a1ae9f3cd8cd21c268ee867413bcd",
+      "oracle": "session_approval_target_is_not_published",
+      "red_log": "continuation-plant-early_target.log",
+      "red_log_sha256": "e02a44f4e1f28f17fc72286b0a8ce6d4b4adf1d30c459e6d8c4fad477387af2d"
+    },
+    {
+      "group": "continuation",
+      "plant": "old_context_transfer",
+      "detected": true,
+      "receipt": "continuation-plant-receipts.json",
+      "receipt_sha256": "543e9528e9a84f40c247c9d75e0a2b2c865a1ae9f3cd8cd21c268ee867413bcd",
+      "oracle": "session_approval_continuation_binds",
+      "red_log": "continuation-plant-old_context_transfer.log",
+      "red_log_sha256": "5e8e63df2d01af987c652681a246532d184a635bfbc80175a540c73cc591ffba"
+    },
+    {
+      "group": "continuation",
+      "plant": "duplicate_transfer",
+      "detected": true,
+      "receipt": "continuation-plant-receipts.json",
+      "receipt_sha256": "543e9528e9a84f40c247c9d75e0a2b2c865a1ae9f3cd8cd21c268ee867413bcd",
+      "oracle": "session_approval_two_files",
+      "red_log": "continuation-plant-duplicate_transfer.log",
+      "red_log_sha256": "fd8fa6e443862501cf9cf3e54f52b65eb33246cdad64de6c36c7dbef27edc460"
+    },
+    {
+      "group": "continuation",
+      "plant": "changed_generation",
+      "detected": true,
+      "receipt": "continuation-plant-receipts.json",
+      "receipt_sha256": "543e9528e9a84f40c247c9d75e0a2b2c865a1ae9f3cd8cd21c268ee867413bcd",
+      "oracle": "session_approval_continuation_binds",
+      "red_log": "continuation-plant-changed_generation.log",
+      "red_log_sha256": "9479ddf9e6bf1e25e3c75a8f8f0ecad741a8f88a0dbaadb30441f6381db46027"
+    },
+    {
+      "group": "continuation",
+      "plant": "lost_native_prerequisite",
+      "detected": true,
+      "receipt": "continuation-plant-receipts.json",
+      "receipt_sha256": "543e9528e9a84f40c247c9d75e0a2b2c865a1ae9f3cd8cd21c268ee867413bcd",
+      "oracle": "session_mother_context_refuses",
+      "red_log": "continuation-plant-lost_native_prerequisite.log",
+      "red_log_sha256": "6bec5e3a0a8faf3b5902f8530eae670610d3450a827fe157df2338e6f005644d"
+    },
+    {
+      "group": "continuation",
+      "plant": "old_native_preparation_scope",
+      "detected": true,
+      "receipt": "continuation-plant-receipts.json",
+      "receipt_sha256": "543e9528e9a84f40c247c9d75e0a2b2c865a1ae9f3cd8cd21c268ee867413bcd",
+      "oracle": "session_continuation_native_preparation",
+      "red_log": "continuation-plant-old_native_preparation_scope.log",
+      "red_log_sha256": "a59514750545481be054385bf1f13827fe8e47a7a490557e4494da8c765fb9f3"
+    },
+    {
+      "group": "close",
+      "plant": "unjoined_producer",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-unjoined_producer.log",
+      "red_log_sha256": "8f6b559cc0fefd808943e36a2d281d75a2a12a97713784070696dd0db18fa27e"
+    },
+    {
+      "group": "close",
+      "plant": "uncovered_stop",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-uncovered_stop.log",
+      "red_log_sha256": "34bd4ff32f97496d6d3a67bbb1a04eb260a6900db76f482083fb69776143e93f"
+    },
+    {
+      "group": "close",
+      "plant": "native_record_debt",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-native_record_debt.log",
+      "red_log_sha256": "325a9c9275399062dc33709048a9c29da83c6fa2e2fc95af00f3354492adc6b0"
+    },
+    {
+      "group": "close",
+      "plant": "private_resource_debt",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-private_resource_debt.log",
+      "red_log_sha256": "7bb93b19524fcb9d64e7d681fd717bf96dc6fd5d1582806c6f8a779fa779f520"
+    },
+    {
+      "group": "close",
+      "plant": "exact_ack_debt",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-exact_ack_debt.log",
+      "red_log_sha256": "e0ab23e40c37a9a8b963f9236fdb49d4f5df846f44641b7dbe3eb9b1baff5831"
+    },
+    {
+      "group": "close",
+      "plant": "startup_sources",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-startup_sources.log",
+      "red_log_sha256": "3e7f68efac50893e3d3a1736642fea9a584b420f9cb1ebec1a65b16d2edeae68"
+    },
+    {
+      "group": "close",
+      "plant": "mother_before_primary",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-mother_before_primary.log",
+      "red_log_sha256": "5b9e8c0a41e4bda85d82da25fc358991b42ed1da3ef1d9b57901b5da20b5d4ed"
+    },
+    {
+      "group": "close",
+      "plant": "primary_before_delivery",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-primary_before_delivery.log",
+      "red_log_sha256": "52af6f92a1d4320f8e3160c5547658605b7224fa25dd7c81f1d477d14a95650f"
+    },
+    {
+      "group": "close",
+      "plant": "lost_finalizer",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-lost_finalizer.log",
+      "red_log_sha256": "6f5081abb3fe29300fc3626440b95e832cb1a2245605326276f6bb6696f8a2ba"
+    },
+    {
+      "group": "close",
+      "plant": "post_seal_ingress",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-post_seal_ingress.log",
+      "red_log_sha256": "a263348cc205d57f0c651f8852caeb465cabe92ba2fba22c923d6401c6991bf2"
+    },
+    {
+      "group": "close",
+      "plant": "post_seal_settlement",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-post_seal_settlement.log",
+      "red_log_sha256": "80b9d19e10d373f8bb9031e3e10e6a0d320b3712a5dbe7ef841ba2d7d46988ed"
+    },
+    {
+      "group": "close",
+      "plant": "unverified_mother_end",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-unverified_mother_end.log",
+      "red_log_sha256": "addc8f6ba872bee8854aedc05661113c441e90abc89df6eeeca7e84d4f2a0d1a"
+    },
+    {
+      "group": "close",
+      "plant": "seal_retries_new_word",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-seal_retries_new_word.log",
+      "red_log_sha256": "dcfb8cb78fd7b16032aa04f7f33ccaec1631a038a6908f0e366b7a6c4c8736e1"
+    },
+    {
+      "group": "close",
+      "plant": "producer_transfer_omission",
+      "detected": true,
+      "receipt": "close-plant-receipts-current.json",
+      "receipt_sha256": "54724ae6aa5c43a8e50f599c4b6f37d73d81383cdb40d8bedca4a7b83101d753",
+      "oracle": null,
+      "red_log": "close-plant-producer_transfer_omission.log",
+      "red_log_sha256": "e55cab182b5930fb3eb1c2704d263f6b906907ef297a561a787150dabb6b2c31"
+    },
+    {
+      "group": "host",
+      "plant": "command_deadline_refresh",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--lib",
+        "session_confirmation_scope_keeps_original_request_time_and_generation",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-command_deadline_refresh.log",
+      "red_log_sha256": "b9a95e61b8ae12f3bc0be7db456d9ee2fbd769f6ba71c625358076349508d7ff"
+    },
+    {
+      "group": "host",
+      "plant": "invalid_answer_as_decline",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--lib",
+        "session_confirmation_distinguishes_explicit_decline_invalid_input_and_ingress",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-invalid_answer_as_decline.log",
+      "red_log_sha256": "5745e15c7b8d2034d997f5cc302fb5e5cd40c129366f2b2efa0216e07dde98bb"
+    },
+    {
+      "group": "host",
+      "plant": "reader_omits_original_ingress",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--lib",
+        "m2dd_eof_and_stop_deny_at_display_boundary_and_answer_wait",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-reader_omits_original_ingress.log",
+      "red_log_sha256": "f6ea4b2fd66c25a4c91db91a568310f2323e85d8604a495f26981f535b1b9e98"
+    },
+    {
+      "group": "host",
+      "plant": "terminal_finalization_after_receipt",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_close_failures",
+        "session_terminal_finalization_failure_keeps_ends_without_clean_receipt",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-terminal_finalization_after_receipt.log",
+      "red_log_sha256": "8f3888967f43624625a16f2a84608ae76297644c9c33044b08fc01a71dff722a"
+    },
+    {
+      "group": "host",
+      "plant": "append_consumes_delivery_budget",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_close_failures",
+        "session_primary_append_timeout_keeps_unknown_separate_from_mother_recorded",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-append_consumes_delivery_budget.log",
+      "red_log_sha256": "35259fc2207509f3c7b401a67e915e908f47d8c92cc010131524e67c0b726f45"
+    },
+    {
+      "group": "host",
+      "plant": "omit_current_undo_exclusion",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_close_failures",
+        "session_inventory_reports_current_undo_exclusion_beside_actual_staging",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-omit_current_undo_exclusion.log",
+      "red_log_sha256": "21f165e03f842a54456987192f6f751c3eec9f70715885768bcb246a82403ab7"
+    },
+    {
+      "group": "host",
+      "plant": "erase_restore_handoff_result",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_undo_reports_native_handoff_and_physical_result_independently",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-erase_restore_handoff_result.log",
+      "red_log_sha256": "d16ccdaeafb17d168e99c288ef12af7f020222a9893031366e742cbde06321c0"
+    },
+    {
+      "group": "host",
+      "plant": "erase_grant_closure_fact",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_undo_reports_native_handoff_and_physical_result_independently",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-erase_grant_closure_fact.log",
+      "red_log_sha256": "924897bb32862f4a190b6f1c383bae29a17033df30b4b1cfb94287c4ec8bb745"
+    },
+    {
+      "group": "host",
+      "plant": "undo_borrow_does_not_retire_target",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_undo_acceptance_has_no_busy_target_and_returned_slot_has_new_version",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-undo_borrow_does_not_retire_target.log",
+      "red_log_sha256": "29685a2ff99953c8b466cb98182a3cdefb2708f11f4605421c62031dbb9f657c"
+    },
+    {
+      "group": "host",
+      "plant": "returned_slot_reuses_target",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_undo_acceptance_has_no_busy_target_and_returned_slot_has_new_version",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-returned_slot_reuses_target.log",
+      "red_log_sha256": "322aaed400abb6290acf9f9e0d82c8fb432272d52889b95da559e1004bf08b3b"
+    },
+    {
+      "group": "host",
+      "plant": "failed_state_blanket_denies_observation",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_close_facade",
+        "session_failed_observation_has_owned_lifetime_without_work_permission",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-failed_state_blanket_denies_observation.log",
+      "red_log_sha256": "ed62f44abca06152672035d3557b23d83b9cf6967cca7fca6f93c747a294b1bd"
+    },
+    {
+      "group": "host",
+      "plant": "raw_owner_escape",
+      "detected": true,
+      "receipt": "host-plant-receipts.json",
+      "receipt_sha256": "5e22d1f1de0e9c64366dc396033f33ab5fa205e32f72ba3bacf08aeee90cd005",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_hands_and_stop_call_graph_cannot_reach_raw_legacy_authority",
+        "--",
+        "--nocapture"
+      ],
+      "red_log": "host-plant-raw_owner_escape.log",
+      "red_log_sha256": "1363b17159dd6fe01d2a50ac77e540ff6f98e569a5ffaa9256db4ebe777352a7"
+    },
+    {
+      "group": "delivery",
+      "plant": "second_queue_budget",
+      "detected": true,
+      "receipt": "delivery-plant-receipts.json",
+      "receipt_sha256": "4599df6d7a5d43583418b87c5061e534842bcc16b443781f86e13a5c546453b7",
+      "oracle": "session_busy_work_retains_one_bounded_original_command_queue",
+      "red_log": "delivery-plant-second_queue_budget.log",
+      "red_log_sha256": "55bcdeff490387c57a67fda4bb97eebc7f439df71914acb54d3e481f71c72d3f"
+    },
+    {
+      "group": "delivery",
+      "plant": "queue_as_delivery",
+      "detected": true,
+      "receipt": "delivery-plant-receipts.json",
+      "receipt_sha256": "4599df6d7a5d43583418b87c5061e534842bcc16b443781f86e13a5c546453b7",
+      "oracle": "session_stop_delivery_retains_exact_events_until_actual_output_ack",
+      "red_log": "delivery-plant-queue_as_delivery.log",
+      "red_log_sha256": "431de5bf7aca54ddb9b61bd4238b3cbf2d0bcdf6795fe8eeccd12dc09f0aca4a"
+    },
+    {
+      "group": "delivery",
+      "plant": "ingress_covers_outcome",
+      "detected": true,
+      "receipt": "delivery-plant-receipts.json",
+      "receipt_sha256": "4599df6d7a5d43583418b87c5061e534842bcc16b443781f86e13a5c546453b7",
+      "oracle": "session_stop_delivery_retains_exact_events_until_actual_output_ack",
+      "red_log": "delivery-plant-ingress_covers_outcome.log",
+      "red_log_sha256": "98a3a28d25fcd97822919b4b4735b7a8b70777d27d725bca10e715a9fe17cf35"
+    },
+    {
+      "group": "result",
+      "plant": "erase_apply_handoff",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "governed::session_routes::session_result_facts_are_exact_observations_not_authority_or_generic_success",
+      "red_log": "result-plant-erase_apply_handoff.log",
+      "red_log_sha256": "f4fd9fb5c2c2c3f812b1fd7223d7b0c703f856753ee7b5ea957cbd56cfc0371a"
+    },
+    {
+      "group": "result",
+      "plant": "erase_native_return_fact",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "governed::session_routes::session_result_retains_each_entered_native_call_separately",
+      "red_log": "result-plant-erase_native_return_fact.log",
+      "red_log_sha256": "22c7ad3e329bd74324d209d5facb1d7176ffc5f7facd4efb46ca62522e428971"
+    },
+    {
+      "group": "result",
+      "plant": "healthy_store_is_recorded",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "governed::session_routes::session_result_facts_are_exact_observations_not_authority_or_generic_success",
+      "red_log": "result-plant-healthy_store_is_recorded.log",
+      "red_log_sha256": "888c9d9182fb0c47cc2497033e3e6d80c48537b6ac9ea3084a00db0c2984e22d"
+    },
+    {
+      "group": "result",
+      "plant": "erase_exact_mother_receipt",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "session_result_envelope_preserves_answer_physical_records_and_exact_ack",
+      "red_log": "result-plant-erase_exact_mother_receipt.log",
+      "red_log_sha256": "eef2822b4baf1362d35504cfd903f5c4bf6676183fdfd6044aab7009240b6638"
+    },
+    {
+      "group": "result",
+      "plant": "collapse_native_publication",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "governed::session_routes::session_result_facts_are_exact_observations_not_authority_or_generic_success",
+      "red_log": "result-plant-collapse_native_publication.log",
+      "red_log_sha256": "3442ec8771e6bd315dd581e2d6318966aa253d09072ddfa6a761ac18b5935964"
+    },
+    {
+      "group": "result",
+      "plant": "generic_fence_replaces_intent",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "coordinator::lite::session_terminal_oracles::session_literal_thirteen_states_against_real_terminal_paths",
+      "red_log": "result-plant-generic_fence_replaces_intent.log",
+      "red_log_sha256": "fa0a5338581c4da4f48512c90b1d19b3e618a6f1b651a5f133b3b6b5b62bedf2"
+    },
+    {
+      "group": "result",
+      "plant": "erase_each_dialogue_answer",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "session_result_envelope_preserves_answer_physical_records_and_exact_ack",
+      "red_log": "result-plant-erase_each_dialogue_answer.log",
+      "red_log_sha256": "07b8d6b4bb927915831c6d4da2da68199772e8185b8deb09a4d50416a46662c0"
+    },
+    {
+      "group": "result",
+      "plant": "reuse_answer_after_poison",
+      "detected": true,
+      "receipt": "result-plant-receipts.json",
+      "receipt_sha256": "17477869366f19d8e7c7bc17eaa838975b1b56694ee8f389836ba708e09279a5",
+      "oracle": "terminal_tests::session_dialogue_poison_cannot_reuse_an_earlier_affirmative_answer",
+      "red_log": "result-plant-reuse_answer_after_poison.log",
+      "red_log_sha256": "1cbb727abe6d683cf193804f9d434be33ae2f524681e86a61c56b0da62f276f3"
+    },
+    {
+      "group": "budget",
+      "plant": "producers_consume_delivery_budget",
+      "detected": true,
+      "receipt": "budget-plant-receipt.json",
+      "receipt_sha256": "753b63acd231e4b5a330c4977b9dad7b9f45a1e4d8d7fd2803f9c3f3a3337211",
+      "oracle": null,
+      "red_log": "budget-plant-producers-consume-delivery.log",
+      "red_log_sha256": "c662c3228ca89dc413d4bef7e3f2077c4d54e65bc518c70d4b96171477bd52d7"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "draft",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-draft.log",
+      "red_log_sha256": "490db1e32207cde8692e662a817120994e63c2b6be54637a8f93a4ecdef457de"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "file_select",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-file_select.log",
+      "red_log_sha256": "6c7625319a24ee384644e96d80143497902459e558a2ee5fba9af7ba8f9f5da7"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "dispatch_reserve",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-dispatch_reserve.log",
+      "red_log_sha256": "44254792d029a578f0bea0ebb0c1974a664511c206b26093496cbd22b13a7125"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "dispatch_reconcile",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-dispatch_reconcile.log",
+      "red_log_sha256": "182c910338273825f7019598c8bad84b4cb3817ab094f037e449029362253419"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "pending_install",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-pending_install.log",
+      "red_log_sha256": "a9341409567949e0b3dfe5066616418c6f6d1499a806ba437ba46087d9765e37"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "lane_reserve",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-lane_reserve.log",
+      "red_log_sha256": "52ce0519fc86c3a0f1e194d746814b2dc6674fc8608b3b229872e3cc45565890"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "revise",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-revise.log",
+      "red_log_sha256": "5b779698a8cae621cae5c8aee7b7d10c0434084220ce91db81a1552aa07375ad"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "submit",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-submit.log",
+      "red_log_sha256": "d7cd9f6755c08a3a22840c7146cd270df9892d30476c9367bd9412602314d78c"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "consent_install",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-consent_install.log",
+      "red_log_sha256": "a94685f62a1714d392ee260bb3d6c98e49ab5227531778791cd6565b659bb171"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "start",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-start.log",
+      "red_log_sha256": "bc052d4dddc68dc39478ee8ca7e3c82f3a6ba7539e52ccb1b45b4999d7eed1e6"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "phase_done",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-phase_done.log",
+      "red_log_sha256": "0e03fa968c7279694cec052605ae0cb03ee3640f7e87f15568214c12cb0e862e"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "verify_pass",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-verify_pass.log",
+      "red_log_sha256": "98aa50812bae562fa93a452e9c468fb3c5b9cac7852125de9612d199cd0c690d"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "awaiting_approval",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-awaiting_approval.log",
+      "red_log_sha256": "522f8bd6a05e0edd67ca28bad8632f5f37cf22a74e59f1aae43cfd345b94c21f"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "approval_recognize",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-approval_recognize.log",
+      "red_log_sha256": "b737cfadb66f9268cfc867985ccaa9e4a9daf6265e4f8d58b6f39fed7fa9386e"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "consent_reserve",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-consent_reserve.log",
+      "red_log_sha256": "dd87811507a2670165a8a53244d680e6763e27531f5bf9b3640bcae2a326dea9"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "phase_reserve",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-phase_reserve.log",
+      "red_log_sha256": "29405d164757abc5dffd2216e32e91a8cb84a3b393bc1f769d63423e0cbfba9b"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "lane_invoke",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-lane_invoke.log",
+      "red_log_sha256": "56ee81a671fac4a077681ec6b42819456f47dd8fca41801285a4e7ce519582fc"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "paused_store",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "coordinator::session_journal_oracles::session_r08_append_admission_and_every_prefix",
+      "red_log": "mother-sink-plant-paused_store.log",
+      "red_log_sha256": "0179109c9f44e923f0cbacac1e2c35bd465b42c12e4a60df00c6a9cedbbb8d94"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_mkdir",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_mkdir.log",
+      "red_log_sha256": "70f788afc0b256991e1b2b96b030a18161d34389bc12cdb50fb8c6895e57649b"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_temp_create",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_temp_create.log",
+      "red_log_sha256": "46a2766dea89022b14a83c89830351e241d80b1a17b945721605aaf966bd5051"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_write",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_write.log",
+      "red_log_sha256": "4a5855b8aa3cad6b7bdac233724356020007a9d137a763842d2cdb7e95f1c4c9"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_sync",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_sync.log",
+      "red_log_sha256": "379d3b266210c99d4d9d3a941fb4b785d8c65e8c849e5660eb31c1012e5f9525"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_rename",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_rename.log",
+      "red_log_sha256": "b0adf6d9651c9cd389d06d7636dbfd280d6e58b4406fd1bead958c8c6955934a"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_parent_sync",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_parent_sync.log",
+      "red_log_sha256": "d78ec4f9f97616925e34210d99b7162d5b2b787ec7788a19101ec8e32471c71a"
+    },
+    {
+      "group": "mother_sink",
+      "plant": "private_error_remove",
+      "detected": true,
+      "receipt": "mother-sink-plant-receipts.json",
+      "receipt_sha256": "2773ac6d63fb259b7d14163a197c8217fdef1483190de6f623c6bb6bc31b632f",
+      "oracle": "adapter::private_file::session_probe::session_r37_each_private_call_and_error_removal_has_its_own_boundary",
+      "red_log": "mother-sink-plant-private_error_remove.log",
+      "red_log_sha256": "a58fe2ccf1719844e00225fd497d57f11d44ea782eca6046cfa846203b3c6da5"
+    },
+    {
+      "group": "ownership",
+      "plant": "cas_load_check_gap",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_same_word_atomic_admission_is_ordered_after_unscheduled_ingress",
+      "red_log": "ownership-plant-cas_load_check_gap.log",
+      "red_log_sha256": "15ca992346fae599f304de4fcaccb05908d08911da44ddd170a34d0b20c5d56b"
+    },
+    {
+      "group": "ownership",
+      "plant": "native_blanket_denial",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_r17_executed_staging_schedules_compare_verified_ledger_events",
+      "red_log": "ownership-plant-native_blanket_denial.log",
+      "red_log_sha256": "892f368b204dc7e0f749abbbf3a381bf593c2a00409147e0bc0f9513e4ddb234"
+    },
+    {
+      "group": "ownership",
+      "plant": "undo_grant_bypass",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_undo_grant_has_its_own_original_request_handoff",
+      "red_log": "ownership-plant-undo_grant_bypass.log",
+      "red_log_sha256": "f8c4960c0ab804f4993220a4a2415b6795f7fff3a2c88cdbc4d7bbbc96646230"
+    },
+    {
+      "group": "ownership",
+      "plant": "housekeeping_sync_bypass",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_discharge_requires_separate_sync_and_keeps_the_owner_file",
+      "red_log": "ownership-plant-housekeeping_sync_bypass.log",
+      "red_log_sha256": "259c2ad2bb1a94166f290f634ab665db11cbee18d676551d3ee6a521bdb6a888"
+    },
+    {
+      "group": "ownership",
+      "plant": "absence_is_durable_finalization",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_discharge_requires_separate_sync_and_keeps_the_owner_file",
+      "red_log": "ownership-plant-absence_is_durable_finalization.log",
+      "red_log_sha256": "8961cc7483b6aa7bc224a947d1cfd9e06e639a60f1a78e21cb428350246e4863"
+    },
+    {
+      "group": "ownership",
+      "plant": "omit_native_inventory_transfer",
+      "detected": true,
+      "receipt": "ownership-followup-plant-receipts.json",
+      "receipt_sha256": "8a341e7575d2871a323367e8dacd0043bd576e7981da42fd55e086c0636d72be",
+      "oracle": "session_discharge_requires_separate_sync_and_keeps_the_owner_file",
+      "red_log": "ownership-followup-plant-omit_native_inventory_transfer.log",
+      "red_log_sha256": "acbf67f5d8b31f9bc6e4642d44b24caa88a5d3178290d14a6b0282ef6c57e2bf"
+    },
+    {
+      "group": "ownership",
+      "plant": "omit_resource_reservation_transfer",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_close_keeps_private_resource_and_exact_ack_debt_independent",
+      "red_log": "ownership-plant-omit_resource_reservation_transfer.log",
+      "red_log_sha256": "53b9f1d372ac0204d0221c67fc08335aa04b56f65cbca7125765016f3c163278"
+    },
+    {
+      "group": "ownership",
+      "plant": "omit_preparation_run_retention",
+      "detected": true,
+      "receipt": "ownership-followup-plant-receipts.json",
+      "receipt_sha256": "8a341e7575d2871a323367e8dacd0043bd576e7981da42fd55e086c0636d72be",
+      "oracle": "session_pending_quit_prepares_terminal_ack_without_recording_an_end",
+      "red_log": "ownership-followup-plant-omit_preparation_run_retention.log",
+      "red_log_sha256": "2701871b5195f3929d4e4ac64425df7f8acebba0c059bd2e78e72cf0ef9d1975"
+    },
+    {
+      "group": "ownership",
+      "plant": "native_owner_destructor",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_normal_final_owner_drop_is_not_an_implicit_cleanup_request",
+      "red_log": "ownership-plant-native_owner_destructor.log",
+      "red_log_sha256": "3d921cc4c6f7518fcbee54e7815d5065adb9ebe4c20f7c7b1069c93a597c8469"
+    },
+    {
+      "group": "ownership",
+      "plant": "old_undo_owner_drop",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_undo_index_replacement_conserves_both_runs_after_the_second_handoff",
+      "red_log": "ownership-plant-old_undo_owner_drop.log",
+      "red_log_sha256": "d2b0e398d5a9f9a61fb77b2e3554a143e5522ad89666ce9e8fe2f3334894f926"
+    },
+    {
+      "group": "ownership",
+      "plant": "implicit_retire_removal",
+      "detected": true,
+      "receipt": "ownership-followup-plant-receipts.json",
+      "receipt_sha256": "8a341e7575d2871a323367e8dacd0043bd576e7981da42fd55e086c0636d72be",
+      "oracle": "session_r18_r24_r30_r35_terminal_wrappers_and_last_owner_conserve_staging",
+      "red_log": "ownership-followup-plant-implicit_retire_removal.log",
+      "red_log_sha256": "d77745fc4f611acd8b45f454ba359ffbee8fc193722eb5206b14eeb173784905"
+    },
+    {
+      "group": "ownership",
+      "plant": "unknown_ack_as_duplicate",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_r25_unknown_ack_is_not_a_successful_duplicate",
+      "red_log": "ownership-plant-unknown_ack_as_duplicate.log",
+      "red_log_sha256": "cc3b44f496d9611a710fef6432e0740b5c418623cd3386105d7d4ebadf7f4c58"
+    },
+    {
+      "group": "ownership",
+      "plant": "undurable_ack_releases_pin",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_ack_without_exact_durable_mother_reference_retains_every_pin",
+      "red_log": "ownership-plant-undurable_ack_releases_pin.log",
+      "red_log_sha256": "212aa95411f6c4cd13382b91faa6eb2ea02bd1e77ad8634d2d63efb96b7e07f6"
+    },
+    {
+      "group": "ownership",
+      "plant": "weaken_existing_publication_observer",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "lite_h_final_check_after_engagement_refuses_real_publication",
+      "red_log": "ownership-plant-weaken_existing_publication_observer.log",
+      "red_log_sha256": "487147b9280ea7e6af23197158b44ca59a71e12da8d5606e5dfa6b61ce4e133b"
+    },
+    {
+      "group": "ownership",
+      "plant": "retry_cleanup_bypass",
+      "detected": true,
+      "receipt": "ownership-plant-receipts.json",
+      "receipt_sha256": "a2be83c1427a6e7a1d996ad7753e4617e6d029969e5f2e062b94f98990160f0d",
+      "oracle": "session_retry_cleanup_handoff_and_successor_are_independently_admitted",
+      "red_log": "ownership-plant-retry_cleanup_bypass.log",
+      "red_log_sha256": "0ff6c5d996fab07903ec4c906c71d913f399aa75295eafc00b1bb3e07c99596f"
+    },
+    {
+      "group": "ownership",
+      "plant": "prune_precommitment_origin",
+      "detected": true,
+      "receipt": "ownership-followup-plant-receipts.json",
+      "receipt_sha256": "8a341e7575d2871a323367e8dacd0043bd576e7981da42fd55e086c0636d72be",
+      "oracle": "session_precommitment_retention_survives_finish_and_run_capacity_pressure",
+      "red_log": "ownership-followup-plant-prune_precommitment_origin.log",
+      "red_log_sha256": "8a20ff34324d53835b355e43e3c835011a6e1aa524badbff15393788071f7167"
+    },
+    {
+      "group": "ownership",
+      "plant": "omit_commitment_pin_transfer",
+      "detected": true,
+      "receipt": "ownership-followup-plant-receipts.json",
+      "receipt_sha256": "8a341e7575d2871a323367e8dacd0043bd576e7981da42fd55e086c0636d72be",
+      "oracle": "session_ack_without_exact_durable_mother_reference_retains_every_pin",
+      "red_log": "ownership-followup-plant-omit_commitment_pin_transfer.log",
+      "red_log_sha256": "d58f5f70177f54dae7fee3c2cc51fe2650af5e47479772935701ee6da06539c6"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-held-confirm",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-held-confirm.log",
+      "red_log_sha256": "e0d66b34a85cf854bcdcf415908627171150a0aa4f8f640068e6a545a74b149c"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-held-resume",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-held-resume.log",
+      "red_log_sha256": "ce19c21e624848b230584ea932947bc846f1571cd471dab50c443aee28cf0082"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-adopt",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-adopt.log",
+      "red_log_sha256": "f32fe96f74fe44f59dde16e1204a9a7a94784d60b5fe00cacc6181c00f409345"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-join",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-join.log",
+      "red_log_sha256": "4300cb46780ff1f581f1225f74d1dea2d109a46c0e281bb59d64837c740b5522"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-replay",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-replay.log",
+      "red_log_sha256": "347ed098a010343aa3ae4b21c8523f8ddc199adafcaf716613da0f7ac1a288c1"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-network",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-network.log",
+      "red_log_sha256": "72708dfeb68c7168cadc8aa0749b56582ce73b59ebcaf6748837511f4bcd4430"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-process",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-process.log",
+      "red_log_sha256": "13b12158bce8bd89cd8b39c97c4401977d7f82f8e64f9ede07650062255cd4bc"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-connector",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-connector.log",
+      "red_log_sha256": "3aea4005085e3fe23616bfc4a61b7d4f852ea78a939836fe13e5b29474092d5e"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-spend",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-spend.log",
+      "red_log_sha256": "4b8e4d87695275e456c0742fe324b3b4d62b73ef8330e62cfef7b8b9a824f799"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-display",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-display.log",
+      "red_log_sha256": "1f46f174b4cafca7417889217e7acf20d542c251c4b045f8149642d4f3a2d448"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-lift",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-lift.log",
+      "red_log_sha256": "4ed6c75d9d64e4ec49c048b2a24122606596b9f287dd99dd8bc413586ddee4ab"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-inference",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-inference.log",
+      "red_log_sha256": "0a752dfb9f833753e25cfba153a77968edc8853d0589ffe7dd6d5be71b447c36"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-model-attempt",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-model-attempt.log",
+      "red_log_sha256": "ede346bb3c90f9e5ceeaa9b0ca26ad5924e90972bbc793e82cc0bf9347c6b49d"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-obsolete-undo-cleanup",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-obsolete-undo-cleanup.log",
+      "red_log_sha256": "6fae996f17c7b4800adb8ed9813966952a1dfbdeb6dbb2a5bb66c736e927d54d"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-undo-prior-cleanup",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-undo-prior-cleanup.log",
+      "red_log_sha256": "932bc297342159bfde3d33cf3c16bd112df038bcd732932ef2e411f4ad6d3fd6"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-implicit-drain",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-implicit-drain.log",
+      "red_log_sha256": "5261b97eba7875697443669fecd111b2b12f6eff5c9bd1a31141473907c6ff34"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-implicit-retire",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-implicit-retire.log",
+      "red_log_sha256": "de76e89ff2b1d8243ecd4ccd92c0029983b9ed58066403a7459112154181e5e7"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-generic-checked-closure",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-generic-checked-closure.log",
+      "red_log_sha256": "e5029be38e9a44994a2953a91ac674fc234583b43d99535eda654c4478581b82"
+    },
+    {
+      "group": "surface",
+      "plant": "seal-legacy-intent-conversion",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-seal-legacy-intent-conversion.log",
+      "red_log_sha256": "5926aadc71a05c943a694b43f1b0f046dde396dc108ddb630e0ac1f255591d51"
+    },
+    {
+      "group": "surface",
+      "plant": "copy-classification-to-expected",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_literal_oracle_provenance_is_frozen_independently_of_product_classifiers",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-copy-classification-to-expected.log",
+      "red_log_sha256": "c979aa4e581f7ee8f322c4e0a3439b696b4a5fbc5dfbc3e1bf70d3c2f0e215b6"
+    },
+    {
+      "group": "surface",
+      "plant": "classifier-as-primitive",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_literal_oracle_provenance_is_frozen_independently_of_product_classifiers",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-classifier-as-primitive.log",
+      "red_log_sha256": "b7e3137836d0914910024ab6bd8af484eceadfb252f4c89c0787c4f973536590"
+    },
+    {
+      "group": "surface",
+      "plant": "accept-recovery-error",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitutions",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-accept-recovery-error.log",
+      "red_log_sha256": "b8d11c75552751148f0188ea74e123f395052602c0a06cb2be42397ff91268ba"
+    },
+    {
+      "group": "surface",
+      "plant": "skip-torn-assertion",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitutions",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-skip-torn-assertion.log",
+      "red_log_sha256": "edb156e3048995e4efc9866df1e84042ad670d54a7b4ab761c9e7a4f08146556"
+    },
+    {
+      "group": "surface",
+      "plant": "fake-boundary-receipt",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_sealing",
+        "session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitutions",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-fake-boundary-receipt.log",
+      "red_log_sha256": "53936d744ec25a5a0c7710ddd0b70f59fd10f3602ce10dafd6ed7b2cfee3d815"
+    },
+    {
+      "group": "surface",
+      "plant": "lf-only",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "pty",
+        "review1_real_cr_lf_crlf_commands_and_answers",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-lf-only.log",
+      "red_log_sha256": "5e01644d55bbe23cebc5bc113311592a641b698ae1d297cb9fd4f2a48ac30b73"
+    },
+    {
+      "group": "surface",
+      "plant": "stdout-lock-while-waiting",
+      "detected": true,
+      "receipt": "surface-followup-plant-receipts.json",
+      "receipt_sha256": "4a5b74d791ed5b01b473e8fb86240d2c3d8e53df9ca7ecb5d6204e75d219f1ca",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "pty",
+        "review1_walk_reaches_first_dialogue_under_pty",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-followup-plant-stdout-lock-while-waiting.log",
+      "red_log_sha256": "f981513c6d2c6dda0f09f2939dadb26e5aec137028631cadea76425c79dfc546"
+    },
+    {
+      "group": "surface",
+      "plant": "accept-stale-partial-answer",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "faults",
+        "d_o4_display_boundary_rejects_queued_complete_and_partial_answers",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-accept-stale-partial-answer.log",
+      "red_log_sha256": "92fd9ef3a0682ffa77e9399dbe6fea3e564af4eab9b7310026ea1d647206d50d"
+    },
+    {
+      "group": "surface",
+      "plant": "sweep-on-restart",
+      "detected": true,
+      "receipt": "surface-plant-receipts.json",
+      "receipt_sha256": "db0547523a67e20efb42f22f6dc98622a9fa35eb4a01e682b8bbd1ec5db64558",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_protocol",
+        "session_lost_pending_inventory_is_report_only_on_two_new_process_starts",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "red_log": "surface-plant-sweep-on-restart.log",
+      "red_log_sha256": "5a93f919488fcdfd1d73f3fc61d8979fd28c2030093f702a2e35bc13b4d82347"
+    },
+    {
+      "group": "setup",
+      "plant": "hold_configure",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-hold_configure.log",
+      "red_log_sha256": "cf7a2ecf878b0a924614c99c78929a032056d8e7151792531cd1453855e2f471"
+    },
+    {
+      "group": "setup",
+      "plant": "workspace_install",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-workspace_install.log",
+      "red_log_sha256": "e3c572dda434be05594b9b763bb12b5ba7d5a2a3d5b6fb7bf616242236a42059"
+    },
+    {
+      "group": "setup",
+      "plant": "grant_confirm",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-grant_confirm.log",
+      "red_log_sha256": "2408c034a86e03d072ab3c44e1c9ed167762f2732da21522d85869c7055b8d24"
+    },
+    {
+      "group": "setup",
+      "plant": "grant_issue",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-grant_issue.log",
+      "red_log_sha256": "4a751f2b54ff67b8486c4e0651be473ee34c197781288001330581a00e59a601"
+    },
+    {
+      "group": "setup",
+      "plant": "grant_install",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-grant_install.log",
+      "red_log_sha256": "cce39b0b61978ac1955f56e806c0441f09d99370d7c0ed6b5a433b8b371721d4"
+    },
+    {
+      "group": "setup",
+      "plant": "door_confirm",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-door_confirm.log",
+      "red_log_sha256": "fb574b9698cb6a646181ed66a945981e77f05fb6c1aff7ddd651ade7a0b4bc4d"
+    },
+    {
+      "group": "setup",
+      "plant": "door_activate",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-door_activate.log",
+      "red_log_sha256": "2923e95d9609e32093a8b7cb891dd332a0dc54aec05e04d53d3fa52db8fadcc9"
+    },
+    {
+      "group": "setup",
+      "plant": "mission_confirm",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-mission_confirm.log",
+      "red_log_sha256": "c4b58257579b13b1ea7ea07ced8a8caef2b962cb725bc1bdb17e6878e879edca"
+    },
+    {
+      "group": "setup",
+      "plant": "consent_cache",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-consent_cache.log",
+      "red_log_sha256": "c418271ca2b3176fbed4a5c54985c3320045d162a9627287262462ccb13ddc86"
+    },
+    {
+      "group": "setup",
+      "plant": "run_create",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-run_create.log",
+      "red_log_sha256": "78ca1d4c47a793613d2f16cfa5d67c2bada4baf7a2fa91120719057e9350e60a"
+    },
+    {
+      "group": "setup",
+      "plant": "file_binding",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-file_binding.log",
+      "red_log_sha256": "3146e61c5f6ff19c1556c945b82877e2cacc6fe0bc365f2fe9bf775f32f35427"
+    },
+    {
+      "group": "setup",
+      "plant": "port_issue",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-port_issue.log",
+      "red_log_sha256": "57c84c34d444b0e2c38a93951deee0f48e6b94ae8d4faf0bc69ebd7011d53b99"
+    },
+    {
+      "group": "setup",
+      "plant": "attachment_claim",
+      "detected": true,
+      "receipt": "setup-followup-plant-receipts.json",
+      "receipt_sha256": "54bf392d572ff65880425944d0605678e419f99f7ebd402196e788ecd752702d",
+      "oracle": null,
+      "red_log": "setup-plant-attachment_claim.log",
+      "red_log_sha256": "457beef07b474a68c47ea2df155175c4a9763851bfe82a7c7532637c53234cc7"
+    },
+    {
+      "group": "setup",
+      "plant": "file_select",
+      "detected": true,
+      "receipt": "setup-plant-receipts.json",
+      "receipt_sha256": "474743d54e2abd469583583fef2d0348f9b21dd7bb88da406169985ab73d54e7",
+      "oracle": null,
+      "red_log": "setup-plant-file_select.log",
+      "red_log_sha256": "6c0ffcf940d79ac0b29a9d9f53ef404f4359c99c4731bb032a1e3a0147aefa46"
+    },
+    {
+      "group": "projection",
+      "plant": "run_project",
+      "detected": true,
+      "receipt": "projection-plant-receipts.json",
+      "receipt_sha256": "59ea69d75a25ac423fb81268f691f5dc228cb9da6548df417903e31e6d2ae563",
+      "oracle": null,
+      "red_log": "projection-plant-run_project.log",
+      "red_log_sha256": "cf9040d01d0f249632a970e1cfb786ae91e3993f8368397edff9c4d3ba44975a"
+    },
+    {
+      "group": "projection",
+      "plant": "file_binding_project",
+      "detected": true,
+      "receipt": "projection-plant-receipts.json",
+      "receipt_sha256": "59ea69d75a25ac423fb81268f691f5dc228cb9da6548df417903e31e6d2ae563",
+      "oracle": null,
+      "red_log": "projection-plant-file_binding_project.log",
+      "red_log_sha256": "ce9eccd57374589925af9c8a380e8f5646422c041d4e8c3d2a3903d44f7b4a3a"
+    },
+    {
+      "group": "projection",
+      "plant": "file_effect_select",
+      "detected": true,
+      "receipt": "projection-plant-receipts.json",
+      "receipt_sha256": "59ea69d75a25ac423fb81268f691f5dc228cb9da6548df417903e31e6d2ae563",
+      "oracle": null,
+      "red_log": "projection-plant-file_effect_select.log",
+      "red_log_sha256": "8f4b92bd7fb2f43049911754b3fb9ee0f299f85966a1c62e80304e08c4cbd8ce"
+    },
+    {
+      "group": "projection",
+      "plant": "effect_dispatch",
+      "detected": true,
+      "receipt": "projection-plant-receipts.json",
+      "receipt_sha256": "59ea69d75a25ac423fb81268f691f5dc228cb9da6548df417903e31e6d2ae563",
+      "oracle": null,
+      "red_log": "projection-plant-effect_dispatch.log",
+      "red_log_sha256": "68b0ab271a6b803f6a4834d1ce342026220d972be7ea478040d7c2788990e715"
+    },
+    {
+      "group": "registry",
+      "plant": "pending_reserve",
+      "detected": true,
+      "receipt": "registry-plant-receipts.json",
+      "receipt_sha256": "d9d5381ff1d51e844cb44050ae42eb55baad20f29216838648e586045b3d31f1",
+      "oracle": null,
+      "red_log": "registry-plant-pending_reserve.log",
+      "red_log_sha256": "09b07ae7b0d5293bdc5f3a1a2ae26d6863472bfb3862c3f525a6591a50f475f7"
+    },
+    {
+      "group": "registry",
+      "plant": "preparation_reserve",
+      "detected": true,
+      "receipt": "registry-plant-receipts.json",
+      "receipt_sha256": "d9d5381ff1d51e844cb44050ae42eb55baad20f29216838648e586045b3d31f1",
+      "oracle": null,
+      "red_log": "registry-plant-preparation_reserve.log",
+      "red_log_sha256": "e452d8828465a3c68f53417db8f552107b1c323321816c4a87b766d788cee270"
+    },
+    {
+      "group": "registry",
+      "plant": "preparation_validate",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-preparation_validate.log",
+      "red_log_sha256": "fea69f7b576ee7e8fa92f908ba06de3a90e1c4db2ac22ac537c4c62cf358b9f9"
+    },
+    {
+      "group": "registry",
+      "plant": "preparation_retention",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-preparation_retention.log",
+      "red_log_sha256": "4a9d7cb25d7f0d920716696eafc03cc3000905e07a05945c299de752fbf8a381"
+    },
+    {
+      "group": "registry",
+      "plant": "commitment_create",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-commitment_create.log",
+      "red_log_sha256": "5982ecaf80b1b0978a509525eccc05747f8fe212351cfb688a8c5d375d39cb9a"
+    },
+    {
+      "group": "registry",
+      "plant": "resource_reserve",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-resource_reserve.log",
+      "red_log_sha256": "020b7c4b349d64e138823dfe7fea2ba4199e7ad81949103ad1e26ba925aa4062"
+    },
+    {
+      "group": "registry",
+      "plant": "action_reserve",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-action_reserve.log",
+      "red_log_sha256": "62023ad9039f0bd4f7a7f3641616d1a4ea7192113425f748135694f318fabedc"
+    },
+    {
+      "group": "registry",
+      "plant": "pending_install",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-pending_install.log",
+      "red_log_sha256": "e139f101d47aa81b16af2eee2db4b392443055be46582827ce53fd94b78c481b"
+    },
+    {
+      "group": "registry",
+      "plant": "action_confirm",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-action_confirm.log",
+      "red_log_sha256": "0583de779953d6b955ee3186e16211f329a42522822e6fee20541f69742ebe89"
+    },
+    {
+      "group": "registry",
+      "plant": "undo_confirm",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-undo_confirm.log",
+      "red_log_sha256": "9eab67f906e41d21d6079c7c832b75e0fe62ce6301dc8894fea0a14eda651ee3"
+    },
+    {
+      "group": "registry",
+      "plant": "token_issue",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-token_issue.log",
+      "red_log_sha256": "81a13ba3e2b59d43a328ff8ad28f53629950c4e535b2018eb908b42ff0d498e8"
+    },
+    {
+      "group": "registry",
+      "plant": "authorize",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-authorize.log",
+      "red_log_sha256": "621771a35c9e652ec52138113b2b3824d0ff72ffe924a4cf65efa77f41caa916"
+    },
+    {
+      "group": "registry",
+      "plant": "commitment_start",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-commitment_start.log",
+      "red_log_sha256": "51180877beb2a7f6d713830662e608a716dd567dc582f9143eef00ca7d574b12"
+    },
+    {
+      "group": "registry",
+      "plant": "project_select",
+      "detected": true,
+      "receipt": "registry-followup-plant-receipts.json",
+      "receipt_sha256": "f1067a818428507f0e228d597cd4380ad2ea79422ef29fbd9961c28b4e46a060",
+      "oracle": null,
+      "red_log": "registry-plant-project_select.log",
+      "red_log_sha256": "cf5cbe30da277fc9ce66b347f696af72dff180de4cd3adfee0aee62323e39b31"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "place_transfer_twice",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_reservation_transfer_releases_exactly_its_own_capacity"
+      ],
+      "red_log": "final-ownership-plant-place_transfer_twice.log",
+      "red_log_sha256": "b4dba1bc1e0667c486efbacea9e7189aa00958b6650cf8c14d2087ce9345fee8"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "place_drop_omits_return",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_reservation_transfer_releases_exactly_its_own_capacity"
+      ],
+      "red_log": "final-ownership-plant-place_drop_omits_return.log",
+      "red_log_sha256": "7b9edf1314af6f18301c614acdbfddcf2f4698050513f69b3212f990c79a1393"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "preparation_transfer_twice",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_reservation_transfer_releases_exactly_its_own_capacity"
+      ],
+      "red_log": "final-ownership-plant-preparation_transfer_twice.log",
+      "red_log_sha256": "9f7128300d877fe92887292577bba474a7fbb462b2aa624c68156d0421524bc5"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "preparation_drop_omits_return",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_reservation_transfer_releases_exactly_its_own_capacity"
+      ],
+      "red_log": "final-ownership-plant-preparation_drop_omits_return.log",
+      "red_log_sha256": "e743916ca96e957a5518096b1e3ce2d82c24377b97a5ab59abb34fad501f8fc2"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "ownedtemp_destructor",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_retry_cleanup_handoff_and_successor_are_independently_admitted"
+      ],
+      "red_log": "final-ownership-plant-ownedtemp_destructor.log",
+      "red_log_sha256": "2376d90c58d96667d8f2e7fa73e6a2aa4f9eb9e70b153002ea2e219e1dea1a08"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "ack_wrong_terminal",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "--lib",
+        "session_approval_two_files_keep_distinct_roots_and_reject_a_queued_replacement"
+      ],
+      "red_log": "final-ownership-plant-ack_wrong_terminal.log",
+      "red_log_sha256": "b69da7569acf741f7f740068850c29f7a4756bebc05138a0643e7a84097e6942"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "ack_releases_twice",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother",
+        "--locked",
+        "--lib",
+        "session_approval_two_files_keep_distinct_roots_and_reject_a_queued_replacement"
+      ],
+      "red_log": "final-ownership-plant-ack_releases_twice.log",
+      "red_log_sha256": "5333a6943f1b2868303e793abb052eab017eb8b7d332156d33c285f9673cf80e"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "command_accept_bypass",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--test",
+        "session_close_facade",
+        "session_failed_observation_has_owned_lifetime_without_work_permission"
+      ],
+      "red_log": "final-ownership-plant-command_accept_bypass.log",
+      "red_log_sha256": "eb5d55bfd3d6d5069f525f21db3c9d6ec950711238234a1d17d0856b36f5443b"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "busy_dequeue_bypass",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--lib",
+        "session_busy_work_retains_one_bounded_original_command_queue"
+      ],
+      "red_log": "final-ownership-plant-busy_dequeue_bypass.log",
+      "red_log_sha256": "ebc8bc619db015dc756fd5af13744f00455edf5d690e484b545e5c94ce8fa4b0"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "omit_consent_cache_ownership",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_setup_each_final"
+      ],
+      "red_log": "final-ownership-plant-omit_consent_cache_ownership.log",
+      "red_log_sha256": "88dc7e15d1aceed6a8530fadaaeba7cf311f0b86006c2a0aea8d3882ca195a71"
+    },
+    {
+      "group": "final_ownership",
+      "plant": "omit_transition_reservation",
+      "detected": true,
+      "receipt": "final-ownership-plant-receipts.json",
+      "receipt_sha256": "c6d00cfb50e8c04b960f6ff9b98e3220cbf00a81137ce5dc01563920c4c1d359",
+      "oracle": [
+        "test",
+        "-p",
+        "nexus-governed-control",
+        "--locked",
+        "--lib",
+        "session_registry_each_final"
+      ],
+      "red_log": "final-ownership-plant-omit_transition_reservation.log",
+      "red_log_sha256": "08a50962e147b88ac00a04fff94c0a6a7fac029a43be7fa64c4ecb43e3d7c354"
+    },
+    {
+      "group": "execution_guard",
+      "plant": "legacy_execution_guard_drop_records_during_unwind",
+      "detected": true,
+      "red_log": "execution-guard-drop-plant-red.log",
+      "red_log_sha256": "ba15f2116fed76546f97bce5734c8fa54f7836677bafe67c6ff99e16b5f94dcc"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+route	boundary	reason	legacy_positive_control	bypass_plant
+R09-held_confirm	HostSession closed command and port vocabulary	unsupported_host_route	m2c held mission native confirmation fixtures	seal-held-confirm
+R09-held_resume	HostSession report-only recovery	no_such_authority	frozen held mission resume fixtures	seal-held-resume
+R11-adopt	HostSession immutable issued origin	no_such_authority	frozen ordinary legacy door adoption fixtures	seal-adopt
+R11-join	HostSession immutable issued origin	no_such_authority	frozen ordinary legacy door membership fixtures	seal-join
+R11-replay_authority	HostSession report-only recovery	no_such_authority	frozen C-lite legacy crash/replay fixtures	seal-replay
+R14-network	HostSession File-only port	unsupported_host_route	frozen real legacy egress and mixed File/network fixtures	seal-network
+R14-process	HostSession File-only port	unsupported_host_route	frozen governed process launcher fixtures	seal-process
+R14-connector	HostSession File-only port	unsupported_host_route	frozen connector broker fixtures	seal-connector
+R14-spend	HostSession File-only port	unsupported_host_route	frozen spend authority fixtures	seal-spend
+R14-display	HostSession File-only port	unsupported_host_route	frozen native display lifecycle fixtures	seal-display
+R31-lift	HostSession command kind typed unavailable	unsupported_host_route	unchanged cell-less Decision 10 legacy lift and undo control	seal-lift
+R32-inference_binding	HostSession File-only port	unsupported_host_route	frozen configured local-model admission fixtures	seal-inference
+R32-model_attempt	HostSession File-only port	unsupported_host_route	frozen configured model attempt and live inference fixtures	seal-model-attempt
+R23-obsolete_undo_cleanup	Non-owning undo replacement retains the old inventory entry; only explicit fixed cleanup selects it	no_filesystem_sink	session_undo_index_replacement_conserves_both_runs_after_the_second_handoff plus legacy replacement controls	seal-obsolete-undo-cleanup
+R28-undo_prior_cleanup	Session undo does not drain; cleanup is its own original command or close capability	no_filesystem_sink	m2d_b2_r1_h4_the_undo_lifetime_is_taken_before_its_cleanup remains unchanged	seal-undo-prior-cleanup
+R30-implicit_drain	Session terminal wrappers transfer ownership and do not reach native drain	no_such_authority	m2d_b2_r2_row5_stop_transfers_a_pending_effect_without_cleanup remains unchanged	seal-implicit-drain
+R30-implicit_retire	Host retire marks the inventory entry without removing native objects	no_such_authority	m2d_b2_r1_m1_a_failed_staging_cleanup_stays_owned_reported_and_retried remains unchanged	seal-implicit-retire

@@ -28,6 +28,14 @@ process death and recovery tests cover these boundaries; see
 authority. The original generic M1 file route remains refused; the distinct typed
 File session is the implemented route.
 
+Hands adds a Linux-only terminal host for deterministic File missions and calls
+no model. It uses one broker-owned session boundary; after emergency only status,
+evidence and Quit remain available, and entered kernel calls may still finish.
+Restart is report-only and restores neither cleanup permission nor undo. See
+[Run Hands](#run-hands-m2d-d-candidate-linux-only) for the terminal-specific limits;
+the historical M1–M2c interfaces below do not widen that boundary. Automated
+tests are not Owner acceptance on the installed build.
+
 ## Core coordinator (M1 contract and subsequent hardening)
 
 Mother turns a human goal into a governed mission:
@@ -271,10 +279,10 @@ Coordinator rules the oracles pin:
 - M2a-S: the clean close is a record in the unkeyed chain. Someone with
   write access who cuts the journal back to a clean close (dropping a
   later Stop) is not detected; that is the existing truncation non-claim.
-- **Consent is the broker's, the dialog is not built yet.** The limited GTK4 desktop
-  does not implement `confirm_mission` and declines: the walk
-  example stands in for it at the terminal, and only test code fakes one.
-  A confirmer that does not implement it declines every mission.
+- **Consent is the broker's.** The limited GTK4 desktop does not implement
+  `confirm_mission` and declines. Hands uses the original session-bound terminal
+  confirmer with fresh codes; the isolated walk retains its three original
+  dialogue categories. A confirmer that does not implement a category declines it.
 - The broker shows Mother's summary beside the hash; it does not check the
   summary against the hash (Mother builds both). It binds the Owner's
   answer to the hash and the request label.
@@ -440,17 +448,20 @@ cargo run -p nexus-mother-host --example walk
 
 The walk opens a fresh home under the system's temporary directory and
 prints its path. It stands in, at the terminal, for the broker's three
-dialogs, showing what the broker would show; anything but the code is a no:
+dialogs, showing what the broker would show. Each dialogue shows a fresh random
+8-character code on its `Answer code:` line. Wait for `INPUT READY`, then type
+that exact code and press Return to approve. Every dialogue needs its own code;
+anything else is a no.
 
-- **The door** ("Let this agent act?"): the agent, the door id and any
-  advisory lines. Type the first 8 characters of the door id. It is asked
-  every time Mother starts: at the start of each run and at every restart.
-- **A mission's consent** ("Start this mission?"): type the first 8
-  characters of the contract hash. In run 2, answer no when the Deny step
-  asks.
-- **A held mission's resume** ("Resume this held mission?"): the mission,
-  its contract hash, the request, why it is held and its summary. Type the
-  first 8 characters of the contract hash.
+- **The door** ("Let this agent act?") shows the agent, the door id and any
+  advisory lines. Use its displayed answer code. It is asked every time
+  Mother starts: at the start of each run and at every restart.
+- **A mission's consent** ("Start this mission?") shows the full contract
+  hash, request and summary. Use its displayed answer code. In run 2,
+  answer no when the Deny step asks.
+- **A held mission's resume** ("Resume this held mission?") shows the mission,
+  its contract hash, the request, why it is held and its summary. Use this
+  dialogue's newly displayed answer code.
 
 Run 3 consents to a mission, advances it once, and exits without shutting
 down. On restart the mission is held; a yes to the resume dialog lets it
@@ -460,3 +471,166 @@ M2c: Mother's own crate builds no broker. The host crate
 (`mother/host`, `nexus-mother-host`, not published) holds `Home`: the broker,
 the journal, the Owner's confirmer, `door()` (asks every time) and the
 Owner's side, `owner()`, which is never handed to Mother.
+
+## Run Hands (M2d-D candidate; Linux only)
+
+Hands creates one approved top-level `.txt` or checked `.html` file in an
+empty, canonical folder you select. It never replaces a file, runs a shell,
+opens a browser or calls a model. The broker validates size, content, extension,
+mount topology, ownership and reserved directories; Linux alone does not make
+storage supported. Home and its contents are reserved, as are the broker and
+identity stores. Symlink selection and a nonempty folder refuse. Choose private
+locations beneath your own home, outside this repository.
+
+Build from the repository root with the checked-in Cargo workspace:
+
+```bash
+cargo build -p nexus-mother-host --bin mother-hands --locked --target-dir target
+install -d -m 700 "$HOME/.local/share/mother-hands-demo" "$HOME/mother-hands-empty"
+target/debug/mother-hands \
+  --home "$HOME/.local/share/mother-hands-demo" \
+  --workspace "$HOME/mother-hands-empty" \
+  --name hello.txt --text $'Hello from Mother.\n'
+```
+
+Both input and output must be real terminals; do not pipe or redirect them.
+All four named arguments are required. `--text` is the exact UTF-8 argument,
+including its final newline; it is visible in the launching command line and
+may be retained by your shell history. Journal, ledger and evidence keep codes,
+counts and digests; working content belongs in the private store and broker
+candidate staging. This is not encryption or a disk-forensics guarantee.
+
+Type `run`, then answer each Files grant, Mother door and mission-consent
+dialogue with its own eight-character lowercase hexadecimal code. The grant
+lasts 300 seconds. When `FILE PENDING` appears, type `approve`; inspect all
+facts and the complete fenced content before typing the new code. Every answer
+is exact. `no` is an explicit decline; whitespace, an empty line, a wrong code
+or an overlong line fails the protocol and ends the host without approval.
+A code inside content is data. Codes are random, checked against the
+fixed display for collisions, and regenerated per dialogue.
+
+Wait for `INPUT READY` before typing. The reader invalidates complete queued
+answers and partial lines after the entire display is written and flushed.
+A stale partial line is discarded through its newline. Stop, Quit and Ctrl-D
+remain active across that boundary. There is one dialogue at a time; display,
+flush, input and boundary failures deny and end the host. Door, grant and undo
+dialogues allow 120 seconds; mission dialogues allow
+300. These limits start at the original command acceptance, including queue
+and display time. File approval also respects both original backend deadlines.
+A new display code never refreshes request authority. Input accumulation and
+queues are bounded. Terminal
+echo, canonical input and newline translation are disabled while Hands owns
+the terminal; orderly exit restores the prior modes. Ctrl-C is not intercepted.
+
+| Command | Meaning |
+|---|---|
+| `run` | Start the one File mission allowed in this process. |
+| `approve` | Ask for approval of this mission's exact pending action, then execute only if authorized. |
+| `status` | Show session restriction, actual kernel/broker Stop and worker receipts. |
+| `evidence` | Show bounded recent evidence, store health and resource/recording obligations; not a complete chain export. |
+| `detail` | Consume the Owner-only in-memory working detail during normal operation. |
+| `stop` | Deny through the original session cell immediately, then record that exact event off the reader. |
+| `lift-for-undo` | Unavailable in every Hands state; no dialogue. |
+| `undo` | Before emergency, separately approve removal of the exact eligible same-session file, once. Full bytes, SHA-256 and inode identity are shown; Owner edits refuse. |
+| `cleanup` | Before emergency, request cleanup of a fixed list of returned disposable entries. Report settled, owed, excluded, in-flight and unknown facts. |
+| `quit` | Quiesce, settle and close within the original three-second deadline. It never invokes undo. |
+
+There is one original broker-issued session before input starts, one File
+mission per process, and no replacement coordinator, adoption or recycled
+eligibility. Commands retain their acceptance identity, target and deadline
+through queues, dialogue and all child operations. A missing, busy or changed
+approval/undo target refuses; a later target cannot repair an old command.
+
+After emergency only status, evidence and Quit remain available; repeated Stop
+still ingresses until sealing. No fresh undo, cleanup, lift or mission work can
+start. Normal undo is available only before the first emergency. An already
+handed-off kernel call may finish its documented internal work, including
+compensation and internal cleanup. Each subsequent broker call needs a new
+admission against its original request. Removing emergency undo does not close
+the native handoff window; no new kernel observer or kernel change is claimed.
+
+The reader performs memory-only Stop ingress and never waits on broker,
+coordinator, output or cleanup. Up to four owned workers perform synchronous
+Stop recording; additional presses still perform ingress and retain pending
+recording obligations. Free worker slots drain them individually.
+`STOP REQUEST RECEIVED`, corroborated kernel/broker halt, and
+`STOP RECORDING COMPLETED` are different receipts. Worker return alone does
+not establish durable recording; inspect health for owed/uncertain records.
+
+A write already past the final native authorization check may publish once.
+The host reports it honestly. Emergency does not grant permission for undo.
+The exact uncertainty notice is:
+
+> A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.
+
+Startup verifies the kernel ledger, Mother history and primary evidence before
+workspace selection or work. It does not sweep staging, restore permission,
+recreate acknowledgement capabilities or restore undo. Unresolved or invalid
+sources keep the Home report-only. A repeated start does not certify cleanup
+or permit retrying an uncertain write. Facts absent from durable evidence are
+reported as unavailable.
+
+Normal Quit withdraws the exact pending action and truthfully settles a
+nonterminal mission before cleanup. Cleanup preserves the published Owner
+file and intentionally retained recovery material. Emergency close cannot
+start new cleanup. Clean close requires joined producers/workers, complete
+resource/recording/acknowledgement accounting, an atomic seal, durable Mother
+then primary end records, terminal restoration and acknowledged final delivery.
+After sealing, retained handles refuse and ingress returns `SessionEnded`.
+
+`SESSION CLOSED recorded` is the final receipt; zero exit additionally requires
+its successful delivery and renderer finalization before the same deadline.
+A blocked append remains Unknown. Failure can leave one or both end records
+durable while the full close fails; their statuses are reported separately.
+EOF/read error engages emergency before nonzero shutdown. No exited process
+promises eventual cleanup or recording. The exact notice is:
+
+> UNCLEAN EXIT: this process did not complete the full clean-close protocol. Some session-end records may already be durable; any unverified recording or resource obligations are listed separately. No cleanup or recording is promised after this process exits.
+
+FileJournal synchronizes both journal and parent directory, including existing
+entries. Synchronization failure is returned rather than acknowledged.
+
+### Install and record the exact build (Owner procedure)
+
+This procedure is documented for the Owner; the builder does not install or
+claim a physical test. Build the reviewed commit from a clean worktree. An
+explicit target directory prevents confusion with `CARGO_TARGET_DIR`.
+
+```bash
+"$slot" cargo build --release -p nexus-mother-host --bin mother-hands --locked \
+  --target-dir target/mother-hands-release
+git rev-parse HEAD
+sha256sum target/mother-hands-release/release/mother-hands
+install -d -m 700 "$HOME/.local/bin" "$HOME/.local/share/mother-hands-receipts"
+install -m 755 target/mother-hands-release/release/mother-hands "$HOME/.local/bin/mother-hands"
+sha256sum "$HOME/.local/bin/mother-hands"
+```
+
+Keep the commit SHA, both matching hashes, build command, date, OS/filesystem,
+selected Home/workspace paths and observed exit status in a receipt under
+`$HOME/.local/share/mother-hands-receipts`. Do not capture approval codes or
+private content in shared logs. The installed binary is separate from the
+desktop; launching another process cannot control this process's broker.
+
+For D-O20 physical acceptance, use two separate fresh, private Home/workspace
+pairs and the **installed** binary with `--hold-before-publish 20` (integer
+0–30 only, configured at startup). In each session consent, approve, and while
+execution is held, first test `stop`, then in the second session test Ctrl-D.
+Confirm no file or named temporary file appears. For Stop, confirm actual
+kernel/broker halt, worker completion and evidence health, then Quit. Ctrl-D
+must exit unclean/nonzero after emergency ingress. Save the observed receipts
+and independently inspect the workspace. Record these as **OBSERVED** Owner
+results; automated PTY tests are separate evidence. No installed physical
+acceptance, H1 acceptance, C-11 closure, cross-session undo, Windows/macOS
+terminal support, sandboxing or phase advancement is claimed by this document.
+
+For the session-refactor acceptance addendum, additionally record a normal
+create/undo/clean-Quit control and a separate emergency after publication.
+For the latter, verify that lift, undo, cleanup, run and approve each refuse
+without dialogue and that the Owner file remains unchanged. With an unfinished
+preparation, record the retained staging and nonzero Quit. Restart twice and
+verify report-only findings and unchanged resource identities/content. Do not
+interpret an empty native apply summary as proof of complete resource cleanup.
+The frozen contract and oracle amendments are in
+[`docs/security/m2d-d-session-spec.md`](../docs/security/m2d-d-session-spec.md)
+and [the host registration](../docs/security/m2d-d-host-oracles.md).

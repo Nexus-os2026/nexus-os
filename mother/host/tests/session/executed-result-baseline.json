@@ -1,0 +1,52 @@
+{
+  "base": "959db37a9d7f1ebbd335bc7df28420edf8e2a418",
+  "kind": "executed audit and A12 preimplementation baseline; not final gate",
+  "workspace": {
+    "passed": 5457,
+    "failed": 1,
+    "ignored_existing": 68,
+    "binary_results": 114,
+    "failure": "h1_shutdown_with_storage_held_is_bounded_and_unclean: expected UNCLEAN outstanding= after blocked Stop worker spent final delivery budget",
+    "log_sha256": "6843e403d2244c73ff513133316c5d1cb75ae0f648c943d02a5012cc9ee18b08"
+  },
+  "a12_host": {
+    "executed": [
+      {
+        "affirmative": false,
+        "expected": "answer=Declined followed by independently established physical/Mother/ack facts",
+        "observed": "missing answer=Declined after ACTION DENIED",
+        "outcome": "behavioral red"
+      }
+    ],
+    "not_reached": [
+      "affirmative=true",
+      "normal undo"
+    ],
+    "log_sha256": "2e0291c260697e1ce46c18c7c2b24ff54ca289044b58fe3d0932975e5f9dc036"
+  },
+  "a12_native_and_mother": {
+    "outcome": "API unavailable; not behavioral red",
+    "compiler_errors": 8,
+    "log_sha256": "4e554faadcfcfb4da000ee357ad5c0119a90ce55461754ad543f1ccad0982dd5"
+  },
+  "deviations": [
+    "First uncommitted PTY fixture used invalid yes/no-code format; corrected to fresh code / literal no before this baseline.",
+    "A12 result projection oracles were added late, after other component production commits. R-1 requires disclosure and continuation; these oracles precede their own production repair."
+  ],
+  "additional_result_facts": {
+    "base": "7cdc4117 with uncommitted first result projection",
+    "native": "one unavailable calls field; corrected fixture RecordBatch::write API before baseline; not behavioral red",
+    "host": "actual three affirmative dialogues then missing ANSWERS grant=Affirmative door=Affirmative mission=Affirmative action=NotAsked undo=NotAsked",
+    "logs": {
+      "result-calls-baseline-corrected.log": "b2deaa48edebbc37c6451a9c86557c8383fe56133cfb24714b6d26fa697c3ece",
+      "result-answers-baseline.log": "b41e51221dd87d75d1ca24cb4185a4459503b30a25a2c588a034211cef8988d9"
+    }
+  },
+  "dialogue_poison": {
+    "executed": 1,
+    "expected": "ProtocolFailed",
+    "observed": "Affirmative after actual first affirmative answer and a poisoned dialogue lock",
+    "outcome": "behavioral red",
+    "log_sha256": "d6d8fb561e7d3fc7b376834a8063887350fda2d29feaccf2fb108c7be3152fdd"
+  }
+}
