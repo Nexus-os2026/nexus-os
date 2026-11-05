@@ -253,7 +253,7 @@ fn ux_u4_run_approve_undo_cleanup_and_quit_have_truthful_owner_results() {
     p.yes();
     result(
         &mut p,
-        "RESULT: the approved file was removed; restore completed and was recorded.\n",
+        "RESULT: the approved file was removed; restore completed, but other recording status is uncertain.\n",
         "Undo",
     );
     f.empty();

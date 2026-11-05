@@ -23,3 +23,17 @@ interposition fixture are registered before implementation. Old oracles are
 amended in a separate `test(oracle-amend)` commit quoting Owner authority.
 No existing oracle expected two `MISSION done` lines; the new exact-count
 oracle covers that defect without removing another output assertion.
+
+## U4 wording clarification before GREEN
+
+Owner U4 requires “derived from the same facts the technical block reports
+(never more optimistic: uncertain stays ‘uncertain’; unrecorded stays ‘not
+yet recorded’).” The new normal-undo oracle originally said “RESULT: the
+approved file was removed; restore completed and was recorded.” Its clarified
+expectation is “RESULT: the approved file was removed; restore completed, but
+other recording status is uncertain.” The existing broker observation records
+the native restore separately and does not establish per-request primary
+recording for undo (`host_session/outcome.rs`); the stronger blanket wording
+would hide that distinction. The baseline RED never reached this assertion;
+no GREEN result has been seen. All physical, grant, journal and safety
+assertions remain unchanged. This follows the same Owner approval above.
