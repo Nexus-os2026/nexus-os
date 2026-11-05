@@ -368,3 +368,40 @@ fn compatibility_states_violations_and_every_error_display_stay_exact() {
         assert_eq!(on_error(&e), strategy);
     }
 }
+
+#[test]
+fn every_persisted_source_kind_name_stays_exact() {
+    use nexus_kernel::hm::SourceKind;
+    use SourceKind::*;
+    // Exhaustive match forces a conscious golden update if the enum grows.
+    let expected = |kind| match kind {
+        MemoryStoreAction => "memory_store_action",
+        LoopEpisodic => "loop_episodic",
+        EvolutionProcedural => "evolution_procedural",
+        StrategyScore => "strategy_score",
+        CrossAgentLearning => "cross_agent_learning",
+        GoalRecord => "goal_record",
+        OptimizedPrompt => "optimized_prompt",
+        PlannerStrategyInjection => "planner_strategy_injection",
+        CognitiveParam => "cognitive_param",
+        ModelMapping => "model_mapping",
+        DbMemoryStore => "db_memory_store",
+        KnowledgeGraphReplace => "knowledge_graph_replace",
+    };
+    for kind in [
+        MemoryStoreAction,
+        LoopEpisodic,
+        EvolutionProcedural,
+        StrategyScore,
+        CrossAgentLearning,
+        GoalRecord,
+        OptimizedPrompt,
+        PlannerStrategyInjection,
+        CognitiveParam,
+        ModelMapping,
+        DbMemoryStore,
+        KnowledgeGraphReplace,
+    ] {
+        assert_eq!(kind.name(), expected(kind), "{kind:?}");
+    }
+}
