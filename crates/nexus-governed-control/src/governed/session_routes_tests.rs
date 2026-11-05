@@ -2013,3 +2013,55 @@ fn session_mother_context_refuses_its_cancelled_native_run_without_session_stop(
         );
     }
 }
+
+#[test]
+fn session_continuation_native_preparation_uses_the_actual_approval_scope() {
+    let f = Fixture::new();
+    let first = f.pending();
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let (seen, gov, run) = (captured.clone(), f.gov.clone(), f.run);
+    f.gov.files().hooks().arm("files.execute_start", move || {
+        *seen.lock().unwrap() = Some(
+            gov.authority()
+                .commitments()
+                .session_request(first, run)
+                .unwrap(),
+        );
+    });
+    f.approve(first).unwrap();
+    let approval = captured
+        .lock()
+        .unwrap()
+        .take()
+        .expect("actual native approval handoff");
+    f._session.expire_request_for_test(1);
+    assert!(f.propose_content("stale.txt", "stale\n").is_err());
+    let second = f
+        .gov
+        .propose_session_file(
+            f.door.agent(),
+            f.run,
+            &FileCreate {
+                name: "continued.txt".into(),
+                content: "continued\n".into(),
+            },
+            &approval,
+        )
+        .unwrap();
+    assert_eq!(
+        second.state,
+        crate::authority::commitment::CommitmentState::Prepared
+    );
+    assert_eq!(
+        matching(&events(&f.ledger_path()), "run.granted", None),
+        2,
+        "new root owns every actual native preparation child while the original remains expired"
+    );
+    assert!(!f
+        ._dirs
+        .0
+        .path()
+        .join("selected/workspace/continued.txt")
+        .exists());
+    assert!(f.propose_content("stale.txt", "stale\n").is_err());
+}
