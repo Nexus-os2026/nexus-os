@@ -1535,3 +1535,114 @@ fn session_r19_r20_registry_insertion_and_authorization_keep_original_lifetime()
         failures.join(", ")
     );
 }
+
+#[test]
+fn session_discharge_requires_separate_sync_and_keeps_the_owner_file() {
+    for published in [false, true] {
+        for interrupt_sync in [false, true] {
+            let f = Fixture::new();
+            let id = f.pending();
+            if published {
+                f.approve(id).unwrap();
+                let cleanup = f.cleanup().unwrap();
+                assert_eq!(cleanup.settled, 0, "the currently offered undo is excluded");
+                assert_eq!(
+                    cleanup.still_owed, 1,
+                    "excluded resources stay in the total"
+                );
+            } else {
+                f.gov.deny(id, f.door.agent(), f.run).unwrap();
+            }
+            let entered = Arc::new(AtomicUsize::new(0));
+            let seen = entered.clone();
+            f.gov
+                .files()
+                .hooks()
+                .arm("session.entered.finalization_sync", move || {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                });
+            if interrupt_sync {
+                let ingress = f._session.ingress();
+                f.gov
+                    .files()
+                    .hooks()
+                    .arm("session.before.finalization_sync", move || {
+                        ingress.emergency().unwrap();
+                    });
+            }
+            let seq = f.sequence.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+            let quit = f._session.ingress().accept(CommandKind::Quit, seq).unwrap();
+            let result = f._session.settle_close_resources(&quit);
+            let inventory = f._session.inventory().unwrap();
+            assert_eq!(inventory.entries.len(), 1);
+            let entry = &inventory.entries[0];
+            assert!(
+                entry.staging_absent,
+                "actual discard precedes the separate sync boundary"
+            );
+            assert_eq!(entered.load(Ordering::SeqCst), usize::from(!interrupt_sync));
+            assert_eq!(
+                entry.parent_synced, !interrupt_sync,
+                "absence is not durability"
+            );
+            assert_eq!(entry.discharged, !interrupt_sync);
+            assert_eq!(entry.intentionally_retained, published);
+            assert_eq!(result.is_ok(), !interrupt_sync);
+            let workspace = f._dirs.0.path().join("selected/workspace/session.txt");
+            assert_eq!(workspace.exists(), published);
+            if published {
+                assert_eq!(std::fs::read(workspace).unwrap(), b"session oracle\n");
+            }
+            let staging = f.gov.files().state_dir_for_test().join("coding-runs");
+            let retained: Vec<_> = std::fs::read_dir(staging)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+            assert_eq!(retained.len(), usize::from(published));
+            assert!(retained
+                .iter()
+                .all(|name| name.to_string_lossy().ends_with(".apply")));
+        }
+    }
+}
+
+#[test]
+fn session_undo_grant_has_its_own_original_request_handoff() {
+    for interrupt in [false, true] {
+        let f = Fixture::new();
+        let id = f.pending();
+        f.approve(id).unwrap();
+        let entered = Arc::new(AtomicUsize::new(0));
+        let seen = entered.clone();
+        f.gov
+            .files()
+            .hooks()
+            .arm("session.entered.undo_grant", move || {
+                seen.fetch_add(1, Ordering::SeqCst);
+            });
+        if interrupt {
+            let ingress = f._session.ingress();
+            f.gov
+                .files()
+                .hooks()
+                .arm("session.before.undo_grant", move || {
+                    ingress.emergency().unwrap();
+                });
+        }
+        let result = f.undo();
+        assert_eq!(result.is_ok(), !interrupt);
+        assert_eq!(entered.load(Ordering::SeqCst), usize::from(!interrupt));
+        assert_eq!(
+            f._dirs
+                .0
+                .path()
+                .join("selected/workspace/session.txt")
+                .exists(),
+            interrupt
+        );
+        assert_eq!(
+            matching(&events(&f.ledger_path()), "restore.completed", None),
+            usize::from(!interrupt)
+        );
+    }
+}
