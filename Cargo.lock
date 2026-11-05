@@ -2419,21 +2419,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nexus-outcome-eval"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "hex",
- "regex",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "nexus-persistence"
 version = "10.6.0"
 dependencies = [
