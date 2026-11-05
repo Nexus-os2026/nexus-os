@@ -721,6 +721,14 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
     Ok(())
 }
 
+// Every pre-finalization stage shares this earlier point in the original
+// shutdown budget. A held producer cannot consume truthful timeout delivery.
+fn producer_deadline(deadline: Instant) -> Instant {
+    deadline
+        .checked_sub(Duration::from_millis(250))
+        .unwrap_or(deadline)
+}
+
 fn join<T>(handle: &mut Option<JoinHandle<T>>, deadline: Instant, screen: &Shared) -> Option<T> {
     while handle.as_ref().is_some_and(|h| !h.is_finished()) && Instant::now() < deadline {
         screen.wait();
@@ -831,14 +839,14 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             || screen.input().quit.is_some()
             || ingress
                 .close_deadline()
-                .is_some_and(|d| Instant::now() >= d)
+                .is_some_and(|d| Instant::now() >= producer_deadline(d))
         {
             break;
         }
         screen.wait();
     }
     let deadline = ingress.close_deadline().unwrap_or_else(Instant::now);
-    let started = join(&mut startup, deadline, &screen);
+    let started = join(&mut startup, producer_deadline(deadline), &screen);
     if startup.is_none() {
         startup_debt.joined();
     } else {
@@ -935,15 +943,16 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let deadline = ingress
         .close_deadline()
         .expect("first shutdown trigger established deadline");
-    let reader_done = terminal.stop_reader(deadline);
-    let work_done = work.is_none() || join(&mut work, deadline, &screen).is_some();
+    let producers_until = producer_deadline(deadline);
+    let reader_done = terminal.stop_reader(producers_until);
+    let work_done = work.is_none() || join(&mut work, producers_until, &screen).is_some();
     if work.is_none() {
         if let Some(debt) = work_debt.take() {
             debt.joined();
         }
     }
-    let stops_done = screen.stop.join_until(deadline);
-    let producers_done = terminal.quiesce(deadline);
+    let stops_done = screen.stop.join_until(producers_until);
+    let producers_done = terminal.quiesce(producers_until);
     let mut seal = None;
     if reader_done
         && work_done
@@ -964,13 +973,9 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                         .and_then(|r| r.close(request))
                 })
                 .ok();
-            // Reserve the last part of the original three-second budget for
-            // truthful timeout delivery and terminal finalization. No clock
-            // or authority is refreshed; the append may remain Unknown.
-            let recording_until = deadline
-                .checked_sub(Duration::from_millis(100))
-                .unwrap_or(deadline);
-            seal = join(&mut close, recording_until, &screen).flatten();
+            // An append shares the producer budget; it cannot borrow the
+            // remaining delivery/mode-restoration time or refresh the clock.
+            seal = join(&mut close, producers_until, &screen).flatten();
             if close.is_some() {
                 std::mem::forget(close);
             }
@@ -1031,9 +1036,14 @@ fn failed_startup(
         .ingress
         .close_deadline()
         .expect("failure deadline");
-    let _input = terminal.stop_reader(deadline);
-    let _stops = screen.stop.join_until(deadline);
-    screen.emit(&format!("{}\n", crate::terminal::UNCLEAN_NOTICE));
+    let producers_until = producer_deadline(deadline);
+    let _input = terminal.stop_reader(producers_until);
+    let _stops = screen.stop.join_until(producers_until);
+    let _modes = terminal.restore_modes(deadline);
+    let _delivered = screen.delivered(
+        &format!("{}\n", crate::terminal::UNCLEAN_NOTICE),
+        deadline,
+    );
     let _terminal = terminal.finish(deadline);
     std::mem::forget(startup);
     std::mem::forget(screen);
