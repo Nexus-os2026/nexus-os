@@ -42,6 +42,14 @@ pub struct Temporary {
     pub until: u8,
 }
 
+pub fn extraction_home(stage: u8, extraction_stage: u8, extraction: &Extraction) -> &str {
+    if stage >= extraction_stage {
+        &extraction.destination
+    } else {
+        &extraction.source
+    }
+}
+
 pub fn stages() -> &'static [Stage] {
     static ROWS: std::sync::OnceLock<Vec<Stage>> = std::sync::OnceLock::new();
     ROWS.get_or_init(|| {

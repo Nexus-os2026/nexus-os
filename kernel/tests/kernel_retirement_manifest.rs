@@ -10,6 +10,19 @@ mod source;
 use retirement::*;
 use std::collections::BTreeSet;
 
+fn check_extraction_anchors(stage: u8, row: &Stage, read_home: impl Fn(&str) -> String) {
+    for extraction in &row.extract {
+        let path = extraction_home(stage, row.stage, extraction);
+        let text = read_home(path);
+        for anchor in &extraction.anchors {
+            assert!(
+                coverage::active_anchor(&text, anchor),
+                "{path}: missing {anchor}"
+            );
+        }
+    }
+}
+
 fn module_attributes(declaration: &str) -> Vec<String> {
     if declaration == "pub mod test_support;" {
         vec!["#[cfg(any(test,feature=\"test-utils\"))]".into()]
@@ -139,17 +152,14 @@ fn every_extraction_payload_and_temporary_export_has_a_named_home() {
     let mut payloads = 0;
     let mut temporary_helpers = 0;
     for row in rows {
+        check_extraction_anchors(LIVE_STAGE, row, read);
         for extraction in &row.extract {
             assert!(extraction.destination.starts_with("kernel/src/"));
             assert!(!extraction.destination.contains(".."));
             assert_ne!(extraction.source, extraction.destination);
             assert!(!extraction.payload.is_empty());
             assert!(!extraction.anchors.is_empty());
-            let path = if row.stage <= LIVE_STAGE {
-                &extraction.destination
-            } else {
-                &extraction.source
-            };
+            let path = extraction_home(LIVE_STAGE, row.stage, extraction);
             let text = read(path);
             if row.stage <= LIVE_STAGE && root().join(&extraction.source).is_file() {
                 let old = compact(&source::mask(&read(&extraction.source), false));
@@ -159,12 +169,6 @@ fn every_extraction_payload_and_temporary_export_has_a_named_home() {
                         "missing same-type export: {export}"
                     );
                 }
-            }
-            for anchor in &extraction.anchors {
-                assert!(
-                    coverage::active_anchor(&text, anchor),
-                    "{path}: missing {anchor}"
-                );
             }
             for temporary in &extraction.temporary {
                 temporary_helpers += 1;
@@ -249,14 +253,7 @@ fn manifest_presence_requires_real_ungated_declarations() {
         coverage::test_contract(&baseline.replace("linux", "lin ux"), "protected")
     );
     for row in stages() {
-        for extraction in &row.extract {
-            for anchor in &extraction.anchors {
-                assert!(
-                    coverage::active_anchor(&read(&extraction.source), anchor),
-                    "{anchor}"
-                );
-            }
-        }
+        check_extraction_anchors(LIVE_STAGE, row, read);
         for declaration in &row.declarations {
             let name = declaration
                 .trim_start_matches("pub mod ")
@@ -280,6 +277,59 @@ fn manifest_presence_requires_real_ungated_declarations() {
             }
         }
     }
+}
+
+#[test]
+fn extraction_anchor_controls_accept_k02_same_type_exports_and_later_source_deletion() {
+    let row = &stages()[0];
+    assert_eq!(row.stage, 2);
+    // Independent synthetic declarations remain usable after the old sources
+    // are deleted; their serialized behavior has separate live goldens.
+    let permissions = "pub enum FsPermissionLevel { ReadOnly, ReadWrite, Deny }";
+    let mut tree = std::collections::BTreeMap::from([
+        (
+            "kernel/src/supervisor.rs",
+            "pub use crate::agent_identity::AgentId;".to_owned(),
+        ),
+        (
+            "kernel/src/agent_identity.rs",
+            "use uuid::Uuid;\npub type AgentId = Uuid;".to_owned(),
+        ),
+        (
+            "kernel/src/manifest.rs",
+            "pub use crate::workspace_permissions::FsPermissionLevel;".to_owned(),
+        ),
+        (
+            "kernel/src/workspace_permissions.rs",
+            permissions.to_owned(),
+        ),
+    ]);
+    check_extraction_anchors(2, row, |p| tree[p].clone());
+    for extraction in &row.extract {
+        let old = compact(&source::mask(&tree[extraction.source.as_str()], false));
+        for export in &extraction.transitional_exports {
+            assert!(old.contains(&compact(export)));
+        }
+        for anchor in &extraction.anchors {
+            assert!(!coverage::active_anchor(
+                &tree[extraction.source.as_str()],
+                anchor
+            ));
+        }
+    }
+    tree.remove("kernel/src/supervisor.rs");
+    tree.remove("kernel/src/manifest.rs");
+    check_extraction_anchors(19, row, |p| tree[p].clone());
+    // The same shared oracle rejects an empty destination even if the original
+    // declaration is restored in its old source home.
+    tree.insert(
+        "kernel/src/supervisor.rs",
+        "pub type AgentId = Uuid;".into(),
+    );
+    tree.insert("kernel/src/agent_identity.rs", String::new());
+    assert!(
+        std::panic::catch_unwind(|| check_extraction_anchors(2, row, |p| tree[p].clone())).is_err()
+    );
 }
 
 #[test]
