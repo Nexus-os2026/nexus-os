@@ -1789,6 +1789,7 @@ fn session_stop_workers_record_exact_ingress_without_minting_another_event() {
 #[test]
 fn session_stop_unknown_receipt_and_failed_record_remain_unsettled() {
     let f = Fixture::new();
+    let event = f._session.ingress().emergency().unwrap();
     let other = Fixture::new();
     let foreign = other._session.ingress().emergency().unwrap();
     let before = f.primary.store().rows();
@@ -1798,7 +1799,6 @@ fn session_stop_unknown_receipt_and_failed_record_remain_unsettled() {
         before,
         "foreign ingress cannot narrow or record"
     );
-    let event = f._session.ingress().emergency().unwrap();
     f.primary.store().refuse_inserts(true);
     let receipt = f._session.record_stop(&event).unwrap();
     assert!(receipt.snapshot.kernel_stopped && receipt.snapshot.broker_stopped);
@@ -1913,4 +1913,35 @@ fn session_stop_receipts_are_bounded_without_losing_overflow_denial() {
         crate::host_session::SessionState::Failed
     );
     assert!(f._session.ingress().accept(CommandKind::Run, 2).is_err());
+}
+
+#[test]
+fn session_stop_poison_cannot_be_reported_as_completed_recording() {
+    for hold in ["runs", "commitments", "pending", "lease_slot"] {
+        let f = Fixture::new();
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match hold {
+                "runs" => f.gov.authority().runs().panic_holding_the_runs_lock(),
+                "commitments" => f.gov.authority().commitments().panic_holding_entries(),
+                "pending" => f.gov.control.panic_holding_pending(),
+                "lease_slot" => f.gov.authority().commitments().panic_holding_lease_slot(),
+                _ => unreachable!(),
+            }))
+            .is_err()
+        );
+        let event = f._session.ingress().emergency().unwrap();
+        let _result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            f._session.record_stop(&event)
+        }));
+        let debt = f._session.stop_obligations().unwrap();
+        assert_eq!(
+            debt.recorded, 0,
+            "poisoned {hold} is not a conclusive worker result"
+        );
+        assert_eq!(
+            debt.uncertain + debt.failed,
+            1,
+            "poisoned {hold} retains its exact event obligation"
+        );
+    }
 }
