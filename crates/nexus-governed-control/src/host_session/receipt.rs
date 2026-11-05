@@ -208,6 +208,7 @@ impl History {
         action: &Action,
         publication: &PublicationClass,
         state: CommitmentState,
+        #[cfg(test)] cell: &crate::authority::file_session::HaltCell,
     ) -> Result<Terminal, AuthorityError> {
         let (file, lines) = self.read()?;
         let mission = action.mission.ok_or_else(unavailable)?;
@@ -267,6 +268,8 @@ impl History {
         let terminal = terminal.ok_or_else(unavailable)?;
         // Reading a line is not its durability proof. The same opened file and
         // its identity-checked parent are synchronized before receipt install.
+        #[cfg(test)]
+        cell.1.fire("ack.terminal.file_sync");
         file.sync_all().map_err(|_| unavailable())?;
         self.verify_root()?;
         if !same(
@@ -283,6 +286,8 @@ impl History {
         ) {
             return Err(unavailable());
         }
+        #[cfg(test)]
+        cell.1.fire("ack.terminal.parent_sync");
         parent.sync_all().map_err(|_| unavailable())?;
         self.verify_root()?;
         Ok(terminal)
@@ -501,6 +506,8 @@ pub(super) fn ack(door: &SessionDoor, id: CommitmentId) -> Result<(), AuthorityE
             action,
             &publication,
             view.state,
+            #[cfg(test)]
+            &door.context.cell,
         )?;
         action.receipt = Some(Receipt {
             outcome,

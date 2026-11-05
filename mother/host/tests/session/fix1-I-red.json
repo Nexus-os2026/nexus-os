@@ -1,0 +1,33 @@
+{
+  "finding": "F12",
+  "mechanism": "I",
+  "baseline": "c4245ca84e64f58ea227556d8c5874be5ccfb74c",
+  "oracle": "governed::session_routes::session_ack_fix1_tests::fix1_i_ack_sync_does_not_hold_session_action_inventory",
+  "command": "cargo test -p nexus-governed-control --locked fix1_i_ack_sync_does_not_hold_session_action_inventory -- --nocapture",
+  "wrapper": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh",
+  "target": "/tmp/claude-1000/m2dd-fix1-target",
+  "red": {
+    "exit": 101,
+    "passed": 0,
+    "failed": 1,
+    "log": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/m2dd/session/fix1-I/red.log",
+    "sha256": "0a06a35e2873b6602ee0ef7d55328b24900bf2fa49d04ec7ecc7e44ba501aad4",
+    "observed": "Holding terminal file sync blocked operation_observation and second real File reservation; exact first pin stayed retained until release; ack completed afterward."
+  },
+  "registered_schedules": [
+    "journal file sync",
+    "identity-checked parent sync",
+    "exact native pin release"
+  ],
+  "invariants": [
+    "Independent observation and action reservation finish while the exact ack is held",
+    "Exact action pin remains retained before completed durable receipt and native ack",
+    "Receipt remains Pending until release; exact completed duplicate succeeds"
+  ],
+  "excluded_attempts": [
+    {
+      "log": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/m2dd/session/fix1-I/compile-missing-peer-module.log",
+      "reason": "Peer temporarily registered a test module before its file existed; no behavioral execution and no detection claimed."
+    }
+  ]
+}
