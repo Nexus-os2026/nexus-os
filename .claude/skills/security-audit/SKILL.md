@@ -5,7 +5,8 @@ Use for a scoped review requested by the current Mother mission. Read AGENTS.md
 security-core, host, network, push or integration permission.
 
 1. Establish the base, candidate, changed files and expected trust boundary.
-   Check every raw database query for SQL injection and every unsafe block for a documented safety argument.
+   Check every raw database query for SQL injection and every unsafe block
+   for a documented safety argument.
    The unsafe review check never authorizes an exception to the workspace's
    `unsafe_code = "forbid"` policy. Check source for hardcoded secrets/API keys
    without printing their values, validate inputs at every exposed command/API
@@ -16,13 +17,9 @@ security-core, host, network, push or integration permission.
 3. Check Stop/halt before waits, races at every admission boundary, uncertain
    File publication, retained settlement, cleanup and real error propagation.
    Check capability escalation, prompt injection, data exfiltration and governance
-   bypass explicitly, including capability and fuel checks before actions,
-   accurate fuel accounting, approval for sensitive/legacy L2+ operations, and
-   audit events on state changes and LLM/tool transitions. Review retained
-   prompt/output filters and suspicious-output circuit breakers without treating
-   them as authority. Any exposed content/request boundary must also be checked
-   for injection, forged cross-origin requests and direct-object access without
-   authorization; removed frontend tooling stays removed.
+   bypass explicitly. Check capabilities before actions and human approval for
+   sensitive operations. Check exposed content/request boundaries for injection
+   and direct-object access without authorization.
 4. Check closed evidence fields, canary coverage, private-store separation and
    no secrets or private content in records/errors. Unkeyed chains are not
    authenticated memory and private content is not encrypted.
@@ -39,6 +36,8 @@ security-core, host, network, push or integration permission.
    Report PASS/FAIL per check, or BLOCKED with the missing evidence; never turn
    an unperformed check into PASS or ALL CLEAR.
    Security-core changes still need fresh-context review and Owner approval.
+
+Legacy kernel, SDK and connector code still in the workspace keeps its existing checks and tests until an Owner-approved retirement removes it; it is not a pattern for new Mother code, and new Mother code must not be built on it.
 
 See SECURITY.md and THREAT_MODEL.md for current claims. A review is not a
 release approval or physical acceptance.

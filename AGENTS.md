@@ -85,7 +85,12 @@ The Architect:
 - reviews the verified mission result
 - authorizes phase progression
 
-The Architect is independent of the implementation loop.
+The Architect is independent of the implementation loop. Under [MOTHER.md
+§3](MOTHER.md#3-independence-without-a-second-architect), this means independent
+review and acceptance through its pre-registered oracles, deterministic gates,
+fresh-context security review and Owner-only approvals. The Architect also
+implements, but must never approve its own work; implementation cannot replace
+those independent controls or Owner physical acceptance.
 
 Work must not silently replace architect decisions with its own broader architecture.
 
