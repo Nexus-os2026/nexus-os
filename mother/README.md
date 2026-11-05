@@ -482,11 +482,10 @@ storage supported. Home and its contents are reserved, as are the broker and
 identity stores. Symlink selection and a nonempty folder refuse. Choose private
 locations beneath your own home, outside this repository.
 
-Build in this worktree, using the mission's Cargo slot:
+Build from the repository root with the checked-in Cargo workspace:
 
 ```bash
-slot=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/cargo-slot.sh
-"$slot" cargo build -p nexus-mother-host --bin mother-hands --locked --target-dir target
+cargo build -p nexus-mother-host --bin mother-hands --locked --target-dir target
 install -d -m 700 "$HOME/.local/share/mother-hands-demo" "$HOME/mother-hands-empty"
 target/debug/mother-hands \
   --home "$HOME/.local/share/mother-hands-demo" \
