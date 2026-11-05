@@ -578,9 +578,15 @@ The exact uncertainty notice is:
 > A file may exist in your folder. A write already handed off may still finish. Mother will not retry or continue this mission.
 
 Startup verifies the kernel ledger, Mother history and primary evidence before
-workspace selection or work. A genuinely fresh Home displays “Fresh start:
-no earlier session in this home; nothing to recover.” A Home with prior
-history retains both recovery-report disclosures, even after a clean exit.
+workspace selection or work. “Fresh start: no earlier session in this home;
+nothing to recover.” appears only when the adapter observed the Home absent
+or completely empty, through link-free directory ancestors, before creating
+the Home or opening any session store, and all startup sources verify ready.
+Every session store is beneath that Home. Any prior entry or history retains
+both recovery-report disclosures, even after a clean exit, including primary-only
+sessions and a schema/identity committed before the first session record.
+Unproven freshness also retains both disclosures; post-open record counts
+alone never establish a fresh start.
 Startup does not sweep staging, restore permission,
 recreate acknowledgement capabilities or restore undo. Unresolved or invalid
 sources keep the Home report-only. A repeated start does not certify cleanup

@@ -847,10 +847,11 @@ fn show_recovery(home: &SessionServices, screen: &Shared) -> Result<(), &'static
         sources.primary.unclean_sessions
     ));
     // Presentation only: never infer authority or readiness from this label.
-    // Every clean Hands close records a Mother session end. Lost sessions
-    // appear in primary recovery health. Keep host filesystem access behind
-    // the existing adapter and use only these verified backend observations.
-    let fresh = sources.ready()
+    // Pre-open provenance is required: healthy post-open sources can still
+    // contain primary-only history or a schema committed before session_opened.
+    // Unproven freshness always retains both recovery disclosures.
+    let fresh = home.initially_empty
+        && sources.ready()
         && sources.mother.as_ref().is_ok_and(|m| m.records == 0)
         && sources.resources.as_ref().is_ok_and(Vec::is_empty);
     if fresh {
