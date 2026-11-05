@@ -38,13 +38,15 @@ AgentError texts (both AuditError causes) and on_error strategies.
 Every current guard remains active and unchanged. `LIVE_STAGE = 1` is explicit.
 The successor test driver applies K02–K22 policies to synthetic in-memory source
 trees only. Synthetic empty module slots are effect-free fixtures, never purported
-production source. Cargo manifests are public policy inputs, never byte-frozen snapshots.
+production source. Cargo metadata is the resolved dependency policy input; manifests
+are presence fixtures, never byte-frozen snapshots. Ruling R-6 below is the current
+scope and supersedes the earlier rounds' resolution-scanner claims.
 There is no live-tree fallback, old-or-new acceptance or missing-file skip.
 
 | Oracle | Activation and current evidence preserved |
 |---|---|
 | F7 | K05–K21 cumulatively prohibit exact retired roots and alternate file/directory spellings, root declarations, imports and exports. K11/K12/K14/K15/K17/K19 add runtime-type prohibitions. Free-api/orchestration/delegation bans remain at every stage. Current m0_f7_legacy_supervisor_cut.rs remains active throughout K01. |
-| Dependency closure | production-paths.txt fixes 327 source seeds; manifest files and extraction homes enter/leave with the selected stage. Every expected seed must be present. Exact source/module inventories apply to kernel/ only; outside it, unrelated modules/files may grow while retired contacts and Cargo dependency aliases/wrappers fail. Extraction destinations enter only at their stage. cargo-manifests.json retains the ten required manifest paths, while manifests selected by current workspace membership are also checked. Retired package identities (including aliases and workspace declarations) and paths under retirement roots are forbidden in every dependency kind and target. kernel-dependency-names.json caps the kernel dependency names at the 39-name base set; later stages may shrink it. Unrelated non-kernel dependency changes do not require fixture edits. |
+| Dependency closure (R-6) | production-paths.txt retains 327 source seeds and cargo-manifests.json retains ten required manifest paths as presence minima. Extraction destinations enter at their stage. Exact source/module inventories apply to kernel/ only. The shared desktop tripwire helper runs Cargo metadata locked/offline, default and all features, without a target filter. All reported packages (including implicit members and renamed normal/dev/build/target dependencies) must avoid retired identities and manifest paths under retired roots. Kernel direct declaration names/renames must stay within the unchanged 39-name cap. Cargo/rustc own resolution and post-deletion absence; K01 has no cross-crate source contact scanner. |
 | Logging | K11 replaces loop-source obligations with its absence and no replacement execution route. K12 removes actuator source obligations. logging.jsonl freezes the six retained kernel logging macro expressions and contexts; missing, changed or extra kernel sinks fail, including rebinding and appended logging. Non-kernel sinks may grow. Mother/broker/host P0 privacy and isolation scanners retain sole ownership of their privacy policy. |
 | Web search | Through K11, preserve F3's source prohibition plus the independently runnable kernel_retirement_web_search binary's direct default/backend/registry refusal, no-connection and injected-backend checks. K03 moves its PlannedAction import to action_types; its complete source is pinned by web-search-guard.rs.txt. K11 retires only the executor checks with their subject. K12 retires this actuator-dependent binary and switches to actuator/registry/backend absence, including renamed search modules/process sinks; no curl exception remains. broker-classifier.sha256 freezes the exhaustive classifier and refusal vocabulary independently of imports. WebSearch stays inert. Existing broker egress, credentials and proxy tests remain required. |
 | HM prompt/writers/separation | K11 removes exactly six prompt-content exceptions, three AgentMemoryManager writers and the world-model separation row. hm-rows.jsonl names sites/routes; the full 26-route no-handoff vocabulary and raw SQL/write/content-read plants survive. |
@@ -70,8 +72,12 @@ There is no live-tree fallback, old-or-new acceptance or missing-file skip.
    weaker text predicate. The registered HM row sets specify only narrowing.
 4. Run the synthetic controls plus actual live-tree checks at that candidate.
    Kernel source paths/import edges/dependencies/sinks need reviewed registration.
-   Under R-5, unrelated non-kernel growth requires no K01 inventory amendment;
-   non-kernel retirement contacts still fail, including path overrides and aliases.
+   Under R-6, non-kernel growth requires no K01 source inventory amendment.
+   Before deletion, existing Mother isolation/structure guards own cross-crate
+   contact policy; after deletion, rustc rejects imports and path includes that
+   reach removed code. Cargo metadata enforces the resolved dependency policy
+   at registration and every activated stage; synthetic source trees do not
+   claim to resolve or compile as deletion builds.
 
 Owner-approved F7 policy: **absent and cannot return**, replacing “retained but
 isolated” only as each removal lands. This policy successor needs independent
@@ -132,8 +138,9 @@ K01's whole-file self-spawn hashes: unrelated changes to these non-kernel files
 must pass. Their registered cfg(test) loading contracts remain specific acceptance
 predecessor subjects; promoting a helper into production still changes that
 contract. K01's process/network/Stop/SQLite/HM effect predicates now apply only
-inside kernel/. Their existing component guards are unchanged. Retirement
-contacts remain forbidden throughout the production inventory.
+inside kernel/. Their existing component guards are unchanged. Under R-6,
+K01 does not scan non-kernel source contacts; rustc and the existing isolation
+guards supply that evidence.
 
 ## Fix round 2 registration
 
@@ -192,7 +199,10 @@ already carried. The predecessor's registry/executor default-refusal and executo
 injection assertions remain active with their subjects; executor checks retire
 with the K11 executor, while independent direct checks survive until K12.
 
-## Fix round 4 registration
+## Fix round 4 registration (historical; resolution replaced by R-6)
+
+The following records round 4, not the current dependency implementation. R-6
+removes the hand-written manifest, path and membership checker and its controls.
 
 `test(oracle-fix)` — Old: "freeze the exact bytes of ten Cargo manifests".
 New: "enforce retirement dependency policy and a narrowing kernel name set".
@@ -244,7 +254,10 @@ security/behavior registrations with mutation controls. No other byte drift of
 registered files was found. LIVE_STAGE remains 1; no existing guard or trust
 boundary is changed. No phase advancement or integration is authorized here.
 
-## Fix round 5 (Ruling R-5)
+## Fix round 5 (Ruling R-5; contact scanning superseded by R-6)
+
+The following records round 5. Its cross-crate contact scanner and associated
+red plants are removed by R-6; exact kernel registrations remain unchanged.
 
 `test(oracle-fix)` — Old: "freeze repository-wide modules, source files and logs".
 New: "freeze kernel retirement subjects; reject retired contacts elsewhere".
@@ -307,3 +320,55 @@ overrides fail at the exact planted
 subject; new kernel module/file/sink growth fails. Existing omission, source
 promotion, F3, F7, HM, logging rebinding and dependency controls remain active.
 No production code, dependency, existing guard or trust boundary changes.
+
+
+## Fix round 6 (Ruling R-6)
+
+`test(oracle-fix)` — Old: "re-implement Rust/Cargo resolution in text scanners".
+New: "use rustc/Cargo as authoritative absence oracles; apply dependency policy
+to Cargo's resolved graph". Architect Ruling R-6 (2026-11-05) is the Deep Diagnostic
+outcome for the repeated completeness findings in rounds 1–5.
+
+`dependencies.rs` reuses `desktop_tripwire::resolve` and its default/all-feature
+configurations: `cargo metadata --locked --offline --format-version 1`, with no
+host target filter. Unavailable Cargo, timeout, nonzero status, unreadable output
+or malformed/inconsistent graph fails closed. Every reported package is checked,
+including implicit workspace members and transitive dependencies, irrespective
+of edge name, kind or target. The six merged retired package identities and all
+registered retired roots remain forbidden. Manifest paths use component checks,
+including Cargo's resolved spelling and canonical spelling when available.
+The kernel's metadata declaration names (using `rename` when present), including
+normal/dev/build/target/optional declarations, must be a subset of the unchanged
+39-name fixture. No TOML, workspace-glob or dependency-path resolver remains.
+The live gate runs at K01 and at every explicitly activated successor stage.
+
+Controls use synthetic Cargo metadata OUTPUT, not synthetic manifests that
+pretend to implement Cargo. Exact findings prove retired identities are red via
+an implicit helper member and renamed normal/dev/build dependencies with and
+without a target, as well as when the retired package itself is a member.
+An innocent identity under every retired root is red; component neighbors pass.
+New kernel names and renames fail across kinds/targets; shrinkage and unrelated
+host declarations pass. Missing/malformed/inconsistent graphs fail, and the
+actual locked/offline graph passes. Source fixtures load Cargo's actual member
+manifests (including implicit members), plus the original ten required paths as
+presence minima. The same synthetic implicit-member control checks that fixture
+membership includes the helper, without parsing TOML. Dependency controls no
+longer mutate unresolved in-memory TOML and claim Cargo equivalence.
+
+Removed: K01's cross-crate alias discovery, namespace tracking, `#[path]` and
+`include!` contact resolver, live non-kernel contact registration, associated red
+plants, and the hand-written Cargo manifest/membership/dependency checker.
+Mother's existing isolation scanner, desktop tripwire and structure guards
+remain unchanged. Once a reviewed K-PR removes a module/crate, rustc/Cargo must
+reject an import, path include or dependency reaching the missing subject.
+K01 does not claim static completeness for Rust/Cargo resolution.
+
+Kept unchanged: retirement manifest/validation, KEEP and extraction obligations,
+compatibility/default/error/SourceKind goldens, all 95 kernel module rows, all six
+logging rows, staged kernel path/declaration/re-export absence, original F7
+prohibitions until each subject disappears, F3 error/refusal and logging
+successors, and their source mutation/omission controls. Removing calls to the
+deleted contact scanner does not replace these kernel inventories. The same
+159 named acceptance tests/loading contracts, HM rules and source-promotion
+controls remain. LIVE_STAGE stays 1; no production code, manifest, lockfile,
+existing guard, phase or trust boundary changes.

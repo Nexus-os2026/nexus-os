@@ -229,16 +229,11 @@ fn retained_production_seeds_and_dependency_manifests_are_present() {
     for path in paths_at(LIVE_STAGE) {
         assert!(root().join(&path).is_file(), "missing stage seed: {path}");
     }
-    let manifests = dependencies::load_manifests();
     assert_eq!(cargo_manifests().len(), 10);
     for path in cargo_manifests() {
-        assert!(manifests.contains_key(&path), "missing manifest: {path}");
+        assert!(root().join(&path).is_file(), "missing manifest: {path}");
     }
-    assert_eq!(
-        dependencies::violations(LIVE_STAGE, &manifests),
-        BTreeSet::new(),
-        "retirement dependency policy"
-    );
+    dependencies::assert_live();
 }
 
 #[test]
@@ -368,173 +363,170 @@ fn payload_presence_rejects_comments_literals_macros_and_disabling_cfg() {
     }
 }
 
+// Cargo, rather than these controls, decides which packages are implicit
+// members and what renamed/target-specific edges resolve to. Fixtures model
+// that OUTPUT; they do not parse or simulate Cargo.toml membership rules.
+fn metadata_fixture() -> serde_json::Value {
+    use serde_json::json;
+    json!({
+        "packages": [
+            {"id":"kernel", "name":"nexus-kernel", "manifest_path":root().join("kernel/Cargo.toml"),
+             "dependencies":[{"name":"serde", "rename":null}]},
+            {"id":"host", "name":"nexus-mother-host", "manifest_path":root().join("mother/host/Cargo.toml"),
+             "dependencies":[]}
+        ],
+        "workspace_members":["kernel", "host"],
+        "resolve":{"nodes":[{"id":"kernel", "deps":[]}, {"id":"host", "deps":[]}]}
+    })
+}
+
+fn add_metadata_package(doc: &mut serde_json::Value, name: &str, path: &str) {
+    use serde_json::json;
+    doc["packages"].as_array_mut().unwrap().push(json!({
+        "id":"added", "name":name, "manifest_path":root().join(path), "dependencies":[]
+    }));
+    doc["resolve"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"added", "deps":[]}));
+}
+
 #[test]
-fn dependency_policy_rejects_retired_names_aliases_and_all_dependency_kinds() {
-    let baseline = dependencies::load_manifests();
-    assert!(dependencies::violations(1, &baseline).is_empty());
-    for path in baseline.keys() {
-        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
-            for prefix in [String::new(), "target.'cfg(target_os = \"never\")'.".into()] {
-                for (alias, spec) in [
-                    ("nexus-sdk", "version = '1'"),
-                    ("innocent_alias", "package = 'nexus-sdk'\nversion = '1'"),
-                ] {
-                    let mut changed = baseline.clone();
-                    changed
-                        .get_mut(path)
-                        .unwrap()
-                        .push_str(&format!("\n[{prefix}{kind}.{alias}]\n{}\n", spec));
-                    assert!(
-                        dependencies::violations(1, &changed).contains(path),
-                        "{path}: {prefix}{kind}.{alias}"
-                    );
-                }
+fn cargo_metadata_real_graph_and_synthetic_baseline_pass() {
+    dependencies::assert_live();
+    assert!(dependencies::findings_of(&root(), &metadata_fixture()).is_empty());
+}
+
+#[test]
+fn cargo_metadata_rejects_retired_packages_including_implicit_members_and_renamed_target_edges() {
+    use serde_json::json;
+    for (name, _) in dependencies::RETIRED {
+        for kind in [json!(null), json!("dev"), json!("build")] {
+            for target in [json!(null), json!("cfg(windows)")] {
+                let mut doc = metadata_fixture();
+                // Cargo's implicit helper member is present in workspace_members
+                // even though no explicit workspace.members entry named it.
+                doc["packages"].as_array_mut().unwrap().push(json!({
+                    "id":"helper", "name":"helper", "manifest_path":root().join("crates/helper/Cargo.toml"),
+                    "dependencies":[{"name":name, "rename":"innocent_alias", "kind":kind, "target":target}]
+                }));
+                doc["workspace_members"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!("helper"));
+                doc["resolve"]["nodes"].as_array_mut().unwrap().push(json!({"id":"helper", "deps":[
+                    {"name":"innocent_alias", "pkg":"added", "dep_kinds":[{"kind":kind, "target":target}]}
+                ]}));
+                doc["resolve"]["nodes"][1]["deps"] = json!([
+                    {"name":"helper", "pkg":"helper", "dep_kinds":[{"kind":null, "target":null}]}
+                ]);
+                assert!(dependencies::member_manifests_of(&root(), &doc)
+                    .contains("crates/helper/Cargo.toml"));
+                // A normal-looking manifest path ensures package identity alone
+                // catches a retired crate behind the resolved alias.
+                add_metadata_package(&mut doc, name, "crates/innocent/Cargo.toml");
+                assert_eq!(
+                    dependencies::findings_of(&root(), &doc),
+                    BTreeSet::from([format!(
+                        "retired package {name} at {}",
+                        root().join("crates/innocent/Cargo.toml").display()
+                    )])
+                );
+                // Retired identity is also prohibited as an implicit member.
+                doc["workspace_members"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!("added"));
+                assert_eq!(dependencies::findings_of(&root(), &doc).len(), 1);
             }
         }
     }
-    // A workspace alias is resolved through the root declaration even when
-    // inherited by a member; neither table may reintroduce a retired package.
-    let mut changed = baseline.clone();
-    changed
-        .get_mut("Cargo.toml")
-        .unwrap()
-        .push_str("\n[workspace.dependencies.alias]\npackage = 'nexus-memory'\nversion = '1'\n");
-    changed
-        .get_mut("mother/host/Cargo.toml")
-        .unwrap()
-        .push_str("\n[dependencies.alias]\nworkspace = true\n");
-    assert!(dependencies::violations(1, &changed).contains("Cargo.toml"));
 }
 
 #[test]
-fn dependency_policy_checks_retired_paths_and_every_registered_retirement_root() {
-    let baseline = dependencies::load_manifests();
-    let path = "mother/host/Cargo.toml";
-    for retired in [
-        "sdk",
-        "connectors/llm",
-        "agents/web-builder",
-        "crates/nexus-memory",
-        "crates/nexus-self-improve",
-        "crates/nexus-outcome-eval",
-    ] {
-        for dependency in [
-            format!("../../{retired}/nested"),
-            format!("../../mother/../{retired}/nested"),
-            root()
-                .join(retired)
-                .join("nested")
-                .to_str()
-                .unwrap()
-                .to_owned(),
-        ] {
-            let mut changed = baseline.clone();
-            changed.get_mut(path).unwrap().push_str(&format!(
-                "\n[build-dependencies.alias]\npath = {dependency:?}\n"
-            ));
-            assert!(
-                dependencies::violations(1, &changed).contains(path),
-                "{dependency}"
-            );
-        }
-    }
-    for row in stages() {
-        for retired in &row.roots {
-            let mut changed = baseline.clone();
-            changed.get_mut(path).unwrap().push_str(&format!("\n[target.'cfg(windows)'.dev-dependencies.alias]\npath = '../../{retired}/nested'\n"));
-            assert!(
-                dependencies::violations(1, &changed).contains(path),
-                "K01: {retired}"
-            );
-            assert!(
-                dependencies::violations(row.stage, &changed).contains(path),
-                "K{}: {retired}",
-                row.stage
-            );
-        }
-    }
-    // Component boundaries do not prohibit an unrelated neighboring path.
-    let mut changed = baseline;
-    changed
-        .get_mut(path)
-        .unwrap()
-        .push_str("\n[dependencies.alias]\npath = '../../sdk-tools'\n");
-    assert!(dependencies::violations(22, &changed).is_empty());
-}
-
-#[test]
-fn dependency_policy_allows_legitimate_manifest_changes_and_kernel_shrinkage() {
-    let baseline = dependencies::load_manifests();
-    for stage in [1, 2, 11, 22] {
-        let mut changed = baseline.clone();
-        // The merged #83 nix/uuid content is already in the green baseline.
-        changed
-            .get_mut("mother/host/Cargo.toml")
-            .unwrap()
-            .push_str("\n[dev-dependencies.new_host_helper]\nversion = '1'\n");
-        assert!(dependencies::violations(stage, &changed).is_empty());
-        let mut kernel: toml::Value = toml::from_str(&changed["kernel/Cargo.toml"]).unwrap();
-        kernel["dependencies"]
-            .as_table_mut()
-            .unwrap()
-            .remove("htmd")
-            .unwrap();
-        changed.insert(
-            "kernel/Cargo.toml".into(),
-            toml::to_string(&kernel).unwrap(),
+fn cargo_metadata_rejects_packages_under_every_retired_root_with_component_boundaries() {
+    let roots = dependencies::RETIRED.iter().map(|(_, path)| *path).chain(
+        stages()
+            .iter()
+            .flat_map(|row| &row.roots)
+            .map(String::as_str),
+    );
+    for retired in roots {
+        let mut doc = metadata_fixture();
+        let path = format!("{retired}/nested/Cargo.toml");
+        add_metadata_package(&mut doc, "innocent", &path);
+        assert_eq!(
+            dependencies::findings_of(&root(), &doc),
+            BTreeSet::from([format!(
+                "retired package innocent at {}",
+                root().join(path).display()
+            )])
         );
-        assert!(dependencies::violations(stage, &changed).is_empty());
-        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
-            let mut added = changed.clone();
-            added
-                .get_mut("kernel/Cargo.toml")
-                .unwrap()
-                .push_str(&format!(
-                    "\n[target.'cfg(windows)'.{kind}.brand_new_kernel_name]\nversion = '1'\n"
-                ));
-            assert_eq!(
-                dependencies::violations(stage, &added),
-                BTreeSet::from(["kernel/Cargo.toml".into()])
-            );
-        }
+        doc["packages"][2]["manifest_path"] =
+            serde_json::json!(root().join(format!("{retired}-neighbor/Cargo.toml")));
+        assert!(dependencies::findings_of(&root(), &doc).is_empty());
     }
 }
 
 #[test]
-fn dependency_policy_covers_new_workspace_members_and_fails_on_missing_or_invalid_manifests() {
-    let mut changed = dependencies::load_manifests();
-    let mut workspace: toml::Value = toml::from_str(&changed["Cargo.toml"]).unwrap();
-    workspace["workspace"]["members"]
-        .as_array_mut()
-        .unwrap()
-        .push(toml::Value::String("new-member".into()));
-    changed.insert("Cargo.toml".into(), toml::to_string(&workspace).unwrap());
-    assert!(dependencies::violations(1, &changed).contains("Cargo.toml"));
-    let path = "new-member/Cargo.toml";
-    changed.insert(
-        path.into(),
-        "[package]\nname = 'new-member'\nversion = '1.0.0'\n".into(),
-    );
-    assert!(dependencies::violations(1, &changed).is_empty());
-    changed.get_mut(path).unwrap().push_str("\n[target.'cfg(windows)'.dependencies.alias]\npackage = 'nexus-connectors-llm'\nversion = '1'\n");
-    assert!(dependencies::violations(1, &changed).contains(path));
-    let mut globbed = changed.clone();
-    let mut root_manifest: toml::Value = toml::from_str(&globbed["Cargo.toml"]).unwrap();
-    *root_manifest["workspace"]["members"]
-        .as_array_mut()
-        .unwrap()
-        .last_mut()
-        .unwrap() = toml::Value::String("new-*".into());
-    globbed.insert(
-        "Cargo.toml".into(),
-        toml::to_string(&root_manifest).unwrap(),
-    );
-    assert!(dependencies::violations(1, &globbed).contains(path));
-    globbed.insert(
-        path.into(),
-        "[package]\nname = 'new-member'\nversion = '1.0.0'\n".into(),
-    );
-    assert!(dependencies::violations(1, &globbed).is_empty());
-    changed.insert(path.into(), "invalid TOML = [".into());
-    assert!(dependencies::violations(1, &changed).contains(path));
+fn cargo_metadata_kernel_direct_names_may_shrink_but_new_names_or_renames_fail() {
+    use serde_json::json;
+    for kind in [json!(null), json!("dev"), json!("build")] {
+        for target in [json!(null), json!("cfg(windows)")] {
+            for rename in [json!(null), json!("brand_new_kernel_name")] {
+                let mut doc = metadata_fixture();
+                doc["packages"][0]["dependencies"] = json!([{
+                    "name": if rename.is_null() { "brand_new_kernel_name" } else { "serde" },
+                    "rename":rename, "kind":kind, "target":target
+                }]);
+                assert_eq!(
+                    dependencies::findings_of(&root(), &doc),
+                    BTreeSet::from([
+                        "kernel dependency beyond frozen cap: brand_new_kernel_name".into()
+                    ])
+                );
+            }
+        }
+    }
+    let mut doc = metadata_fixture();
+    doc["packages"][0]["dependencies"] = json!([]);
+    assert!(dependencies::findings_of(&root(), &doc).is_empty());
+    doc["packages"][1]["dependencies"] = json!([{"name":"new_host_helper", "rename":null}]);
+    assert!(dependencies::findings_of(&root(), &doc).is_empty());
+}
+
+#[test]
+fn cargo_metadata_missing_malformed_or_inconsistent_graphs_fail_closed() {
+    use serde_json::json;
+    for key in ["packages", "workspace_members", "resolve"] {
+        let mut doc = metadata_fixture();
+        doc.as_object_mut().unwrap().remove(key);
+        assert!(
+            !dependencies::findings_of(&root(), &doc).is_empty(),
+            "{key}"
+        );
+    }
+    for (pointer, value) in [
+        ("/resolve", json!(null)),
+        ("/workspace_members", json!([])),
+        ("/workspace_members", json!(["unknown"])),
+        ("/packages/0/manifest_path", json!("kernel/Cargo.toml")),
+        ("/packages/0/dependencies", json!(null)),
+        ("/resolve/nodes/0/id", json!("unknown")),
+        (
+            "/resolve/nodes/0/deps",
+            json!([{"pkg":"unknown", "dep_kinds":[{"kind":null,"target":null}]}]),
+        ),
+        (
+            "/resolve/nodes/0/deps",
+            json!([{"pkg":"host", "dep_kinds":[]}]),
+        ),
+    ] {
+        let mut doc = metadata_fixture();
+        *doc.pointer_mut(pointer).unwrap() = value;
+        assert!(
+            !dependencies::findings_of(&root(), &doc).is_empty(),
+            "{pointer}"
+        );
+    }
 }

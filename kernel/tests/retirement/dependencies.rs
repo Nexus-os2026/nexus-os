@@ -1,13 +1,15 @@
-//! Retirement dependency POLICY, shared by live registration and staged oracles.
-//! No Cargo invocation, dependency resolution or host-target filtering is needed.
-use super::{cargo_manifests, root, stages, within};
+//! R-6: Cargo owns dependency resolution and workspace membership. K01 applies
+//! retirement policy to its resolved metadata, never to hand-parsed manifests.
+use super::{root, stages};
+use serde::Deserialize;
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Component, Path};
-use toml::Value;
+use std::path::{Path, PathBuf};
 
-const KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
-// Package identities and roots from the already merged crate retirements.
-// The K02–K22 module roots additionally come directly from manifest.jsonl.
+#[path = "../desktop_tripwire/mod.rs"]
+mod desktop_tripwire;
+
+// Already merged crate retirements; module roots come from manifest.jsonl.
 pub const RETIRED: [(&str, &str); 6] = [
     ("nexus-outcome-eval", "crates/nexus-outcome-eval"),
     ("nexus-self-improve", "crates/nexus-self-improve"),
@@ -17,211 +19,186 @@ pub const RETIRED: [(&str, &str); 6] = [
     ("nexus-sdk", "sdk"),
 ];
 
-pub fn load_manifests() -> BTreeMap<String, String> {
-    fn walk(dir: &Path, out: &mut BTreeMap<String, String>) {
-        for entry in std::fs::read_dir(dir).expect("manifest directory readable") {
-            let entry = entry.unwrap();
-            let name = entry.file_name();
-            let name = name.to_str().unwrap();
-            if name.starts_with("target") || matches!(name, ".git" | "node_modules" | "dist") {
-                continue;
-            }
-            let kind = entry.file_type().unwrap();
-            assert!(
-                !kind.is_symlink(),
-                "manifest inventory cannot alias: {:?}",
-                entry.path()
-            );
-            if kind.is_dir() {
-                walk(&entry.path(), out);
-            } else if name == "Cargo.toml" {
-                let rel = entry
-                    .path()
-                    .strip_prefix(root())
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .replace('\\', "/");
-                out.insert(rel, std::fs::read_to_string(entry.path()).unwrap());
-            }
-        }
-    }
-    let mut out = BTreeMap::new();
-    walk(&root(), &mut out);
-    let (retained, _) = retained_paths(&out);
-    out.retain(|path, _| retained.contains(path));
-    out
+#[derive(Deserialize)]
+struct Graph {
+    packages: Vec<Package>,
+    workspace_members: BTreeSet<String>,
+    resolve: Resolve,
+}
+#[derive(Deserialize)]
+struct Package {
+    id: String,
+    name: String,
+    manifest_path: PathBuf,
+    dependencies: Vec<Dependency>,
+}
+#[derive(Deserialize)]
+struct Dependency {
+    name: String,
+    rename: Option<String>,
+}
+#[derive(Deserialize)]
+struct Resolve {
+    nodes: Vec<Node>,
+}
+#[derive(Deserialize)]
+struct Node {
+    id: String,
+    deps: Vec<Edge>,
+}
+#[derive(Deserialize)]
+struct Edge {
+    pkg: String,
+    dep_kinds: Vec<Value>,
 }
 
-// Lexically resolve even nonexistent retired paths, including traversal and
-// absolute paths inside this checkout. Live source inventory separately rejects
-// symlink aliases; synthetic trees have no filesystem-dependent path authority.
-pub fn dependency_path(manifest: &str, raw: &str) -> Option<String> {
-    let raw = raw.replace('\\', "/");
-    let path = Path::new(&raw);
-    let joined = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        root().join(Path::new(manifest).parent()?).join(path)
+/// All packages Cargo reports, including implicit members and every dependency
+/// kind/target. No target filter, alias inference or workspace glob matching.
+/// Missing/malformed metadata is a finding, never an empty successful graph.
+pub fn findings_of(workspace: &Path, doc: &Value) -> BTreeSet<String> {
+    let graph: Graph = match serde_json::from_value(doc.clone()) {
+        Ok(graph) => graph,
+        Err(error) => return BTreeSet::from([format!("unreadable Cargo metadata: {error}")]),
     };
-    let mut normalized = std::path::PathBuf::new();
-    for part in joined.components() {
-        match part {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            part => normalized.push(part.as_os_str()),
-        }
+    let packages: BTreeMap<_, _> = graph.packages.iter().map(|p| (p.id.as_str(), p)).collect();
+    let nodes: BTreeSet<_> = graph.resolve.nodes.iter().map(|n| n.id.as_str()).collect();
+    let mut found = BTreeSet::new();
+    if !workspace.is_absolute()
+        || packages.len() != graph.packages.len()
+        || nodes.len() != graph.resolve.nodes.len()
+        || graph.workspace_members.is_empty()
+        || graph
+            .workspace_members
+            .iter()
+            .any(|id| !nodes.contains(id.as_str()))
+        || nodes.iter().any(|id| !packages.contains_key(id))
+    {
+        found.insert(
+            "unreadable Cargo metadata: inconsistent package/member/node identities".into(),
+        );
     }
-    Some(
-        normalized
-            .strip_prefix(root())
-            .ok()?
-            .to_str()?
-            .replace('\\', "/"),
-    )
-}
-
-fn dependency_tables(data: &Value) -> Option<Vec<&toml::map::Map<String, Value>>> {
-    fn append<'a>(data: &'a Value, out: &mut Vec<&'a toml::map::Map<String, Value>>) -> Option<()> {
-        for kind in KINDS {
-            if let Some(table) = data.get(kind) {
-                out.push(table.as_table()?);
+    for node in &graph.resolve.nodes {
+        for edge in &node.deps {
+            if edge.dep_kinds.is_empty() || !nodes.contains(edge.pkg.as_str()) {
+                found.insert(format!("unreadable Cargo metadata: edge from {}", node.id));
             }
         }
-        Some(())
     }
-    let mut out = Vec::new();
-    append(data, &mut out)?;
-    if let Some(targets) = data.get("target") {
-        for target in targets.as_table()?.values() {
-            append(target, &mut out)?;
-        }
-    }
-    if let Some(workspace) = data.get("workspace") {
-        append(workspace, &mut out)?;
-    }
-    Some(out)
-}
-
-fn manifest_ok(path: &str, data: &Value) -> Option<bool> {
-    static BASELINE: std::sync::OnceLock<BTreeSet<String>> = std::sync::OnceLock::new();
-    let baseline = BASELINE.get_or_init(|| {
-        serde_json::from_str(include_str!("kernel-dependency-names.json")).unwrap()
-    });
-    for table in dependency_tables(data)? {
-        for (alias, spec) in table {
-            // All names/kinds count, including optional and inactive targets.
-            if path == "kernel/Cargo.toml" && !baseline.contains(alias) {
-                return Some(false);
-            }
-            let package = match spec.get("package") {
-                Some(value) => Some(value.as_str()?),
-                None => None,
-            };
-            if RETIRED
+    let retired_roots: Vec<_> = RETIRED
+        .iter()
+        .map(|(_, path)| workspace.join(path))
+        .chain(
+            stages()
                 .iter()
-                .any(|(name, _)| alias == name || package == Some(*name))
-            {
-                return Some(false);
-            }
-            if let Some(raw) = spec.get("path") {
-                let raw = raw.as_str()?;
-                if let Some(resolved) = dependency_path(path, raw) {
-                    if RETIRED
-                        .iter()
-                        .any(|(_, retired)| within(&resolved, retired))
-                        || stages()
-                            .iter()
-                            .flat_map(|row| &row.roots)
-                            .any(|retired| within(&resolved, retired))
-                    {
-                        return Some(false);
-                    }
+                .flat_map(|row| &row.roots)
+                .map(|path| workspace.join(path)),
+        )
+        .collect();
+    let cap: BTreeSet<String> =
+        serde_json::from_str(include_str!("kernel-dependency-names.json")).unwrap();
+    let kernel_manifest = workspace.join("kernel/Cargo.toml");
+    let mut kernel = None;
+    for package in &graph.packages {
+        if !package.manifest_path.is_absolute() {
+            found.insert(format!(
+                "unreadable Cargo metadata: relative manifest for {}",
+                package.id
+            ));
+        }
+        // Cargo supplies resolved paths. Also inspect their canonical spelling
+        // when present so a filesystem alias cannot conceal a retired root.
+        let canonical = package.manifest_path.canonicalize().ok();
+        if RETIRED.iter().any(|(name, _)| package.name == *name)
+            || retired_roots.iter().any(|retired| {
+                package.manifest_path.starts_with(retired)
+                    || canonical
+                        .as_ref()
+                        .is_some_and(|path| path.starts_with(retired))
+            })
+        {
+            found.insert(format!(
+                "retired package {} at {}",
+                package.name,
+                package.manifest_path.display()
+            ));
+        }
+        if package.manifest_path == kernel_manifest && package.name == "nexus-kernel" {
+            kernel = Some(package.id.as_str());
+            // Metadata keeps Cargo declaration names/renames with hyphens,
+            // unlike resolve.nodes' Rust namespace names with underscores.
+            // All normal/dev/build/target (and optional) declarations count.
+            for dependency in &package.dependencies {
+                let name = dependency.rename.as_ref().unwrap_or(&dependency.name);
+                if !cap.contains(name) {
+                    found.insert(format!("kernel dependency beyond frozen cap: {name}"));
                 }
             }
-            if !spec.is_str() && !spec.is_table() {
-                return None;
-            }
         }
     }
-    Some(true)
+    if kernel.is_none_or(|id| !graph.workspace_members.contains(id)) {
+        found.insert("unreadable Cargo metadata: kernel is not a workspace member".into());
+    }
+    found
 }
 
-// Match Cargo's simple component globs against the manifest inventory. Unsupported
-// syntax is a policy error rather than silently omitting a workspace member.
-fn member_matches(pattern: &str, member: &str) -> Option<bool> {
-    if pattern.contains(['[', ']', '{', '}', '\\']) || pattern.contains("**") {
-        return None;
-    }
-    let pattern = pattern.trim_start_matches("./").trim_end_matches('/');
-    if !pattern.contains(['*', '?']) {
-        return Some(pattern == member);
-    }
-    let mut expression = String::from("^");
-    for c in pattern.chars() {
-        match c {
-            '*' => expression.push_str("[^/]*"),
-            '?' => expression.push_str("[^/]"),
-            c => expression.push_str(&regex::escape(&c.to_string())),
-        }
-    }
-    expression.push('$');
-    Some(regex::Regex::new(&expression).ok()?.is_match(member))
+fn live_docs() -> &'static [Value] {
+    static DOCS: std::sync::OnceLock<Vec<Value>> = std::sync::OnceLock::new();
+    DOCS.get_or_init(|| {
+        let workspace = root().canonicalize().expect("workspace root readable");
+        desktop_tripwire::CONFIGURATIONS
+            .into_iter()
+            .map(|features| desktop_tripwire::resolve(&workspace.join("Cargo.toml"), features))
+            .collect()
+    })
 }
 
-// Discover members from current root metadata, retaining the original required
-// manifest paths. Nested independent Cargo test fixtures are not product members.
-fn retained_paths(files: &BTreeMap<String, String>) -> (BTreeSet<String>, bool) {
-    let mut paths = cargo_manifests();
-    let workspace_ok = || -> Option<BTreeSet<String>> {
-        let data: Value = toml::from_str(files.get("Cargo.toml")?).ok()?;
-        let mut selected = BTreeSet::new();
-        for member in data.get("workspace")?.get("members")?.as_array()? {
-            let pattern = member.as_str()?;
-            let mut matched = false;
-            for path in files.keys().filter(|p| p.ends_with("Cargo.toml")) {
-                let member = if path == "Cargo.toml" {
-                    "."
-                } else {
-                    path.strip_suffix("/Cargo.toml")?
-                };
-                if member_matches(pattern, member)? {
-                    matched = true;
-                    selected.insert(path.clone());
-                }
-            }
-            if !matched {
-                return None;
-            }
+/// Source fixtures need real member manifests to establish their existing HM
+/// reachability proof. Cargo owns this membership too: the ten required paths
+/// are a presence minimum, not a frozen selection of workspace members.
+pub fn member_manifests_of(workspace: &Path, doc: &Value) -> BTreeSet<String> {
+    let graph: Graph = serde_json::from_value(doc.clone()).expect("readable Cargo metadata");
+    let mut paths = BTreeSet::from(["Cargo.toml".into()]);
+    for package in graph.packages {
+        if graph.workspace_members.contains(&package.id) {
+            let path = package
+                .manifest_path
+                .strip_prefix(workspace)
+                .expect("fixture member manifest must remain within the workspace");
+            paths.insert(
+                path.to_str()
+                    .expect("UTF-8 fixture path")
+                    .replace('\\', "/"),
+            );
         }
-        Some(selected)
-    };
-    match workspace_ok() {
-        Some(selected) => {
-            paths.extend(selected);
-            (paths, true)
-        }
-        None => (paths, false),
     }
+    paths
 }
 
-pub fn violations(stage: u8, files: &BTreeMap<String, String>) -> BTreeSet<String> {
-    assert!((1..=22).contains(&stage));
-    let mut bad = BTreeSet::new();
-    let (retained, workspace_ok) = retained_paths(files);
-    if !workspace_ok {
-        bad.insert("Cargo.toml".into());
-    }
-    for path in retained {
-        let valid = files
-            .get(&path)
-            .and_then(|raw| toml::from_str::<Value>(raw).ok())
-            .and_then(|data| manifest_ok(&path, &data));
-        if valid != Some(true) {
-            bad.insert(path);
-        }
-    }
-    bad
+pub fn fixture_manifests() -> BTreeMap<String, String> {
+    assert_live();
+    let workspace = root().canonicalize().expect("workspace root readable");
+    live_docs()
+        .iter()
+        .flat_map(|doc| member_manifests_of(&workspace, doc))
+        .chain(super::cargo_manifests())
+        .map(|path| {
+            let raw = super::read(&path);
+            (path, raw)
+        })
+        .collect()
+}
+
+pub fn assert_live() {
+    static FOUND: std::sync::OnceLock<BTreeSet<String>> = std::sync::OnceLock::new();
+    let found = FOUND.get_or_init(|| {
+        let workspace = root().canonicalize().expect("workspace root readable");
+        live_docs()
+            .iter()
+            .flat_map(|doc| findings_of(&workspace, doc))
+            .collect()
+    });
+    assert!(
+        found.is_empty(),
+        "R-6 retirement dependency policy: {found:#?}"
+    );
 }

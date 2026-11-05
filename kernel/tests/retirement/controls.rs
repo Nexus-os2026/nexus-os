@@ -517,9 +517,9 @@ fn module_matching_uses_complete_components_in_direct_and_grouped_paths() {
 }
 
 #[test]
-fn non_kernel_scaffolds_allow_unrelated_changes_but_reject_legacy_contacts() {
-    // R-5 removes whole-file hash freezes; acceptance's named test/loading
-    // contracts still apply, and a renamed legacy import remains forbidden.
+fn non_kernel_scaffolds_allow_unrelated_changes() {
+    // R-6 keeps named test/loading contracts; cross-crate contacts belong to
+    // existing isolation guards and the compiler, not a K01 syntax scanner.
     for path in [
         "mother/src/adapter/lite_review3.rs",
         "mother/src/adapter/lite_review4.rs",
@@ -533,34 +533,6 @@ fn non_kernel_scaffolds_allow_unrelated_changes_but_reject_legacy_contacts() {
         );
         tree.prove_fixture();
         assert_eq!(successor(22, &tree), Findings::new(), "{path}");
-        tree.get_mut(path)
-            .unwrap()
-            .push_str("use nexus_kernel::cognitive::CognitiveRuntime as FreshRunner;");
-        rejected(22, &tree, "f7-dependency", path);
-    }
-}
-
-#[test]
-fn manifest_policy_is_shared_by_every_staged_successor() {
-    for stage in 2..=22 {
-        let mut tree = clean_tree(stage);
-        let path = "mother/host/Cargo.toml";
-        tree.get_mut(path)
-            .unwrap()
-            .push_str("\n[dev-dependencies.new_host_helper]\nversion = '1'\n");
-        tree.prove_fixture();
-        assert_eq!(
-            successor(stage, &tree),
-            Findings::new(),
-            "K{stage}: legitimate host dependency"
-        );
-        tree.get_mut(path).unwrap().push_str("\n[target.'cfg(windows)'.build-dependencies.alias]\npackage = 'nexus-sdk'\nversion = '1'\n");
-        rejected(stage, &tree, "f7-dependency", path);
-        let mut tree = clean_tree(stage);
-        tree.get_mut("kernel/Cargo.toml")
-            .unwrap()
-            .push_str("\n[build-dependencies.new_kernel_dependency]\nversion = '1'\n");
-        rejected(stage, &tree, "f7-dependency", "kernel/Cargo.toml");
     }
 }
 
@@ -598,74 +570,6 @@ pub fn report() { eprintln!("{}", Diagnostic::Unavailable.code()); }
         assert!(!loaded.test_only.contains(child));
         assert_eq!(successor(stage, &loaded), Findings::new(), "K{stage}");
     }
-}
-
-#[test]
-fn r5_non_kernel_retired_declarations_paths_imports_and_aliases_are_red() {
-    for row in stages().iter().filter(|r| !r.roots.is_empty()) {
-        let stage = row.stage;
-        let path = "mother/src/lib.rs";
-        for declaration in &row.declarations {
-            let module = declaration
-                .trim_start_matches("pub mod ")
-                .trim_end_matches(';');
-            for plant in [
-                format!("#[path = \"../../{}\"] mod {module};", row.roots[0]),
-                format!("use nexus_kernel::{module}::Old as FreshRunner;"),
-                format!("pub use nexus_kernel::{{{module} as unrelated}};"),
-                format!("use nexus_kernel as renamed; use renamed::{module}::Old;"),
-                format!("extern crate nexus_kernel as renamed; use renamed::{module}::Old;"),
-                format!("use nexus_kernel::{{self as renamed}}; use renamed::{module}::Old;"),
-            ] {
-                let mut tree = clean_tree(stage);
-                tree.get_mut(path).unwrap().push_str(&plant);
-                rejected(stage, &tree, "f7-dependency", path);
-            }
-        }
-        for root in &row.roots {
-            let target = if root.ends_with(".rs") {
-                root.clone()
-            } else {
-                format!("{root}/mod.rs")
-            };
-            for value in [
-                format!("../../{target}"),
-                retirement::root()
-                    .join(&target)
-                    .to_str()
-                    .unwrap()
-                    .to_owned(),
-            ] {
-                for plant in [
-                    format!("#[path = {value:?}] mod unrelated;"),
-                    format!("#[path = r#\"{value}\"#] mod unrelated;"),
-                    format!("#[cfg_attr(target_os = \"never\", path = {value:?})] mod unrelated;"),
-                    format!("include!({value:?});"),
-                ] {
-                    let mut tree = clean_tree(stage);
-                    tree.get_mut(path).unwrap().push_str(&plant);
-                    rejected(stage, &tree, "f7-dependency", path);
-                }
-            }
-        }
-    }
-    for plant in [
-        "pub use nexus_kernel::CognitivePlanner as FreshPlanner;",
-        "use nexus_kernel as old; pub use old::CognitiveRuntime as FreshRunner;",
-        "use nexus_sdk::Client as NewClient;",
-    ] {
-        let mut tree = clean_tree(22);
-        let path = "mother/src/lib.rs";
-        tree.get_mut(path).unwrap().push_str(plant);
-        rejected(22, &tree, "f7-dependency", path);
-    }
-    // Renaming the wrapper does not excuse its contact with the retired runtime.
-    let mut tree = clean_tree(22);
-    let path = "mother/src/lib.rs";
-    tree.get_mut(path)
-        .unwrap()
-        .push_str("struct FreshRunner(nexus_kernel::cognitive::CognitiveRuntime);");
-    rejected(22, &tree, "f7-dependency", path);
 }
 
 #[test]
