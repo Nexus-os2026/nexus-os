@@ -721,3 +721,44 @@ impl R2Approval {
         &self.binding
     }
 }
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn mission_confirmation_debug_redacts_summary_and_facts() {
+        let request = MissionConfirmation {
+            contract_hash: "ab".repeat(32),
+            request: "mission-consent-1".into(),
+            summary: vec!["C1_NATIVE_NOTE_CANARY 面包🍞".into()],
+            page_facts: Some(FactsView {
+                name: "C1_FACT_CANARY".into(),
+                hours: vec!["Monday 09:00-17:00".into()],
+                phone: "+44 20 1234 5678".into(),
+            }),
+        };
+        let display = request.text();
+        assert!(request.message().contains("C1_NATIVE_NOTE_CANARY"));
+        assert!(display.plain().contains("C1_FACT_CANARY"));
+        for debug in [
+            format!("{request:?}"),
+            format!("{request:#?}"),
+            format!("{display:?}"),
+            format!("{display:#?}"),
+        ] {
+            assert!(
+                !debug.contains("C1_NATIVE_NOTE_CANARY"),
+                "native debug redacts summary"
+            );
+            assert!(
+                !debug.contains("面包"),
+                "native debug redacts Unicode summary"
+            );
+            assert!(
+                !debug.contains("C1_FACT_CANARY"),
+                "native debug redacts facts"
+            );
+        }
+    }
+}

@@ -417,6 +417,89 @@ fn e_o33_tampered_valid_chains() {
     });
     assert!(inspect_history_lines(&chain(es)).is_err());
 }
+// Correctly re-chained histories, including the review's exact close/reopen attack.
+#[test]
+fn e_o33c_session_boundaries_reject_charge() {
+    for boundary in ["close", "return", "overtake", "transition"] {
+        let mut es = prefix(2, 2);
+        es.push(charge(1));
+        match boundary {
+            "close" => es.extend([Event::SessionClosed, Event::SessionOpened]),
+            "return" => es.push(Event::LaneReturned {
+                invocation: InvocationId {
+                    mission: MissionId(1),
+                    seq: 5,
+                },
+                output_hash: "ef".repeat(32),
+            }),
+            "overtake" => es.push(Event::LaneOvertaken {
+                invocation: InvocationId {
+                    mission: MissionId(1),
+                    seq: 5,
+                },
+            }),
+            "transition" => es.push(Event::Transition {
+                trigger: Trigger::PhaseDone,
+            }),
+            _ => unreachable!(),
+        }
+        assert!(
+            inspect_history_lines(&chain(es.clone())).is_ok(),
+            "valid boundary prefix: {boundary}"
+        );
+        es.push(charge(2));
+        let lines = chain(es);
+        let journal = MemoryJournal::new();
+        journal.set_lines(lines.clone());
+        for result in [inspect_history_lines(&lines), inspect_history(&journal)] {
+            assert!(
+                matches!(
+                    result,
+                    Err(JournalError::Inconsistent {
+                        code: ReplayViolation::ModelChargeOutOfPlace,
+                        ..
+                    })
+                ),
+                "report-only rejects post-invalidation charge: {boundary}"
+            );
+        }
+    }
+}
+
+#[test]
+fn e_o33d_session_boundaries_retain_evidence() {
+    for clean in [true, false] {
+        let mut es = prefix(2, 2);
+        es.push(charge(1));
+        if clean {
+            es.push(Event::SessionClosed);
+        }
+        es.push(Event::SessionOpened);
+        let mut ms = BTreeMap::new();
+        let mut next = 1;
+        let mut session = Session::Never;
+        for entry in verify(&chain(es)).unwrap() {
+            replay(&mut ms, &mut next, &mut session, &entry).unwrap();
+        }
+        let m = &ms[&MissionId(1)];
+        assert_eq!(m.model_calls, 1, "charges never refunded");
+        assert_eq!(m.declared_model_budgets, vec![2]);
+        assert_eq!(
+            m.pending_lane,
+            Some(InvocationId {
+                mission: MissionId(1),
+                seq: 5
+            }),
+            "pending settlement evidence retained"
+        );
+        assert!(m.lane_calls.is_none(), "replay has no live latch or meter");
+        assert!(
+            m.call_accounting.is_none(),
+            "session boundary invalidates accounting: clean={clean}"
+        );
+    }
+}
+
 #[test]
 fn e_o33b_closed_budget_equality_and_no_entitlement() {
     let (w, id) = ready(4);
@@ -493,6 +576,34 @@ fn e_o41_consent_hash_and_redacted_diagnostics() {
     assert!(lines.contains("│ C1_NOTE_CANARY\n│ 面包🍞"));
     for debug in [format!("{c:?}"), format!("{s:?}"), format!("{:?}", c.notes)] {
         assert!(!debug.contains("C1_NOTE_CANARY"));
+    }
+    let asked_id = w.submitted(c.clone());
+    let request = w.mother.consent_request(asked_id).unwrap();
+    let cached = w.mother.peek(|i| i.missions[&asked_id].asking.clone());
+    let text = request.0.text();
+    assert!(request.0.message().contains("C1_NOTE_CANARY"));
+    assert!(
+        text.plain().contains("面包🍞"),
+        "native display stays complete"
+    );
+    for debug in [
+        format!("{:?}", request.0),
+        format!("{:#?}", request.0),
+        format!("{request:?}"),
+        format!("{request:#?}"),
+        format!("{cached:?}"),
+        format!("{cached:#?}"),
+        format!("{text:?}"),
+        format!("{text:#?}"),
+    ] {
+        assert!(
+            !debug.contains("C1_NOTE_CANARY"),
+            "native diagnostics redact notes"
+        );
+        assert!(
+            !debug.contains("面包"),
+            "native diagnostics redact Unicode notes"
+        );
     }
     for field in 0..6 {
         let mut changed = c.clone();
