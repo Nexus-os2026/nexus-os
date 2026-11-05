@@ -385,6 +385,18 @@ fn model_transport_findings(files: &[ProdFile]) -> Vec<String> {
 }
 
 /// E-O65: the problems with the route guard in these production files.
+/// Checks the ModelTransport impl/alias/file-count rules above, rejects
+/// qualification_seam, and checks present files for a sole false-bodied
+/// qualification_override, conversation_route_open before request.check,
+/// check_runtime, charge or exchange in VerifiedOllama::call, and
+/// conversation_route_open in LocalOllama::bind. Also flags the listed legacy
+/// route tokens and API paths.
+/// Per Ruling R-2, these source-text checks are regression tripwires for ordinary,
+/// reviewed code. Adversarially constructed code (macro-generated items, cfg
+/// tricks, unusual literal prefixes, include!, build scripts) is out of scope;
+/// independent PR review, Mother's sealed effect port and the broker's runtime
+/// authority counter that code. Known pre-existing scanner gaps are tracked for
+/// a separate hardening PR with red/green controls.
 fn route_guard_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = model_transport_findings(files);
     for f in files {
@@ -514,10 +526,14 @@ fn predicate_literal_counts(file: &ProdFile) -> [usize; 3] {
 /// tts.rs's `"openai" | "cloud"`; identifier exemptions remain EMPTY.
 ///
 /// Semantic clones using NEITHER the protected identifiers NOR these literals
-/// are explicitly out of scope. Independent guards against a second model path
-/// remain: HM model-call classification in kernel/tests/hm_m3_guards.rs,
-/// provider classification in kernel/tests/m2e_transport_guards.rs, and E-O65's
-/// route_guard_findings in this file.
+/// are explicitly out of scope. Per Ruling R-2, the identifier and exact-literal
+/// rules above are regression tripwires for ordinary, reviewed code, as are HM
+/// model-call classification, transport provider classification and E-O65.
+/// Adversarially constructed code (macro-generated items, cfg tricks, unusual
+/// literal prefixes, include!, build scripts) is out of scope; independent PR
+/// review, Mother's sealed effect port and the broker's runtime authority counter
+/// that code. Known pre-existing scanner gaps are tracked for a separate hardening
+/// PR with red/green controls.
 fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
     for file in files {
