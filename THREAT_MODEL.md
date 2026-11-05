@@ -1,109 +1,59 @@
-# NEXUS OS Threat Model
+# Mother Nexus threat model
 
-## Scope
+## Scope and assets
 
-This model covers NEXUS OS v1.0.0 runtime, connectors, desktop/CLI surfaces, messaging bridge, voice pipeline, and update path.
+This model covers Mother's coordinator, sealed port, host-owned broker door,
+native GTK4 status/Stop surface, file settlement, journal/private store, local
+inference transport, inert-page checker and advisory typed-decision core.
+It is not a security claim for removed applications, remote doors or a complete
+autonomous intelligence. Mother is Linux-first; other platforms are unvalidated.
 
-## Security Goals
+Assets are the Owner's files and private content, consent and grant bindings,
+mission budgets, cancellation state, durable evidence and honest result labels.
+The main pathway is goal → plan → governed execution → verified proof → teaching.
+No other feature is authorized by this threat model.
 
-1. Preserve integrity of governed actions.
-2. Prevent unauthorized capability use.
-3. Maintain tamper-evident audit history.
-4. Protect secrets and sensitive runtime data.
-5. Ensure updates are authentic and rollback-resistant.
+## Trust boundaries
 
-## Known Attack Surfaces
+| Threat | Required control | Limit |
+|---|---|---|
+| Prompt injection or forged approval in project/model text | Treat content as data; exact contract consent; backend-issued grants and door; revalidate before effects | A model can still give bad advice; filters and typed decisions are not authority |
+| Path escape, symlinks, stale identity or a changed candidate | Trusted canonical roots, retained identities, narrowing grants and pre-write checks | Path validation alone is not OS isolation; mutation is not a multi-file atomic transaction |
+| Stop racing publication or journal failure | Halt before recording, admission checks, durable holds, truthful uncertain settlement and retained obligations | Cancellation cannot undo effects already performed; evidence writes can still fail or block |
+| Secret leakage in records and errors | Closed evidence fields/codes, privacy canaries, separate permission-checked private content | Private content is not encrypted; low-entropy hashes can be guessed |
+| Journal tampering, torn writes or crash replay | Validate chain and state transitions; refuse poison/torn or inconsistent history; hold unfinished missions | An unkeyed chain cannot authenticate a rewritten history or detect all valid-prefix truncation |
+| External inference egress, changed model or late reply | Pinned loopback transport and local-only identity, budgets, bounded cancellation, reject late results | Conversation route is closed pending qualification; no cloud path is implicitly authorized |
+| Active content or exaggerated page claims | Bounded inert policy, facts report, independent reader, explicit not-rendered result | No rendering, viewport, layout or general semantic proof |
+| Typed advice becomes permission | Code-owned questions, strict decode, one-use slots, deterministic checks dominate advice | T1 has no live model I/O; confidence is not a safety guarantee |
+| Legacy services or code alter Mother | Isolation scans, explicit broker boundary, no old actuator/state imports | Retained libraries are not permission to resurrect old routes |
+| Hostile native desktop client spoofs consent | Backend-bound native confirmation and fail-closed missing dialogs | No authenticated secure attention against a hostile same-user desktop client |
 
-1. LLM prompt and tool invocation channel.
-2. Web ingestion (search + page reader).
-3. Messaging bridge (Telegram and future channels).
-4. Desktop control and screen capture pathways.
-5. External provider APIs (LLM/social/search).
-6. Agent package/install/update supply chain.
-7. Local config and credential storage.
+## Host and execution assumptions
 
-## Prompt Injection Mitigations
+The Owner controls the host and protects Mother's home. Root/admin, kernel
+compromise and arbitrary same-UID attacks against user-owned state are outside
+the claimed boundary. Do not describe these assumptions as enforced isolation.
+The desktop is native GTK4 and embeds no browser engine. Planned voice, messaging,
+paired devices, remote control and cloud transports are not present protections.
 
-Threats:
-- untrusted web content attempts to override system instructions
-- model output requests unauthorized tool calls
+The retained verifier's all-or-nothing isolation contract is documented in the
+[verifier boundary](docs/security/phase2-governed-verification.md). Missing Linux
+layers, packaged identity or qualified host mean unavailable, never an
+unsandboxed fallback. That foundation does not expose arbitrary process
+execution to Mother. The [broker boundary](docs/security/phase3-governed-real-world-control.md)
+separates available Mother routes from retained mechanisms.
 
-Controls:
-1. Capability checks before every tool action.
-2. Fuel budget checks to constrain abuse loops.
-3. Prompt/output defense filters in LLM connector layer.
-4. Action-level validation before execution.
-5. Audit event emission for all LLM/tool transitions.
-6. Circuit-breaker behavior for suspicious output patterns.
+## Evidence and incident handling
 
-Residual risk:
-- sophisticated context poisoning may still degrade quality even when execution is blocked.
-
-## Messaging Bridge Security Model
-
-Threats:
-- unauthorized remote command injection
-- replay of old approvals
-- device impersonation
-
-Controls:
-1. Pairing flow with one-time code and expiry.
-2. Chat/device authorization before command routing.
-3. Step-up authentication for sensitive operations.
-4. Approval workflow for authority-escalating actions.
-5. Rate limiting and command parsing validation.
-6. Auditable records of inbound/outbound bridge actions.
-
-Residual risk:
-- compromised user messaging account can still issue authenticated commands.
-
-## Screen Capture Trust Boundary
-
-Threats:
-- over-collection of sensitive UI data
-- unauthorized capture/control execution
-
-Boundary definition:
-- Screen control and capture are privileged capabilities separate from core agent logic.
-
-Controls:
-1. Explicit capability gating for capture/input actions.
-2. Action logs with immutable hash-chain audit records.
-3. Human approval path for sensitive operations.
-4. Privacy-oriented retention and telemetry defaults.
-
-Residual risk:
-- endpoint-level malware outside NEXUS OS can still exfiltrate screen data.
-
-## Update Supply Chain Integrity
-
-Threats:
-- artifact tampering
-- malicious mirror/repository content
-- rollback/freeze attacks
-
-Controls:
-1. TUF metadata verification (root, targets, snapshot, timestamp).
-2. Signature verification on release artifacts.
-3. in-toto provenance verification for package trust.
-4. Rollback/freeze protections in update checks.
-5. Canary rollout and automatic rollback on failure signals.
-6. Policy restrictions on self-patching boundaries.
-
-Residual risk:
-- compromised signing infrastructure remains high impact and requires key rotation response.
-
-## Additional Hardening Priorities
-
-1. Hardware-backed signing keys and stricter key custody.
-2. Sigstore/cosign integration for release attestations.
-3. Automated chaos drills for rollback and update recovery.
-4. Expanded abuse-detection heuristics for remote control channels.
-
-## Incident Response Baseline
-
-1. Contain: disable affected connectors or bridge routes.
-2. Verify: inspect audit chain integrity and recent events.
-3. Rotate: revoke impacted credentials/tokens.
-4. Recover: deploy signed patch through verified release path.
-5. Review: document root cause and update threat controls.
+Tests and source guards are evidence with limits, not a blanket security proof.
+Installed-build qualification and Owner physical acceptance are required for
+capability claims. See [SECURITY.md](SECURITY.md) for non-claims and private
+reporting. On an incident: Stop and revoke affected authority, preserve evidence
+without private payloads, assess integrity, rotate compromised credentials through
+the approved mechanism, and recover only under a bounded approved mission.
+Do not silently restart uncertain work or claim recovery before it is verified.
+After recovery, document the root cause and update the threat controls under
+the approved mission; an incident does not grant release or security-core
+change authority. Any future authorized update path must verify artifact
+authenticity/provenance and resist rollback/freeze attacks before deployment;
+the removed TUF/update implementation is not a present Mother protection.

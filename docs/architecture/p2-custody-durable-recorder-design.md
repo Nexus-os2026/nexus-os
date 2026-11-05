@@ -1,5 +1,14 @@
 # P2 custody: durable recorder and refusal store — design (revision R5)
 
+> **Retained test contract, not a Mother roadmap.** The historical candidate,
+> evidence paths and status statements below describe the original study, not
+> today's checkout or an available Mother capability. Several evidence paths
+> now exist only in Git history. The current roles, mission and state come from
+> `MOTHER.md` and Git. This material is retained because
+> `crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs` embeds its
+> procedure tables and crash matrix. Those contracts are unchanged. It grants
+> no production integration, host qualification or permission to resume old work.
+
 | | |
 |---|---|
 | Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1 (`34cb35d8`), P2-V1-R3B-I3-P-R2 (`8f888252`), P2-V1-R3B-I3-P-R3 (`b0f84376`), P2-V1-R3B-I3-P-R4 (`91d91e50`) and P2-V1-R3B-I3-P-R5. A module of Phase Two, not Phase Three. |

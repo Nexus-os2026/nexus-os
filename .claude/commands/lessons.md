@@ -1,1 +1,5 @@
-Read tasks/lessons.md and review all lessons learned. Then check if the current codebase has any instances where these lessons are being violated. Report findings and fix any violations found.
+Review the current Mother mission's recorded lessons and relevant failure
+history. Re-establish each finding against current source and tests. Report
+bounded risks with evidence; do not start fixes or create a new backlog beside
+the main pathway. Changes require authorization in the current mission. Keep
+private data out of notes and never alter an oracle to fit a result.

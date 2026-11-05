@@ -1,15 +1,9 @@
 repository:
-  description: "The Autonomous Digital Worker Platform — AI agents that code, post, build websites, and improve themselves. Governed, audited, verifiable."
+  description: "Mother Nexus — governed, local-first Hybrid Intelligence, being built from goals to verified proof and teaching."
   topics:
     - ai
-    - agents
     - rust
-    - tauri
-    - voice-assistant
-    - automation
-    - screen-vision
-    - llm
-    - self-improving
+    - gtk4
+    - local-first
     - governed-ai
-    - desktop-app
-    - three-js
+    - hybrid-intelligence
