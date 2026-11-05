@@ -184,8 +184,7 @@ test('nothing runs at install, and everything is root-owned and plain', () => {
   refused((f) => { f.control = f.control.replace('amd64', 'arm64'); }, /not for amd64/);
 });
 
-test('the inspection script is the one the release runs', () => {
-  const workflow = fs.readFileSync(path.join(here, '..', '..', '..', '.github', 'workflows', 'release.yml'), 'utf8');
-  assert.ok(workflow.includes('node packaging/verifier-toolchain/scripts/inspect-deb.mjs'));
-  assert.ok(workflow.includes('node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs'));
+test('the package inspection controls are run by Fast Local CI', () => {
+  const workflow = fs.readFileSync(path.join(here, '..', '..', '..', '.github', 'workflows', 'ci-fast-local.yml'), 'utf8');
+  assert.match(workflow, /^[ \t]+run: node --test packaging\/verifier-toolchain\/test\/inspect-deb\.test\.mjs$/m);
 });
