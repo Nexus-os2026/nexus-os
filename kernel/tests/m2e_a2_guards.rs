@@ -429,7 +429,7 @@ fn route_macro_findings(file: &ProdFile, tokens: &[&str]) -> Vec<String> {
 /// Resolve the named import root, including kernel-local self/super paths.
 /// A module merely named inference beneath some other root is not the kernel
 /// inference module. Globs inside the inference authority stay permitted.
-fn route_inference_import(rel: &str, path: &[&str]) -> bool {
+fn route_inference_import<'a>(rel: &'a str, scope: &[&'a str], path: &[&'a str]) -> bool {
     if path.starts_with(&["nexus_kernel", "inference"]) {
         return true;
     }
@@ -444,6 +444,7 @@ fn route_inference_import(rel: &str, path: &[&str]) -> bool {
     if !matches!(file, "lib.rs" | "main.rs" | "mod.rs") {
         module.push(file.strip_suffix(".rs").unwrap_or(file));
     }
+    module.extend_from_slice(scope);
     let mut at = 0;
     if path.first() == Some(&"self") {
         at = 1;
@@ -461,7 +462,13 @@ fn route_inference_import(rel: &str, path: &[&str]) -> bool {
 
 /// Read one use tree, preserving each group's inherited prefix. This catches
 /// grouped forms such as nexus_kernel::{inference::{self, ollama::{*}}, Other}.
-fn route_use_tree<'a>(tokens: &[&'a str], at: &mut usize, prefix: &[&'a str], rel: &str) -> bool {
+fn route_use_tree<'a>(
+    tokens: &[&'a str],
+    at: &mut usize,
+    prefix: &[&'a str],
+    rel: &'a str,
+    scope: &[&'a str],
+) -> bool {
     let mut path = prefix.to_vec();
     let mut found = false;
     if tokens.get(*at) == Some(&"::") {
@@ -472,13 +479,13 @@ fn route_use_tree<'a>(tokens: &[&'a str], at: &mut usize, prefix: &[&'a str], re
         match token {
             "*" => {
                 *at += 1;
-                return route_inference_import(rel, &path);
+                return route_inference_import(rel, scope, &path);
             }
             "{" => {
                 *at += 1;
                 while tokens.get(*at).is_some_and(|&token| token != "}") {
                     let before = *at;
-                    found |= route_use_tree(tokens, at, &path, rel);
+                    found |= route_use_tree(tokens, at, &path, rel, scope);
                     if tokens.get(*at) == Some(&",") {
                         *at += 1;
                     } else if *at == before {
@@ -511,8 +518,29 @@ fn route_inference_glob_findings(file: &ProdFile, tokens: &[&str]) -> Vec<String
         return Vec::new();
     }
     let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut modules = Vec::new();
     for (at, &token) in tokens.iter().enumerate() {
-        if token == "use" && route_use_tree(tokens, &mut (at + 1), &[], &file.rel) {
+        match token {
+            "{" => {
+                depth += 1;
+                if at >= 2 && tokens[at - 2] == "mod" {
+                    modules.push((tokens[at - 1], depth));
+                }
+            }
+            "}" => {
+                if modules.last().is_some_and(|&(_, open)| open == depth) {
+                    modules.pop();
+                }
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+        if token != "use" {
+            continue;
+        }
+        let scope: Vec<_> = modules.iter().map(|&(name, _)| name).collect();
+        if route_use_tree(tokens, &mut (at + 1), &[], &file.rel, &scope) {
             out.push(format!(
                 "{}: inference glob import outside kernel inference",
                 file.rel
