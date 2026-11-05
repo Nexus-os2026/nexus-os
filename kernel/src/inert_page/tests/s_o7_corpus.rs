@@ -1,5 +1,5 @@
 //! S-O7's corpus tie (a fixture check, not a behavioural oracle). The HTML5
-//! differential (`agents/web-builder/tests/s1a_html5_oracle.rs`) includes
+//! differential (`kernel/tests/s1a_html5_oracle.rs`) includes
 //! S-O4's generator and runs over every S-O4 page; both pin the same digest
 //! of that corpus, so the two cannot drift apart unnoticed.
 

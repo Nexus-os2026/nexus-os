@@ -4,7 +4,7 @@
 //! one pass, spans joined, each `br` read as one space), never produced by
 //! either implementation. Mother's second reader must give exactly these
 //! texts (`m3a_verifier.rs`), and so must html5ever through the S-O7 host
-//! (`agents/web-builder/tests/m3a_reader_html5.rs`, which includes this
+//! (`kernel/tests/m3a_reader_html5.rs`, which includes this
 //! file unchanged) and S1a's own `Leaf::text`.
 //!
 //! The file is self-contained, with no imports, so both crates can

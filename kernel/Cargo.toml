@@ -69,6 +69,7 @@ windows-sys = { version = "=0.61.2", features = [
 ] }
 
 [dev-dependencies]
+scraper = "0.22"
 tempfile = "3"
 serial_test = "3"
 nexus-kernel = { path = ".", features = ["test-utils"] }

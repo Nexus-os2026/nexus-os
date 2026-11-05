@@ -7,7 +7,6 @@
 
 use nexus_kernel::inert_page::*;
 use sha2::{Digest, Sha256};
-use web_builder_agent::templates::get_template;
 
 const OLD_SHA256: &str = "5f29b79a0f6f7df3d1831de3d5343c29ab4e8544b3808191e765d291a8b8387f";
 const OLD_BYTES: usize = 38_533;
@@ -50,9 +49,7 @@ fn filled(html: &str) -> String {
 
 #[test]
 fn s_o8_the_old_template_is_refused_as_shipped_and_filled() {
-    let shipped = get_template("local_business")
-        .expect("the local_business template")
-        .html;
+    let shipped = include_str!("fixtures/local_business.html");
     assert_eq!(hex::encode(Sha256::digest(shipped)), OLD_SHA256);
     assert_eq!(shipped.len(), OLD_BYTES);
     let bakery_page = filled(shipped);

@@ -2322,6 +2322,7 @@ dependencies = [
  "readability",
  "regex",
  "reqwest",
+ "scraper",
  "serde",
  "serde_json",
  "serial_test",
@@ -4632,29 +4633,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd48d1679b6858988cb96b154dda0ec5bbb09275b71db46057be37332d5477be"
 dependencies = [
  "wast",
-]
-
-[[package]]
-name = "web-builder-agent"
-version = "10.6.0"
-dependencies = [
- "base64",
- "chrono",
- "hex",
- "indexmap",
- "nexus-connectors-llm",
- "nexus-crypto",
- "nexus-kernel",
- "nexus-sdk",
- "nix",
- "regex",
- "scraper",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
 ]
 
 [[package]]
