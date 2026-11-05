@@ -133,7 +133,7 @@ ssize_t pwrite64(int fd, const void *data, size_t size, off64_t offset) {
         strstr(path, "/p3-evidence/evidence.sqlite3")) boundary("evidence", path, NULL, 0);
     /* Execute is held before its final check. Only emergency recording can
      * reach this evidence write until that owned execution is released. */
-    if ((mode("before-publication") || mode("held-read-error")) && atomic_load(&held) &&
+    if ((mode("before-publication") || mode("held-read-error") || mode("echo-hold")) && atomic_load(&held) &&
         path_of(fd, path, sizeof(path)) && strstr(path, "/p3-evidence/evidence.sqlite3") &&
         !atomic_exchange(&recording, 1)) receipt("stop-recording", path, NULL, 0);
     return real(fd, data, size, offset);
@@ -145,6 +145,8 @@ ssize_t write(int fd, const void *data, size_t size) {
      * unrelated result/status write happens to be draining when it arms. */
     if (fd == STDOUT_FILENO && mode("display") &&
         memmem(data, size, "Answer code: ", 13)) boundary("display", "stdout", data, size);
+    if (fd == STDOUT_FILENO && mode("echo-hold") &&
+        size == 7 && !memcmp(data, "mistake", 7)) boundary("echo-hold", "stdout", data, size);
     if (fd == STDOUT_FILENO && mode("write-fail")) { errno = EIO; return -1; }
     if (fd == STDOUT_FILENO && mode("final-write-fail") &&
         memmem(data, size, "SESSION CLOSED recorded", 23)) { errno = EIO; return -1; }
