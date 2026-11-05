@@ -601,7 +601,9 @@ resource/recording/acknowledgement accounting, an atomic seal, durable Mother
 then primary end records, terminal restoration and acknowledged final delivery.
 After sealing, retained handles refuse and ingress returns `SessionEnded`.
 
-`SESSION CLOSED recorded` is the final receipt; zero exit additionally requires
+While finalization is pending, the result says “closing; the final close status
+follows.” It does not claim clean closure. `SESSION CLOSED recorded` is the
+durable-end receipt; zero exit additionally requires
 its successful delivery and renderer finalization before the same deadline.
 A blocked append remains Unknown. Failure can leave one or both end records
 durable while the full close fails; their statuses are reported separately.

@@ -1230,8 +1230,10 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let modes_ok = terminal.restore_modes(deadline);
     if let Some(seal) = seal {
         if modes_ok {
+            // Both end records are durable. Delivery, renderer finalization
+            // and the seal's final deadline check still have to succeed.
             let delivered = screen.delivered(
-                "RESULT: closed cleanly.\nSESSION CLOSED recorded\n",
+                "RESULT: closing; the final close status follows.\nSESSION CLOSED recorded\n",
                 deadline,
             );
             let finished = terminal.finish(deadline);
