@@ -2066,26 +2066,31 @@ fn session_continuation_native_preparation_uses_the_actual_approval_scope() {
     assert!(f.propose_content("stale.txt", "stale\n").is_err());
 }
 
+fn close_opening(f: &Fixture) -> (std::path::PathBuf, String) {
+    use sha2::{Digest, Sha256};
+    // Existing canonical schema, independently prepared administrative
+    // Mother opening. It creates no operational Mother authority.
+    let previous = "0".repeat(64);
+    let event = r#"{"event":"session_opened"}"#;
+    let mut hash = Sha256::new();
+    hash.update(b"nexus-mother-journal-v2\n");
+    for part in [previous.as_bytes(), &[2], &0u64.to_be_bytes(), &0u64.to_be_bytes(), event.as_bytes()] {
+        hash.update((part.len() as u64).to_be_bytes()); hash.update(part);
+    }
+    let hash = hex::encode(hash.finalize());
+    let line = format!("{{\"format\":2,\"seq\":0,\"prev\":\"{previous}\",\"mission\":0,\"event\":{event},\"hash\":\"{hash}\"}}\n");
+    let path = f._root.0.path().join("mother-journal.jsonl");
+    std::fs::write(&path, &line).unwrap();
+    std::fs::File::open(&path).unwrap().sync_all().unwrap();
+    std::fs::File::open(f._root.0.path()).unwrap().sync_all().unwrap();
+    (path, line)
+}
+
 #[test]
 fn session_final_seal_orders_against_ingress_and_reassesses_the_exact_event() {
-    use sha2::{Digest, Sha256};
     for interferes in [false, true] {
         let f = Fixture::new();
-        // Existing canonical schema, independently prepared administrative
-        // Mother opening. It creates no operational Mother authority.
-        let previous = "0".repeat(64);
-        let event = r#"{"event":"session_opened"}"#;
-        let mut hash = Sha256::new();
-        hash.update(b"nexus-mother-journal-v2\n");
-        for part in [previous.as_bytes(), &[2], &0u64.to_be_bytes(), &0u64.to_be_bytes(), event.as_bytes()] {
-            hash.update((part.len() as u64).to_be_bytes()); hash.update(part);
-        }
-        let hash = hex::encode(hash.finalize());
-        let line = format!("{{\"format\":2,\"seq\":0,\"prev\":\"{previous}\",\"mission\":0,\"event\":{event},\"hash\":\"{hash}\"}}\n");
-        let path = f._root.0.path().join("mother-journal.jsonl");
-        std::fs::write(&path, &line).unwrap();
-        std::fs::File::open(&path).unwrap().sync_all().unwrap();
-        std::fs::File::open(f._root.0.path()).unwrap().sync_all().unwrap();
+        let (path, line) = close_opening(&f);
         let ingress = f._session.ingress();
         let quit = ingress.accept(CommandKind::Quit, 2).unwrap();
         f._session.settle_close_authority(&quit).unwrap();
@@ -2110,5 +2115,37 @@ fn session_final_seal_orders_against_ingress_and_reassesses_the_exact_event() {
             drop(seal);
         } else { drop(sealed.unwrap()); }
         assert_eq!(f._session.state(), crate::host_session::SessionState::ClosedUnclean, "dropping the finalizer cannot manufacture either end or delivery");
+    }
+}
+
+#[test]
+fn session_close_keeps_private_resource_and_exact_ack_debt_independent() {
+    for private_debt in [false, true] {
+        let f = Fixture::new();
+        let (path, opening) = close_opening(&f);
+        let expected_file = if private_debt {
+            let path = f._root.0.path().join("retained-private-temp");
+            let obligation = f.door.context().reserve_private(&path, None).unwrap();
+            std::fs::write(&path, b"owned private material").unwrap();
+            obligation.observe_created(std::fs::metadata(&path).unwrap()).unwrap();
+            drop(obligation);
+            path
+        } else {
+            let id = f.pending();
+            f.approve(id).unwrap();
+            f._dirs.0.path().join("selected/workspace/session.txt")
+        };
+        let before = std::fs::read(&expected_file).unwrap();
+        let request = f._session.ingress().accept(CommandKind::Quit, 3).unwrap();
+        let inventory = f._session.settle_close_resources(&request).unwrap();
+        assert!(inventory.entries.iter().all(|e| e.discharged));
+        f._session.settle_close_authority(&request).unwrap();
+        let resources = f._session.resource_obligations().unwrap();
+        if private_debt { assert_eq!(resources.private_unresolved, 1); }
+        else { assert_eq!(resources.unresolved, 0, "native resource closure does not discharge the missing exact Mother acknowledgement"); }
+        assert!(f._session.seal_close(&request).is_err(), "independent {} debt must refuse seal", if private_debt { "private resource" } else { "exact acknowledgement" });
+        assert_eq!(std::fs::read(&expected_file).unwrap(), before);
+        assert_eq!(std::fs::read_to_string(path).unwrap(), opening);
+        assert!(!f.primary.store().rows().iter().any(|r| r.phase == "session_closed"));
     }
 }
