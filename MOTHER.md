@@ -119,8 +119,8 @@ physical evidence, never on dates.
 **Mission sequencing:** use the latest Owner-approved mission and roadmap,
 not an old phase checklist. Each mission states its user benefit, agency rung,
 guardrail and evidence. Implementation on `main` is not physical acceptance.
-Gate A and the first end-to-end mission must be corroborated on the intended
-installed build.
+Gate A physical tests, the Mother screen and the first end-to-end mission must
+be corroborated on the same intended installed build.
 
 **Result labels:** NOT TESTED · OBSERVED PASS · CORROBORATED PASS · FAIL ·
 BLOCKED · INCONCLUSIVE. Only CORROBORATED PASS on the intended build opens a

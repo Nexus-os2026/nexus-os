@@ -21,6 +21,8 @@ inspects the candidate and runs CI on the exact SHA. Follow
 [CONTRIBUTING.md](CONTRIBUTING.md) and the mission's explicit Git permissions;
 permission to commit does not imply permission to push or integrate.
 
+Before merging into `main`, all required jobs in `.github/workflows/ci.yml` and `.github/workflows/audit.yml` must pass on the exact candidate SHA. Fast Local CI cannot replace these gates.
+
 ## Repository and communication
 
 The authoritative repository is `Nexus-os2026/nexus-os` on GitHub. Always use

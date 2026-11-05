@@ -377,6 +377,10 @@ Do not implement repair work directly on `main`.
 
 Do not merge to `main` unless explicitly authorized.
 
+`main` may advance only through an explicit Owner-approved fast-forward integration.
+
+Before merging into `main`, all required jobs in `.github/workflows/ci.yml` and `.github/workflows/audit.yml` must pass on the exact candidate SHA. Fast Local CI cannot replace these gates.
+
 Use bounded repair branches/worktrees.
 
 Prefer one root cause per repair commit.
@@ -447,6 +451,12 @@ The historical closure refs `rebuild/phase0-trust-boundary`,
 `evidence/phase1-closure` must not move. No mission, report or agent can
 authorize moving them. Evidence for later work belongs on a new designated
 ref. Removing the old operational snapshot does not change these protections.
+
+`rebuild/phase2-governed-verification` and `evidence/phase2-closure` are also immutable historical refs. Neither may move; subsequent work and evidence belong on new refs.
+
+The Owner-frozen Phase Three engineering identity is commit
+`51af45efc70dfe2551db29991f074c4a00d836de`. Later documentation or integration
+must not redefine it or expand its recorded claims.
 
 ---
 
@@ -541,6 +551,10 @@ CI is an evidence system.
 It is not a box-checking exercise.
 
 ## 11.1 Required Behavior
+
+Before merging into `main`, all required jobs in `.github/workflows/ci.yml` and `.github/workflows/audit.yml` must pass on the exact candidate SHA. Fast Local CI cannot replace these gates.
+
+Deferred portability CI is additional evidence, not a substitute for these gates.
 
 After an authoritative push:
 

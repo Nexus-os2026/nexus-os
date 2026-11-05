@@ -85,9 +85,11 @@ Forbidden unless explicitly authorized:
 - destructive worktree/branch deletion.
 
 Use the mission's branch/worktree.
-Do not modify `main`; it advances only through an explicit Owner-approved integration.
+Do not modify `main` directly.
+`main` may advance only through an explicit Owner-approved fast-forward integration.
 Never move the closure refs `rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding` and `evidence/phase1-closure`: they are immutable. Evidence for a future phase goes on a new Owner-approved ref.
-Use `--ff-only` for authoritative integration when instructed.
+Never move `rebuild/phase2-governed-verification` or `evidence/phase2-closure` either; subsequent work and evidence belong on new refs.
+Use `--ff-only` for authorized authoritative integration.
 Do not merge validation PRs unless explicitly authorized.
 
 Provenance:
@@ -182,6 +184,12 @@ Do not stop merely because context is getting low. Preserve state using Git and 
 
 Do not create ad-hoc repository state files unless authorized.
 Do not resume stale assumptions from an old Claude session; re-establish state from Git and the current mission.
+
+Use plain-text mission prompts, never Bash scripts as prompts. Run required
+full-workspace tests through the approved terminal or CI runner, not inside a
+Claude Code session unless the current Owner-approved mission explicitly requires
+it; report the actual runner and result. The mission's explicit validation
+instructions take precedence over older session/tool restrictions.
 
 ## CLAUDE.md maintenance
 Keep this file concise and durable. Do not store current checkpoint SHA, current branch/worktree, transient CI failures, changing roadmap status, competitor/marketing claims, or launch goals.

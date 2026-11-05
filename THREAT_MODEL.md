@@ -52,3 +52,8 @@ reporting. On an incident: Stop and revoke affected authority, preserve evidence
 without private payloads, assess integrity, rotate compromised credentials through
 the approved mechanism, and recover only under a bounded approved mission.
 Do not silently restart uncertain work or claim recovery before it is verified.
+After recovery, document the root cause and update the threat controls under
+the approved mission; an incident does not grant release or security-core
+change authority. Any future authorized update path must verify artifact
+authenticity/provenance and resist rollback/freeze attacks before deployment;
+the removed TUF/update implementation is not a present Mother protection.

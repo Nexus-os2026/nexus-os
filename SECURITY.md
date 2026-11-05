@@ -106,6 +106,16 @@ checkpoints and their lockfiles are not current shippable bytes; their historica
 evidence is not reopened or redefined by this cleanup. Retired release,
 installer and update mechanisms are not supported Mother distribution paths.
 
+The Phase Two checkpoint `rebuild/phase2-governed-verification` records
+`dc52fadba078f2cddd6b51e26dd1a38db1ffedcc`; its completion evidence
+`evidence/phase2-closure` records `4966a295e395703fc8ff823413b63a32f3d069e0`.
+`rebuild/phase2-governed-verification` and `evidence/phase2-closure` are also immutable historical refs. Neither may move; subsequent work and evidence belong on new refs.
+All six protected historical refs are listed in AGENTS.md §7.5.
+The Owner's Phase Three completion record freezes the engineering identity at
+`51af45efc70dfe2551db29991f074c4a00d836de`, with its recorded limitations.
+Later documentation and integration do not redefine that identity or authorize
+production release, deployment or unrestricted operation.
+
 ## Dependencies and releases
 
 Use `Cargo.toml`, `Cargo.lock`, `deny.toml`, the audit script and the required

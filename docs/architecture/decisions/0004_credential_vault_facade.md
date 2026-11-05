@@ -11,8 +11,8 @@ not an effect grant. Do not expose this facade through Mother, reconstruct
 removed commands or treat its legacy audit context as capability enforcement.
 
 The SQLite backend uses an existing configured encryption key and identity-bound
-authenticated data. Legacy unbound rows are refused on the read path; a separate
-planned upgrade handles migration. Missing trusted key/configuration must fail;
+authenticated data. Legacy unbound rows are refused on the read path; the existing one-time upgrade in `kernel::startup::run_migrations` verifies the configured key and commits identity-bound replacements and the completion marker in one transaction.
+Missing trusted key/configuration must fail;
 there is no permission to create keys, roots or host services on a lookup failure.
 Read actual startup/configuration code for the build under review rather than
 assuming the original bootstrap sketch is current behavior.
