@@ -1,9 +1,9 @@
 //! M3-O6 (design M3 §5.3): the Mother reader's independently authored
 //! expected-text fixtures (`mother/src/oracles/m3a_reader_fixtures.rs`,
 //! included unchanged) checked against the existing HTML5 oracle. html5ever
-//! (0.29.1, through `scraper`; this crate is only the host, as for S-O7,
-//! and no Cargo file changes) parses each fixture page with zero parse
-//! errors in no-quirks mode, and its title text and each leaf element's
+//! (0.29.1, through `scraper`; hosted as a kernel integration test, as for
+//! S-O7) parses each fixture page with zero parse errors in no-quirks mode,
+//! and its title text and each leaf element's
 //! text (its text descendants joined, `br` as one space), tag for tag, are
 //! exactly the hand-written texts. The kernel accepts each page, and its
 //! own `Leaf::text` agrees too.
@@ -13,10 +13,10 @@
 use nexus_kernel::inert_page::*;
 use scraper::{ElementRef, Html, Node};
 
-#[path = "../../../mother/src/oracles/m3a_reader_fixtures.rs"]
+#[path = "../../mother/src/oracles/m3a_reader_fixtures.rs"]
 mod reader_fixtures;
 
-const REFERENCE: &str = include_str!("../../../kernel/src/inert_page/fixtures/reference.html");
+const REFERENCE: &str = include_str!("../src/inert_page/fixtures/reference.html");
 /// The leaf elements of S1a's grammar.
 const LEAVES: [&str; 6] = ["h1", "h2", "h3", "p", "li", "address"];
 

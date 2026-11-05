@@ -162,7 +162,7 @@ static LOCAL_BUSINESS: Template = Template {
     name: "Local Business",
     description:
         "Warm inviting local business site with services, gallery, testimonials, map, and hours",
-    html: include_str!("local_business.html"),
+    html: include_str!("../../../../kernel/tests/fixtures/local_business.html"),
     sections: &[
         "hero",
         "services",

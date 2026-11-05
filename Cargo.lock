@@ -2322,6 +2322,7 @@ dependencies = [
  "readability",
  "regex",
  "reqwest",
+ "scraper",
  "serde",
  "serde_json",
  "serial_test",

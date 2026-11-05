@@ -1,5 +1,5 @@
 //! S-O7 (design v2 §8): the HTML5 differential. html5ever (0.29.1, through
-//! `scraper`; this crate is only the host, and no Cargo file changes) parses
+//! `scraper`; hosted as a kernel integration test) parses
 //! the reference page, every S-O4 page and the inline example
 //! `<p><strong>Open</strong> <em>today</em></p>`, and must build exactly the
 //! kernel's typed tree:
@@ -26,7 +26,7 @@ use sha2::{Digest, Sha256};
 
 /// S-O4's generator, included unchanged from the kernel's oracle, so this
 /// test parses exactly S-O4's pages (their digest is pinned on both sides).
-#[path = "../../../kernel/src/inert_page/tests/s_o4_round_trip.rs"]
+#[path = "../src/inert_page/tests/s_o4_round_trip.rs"]
 mod s_o4_round_trip;
 
 /// The kernel oracles' local generator (`kernel/src/inert_page/tests/mod.rs`),
@@ -58,7 +58,7 @@ impl Rng {
     }
 }
 
-const REFERENCE: &str = include_str!("../../../kernel/src/inert_page/fixtures/reference.html");
+const REFERENCE: &str = include_str!("../src/inert_page/fixtures/reference.html");
 const S_O4_SEED: u64 = 0x5EED_0004;
 const S_O4_PAGES: usize = 2_000;
 /// The same digest as `kernel/src/inert_page/tests/s_o7_corpus.rs`.
