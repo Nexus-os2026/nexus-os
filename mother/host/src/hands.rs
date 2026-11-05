@@ -1016,6 +1016,9 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             if let Some(reason) = command.refusal {
                 let subject = if command.name == "undo" { "UNDO " } else { "" };
                 screen.emit(&format!("{subject}REFUSED {reason}\n"));
+                if reason == "unknown_command" {
+                    screen.emit("Valid commands: run, approve, status, evidence, detail, stop, undo, cleanup, quit\n");
+                }
             } else if command.name == "status" {
                 let current = session.stop_snapshot();
                 let receipt = screen.stop.receipt();
