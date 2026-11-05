@@ -496,6 +496,28 @@ pub struct CleanupRetry {
     pub still_owed: usize,
 }
 
+/// Current-process inventory observations, never reconstructed capabilities.
+#[derive(Clone, Debug, Default)]
+pub struct SessionInventory {
+    pub entries: Vec<SessionResourceFacts>,
+}
+#[derive(Clone, Debug)]
+pub struct SessionResourceFacts {
+    pub request: u64,
+    pub preparing: bool,
+    pub in_flight: bool,
+    pub uncertain: bool,
+    pub current_undo: bool,
+    pub returned: bool,
+    pub discharged: bool,
+    pub staging_absent: bool,
+    pub private_finalization_established: bool,
+    pub parent_synced: bool,
+    pub grants_closed: bool,
+    pub cleanup_recorded: bool,
+    pub intentionally_retained: bool,
+}
+
 /// A file of a finding: its path digest and the backend-random id of its
 /// temporary name, as recorded.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -577,6 +599,35 @@ impl Kernel {
 struct Backend {
     ledger: LedgerFile,
     staging: StagingParent,
+    parent: std::fs::File,
+}
+#[cfg(target_os = "linux")]
+impl Backend {
+    fn verify_parent(&self) -> Result<(), AuthorityError> {
+        use std::os::unix::fs::MetadataExt;
+        let named = std::fs::symlink_metadata(self.staging.path())
+            .map_err(|_| AuthorityError::TargetChanged)?;
+        let retained = self
+            .parent
+            .metadata()
+            .map_err(|_| AuthorityError::TargetChanged)?;
+        if !named.is_dir() || (named.dev(), named.ino()) != (retained.dev(), retained.ino()) {
+            return Err(AuthorityError::TargetChanged);
+        }
+        Ok(())
+    }
+    fn absent(&self, name: &str) -> Result<bool, AuthorityError> {
+        use std::os::fd::AsRawFd;
+        self.verify_parent()?;
+        let path = PathBuf::from(format!("/proc/self/fd/{}", self.parent.as_raw_fd())).join(name);
+        let absent = match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+            Ok(_) => false,
+            Err(_) => return Err(AuthorityError::TargetChanged),
+        };
+        self.verify_parent()?;
+        Ok(absent)
+    }
 }
 
 /// Open (creating owner-only) `<runtime root>/files`, its ledger and its
@@ -600,9 +651,18 @@ fn open_backend(runtime_root: &Path) -> Result<Backend, AuthorityError> {
     {
         return Err(unavailable());
     }
+    let ledger = LedgerFile::open(&dir.join(LEDGER_FILE)).map_err(|_| unavailable())?;
+    let staging = StagingParent::within(&dir).map_err(|_| unavailable())?;
+    use std::os::unix::fs::OpenOptionsExt;
+    let parent = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(staging.path())
+        .map_err(|_| unavailable())?;
     Ok(Backend {
-        ledger: LedgerFile::open(&dir.join(LEDGER_FILE)).map_err(|_| unavailable())?,
-        staging: StagingParent::within(&dir).map_err(|_| unavailable())?,
+        ledger,
+        staging,
+        parent,
     })
 }
 
@@ -618,6 +678,10 @@ struct RunResource {
     abandoned: AtomicBool,
     retired: AtomicBool,
     uncertain: AtomicBool,
+    preparing: AtomicBool,
+    finalized: AtomicBool,
+    reservation: crate::host_session::ResourceReservation,
+    proof: Mutex<ResourceProof>,
     #[cfg(test)]
     hooks: Arc<crate::test_hooks::Hooks>,
 }
@@ -635,9 +699,218 @@ struct NativeGrants {
         WorkspaceGrantId,
         WorkspaceBinding,
     )>,
+    undo: Vec<Arc<UndoGrantResource>>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Default)]
+struct ResourceProof {
+    staging_absent: bool,
+    private_absent_or_retained: bool,
+    parent_synced: bool,
+    grants_closed: bool,
+    cleanup_recorded: bool,
+    intentionally_retained: bool,
+}
+
+#[cfg(target_os = "linux")]
+struct UndoGrantResource {
+    registry: Arc<WorkspaceAuthorityRegistry>,
+    grant: Mutex<Option<(WorkspaceGrantId, WorkspaceBinding)>>,
+    reservation: crate::host_session::ResourceReservation,
+    cell: HaltCell,
+    closed: AtomicBool,
+}
+
+#[cfg(target_os = "linux")]
+fn grant_closed(
+    registry: &WorkspaceAuthorityRegistry,
+    id: WorkspaceGrantId,
+    binding: WorkspaceBinding,
+) -> bool {
+    use nexus_kernel::workspace_authority::WorkspaceAuthorityError;
+    matches!(
+        registry.resolve(id, binding),
+        Err(WorkspaceAuthorityError::RevokedGrant | WorkspaceAuthorityError::ExpiredGrant)
+    )
+}
+
+#[cfg(target_os = "linux")]
+impl UndoGrantResource {
+    fn close(&self) -> bool {
+        let Ok(grant) = self.grant.lock() else {
+            self.cell.fail_session();
+            self.reservation.uncertain();
+            return false;
+        };
+        let closed = grant.is_none_or(|(id, binding)| {
+            let _ = self.registry.revoke(id, binding);
+            grant_closed(&self.registry, id, binding)
+        });
+        if closed {
+            self.closed.store(true, Ordering::SeqCst);
+            self.reservation.release();
+        }
+        closed
+    }
+}
+
+/// A construction reservation already lives in the inventory. Every early
+/// return/unwind marks that same entry; this guard never owns a native object.
+#[cfg(target_os = "linux")]
+struct Preparing(Option<Arc<RunResource>>);
+#[cfg(target_os = "linux")]
+impl Drop for Preparing {
+    fn drop(&mut self) {
+        if let Some(entry) = &self.0 {
+            entry.preparing.store(false, Ordering::SeqCst);
+            entry.abandoned.store(true, Ordering::SeqCst);
+            if std::thread::panicking() {
+                entry.uncertain.store(true, Ordering::SeqCst);
+                entry.reservation.uncertain();
+                entry.binding.cell.fail_session();
+            }
+        }
+    }
 }
 #[cfg(target_os = "linux")]
 impl RunResource {
+    fn narrow_grants(&self) -> bool {
+        let Ok(grants) = self.grants.lock() else {
+            self.binding.cell.fail_session();
+            self.reservation.uncertain();
+            return false;
+        };
+        let mut closed = true;
+        for (registry, id, binding) in grants.read.iter().chain(grants.write.iter()) {
+            let _ = registry.revoke(*id, *binding);
+            closed &= grant_closed(registry, *id, *binding);
+        }
+        for grant in &grants.undo {
+            closed &= grant.close();
+        }
+        closed
+    }
+
+    fn prove_finalization(
+        &self,
+        backend: &Backend,
+        request: &HaltCell,
+    ) -> Result<bool, AuthorityError> {
+        if self.uncertain.load(Ordering::SeqCst) || self.preparing.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
+        let native = self.native.lock().map_err(|_| {
+            self.binding.cell.fail_session();
+            self.reservation.uncertain();
+            AuthorityError::Halted
+        })?;
+        let mut proof = self.proof.lock().map_err(|_| AuthorityError::Halted)?;
+        proof.grants_closed = self.narrow_grants();
+        if let Some(run) = native.as_ref() {
+            if !run.cleanup_owed().is_empty()
+                || run.apply_state() == ApplyState::RecoveryRequired
+                || matches!(
+                    run.state(),
+                    nexus_kernel::coding_run::RunState::RecoveryRequired(_)
+                )
+            {
+                return Ok(false);
+            }
+            let records = backend
+                .ledger
+                .store()
+                .verified_records(run.id().ledger_key())
+                .map_err(ledger_error)?;
+            let mut allocated = false;
+            let mut allocation_attempted = false;
+            let mut staging_closed = false;
+            let mut discard_recorded = false;
+            let mut applied_recorded = false;
+            for record in &records {
+                match record.event_kind.as_str() {
+                    "op.prepared" => {
+                        let value: serde_json::Value = serde_json::from_str(&record.payload)
+                            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+                        allocation_attempted |= value["op"] == "allocate_staging";
+                    }
+                    "run.granted" => {
+                        allocated = true;
+                        let value: serde_json::Value = serde_json::from_str(&record.payload)
+                            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+                        let id: WorkspaceGrantId =
+                            serde_json::from_value(value["staging_grant"].clone())
+                                .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+                        let grants = self.grants.lock().map_err(|_| AuthorityError::Halted)?;
+                        // The verified record is used only for a read-only
+                        // closure observation in the original registry/binding.
+                        // It is never converted into deletion authority.
+                        staging_closed =
+                            grants.read.as_ref().is_some_and(|(registry, _, binding)| {
+                                grant_closed(registry, id, *binding)
+                            });
+                    }
+                    "staging.discarded" => {
+                        let value: serde_json::Value = serde_json::from_str(&record.payload)
+                            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+                        discard_recorded = value["status"] == "Discarded";
+                    }
+                    "apply.completed" => applied_recorded = true,
+                    _ => {}
+                }
+            }
+            proof.staging_absent = backend.absent(&run.id().to_string())?;
+            proof.intentionally_retained =
+                run.apply_state() == ApplyState::Applied && applied_recorded;
+            proof.private_absent_or_retained =
+                proof.intentionally_retained || backend.absent(&format!("{}.apply", run.id()))?;
+            proof.grants_closed &= !allocated || staging_closed;
+            proof.cleanup_recorded = !allocation_attempted || discard_recorded;
+            if allocation_attempted && run.cleanup_status() != CleanupStatus::Discarded {
+                return Ok(false);
+            }
+        } else {
+            // No native run was returned, hence no staging call could start.
+            // Its read-grant reservation is still independently closed above.
+            proof.staging_absent = true;
+            proof.private_absent_or_retained = true;
+            proof.cleanup_recorded = true;
+        }
+        if !proof.staging_absent
+            || !proof.private_absent_or_retained
+            || !proof.grants_closed
+            || !proof.cleanup_recorded
+        {
+            return Ok(false);
+        }
+        // Absence and a best-effort kernel record are not durable removal.
+        // This is a separate normal-housekeeping call under the same request.
+        backend.verify_parent()?;
+        #[cfg(test)]
+        self.hooks.fire("session.before.finalization_sync");
+        self.binding.cell.admit_recovery(Some(request), true)?;
+        #[cfg(test)]
+        self.hooks.fire("session.entered.finalization_sync");
+        backend
+            .parent
+            .sync_all()
+            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+        backend.verify_parent()?;
+        proof.parent_synced = true;
+        if !self.finalized.load(Ordering::SeqCst) {
+            self.binding
+                .control
+                .upgrade()
+                .ok_or(AuthorityError::Halted)?
+                .authority()
+                .runs()
+                .release(self.binding.run)?;
+            self.finalized.store(true, Ordering::SeqCst);
+            self.reservation.release();
+        }
+        Ok(true)
+    }
+
     fn admit(&self) -> Result<(), AuthorityError> {
         let commitment = self.commitment.lock().map_err(|_| {
             self.binding.cell.fail_session();
@@ -742,6 +1015,7 @@ impl Drop for CodingRun {
             entry.abandoned.store(true, Ordering::SeqCst);
             if std::thread::panicking() {
                 entry.uncertain.store(true, Ordering::SeqCst);
+                entry.reservation.uncertain();
                 entry.binding.cell.fail_session();
             }
         }
@@ -760,6 +1034,7 @@ impl Drop for NativeBorrow<'_> {
     fn drop(&mut self) {
         if std::thread::panicking() {
             self.resource.uncertain.store(true, Ordering::SeqCst);
+            self.resource.reservation.uncertain();
             self.resource.binding.cell.fail_session();
         }
     }
@@ -767,6 +1042,50 @@ impl Drop for NativeBorrow<'_> {
 
 #[cfg(target_os = "linux")]
 impl CodingRun {
+    fn undo_grant(
+        &self,
+        kernel: &Kernel,
+        binding: WorkspaceBinding,
+        cell: Option<&HaltCell>,
+        _shared: &Shared,
+    ) -> Result<(ProjectGrant, Option<Arc<UndoGrantResource>>), AuthorityError> {
+        let Self::Host(entry) = self else {
+            #[cfg(test)]
+            _shared.fire("session.entered.undo_grant");
+            return kernel
+                .projects
+                .grant_for_apply(kernel.project.id, binding)
+                .map(|grant| (grant, None))
+                .map_err(project_error);
+        };
+        let request = cell.ok_or(AuthorityError::Halted)?;
+        if !entry.binding.cell.same(request) {
+            return Err(AuthorityError::Halted);
+        }
+        let mut grants = entry.grants.lock().map_err(|_| {
+            entry.binding.cell.fail_session();
+            AuthorityError::Halted
+        })?;
+        let reserved = Arc::new(UndoGrantResource {
+            registry: kernel.authority.clone(),
+            grant: Mutex::new(None),
+            reservation: request.reserve_resource()?,
+            cell: request.clone(),
+            closed: AtomicBool::new(false),
+        });
+        grants.undo.push(reserved.clone());
+        let mut slot = reserved.grant.lock().map_err(|_| AuthorityError::Halted)?;
+        entry.binding.cell.admit_recovery(Some(request), false)?;
+        #[cfg(test)]
+        _shared.fire("session.entered.undo_grant");
+        let grant = kernel
+            .projects
+            .grant_for_apply(kernel.project.id, binding)
+            .map_err(project_error)?;
+        *slot = Some((grant.grant_id(), grant.binding()));
+        drop(slot);
+        Ok((grant, Some(reserved)))
+    }
     fn write_grant(
         &self,
         kernel: &Kernel,
@@ -801,6 +1120,7 @@ impl CodingRun {
                 let native = entry.native.lock().unwrap_or_else(|poison| {
                     entry.binding.cell.fail_session();
                     entry.uncertain.store(true, Ordering::SeqCst);
+                    entry.reservation.uncertain();
                     poison.into_inner()
                 });
                 observe(native.as_ref().expect("constructed inventory reference"))
@@ -822,6 +1142,7 @@ impl CodingRun {
                     Err(_) => {
                         entry.binding.cell.fail_session();
                         entry.uncertain.store(true, Ordering::SeqCst);
+                        entry.reservation.uncertain();
                         return Err(refused());
                     }
                 };
@@ -1157,6 +1478,15 @@ impl Shared {
             .authority()
             .runs()
             .check_retaining(binding.run, &view.agent, true)?;
+        let reservation = match binding.cell.reserve_resource() {
+            Ok(reservation) => reservation,
+            Err(error) => {
+                if control.authority().runs().release(binding.run).is_err() {
+                    binding.cell.fail_session();
+                }
+                return Err(error);
+            }
+        };
         let resource = Arc::new(RunResource {
             native: Mutex::new(None),
             binding,
@@ -1165,6 +1495,10 @@ impl Shared {
             abandoned: AtomicBool::new(false),
             retired: AtomicBool::new(false),
             uncertain: AtomicBool::new(false),
+            preparing: AtomicBool::new(true),
+            finalized: AtomicBool::new(false),
+            reservation,
+            proof: Mutex::new(ResourceProof::default()),
             #[cfg(test)]
             hooks: self.hooks.clone(),
         });
@@ -1358,7 +1692,7 @@ fn owes(run: &CodingRun) -> bool {
 /// dropped effect only hands its run over (H1 decision, requirement 2).
 #[cfg(target_os = "linux")]
 fn discard(run: &mut CodingRun, _shared: &Shared, cell: Option<&HaltCell>) -> bool {
-    if run.cleanup_status() == CleanupStatus::Discarded {
+    if run.cleanup_status() == CleanupStatus::Discarded && !run.host() {
         return true;
     }
     #[cfg(test)]
@@ -1924,6 +2258,7 @@ struct IssuedGrant<'a> {
     run: String,
     armed: bool,
     shared: &'a Shared,
+    host: Option<Arc<UndoGrantResource>>,
 }
 
 #[cfg(target_os = "linux")]
@@ -1941,6 +2276,7 @@ impl<'a> IssuedGrant<'a> {
             run,
             armed: true,
             shared,
+            host: None,
         }
     }
 
@@ -1959,6 +2295,9 @@ impl<'a> IssuedGrant<'a> {
             return true;
         }
         let closed = self.closure();
+        if self.host.is_some() {
+            return closed;
+        }
         if !closed {
             self.shared
                 .unclosed
@@ -1974,6 +2313,9 @@ impl<'a> IssuedGrant<'a> {
         if self.shared.closure_fails.load(Ordering::SeqCst) {
             return false;
         }
+        if let Some(host) = &self.host {
+            return host.close();
+        }
         self.registry.revoke(self.id, self.binding).is_ok()
             || self.registry.resolve(self.id, self.binding).is_err()
     }
@@ -1982,6 +2324,13 @@ impl<'a> IssuedGrant<'a> {
 #[cfg(target_os = "linux")]
 impl Drop for IssuedGrant<'_> {
     fn drop(&mut self) {
+        if let Some(host) = &self.host {
+            if self.armed {
+                host.reservation.uncertain();
+                host.cell.fail_session();
+            }
+            return;
+        }
         let _ = self.settle();
     }
 }
@@ -2817,6 +3166,204 @@ fn selectable(_: &Path, _: &Exclusions, _: &Path) -> Result<Digest, AuthorityErr
 }
 
 impl Files {
+    #[cfg(target_os = "linux")]
+    pub(crate) fn session_inventory(&self) -> Result<SessionInventory, AuthorityError> {
+        let current = self
+            .shared
+            .slot
+            .lock()
+            .map_err(|_| AuthorityError::Halted)?;
+        let inventory = self
+            .shared
+            .inventory
+            .lock()
+            .map_err(|_| AuthorityError::Halted)?;
+        let mut entries = Vec::with_capacity(inventory.len());
+        for entry in inventory.iter() {
+            let in_flight = match entry.native.try_lock() {
+                Ok(_) => false,
+                Err(std::sync::TryLockError::WouldBlock) => true,
+                Err(std::sync::TryLockError::Poisoned(_)) => {
+                    entry.binding.cell.fail_session();
+                    entry.uncertain.store(true, Ordering::SeqCst);
+                    entry.reservation.uncertain();
+                    true
+                }
+            };
+            let proof = *entry.proof.lock().map_err(|_| AuthorityError::Halted)?;
+            let current_undo = current.as_ref().is_some_and(|applied| matches!(&applied.run, CodingRun::Host(owned) if Arc::ptr_eq(owned, entry)));
+            entries.push(SessionResourceFacts {
+                request: entry.reservation.request(),
+                preparing: entry.preparing.load(Ordering::SeqCst),
+                in_flight,
+                uncertain: entry.uncertain.load(Ordering::SeqCst),
+                current_undo,
+                returned: entry.abandoned.load(Ordering::SeqCst),
+                discharged: entry.finalized.load(Ordering::SeqCst),
+                staging_absent: proof.staging_absent,
+                private_finalization_established: proof.private_absent_or_retained,
+                parent_synced: proof.parent_synced,
+                grants_closed: proof.grants_closed,
+                cleanup_recorded: proof.cleanup_recorded,
+                intentionally_retained: proof.intentionally_retained,
+            });
+        }
+        Ok(SessionInventory { entries })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn session_inventory(&self) -> Result<SessionInventory, AuthorityError> {
+        Err(AuthorityError::Unavailable(
+            "Files inventory is available on Linux only",
+        ))
+    }
+
+    /// Called only after the host has quiesced work. Retirement changes an
+    /// index; it neither restores the Owner's file nor removes evidence.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn close_resources(
+        &self,
+        request: Option<&HaltCell>,
+    ) -> Result<SessionInventory, AuthorityError> {
+        let _busy = Busy::take(&self.shared.busy)
+            .ok_or(AuthorityError::Unavailable("Files operation outstanding"))?;
+        let inventory = self
+            .shared
+            .inventory
+            .lock()
+            .map_err(|_| AuthorityError::Halted)?
+            .clone();
+        for entry in inventory {
+            if !entry.preparing.load(Ordering::SeqCst) {
+                entry.narrow_grants();
+            }
+        }
+        if let Some(request) = request {
+            self.cleanup_host(request, true)?;
+        }
+        self.session_inventory()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn close_resources(
+        &self,
+        _: Option<&HaltCell>,
+    ) -> Result<SessionInventory, AuthorityError> {
+        self.session_inventory()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn cleanup_host(
+        &self,
+        request: &HaltCell,
+        closing: bool,
+    ) -> Result<CleanupRetry, AuthorityError> {
+        let backend = self.backend()?;
+        let current = {
+            let mut slot = self
+                .shared
+                .slot
+                .lock()
+                .map_err(|_| AuthorityError::Halted)?;
+            if closing {
+                if let Some(applied) = slot.take() {
+                    applied.run.retain();
+                }
+            }
+            slot.as_ref().and_then(|applied| match &applied.run {
+                CodingRun::Host(entry) => Some(entry.clone()),
+                CodingRun::Legacy(_) => None,
+            })
+        };
+        let selected = self
+            .shared
+            .inventory
+            .lock()
+            .map_err(|_| AuthorityError::Halted)?
+            .clone();
+        let mut retry = CleanupRetry::default();
+        for entry in selected {
+            if entry.finalized.load(Ordering::SeqCst) {
+                continue;
+            }
+            if entry.preparing.load(Ordering::SeqCst)
+                || entry.uncertain.load(Ordering::SeqCst)
+                || !entry.abandoned.load(Ordering::SeqCst)
+                || current
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, &entry))
+            {
+                retry.still_owed += 1;
+                continue;
+            }
+            let commitment = *entry
+                .commitment
+                .lock()
+                .map_err(|_| AuthorityError::Halted)?;
+            if commitment.is_some_and(|id| {
+                entry
+                    .binding
+                    .control
+                    .upgrade()
+                    .is_none_or(|control| control.authority().commitments().is_unconsumed(id))
+            }) {
+                retry.still_owed += 1;
+                continue;
+            }
+            #[cfg(test)]
+            self.shared.fire(crate::test_hooks::at::FILE_CLEANUP);
+            let present = entry
+                .native
+                .lock()
+                .map_err(|_| AuthorityError::Halted)?
+                .is_some();
+            if present {
+                let mut run = CodingRun::Host(entry.clone());
+                let findings =
+                    analyze_apply(backend.ledger.store().as_ref(), run.id().ledger_key())
+                        .map_err(ledger_error)?;
+                // Only conclusive temporary cleanup debt is disposable. Owner
+                // versions and unknown publication/recovery remain retained.
+                if findings.iter().any(|finding| {
+                    !matches!(
+                        finding,
+                        ApplyFinding::CleanupOwed { .. } | ApplyFinding::StagingAwaitingApproval
+                    )
+                }) {
+                    retry.still_owed += 1;
+                    continue;
+                }
+                if !run.cleanup_owed().is_empty() && run.retry_cleanup(Some(request)).is_err() {
+                    retry.still_owed += 1;
+                    break;
+                }
+                if owes(&run) {
+                    retry.still_owed += 1;
+                    continue;
+                }
+                let _ = discard(&mut run, &self.shared, Some(request));
+            }
+            if request.is_engaged() {
+                return Err(AuthorityError::Halted);
+            }
+            if entry.prove_finalization(&backend, request)? {
+                retry.settled += 1;
+            } else {
+                retry.still_owed += 1;
+                break;
+            }
+        }
+        // Report the complete retained set, including excluded, unattempted,
+        // preparation and current-undo entries. Never just the selected list.
+        retry.still_owed = self
+            .session_inventory()?
+            .entries
+            .iter()
+            .filter(|entry| !entry.discharged)
+            .count();
+        Ok(retry)
+    }
+
     pub(crate) fn new(runtime_root: PathBuf) -> Self {
         Self {
             runtime_root,
@@ -2909,7 +3456,7 @@ impl Files {
         let _busy = Busy::take(&self.shared.busy).ok_or(AuthorityError::Unavailable(
             "another Files operation is under way",
         ))?;
-        if cell.is_some() {
+        if cell.is_some_and(|cell| !cell.host()) {
             self.drain_recovery(&lifetime.recovery)?;
         }
         let taken = self.shared.slot.lock().expect("files slot").take();
@@ -2977,23 +3524,24 @@ impl Files {
         let approval = requested.map_err(undo_error)?;
         #[cfg(test)]
         self.shared.fire("session.before.undo_grant");
-        #[cfg(test)]
-        self.shared.fire("session.entered.undo_grant");
-        let write = kernel
-            .projects
-            .grant_for_apply(kernel.project.id, applied.binding)
-            .map_err(project_error)?;
+        let (write, grant_resource) = applied.run.undo_grant(
+            kernel,
+            applied.binding,
+            lifetime.recovery.cell(),
+            &self.shared,
+        )?;
         #[cfg(test)]
         self.shared.fire("session.after.undo_grant");
         #[cfg(test)]
         self.shared.note_write_grant(&kernel.authority, &write);
         // Armed from here until settled, across the restore and any unwind.
-        let issued = IssuedGrant::new(
+        let mut issued = IssuedGrant::new(
             &kernel.authority,
             &write,
             applied.run.id().to_string(),
             &self.shared,
         );
+        issued.host = grant_resource;
         #[cfg(test)]
         self.shared.fire(crate::test_hooks::at::FILE_UNDO_APPROVED);
         if let Err(error) = lifetime.check(authority) {
@@ -3125,7 +3673,7 @@ impl Files {
                     "staging.discarded" => {
                         let payload: serde_json::Value = serde_json::from_str(&record.payload)
                             .map_err(|_| AuthorityError::EvidenceUnavailable)?;
-                        fact.discard_recorded = payload["status"] == "discarded";
+                        fact.discard_recorded = payload["status"] == "Discarded";
                     }
                     _ => {}
                 }
@@ -3159,37 +3707,8 @@ impl Files {
         #[cfg(test)]
         self.shared.fire("files.retry_before_effect");
         recovery.check()?;
-        if cell.is_some_and(HaltCell::host) {
-            let selected: Vec<_> = self
-                .shared
-                .inventory
-                .lock()
-                .map_err(|_| AuthorityError::Halted)?
-                .iter()
-                .filter(|entry| {
-                    entry.abandoned.load(Ordering::SeqCst)
-                        && !entry.uncertain.load(Ordering::SeqCst)
-                })
-                .cloned()
-                .collect();
-            let mut retry = CleanupRetry::default();
-            for entry in selected {
-                #[cfg(test)]
-                self.shared.fire(crate::test_hooks::at::FILE_CLEANUP);
-                recovery.check()?;
-                let mut run = CodingRun::Host(entry);
-                if owes(&run) {
-                    retry.still_owed += 1;
-                    continue;
-                }
-                if discard(&mut run, &self.shared, cell) {
-                    retry.settled += 1;
-                } else {
-                    retry.still_owed += 1;
-                    recovery.check()?;
-                }
-            }
-            return Ok(retry);
+        if let Some(request) = cell.filter(|cell| cell.host()) {
+            return self.cleanup_host(request, false);
         }
         let runs = std::mem::take(&mut *self.shared.kept.lock().expect("files kept"));
         let mut retry = CleanupRetry::default();
@@ -3633,6 +4152,7 @@ impl Files {
         } else {
             None
         };
+        let mut preparing = Preparing(reserved.clone());
         self.drain();
         let backend = self.backend()?;
         let kernel = &workspace.kernel;
@@ -3753,6 +4273,9 @@ impl Files {
             page,
             target,
         };
+        if let Some(entry) = preparing.0.take() {
+            entry.preparing.store(false, Ordering::SeqCst);
+        }
         let action = PreparedAction {
             kind: CapabilityKind::Files,
             class: EffectClass::R2,

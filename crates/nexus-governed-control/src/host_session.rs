@@ -44,7 +44,13 @@ impl RequestScope {
             || (close_allowed && matches!(self.kind, ScopeKind::CloseCleanup))
     }
     pub(crate) fn live(&self, word: u64) -> bool {
-        word == self.snapshot && self.eligible()
+        let same = if matches!(self.kind, ScopeKind::CloseCleanup) {
+            word & EPOCH_MASK == self.snapshot & EPOCH_MASK
+                && word & (CLOSING | FAILED | SEALED | EMERGENCY) == CLOSING
+        } else {
+            word == self.snapshot
+        };
+        same && self.eligible()
     }
     fn eligible(&self) -> bool {
         #[cfg(test)]
@@ -80,8 +86,118 @@ impl RequestScope {
                 AuthorityError::Capacity
             })?;
         // No refresh on CAS failure. Every child carries this original word.
-        cell.session_compare(self.snapshot, self.snapshot)
+        let expected = if matches!(self.kind, ScopeKind::CloseCleanup) {
+            let current = cell.session_word();
+            if !self.live(current) {
+                return Err(AuthorityError::Halted);
+            }
+            current
+        } else {
+            self.snapshot
+        };
+        cell.session_compare(expected, expected)
             .map_err(|_| AuthorityError::Halted)
+    }
+
+    pub(crate) fn reserve_resource(
+        &self,
+    ) -> Result<ResourceReservation, crate::authority::AuthorityError> {
+        if !matches!(self.kind, ScopeKind::Work | ScopeKind::Restoration) {
+            return Err(crate::authority::AuthorityError::Halted);
+        }
+        let core = self
+            .core
+            .upgrade()
+            .ok_or(crate::authority::AuthorityError::Halted)?;
+        let mut resources = core.resources.lock().map_err(|_| {
+            self.fail();
+            crate::authority::AuthorityError::Halted
+        })?;
+        if resources.len() == 256 {
+            return Err(crate::authority::AuthorityError::Capacity);
+        }
+        self.admit(&core.cell)?;
+        let resource = Arc::new(ResourceState {
+            request: self.request,
+            released: std::sync::atomic::AtomicBool::new(false),
+            uncertain: std::sync::atomic::AtomicBool::new(false),
+            private: std::sync::Mutex::new(None),
+        });
+        resources.push(resource.clone());
+        Ok(ResourceReservation(resource))
+    }
+}
+
+struct ResourceState {
+    request: u64,
+    released: std::sync::atomic::AtomicBool,
+    uncertain: std::sync::atomic::AtomicBool,
+    private: std::sync::Mutex<Option<PrivateResourceIdentity>>,
+}
+
+struct PrivateResourceIdentity {
+    // Observation only. These names never authorize opening or removing
+    // anything; the private sink owns its original paths and descriptors.
+    temporary: std::path::PathBuf,
+    retained: Option<std::path::PathBuf>,
+    observed: Option<std::fs::Metadata>,
+}
+
+/// One pre-reserved Mother private-store obligation. Its metadata survives
+/// failed writes, unwind and final store destruction in the original session.
+pub struct PrivateObligation {
+    reservation: ResourceReservation,
+    context: SessionContext,
+}
+impl PrivateObligation {
+    pub fn observe_created(&self, metadata: std::fs::Metadata) -> Result<(), SessionError> {
+        let mut identity = self.reservation.0.private.lock().map_err(|_| {
+            self.context.fail();
+            SessionError::Restricted
+        })?;
+        let identity = identity.as_mut().ok_or(SessionError::Restricted)?;
+        identity.observed = Some(metadata);
+        Ok(())
+    }
+    /// Called by the private store only after its required file and parent
+    /// synchronizations, or conclusive non-creation/removal and parent sync.
+    /// This is accounting, not permission for a later filesystem call.
+    pub fn complete(self) {
+        self.reservation.release();
+    }
+}
+impl Drop for PrivateObligation {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.reservation.uncertain();
+            self.context.fail();
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ResourceObligations {
+    pub reserved: usize,
+    pub discharged: usize,
+    pub unresolved: usize,
+    pub uncertain: usize,
+    pub private: usize,
+    pub private_unresolved: usize,
+}
+
+/// Fixed metadata reserved before creation. Dropping it never discharges an
+/// obligation; the session retains the same slot until finalization.
+#[derive(Clone)]
+pub(crate) struct ResourceReservation(Arc<ResourceState>);
+impl ResourceReservation {
+    pub(crate) fn release(&self) {
+        self.0.released.store(true, Ordering::SeqCst);
+    }
+    pub(crate) fn uncertain(&self) {
+        self.0.uncertain.store(true, Ordering::SeqCst);
+    }
+    pub(crate) fn request(&self) -> u64 {
+        self.0.request
     }
 }
 
@@ -186,6 +302,7 @@ struct Core {
     next_target: AtomicU64,
     pending: std::sync::Mutex<Option<PendingContext>>,
     actions: std::sync::Mutex<Vec<receipt::Action>>,
+    resources: std::sync::Mutex<Vec<Arc<ResourceState>>>,
     history: OnceLock<receipt::History>,
     close: OnceLock<CloseIdentity>,
     created: Instant,
@@ -277,6 +394,36 @@ pub struct SessionContext {
     scope: Arc<RequestScope>,
 }
 impl SessionContext {
+    pub fn reserve_private(
+        &self,
+        temporary: &std::path::Path,
+        retained: Option<&std::path::Path>,
+    ) -> Result<PrivateObligation, SessionError> {
+        if !temporary.is_absolute()
+            || temporary.as_os_str().len() > 4096
+            || retained.is_some_and(|path| !path.is_absolute() || path.as_os_str().len() > 4096)
+        {
+            return Err(SessionError::Restricted);
+        }
+        let identity = PrivateResourceIdentity {
+            temporary: temporary.to_owned(),
+            retained: retained.map(std::path::Path::to_owned),
+            observed: None,
+        };
+        let reservation = self
+            .scope
+            .reserve_resource()
+            .map_err(|_| SessionError::Exhausted)?;
+        *reservation
+            .0
+            .private
+            .lock()
+            .map_err(|_| SessionError::Restricted)? = Some(identity);
+        Ok(PrivateObligation {
+            reservation,
+            context: self.clone(),
+        })
+    }
     pub fn session(&self) -> SessionIdentity {
         self.scope.session
     }
@@ -559,6 +706,61 @@ impl HostSession {
         self.control
             .files_retry_cleanup_with_halt(Some(&cell))
             .map_err(Into::into)
+    }
+
+    pub fn inventory(&self) -> Result<crate::files::SessionInventory, SessionFailure> {
+        self.control.files().session_inventory().map_err(|error| {
+            self.ingress().fail();
+            error.into()
+        })
+    }
+    pub fn resource_obligations(&self) -> Result<ResourceObligations, SessionError> {
+        let resources = self.core.resources.lock().map_err(|_| {
+            self.ingress().fail();
+            SessionError::Restricted
+        })?;
+        let mut result = ResourceObligations {
+            reserved: resources.len(),
+            ..ResourceObligations::default()
+        };
+        for resource in resources.iter() {
+            let discharged = resource.released.load(Ordering::SeqCst);
+            result.discharged += usize::from(discharged);
+            result.unresolved += usize::from(!discharged);
+            result.uncertain += usize::from(resource.uncertain.load(Ordering::SeqCst));
+            let private = resource.private.lock().map_err(|_| {
+                self.ingress().fail();
+                SessionError::Restricted
+            })?;
+            if let Some(identity) = private.as_ref() {
+                // Keep the exact expected and observed metadata bounded and
+                // owned, even when its creator did not return. No path lookup.
+                let _owned = (&identity.temporary, &identity.retained, &identity.observed);
+                result.private += 1;
+                result.private_unresolved += usize::from(!discharged);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Resource settlement is one part of the close proof. This neither seals
+    /// the session nor emits either end record.
+    pub fn settle_close_resources(
+        &self,
+        request: &SessionRequest,
+    ) -> Result<crate::files::SessionInventory, SessionFailure> {
+        if !Arc::ptr_eq(&self.core, &request.core) || request.kind != CommandKind::Quit {
+            return Err(crate::authority::AuthorityError::Halted.into());
+        }
+        let cell = self.core.cell.scoped(request.scope.clone());
+        let normal = self.state() == SessionState::ClosingNormal;
+        self.control
+            .files()
+            .close_resources(normal.then_some(&cell))
+            .map_err(|error| {
+                self.ingress().fail();
+                error.into()
+            })
     }
 
     pub fn undo(
@@ -866,6 +1068,7 @@ impl SessionSeed {
                 next_target: AtomicU64::new(0),
                 pending: std::sync::Mutex::new(None),
                 actions: std::sync::Mutex::new(Vec::with_capacity(256)),
+                resources: std::sync::Mutex::new(Vec::with_capacity(256)),
                 history: OnceLock::new(),
                 close: OnceLock::new(),
                 created: Instant::now(),

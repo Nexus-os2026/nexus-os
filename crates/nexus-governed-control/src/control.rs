@@ -122,6 +122,7 @@ pub(crate) struct Place<'a> {
     control: &'a Control,
     run: RunId,
     held: bool,
+    cell: Option<crate::authority::file_session::HaltCell>,
 }
 
 impl Place<'_> {
@@ -171,6 +172,8 @@ impl Drop for Place<'_> {
         if self.held {
             if let Ok(mut table) = self.control.pending.lock() {
                 table.give_back(self.run);
+            } else if let Some(cell) = &self.cell {
+                cell.fail_session();
             }
         }
     }
@@ -220,6 +223,7 @@ impl Control {
             control: self,
             run,
             held: true,
+            cell: None,
         })
     }
 
@@ -238,8 +242,14 @@ impl Control {
             Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
             None => return Err(AuthorityError::UnknownRun),
         };
-        let place = self.place(run, limit).ok_or(AuthorityError::Capacity)?;
-        let slot = self.authority.commitments().reserve_preparation()?;
+        let cell = self
+            .authority
+            .runs()
+            .session_cell(run)?
+            .ok_or(AuthorityError::Halted)?;
+        let mut place = self.place(run, limit).ok_or(AuthorityError::Capacity)?;
+        place.cell = Some(cell.clone());
+        let slot = self.authority.commitments().reserve_preparation(cell)?;
         Ok((place, slot))
     }
 

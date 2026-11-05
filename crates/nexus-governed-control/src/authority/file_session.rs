@@ -159,6 +159,14 @@ impl HaltCell {
             scope.fail();
         }
     }
+    pub(crate) fn reserve_resource(
+        &self,
+    ) -> Result<crate::host_session::ResourceReservation, super::AuthorityError> {
+        match self.mode() {
+            CellMode::Host(Some(scope)) => scope.reserve_resource(),
+            _ => Err(super::AuthorityError::Halted),
+        }
+    }
     pub(crate) fn scoped(&self, scope: Arc<crate::host_session::RequestScope>) -> Self {
         assert!(
             self.host(),

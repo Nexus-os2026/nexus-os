@@ -36,6 +36,7 @@ use super::evidence::{
     bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, Privacy,
     INTERRUPTIONS,
 };
+use super::file_session::HaltCell;
 use super::halt::RecordBatch;
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
@@ -426,19 +427,19 @@ pub(crate) struct Inner {
 pub(crate) struct PreparationSlot {
     registry: CommitmentRegistry,
     held: bool,
+    cell: HaltCell,
 }
 impl Drop for PreparationSlot {
     fn drop(&mut self) {
         if self.held {
             // Dropping a reservation cannot lose capacity accounting on
             // poison; it performs no evidence or native cleanup.
-            let _entries = self
-                .registry
-                .0
-                .entries
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            self.registry.0.preparations.fetch_sub(1, Ordering::SeqCst);
+            match self.registry.0.entries.lock() {
+                Ok(_entries) => {
+                    self.registry.0.preparations.fetch_sub(1, Ordering::SeqCst);
+                }
+                Err(_) => self.cell.fail_session(),
+            }
         }
     }
 }
@@ -514,6 +515,7 @@ struct Reserved<'a> {
     registry: &'a CommitmentRegistry,
     id: CommitmentId,
     token: u64,
+    cell: Option<HaltCell>,
 }
 
 impl Drop for Reserved<'_> {
@@ -525,6 +527,8 @@ impl Drop for Reserved<'_> {
                     entry.reserved = None;
                 }
             }
+        } else if let Some(cell) = &self.cell {
+            cell.fail_session();
         }
     }
 }
@@ -900,7 +904,10 @@ impl CommitmentRegistry {
         owed.leases(&entry.prepared.leases);
     }
 
-    pub(crate) fn reserve_preparation(&self) -> Result<PreparationSlot, AuthorityError> {
+    pub(crate) fn reserve_preparation(
+        &self,
+        cell: HaltCell,
+    ) -> Result<PreparationSlot, AuthorityError> {
         let mut entries = self.0.entries.lock().map_err(|_| AuthorityError::Halted)?;
         let reserved = self.0.preparations.load(Ordering::SeqCst);
         if entries.len() + reserved >= self.capacity() {
@@ -913,6 +920,7 @@ impl CommitmentRegistry {
         Ok(PreparationSlot {
             registry: self.clone(),
             held: true,
+            cell,
         })
     }
 
@@ -1272,16 +1280,17 @@ impl CommitmentRegistry {
                         let token = self.reserve(entry, Transition::Approve);
                         let mut record = self.base_record(EvidencePhase::Approved, id, entry, now);
                         record.approval = Some(binding.short());
-                        Ok((token, record))
+                        Ok((token, record, entry.request.clone()))
                     }),
             }
         };
         self.flush(deferred);
-        let (token, record) = answered?;
+        let (token, record, cell) = answered?;
         let _reserved = Reserved {
             registry: self,
             id,
             token,
+            cell,
         };
         // Evidence first: an unrecorded approval is never given.
         self.record(&record)?;
@@ -1371,17 +1380,20 @@ impl CommitmentRegistry {
             let mut entries = self.entries();
             match entries.get_mut(&id) {
                 None => Err(AuthorityError::UnknownCommitment),
-                Some(entry) => {
-                    self.authorization(id, entry, agent, run, approval, now, &mut deferred)
-                }
+                Some(entry) => self
+                    .authorization(id, entry, agent, run, approval, now, &mut deferred)
+                    .map(|(token, approved, record)| {
+                        (token, approved, record, entry.request.clone())
+                    }),
             }
         };
         self.flush(deferred);
-        let (token, approved, record) = reserved?;
+        let (token, approved, record, cell) = reserved?;
         let _reserved = Reserved {
             registry: self,
             id,
             token,
+            cell,
         };
         self.record(&record)?;
         #[cfg(test)]
@@ -1451,23 +1463,26 @@ impl CommitmentRegistry {
             let mut entries = self.entries();
             match entries.get_mut(&id) {
                 None => Err(AuthorityError::UnknownCommitment),
-                Some(entry) => self.start(
-                    id,
-                    entry,
-                    agent,
-                    run,
-                    (revalidated, parameters),
-                    now,
-                    &mut deferred,
-                ),
+                Some(entry) => self
+                    .start(
+                        id,
+                        entry,
+                        agent,
+                        run,
+                        (revalidated, parameters),
+                        now,
+                        &mut deferred,
+                    )
+                    .map(|(token, record)| (token, record, entry.request.clone())),
             }
         };
         self.flush(deferred);
-        let (token, record) = reserved?;
+        let (token, record, cell) = reserved?;
         let _reserved = Reserved {
             registry: self,
             id,
             token,
+            cell,
         };
         let started_wall_ms = now.wall_ms;
         let start = self.record(&record)?;
@@ -2126,17 +2141,28 @@ impl ExecutionGuard {
     /// during the effect is recorded beside the outcome. Returns what became
     /// of its end record (EL-1 §8).
     pub fn finish(mut self, outcome: Outcome) -> EndStatus {
-        self.finished = true;
+        // Host recording remains an owned obligation until its result
+        // returns. A panic must engage denial without a destructor retry.
+        self.finished = !self.cancel.host();
         let cancelled = self.cancel.is_cancelled();
         let handoff = self.handoff.load(Ordering::SeqCst);
-        self.registry
-            .finish(self.id, self.started_wall_ms, outcome, cancelled, handoff)
+        let status =
+            self.registry
+                .finish(self.id, self.started_wall_ms, outcome, cancelled, handoff);
+        self.finished = true;
+        status
     }
 }
 
 impl Drop for ExecutionGuard {
     fn drop(&mut self) {
         if !self.finished {
+            if self.cancel.abandon_host() {
+                // The exact commitment remains Executing and pinned. Its
+                // outcome/record obligation cannot disappear on unwind.
+                // This destructor performs no recording or cleanup.
+                return;
+            }
             // No caller is left to report to: the store keeps the end
             // record owed, or latched, and the interface shows it.
             self.registry.finish(

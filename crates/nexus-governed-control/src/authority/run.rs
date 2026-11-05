@@ -59,6 +59,18 @@ fn request_cell<'a>(
 }
 
 impl CancelToken {
+    pub(crate) fn host(&self) -> bool {
+        self.1.as_ref().is_some_and(HaltCell::host)
+    }
+    pub(crate) fn abandon_host(&self) -> bool {
+        if let Some(cell) = self.1.as_ref().filter(|cell| cell.host()) {
+            self.0.store(true, Ordering::SeqCst);
+            cell.fail_session();
+            true
+        } else {
+            false
+        }
+    }
     pub(crate) fn admit_host(&self) -> Result<(), AuthorityError> {
         match &self.1 {
             Some(cell) if cell.host() => {
@@ -1342,6 +1354,7 @@ impl RunRegistry {
         if door.consents.len().saturating_add(door.pending_consents) >= MAX_CONSENTS {
             return Err(AuthorityError::Capacity);
         }
+        super::file_session::admit_host(door.file_cell.as_ref())?;
         door.pending_consents += 1;
         Ok(ConsentSlot {
             registry: self,
@@ -1352,6 +1365,7 @@ impl RunRegistry {
                 closed: false,
             },
             held: true,
+            cell: door.file_cell.clone(),
         })
     }
 
@@ -1699,6 +1713,7 @@ pub(crate) struct ConsentSlot<'a> {
     group: GroupId,
     life: Life,
     held: bool,
+    cell: Option<HaltCell>,
 }
 
 impl ConsentSlot<'_> {
@@ -1772,6 +1787,8 @@ impl Drop for ConsentSlot<'_> {
                 if let Some(door) = runs.doors.get_mut(&self.group) {
                     door.pending_consents = door.pending_consents.saturating_sub(1);
                 }
+            } else if let Some(cell) = &self.cell {
+                cell.fail_session();
             }
         }
     }
