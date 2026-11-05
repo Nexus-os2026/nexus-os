@@ -27,12 +27,14 @@ const GOVERNED_RS: &str = include_str!("../../crates/nexus-governed-control/src/
 /// The only files that may name `claim_global_controller`: its
 /// definition, the owner's Stop/Resume path, this guard, and test binaries
 /// that drive the process's own authority (each its own process).
+/// Mother Nexus cleanup (2026-11-05): the retired
+/// `connectors/llm/tests/m0_f5_stop.rs` entry was removed. Six entries remain;
+/// the unchanged workspace-wide scan now permits one fewer claimant.
 const MAY_CLAIM_THE_GLOBAL_CONTROLLER: &[&str] = &[
     "kernel/src/emergency_stop.rs",
     "crates/nexus-governed-control/src/governed.rs",
     "kernel/tests/m0_fix2_f10_stop_seal.rs",
     "kernel/tests/m0_f5_emergency_stop.rs",
-    "connectors/llm/tests/m0_f5_stop.rs",
     "crates/nexus-governed-control/tests/m0_fix2_f10_owner_stop.rs",
     "crates/nexus-governed-control/tests/m0_fix2_f10_front_door_drop.rs",
 ];

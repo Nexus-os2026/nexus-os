@@ -1,7 +1,7 @@
 //! M2e-A2 guards (design v2 §14; N1 spec E-O65): E-O65 in a non-test
 //! build of the kernel, where no test seam exists, and the source guards
-//! E-O12 (the worker's grammar is defined once), E-O15 (the gateway's local
-//! predicates are the kernel's) and E-O65 (the qualification seam is
+//! E-O12 (the worker's grammar is defined once), E-O15 (local-model predicates
+//! occur only in kernel inference) and E-O65 (the qualification seam is
 //! test-only; the transport call boundary guards the route first; the
 //! legacy chat route is gone).
 //!
@@ -214,13 +214,6 @@ fn squeeze(code: &str) -> String {
     code.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-fn file<'a>(files: &'a [ProdFile], rel: &str) -> &'a ProdFile {
-    files
-        .iter()
-        .find(|f| f.rel == rel)
-        .unwrap_or_else(|| panic!("no production file {rel}"))
-}
-
 /// The body (between its braces) of the first `fn NAME(` after `after` in
 /// `code`, or `None`.
 fn fn_body<'a>(code: &'a str, after: &str, name: &str) -> Option<&'a str> {
@@ -243,20 +236,169 @@ fn literal_sites(files: &[ProdFile], needle: &str) -> Vec<(String, usize)> {
         .collect()
 }
 
-/// E-O65: the problems with the route guard in these production files.
-fn route_guard_findings(files: &[ProdFile]) -> Vec<String> {
+/// Exact production identifier inventory, measured through `production_files()`.
+/// Doc comments and literal contents do not confer permission to name the trait.
+const MODEL_TRANSPORT_ALLOWLIST: [(&str, usize); 4] = [
+    ("kernel/src/inference/mod.rs", 1),
+    ("kernel/src/inference/ollama.rs", 2),
+    ("kernel/src/coding_run/local_model.rs", 1),
+    ("crates/nexus-governed-control/src/inference.rs", 1),
+];
+
+/// Tokens from the masked code view. Keep punctuation so paths and generic
+/// arguments can be read independently of whitespace; normalize raw identifiers.
+fn route_tokens(code: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut at = 0;
+    while at < code.len() {
+        let ch = code[at..].chars().next().unwrap();
+        if ch.is_whitespace() {
+            at += ch.len_utf8();
+            continue;
+        }
+        if code[at..].starts_with("r#")
+            && code[at + 2..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_alphabetic() || ch == '_')
+        {
+            at += 2;
+        }
+        let start = at;
+        if code[at..].starts_with("::") || code[at..].starts_with("->") {
+            at += 2;
+        } else {
+            let ch = code[at..].chars().next().unwrap();
+            at += ch.len_utf8();
+            if ch.is_alphanumeric() || ch == '_' {
+                while let Some(ch) = code[at..].chars().next() {
+                    if !(ch.is_alphanumeric() || ch == '_') {
+                        break;
+                    }
+                    at += ch.len_utf8();
+                }
+            }
+        }
+        tokens.push(&code[start..at]);
+    }
+    tokens
+}
+
+/// Skip a balanced generic argument/parameter list or delimiter group.
+/// Arrows are single tokens; comparisons inside const blocks cannot close `<`.
+fn route_group_end(tokens: &[&str], start: usize) -> Option<usize> {
+    let close = match *tokens.get(start)? {
+        "<" => ">",
+        "(" => ")",
+        "[" => "]",
+        "{" => "}",
+        _ => return None,
+    };
+    let mut at = start + 1;
+    while let Some(&token) = tokens.get(at) {
+        if token == close {
+            return Some(at + 1);
+        }
+        if matches!(token, "(" | "[" | "{") || (close == ">" && token == "<") {
+            at = route_group_end(tokens, at)?;
+        } else {
+            at += 1;
+        }
+    }
+    None
+}
+
+/// Read the trait path after `impl` and optional generics. Only the final
+/// segment before `for` decides trait identity, never an exact header spelling.
+fn model_transport_impl(tokens: &[&str], mut at: usize) -> bool {
+    if tokens.get(at) == Some(&"<") {
+        let Some(end) = route_group_end(tokens, at) else {
+            return false;
+        };
+        at = end;
+    }
+    if tokens.get(at) == Some(&"!") {
+        at += 1;
+    }
+    if tokens.get(at) == Some(&"::") {
+        at += 1;
+    }
+    loop {
+        let Some(&segment) = tokens.get(at) else {
+            return false;
+        };
+        at += 1;
+        // Type paths also allow `segment::<Args>`.
+        if tokens.get(at..at + 2) == Some(&["::", "<"]) {
+            at += 1;
+        }
+        if tokens.get(at) == Some(&"<") {
+            let Some(end) = route_group_end(tokens, at) else {
+                return false;
+            };
+            at = end;
+        }
+        match tokens.get(at) {
+            Some(&"::") => at += 1,
+            Some(&"for") => return segment == "ModelTransport",
+            _ => return false,
+        }
+    }
+}
+
+/// E-O65 (stricter oracle amendment): every impl header naming a trait path
+/// ending in ModelTransport counts, including qualified/raw/generic spellings.
+/// Exactly one implementation, in ollama.rs, is allowed. Trait renaming is
+/// forbidden; every identifier occurrence also needs an exact file/count entry.
+fn model_transport_findings(files: &[ProdFile]) -> Vec<String> {
     let mut out = Vec::new();
-    let impls: Vec<String> = files
-        .iter()
-        .flat_map(|f| {
-            f.code
-                .match_indices("impl ModelTransport for")
-                .map(move |_| f.rel.clone())
-        })
-        .collect();
+    let mut impls = Vec::new();
+    for file in files {
+        let tokens = route_tokens(&file.code);
+        let count = tokens.iter().filter(|&&t| t == "ModelTransport").count();
+        let expected = MODEL_TRANSPORT_ALLOWLIST
+            .iter()
+            .find(|&&(rel, _)| rel == file.rel)
+            .map_or(0, |&(_, count)| count);
+        if count != expected {
+            out.push(format!(
+                "{}: ModelTransport identifiers: {count}, exact allowlist count {expected}",
+                file.rel
+            ));
+        }
+        for (at, &token) in tokens.iter().enumerate() {
+            if token == "impl" && model_transport_impl(&tokens, at + 1) {
+                impls.push(file.rel.clone());
+            }
+            if token == "ModelTransport" && tokens.get(at + 1) == Some(&"as") {
+                out.push(format!(
+                    "{}: ModelTransport renaming is forbidden",
+                    file.rel
+                ));
+            }
+        }
+    }
     if impls != ["kernel/src/inference/ollama.rs"] {
         out.push(format!("ModelTransport implementations: {impls:?}"));
     }
+    out
+}
+
+/// E-O65: the problems with the route guard in these production files.
+/// Checks the ModelTransport impl/alias/file-count rules above, rejects
+/// qualification_seam, and checks present files for a sole false-bodied
+/// qualification_override, conversation_route_open before request.check,
+/// check_runtime, charge or exchange in VerifiedOllama::call, and
+/// conversation_route_open in LocalOllama::bind. Also flags the listed legacy
+/// route tokens and API paths.
+/// Per Ruling R-2, these source-text checks are regression tripwires for ordinary,
+/// reviewed code. Adversarially constructed code (macro-generated items, cfg
+/// tricks, unusual literal prefixes, include!, build scripts) is out of scope;
+/// independent PR review, Mother's sealed effect port and the broker's runtime
+/// authority counter that code. Known pre-existing scanner gaps are tracked for
+/// a separate hardening PR with red/green controls.
+fn route_guard_findings(files: &[ProdFile]) -> Vec<String> {
+    let mut out = model_transport_findings(files);
     for f in files {
         if f.code.contains("qualification_seam") {
             out.push(format!("{}: the test seam in production code", f.rel));
@@ -347,32 +489,97 @@ fn grammar_findings(files: &[ProdFile]) -> Vec<String> {
     out
 }
 
-/// E-O15: the problems with the gateway's re-export of the predicates.
-fn gateway_findings(gateway: &ProdFile) -> Vec<String> {
-    let mut out = Vec::new();
-    for local in [
-        "fn ollama_model_name_is_cloud",
-        "fn ollama_show_names_remote",
-    ] {
-        if gateway.code.contains(local) {
-            out.push(format!("the gateway defines {local}"));
+/// Exact production literal exemptions: (file, literal content, count, why).
+const PREDICATE_LITERAL_ALLOWLIST: [(&str, &str, usize, &str); 1] = [(
+    "kernel/src/actuators/tts.rs",
+    "cloud",
+    1,
+    "Legacy actuator scheduled for removal in the kernel plan",
+)];
+
+const PREDICATE_LITERALS: [&str; 3] = ["cloud", "remote_host", "remote_model"];
+
+/// Count complete string-literal contents, using the existing production views.
+/// Only delimiter quotes survive in `code`: quotes inside ordinary/raw/byte
+/// strings and char literals are masked. Pair those delimiters and read each
+/// complete content from `text`, where comments and test code are excluded.
+fn predicate_literal_counts(file: &ProdFile) -> [usize; 3] {
+    let mut counts = [0; 3];
+    let mut quotes = file.code.match_indices('"');
+    while let (Some((open, _)), Some((close, _))) = (quotes.next(), quotes.next()) {
+        let content = &file.text[open + 1..close];
+        if let Some(i) = PREDICATE_LITERALS.iter().position(|&s| s == content) {
+            counts[i] += 1;
         }
     }
-    let code = squeeze(&gateway.code);
-    for export in [
-        "name_is_cloudasollama_model_name_is_cloud",
-        "show_names_remoteasollama_show_names_remote",
-    ] {
-        let re_exported = code
-            .split("pubusenexus_kernel::inference::ollama::{")
-            .skip(1)
-            .any(|rest| {
-                rest.split('}')
-                    .next()
-                    .is_some_and(|list| list.contains(export))
-            });
-        if !re_exported {
-            out.push(format!("the gateway does not re-export {export}"));
+    counts
+}
+
+/// E-O15: no second copy of the local-model predicates outside kernel inference.
+/// Fix round 1 rejected ANY occurrence of the four protected identifiers,
+/// including raw identifiers, macro arguments/bodies, calls and imports.
+/// Fix round 2 is stricter: retain that fail-closed identifier rule AND reject
+/// exact string-literal contents "cloud", "remote_host" and "remote_model"
+/// outside kernel/src/inference/ (raw and byte strings included; comments and
+/// test code excluded), except the exact file/literal/count allowlist above.
+/// `git grep` plus the production inventory verified the sole exemption:
+/// tts.rs's `"openai" | "cloud"`; identifier exemptions remain EMPTY.
+///
+/// Semantic clones using NEITHER the protected identifiers NOR these literals
+/// are explicitly out of scope. Per Ruling R-2, the identifier and exact-literal
+/// rules above are regression tripwires for ordinary, reviewed code, as are HM
+/// model-call classification, transport provider classification and E-O65.
+/// Adversarially constructed code (macro-generated items, cfg tricks, unusual
+/// literal prefixes, include!, build scripts) is out of scope; independent PR
+/// review, Mother's sealed effect port and the broker's runtime authority counter
+/// that code. Known pre-existing scanner gaps are tracked for a separate hardening
+/// PR with red/green controls.
+fn predicate_findings(files: &[ProdFile]) -> Vec<String> {
+    let mut out = Vec::new();
+    for file in files {
+        if file.rel.starts_with("kernel/src/inference/") {
+            continue;
+        }
+        // `#` is a separator so both ordinary and raw identifiers are caught,
+        // including names next to macro/attribute punctuation.
+        let tokens: Vec<&str> = file
+            .code
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|token| !token.is_empty())
+            .collect();
+        for (i, &name) in tokens.iter().enumerate() {
+            if matches!(
+                name,
+                "name_is_cloud"
+                    | "show_names_remote"
+                    | "ollama_model_name_is_cloud"
+                    | "ollama_show_names_remote"
+            ) {
+                // Retain the old direct-definition diagnostic, also for r#name.
+                let definition = i > 0 && tokens[i - 1] == "fn"
+                    || i > 1 && tokens[i - 1] == "r" && tokens[i - 2] == "fn";
+                let detail = if definition {
+                    "defines its own"
+                } else {
+                    "contains protected predicate identifier"
+                };
+                out.push(format!("{} {detail} {name}", file.rel));
+            }
+        }
+        for (literal, count) in PREDICATE_LITERALS
+            .iter()
+            .zip(predicate_literal_counts(file))
+        {
+            let expected = PREDICATE_LITERAL_ALLOWLIST
+                .iter()
+                .find(|&&(rel, content, _, _)| rel == file.rel && content == *literal)
+                .map_or(0, |&(_, _, count, _)| count);
+            if count != expected {
+                out.push(format!(
+                    "{}: predicate literal {literal:?}: {count} occurrence(s), exact allowlist count {expected}",
+                    file.rel
+                ));
+            }
         }
     }
     out
@@ -391,7 +598,7 @@ fn m2e_a2_scanners_flag_planted_violations() {
     let ollama = |call: &str| {
         planted(
             "kernel/src/inference/ollama.rs",
-            &format!("impl ModelTransport for VerifiedOllama {{ fn call(&self) {{ {call} }} }}"),
+            &format!("use super::ModelTransport; impl ModelTransport for VerifiedOllama {{ fn call(&self) {{ {call} }} }}"),
         )
     };
     let unguarded = [ollama(
@@ -408,7 +615,7 @@ fn m2e_a2_scanners_flag_planted_violations() {
         "kernel/src/inference/mod.rs",
         "fn qualification_override() -> bool { qualification_seam::is_open() }",
     )];
-    assert_eq!(route_guard_findings(&leaked).len(), 3);
+    assert_eq!(route_guard_findings(&leaked).len(), 4);
     let legacy = [planted(
         "kernel/src/coding_run/local_model.rs",
         "impl LocalOllama { fn bind() { conversation_route_open() } fn complete() { let u = \"api/chat\"; } }",
@@ -428,17 +635,254 @@ fn m2e_a2_scanners_flag_planted_violations() {
         ),
     ];
     assert_eq!(grammar_findings(&twice).len(), 5);
+}
 
-    let local = planted(
-        "connectors/llm/src/gateway.rs",
-        "pub fn ollama_model_name_is_cloud(m: &str) -> bool { false }",
+#[test]
+fn e_o65_model_transport_inventory_rejects_alternate_spellings_and_aliases() {
+    let approved = || {
+        planted(
+            "kernel/src/inference/ollama.rs",
+            "use super::ModelTransport; impl ModelTransport for VerifiedOllama {}",
+        )
+    };
+    assert!(model_transport_findings(&[approved()]).is_empty());
+    // Reviewer's bypass: qualification, metering and Stop are absent.
+    let qualified = r#"
+impl crate::inference::ModelTransport for Alternate {
+    fn call(&self) { self.client.post(&self.endpoint).send(); }
+}
+"#;
+    for header in [
+        qualified,
+        "impl<T> ModelTransport for Wrapper<T> {}",
+        "impl ::nexus_kernel::inference::ModelTransport for X {}",
+        "impl\n crate :: inference ::\n ModelTransport\n for X {}",
+        "impl r#ModelTransport for X {}",
+        "impl<T: Fn() -> Vec<U>, U> crate::inference::r#ModelTransport for Wrapper<T> {}",
+        "impl<T> crate::ModelTransport<Vec<T>> for Wrapper<T> {}",
+        "impl<T> crate::module::<T>::ModelTransport::<T> for Wrapper<T> {}",
+        "impl<const N: bool = { 1 < 2 }> ModelTransport for X {}",
+    ] {
+        let found =
+            model_transport_findings(&[approved(), planted("sdk/src/alternate.rs", header)]);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.contains("ModelTransport implementations:")),
+            "implementation must count: {header}: {found:?}"
+        );
+    }
+    let renamed = "use crate::inference::ModelTransport as Mt; impl Mt for X {}";
+    let found = model_transport_findings(&[approved(), planted("sdk/src/alternate.rs", renamed)]);
+    assert!(found.iter().any(|f| f.contains("renaming is forbidden")));
+    assert!(found
+        .iter()
+        .any(|f| f.contains("identifiers: 1, exact allowlist count 0")));
+    // Renaming also fails at the exact allowed identifier count, in its owner.
+    let found = model_transport_findings(&[planted(
+        "kernel/src/inference/ollama.rs",
+        "use super::ModelTransport as Mt; impl ModelTransport for X {}",
+    )]);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].contains("renaming is forbidden"));
+
+    for src in [
+        "use crate::inference::ModelTransport;",
+        "type T = dyn r#ModelTransport;",
+    ] {
+        let found = model_transport_findings(&[approved(), planted("sdk/src/new.rs", src)]);
+        assert_eq!(found.len(), 1, "merely naming the trait: {src}");
+        assert!(found[0].contains("exact allowlist count 0"));
+    }
+    for src in [
+        "/// ModelTransport\n/** r#ModelTransport */",
+        "// impl ModelTransport for X {}",
+        "const S: &str = \"impl ModelTransport for X {}\";",
+        "const S: &str = r#\"ModelTransport as Mt\"#;",
+        "impl OtherModelTransport for X {} impl ModelTransportSuffix for Y {}",
+    ] {
+        assert!(
+            model_transport_findings(&[approved(), planted("sdk/src/new.rs", src)]).is_empty(),
+            "must ignore: {src}"
+        );
+    }
+    let found = model_transport_findings(&[
+        approved(),
+        planted(
+            "sdk/src/new.rs",
+            "impl crate::ModelTransport::Other for X {}",
+        ),
+    ]);
+    assert_eq!(
+        found.len(),
+        1,
+        "only the final path segment decides impl identity"
     );
-    assert_eq!(gateway_findings(&local).len(), 3);
-    let exported = planted(
-        "connectors/llm/src/gateway.rs",
-        "pub use nexus_kernel::inference::ollama::{\n    name_is_cloud as ollama_model_name_is_cloud,\n    show_names_remote as ollama_show_names_remote,\n};",
+    assert!(found[0].contains("exact allowlist count 0"));
+    // Exactly one occurrence, even in the approved implementation file.
+    let found = model_transport_findings(&[planted(
+        "kernel/src/inference/ollama.rs",
+        "impl ModelTransport for X {} impl ModelTransport for Y {}",
+    )]);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].contains("ModelTransport implementations:"));
+}
+
+#[test]
+fn e_o65_model_transport_allowlist_matches_masked_production_counts() {
+    let files = production_files();
+    assert!(model_transport_findings(&files).is_empty());
+    for (rel, expected) in MODEL_TRANSPORT_ALLOWLIST {
+        let file = files.iter().find(|file| file.rel == rel).unwrap();
+        let count = route_tokens(&file.code)
+            .iter()
+            .filter(|&&t| t == "ModelTransport")
+            .count();
+        assert_eq!(count, expected, "{rel}");
+        println!("ModelTransport production inventory: {rel}: {count}");
+        // Each real allowlisted file is green at its exact count and red when
+        // that count decreases or increases. No doc-comment allowance is used.
+        for code in [
+            file.code.replace("ModelTransport", "OtherTransport"),
+            format!("{} use crate::ModelTransport;", file.code),
+        ] {
+            let found = model_transport_findings(&[planted(rel, &code)]);
+            assert!(found.iter().any(|f| f.contains("exact allowlist count")));
+        }
+    }
+}
+
+#[test]
+fn e_o15_scanner_fails_closed_on_protected_identifiers() {
+    let findings = |src: &str| predicate_findings(&[planted("sdk/src/local_model.rs", src)]);
+    for predicate in [
+        "name_is_cloud",
+        "show_names_remote",
+        "ollama_model_name_is_cloud",
+        "ollama_show_names_remote",
+    ] {
+        for spelling in [predicate.to_string(), format!("r#{predicate}")] {
+            let local = findings(&format!("pub fn\n {spelling} () -> bool {{ false }}"));
+            assert_eq!(local.len(), 1, "definition of {spelling}");
+            assert!(local[0].contains("defines its own"));
+            for code in [
+                format!("define_predicate!({spelling});"),
+                format!("impl Local {{ fn {spelling}(&self) -> bool {{ false }} }}"),
+                format!("fn caller() {{ nexus_kernel::inference::ollama::{spelling}(\"x\"); }}"),
+                format!("use nexus_kernel::inference::ollama::{spelling};"),
+            ] {
+                assert_eq!(findings(&code).len(), 1, "must reject {code}");
+            }
+        }
+    }
+    // Reviewer's parameterized macro: the protected name is only an argument.
+    let generated = r#"
+macro_rules! define_predicate {
+    ($name:ident) => { pub fn $name(_: &str) -> bool { false } };
+}
+define_predicate!(ollama_model_name_is_cloud);
+"#;
+    assert_eq!(findings(generated).len(), 1);
+    assert_eq!(
+        findings("macro_rules! define_predicate { () => { pub fn show_names_remote() {} }; }")
+            .len(),
+        1
     );
-    assert!(gateway_findings(&exported).is_empty());
+    // Imports/re-exports and calls are not exempt: today's allowlist is empty.
+    assert_eq!(
+        findings("pub use nexus_kernel::inference::ollama::{name_is_cloud as ollama_model_name_is_cloud, show_names_remote as ollama_show_names_remote};").len(),
+        4
+    );
+    for ignored in [
+        "// name_is_cloud\n/* r#show_names_remote */",
+        "const TEXT: &str = \"ollama_model_name_is_cloud\";",
+        "const TEXT: &str = r#\"ollama_show_names_remote\"#;",
+        "const C: char = 'n';",
+        "fn name_is_cloud_suffix() {} fn prefix_show_names_remote() {}",
+    ] {
+        assert!(findings(ignored).is_empty(), "must ignore {ignored}");
+    }
+    let owner = [planted("kernel/src/inference/ollama.rs", generated)];
+    assert!(predicate_findings(&owner).is_empty());
+}
+
+#[test]
+fn e_o15_scanner_rejects_renamed_predicate_copies_and_exact_literals() {
+    let findings = |src: &str| predicate_findings(&[planted("sdk/src/local_model.rs", src)]);
+    // Reviewer's renamed function, closure and trait-default copies.
+    let renamed = r#"
+pub fn rejects_cloud_model(model: &str) -> bool {
+    model.to_ascii_lowercase().split([':', '-', '/', '.', '_']).any(|part| part == "cloud")
+}
+"#;
+    let closure = r#"
+fn caller(model: &str) -> bool {
+    let rejects = |model: &str| model.to_ascii_lowercase().split([':', '-', '/', '.', '_']).any(|part| part == "cloud");
+    rejects(model)
+}
+"#;
+    let trait_default = r#"
+trait LocalModel {
+    fn rejects_cloud_model(&self, model: &str) -> bool {
+        model.to_ascii_lowercase().split([':', '-', '/', '.', '_']).any(|part| part == "cloud")
+    }
+}
+"#;
+    for src in [renamed, closure, trait_default] {
+        let found = findings(src);
+        assert_eq!(found.len(), 1, "must reject {src}");
+        assert!(found[0].contains("predicate literal \"cloud\""));
+    }
+    let remote_copy = r#"
+fn description_is_remote(show: &serde_json::Value) -> bool {
+    ["remote_host", "remote_model"].iter().any(|field| {
+        show.get(field).is_some_and(|value| {
+            !value.is_null() && value.as_str().is_none_or(|text| !text.trim().is_empty())
+        })
+    })
+}
+"#;
+    let remote = findings(remote_copy);
+    assert_eq!(remote.len(), 2);
+    for literal in ["remote_host", "remote_model"] {
+        assert!(remote.iter().any(|finding| finding.contains(literal)));
+    }
+    // Exact contents in ordinary, raw, byte and raw-byte strings all count.
+    for literal in PREDICATE_LITERALS {
+        for spelling in [
+            format!("\"{literal}\""),
+            format!("r#\"{literal}\"#"),
+            format!("b\"{literal}\""),
+            format!("br##\"{literal}\"##"),
+        ] {
+            assert_eq!(findings(&format!("const S = {spelling};")).len(), 1);
+        }
+    }
+    for src in [
+        r#"// "cloud"
+/* "remote_host" /* "remote_model" */ */"#,
+        r#"const S: &str = "cloudy"; const T: &str = "remote_hosts";"#,
+        r###"const S: &str = r##"contains "cloud" and "remote_host""##;"###,
+        r#"const S: &str = "contains \"cloud\""; const C: char = '"';"#,
+    ] {
+        assert!(findings(src).is_empty(), "must ignore {src}");
+    }
+    for src in [renamed, closure, trait_default, remote_copy] {
+        assert!(predicate_findings(&[planted("kernel/src/inference/ollama.rs", src)]).is_empty());
+    }
+
+    let tts = r#"match provider { "openai" | "cloud" => run_openai(), _ => refuse() }"#;
+    let allowlisted =
+        |src: &str| predicate_findings(&[planted("kernel/src/actuators/tts.rs", src)]);
+    assert!(allowlisted(tts).is_empty());
+    assert_eq!(findings(tts).len(), 1, "exemption is exact-file only");
+    assert_eq!(allowlisted("").len(), 1, "exemption requires exact count");
+    assert_eq!(allowlisted(&format!("{tts} {tts}")).len(), 1);
+    assert_eq!(
+        allowlisted(&format!("{tts} const S = \"remote_model\";")).len(),
+        1
+    );
+    assert_eq!(allowlisted(&format!("{tts} name_is_cloud();")).len(), 1);
 }
 
 // ── E-O65, E-O12, E-O15 on the workspace ────────────────────────────────────
@@ -458,8 +902,38 @@ fn e_o12_the_worker_grammar_is_defined_once() {
 }
 
 #[test]
-fn e_o15_the_gateway_predicates_are_the_kernels() {
+fn e_o15_local_model_predicates_are_defined_only_in_kernel_inference() {
     let files = production_files();
-    let findings = gateway_findings(file(&files, "connectors/llm/src/gateway.rs"));
+    let findings = predicate_findings(&files);
     assert!(findings.is_empty(), "{}", findings.join("\n"));
+}
+
+/// Mother Nexus cleanup (2026-11-05): two absence guards keep the retired
+/// `connectors/llm` provider/gateway stack and its workspace membership gone.
+#[test]
+fn m2e_a2_retired_llm_connectors_directory_is_absent() {
+    let path = source::workspace_root().join("connectors/llm");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(&path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "the retired connectors/llm path must remain absent"
+    );
+}
+
+#[test]
+fn m2e_a2_retired_llm_connectors_are_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(source::workspace_root().join("Cargo.toml")).unwrap();
+    let manifest: toml::Value = toml::from_str(&manifest).unwrap();
+    let members = manifest["workspace"]["members"]
+        .as_array()
+        .expect("workspace members array");
+    assert!(
+        members.iter().all(|member| {
+            std::path::Path::new(member.as_str().expect("workspace member path"))
+                != std::path::Path::new("connectors/llm")
+        }),
+        "the retired connectors/llm must not be a workspace member"
+    );
 }
