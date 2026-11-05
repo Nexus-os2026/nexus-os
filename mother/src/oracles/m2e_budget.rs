@@ -9,6 +9,7 @@
 use super::model_calls::{reserve_lane, ModelMeter};
 use super::*;
 use crate::contract::{ModelChoice, Note};
+use crate::journal::MemoryJournal;
 use crate::oracles::{
     contract, keyed_lanes, test_private, world, world_with, RecordingPort, World,
 };
@@ -605,8 +606,8 @@ fn e_o43_frozen_heuristic_and_limits() {
         c.notes[0].label = label;
         assert_eq!(c.validate().is_ok(), ok);
     }
-    // 14 bytes framing for label notes; text exactly 1778 bytes, bounded lines.
-    for (bytes, ok) in [(1778, true), (1779, false)] {
+    // 15 bytes framing for label notes; text exactly 1777 bytes, bounded lines.
+    for (bytes, ok) in [(1777, true), (1778, false)] {
         let mut text = (0..6)
             .map(|_| "x".repeat(256))
             .collect::<Vec<_>>()
