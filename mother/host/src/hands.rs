@@ -289,8 +289,12 @@ impl Runtime {
                         return;
                     }
                     if report.to.is_terminal() {
-                        self.screen
-                            .emit(&format!("MISSION {}\n", report.to.as_str()));
+                        // Done is emitted by observe, together with its notice.
+                        // Preserve every other existing technical line.
+                        if report.to != MissionState::Done {
+                            self.screen
+                                .emit(&format!("MISSION {}\n", report.to.as_str()));
+                        }
                         self.observe();
                         return;
                     }
