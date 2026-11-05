@@ -46,6 +46,13 @@ fn waiting(
     home: &crate::adapter::session_support::Fixture,
     store: impl JournalStore + 'static,
 ) -> (FileSession<crate::adapter::SessionPort>, MissionId) {
+    waiting_with(home, store, "MKFILE:session.txt")
+}
+fn waiting_with(
+    home: &crate::adapter::session_support::Fixture,
+    store: impl JournalStore + 'static,
+    markers: &str,
+) -> (FileSession<crate::adapter::SessionPort>, MissionId) {
     let session = Coordinator::open(
         store,
         home.port.clone(),
@@ -56,7 +63,7 @@ fn waiting(
     .unwrap()
     .into_file_session()
     .unwrap();
-    let mut contract = contract_with("MKFILE:session.txt");
+    let mut contract = contract_with(markers);
     contract.requested_folder = Some(home.session.workspace().unwrap().name);
     let id = session.draft(contract).unwrap();
     session.submit(id).unwrap();
@@ -150,7 +157,7 @@ fn session_approval_target_is_not_published_inside_either_wait_append() {
 fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission() {
     assert!(nexus_governed_control::files::make_non_dumpable());
     let Ok(case) = std::env::var(CASE) else {
-        for case in ["control", "stopped"] {
+        for case in ["control", "stopped", "advanced"] {
             child(
                 "session_approval_continuation_binds_the_new_root_and_refuses_changed_mission",
                 case,
@@ -158,7 +165,7 @@ fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission(
         }
         return;
     };
-    assert!(matches!(case.as_str(), "control" | "stopped"));
+    assert!(matches!(case.as_str(), "control" | "stopped" | "advanced"));
     for stop_before_continuation in [case == "stopped"] {
         let label = if stop_before_continuation {
             "continuation-stopped"
@@ -189,9 +196,15 @@ fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission(
         assert_eq!(old_context.request(), 1);
         if stop_before_continuation {
             session.stop(id).unwrap();
+        } else if case == "advanced" {
+            session.advance(id).unwrap();
+            assert_ne!(
+                session.state(id).unwrap(),
+                Some(MissionState::AwaitingApproval)
+            );
         }
         let continued = session.continue_approval(continuation);
-        if stop_before_continuation {
+        if stop_before_continuation || case == "advanced" {
             assert!(
                 continued.is_err(),
                 "settlement/changed generation cannot be refreshed by a saved continuation"
@@ -237,4 +250,79 @@ fn session_approval_continuation_binds_the_new_root_and_refuses_changed_mission(
         }
         println!("CONTINUATION VERIFIED {case}");
     }
+}
+
+#[test]
+fn session_approval_two_files_keep_distinct_roots_and_reject_a_queued_replacement() {
+    if std::env::var(CASE).as_deref() != Ok("two-files") {
+        child(
+            "session_approval_two_files_keep_distinct_roots_and_reject_a_queued_replacement",
+            "two-files",
+        );
+        return;
+    }
+    assert!(nexus_governed_control::files::make_non_dumpable());
+    let home = crate::adapter::session_support::Fixture::new("two-cont");
+    let (session, id) = waiting_with(
+        &home,
+        home.journal(),
+        "MKFILE:session.txt MKFILE:second.txt",
+    );
+    let first = home
+        .session
+        .ingress()
+        .accept(CommandKind::Approve, 100)
+        .unwrap();
+    let queued = home
+        .session
+        .ingress()
+        .accept(CommandKind::Approve, 101)
+        .unwrap();
+    assert_eq!(first.context(), queued.context());
+    home.session.approve_file(&first).unwrap();
+    let continuation = home.session.approval_continuation(&first).unwrap();
+    assert!(
+        home.session.approval_continuation(&first).is_err(),
+        "continuation ownership transfers only once"
+    );
+    let session = session.continue_approval(continuation).unwrap();
+    session.advance(id).unwrap();
+    assert_eq!(
+        session.state(id).unwrap(),
+        Some(MissionState::AwaitingApproval)
+    );
+    assert!(home.workspace.join("session.txt").exists());
+    assert!(!home.workspace.join("second.txt").exists());
+    assert!(
+        home.session.approve_file(&queued).is_err(),
+        "accepted old target cannot transfer to replacement"
+    );
+    assert!(!home.workspace.join("second.txt").exists());
+    let second = home
+        .session
+        .ingress()
+        .accept(CommandKind::Approve, 102)
+        .unwrap();
+    assert_ne!(first.context(), second.context());
+    home.session.approve_file(&second).unwrap();
+    let session = session
+        .continue_approval(home.session.approval_continuation(&second).unwrap())
+        .unwrap();
+    assert_eq!(session.coordinator.port.context().request(), 102);
+    assert_eq!(home.port.context().request(), 1);
+    for _ in 0..8 {
+        if session.state(id).unwrap() == Some(MissionState::Done) {
+            break;
+        }
+        session.advance(id).unwrap();
+    }
+    assert_eq!(session.state(id).unwrap(), Some(MissionState::Done));
+    assert!(home.workspace.join("second.txt").exists());
+    let lines = home.lines();
+    for end in 0..=lines.len() {
+        let prefix = crate::journal::MemoryJournal::new();
+        prefix.set_lines(lines[..end].to_vec());
+        crate::coordinator::inspect_history(&prefix).unwrap();
+    }
+    println!("CONTINUATION VERIFIED two-files");
 }
