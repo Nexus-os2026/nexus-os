@@ -1,0 +1,26 @@
+{
+  "mechanism": "G",
+  "finding": "F10",
+  "production_base": "c4245ca84e64f58ea227556d8c5874be5ccfb74c",
+  "expectation": "Three real grant, door and mission dialogues preserve explicit no versus Stop, Quit and protocol failure in verified primary evidence; typed delegates remain sealed.",
+  "runs": [
+    {
+      "command": "cargo test -p nexus-mother-host --locked --test session_confirmation_truth -- --nocapture",
+      "log": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/m2dd/session/fix1-G/red.log",
+      "sha256": "f71ef59f8a1fa12d23fcf0150e1190d38b0af65d8cf76803038ff4f063ca32f3",
+      "passed": 3,
+      "failed": 9,
+      "exit": 101,
+      "failure": "The nine interrupted/protocol answers are correctly retained by the terminal but recorded as unqualified declines with failure=None."
+    },
+    {
+      "command": "cargo test -p nexus-mother --locked scan_m2dd_typed_confirmation_exact_delegates_and_negative_controls -- --nocapture",
+      "log": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/m2dd/session/fix1-G/red-scan.log",
+      "sha256": "78a902f5754dd864396a1f17087fa259f73273f22cb884b6134022078da8fb81",
+      "passed": 0,
+      "failed": 1,
+      "exit": 101,
+      "failure": "Typed terminal answer delegates are absent."
+    }
+  ]
+}

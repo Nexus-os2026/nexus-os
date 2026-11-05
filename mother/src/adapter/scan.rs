@@ -905,3 +905,50 @@ fn scan_hands_services_cannot_import_the_walk_or_raw_authority() {
         }
     }
 }
+
+// G/F10: typed Hands answers reach the same fixed terminal implementation;
+// adding typed callbacks does not create an unguarded authority route.
+fn hands_typed_answers(text: &str) -> bool {
+    [
+        ("confirm_grant_answer", "grant"),
+        ("confirm_agent_door_answer", "door"),
+        ("confirm_mission_answer", "mission"),
+    ]
+    .iter()
+    .all(|(method, delegate)| {
+        bodies_of(text, method)
+            == vec![format!(
+                "self.{delegate}(request);self.confirmation_answer()"
+            )]
+    })
+}
+
+#[test]
+fn scan_m2dd_typed_confirmation_exact_delegates_and_negative_controls() {
+    let mut fixture = String::new();
+    for (method, delegate) in [
+        ("grant", "grant"),
+        ("agent_door", "door"),
+        ("mission", "mission"),
+    ] {
+        fixture.push_str(&format!("fn confirm_{method}_answer(&self, request: &R) -> ConfirmationAnswer {{ self.{delegate}(request); self.confirmation_answer() }}"));
+    }
+    assert!(hands_typed_answers(&fixture));
+    for delegate in ["grant", "door", "mission"] {
+        assert!(!hands_typed_answers(&fixture.replace(
+            &format!("self.{delegate}(request); self.confirmation_answer()"),
+            "ConfirmationAnswer::Affirmative",
+        )));
+        assert!(!hands_typed_answers(&fixture.replace(
+            &format!("self.{delegate}(request); self.confirmation_answer()"),
+            "ConfirmationAnswer::Declined",
+        )));
+    }
+    assert!(!hands_typed_answers(&format!("{fixture}{fixture}")));
+    let text = code(&std::fs::read_to_string(crate_root().join("host/src/terminal.rs")).unwrap());
+    assert!(hands_confirmer("host/src/terminal.rs", &text));
+    assert!(
+        hands_typed_answers(&text),
+        "typed answers must keep the real terminal's exact result"
+    );
+}
