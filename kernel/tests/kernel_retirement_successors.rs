@@ -986,6 +986,18 @@ fn project_live_source(stage: u8, path: &str, raw: String) -> String {
                     row.stage
                 );
                 let at = hits[0];
+                // Fail closed when anything could attach to or change the
+                // meaning of the neighbouring item after removal: an
+                // attribute (or attribute continuation) directly above the
+                // declaration refuses the projection (K04 review 2, HIGH).
+                let above = at.checked_sub(1).map(|i| lines[i].trim_start());
+                assert!(
+                    !above.is_some_and(|l| l.starts_with("#[")
+                        || l.starts_with("#!")
+                        || l.ends_with(']')),
+                    "K{}: {path} attributed {child} declaration cannot be projected",
+                    row.stage
+                );
                 lines.remove(at);
                 if lines.get(at) == Some(&"") && at + 1 < lines.len() {
                     lines.remove(at);
@@ -1452,6 +1464,18 @@ fn r8_projection_removes_only_an_exact_registered_line() {
                 "{kept}"
             );
         }
+    }
+    // An attribute directly above the registered line would attach to the
+    // next item after removal (K04 review 2): the replay must refuse.
+    for attributed in [
+        "#[cfg(test)]\npub mod schema_compat;\npub mod unregistered_compat {}\n",
+        "#[cfg(\n    test\n)]\npub mod schema_compat;\npub mod unregistered_compat {}\n",
+    ] {
+        let refused = std::panic::catch_unwind(|| project_live_source(2, path, attributed.into()));
+        assert!(
+            refused.is_err(),
+            "attributed declaration must not be projected: {attributed:?}"
+        );
     }
     // Indented or trailing-text forms are not the registered line: they are
     // not projected, so the replay fails closed instead of hiding the edge.
