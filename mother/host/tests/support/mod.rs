@@ -226,6 +226,7 @@ impl Pty {
         let deadline = Instant::now() + DEADLINE;
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
+                self.drain_after_exit(deadline);
                 return status;
             }
             assert!(
@@ -237,6 +238,24 @@ impl Pty {
                 self.read_once(deadline);
             } else {
                 std::thread::yield_now();
+            }
+        }
+    }
+    /// Exit can be observed before the master has been read: keep reading
+    /// until EOF/EIO. A descendant still holding the slave ends the drain
+    /// after one quiet poll, so the drain stays bounded.
+    fn drain_after_exit(&mut self, deadline: Instant) {
+        if self.master.is_none() {
+            return;
+        }
+        loop {
+            let before = self.wire_output.len() + self.pending_utf8.len();
+            let quiet = (Instant::now() + Duration::from_millis(100)).min(deadline);
+            if !self.read_once(quiet) {
+                return;
+            }
+            if self.wire_output.len() + self.pending_utf8.len() == before {
+                return;
             }
         }
     }
