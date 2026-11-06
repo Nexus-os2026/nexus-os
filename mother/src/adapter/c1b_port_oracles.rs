@@ -604,8 +604,8 @@ fn identity(arg: &str) {
 
 // ---------------------------------------------------------------- closed
 
-/// C1b-1 leaves the coordinator unwired: even over the ordinary port with a
-/// registered model, a model lane is refused at submit and never invoked.
+/// C1b-2: the ordinary route alone is insufficient. A non-File coordinator
+/// refuses the same model lane at submit and never invokes it.
 #[test]
 fn c1b1_model_lane_admission_stays_closed() {
     port_children("c1b1_model_lane_admission_stays_closed", &["closed"]);
@@ -614,7 +614,10 @@ fn closed() {
     let f = Fx::with(true);
     assert!(f.port.model_identity().is_some(), "the route exists");
     let invoked = Arc::new(AtomicUsize::new(0));
-    let m = f.mother(model_lanes(&invoked));
+    let m = Coordinator::open(
+        MemoryJournal::new(), f.port.clone(), Lanes::new(model_lanes(&invoked)).unwrap(),
+        Arc::new(ManualClock::default()), f.home.private(),
+    ).unwrap();
     let id = m.draft(f.contract()).unwrap();
     assert_eq!(
         m.submit(id),

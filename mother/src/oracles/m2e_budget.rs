@@ -894,6 +894,8 @@ impl Lane for ModelLane {
     }
 }
 #[test]
+// C1b-2 amendment: this RecordingPort/non-File fixture still refuses because
+// it has no permitted File/model route; unfinished C1 is no longer the reason.
 fn c1a_production_admission_closed() {
     let model = Arc::new(ModelLane(AtomicUsize::new(0)));
     let mut lanes = keyed_lanes();
