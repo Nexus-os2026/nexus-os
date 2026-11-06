@@ -1876,6 +1876,11 @@ impl<P: EffectPort> Coordinator<P> {
             drop(caller);
             if cap > 0 {
                 let terminal = match output.verdict {
+                    Verdict::Fail { .. } if *role == LaneRole::Verifier => {
+                        Some(Trigger::VerifyFail {
+                            reason: VerifyFailReason::VerifierFailed,
+                        })
+                    }
                     Verdict::Fail { .. } => Some(Trigger::Fail {
                         reason: FailReason::LaneFail(*role),
                     }),
@@ -1885,7 +1890,9 @@ impl<P: EffectPort> Coordinator<P> {
                     _ => None,
                 };
                 if let Some(trigger) = terminal {
-                    return Ok(Ended::Ended(self.end_with(id, trigger)?));
+                    let ended = self.end_with(id, trigger);
+                    self.model_obligations()?;
+                    return Ok(Ended::Ended(ended?));
                 }
             }
             #[cfg(all(test, target_os = "linux"))]
