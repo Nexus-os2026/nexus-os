@@ -2,6 +2,7 @@
 
 pub mod actuators;
 pub mod adaptive_policy;
+pub mod agent_identity;
 pub mod audit;
 
 pub mod autonomy;
@@ -52,6 +53,7 @@ pub mod typed_tools;
 pub mod web_conduct;
 pub mod workspace;
 pub mod workspace_authority;
+pub mod workspace_permissions;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_support;

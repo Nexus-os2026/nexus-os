@@ -5,13 +5,8 @@ use std::collections::BTreeSet;
 
 // ── Filesystem permission model (C.6 granular FS permissions) ───────────────
 
-/// Permission level for a filesystem path scope.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FsPermissionLevel {
-    ReadOnly,
-    ReadWrite,
-    Deny,
-}
+// Transitional same-type export (K02); the type now lives in `workspace_permissions`.
+pub use crate::workspace_permissions::FsPermissionLevel;
 
 /// A single path-scoped filesystem permission entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

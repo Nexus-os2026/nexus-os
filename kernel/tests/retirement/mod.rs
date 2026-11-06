@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[path = "dependencies.rs"]
 pub mod dependencies;
 
-pub const LIVE_STAGE: u8 = 1;
+pub const LIVE_STAGE: u8 = 2;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

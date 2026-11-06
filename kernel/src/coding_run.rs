@@ -154,11 +154,11 @@ use serde_json::{json, Value};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::manifest::FsPermissionLevel;
 use crate::workspace_authority::{
     WorkspaceAuthorityError, WorkspaceAuthorityRegistry, WorkspaceAuthoritySource,
     WorkspaceBinding, WorkspaceGrant, WorkspaceGrantId,
 };
+use crate::workspace_permissions::FsPermissionLevel;
 use fsops::{DirHandle, EntryKind, NodeIdentity};
 
 pub use apply::{

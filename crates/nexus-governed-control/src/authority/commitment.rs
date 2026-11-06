@@ -51,15 +51,24 @@ use std::time::Duration;
 /// The canonical identity of what an action acts on, as the domain resolved
 /// it (a destination, a window, an executable). `display` is bounded text
 /// for the owner and evidence; `digest` is what revalidation must match.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TargetIdentity {
     pub display: String,
     pub digest: Digest,
 }
 
+impl std::fmt::Debug for TargetIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TargetIdentity")
+            .field("display_bytes", &self.display.len())
+            .field("digest", &self.digest)
+            .finish()
+    }
+}
+
 /// A backend-prepared action: what a domain actuator resolved from an
 /// intent. Only the actuators build these; nothing deserializes one.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PreparedAction {
     pub kind: CapabilityKind,
     pub class: EffectClass,
@@ -73,6 +82,21 @@ pub struct PreparedAction {
     pub leases: Vec<LeaseId>,
     /// Bounded lines for the owner's confirmation (no secrets).
     pub summary: Vec<String>,
+}
+
+impl std::fmt::Debug for PreparedAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedAction")
+            .field("kind", &self.kind)
+            .field("class", &self.class)
+            .field("operation", &self.operation)
+            .field("target", &self.target)
+            .field("parameters", &self.parameters)
+            .field("grants", &self.grants)
+            .field("leases", &self.leases)
+            .field("summary_lines", &self.summary.len())
+            .finish()
+    }
 }
 
 /// Where a commitment is in its life.
@@ -157,7 +181,7 @@ impl FailureClass {
 }
 
 /// How an execution ended.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Outcome {
     /// It happened; `meta` is bounded, redacted result metadata.
     Succeeded {
@@ -172,6 +196,26 @@ pub enum Outcome {
     Cancelled {
         detail: Option<String>,
     },
+}
+
+impl std::fmt::Debug for Outcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Outcome::Succeeded { meta } => f
+                .debug_struct("Succeeded")
+                .field("meta_entries", &meta.len())
+                .finish(),
+            Outcome::Failed { class, detail } => f
+                .debug_struct("Failed")
+                .field("class", class)
+                .field("detail_bytes", &detail.len())
+                .finish(),
+            Outcome::Cancelled { detail } => f
+                .debug_struct("Cancelled")
+                .field("detail_bytes", &detail.as_ref().map(String::len))
+                .finish(),
+        }
+    }
 }
 
 /// M2d-C round 4 (settlement design v2, rule 1): what a door may conclude
@@ -206,8 +250,9 @@ const PROVEN_NOT_PUBLISHED: u8 = 2;
 /// refused rather than shortened.
 pub const MAX_SUMMARY_LINES: usize = 192;
 
-/// A commitment, for display (holds no authority).
-#[derive(Clone, Debug)]
+/// A commitment, for display (holds no authority). Its `Debug` shows no
+/// target and no summary: only identifiers, classes, sizes and times.
+#[derive(Clone)]
 pub struct CommitmentView {
     pub id: CommitmentId,
     pub agent: AgentId,
@@ -222,6 +267,26 @@ pub struct CommitmentView {
     pub created_wall_ms: u64,
     pub expires_wall_ms: u64,
     pub binding_short: String,
+}
+
+impl std::fmt::Debug for CommitmentView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommitmentView")
+            .field("id", &self.id)
+            .field("agent", &self.agent)
+            .field("run", &self.run)
+            .field("kind", &self.kind)
+            .field("class", &self.class)
+            .field("operation", &self.operation)
+            .field("target_bytes", &self.target.len())
+            .field("summary_lines", &self.summary.len())
+            .field("state", &self.state)
+            .field("requires_approval", &self.requires_approval)
+            .field("created_wall_ms", &self.created_wall_ms)
+            .field("expires_wall_ms", &self.expires_wall_ms)
+            .field("binding_short", &self.binding_short)
+            .finish()
+    }
 }
 
 struct Entry {

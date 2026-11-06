@@ -138,8 +138,8 @@ impl std::fmt::Debug for SecretHeader {
     }
 }
 
-/// One request, pinned to checked addresses.
-#[derive(Debug)]
+/// One request, pinned to checked addresses. Its `Debug` shows no URL path,
+/// header or body.
 pub struct PinnedRequest {
     pub method: Method,
     pub url: Url,
@@ -154,8 +154,24 @@ pub struct PinnedRequest {
     pub max_body: usize,
 }
 
-/// What came back (bounded).
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl std::fmt::Debug for PinnedRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PinnedRequest")
+            .field("method", &self.method)
+            .field("domain", &self.domain)
+            .field("addresses", &self.addresses)
+            .field("header_count", &self.headers.len())
+            .field("body_bytes", &self.body.as_ref().map(Vec::len))
+            .field("secret", &self.secret)
+            .field("timeout", &self.timeout)
+            .field("max_body", &self.max_body)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What came back (bounded). Its `Debug` shows the status and the size of
+/// the body, not the body, the content type or the location.
+#[derive(Clone, PartialEq, Eq)]
 pub struct HttpResponse {
     pub status: u16,
     pub peer: Option<SocketAddr>,
@@ -164,6 +180,17 @@ pub struct HttpResponse {
     pub body: Vec<u8>,
     /// A released credential was found in the response and removed.
     pub redacted: bool,
+}
+
+impl std::fmt::Debug for HttpResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpResponse")
+            .field("status", &self.status)
+            .field("peer", &self.peer)
+            .field("body_bytes", &self.body.len())
+            .field("redacted", &self.redacted)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Why an exchange failed.

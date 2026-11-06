@@ -33,10 +33,10 @@ use crate::inference::{
     CancelCause, Charged, DeadlineClock, MeterRefusal, ModelPinSpec, RetainedAnswer, RuntimeConfig,
     SystemClocks, Think, VerifiedOllama, FRAME_CLOSE, FRAME_OPEN,
 };
-use crate::manifest::FsPermissionLevel;
 use crate::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
 };
+use crate::workspace_permissions::FsPermissionLevel;
 
 const NAME: &str = "qwen3.6:35b-a3b";
 const DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";

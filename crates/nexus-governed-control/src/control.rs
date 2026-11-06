@@ -26,8 +26,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-/// What an executed effect returns to its caller: data only.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// What an executed effect returns to its caller: data only. Its `Debug`
+/// shows sizes, never the text, bytes or metadata.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct EffectOutput {
     /// Bounded text (a page's text, a tool's output, a response body).
     pub text: Option<String>,
@@ -38,6 +39,17 @@ pub struct EffectOutput {
     /// The effect's evidence: its start record, and what became of its end
     /// record (EL-1 §8). Set by the pipeline when the effect has ended.
     pub evidence: Option<ExecutionEvidence>,
+}
+
+impl std::fmt::Debug for EffectOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EffectOutput")
+            .field("text_bytes", &self.text.as_ref().map(String::len))
+            .field("bytes_len", &self.bytes.as_ref().map(Vec::len))
+            .field("meta_entries", &self.meta.len())
+            .field("evidence", &self.evidence)
+            .finish()
+    }
 }
 
 /// An effect prepared by a domain actuator, waiting for its commitment.

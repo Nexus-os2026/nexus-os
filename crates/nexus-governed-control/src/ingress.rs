@@ -30,8 +30,9 @@ pub const MAX_COMMAND: usize = 4096;
 pub const MAX_ATTACHMENT: usize = 8 * 1024 * 1024;
 const MAX_ATTACHMENTS: usize = 32;
 
-/// One command, as data.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+/// One command, as data. Its `Debug` shows sizes and counts, never the
+/// text or the transcript.
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CommandEnvelope {
     #[serde(default)]
@@ -44,6 +45,20 @@ pub struct CommandEnvelope {
     /// A structured intent from the interface's forms.
     #[serde(default)]
     pub intent: Option<Intent>,
+}
+
+impl std::fmt::Debug for CommandEnvelope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommandEnvelope")
+            .field("text_bytes", &self.text.as_ref().map(String::len))
+            .field(
+                "voice_transcript_bytes",
+                &self.voice_transcript.as_ref().map(String::len),
+            )
+            .field("attachment_count", &self.attachments.len())
+            .field("intent", &self.intent)
+            .finish()
+    }
 }
 
 impl CommandEnvelope {
@@ -66,13 +81,25 @@ impl CommandEnvelope {
     }
 }
 
-/// An attachment the owner imported natively: data only.
-#[derive(Clone, Debug)]
+/// An attachment the owner imported natively: data only. Its `Debug` shows
+/// the size of the name and of the bytes, never either.
+#[derive(Clone)]
 pub struct Attachment {
     pub id: String,
     pub name: String,
     pub bytes: Vec<u8>,
     pub digest: Digest,
+}
+
+impl std::fmt::Debug for Attachment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Attachment")
+            .field("id", &self.id)
+            .field("name_bytes", &self.name.len())
+            .field("bytes_len", &self.bytes.len())
+            .field("digest", &self.digest)
+            .finish()
+    }
 }
 
 /// Attachments imported through the native picker, kept in memory.

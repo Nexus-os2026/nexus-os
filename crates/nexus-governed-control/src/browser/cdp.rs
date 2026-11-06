@@ -19,12 +19,28 @@ const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 const MAX_EVENTS: usize = 1024;
 const MAX_EVENT_BYTES: usize = 1024 * 1024;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Its `Debug` shows the size of the browser's own error text, never the
+/// text (it can echo what the page or the agent sent).
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) enum CdpError {
     Closed,
     Timeout,
     Cancelled,
     Protocol(String),
+}
+
+impl std::fmt::Debug for CdpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CdpError::Closed => f.write_str("Closed"),
+            CdpError::Timeout => f.write_str("Timeout"),
+            CdpError::Cancelled => f.write_str("Cancelled"),
+            CdpError::Protocol(text) => f
+                .debug_struct("Protocol")
+                .field("bytes", &text.len())
+                .finish(),
+        }
+    }
 }
 
 type Pending = Arc<Mutex<HashMap<u64, mpsc::Sender<Value>>>>;
