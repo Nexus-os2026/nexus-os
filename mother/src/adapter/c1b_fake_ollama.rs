@@ -1,15 +1,19 @@
 //! M2e-C1b test fixture: a fake Ollama on 127.0.0.1, composed with the real
 //! ordinary broker (the broker's own fake is private to its test module).
 //! It answers as the healthy pinned runtime, except for the paths a test
-//! routes, and counts the paths it was asked.
+//! routes. A held request is answered only when its client closes it.
 use nexus_governed_control::inference::{ModelPinSpec, RuntimeConfig, Think};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 pub(crate) const NAME: &str = "qwen3.6:35b-a3b";
 pub(crate) const DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";
 const VERSION: &str = "0.40.13";
+/// How long a test waits for something that must happen promptly.
+pub(crate) const PATIENCE: Duration = Duration::from_secs(10);
 
 pub(crate) fn spec() -> ModelPinSpec {
     ModelPinSpec {
@@ -26,14 +30,24 @@ pub(crate) fn spec() -> ModelPinSpec {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Seen {
+    Request(String),
+    Closed(String),
+}
+
+#[derive(Clone)]
 pub(crate) enum Answer {
     Json(u16, String),
+    /// Held open until the client closes the connection.
+    Hold,
 }
 
 type Route = Arc<dyn Fn(&str) -> Option<Answer> + Send + Sync>;
 
 pub(crate) struct FakeOllama {
     addr: SocketAddr,
+    events: Mutex<Receiver<Seen>>,
     log: Arc<Mutex<Vec<String>>>,
     route: Arc<Mutex<Route>>,
 }
@@ -72,17 +86,23 @@ impl FakeOllama {
     pub(crate) fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
+        let (tx, events) = channel();
         let log: Arc<Mutex<Vec<String>>> = Arc::default();
         let route: Arc<Mutex<Route>> = Arc::new(Mutex::new(Arc::new(|_: &str| None)));
         let (l, r) = (log.clone(), route.clone());
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(stream) = stream else { return };
-                let (l, r) = (l.clone(), r.clone());
-                std::thread::spawn(move || serve(stream, &l, &r));
+                let (tx, l, r) = (tx.clone(), l.clone(), r.clone());
+                std::thread::spawn(move || serve(stream, &tx, &l, &r));
             }
         });
-        Self { addr, log, route }
+        Self {
+            addr,
+            events: Mutex::new(events),
+            log,
+            route,
+        }
     }
 
     pub(crate) fn endpoint(&self) -> String {
@@ -102,9 +122,27 @@ impl FakeOllama {
             .filter(|p| *p == path)
             .count()
     }
+
+    /// Forget the events seen so far.
+    pub(crate) fn drain(&self) {
+        while self.events.lock().unwrap().try_recv().is_ok() {}
+    }
+
+    /// Whether `want` is seen within [`PATIENCE`] (earlier events are skipped).
+    pub(crate) fn wait(&self, want: Seen) -> bool {
+        let deadline = Instant::now() + PATIENCE;
+        let events = self.events.lock().unwrap();
+        loop {
+            match events.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                Ok(seen) if seen == want => return true,
+                Ok(_) => {}
+                Err(_) => return false,
+            }
+        }
+    }
 }
 
-fn serve(mut stream: TcpStream, log: &Mutex<Vec<String>>, route: &Mutex<Route>) {
+fn serve(mut stream: TcpStream, tx: &Sender<Seen>, log: &Mutex<Vec<String>>, route: &Mutex<Route>) {
     let mut head = Vec::new();
     let mut byte = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
@@ -134,10 +172,24 @@ fn serve(mut stream: TcpStream, log: &Mutex<Vec<String>>, route: &Mutex<Route>) 
     }
     log.lock().unwrap().push(path.clone());
     let over = route.lock().unwrap().clone();
-    let Answer::Json(status, body) = over(&path).unwrap_or_else(|| healthy(&path));
-    let _ = write!(
-        stream,
-        "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-        body.len()
-    );
+    let answer = over(&path).unwrap_or_else(|| healthy(&path));
+    let _ = tx.send(Seen::Request(path.clone()));
+    match answer {
+        Answer::Json(status, body) => {
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+        Answer::Hold => {
+            let mut sink = [0u8; 1024];
+            while let Ok(n) = stream.read(&mut sink) {
+                if n == 0 {
+                    break;
+                }
+            }
+            let _ = tx.send(Seen::Closed(path));
+        }
+    }
 }

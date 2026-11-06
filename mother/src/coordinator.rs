@@ -962,6 +962,7 @@ pub(crate) struct CoordinatorHooks {
     pub(crate) file_after_halt: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_invocations: std::sync::atomic::AtomicUsize,
     pub(crate) file_before_ack: crate::oracles::m2as_hooks::HookSlot,
+    pub(crate) model_replied: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_before_lane: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_after_perform_check: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) before_owed_write: crate::oracles::m2as_hooks::HookSlot,

@@ -223,6 +223,15 @@ impl FileSession<crate::adapter::SessionPort> {
 
 impl<P: EffectPort> FileSession<P> {
     #[cfg(test)]
+    pub(crate) fn overtake_model_for_test(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        self.coordinator.try_with_lock(|inner| {
+            let invocation = inner.mission(id)?.pending_lane.unwrap();
+            inner.append(id, Event::LaneOvertaken { invocation })?;
+            inner.mission(id)?.pending_lane = None;
+            Ok(())
+        })
+    }
+    #[cfg(test)]
     pub(crate) fn end_for_test(
         &self,
         id: MissionId,
