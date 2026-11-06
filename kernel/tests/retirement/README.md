@@ -432,3 +432,21 @@ path replacement and import relocation. The new reversal control reconstructs
 K01's frozen snapshot byte for byte and rejects the old-position rendering.
 The snapshot itself, every test body/assertion, the classifier hash, all JSON
 fixtures and all inventories remain unchanged. No old-or-new acceptance is added.
+
+## K03 extraction registration (LIVE_STAGE = 3)
+
+`refactor` — move the complete `BrowserAction`, `PlannedAction`,
+`string_or_vec::deserialize`, `action_type` and temporary `required_capabilities`
+payloads unchanged from `cognitive/types.rs` to `action_types.rs`. Move
+`ScreenRegion` unchanged from `computer_control.rs` to `screen_region.rs`.
+Keep exactly the three registered same-type exports at the old homes. All
+existing inline behavioral tests remain present; no Debug redaction is included.
+Kernel callers, the broker classifier and its typed test fixtures import the
+same definitions at their new homes. The cognitive export group is unchanged.
+
+No fixture inventory amendment is needed: `paths_at(3)` and the staged module
+edges derive both new homes and the codec module from the unchanged manifest.
+`production-paths.txt` stays at 330 seeds; all JSONL bytes/hashes, module edges,
+logging/HM/retained-test inventories and classifier bytes stay unchanged. The
+only oracle amendment is the pre-registered F3 import formatting above. Stage 3
+activates the registered live checks; it authorizes no later retirement step.

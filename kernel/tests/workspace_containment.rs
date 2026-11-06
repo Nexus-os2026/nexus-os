@@ -1,8 +1,8 @@
 //! P0-002: exercise the real filesystem actuator against disposable host files.
+use nexus_kernel::action_types::PlannedAction;
 use nexus_kernel::actuators::types::Actuator;
 use nexus_kernel::actuators::{ActuatorContext, ActuatorError, GovernedFilesystem};
 use nexus_kernel::autonomy::AutonomyLevel;
-use nexus_kernel::cognitive::PlannedAction;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 

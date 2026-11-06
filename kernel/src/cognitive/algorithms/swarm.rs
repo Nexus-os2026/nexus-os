@@ -169,7 +169,7 @@ fn statistical_variance(values: &[f64]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cognitive::types::PlannedAction;
+    use crate::action_types::PlannedAction;
 
     fn make_step(goal_id: &str) -> AgentStep {
         AgentStep::new(

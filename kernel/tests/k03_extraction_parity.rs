@@ -2,8 +2,8 @@
 //! The K01 JSON fixtures remain unchanged; independent Rust constructions bind
 //! every planned variant to those bytes, its label and temporary capabilities.
 //! K01 separately binds all six browser variants to their frozen bytes.
-use nexus_kernel::cognitive::types::{BrowserAction, PlannedAction};
-use nexus_kernel::computer_control::ScreenRegion;
+use nexus_kernel::action_types::{BrowserAction, PlannedAction};
+use nexus_kernel::screen_region::ScreenRegion;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;

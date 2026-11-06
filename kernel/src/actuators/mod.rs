@@ -41,9 +41,9 @@ pub use types::{
 };
 pub use web::{CurlWebBackend, GovernedWeb, WebSearchBackend, WebSearchResult};
 
+use crate::action_types::PlannedAction;
 use crate::audit::{AuditWriter, EventType};
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 use serde_json::json;
 use std::collections::HashMap;
 

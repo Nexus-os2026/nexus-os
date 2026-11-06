@@ -1,7 +1,7 @@
 use super::filesystem::GovernedFilesystem;
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::{BrowserAction, PlannedAction};
 use crate::capabilities::has_capability;
-use crate::cognitive::types::{BrowserAction, PlannedAction};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};

@@ -1,7 +1,7 @@
 //! GovernedFilesystem actuator — sandboxed file I/O with path traversal prevention.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
-use crate::cognitive::types::PlannedAction;
+use crate::action_types::PlannedAction;
 use std::path::Path;
 
 /// Maximum file size for reads: 10 MB.

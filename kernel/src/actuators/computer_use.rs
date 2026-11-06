@@ -1,7 +1,7 @@
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::autonomy::AutonomyLevel;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 use crate::computer_control::{
     analyze_stored_screenshot, append_audit_log, capture_and_store_screen, checkpoints_path,
     execute_input_action, write_bytes_to_workspace_file, InputAction,

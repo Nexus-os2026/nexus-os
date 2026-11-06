@@ -1,8 +1,8 @@
 //! GovernedApiClient actuator — governed HTTP API calls with method/size/egress enforcement.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 
 /// Request timeout in seconds.
 const REQUEST_TIMEOUT_SECS: u64 = 30;

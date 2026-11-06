@@ -1,6 +1,6 @@
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 
 const MAX_OUTPUT_BYTES: usize = 100 * 1024;
 const FUEL_COST_DOCKER: f64 = 8.0;

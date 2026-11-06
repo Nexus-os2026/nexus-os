@@ -184,7 +184,7 @@ impl PlanEvolutionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cognitive::types::PlannedAction;
+    use crate::action_types::PlannedAction;
 
     fn make_step(goal_id: &str, fuel: f64) -> AgentStep {
         let mut step = AgentStep::new(

@@ -1,5 +1,6 @@
 //! Core runtime primitives and governance enforcement surfaces for NEXUS OS.
 
+pub mod action_types;
 pub mod actuators;
 pub mod adaptive_policy;
 pub mod agent_identity;
@@ -44,6 +45,7 @@ pub mod redaction;
 pub mod resource_limiter;
 pub mod safety_supervisor;
 pub mod scheduler;
+pub mod screen_region;
 pub mod secrets;
 pub mod speculative;
 pub mod startup;

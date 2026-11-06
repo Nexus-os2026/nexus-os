@@ -12,8 +12,8 @@ use crate::display::{Button, InputIntent, PerceptionIntent, Rect, ScrollDirectio
 use crate::egress::EgressIntent;
 use crate::governed::Intent;
 use crate::tool::ToolIntent;
-use nexus_kernel::cognitive::types::BrowserAction;
-use nexus_kernel::cognitive::PlannedAction;
+use nexus_kernel::action_types::BrowserAction;
+use nexus_kernel::action_types::PlannedAction;
 use serde_json::json;
 
 /// What happens to a planned action.

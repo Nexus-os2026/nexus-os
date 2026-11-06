@@ -6,7 +6,8 @@
 //! only as verbatim items (`PromptBuilder::include`), recalled route-first
 //! for the unit by the caller's recall source; the reply is a derived item.
 
-use super::types::{AgentGoal, AgentStep, PlannedAction, PlanningContext};
+use super::types::{AgentGoal, AgentStep, PlanningContext};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
 use crate::hm::{

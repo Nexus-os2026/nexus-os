@@ -7,8 +7,8 @@
 //! there is no OS-level confinement of the runtime.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 #[cfg(unix)]
 use std::process::Command;
 use std::time::Duration;
