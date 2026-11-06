@@ -132,13 +132,42 @@ fn web_test_source(stage: u8) -> String {
     // A frozen text fixture survives the K12 retirement of the live binary.
     let raw = include_str!("retirement/web-search-guard.rs.txt");
     if stage >= 3 {
-        raw.replace(
-            "nexus_kernel::cognitive::types::PlannedAction",
-            "nexus_kernel::action_types::PlannedAction",
-        )
+        raw.replace("use nexus_kernel::cognitive::types::PlannedAction;\n", "")
+            .replace(
+                "use nexus_kernel::actuators::{",
+                "use nexus_kernel::action_types::PlannedAction;\nuse nexus_kernel::actuators::{",
+            )
     } else {
         raw.to_owned()
     }
+}
+
+#[test]
+fn k03_f3_import_relocation_preserves_all_other_bytes() {
+    let raw = include_str!("retirement/web-search-guard.rs.txt");
+    assert_eq!(web_test_source(2), raw);
+    let staged = web_test_source(3);
+    assert!(staged.contains(
+        "use nexus_kernel::action_types::PlannedAction;\nuse nexus_kernel::actuators::{"
+    ));
+    assert_eq!(
+        staged
+            .replace("use nexus_kernel::action_types::PlannedAction;\n", "")
+            .replace(
+                "use nexus_kernel::test_support::HermeticSearchBackend;",
+                "use nexus_kernel::cognitive::types::PlannedAction;\nuse nexus_kernel::test_support::HermeticSearchBackend;",
+            ),
+        raw,
+        "K03 changes only the import path and its rustfmt position"
+    );
+    // A compiling import in the old position must still fail the exact oracle.
+    assert_ne!(
+        staged,
+        raw.replace(
+            "nexus_kernel::cognitive::types::PlannedAction",
+            "nexus_kernel::action_types::PlannedAction"
+        )
+    );
 }
 fn required_test_policy() -> BTreeMap<String, coverage::Contract> {
     serde_json::from_str(include_str!("retirement/retained-test-policy.json")).unwrap()

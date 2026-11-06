@@ -421,3 +421,14 @@ output and derives remain unchanged. No fixture is regenerated or amended.
 The same-type old-path checks retire with cognitive at K11 and computer_control
 at K13; K22 still forbids old-path imports/exports. The capability parity check
 must retire with the temporary helper at K12.
+
+## K03 F3 import formatting registration (before extraction)
+
+`test(oracle-amend)` — K01's staged F3 source expectation replaced the type
+path in place. Rustfmt moves the new `action_types` import ahead of `actuators`;
+leaving it at the old `cognitive` position cannot pass both exact source equality
+and fmt. Before extraction, `web_test_source(3..)` now registers exactly that
+path replacement and import relocation. The new reversal control reconstructs
+K01's frozen snapshot byte for byte and rejects the old-position rendering.
+The snapshot itself, every test body/assertion, the classifier hash, all JSON
+fixtures and all inventories remain unchanged. No old-or-new acceptance is added.
