@@ -29,38 +29,63 @@ use nexus_governed_control::inference::{
     CallDeadline, CallMeter, Charged, MeterRefusal, ModelError, ModelIdentity, ModelRequest,
     ResponseSchema,
 };
+use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const CASE: &str = "NEXUS_M2E_C1B1_CASE";
 const REPLY: &str = "C1B_REPLY_CANARY";
 
 /// Each case in its own child (one broker per process).
-fn children(test: &str, cases: &[&str]) {
-    if let Ok(case) = std::env::var(CASE) {
+fn port_children(test: &str, cases: &[&str]) {
+    children("adapter::c1b_port_oracles", CASE, test, cases, run);
+}
+pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str], run: fn(&str)) {
+    if let Ok(case) = std::env::var(variable) {
         run(&case);
-        println!("c1b1-case-ok:{case}");
+        println!("case-ok:{case}");
         return;
     }
     let mut failures = Vec::new();
     for case in cases {
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                &format!("adapter::c1b_port_oracles::{test}"),
-                "--nocapture",
-            ])
-            .env(CASE, case)
-            .output()
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &format!("{module}::{test}"), "--nocapture"])
+            .env(variable, case)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .unwrap();
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if !output.status.success() || !stdout.contains(&format!("c1b1-case-ok:{case}")) {
-            failures.push(format!(
-                "{case}:\n{stdout}\n{}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
+        let read = |mut pipe: Box<dyn Read + Send>| {
+            std::thread::spawn(move || {
+                let mut text = String::new();
+                let _ = pipe.read_to_string(&mut text);
+                text
+            })
+        };
+        let out = read(Box::new(child.stdout.take().unwrap()));
+        let err = read(Box::new(child.stderr.take().unwrap()));
+        // A bounded wait for the child's exit (not a success condition).
+        let deadline = Instant::now() + Duration::from_secs(180);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break Some(status);
+            }
+            if Instant::now() > deadline {
+                child
+                    .kill()
+                    .unwrap_or_else(|e| panic!("{case}: kill owned child: {e}"));
+                child
+                    .wait()
+                    .unwrap_or_else(|e| panic!("{case}: reap owned child: {e}"));
+                break None;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let (out, err) = (out.join().unwrap(), err.join().unwrap());
+        if !status.is_some_and(|s| s.success()) || !out.contains(&format!("case-ok:{case}")) {
+            failures.push(format!("{case}: {status:?}\n{out}\n{err}"));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n---\n"));
@@ -143,14 +168,14 @@ impl CallDeadline for Never {
     }
 }
 
-struct Fx {
-    home: Home,
-    fake: FakeOllama,
-    port: Arc<GovernedPort>,
-    folder: String,
+pub(crate) struct Fx {
+    pub(crate) home: Home,
+    pub(crate) fake: FakeOllama,
+    pub(crate) port: Arc<GovernedPort>,
+    pub(crate) folder: String,
 }
 impl Fx {
-    fn with(register: bool) -> Self {
+    pub(crate) fn with(register: bool) -> Self {
         assert!(nexus_governed_control::files::make_non_dumpable());
         let home = Home::fresh_temp("c1b1").unwrap();
         let workspace = home.dir.join("workspace");
@@ -239,7 +264,7 @@ fn admit(
 /// admission, no attempt (nothing charged).
 #[test]
 fn c1_s1_sealed_session_denies_inference() {
-    children("c1_s1_sealed_session_denies_inference", &["session"]);
+    port_children("c1_s1_sealed_session_denies_inference", &["session"]);
 }
 fn session_denies() {
     assert!(nexus_governed_control::files::make_non_dumpable());
@@ -336,7 +361,7 @@ fn c1_s1_session_sources_have_no_model_route() {
 /// before installation refuse. The ordinary door exposes the identity.
 #[test]
 fn c1_s2_native_consent_binds_once_at_the_port() {
-    children(
+    port_children(
         "c1_s2_native_consent_binds_once_at_the_port",
         &["consent/bound", "consent/stop-first"],
     );
@@ -433,7 +458,7 @@ fn c1_s3_the_record_is_read_before_the_reply() {
 /// recorded).
 #[test]
 fn c1_s3_port_releases_only_recorded_replies() {
-    children(
+    port_children(
         "c1_s3_port_releases_only_recorded_replies",
         &[
             "attempt/recorded",
@@ -543,7 +568,7 @@ fn c1_s3_record_seam_is_test_only() {
 /// attempt: nothing is charged, sent or recorded.
 #[test]
 fn e_o42_native_identity_mismatch_refuses() {
-    children(
+    port_children(
         "e_o42_native_identity_mismatch_refuses",
         &["identity/native", "identity/absent"],
     );
@@ -583,17 +608,24 @@ fn identity(arg: &str) {
 
 // ---------------------------------------------------------------- closed
 
-/// C1b-1 leaves the coordinator unwired: even over the ordinary port with a
-/// registered model, a model lane is refused at submit and never invoked.
+/// C1b-2: the ordinary route alone is insufficient. A non-File coordinator
+/// refuses the same model lane at submit and never invokes it.
 #[test]
 fn c1b1_model_lane_admission_stays_closed() {
-    children("c1b1_model_lane_admission_stays_closed", &["closed"]);
+    port_children("c1b1_model_lane_admission_stays_closed", &["closed"]);
 }
 fn closed() {
     let f = Fx::with(true);
     assert!(f.port.model_identity().is_some(), "the route exists");
     let invoked = Arc::new(AtomicUsize::new(0));
-    let m = f.mother(model_lanes(&invoked));
+    let m = Coordinator::open(
+        MemoryJournal::new(),
+        f.port.clone(),
+        Lanes::new(model_lanes(&invoked)).unwrap(),
+        Arc::new(ManualClock::default()),
+        f.home.private(),
+    )
+    .unwrap();
     let id = m.draft(f.contract()).unwrap();
     assert_eq!(
         m.submit(id),
@@ -658,4 +690,9 @@ fn c1_s6_model_codes_are_closed_and_round_trip() {
         BrokerClass::of("model_C1B_ERROR_CANARY"),
         BrokerClass::Unknown
     );
+}
+
+/// Reuse the existing cfg(test) seam from the fixture module already scanned.
+pub(crate) fn record_next(port: &GovernedPort, status: EndStatus) {
+    *port.model_record.lock().unwrap() = Some(status);
 }

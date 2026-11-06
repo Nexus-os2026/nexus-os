@@ -962,6 +962,7 @@ pub(crate) struct CoordinatorHooks {
     pub(crate) file_after_halt: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_invocations: std::sync::atomic::AtomicUsize,
     pub(crate) file_before_ack: crate::oracles::m2as_hooks::HookSlot,
+    pub(crate) model_replied: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_before_lane: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) file_after_perform_check: crate::oracles::m2as_hooks::HookSlot,
     pub(crate) before_owed_write: crate::oracles::m2as_hooks::HookSlot,
@@ -1324,6 +1325,7 @@ impl<P: EffectPort> Coordinator<P> {
             .by_role
             .values()
             .any(|lane| lane.max_model_calls() > 0)
+            && (self.file.is_none() || self.port.model_identity().is_none())
         {
             return Err(CoordinatorError::Contract(
                 ContractError::ModelLaneUnavailable,
@@ -1794,25 +1796,57 @@ impl<P: EffectPort> Coordinator<P> {
                 self.stop_for(id, StopReason::EmergencyStop)?;
                 return Err(CoordinatorError::Stopped);
             }
-            // Reserve the call.
-            let step = self.step(|inner| {
+            // Identity observation is outside the coordinator hold; native admission
+            // independently rechecks it against the same original run and consent.
+            let cap = lane.max_model_calls();
+            let model = (cap > 0).then(|| self.port.model_identity()).flatten();
+            let (step, caller) = self.step(|inner| {
                 if identity.role != *role {
-                    return Ok(Then::End(BlockReason::LaneIdentityChanged));
+                    return Ok((Then::End(BlockReason::LaneIdentityChanged), None));
                 }
-                model_calls::reserve_lane(
-                    inner,
-                    id,
-                    generation,
-                    &identity,
-                    lane.max_model_calls(),
-                    &*self.clock,
-                )
+                if cap > 0 {
+                    let c = inner.mission(id)?.contract()?;
+                    let reason = match (&c.model, &model) {
+                        (Some(pin), Some(view))
+                            if self.file.is_some()
+                                && c.deliverable.as_deref() == Some("index.html") =>
+                        {
+                            (pin.name != view.name
+                                || pin.digest != view.digest
+                                || pin.identity != view.identity)
+                                .then_some(BlockReason::ModelIdentityChanged)
+                        }
+                        _ => Some(BlockReason::ModelNotPinned),
+                    };
+                    if let Some(reason) = reason {
+                        return Ok((Then::End(reason), None));
+                    }
+                }
+                let step =
+                    model_calls::reserve_lane(inner, id, generation, &identity, cap, &*self.clock)?;
+                let caller = match &step {
+                    Then::Go(input) if cap > 0 => Some(model_calls::Caller::reserved(
+                        self,
+                        inner,
+                        input.invocation,
+                        generation,
+                    )?),
+                    _ => None,
+                };
+                Ok((step, caller))
             })?;
             let input = match self.then(id, step)? {
                 Ok(input) => input,
                 Err(state) => return Ok(Ended::Ended(state)),
             };
 
+            if let Some(caller) = &caller {
+                if caller.admit().is_err() {
+                    return Ok(Ended::Ended(
+                        self.end(id, BlockReason::ModelAdmissionRefused)?,
+                    ));
+                }
+            }
             #[cfg(test)]
             if self.file.is_some() {
                 self.hooks.file_before_lane.fire();
@@ -1835,16 +1869,47 @@ impl<P: EffectPort> Coordinator<P> {
             }
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "lane_invoke");
-            let output = lane.invoke(&input);
+            let context = crate::lane::LaneContext {
+                model: caller.as_ref().map(|c| c as &dyn crate::lane::ModelCaller),
+            };
+            let output = lane.invoke_in(&input, &context);
+            drop(caller);
+            if cap > 0 {
+                let terminal = match output.verdict {
+                    Verdict::Fail { .. } if *role == LaneRole::Verifier => {
+                        Some(Trigger::VerifyFail {
+                            reason: VerifyFailReason::VerifierFailed,
+                        })
+                    }
+                    Verdict::Fail { .. } => Some(Trigger::Fail {
+                        reason: FailReason::LaneFail(*role),
+                    }),
+                    Verdict::Halt { .. } => Some(Trigger::Block {
+                        reason: BlockReason::LaneHalt(*role),
+                    }),
+                    _ => None,
+                };
+                if let Some(trigger) = terminal {
+                    let ended = self.end_with(id, trigger);
+                    self.model_obligations()?;
+                    return Ok(Ended::Ended(ended?));
+                }
+            }
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("after", "lane_invoke");
-            self.file_boundary(id)?;
+            let boundary = self.file_boundary(id);
+            self.model_obligations()?;
+            boundary?;
 
             // Keep the answer only if the reservation still holds.
             let hash = output_hash(&output);
             let contract = self.step(|inner| {
                 inner.kept(id)?;
-                if inner.mission(id)?.generation != generation {
+                let m = inner.mission(id)?;
+                if m.generation != generation || m.pending_lane != Some(input.invocation) {
+                    if m.pending_lane != Some(input.invocation) {
+                        return Err(CoordinatorError::Stopped);
+                    }
                     inner.append(
                         id,
                         Event::LaneOvertaken {
@@ -2723,6 +2788,7 @@ impl<P: EffectPort> Coordinator<P> {
     /// can be lost behind the clean close.
     pub(crate) fn close_ref(&self) -> Result<(), CoordinatorError> {
         self.step(|inner| {
+            self.model_obligations()?;
             if inner.closed {
                 return Err(CoordinatorError::Closed);
             }

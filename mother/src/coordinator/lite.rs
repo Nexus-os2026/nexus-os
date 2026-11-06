@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(super) struct FileLife {
     pub(super) cell: HaltCell,
+    // Independent of revoked entitlements: these survive Stop/transition.
+    pub(super) model_active: std::sync::atomic::AtomicBool,
+    pub(super) model_debt: std::sync::atomic::AtomicBool,
     pub(super) terminal: std::sync::OnceLock<super::lite_intent::FileTerminal>,
     #[cfg(test)]
     after_engagement: crate::oracles::lite_engagement_hooks::SiteHook,
@@ -123,6 +126,8 @@ impl<P: EffectPort> Coordinator<P> {
         }
         self.file = Some(FileLife {
             terminal: std::sync::OnceLock::new(),
+            model_active: std::sync::atomic::AtomicBool::new(false),
+            model_debt: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]
             after_engagement: self.hooks.file_engagement.clone(),
             cell,
@@ -222,6 +227,15 @@ impl FileSession<crate::adapter::SessionPort> {
 }
 
 impl<P: EffectPort> FileSession<P> {
+    #[cfg(test)]
+    pub(crate) fn overtake_model_for_test(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        self.coordinator.try_with_lock(|inner| {
+            let invocation = inner.mission(id)?.pending_lane.unwrap();
+            inner.append(id, Event::LaneOvertaken { invocation })?;
+            inner.mission(id)?.pending_lane = None;
+            Ok(())
+        })
+    }
     #[cfg(test)]
     pub(crate) fn end_for_test(
         &self,
@@ -374,6 +388,7 @@ impl<P: EffectPort> FileSession<P> {
         self.call(|c| c.file_notice(id))
     }
     pub fn close(&self) -> Result<(), CoordinatorError> {
+        self.coordinator.model_obligations()?;
         self.touch()?;
         self.call(|c| {
             c.step(|inner| {

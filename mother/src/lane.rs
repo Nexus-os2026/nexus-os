@@ -112,14 +112,36 @@ pub struct LaneOutput {
     pub verdict: Verdict,
 }
 
+/// A borrowed, invocation-bound model route. Scripted lanes receive none.
+pub struct LaneContext<'a> {
+    pub model: Option<&'a dyn ModelCaller>,
+}
+pub trait ModelCaller: Send + Sync {
+    fn call(
+        &self,
+        request: &nexus_governed_control::inference::ModelRequest,
+    ) -> Result<nexus_governed_control::inference::ModelReply, ModelCallError>;
+}
+/// Closed facts only; no transport body or reply enters diagnostics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelCallError {
+    Invalidated,
+    Refused(crate::evidence::BrokerClass),
+    Failed(crate::evidence::BrokerClass),
+    RecordUnavailable,
+}
+
 /// A lane.
 pub trait Lane: Send + Sync {
-    /// Code-defined allowance. C1a refuses nonzero caps at submission.
+    /// Code-defined allowance; only a File session over a model route admits it.
     fn max_model_calls(&self) -> u32 {
         0
     }
     fn identity(&self) -> LaneIdentity;
     fn invoke(&self, input: &LaneInput) -> LaneOutput;
+    fn invoke_in(&self, input: &LaneInput, _: &LaneContext<'_>) -> LaneOutput {
+        self.invoke(input)
+    }
 }
 
 /// The hex SHA-256 of a lane input's canonical form.

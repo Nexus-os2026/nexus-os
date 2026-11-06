@@ -54,6 +54,7 @@ impl FileSession<crate::adapter::SessionPort> {
     /// Exclusive transfer removes all operational controller routes. Terminal
     /// settlement and the exact acknowledgements happen before this returns.
     pub fn prepare_session_end(self) -> Result<PreparedSessionEnd, CoordinatorError> {
+        self.coordinator.model_obligations()?;
         let id = self.life().mission.load(Ordering::SeqCst);
         if id != 0 {
             self.call(|c| {
