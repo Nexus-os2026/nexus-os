@@ -27,6 +27,9 @@ use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::RecordBatch;
+use nexus_governed_control::inference::{
+    CallDeadline, CallMeter, ModelIdentityView, ModelReply, ModelRequest,
+};
 use nexus_governed_control::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -113,6 +116,25 @@ pub struct PendingAction {
     pub run: String,
     pub commitment: String,
     pub deadline_mono_ms: u64,
+}
+
+/// M2e-C1b: an attempt's record was not confirmed (owed, or unknown).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecordDebt {
+    Owed,
+    Uncertain,
+}
+
+/// M2e-C1b (A5): one attempted model call. Its record is read first: only a
+/// recorded attempt releases its reply (untrusted data).
+#[derive(Debug)]
+pub enum ModelAttempt<R = ModelReply> {
+    /// Recorded, with its reply.
+    Replied(R),
+    /// Recorded; the call ended without a reply (its class).
+    Failed(BrokerClass),
+    /// Not confirmed recorded: any reply was discarded.
+    Unrecorded(RecordDebt),
 }
 
 /// The port or the broker refused: only a class of the closed registry
@@ -310,6 +332,34 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
         false
     }
     fn file_ack(&self, _: &PendingAction) -> Result<(), EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NoBrokerRoute,
+        })
+    }
+    /// M2e-C1b: the registered model, if this port has a model route.
+    fn model_identity(&self) -> Option<ModelIdentityView> {
+        None
+    }
+    /// M2e-C1b: bind the mission's run, once, to the cached yes and `identity`.
+    fn admit_inference(
+        &self,
+        _: MissionId,
+        _contract_hash: &str,
+        _request: &str,
+        _identity: [u8; 32],
+    ) -> Result<(), EffectRefusal> {
+        Err(EffectRefusal {
+            class: BrokerClass::NoBrokerRoute,
+        })
+    }
+    /// M2e-C1b: one metered call. `Err`: refused before any attempt.
+    fn model_call(
+        &self,
+        _: MissionId,
+        _: &ModelRequest,
+        _: &dyn CallMeter,
+        _: &dyn CallDeadline,
+    ) -> Result<ModelAttempt, EffectRefusal> {
         Err(EffectRefusal {
             class: BrokerClass::NoBrokerRoute,
         })

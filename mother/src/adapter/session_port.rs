@@ -5,6 +5,12 @@ use super::*;
 #[cfg(test)]
 pub(super) mod session_projection_tests;
 use nexus_governed_control::host_session::{SessionContext, SessionDoor};
+use nexus_governed_control::inference::{
+    CallDeadline, CallMeter, ModelCallOutcome, ModelIdentityView, ModelRequest,
+};
+
+/// M2d-D R32: the sealed session issues no model capability.
+const NO_SESSION_MODEL: &str = "inference is not a session route";
 
 pub(super) enum PortDoor {
     Legacy(AgentDoor),
@@ -158,6 +164,36 @@ impl PortDoor {
         match self {
             Self::Legacy(door) => door.ack_commitment(id),
             Self::Session(door) => door.ack_commitment(id).map_err(Into::into),
+        }
+    }
+    pub(super) fn model_identity(&self) -> Option<ModelIdentityView> {
+        match self {
+            Self::Legacy(door) => door.model_identity(),
+            Self::Session(_) => None,
+        }
+    }
+    pub(super) fn admit_inference(
+        &self,
+        run: RunId,
+        contract_hash: &str,
+        request: &str,
+        identity: [u8; 32],
+    ) -> Result<(), AuthorityError> {
+        match self {
+            Self::Legacy(door) => door.admit_inference(run, contract_hash, request, identity),
+            Self::Session(_) => Err(AuthorityError::Unavailable(NO_SESSION_MODEL)),
+        }
+    }
+    pub(super) fn model_call(
+        &self,
+        run: RunId,
+        request: &ModelRequest,
+        meter: &dyn CallMeter,
+        deadline: &dyn CallDeadline,
+    ) -> Result<ModelCallOutcome, AuthorityError> {
+        match self {
+            Self::Legacy(door) => door.model_call(run, request, meter, deadline),
+            Self::Session(_) => Err(AuthorityError::Unavailable(NO_SESSION_MODEL)),
         }
     }
 }

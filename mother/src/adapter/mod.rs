@@ -28,7 +28,7 @@
 
 use crate::effect::{
     Admission, ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest,
-    FileSnapshot, Owed, PendingAction,
+    FileSnapshot, ModelAttempt, Owed, PendingAction, RecordDebt,
 };
 use crate::evidence::BrokerClass;
 use crate::journal::{IoKind, JournalError, JournalStore, MissionId, StoreFailure};
@@ -37,6 +37,7 @@ use nexus_governed_control::authority::approval::{
 };
 use nexus_governed_control::authority::commitment::PublicationClass;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::evidence::EndStatus;
 use nexus_governed_control::authority::file_session::{
     FileAttachment, FilePort, FileSessionError, HaltCell, HaltTag,
 };
@@ -45,6 +46,7 @@ use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::governed::{
     AgentDoor, AgentOutcome, HaltReason, Intent, Lookup, RecordBatch,
 };
+use nexus_governed_control::inference::{CallDeadline, CallMeter, ModelIdentityView, ModelRequest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -223,6 +225,10 @@ pub struct GovernedPort {
     /// before the coordinator takes the answer.
     #[cfg(test)]
     pub(crate) after_held_answer: crate::oracles::m2as_hooks::HookSlot,
+    /// M2e-C1b (tests only): replaces the next model attempt's record
+    /// status (the broker's store fault hooks are private to its crate).
+    #[cfg(test)]
+    pub(crate) model_record: Mutex<Option<EndStatus>>,
 }
 
 impl GovernedPort {
@@ -276,6 +282,8 @@ impl GovernedPort {
             first_fence_cancel: Default::default(),
             #[cfg(test)]
             after_held_answer: Default::default(),
+            #[cfg(test)]
+            model_record: Default::default(),
         }
     }
 
@@ -487,6 +495,21 @@ impl GovernedPort {
         }
     }
 
+    /// M2e-C1b: the mission's existing run; a model step never opens one.
+    fn model_run(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
+        self.admit_host()?;
+        self.enter()?;
+        self.with_runs(|runs| {
+            if runs.ended.contains(&mission) {
+                return Err(refused(BrokerClass::MissionCancelled));
+            }
+            runs.open
+                .get(&mission)
+                .copied()
+                .ok_or_else(|| refused(BrokerClass::NotAdmitted))
+        })
+    }
+
     /// Mark the mission ended; its run, if it opened one.
     fn end(&self, mission: MissionId) -> Option<RunId> {
         self.with_runs(|runs| {
@@ -511,6 +534,19 @@ fn refused(class: BrokerClass) -> EffectRefusal {
 /// The broker's class, in the closed registry (anything else is `unknown`).
 fn refused_by(class: &str) -> EffectRefusal {
     refused(BrokerClass::of(class))
+}
+
+/// M2e-C1b (A5): the record is read before the reply: only a recorded
+/// attempt releases one; owed or uncertain evidence discards it.
+pub(crate) fn classify<R>(record: EndStatus, result: Result<R, AuthorityError>) -> ModelAttempt<R> {
+    match record {
+        EndStatus::Recorded { .. } => match result {
+            Ok(reply) => ModelAttempt::Replied(reply),
+            Err(error) => ModelAttempt::Failed(BrokerClass::of(error.class())),
+        },
+        EndStatus::Owed => ModelAttempt::Unrecorded(RecordDebt::Owed),
+        EndStatus::Uncertain => ModelAttempt::Unrecorded(RecordDebt::Uncertain),
+    }
 }
 
 impl GovernedPort {
@@ -761,6 +797,45 @@ impl EffectPort for GovernedPort {
 
     fn hand(&self, mission: MissionId, pending: &PendingAction) {
         self.record_handed(mission, pending);
+    }
+
+    /// M2e-C1b: the ordinary door's registered model (a session door: none).
+    fn model_identity(&self) -> Option<ModelIdentityView> {
+        self.door.model_identity()
+    }
+
+    fn admit_inference(
+        &self,
+        mission: MissionId,
+        contract_hash: &str,
+        request: &str,
+        identity: [u8; 32],
+    ) -> Result<(), EffectRefusal> {
+        let run = self.model_run(mission)?;
+        self.admit_host()?;
+        self.door
+            .admit_inference(run, contract_hash, request, identity)
+            .map_err(|e| refused_by(e.class()))
+    }
+
+    /// No port lock is held across the broker's call or its record write.
+    fn model_call(
+        &self,
+        mission: MissionId,
+        request: &ModelRequest,
+        meter: &dyn CallMeter,
+        deadline: &dyn CallDeadline,
+    ) -> Result<ModelAttempt, EffectRefusal> {
+        let run = self.model_run(mission)?;
+        self.admit_host()?;
+        let outcome = self
+            .door
+            .model_call(run, request, meter, deadline)
+            .map_err(|e| refused_by(e.class()))?;
+        let record = outcome.record();
+        #[cfg(test)]
+        let record = self.model_record.lock().unwrap().take().unwrap_or(record);
+        Ok(classify(record, outcome.into_result()))
     }
 
     /// The coordinator broke (called under the coordinator lock). Owner
