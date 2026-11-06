@@ -975,7 +975,8 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
             RunId::parse(&pending.run).is_some()
                 && CommitmentId::parse(&pending.commitment).is_some()
         }
-        Event::ConsentRefused { .. }
+        Event::ModelCallCharged { .. }
+        | Event::ConsentRefused { .. }
         | Event::LaneOvertaken { .. }
         | Event::EffectRefused { .. }
         | Event::EffectSettled { .. }

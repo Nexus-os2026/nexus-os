@@ -62,7 +62,7 @@ fn m2a_review_the_dialog_summary_carries_every_term() {
     for line in [
         "│ A one-page site for Rosa's bakery",
         "│ ~/Sites/rosas-bakery",
-        "Budget: 3600000 ms, 50 lane calls, money 0 (minor units)",
+        "Budget: 3600000 ms, 50 model calls (each lane call counts as at least one), money 0 (minor units)",
         "Never allowed: process, spend",
         "│ Which colours do you like?",
         "│ Blue and cream",
@@ -240,6 +240,8 @@ fn m2a_review_replay_checks_the_wait_s_payload() {
             version: "m1-test".into(),
         }),
         input_hash: "0".repeat(64),
+        model_cap: 0,
+        model_budget: 0,
     });
     events.push(Event::LaneOvertaken {
         invocation: crate::lane::InvocationId {
