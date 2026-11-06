@@ -15,12 +15,12 @@ use crate::actuators::{ActuatorContext, ActuatorRegistry, ActuatorScope};
 use crate::audit::{AuditTrail, AuditWriter, EventType};
 use crate::autonomy::AutonomyLevel;
 use crate::capabilities::has_capability;
+use crate::errors::compat::AgentState;
 use crate::errors::AgentError;
 use crate::hm::{
     DerivedItem, DispatchContext, DispatchIssuer, Parent, Principal, PromptBuilder, PromptEnvelope,
     PromptSource, RecallSpec, RecalledRecord, RecordTable, SourceKind, Unit,
 };
-use crate::lifecycle::AgentState;
 use crate::supervisor::Supervisor;
 use arc_swap::ArcSwap;
 use nexus_persistence::{NexusDatabase, StateStore};
@@ -3267,9 +3267,9 @@ mod tests {
 
     /// A supervisor with an agent in `state`, and that agent's id.
     fn supervisor_with_agent_in(
-        state: crate::lifecycle::AgentState,
+        state: crate::errors::compat::AgentState,
     ) -> (Arc<Mutex<Supervisor>>, String) {
-        use crate::lifecycle::AgentState as S;
+        use crate::errors::compat::AgentState as S;
         let (sup, running) = make_supervisor_with_agent();
         let id = uuid(&running);
         let agent_id = {
@@ -3343,7 +3343,10 @@ mod tests {
         }
     }
 
-    fn refused_as(result: &Result<(), AgentError>, state: crate::lifecycle::AgentState) -> bool {
+    fn refused_as(
+        result: &Result<(), AgentError>,
+        state: crate::errors::compat::AgentState,
+    ) -> bool {
         result
             .as_ref()
             .is_err_and(|e| e.to_string().contains(&format!("is {state}")))
@@ -3353,11 +3356,11 @@ mod tests {
     /// restarted, the same agent is given one and its cycle asks the model.
     #[test]
     fn p4_s1_h1_a_stopped_agent_is_given_no_goal_and_nothing_runs() {
-        let (sup, agent_id) = supervisor_with_agent_in(crate::lifecycle::AgentState::Stopped);
+        let (sup, agent_id) = supervisor_with_agent_in(crate::errors::compat::AgentState::Stopped);
         let (runtime, emitter) = make_runtime(sup.clone());
         let refused = runtime.assign_goal(&agent_id, AgentGoal::new("summarize".into(), 5));
         assert!(
-            refused_as(&refused, crate::lifecycle::AgentState::Stopped),
+            refused_as(&refused, crate::errors::compat::AgentState::Stopped),
             "{refused:?}"
         );
         assert_eq!(published(&runtime, &agent_id), [false; 3]);
@@ -3396,7 +3399,7 @@ mod tests {
     /// one handed in), before anything is published.
     #[test]
     fn p4_s1_h1_no_agent_outside_running_or_paused_is_given_a_goal() {
-        use crate::lifecycle::AgentState as S;
+        use crate::errors::compat::AgentState as S;
         for state in [
             S::Created,
             S::Starting,
@@ -3422,7 +3425,7 @@ mod tests {
     /// both routes as before.
     #[test]
     fn p4_s1_h1_running_and_paused_agents_are_still_given_goals() {
-        use crate::lifecycle::AgentState as S;
+        use crate::errors::compat::AgentState as S;
         for state in [S::Running, S::Paused] {
             let (sup, agent_id) = supervisor_with_agent_in(state);
             let (runtime, _) = make_runtime(sup);
@@ -3501,7 +3504,7 @@ mod tests {
         drop(held);
         let result = assigning.join().unwrap();
         assert!(
-            refused_as(&result, crate::lifecycle::AgentState::Stopped),
+            refused_as(&result, crate::errors::compat::AgentState::Stopped),
             "{result:?}"
         );
         assert_eq!(published(&runtime, &agent_id), [false; 3]);
@@ -3539,7 +3542,7 @@ mod tests {
             let result = assigning.join().unwrap();
             if stop {
                 assert!(
-                    refused_as(&result, crate::lifecycle::AgentState::Stopped),
+                    refused_as(&result, crate::errors::compat::AgentState::Stopped),
                     "{result:?}"
                 );
                 assert_eq!(published(&runtime, &agent_id), [false; 3]);

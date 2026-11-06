@@ -1,6 +1,6 @@
+use nexus_kernel::errors::compat::AgentState;
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::kill_gates::GateStatus;
-use nexus_kernel::lifecycle::AgentState;
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::safety_supervisor::KpiKind;
 use nexus_kernel::supervisor::Supervisor;

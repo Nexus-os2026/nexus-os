@@ -475,3 +475,48 @@ Pre-extraction stage-4 activation was RED: the manifest payload-home,
 real-declaration and stage-seed checks failed for the missing new homes; the
 live successor reported exactly config/schema_compat.rs and errors/compat.rs
 as omissions. Stage 3 was restored before this oracle was added.
+
+
+## K04 extraction registration (LIVE_STAGE = 4)
+
+`refactor` — move FuelViolation and AgentState/Display unchanged to
+errors/compat.rs, and BackupScheduleConfig, RateLimitConfig, ApiHardeningConfig
+and every registered default helper unchanged to config/schema_compat.rs.
+Keep exactly the five registered same-type old-home exports. Config, errors,
+retained kernel runtime callers and typed tests use the new homes; there are
+no outside-kernel import changes. Existing behavioral tests stay present.
+
+The private default_backup_dir helper also served BackupConfig::default.
+That one retained runtime caller inlines its identical validated-home
+expression, preserving the lossless PathBuf even for non-UTF-8 HOME. The moved
+helper stays private and byte-identical; no helper export or string roundtrip
+is added. No config migration, behavior, Debug or serde change is introduced.
+
+For the live K04 tree, paths_at(4) and the staged module edges derive both
+nested homes and their parent declarations from the unchanged manifest. All
+JSONL bytes/hashes, production seeds, module/logging/HM/retained-test and
+dependency inventories remain unchanged. Stage 4 activates only this approved
+extraction; later retirement and authoritative integration remain separate.
+
+
+K04 mutation receipts: backup serde retention default, rate default, API depth
+default, AgentState Display, FuelViolation serde name and the backup transitional
+export were each planted separately. All six failed by the named assertion
+(no compile-error substitute), then their source bytes were restored and the
+same named test passed. The pre-extraction stage-4 RED probe remains separate.
+
+
+K04 verification is BLOCKED. The required full kernel command reached the
+successor binary, then stopped with 1845 passed, 11 failed and 15 ignored.
+All 11 failures report the same historical K02 synthetic baseline finding:
+`f7-dependency` at kernel/src/config.rs. build_clean_tree copies today's config
+source, including the new schema_compat child, into synthetic K02/K03; their
+module inventory correctly adds that child only at K04. The live K04 gate,
+manifest, K02/K03/K04 parity and goldens pass; fmt and workspace Clippy pass.
+No check or fixture was changed after observing the failure. Historical
+fixture projection needs Architect review and separate oracle registration;
+this candidate does not satisfy the zero-failure exit condition.
+
+The separate no-fail-fast diagnostic ran all 23 binaries not reached after
+that failure: 201 passed, 0 failed, 13 ignored. Combined candidate inventory:
+2046 passed, 11 failed, 28 ignored; this is not a green single-command result.

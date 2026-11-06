@@ -2,15 +2,15 @@
 //! Defaults, field order, serde names, Debug and error text are compatibility
 //! contracts; K01's fixtures and the existing config/vault tests stay unchanged.
 use nexus_kernel::audit::AuditError;
-use nexus_kernel::backup::BackupScheduleConfig;
+use nexus_kernel::config::schema_compat::{
+    ApiHardeningConfig, BackupScheduleConfig, RateLimitConfig,
+};
 use nexus_kernel::config::{
     is_config_envelope, load_config_from_path_with, save_config_checked_to_path, ConfigKeyMaterial,
     NexusConfig,
 };
+use nexus_kernel::errors::compat::{AgentState, FuelViolation};
 use nexus_kernel::errors::{on_error, AgentError, ErrorStrategy};
-use nexus_kernel::fuel_hardening::FuelViolation;
-use nexus_kernel::lifecycle::AgentState;
-use nexus_kernel::rate_limit::{ApiHardeningConfig, RateLimitConfig};
 use serde::de::value::{Error as ValueError, U32Deserializer};
 use serde::de::{DeserializeOwned, IntoDeserializer};
 use serde::{Deserialize, Serialize};

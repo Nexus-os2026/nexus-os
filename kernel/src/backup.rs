@@ -3,6 +3,7 @@
 //! Creates compressed, optionally encrypted archives of all Nexus OS data
 //! (databases, manifests, configuration) with integrity verification.
 
+pub use crate::config::schema_compat::BackupScheduleConfig;
 use crate::crypto::{self, CryptoError, EncryptionKey};
 use chrono::{DateTime, Utc};
 use flate2::read::GzDecoder;
@@ -130,7 +131,14 @@ fn yes() -> bool {
 impl Default for BackupConfig {
     fn default() -> Self {
         Self {
-            output_dir: default_backup_dir(),
+            output_dir: crate::identity_home::identity_home()
+                .map(|home| {
+                    home.join(".local")
+                        .join("share")
+                        .join("nexus-os")
+                        .join("backups")
+                })
+                .unwrap_or_default(),
             include_audit: true,
             include_genomes: true,
             include_config: true,
@@ -207,86 +215,7 @@ pub struct VerifyResult {
     pub errors: Vec<String>,
 }
 
-/// Scheduled backup configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BackupScheduleConfig {
-    #[serde(default)]
-    pub enabled: bool,
-
-    /// Cron expression for backup schedule (e.g. "0 2 * * *" = daily 2 AM).
-    #[serde(default = "default_schedule")]
-    pub schedule: String,
-
-    /// Directory to store backups.
-    #[serde(default = "default_backup_dir_string")]
-    pub output_dir: String,
-
-    /// Number of backups to retain before rotating old ones.
-    #[serde(default = "default_retention")]
-    pub retention_count: u32,
-
-    /// Encrypt backups.
-    #[serde(default)]
-    pub encrypt: bool,
-
-    /// Compression: "gzip" (default).
-    #[serde(default = "default_compression")]
-    pub compression: String,
-
-    #[serde(default = "yes_eq")]
-    pub include_audit: bool,
-
-    #[serde(default = "yes_eq")]
-    pub include_genomes: bool,
-}
-
-fn yes_eq() -> bool {
-    true
-}
-fn default_schedule() -> String {
-    "0 2 * * *".to_string()
-}
-fn default_backup_dir_string() -> String {
-    default_backup_dir().to_string_lossy().into_owned()
-}
-fn default_retention() -> u32 {
-    30
-}
-fn default_compression() -> String {
-    "gzip".to_string()
-}
-
-impl Default for BackupScheduleConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            schedule: default_schedule(),
-            output_dir: default_backup_dir_string(),
-            retention_count: 30,
-            encrypt: false,
-            compression: default_compression(),
-            include_audit: true,
-            include_genomes: true,
-        }
-    }
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────
-
-/// The default backup directory beneath the validated identity home. With no
-/// valid identity home it is empty, which `create_backup` refuses rather than
-/// resolving against the working directory or a shared temporary directory
-/// (P0-002C5B).
-fn default_backup_dir() -> PathBuf {
-    crate::identity_home::identity_home()
-        .map(|home| {
-            home.join(".local")
-                .join("share")
-                .join("nexus-os")
-                .join("backups")
-        })
-        .unwrap_or_default()
-}
 
 fn sha256_file(path: &Path) -> Result<String, BackupError> {
     let data = std::fs::read(path)?;

@@ -4,6 +4,8 @@
 //! request-level input validation (size limits, depth limits, path traversal
 //! prevention).
 
+pub use crate::config::schema_compat::ApiHardeningConfig;
+pub use crate::config::schema_compat::RateLimitConfig;
 use governor::clock::{Clock, DefaultClock};
 use governor::state::keyed::DashMapStateStore;
 use governor::{Quota, RateLimiter};
@@ -58,118 +60,6 @@ impl std::fmt::Display for RateCategory {
 }
 
 // ── Configuration ──────────────────────────────────────────────────────
-
-/// Rate-limiting configuration (embedded in `NexusConfig`).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RateLimitConfig {
-    /// Master switch — when false, all rate checks are no-ops.
-    #[serde(default = "yes")]
-    pub enabled: bool,
-
-    /// Default requests per minute for most commands.
-    #[serde(default = "default_rpm")]
-    pub default_rpm: u32,
-
-    /// LLM requests per minute (more expensive → lower limit).
-    #[serde(default = "default_llm_rpm")]
-    pub llm_rpm: u32,
-
-    /// Agent execution requests per minute.
-    #[serde(default = "default_agent_rpm")]
-    pub agent_execute_rpm: u32,
-
-    /// Audit export requests per minute.
-    #[serde(default = "default_audit_rpm")]
-    pub audit_export_rpm: u32,
-
-    /// Backup creation requests per minute.
-    #[serde(default = "default_backup_rpm")]
-    pub backup_create_rpm: u32,
-
-    /// Admin operation requests per minute.
-    #[serde(default = "default_admin_rpm")]
-    pub admin_rpm: u32,
-
-    /// Maximum burst size (tokens available immediately).
-    #[serde(default = "default_burst")]
-    pub burst_size: u32,
-}
-
-fn yes() -> bool {
-    true
-}
-fn default_rpm() -> u32 {
-    120
-}
-fn default_llm_rpm() -> u32 {
-    20
-}
-fn default_agent_rpm() -> u32 {
-    30
-}
-fn default_audit_rpm() -> u32 {
-    5
-}
-fn default_backup_rpm() -> u32 {
-    2
-}
-fn default_admin_rpm() -> u32 {
-    10
-}
-fn default_burst() -> u32 {
-    10
-}
-
-impl Default for RateLimitConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            default_rpm: default_rpm(),
-            llm_rpm: default_llm_rpm(),
-            agent_execute_rpm: default_agent_rpm(),
-            audit_export_rpm: default_audit_rpm(),
-            backup_create_rpm: default_backup_rpm(),
-            admin_rpm: default_admin_rpm(),
-            burst_size: default_burst(),
-        }
-    }
-}
-
-/// API hardening / request validation configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ApiHardeningConfig {
-    /// Maximum request body size in bytes (default 10 MiB).
-    #[serde(default = "default_max_body")]
-    pub max_request_body_bytes: usize,
-
-    /// Maximum length for any single string field.
-    #[serde(default = "default_max_string")]
-    pub max_string_length: usize,
-
-    /// Maximum JSON nesting depth.
-    #[serde(default = "default_max_depth")]
-    pub json_max_depth: usize,
-}
-
-fn default_max_body() -> usize {
-    10_485_760
-}
-fn default_max_string() -> usize {
-    100_000
-}
-fn default_max_depth() -> usize {
-    32
-}
-
-impl Default for ApiHardeningConfig {
-    fn default() -> Self {
-        Self {
-            max_request_body_bytes: default_max_body(),
-            max_string_length: default_max_string(),
-            json_max_depth: default_max_depth(),
-        }
-    }
-}
 
 // ── Rate Limiter ───────────────────────────────────────────────────────
 
