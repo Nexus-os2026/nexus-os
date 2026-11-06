@@ -1,31 +1,5 @@
+pub use crate::errors::compat::AgentState;
 use crate::errors::AgentError;
-use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum AgentState {
-    Created,
-    Starting,
-    Running,
-    Paused,
-    Stopping,
-    Stopped,
-    Destroyed,
-}
-
-impl Display for AgentState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AgentState::Created => write!(f, "Created"),
-            AgentState::Starting => write!(f, "Starting"),
-            AgentState::Running => write!(f, "Running"),
-            AgentState::Paused => write!(f, "Paused"),
-            AgentState::Stopping => write!(f, "Stopping"),
-            AgentState::Stopped => write!(f, "Stopped"),
-            AgentState::Destroyed => write!(f, "Destroyed"),
-        }
-    }
-}
 
 pub fn transition_state(from: AgentState, to: AgentState) -> Result<AgentState, AgentError> {
     if is_valid_transition(from, to) {
@@ -49,7 +23,8 @@ pub fn is_valid_transition(from: AgentState, to: AgentState) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{transition_state, AgentState};
+    use super::transition_state;
+    use crate::errors::compat::AgentState;
     use crate::errors::AgentError;
 
     #[test]

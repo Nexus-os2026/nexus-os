@@ -943,6 +943,92 @@ fn clean_tree(stage: u8) -> Tree {
     static CLEAN: std::sync::OnceLock<Vec<Tree>> = std::sync::OnceLock::new();
     CLEAN.get_or_init(|| (2..=22).map(build_clean_tree).collect())[usize::from(stage - 2)].clone()
 }
+/// R-8: live retained source copied into a historical synthetic stage loses
+/// only the nested module edges registered by later, already-live extraction
+/// rows, and their own new-home paths revert to the registered old home. Each
+/// projected declaration must occur exactly once in its registered form;
+/// anything else is left in place and judged at every stage.
+fn project_live_source(stage: u8, path: &str, raw: String) -> String {
+    let mut raw = raw;
+    let mut projected = Vec::new();
+    for row in stages()
+        .iter()
+        .filter(|r| r.stage > stage && r.stage <= LIVE_STAGE)
+    {
+        for extraction in &row.extract {
+            let destination = extraction
+                .destination
+                .trim_start_matches("kernel/src/")
+                .trim_end_matches(".rs");
+            let Some((parent, child)) = destination.split_once('/') else {
+                continue;
+            };
+            if path != format!("kernel/src/{parent}.rs") {
+                continue;
+            }
+            // Whole-line projection only: a registered declaration is a line
+            // that is exactly `pub mod <child>;`. Substring deletion could
+            // splice a neighbouring line into a comment and hide it (K04
+            // review 1, HIGH), so lines are removed whole and never merged.
+            let declaration = format!("pub mod {child};");
+            let mut lines: Vec<&str> = raw.split('\n').collect();
+            let hits: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, line)| **line == declaration)
+                .map(|(i, _)| i)
+                .collect();
+            if !hits.is_empty() {
+                assert_eq!(
+                    hits.len(),
+                    1,
+                    "K{}: {path} must declare {child} once",
+                    row.stage
+                );
+                let at = hits[0];
+                // Fail closed when anything could attach to or change the
+                // meaning of the neighbouring item after removal: an
+                // attribute (or attribute continuation) directly above the
+                // declaration refuses the projection (K04 review 2, HIGH).
+                let above = at.checked_sub(1).map(|i| lines[i].trim_start());
+                assert!(
+                    !above.is_some_and(|l| l.starts_with("#[")
+                        || l.starts_with("#!")
+                        || l.ends_with(']')),
+                    "K{}: {path} attributed {child} declaration cannot be projected",
+                    row.stage
+                );
+                lines.remove(at);
+                if lines.get(at) == Some(&"") && at + 1 < lines.len() {
+                    lines.remove(at);
+                }
+                raw = lines.join("\n");
+            }
+            let old = extraction
+                .source
+                .trim_start_matches("kernel/src/")
+                .trim_end_matches(".rs")
+                .replace('/', "::");
+            for name in &extraction.payload {
+                if name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    raw = raw.replace(
+                        &format!("crate::{parent}::{child}::{name}"),
+                        &format!("crate::{old}::{name}"),
+                    );
+                }
+            }
+            projected.push((row.stage, parent, child));
+        }
+    }
+    for (row, parent, child) in projected {
+        assert!(
+            !module_names(&raw).contains(child)
+                && !raw.contains(&format!("crate::{parent}::{child}::")),
+            "K{row}: {path} keeps an unprojected {child} edge"
+        );
+    }
+    raw
+}
 fn build_clean_tree(stage: u8) -> Tree {
     let mut tree = Tree {
         files: paths_at(stage)
@@ -1025,7 +1111,7 @@ fn build_clean_tree(stage: u8) -> Tree {
         );
     }
     for sink in logs() {
-        let mut raw = read(&sink.path);
+        let mut raw = project_live_source(stage, &sink.path, read(&sink.path));
         if stage >= 4 && sink.path == "kernel/src/config.rs" {
             for kind in [
                 "BackupScheduleConfig",
@@ -1348,4 +1434,69 @@ fn web_search_successor_has_no_curl_exception_and_classifier_mutation_is_red() {
         tree.entry(path.into()).or_default().push_str(plant);
         rejected(12, &tree, oracle, path);
     }
+}
+
+#[test]
+fn r8_projection_removes_only_an_exact_registered_line() {
+    let path = "kernel/src/config.rs";
+    // The exact registered declaration is projected out of a K02 replay.
+    let exact = project_live_source(
+        2,
+        path,
+        "use a;\npub mod schema_compat;\n\nfn f() {}\n".into(),
+    );
+    assert!(!exact.contains("schema_compat"), "{exact}");
+    assert!(
+        exact.contains("use a;\n") && exact.contains("fn f() {}"),
+        "{exact}"
+    );
+    // Adversarial input from K04 review 1: a commented declaration followed
+    // by an unregistered module. It must never be silently projected: either
+    // the replay refuses (fail closed) or the unregistered module stays
+    // visible to the stage checks.
+    let crafted = "// pub mod schema_compat;\npub mod unregistered_compat {}\n";
+    match std::panic::catch_unwind(|| project_live_source(2, path, crafted.into())) {
+        Err(_) => {}
+        Ok(kept) => {
+            assert!(kept.contains("\npub mod unregistered_compat {}"), "{kept}");
+            assert!(
+                module_names(&kept).contains("unregistered_compat"),
+                "{kept}"
+            );
+        }
+    }
+    // An attribute directly above the registered line would attach to the
+    // next item after removal (K04 review 2): the replay must refuse.
+    for attributed in [
+        "#[cfg(test)]\npub mod schema_compat;\npub mod unregistered_compat {}\n",
+        "#[cfg(\n    test\n)]\npub mod schema_compat;\npub mod unregistered_compat {}\n",
+    ] {
+        let refused = std::panic::catch_unwind(|| project_live_source(2, path, attributed.into()));
+        assert!(
+            refused.is_err(),
+            "attributed declaration must not be projected: {attributed:?}"
+        );
+    }
+    // Indented or trailing-text forms are not the registered line: they are
+    // not projected, so the replay fails closed instead of hiding the edge.
+    for odd in [
+        "  pub mod schema_compat;\npub mod x {}\n",
+        "pub mod schema_compat; // note\npub mod x {}\n",
+    ] {
+        let refused = std::panic::catch_unwind(|| project_live_source(2, path, odd.into()));
+        assert!(
+            refused.is_err(),
+            "unregistered form must not be projected: {odd:?}"
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "must declare schema_compat once")]
+fn r8_projection_refuses_a_doubled_registered_line() {
+    project_live_source(
+        2,
+        "kernel/src/config.rs",
+        "pub mod schema_compat;\npub mod schema_compat;\n".into(),
+    );
 }

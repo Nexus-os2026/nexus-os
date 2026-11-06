@@ -1,6 +1,5 @@
-use nexus_kernel::fuel_hardening::{
-    AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelViolation,
-};
+use nexus_kernel::errors::compat::FuelViolation;
+use nexus_kernel::fuel_hardening::{AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::Supervisor;
 use nexus_kernel::{audit::AuditTrail, errors::AgentError};

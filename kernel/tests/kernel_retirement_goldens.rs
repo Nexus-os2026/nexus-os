@@ -6,11 +6,11 @@ mod retirement;
 use nexus_kernel::action_types::{BrowserAction, PlannedAction};
 use nexus_kernel::agent_identity::AgentId;
 use nexus_kernel::audit::AuditError;
-use nexus_kernel::backup::BackupScheduleConfig;
+use nexus_kernel::config::schema_compat::{
+    ApiHardeningConfig, BackupScheduleConfig, RateLimitConfig,
+};
+use nexus_kernel::errors::compat::{AgentState, FuelViolation};
 use nexus_kernel::errors::{on_error, AgentError, ErrorStrategy};
-use nexus_kernel::fuel_hardening::FuelViolation;
-use nexus_kernel::lifecycle::AgentState;
-use nexus_kernel::rate_limit::{ApiHardeningConfig, RateLimitConfig};
 use nexus_kernel::screen_region::ScreenRegion;
 use nexus_kernel::workspace_authority::WorkspaceBinding;
 use nexus_kernel::workspace_permissions::FsPermissionLevel;

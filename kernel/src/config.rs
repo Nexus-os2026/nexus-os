@@ -1,3 +1,5 @@
+pub mod schema_compat;
+
 use crate::errors::AgentError;
 use crate::privacy::{EncryptedField, PrivacyManager, UserKey};
 use serde::{Deserialize, Serialize};
@@ -33,11 +35,11 @@ pub struct NexusConfig {
     #[serde(default)]
     pub security: crate::crypto::EncryptionConfig,
     #[serde(default)]
-    pub backup: crate::backup::BackupScheduleConfig,
+    pub backup: crate::config::schema_compat::BackupScheduleConfig,
     #[serde(default)]
-    pub rate_limiting: crate::rate_limit::RateLimitConfig,
+    pub rate_limiting: crate::config::schema_compat::RateLimitConfig,
     #[serde(default)]
-    pub api: crate::rate_limit::ApiHardeningConfig,
+    pub api: crate::config::schema_compat::ApiHardeningConfig,
     /// Bug AK: SecretsFacade behavior knobs. See ADR 0004.
     #[serde(default)]
     pub credential_facade: CredentialFacadeConfig,
@@ -316,9 +318,9 @@ impl Default for NexusConfig {
             agents: BTreeMap::new(),
             agent_llm_assignments: BTreeMap::new(),
             security: crate::crypto::EncryptionConfig::default(),
-            backup: crate::backup::BackupScheduleConfig::default(),
-            rate_limiting: crate::rate_limit::RateLimitConfig::default(),
-            api: crate::rate_limit::ApiHardeningConfig::default(),
+            backup: crate::config::schema_compat::BackupScheduleConfig::default(),
+            rate_limiting: crate::config::schema_compat::RateLimitConfig::default(),
+            api: crate::config::schema_compat::ApiHardeningConfig::default(),
             credential_facade: CredentialFacadeConfig::default(),
         }
     }

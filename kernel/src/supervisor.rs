@@ -1,9 +1,10 @@
 use crate::audit::{AuditTrail, EventType};
 use crate::autonomy::{AutonomyGuard, AutonomyLevel};
 use crate::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
+use crate::errors::compat::{AgentState, FuelViolation};
 use crate::errors::AgentError;
 use crate::fuel_hardening::{
-    AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelViolation,
+    AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport,
 };
 
 /// Maximum fuel cost per action type.  Used by the reserve-then-commit pattern
@@ -120,7 +121,7 @@ pub struct SupervisorFuelReservation {
     pub action_type: String,
 }
 use crate::kill_gates::KillGateError;
-use crate::lifecycle::{transition_state, AgentState};
+use crate::lifecycle::transition_state;
 use crate::manifest::AgentManifest;
 use crate::permissions::{
     CapabilityRequest, PermissionCategory, PermissionHistoryEntry, PermissionManager,

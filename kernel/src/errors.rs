@@ -1,6 +1,8 @@
+pub mod compat;
+
 use crate::audit::AuditError;
-use crate::fuel_hardening::FuelViolation;
-use crate::lifecycle::AgentState;
+use crate::errors::compat::AgentState;
+use crate::errors::compat::FuelViolation;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -54,8 +56,8 @@ pub fn on_error(error: &AgentError) -> ErrorStrategy {
 #[cfg(test)]
 mod tests {
     use super::{on_error, AgentError, ErrorStrategy};
-    use crate::fuel_hardening::FuelViolation;
-    use crate::lifecycle::AgentState;
+    use crate::errors::compat::AgentState;
+    use crate::errors::compat::FuelViolation;
 
     #[test]
     fn test_error_display() {

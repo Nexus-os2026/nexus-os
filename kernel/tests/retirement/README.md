@@ -450,3 +450,102 @@ edges derive both new homes and the codec module from the unchanged manifest.
 logging/HM/retained-test inventories and classifier bytes stay unchanged. The
 only oracle amendment is the pre-registered F3 import formatting above. Stage 3
 activates the registered live checks; it authorizes no later retirement step.
+
+
+## K04 oracle registration (before extraction; LIVE_STAGE = 3)
+
+`test(oracle-add)` — `kernel/tests/k04_extraction_parity.rs` pins all five
+registered compatibility types before extraction. Independent constructions
+freeze nondefault JSON/TOML and Debug bytes; unchanged K01 goldens freeze
+schema defaults. Every individually missing field, explicit false/zero/empty
+value, unknown field, invalid scalar and numeric boundary keeps its behavior.
+Every state/violation name and variant index, state Display, transition error,
+fuel error and remaining AgentError text/strategy is pinned. Only imports may
+follow the moved definitions; assertions and existing fixtures stay unchanged.
+
+HOME cases run in isolated children, including absent HOME on non-Windows and
+non-UTF-8 HOME on Unix. They check both the lossy schema string and the retained
+archive config's lossless PathBuf. Plaintext config loading must not migrate;
+explicit encrypted save/read preserves all three schemas, and a wrong key must
+fail without rewriting. Existing encrypted-config and vault-migration tests
+remain required. Transitional same-type checks retire with fuel/lifecycle at
+K16, backup at K20 and rate_limit at K21; K22 still forbids old paths.
+
+Pre-extraction stage-4 activation was RED: the manifest payload-home,
+real-declaration and stage-seed checks failed for the missing new homes; the
+live successor reported exactly config/schema_compat.rs and errors/compat.rs
+as omissions. Stage 3 was restored before this oracle was added.
+
+
+## K04 extraction registration (LIVE_STAGE = 4)
+
+`refactor` — move FuelViolation and AgentState/Display unchanged to
+errors/compat.rs, and BackupScheduleConfig, RateLimitConfig, ApiHardeningConfig
+and every registered default helper unchanged to config/schema_compat.rs.
+Keep exactly the five registered same-type old-home exports. Config, errors,
+retained kernel runtime callers and typed tests use the new homes; there are
+no outside-kernel import changes. Existing behavioral tests stay present.
+
+The private default_backup_dir helper also served BackupConfig::default.
+That one retained runtime caller inlines its identical validated-home
+expression, preserving the lossless PathBuf even for non-UTF-8 HOME. The moved
+helper stays private and byte-identical; no helper export or string roundtrip
+is added. No config migration, behavior, Debug or serde change is introduced.
+
+For the live K04 tree, paths_at(4) and the staged module edges derive both
+nested homes and their parent declarations from the unchanged manifest. All
+JSONL bytes/hashes, production seeds, module/logging/HM/retained-test and
+dependency inventories remain unchanged. Stage 4 activates only this approved
+extraction; later retirement and authoritative integration remain separate.
+
+
+K04 mutation receipts: backup serde retention default, rate default, API depth
+default, AgentState Display, FuelViolation serde name and the backup transitional
+export were each planted separately. All six failed by the named assertion
+(no compile-error substitute), then their source bytes were restored and the
+same named test passed. The pre-extraction stage-4 RED probe remains separate.
+
+
+K04 verification is BLOCKED. The required full kernel command reached the
+successor binary, then stopped with 1845 passed, 11 failed and 15 ignored.
+All 11 failures report the same historical K02 synthetic baseline finding:
+`f7-dependency` at kernel/src/config.rs. build_clean_tree copies today's config
+source, including the new schema_compat child, into synthetic K02/K03; their
+module inventory correctly adds that child only at K04. The live K04 gate,
+manifest, K02/K03/K04 parity and goldens pass; fmt and workspace Clippy pass.
+No check or fixture was changed after observing the failure. Historical
+fixture projection needs Architect review and separate oracle registration;
+this candidate does not satisfy the zero-failure exit condition.
+
+The separate no-fail-fast diagnostic ran all 23 binaries not reached after
+that failure: 201 passed, 0 failed, 13 ignored. Combined candidate inventory:
+2046 passed, 11 failed, 28 ignored; this is not a green single-command result.
+
+
+## K04 R-8 historical projection registration (LIVE_STAGE = 4)
+
+`test(oracle-fix)` — Architect Ruling R-8. The K04 module edge
+`kernel/src/config.rs -> schema_compat` stays registered with stage 4 only, by
+the existing manifest-derived `build_module_edges`; `module-edges.json` and
+every other inventory are unchanged. The defect was in `build_clean_tree`: it
+copied today's `config.rs` (which declares the K04 child) into synthetic K02 and
+K03, whose stage-correct inventories do not contain that edge.
+
+Old: `let mut raw = read(&sink.path);`
+New: `let mut raw = project_live_source(stage, &sink.path, read(&sink.path));`
+
+`project_live_source` is derived from the manifest. For each extraction row
+later than the replayed stage and no later than LIVE_STAGE whose nested
+destination's parent is the copied file, it removes exactly the one registered
+`pub mod <child>;` declaration and reverts that row's identifier payload paths
+to their registered old home. A duplicate declaration or any residual child
+edge panics. For stage 3 the projected `config.rs` equals the pre-K04 bytes
+(bd883593) exactly. The K01 forward rewrite for stage >= 4 is kept unchanged.
+
+Nothing else is projected. The new R-8 control proves at every stage 2..=22
+that an unregistered `pub mod` in the projected parent, an unregistered file
+under `kernel/src/config/`, and the K04 child name declared in another parent
+are each `f7-dependency`; at K02/K03 the K04 declaration itself is still RED.
+A live plant (`kernel/src/config/planted_unregistered.rs` plus its declaration)
+was RED and then restored byte for byte; it was never committed. The completed
+K04 BLOCKED note above is historical and superseded by this registration.

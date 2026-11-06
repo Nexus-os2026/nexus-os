@@ -1,4 +1,5 @@
 use crate::audit::{AuditTrail, EventType};
+pub use crate::errors::compat::FuelViolation;
 use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -279,13 +280,6 @@ impl Default for BurnAnomalyDetector {
         // baseline=100, spike_factor=500 (5×), slope_threshold=1200 (baseline × window × 3), window=4
         Self::new(100, 500, 1200, 4)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FuelViolation {
-    OverMonthlyCap,
-    AnomalyDetected,
-    ProviderTokenMismatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -739,8 +733,9 @@ impl Drop for FuelReservation {
 
 #[cfg(test)]
 mod tests {
-    use super::{AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelContext, FuelViolation};
+    use super::{AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelContext};
     use crate::audit::AuditTrail;
+    use crate::errors::compat::FuelViolation;
     use uuid::Uuid;
 
     #[test]
