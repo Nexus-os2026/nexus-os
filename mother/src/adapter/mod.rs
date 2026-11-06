@@ -1359,5 +1359,6 @@ mod c1b_port_oracles;
 #[cfg(test)]
 pub(crate) mod session_support;
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod c1b_coordinator_oracles;

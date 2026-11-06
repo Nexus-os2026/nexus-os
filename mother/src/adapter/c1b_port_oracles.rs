@@ -73,8 +73,12 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
                 break Some(status);
             }
             if Instant::now() > deadline {
-                let _ = child.kill();
-                let _ = child.wait();
+                child
+                    .kill()
+                    .unwrap_or_else(|e| panic!("{case}: kill owned child: {e}"));
+                child
+                    .wait()
+                    .unwrap_or_else(|e| panic!("{case}: reap owned child: {e}"));
                 break None;
             }
             std::thread::sleep(Duration::from_millis(20));
@@ -615,9 +619,13 @@ fn closed() {
     assert!(f.port.model_identity().is_some(), "the route exists");
     let invoked = Arc::new(AtomicUsize::new(0));
     let m = Coordinator::open(
-        MemoryJournal::new(), f.port.clone(), Lanes::new(model_lanes(&invoked)).unwrap(),
-        Arc::new(ManualClock::default()), f.home.private(),
-    ).unwrap();
+        MemoryJournal::new(),
+        f.port.clone(),
+        Lanes::new(model_lanes(&invoked)).unwrap(),
+        Arc::new(ManualClock::default()),
+        f.home.private(),
+    )
+    .unwrap();
     let id = m.draft(f.contract()).unwrap();
     assert_eq!(
         m.submit(id),
@@ -682,4 +690,9 @@ fn c1_s6_model_codes_are_closed_and_round_trip() {
         BrokerClass::of("model_C1B_ERROR_CANARY"),
         BrokerClass::Unknown
     );
+}
+
+/// Reuse the existing cfg(test) seam from the fixture module already scanned.
+pub(crate) fn record_next(port: &GovernedPort, status: EndStatus) {
+    *port.model_record.lock().unwrap() = Some(status);
 }

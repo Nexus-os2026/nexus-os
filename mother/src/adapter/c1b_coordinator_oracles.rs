@@ -3,7 +3,7 @@
 use crate::adapter::c1b_fake_ollama::{
     chat, spec, Answer, FakeOllama, Seen, DIGEST, NAME, PATIENCE,
 };
-use crate::adapter::c1b_port_oracles::{children as run_children, Fx as PortFx};
+use crate::adapter::c1b_port_oracles::{children as run_children, record_next, Fx as PortFx};
 use crate::adapter::m2c_support::{port_for, Home};
 use crate::adapter::GovernedPort;
 use crate::contract::{ContractError, MissionContract, ModelChoice, Note};
@@ -143,8 +143,9 @@ fn identity_hex() -> String {
 }
 /// Runs a hook once, under the coordinator lock, just before the first
 /// journal line that contains its needle is appended.
+type ProbeHook = (&'static str, Box<dyn FnOnce() + Send>);
 #[derive(Clone, Default)]
-struct Probe(Arc<Mutex<Vec<(&'static str, Box<dyn FnOnce() + Send>)>>>);
+struct Probe(Arc<Mutex<Vec<ProbeHook>>>);
 impl Probe {
     fn at(&self, needle: &'static str, hook: impl FnOnce() + Send + 'static) {
         self.0.lock().unwrap().push((needle, Box::new(hook)));
@@ -322,7 +323,7 @@ impl Fx {
                 Event::Transition { trigger } => Some(trigger.clone()),
                 _ => None,
             })
-            .last()
+            .next_back()
             .unwrap();
         match trigger {
             Trigger::Stop { reason } => format!("stop:{reason}"),
@@ -764,7 +765,7 @@ fn privacy(arg: &str) {
         })
     });
     if arg == "owed" {
-        *f.port.model_record.lock().unwrap() = Some(EndStatus::Owed);
+        record_next(&f.port, EndStatus::Owed);
     }
     let advance = advance_in(&m, id).join().unwrap();
     let (errors, saw) = within(&rx);
@@ -899,8 +900,8 @@ fn debt(arg: &str) {
         "the ordinary route's positive control"
     );
     match arg {
-        "owed" => *f.port.model_record.lock().unwrap() = Some(EndStatus::Owed),
-        "uncertain" => *f.port.model_record.lock().unwrap() = Some(EndStatus::Uncertain),
+        "owed" => record_next(&f.port, EndStatus::Owed),
+        "uncertain" => record_next(&f.port, EndStatus::Uncertain),
         _ => {}
     }
     let advanced = m.advance(id);
@@ -1075,7 +1076,7 @@ fn first_cause(arg: &str) {
     let (id, _) = f.building(&m, f.contract());
     match arg {
         "debt-then-stop" => {
-            *f.port.model_record.lock().unwrap() = Some(EndStatus::Owed);
+            record_next(&f.port, EndStatus::Owed);
             let adv = advance_in(&m, id);
             let (first, engaged, terminal) = within(&rx);
             assert_eq!(first, "record_unavailable");
@@ -1086,7 +1087,7 @@ fn first_cause(arg: &str) {
             assert_eq!(f.end(id), "block:broker_refused:evidence_unavailable");
         }
         "stop-then-debt" => {
-            *f.port.model_record.lock().unwrap() = Some(EndStatus::Owed);
+            record_next(&f.port, EndStatus::Owed);
             let (entered_tx, entered_rx) = sync_channel(1);
             let (release_tx, release_rx) = sync_channel::<()>(1);
             let release_rx = Mutex::new(release_rx);
