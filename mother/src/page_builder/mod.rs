@@ -58,10 +58,17 @@ impl DraftCode {
         Some(format!("\n\nNexus backend result:\nRejected: {text}"))
     }
     fn failure(self) -> &'static str {
-        if self == Self::Needle {
-            "model_out_of_scope"
-        } else {
-            self.code()
+        match self {
+            Self::NotOneObject => "model_not_one_object",
+            Self::Empty => "model_draft_empty",
+            Self::Markup => "model_draft_markup",
+            Self::CharNotAllowed => "model_draft_char_not_allowed",
+            Self::WordTooLong => "model_draft_word_too_long",
+            Self::TooLarge => "model_draft_too_large",
+            Self::ForeignNumber => "model_draft_foreign_number",
+            Self::Email => "model_draft_email",
+            Self::Needle => "model_out_of_scope",
+            Self::AssemblerFault => "assembler_fault",
         }
     }
 }
@@ -96,7 +103,25 @@ impl std::fmt::Debug for BuildStep {
     }
 }
 impl Builder {
-    fn answer(&mut self, _: &str, _: &ApprovedFacts) -> BuildStep {
-        BuildStep::Closed
+    fn answer(&mut self, answer: &str, facts: &ApprovedFacts) -> BuildStep {
+        if self.done {
+            return BuildStep::Closed;
+        }
+        self.attempts += 1;
+        match draft::parse_draft(answer).and_then(|d| assemble::file_requests(&d, facts)) {
+            Ok(files) => {
+                self.done = true;
+                BuildStep::File(files)
+            }
+            Err(code) => {
+                if self.attempts < 2 {
+                    if let Some(text) = code.correction() {
+                        return BuildStep::Correction(text);
+                    }
+                }
+                self.done = true;
+                BuildStep::Failed(code)
+            }
+        }
     }
 }
