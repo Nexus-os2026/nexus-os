@@ -1275,4 +1275,11 @@ mod host_decision9_tests;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+mod c1b_fake_ollama;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod c1b_port_oracles;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 pub(crate) mod session_support;
