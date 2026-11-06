@@ -239,9 +239,33 @@ pub trait CallMeter: Send + Sync {
     fn settle(&self, call: u32);
 }
 
-/// The caller's cancellation, polled while a request is in flight.
+/// The kind of one HTTP request to the local runtime, derived by the
+/// transport from its private fixed API path (never from caller text): the
+/// version, status, tags and show requests are `Metadata`, the chat request
+/// is `Chat`. Closed: there is no other kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestKind {
+    Metadata,
+    Chat,
+}
+
+/// The caller's cancellation, polled while a request is in flight, and its
+/// final admission of each request.
 pub trait CallCancel: Send + Sync {
     fn cancelled(&self) -> Option<CancelCause>;
+
+    /// Final admission of one request (session bridge I-E1, SB-R5). Must
+    /// not block, perform I/O, or return a retainable permit.
+    ///
+    /// The default refuses with [`ModelError::Cancelled`] when
+    /// [`CallCancel::cancelled`] reports a cause, and admits otherwise; it
+    /// checks neither the stop watch nor a deadline.
+    fn admit_request(&self, _kind: RequestKind) -> Result<(), ModelError> {
+        match self.cancelled() {
+            Some(_) => Err(ModelError::Cancelled),
+            None => Ok(()),
+        }
+    }
 }
 
 /// The caller's absolute deadline: fixed once by its owner and never

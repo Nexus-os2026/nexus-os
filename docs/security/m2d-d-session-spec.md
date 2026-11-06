@@ -14,6 +14,8 @@ Decision 12 amendment A, Rulings 1–3, controls where earlier decisions conflic
 
 All source locations below refer to `03e07b1a`. This specification was prepared read-only: no repository files changed, tests run or remote CI verified.
 
+Session model bridge amendment (Owner approval 2026-11-05; session-bridge design §5, adopted in SB-1): R32, the R14/R32 paragraph, §1.4, A0, A6 and A12 carry the adopted texts below. **Staged (session bridge SB-1, 2026-11-06): allowlist not effective; session model route unavailable until SB-3.** The frozen oracle and plant register is `docs/security/session-model-bridge-oracles.md`.
+
 **1. Admission and handoff contract**
 
 **1.1 Authoritative session**
@@ -79,7 +81,7 @@ A successful compare-and-exchange against the unchanged snapshot, including a sa
 
 For registry mutations, the successful CAS is the mutation’s linearization point; visibility remains protected by the registry hold. Ingress ordered afterward may overlap physical completion of that already-admitted insertion, but every returned handle is already denied by the original cell.
 
-For kernel or lane calls, the successful final CAS is the call-handoff point. Between it and invocation there may be no validation, evidence write, queue, callback, await, second operation or reusable returned permit. The unavoidable instruction/scheduling interval belongs to the explicitly disclosed single-call handoff limit.
+For kernel or lane calls, the successful final CAS is the call-handoff point. Between it and invocation there may be no validation, evidence write, queue, callback, await, second operation or reusable returned permit. The unavoidable instruction/scheduling interval belongs to the explicitly disclosed single-call handoff limit. For R32 only, the entered kernel operation is one prepared local HTTP request’s dispatch routine, reached immediately after the fallible original-scope admission hook. That entered routine contains only the existing bounded content-free timestamp notification and that single send before awaiting its result. It grants no next request. An ingress after admission may overlap this single attempted send; every subsequent metadata request and chat needs another admission. No arbitrary observer, dialog, evidence I/O or model-driven callback is permitted in that interval. (Staged (session bridge SB-1, 2026-11-06): allowlist not effective; session model route unavailable until SB-3.)
 
 Reservation is not handoff. A request paused after reservation, but before this final CAS, must refuse if ingress wins.
 
@@ -366,13 +368,19 @@ All W/R rows carry the original request lifetime. All S rows carry the exact obl
 | R29 Explicit cleanup: `H/hands.rs:498 → B/governed.rs:980 → B/files/mod.rs:2518 → K/coding_run/apply.rs:1019; K/coding_run.rs:2226` | Snapshot of eligible inventory IDs, original cleanup-command lifetime | One attempt per selected entry. `retry_cleanup` and staging discard are separate R/K steps. Preserve interrupted current entry and unattempted tail. Count all inventory states |
 | R30 Implicit drain/retirement: `B/governed.rs:337,435`; `B/files/mod.rs:2862,712,847,2373` | Existing resource entry; never ambient owner authority | Remove implicit removal from session paths. Normal cleanup scheduler requests explicit R steps; emergency settlement only transfers/records |
 | R31 Native lift: `H/hands.rs:434 → B/governed.rs:580 → B/authority/run.rs:1159` | None exposed through Hands | D. `lift-for-undo` is refused without dialogue in every Hands state. Legacy native resume remains outside this surface |
-| R32 Inference binding/model attempt: retained door `B/governed/door.rs:500,544 → B/authority/run.rs:1377,1435 → B/inference.rs:337,371` | No such capability issued to Hands | D at the sealed surface. Compile/source tests prove no route; backend positive controls still exercise configured legacy inference and attempts. No-model configuration alone is insufficient evidence |
+| R32 Session local-model registration, identity, binding and one-call path | Original session and deny-only cell; original Bootstrap scope for registration or Run-command scope for mission work; exact issued Mother door, existing File run, cached affirmative mission consent and immutable registered model identity; original deadlines and native watches | Only SB-R0–SB-R9 in the approved session-bridge route matrix are permitted. HostSession alone registers one pinned local model during Bootstrap. SessionDoor/SessionPort expose read-only identity, exact same-run inference admission and metered two-message calls. Every registration/install, binding, attempt and individual metadata/chat handoff has its own original-scope final admission; cancellation, recording and close retain all owned obligations. All other model routes remain D. Positive controls must succeed through this session route; configured ordinary broker controls and all non-model exclusions remain required. |
 | R33 Status/evidence/detail/recovery: `H/hands.rs:412,518,532,646 → H/lib.rs:225,230 → B/governed.rs:949,955 → B/files/mod.rs:2468` | Read-only session projection; take-once working detail | O; any existing `touch` recording is explicitly S. No drain. After emergency `detail` command is refused; permitted evidence projections remain bounded and truthful |
 | R34 Quit/shutdown/session end: `H/hands.rs:565,890 → M/coordinator/lite.rs:286 → B/governed.rs:502 → H/lib.rs:219` | Original Quit request and complete inventory | L/S, with R only during normal close under §3. No count-only shutdown success. Clean result requires the complete proof |
 | R35 Destruction/startup failure: `H/hands.rs:794,598,904`; `B/files/mod.rs:1245`; `K/coding_run.rs:667`; `K/coding_run/apply.rs:621` | Inventory/quarantine ownership, including channel and worker payloads | Pure ownership disposition outside entered kernel calls. No hidden cleanup on failure, unwind, final-owner drop or process shutdown |
 | R36 Queued commands/retained handles: `H/hands.rs:823,849,873`; retained `Mission` at `:129` | Original envelope and immutable session binding | Every use reaches the same final sink admission. Queuing, cloning, reserving, callback completion and dropping/rebuilding adapters cannot refresh authority |
 
-R14 and R32 are deliberately sealed exclusions, not new features. Adding any excluded route requires a new specification and approval.
+R14 remains a sealed exclusion. R32 is a closed allowlist solely for SB-R0–SB-R9; absence from that allowlist is denial. This is not general network, tool, conversation, registration-by-lane, alternate-run, resume or recovery authority. Any further route requires a new specification and Owner approval. This amendment is security-core work and does not activate a host lane or accept a capability.
+
+**Staged (session bridge SB-1, 2026-11-06): allowlist not effective; session model route unavailable until SB-3.** Until SB-3 the old R32 disposition stays in force at the sealed surface. Old row, verbatim (anchors at `03e07b1a`):
+
+> | R32 Inference binding/model attempt: retained door `B/governed/door.rs:500,544 → B/authority/run.rs:1377,1435 → B/inference.rs:337,371` | No such capability issued to Hands | D at the sealed surface. Compile/source tests prove no route; backend positive controls still exercise configured legacy inference and attempts. No-model configuration alone is insufficient evidence |
+
+Its anchors at `ac72c2f8` are `crates/nexus-governed-control/src/governed/door.rs:549,593 → crates/nexus-governed-control/src/authority/run.rs:1503,1561 → crates/nexus-governed-control/src/inference.rs:337,371`. Old paragraph, verbatim: “R14 and R32 are deliberately sealed exclusions, not new features. Adding any excluded route requires a new specification and approval.”
 
 The implementation must provide a relocation map from every catalogue row to its final sink functions. Each kernel call within R17, R22, R27 and R29 is a distinct generated-test sink.
 
@@ -717,6 +725,8 @@ The pre-mortem's full findings table and builder-choice list (lines 1–165 of `
 >
 > All baseline validation limits, privacy rules, supported File classes, native-watch behavior and legacy positive controls remain unchanged except where this specification explicitly replaces a host expectation. Private implementation names may vary; the observable semantics below may not.
 >
+> The separately Owner-approved session bridge permits only the kernel inference handoff hook and its invocation/tests described in I-E1 above. The former no-kernel scope remains in force for all other M2d-D work; in particular M2d-K3 is not authorized. No workflow/dependency/persistent-format change, legacy capability expansion, restart cleanup or host feature is authorized. (I-E1: `docs/security/session-model-bridge-oracles.md` §1.)
+>
 > **A1. Normal-close capability**
 >
 > Quit acceptance atomically closes ordinary work admission and captures the original session identity, ingress generation, request identity and a cleanup-only close identity. The original command envelope is immutable.
@@ -816,6 +826,8 @@ The pre-mortem's full findings table and builder-choice list (lines 1–165 of `
 > Closed-clean and zero exit require the complete proof, both durable end results, successful required output delivery and terminal finalization within the original deadline. Durable end records can exist even when final output/finalization fails; report those facts separately.
 >
 > All retained work/restoration handles refuse after sealing. No failed or partial close reopens the session.
+>
+> R32 registration, admitted attempts, scoped transport children and record obligations belong to the original session’s close inventory. A dead meter, terminal mission or cancelled request does not discharge them. They must be conclusively accounted before seal within the original three-second deadline; otherwise close is unclean and nonzero. Results retain original session/request/run/consent/registration binding, attempt/charge/handoff facts, client transport outcome, first terminal intent and interruptions, record status and unresolved ownership separately. A handoff or closed client connection is not proof of server generation termination. Restart restores no executable model authority.
 >
 > **A7. Exact acknowledgement and pruning**
 >
@@ -918,6 +930,8 @@ The pre-mortem's full findings table and builder-choice list (lines 1–165 of `
 > Before production changes, commit this amendment, the expanded route manifest, literal expected tables, positive controls and plants. Add the new routes and boundaries to every generation, process-death and ownership-transfer matrix.
 >
 > Local warning-denied Clippy covers `nexus-kernel`, `nexus-governed-control`, `nexus-mother`, `nexus-mother-host` and `nexus-mother-desktop`, with all targets/features and the lockfile fixed. Preserve the other §6.6 gates. Freeze the existing 23 desktop live-test names before implementation; discovery/count alone cannot replace their individual receipts. Required CI remains the exact-SHA jobs named in §6.6, with no workflow change.
+>
+> R32 registration, admitted attempts, scoped transport children and record obligations belong to the original session’s close inventory. A dead meter, terminal mission or cancelled request does not discharge them. They must be conclusively accounted before seal within the original three-second deadline; otherwise close is unclean and nonzero. Results retain original session/request/run/consent/registration binding, attempt/charge/handoff facts, client transport outcome, first terminal intent and interruptions, record status and unresolved ownership separately. A handoff or closed client connection is not proof of server generation termination. Restart restores no executable model authority.
 
 These are the remaining material builder choices and the frozen answers supplied above:
 
