@@ -21,7 +21,7 @@ use crate::oracles::{contract_with, keyed_lanes, Recording};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::authority::evidence::EndStatus;
-use nexus_governed_control::authority::file_session::HaltCell;
+use nexus_governed_control::authority::file_session::{FileSessionError, HaltCell};
 use nexus_governed_control::governed::HaltReason;
 use nexus_governed_control::inference::{ModelIdentity, ModelReply, ModelRequest, ResponseSchema};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1016,15 +1016,22 @@ fn restart() {
             copy.clone().append(line).unwrap();
         }
         let port = Arc::new(port_for(&f.home.control, true).with_workspace(f.folder.clone()));
+        // A File session can never be reopened: the repeated start is refused
+        // and restores no coordinator, so nothing can adopt the interrupted run.
         let reopened = Coordinator::open(
             copy.clone(),
             port,
             Lanes::new(keyed_lanes()).unwrap(),
             f.clock.clone(),
             f.home.private(),
-        )
-        .unwrap();
-        assert!(reopened.state(id).is_some_and(|s| s.is_terminal()));
+        );
+        assert!(
+            matches!(
+                reopened,
+                Err(CoordinatorError::FileSession(FileSessionError::Reopened))
+            ),
+            "the repeated start is refused as a reopened File session"
+        );
         lines = copy.lines();
         assert_eq!(counted(&lines), before, "no invocation or charge restored");
     }
@@ -1033,10 +1040,16 @@ fn restart() {
         .unresolved
         .contains(&id));
     assert_eq!(f.fake.count("/api/chat"), 1);
-    assert_eq!(f.attempts(), 0, "the held call has no record yet");
+    // A refused File reopening halts the live door (file_session.rs `attach`/
+    // `port`), so the held call's own record may land at any moment; it is
+    // not asserted absent here. The restarts add none: exactly one after join.
     assert_eq!(m.stop(id), Ok(MissionState::Stopped));
     let _ = adv.join().unwrap();
-    assert_eq!(f.attempts(), 1);
+    assert_eq!(
+        f.attempts(),
+        1,
+        "only the held call's own record, no restart's"
+    );
     assert_eq!(f.fake.count("/api/chat"), 1);
 }
 
