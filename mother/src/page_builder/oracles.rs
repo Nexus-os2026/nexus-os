@@ -126,11 +126,23 @@ fn m3c_request_bound_counts_every_separator() {
             BuildInputCode::NotesAndFactsTooLarge
         );
     }
-    let mut n = note(&"a ".repeat(889));
+    // Seven plain lines (each <= 256 chars) so only the byte cap can refuse.
+    let lines = |total: usize| {
+        let body = total - 6;
+        let mut v = vec!["a".repeat(body / 7); 7];
+        v[6] = "a".repeat(body - 6 * (body / 7));
+        v.join("\n")
+    };
+    let at_cap = note(&lines(1777));
+    assert_eq!(at_cap.text.len(), 1777);
+    assert!(render_request(&minimal(), &at_cap, MARKER, None).is_ok());
+    let over_cap = note(&lines(1778));
+    assert_eq!(over_cap.text.len(), 1778);
     assert_eq!(
-        render_request(&minimal(), &n, MARKER, None).unwrap_err(),
+        render_request(&minimal(), &over_cap, MARKER, None).unwrap_err(),
         BuildInputCode::InvalidNote
     );
+    let mut n = at_cap;
     n.label = "other".into();
     assert_eq!(
         render_request(&minimal(), &n, MARKER, None).unwrap_err(),
@@ -139,17 +151,13 @@ fn m3c_request_bound_counts_every_separator() {
 }
 #[test]
 fn m3c_oversize_request_never_reaches_caller() {
-    let mut calls = 0;
+    // Kernel-constructor evidence only; the caller/charge count proof is Cb's.
     let r = ModelRequest::new(
         "s".repeat(3937),
         String::new(),
         ResponseSchema::new(SCHEMA).unwrap(),
     );
     assert!(matches!(r, Err(ModelError::RequestTooLarge)));
-    if r.is_ok() {
-        calls += 1;
-    }
-    assert_eq!(calls, 0);
     assert_eq!(request(&minimal(), &note("a"), None).rendered_bytes(), 1301);
 }
 #[test]
