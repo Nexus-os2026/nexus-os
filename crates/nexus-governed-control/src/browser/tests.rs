@@ -1482,3 +1482,28 @@ fn a_browser_that_goes_around_its_proxy_is_refused() {
     // The page was reached directly; no step ran.
     assert!(server.received().iter().any(|r| r.path == "/"));
 }
+
+/// The browser's own error text can echo what the page or the agent sent:
+/// the diagnostic of a protocol error shows its size, never its text. (The
+/// type is private to this module, so its privacy oracle lives here; the
+/// others are in `crate::debug_privacy_tests`.)
+#[test]
+fn a_protocol_error_prints_no_browser_text() {
+    use super::cdp::CdpError;
+    let canary = "NXCANARY-cdp-4d1e8b-面包";
+    let error = CdpError::Protocol(format!("Cannot find context with specified id: {canary}"));
+    for (form, shown) in [
+        ("{:?}", format!("{error:?}")),
+        ("{:#?}", format!("{error:#?}")),
+    ] {
+        assert!(!shown.contains("NXCANARY"), "{form}: {shown}");
+        assert!(!shown.contains("面包"), "{form}: {shown}");
+        assert!(!shown.contains("Cannot find context"), "{form}: {shown}");
+        assert!(shown.contains("Protocol"), "{form}: {shown}");
+    }
+    // The error still carries its text for the failure the pipeline records.
+    let CdpError::Protocol(text) = &error else {
+        unreachable!()
+    };
+    assert!(text.contains(canary), "{text}");
+}

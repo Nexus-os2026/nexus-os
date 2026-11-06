@@ -42,8 +42,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// What an operation's builder produced from its typed input.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What an operation's builder produced from its typed input. Its `Debug`
+/// shows sizes, never the path, the body or a summary line.
+#[derive(Clone, PartialEq, Eq)]
 pub struct OperationRequest {
     /// The path and query, starting with `/`.
     pub path: String,
@@ -51,6 +52,17 @@ pub struct OperationRequest {
     pub content_type: Option<&'static str>,
     /// What the owner reads about it (made plain before display).
     pub summary: Vec<String>,
+}
+
+impl std::fmt::Debug for OperationRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OperationRequest")
+            .field("path_bytes", &self.path.len())
+            .field("body_bytes", &self.body.as_ref().map(String::len))
+            .field("content_type", &self.content_type)
+            .field("summary_lines", &self.summary.len())
+            .finish()
+    }
 }
 
 /// One typed operation.
@@ -83,11 +95,20 @@ pub type Identify = fn(&Value, &[EffectOutput]) -> Result<DestinationIdentity, A
 /// A destination as the connector's API identified it: the plain lines the
 /// owner reads (immutable ids and readable metadata), and a short form for
 /// the commitment's target. Two identities are the same destination only
-/// if every line is the same.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// if every line is the same. Its `Debug` shows sizes, never a line.
+#[derive(Clone, PartialEq, Eq)]
 pub struct DestinationIdentity {
     pub lines: Vec<String>,
     pub display: String,
+}
+
+impl std::fmt::Debug for DestinationIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DestinationIdentity")
+            .field("line_count", &self.lines.len())
+            .field("display_bytes", &self.display.len())
+            .finish()
+    }
 }
 
 impl DestinationIdentity {
@@ -107,13 +128,40 @@ pub struct Connector {
     pub operations: Vec<ConnectorOperation>,
 }
 
-/// An operation request, as data.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+/// An operation request, as data. Its `Debug` shows the size of the
+/// operation name and the shape of the input, never either.
+#[derive(Clone, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ConnectorIntent {
     pub operation: String,
     #[serde(default)]
     pub input: Value,
+}
+
+impl std::fmt::Debug for ConnectorIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectorIntent")
+            .field("operation_bytes", &self.operation.len())
+            .field("input", &JsonShape(&self.input))
+            .finish()
+    }
+}
+
+/// A free-form JSON value, as a diagnostic may show it: its kind and its
+/// size, never a key, a string or a number.
+pub(crate) struct JsonShape<'a>(pub(crate) &'a Value);
+
+impl std::fmt::Debug for JsonShape<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Value::Null => f.write_str("null"),
+            Value::Bool(_) => f.write_str("bool"),
+            Value::Number(_) => f.write_str("number"),
+            Value::String(text) => write!(f, "string({} bytes)", text.len()),
+            Value::Array(items) => write!(f, "array({} items)", items.len()),
+            Value::Object(fields) => write!(f, "object({} fields)", fields.len()),
+        }
+    }
 }
 
 /// How long a prepared operation may wait for authorization.

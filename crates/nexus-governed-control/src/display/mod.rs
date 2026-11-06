@@ -82,16 +82,28 @@ impl Rect {
     }
 }
 
-/// A top-level window on the agent display.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A top-level window on the agent display. Its `Debug` shows the size of
+/// the title, never the title.
+#[derive(Clone, PartialEq, Eq)]
 pub struct WindowInfo {
     pub id: u32,
     pub title: String,
     pub rect: Rect,
 }
 
-/// An observation request, as data.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+impl std::fmt::Debug for WindowInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WindowInfo")
+            .field("id", &self.id)
+            .field("title_bytes", &self.title.len())
+            .field("rect", &self.rect)
+            .finish()
+    }
+}
+
+/// An observation request, as data. Its `Debug` shows the size of a window
+/// title, never the title.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PerceptionIntent {
     Screen {
@@ -100,6 +112,20 @@ pub enum PerceptionIntent {
     },
     /// The title selects the window; the observation binds its id.
     Window { title: String },
+}
+
+impl std::fmt::Debug for PerceptionIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PerceptionIntent::Screen { region } => {
+                f.debug_struct("Screen").field("region", region).finish()
+            }
+            PerceptionIntent::Window { title } => f
+                .debug_struct("Window")
+                .field("title_bytes", &title.len())
+                .finish(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -119,8 +145,9 @@ pub enum ScrollDirection {
     Right,
 }
 
-/// An input request, as data.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+/// An input request, as data. Its `Debug` shows coordinates and sizes,
+/// never typed text, a key or a shortcut.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum InputIntent {
     Move {
@@ -156,6 +183,56 @@ pub enum InputIntent {
         direction: ScrollDirection,
         amount: u8,
     },
+}
+
+impl std::fmt::Debug for InputIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputIntent::Move { x, y } => {
+                f.debug_struct("Move").field("x", x).field("y", y).finish()
+            }
+            InputIntent::Click { x, y, button } => f
+                .debug_struct("Click")
+                .field("x", x)
+                .field("y", y)
+                .field("button", button)
+                .finish(),
+            InputIntent::DoubleClick { x, y } => f
+                .debug_struct("DoubleClick")
+                .field("x", x)
+                .field("y", y)
+                .finish(),
+            InputIntent::Drag {
+                from_x,
+                from_y,
+                to_x,
+                to_y,
+            } => f
+                .debug_struct("Drag")
+                .field("from_x", from_x)
+                .field("from_y", from_y)
+                .field("to_x", to_x)
+                .field("to_y", to_y)
+                .finish(),
+            InputIntent::Type { text } => f
+                .debug_struct("Type")
+                .field("text_bytes", &text.len())
+                .finish(),
+            InputIntent::Press { key } => f
+                .debug_struct("Press")
+                .field("key_bytes", &key.len())
+                .finish(),
+            InputIntent::Shortcut { keys } => f
+                .debug_struct("Shortcut")
+                .field("key_count", &keys.len())
+                .finish(),
+            InputIntent::Scroll { direction, amount } => f
+                .debug_struct("Scroll")
+                .field("direction", direction)
+                .field("amount", amount)
+                .finish(),
+        }
+    }
 }
 
 /// One low-level event of an input action.

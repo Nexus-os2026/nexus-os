@@ -123,8 +123,9 @@ const SESSION_TTL: Duration = Duration::from_secs(10 * 60);
 /// Browser sessions one control runs at once; another is refused.
 const MAX_SESSIONS: usize = 4;
 
-/// One step, as data.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+/// One step, as data. Its `Debug` shows the kind and the sizes, never a
+/// URL, a selector or typed text.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum BrowserStep {
     Navigate {
@@ -152,6 +153,43 @@ pub enum BrowserStep {
     },
 }
 
+impl std::fmt::Debug for BrowserStep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BrowserStep::Navigate { url } => f
+                .debug_struct("Navigate")
+                .field("url_bytes", &url.len())
+                .finish(),
+            BrowserStep::Click { selector } => f
+                .debug_struct("Click")
+                .field("selector_bytes", &selector.len())
+                .finish(),
+            BrowserStep::Fill { selector, text } => f
+                .debug_struct("Fill")
+                .field("selector_bytes", &selector.len())
+                .field("text_bytes", &text.len())
+                .finish(),
+            BrowserStep::Press { selector, key } => f
+                .debug_struct("Press")
+                .field("selector_bytes", &selector.len())
+                .field("key_bytes", &key.len())
+                .finish(),
+            BrowserStep::WaitFor {
+                selector,
+                timeout_ms,
+            } => f
+                .debug_struct("WaitFor")
+                .field("selector_bytes", &selector.as_ref().map(String::len))
+                .field("timeout_ms", timeout_ms)
+                .finish(),
+            BrowserStep::ExtractText { selector } => f
+                .debug_struct("ExtractText")
+                .field("selector_bytes", &selector.len())
+                .finish(),
+        }
+    }
+}
+
 impl BrowserStep {
     fn interacts(&self) -> bool {
         matches!(
@@ -161,13 +199,23 @@ impl BrowserStep {
     }
 }
 
-/// A browser session request, as data.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+/// A browser session request, as data. Its `Debug` shows the size of the
+/// start URL and its steps' own (content-free) diagnostics.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserIntent {
     pub start_url: String,
     #[serde(default)]
     pub steps: Vec<BrowserStep>,
+}
+
+impl std::fmt::Debug for BrowserIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BrowserIntent")
+            .field("start_url_bytes", &self.start_url.len())
+            .field("steps", &self.steps)
+            .finish()
+    }
 }
 
 /// The browser actuator.
