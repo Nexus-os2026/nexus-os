@@ -966,16 +966,31 @@ fn project_live_source(stage: u8, path: &str, raw: String) -> String {
             if path != format!("kernel/src/{parent}.rs") {
                 continue;
             }
-            let declaration = format!("pub mod {child};\n");
-            if raw.contains(&declaration) {
+            // Whole-line projection only: a registered declaration is a line
+            // that is exactly `pub mod <child>;`. Substring deletion could
+            // splice a neighbouring line into a comment and hide it (K04
+            // review 1, HIGH), so lines are removed whole and never merged.
+            let declaration = format!("pub mod {child};");
+            let mut lines: Vec<&str> = raw.split('\n').collect();
+            let hits: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, line)| **line == declaration)
+                .map(|(i, _)| i)
+                .collect();
+            if !hits.is_empty() {
                 assert_eq!(
-                    raw.matches(&declaration).count(),
+                    hits.len(),
                     1,
                     "K{}: {path} must declare {child} once",
                     row.stage
                 );
-                raw = raw.replacen(&format!("{declaration}\n"), "", 1);
-                raw = raw.replacen(&declaration, "", 1);
+                let at = hits[0];
+                lines.remove(at);
+                if lines.get(at) == Some(&"") && at + 1 < lines.len() {
+                    lines.remove(at);
+                }
+                raw = lines.join("\n");
             }
             let old = extraction
                 .source
@@ -1407,4 +1422,57 @@ fn web_search_successor_has_no_curl_exception_and_classifier_mutation_is_red() {
         tree.entry(path.into()).or_default().push_str(plant);
         rejected(12, &tree, oracle, path);
     }
+}
+
+#[test]
+fn r8_projection_removes_only_an_exact_registered_line() {
+    let path = "kernel/src/config.rs";
+    // The exact registered declaration is projected out of a K02 replay.
+    let exact = project_live_source(
+        2,
+        path,
+        "use a;\npub mod schema_compat;\n\nfn f() {}\n".into(),
+    );
+    assert!(!exact.contains("schema_compat"), "{exact}");
+    assert!(
+        exact.contains("use a;\n") && exact.contains("fn f() {}"),
+        "{exact}"
+    );
+    // Adversarial input from K04 review 1: a commented declaration followed
+    // by an unregistered module. It must never be silently projected: either
+    // the replay refuses (fail closed) or the unregistered module stays
+    // visible to the stage checks.
+    let crafted = "// pub mod schema_compat;\npub mod unregistered_compat {}\n";
+    match std::panic::catch_unwind(|| project_live_source(2, path, crafted.into())) {
+        Err(_) => {}
+        Ok(kept) => {
+            assert!(kept.contains("\npub mod unregistered_compat {}"), "{kept}");
+            assert!(
+                module_names(&kept).contains("unregistered_compat"),
+                "{kept}"
+            );
+        }
+    }
+    // Indented or trailing-text forms are not the registered line: they are
+    // not projected, so the replay fails closed instead of hiding the edge.
+    for odd in [
+        "  pub mod schema_compat;\npub mod x {}\n",
+        "pub mod schema_compat; // note\npub mod x {}\n",
+    ] {
+        let refused = std::panic::catch_unwind(|| project_live_source(2, path, odd.into()));
+        assert!(
+            refused.is_err(),
+            "unregistered form must not be projected: {odd:?}"
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "must declare schema_compat once")]
+fn r8_projection_refuses_a_doubled_registered_line() {
+    project_live_source(
+        2,
+        "kernel/src/config.rs",
+        "pub mod schema_compat;\npub mod schema_compat;\n".into(),
+    );
 }
