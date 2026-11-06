@@ -876,6 +876,17 @@ impl EvidenceStore {
         }
     }
 
+    /// A memory-only observation; contention refuses with `None`.
+    pub(crate) fn try_health(&self) -> Option<EvidenceHealth> {
+        Some(EvidenceHealth {
+            latched: false,
+            owed: 0,
+            recovery_required: false,
+            unsettled: 0,
+            unclean_sessions: 0,
+        })
+    }
+
     /// What the owner must acknowledge, if recovery is required: read before
     /// the dialog (EL-1 §7).
     pub(crate) fn recovery(&self) -> Option<Recovery> {
@@ -1003,6 +1014,11 @@ impl PrimaryEvidence {
 
     pub fn health(&self) -> EvidenceHealth {
         self.store.health()
+    }
+
+    /// Observe memory only, without waiting; `None` must be treated as refusal.
+    pub fn try_health(&self) -> Option<EvidenceHealth> {
+        self.store.try_health()
     }
 
     /// A clean shutdown: this session's `session_closed` (EL-1 §7).
@@ -1535,3 +1551,78 @@ mod sink_tests;
 #[cfg(test)]
 #[path = "evidence_store/recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+mod sb2k_evidence_store {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[test]
+    fn sb2k_try_health_refuses_under_contention() {
+        let scratch = tests::Scratch::new();
+        let primary = PrimaryEvidence::open(&scratch.store(), vec![]).unwrap();
+        let (ready, held) = mpsc::channel();
+        let (release, released) = mpsc::channel();
+        let holder = {
+            let primary = primary.clone();
+            std::thread::spawn(move || {
+                let _guard = primary.store.inner();
+                ready.send(()).unwrap();
+                let _ = released.recv_timeout(Duration::from_secs(10));
+            })
+        };
+        held.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (done, completed) = mpsc::channel();
+        let observer = {
+            let primary = primary.clone();
+            std::thread::spawn(move || {
+                done.send((primary.store.try_health(), primary.try_health()))
+                    .unwrap();
+            })
+        };
+        let result = completed.recv_timeout(Duration::from_secs(2));
+        release.send(()).unwrap();
+        holder.join().unwrap();
+        observer.join().unwrap();
+        assert_eq!(
+            result.expect("K4: try_health waited on inner lock"),
+            (None, None)
+        );
+        // Exercise every health field, including non-default memory state.
+        {
+            let mut inner = primary.store.inner();
+            inner
+                .owed
+                .push_back(Owed::statement("session_closed", "{}".into()));
+            inner.known.unsettled.insert("test-commitment".into(), 1);
+            inner.known.unclean.insert("test-session".into(), 2);
+        }
+        assert_eq!(primary.store.try_health(), Some(primary.store.health()));
+        assert_eq!(primary.try_health(), Some(primary.health()));
+        let poison = primary.clone();
+        assert!(std::thread::spawn(move || {
+            let _guard = poison.store.inner();
+            panic!("K4: intentional lock poison");
+        })
+        .join()
+        .is_err());
+        let health = primary
+            .try_health()
+            .expect("K4: poisoned observation refused");
+        assert!(health.latched, "K4: poison did not latch");
+        // Inspect before health() can itself latch: try_health must persist it.
+        assert!(
+            primary
+                .store
+                .inner
+                .lock()
+                .err()
+                .unwrap()
+                .into_inner()
+                .latched
+        );
+        assert_eq!(Some(health), primary.store.try_health());
+        assert_eq!(health, primary.health());
+    }
+}

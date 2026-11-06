@@ -727,6 +727,10 @@ The pre-mortem's full findings table and builder-choice list (lines 1–165 of `
 >
 > The separately Owner-approved session bridge permits only the kernel inference handoff hook and its invocation/tests described in I-E1 above. The former no-kernel scope remains in force for all other M2d-D work; in particular M2d-K3 is not authorized. No workflow/dependency/persistent-format change, legacy capability expansion, restart cleanup or host feature is authorized. (I-E1: `docs/security/session-model-bridge-oracles.md` §1.)
 >
+> Separately Owner-approved SB-2k adds only `halted_now`/`check_now` and
+> `try_health`; no other kernel change. These memory-only observations add no
+> caller and open no session route. All other A0 restrictions remain in force.
+>
 > **A1. Normal-close capability**
 >
 > Quit acceptance atomically closes ordinary work admission and captures the original session identity, ingress generation, request identity and a cleanup-only close identity. The original command envelope is immutable.
