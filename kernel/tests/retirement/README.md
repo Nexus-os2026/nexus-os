@@ -450,3 +450,28 @@ edges derive both new homes and the codec module from the unchanged manifest.
 logging/HM/retained-test inventories and classifier bytes stay unchanged. The
 only oracle amendment is the pre-registered F3 import formatting above. Stage 3
 activates the registered live checks; it authorizes no later retirement step.
+
+
+## K04 oracle registration (before extraction; LIVE_STAGE = 3)
+
+`test(oracle-add)` — `kernel/tests/k04_extraction_parity.rs` pins all five
+registered compatibility types before extraction. Independent constructions
+freeze nondefault JSON/TOML and Debug bytes; unchanged K01 goldens freeze
+schema defaults. Every individually missing field, explicit false/zero/empty
+value, unknown field, invalid scalar and numeric boundary keeps its behavior.
+Every state/violation name and variant index, state Display, transition error,
+fuel error and remaining AgentError text/strategy is pinned. Only imports may
+follow the moved definitions; assertions and existing fixtures stay unchanged.
+
+HOME cases run in isolated children, including absent HOME on non-Windows and
+non-UTF-8 HOME on Unix. They check both the lossy schema string and the retained
+archive config's lossless PathBuf. Plaintext config loading must not migrate;
+explicit encrypted save/read preserves all three schemas, and a wrong key must
+fail without rewriting. Existing encrypted-config and vault-migration tests
+remain required. Transitional same-type checks retire with fuel/lifecycle at
+K16, backup at K20 and rate_limit at K21; K22 still forbids old paths.
+
+Pre-extraction stage-4 activation was RED: the manifest payload-home,
+real-declaration and stage-seed checks failed for the missing new homes; the
+live successor reported exactly config/schema_compat.rs and errors/compat.rs
+as omissions. Stage 3 was restored before this oracle was added.
