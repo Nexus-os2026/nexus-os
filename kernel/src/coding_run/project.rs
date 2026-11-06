@@ -40,10 +40,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::fsops::{DirHandle, NodeIdentity};
-use crate::manifest::FsPermissionLevel;
 use crate::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
 };
+use crate::workspace_permissions::FsPermissionLevel;
 
 /// The longest a run's read grant on its project can live. The run revokes
 /// the grant as soon as it no longer needs project read authority; this

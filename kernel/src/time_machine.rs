@@ -16,10 +16,10 @@
 //! between check and use is out of scope.
 
 use crate::governed_path::{self, FileIdentity};
-use crate::manifest::FsPermissionLevel;
 use crate::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceBinding, WorkspaceGrant, WorkspaceGrantId,
 };
+use crate::workspace_permissions::FsPermissionLevel;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;

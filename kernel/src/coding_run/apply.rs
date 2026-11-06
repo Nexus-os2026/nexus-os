@@ -66,8 +66,8 @@ use super::scope::{RelPath, TEMP_PREFIX};
 use super::structural::StructuralProfile;
 use super::{CodingRun, ProjectGrant, RunError, RunId, RunState, StagingParent};
 use crate::emergency_stop::StopWatch;
-use crate::manifest::FsPermissionLevel;
 use crate::workspace_authority::WorkspaceAuthorityError;
+use crate::workspace_permissions::FsPermissionLevel;
 
 const MAX_DISPLAY_PATHS: usize = 12;
 const MAX_DISPLAY_NAME: usize = 64;
