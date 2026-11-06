@@ -403,3 +403,21 @@ removed, no check relaxed, and a fourth unregistered kernel file still fails.
 Its two `transitional_*_export_is_the_same_type_as_its_new_home` tests name the
 old paths on purpose and are deleted with them: `supervisor` at K14,
 `manifest` at K19. K22 still requires no old-path export or import anywhere.
+
+## K03 oracle registration (before extraction; LIVE_STAGE = 2)
+
+`test(oracle-add)` — `kernel/tests/k03_extraction_parity.rs` adds independent
+Rust constructions for all 46 planned variants against K01's unchanged JSON
+bytes and labels, including every temporary `required_capabilities` result.
+The existing K01 goldens independently cover all six browser variants. Both
+binaries run before the move through the old paths and afterwards through the
+registered new homes; only their import lines follow the definitions.
+
+Additional K03 assertions pin all six `string_or_vec` consumers (including
+missing, null, scalar, object and nested-array inputs), strict vectors outside
+that codec, optional-field defaults, malformed-action refusal and each of the
+four screen-region fields at and beyond the u32 boundary. The current Debug
+output and derives remain unchanged. No fixture is regenerated or amended.
+The same-type old-path checks retire with cognitive at K11 and computer_control
+at K13; K22 still forbids old-path imports/exports. The capability parity check
+must retire with the temporary helper at K12.
