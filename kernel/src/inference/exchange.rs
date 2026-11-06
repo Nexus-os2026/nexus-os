@@ -331,17 +331,30 @@ fn request_error(error: reqwest::Error) -> ModelError {
 }
 
 /// Test seams: a probe each exchange thread holds while it runs (so a test
-/// sees how many ran and that none is left), and a hook run on the calling
-/// thread right after the chat reply arrives.
+/// sees how many ran and that none is left), a hook run on the calling
+/// thread right after the chat reply arrives, and a hook run on the exchange
+/// thread after each request's construction, before its admission (SB-1).
 #[cfg(test)]
 pub(super) mod seams {
     use std::cell::RefCell;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
 
+    use super::super::RequestKind;
+
+    /// The SB-1 seam between a request's construction and its admission.
+    pub(crate) type AfterConstruction = Arc<dyn Fn(RequestKind) + Send + Sync>;
+
     thread_local! {
         static PROBE: RefCell<Option<Arc<AtomicUsize>>> = const { RefCell::new(None) };
         static AFTER_REPLY: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+        static AFTER_CONSTRUCTION: RefCell<Option<AfterConstruction>> = const { RefCell::new(None) };
+    }
+
+    /// Set on the calling thread; each later exchange from it carries the
+    /// hook onto its own thread.
+    pub(crate) fn set_after_construction(hook: AfterConstruction) {
+        AFTER_CONSTRUCTION.with(|slot| *slot.borrow_mut() = Some(hook));
     }
 
     pub(crate) fn set_probe(probe: Arc<AtomicUsize>) {

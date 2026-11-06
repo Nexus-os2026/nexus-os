@@ -2281,3 +2281,6 @@ mod dispatch_panic_payload {
 
 #[path = "n1_tests.rs"]
 mod n1;
+
+#[path = "sb1_tests.rs"]
+mod sb1;
