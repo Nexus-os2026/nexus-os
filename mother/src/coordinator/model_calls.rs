@@ -448,15 +448,8 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
             return Err(ModelCallError::RecordUnavailable);
         }
-        if self.deadline.expired()
-            || matches!(attempt, Ok(ModelAttempt::Failed(BrokerClass::ModelTimeout)))
-        {
+        if self.live() && self.deadline.expired() {
             self.deny(BlockReason::BudgetTime);
-        } else if matches!(
-            attempt,
-            Ok(ModelAttempt::Failed(BrokerClass::ModelOverBudget))
-        ) {
-            self.deny(BlockReason::BudgetModelCalls);
         }
         #[cfg(test)]
         if matches!(attempt, Ok(ModelAttempt::Replied(_))) {
@@ -505,7 +498,7 @@ impl<P: EffectPort> CallMeter for Caller<'_, P> {
 impl<P: EffectPort> CallDeadline for Caller<'_, P> {
     fn expired(&self) -> bool {
         let expired = self.deadline.expired();
-        if expired {
+        if expired && self.live() {
             self.deny(BlockReason::BudgetTime);
         }
         expired
