@@ -9,7 +9,7 @@ use crate::emergency_stop::{HaltArea, HaltOutcome, StopWatch};
 
 use super::endpoint::LoopbackEndpoint;
 use super::ollama::ApiPath;
-use super::{CallCancel, CallContext, CallDeadline, CallObserver, ModelError};
+use super::{CallCancel, CallContext, CallDeadline, CallObserver, ModelError, RequestKind};
 
 /// The backstop on any one request, whatever the caller's deadline.
 pub const CALL_HARD_TIMEOUT: Duration = Duration::from_secs(180);
@@ -173,8 +173,16 @@ pub(super) fn exchange(
         ApiPath::Chat => guard.observer,
         ApiPath::Version | ApiPath::Status | ApiPath::Tags | ApiPath::Show => None,
     };
+    // The request's kind, from the fixed path alone (no `_` arm: a new path
+    // must be classified here).
+    let kind = match path {
+        ApiPath::Chat => RequestKind::Chat,
+        ApiPath::Version | ApiPath::Status | ApiPath::Tags | ApiPath::Show => RequestKind::Metadata,
+    };
     #[cfg(test)]
     let probe = seams::probe();
+    #[cfg(test)]
+    let after_construction = seams::after_construction_hook();
     let outcome = std::thread::scope(|scope| {
         let thread = std::thread::Builder::new()
             .name("nexus-model-exchange".to_string())
@@ -183,6 +191,8 @@ pub(super) fn exchange(
                 let _probe = probe.inspect(|count| {
                     count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 });
+                #[cfg(test)]
+                seams::install_after_construction(after_construction);
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -192,7 +202,9 @@ pub(super) fn exchange(
                         biased;
                         () = guard.stop.halted_async() => Err(Ended::Stopped),
                         error = poll(guard, &hard) => Err(Ended::Error(error)),
-                        reply = request(local, url, body, cap, dispatch) => reply.map_err(Ended::Error),
+                        reply = request(local, url, body, cap, dispatch, guard.cancel, kind) => {
+                            reply.map_err(Ended::Error)
+                        }
                     }
                 });
                 // The connection ends with the runtime.
@@ -235,24 +247,33 @@ async fn poll(guard: &Guard<'_>, hard: &AbsoluteDeadline) -> ModelError {
 }
 
 /// The request itself: no proxy, no redirect, the local address on
-/// loopback, a bounded connect and a bounded body. `dispatch`, given for the
-/// chat request only, is told the host's CLOCK_MONOTONIC immediately before
-/// the request is handed to the HTTP client. The select polls this future
-/// only after the stop watch and the cancel and deadline poll, so a call
-/// already refused by a guard (stopped, cancelled or expired when the
-/// select starts) is never notified. A Stop, cancel or expiry that arrives
-/// during the synchronous client construction below may be followed by the
-/// notice and then end the call `Stopped`, `Cancelled` or `Timeout`: that is
-/// an attempted hand-off, as M3 design §8.5 defines it. In an unwinding
-/// build a panicking observer cannot prevent the hand-off: its unwinding is
-/// caught here, its panic payload is forgotten (never dropped on this
-/// path), and the request is sent as if it had returned.
+/// loopback, a bounded connect and a bounded body. After the client and the
+/// request are built, `admit` makes the request's final admission
+/// ([`CallCancel::admit_request`], once, with its `kind`); a refusal ends
+/// the request there, unnotified and unsent, with the hook's error. Nothing
+/// but the notice and the send follows the admission. `dispatch`, given for
+/// the chat request only, is told the host's CLOCK_MONOTONIC immediately
+/// before the request is handed to the HTTP client. The select polls this
+/// future only after the stop watch and the cancel and deadline poll, so a
+/// call already refused by a guard (stopped, cancelled or expired when the
+/// select starts) is never notified. A cancel that arrives during the
+/// synchronous client construction below is refused by the default
+/// admission (stricter than before SB-1: no notice and no send, the same
+/// `Cancelled`). A Stop or expiry that arrives then, which the default
+/// admission does not check, may be followed by the notice and then end the
+/// call `Stopped` or `Timeout`: that is an attempted hand-off, as M3 design
+/// §8.5 defines it. In an unwinding build a panicking observer cannot
+/// prevent the hand-off: its unwinding is caught here, its panic payload is
+/// forgotten (never dropped on this path), and the request is sent as if it
+/// had returned.
 async fn request(
     local: IpAddr,
     url: String,
     body: Option<Vec<u8>>,
     cap: usize,
     dispatch: Option<&dyn CallObserver>,
+    admit: &dyn CallCancel,
+    kind: RequestKind,
 ) -> Result<Reply, ModelError> {
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -269,6 +290,9 @@ async fn request(
             .body(body),
         None => client.get(url),
     };
+    #[cfg(test)]
+    seams::after_construction(kind);
+    admit.admit_request(kind)?;
     if let Some(observer) = dispatch {
         // Never estimated: no clock reading, no notice.
         if let Some(sent_mono_ms) = host_monotonic_ms() {
@@ -355,6 +379,24 @@ pub(super) mod seams {
     /// hook onto its own thread.
     pub(crate) fn set_after_construction(hook: AfterConstruction) {
         AFTER_CONSTRUCTION.with(|slot| *slot.borrow_mut() = Some(hook));
+    }
+
+    /// The calling thread's hook, captured for its exchange thread.
+    pub(super) fn after_construction_hook() -> Option<AfterConstruction> {
+        AFTER_CONSTRUCTION.with(|slot| slot.borrow().clone())
+    }
+
+    /// Install the captured hook on the exchange thread.
+    pub(super) fn install_after_construction(hook: Option<AfterConstruction>) {
+        AFTER_CONSTRUCTION.with(|slot| *slot.borrow_mut() = hook);
+    }
+
+    /// Run the exchange thread's hook, if any.
+    pub(super) fn after_construction(kind: RequestKind) {
+        let hook = AFTER_CONSTRUCTION.with(|slot| slot.borrow().clone());
+        if let Some(hook) = hook {
+            hook(kind);
+        }
     }
 
     pub(crate) fn set_probe(probe: Arc<AtomicUsize>) {

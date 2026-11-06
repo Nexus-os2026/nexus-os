@@ -193,3 +193,47 @@ invocation, meter or close path to run them against.
 
 Appended at commit 3 (`feat(kernel)`); RED lines recorded at commit 2. Results
 are actual local runs; no oracle text above was edited after them.
+
+### 8.1 Commit 2 (`d919dc8c`, inert surface) — RED as expected
+
+- `cargo test -p nexus-kernel --locked --lib inference`: 56 passed, 11 failed.
+  GREEN: SB1-K1 and every retained inference test. RED at runtime (hook never
+  invoked): K2 (`Registration: one admission per request`, log `[]`), K3, K4
+  (`admission 0`), K5, K6, K7, K8a/K8b (`Registration request 0`, stages `[]`),
+  K9 (`Ok(())` ≠ `Err(Cancelled)`), O2 (`same code`, `Ok(())`), O3 (`the hook
+  refused the chat`, 0 ≠ 4).
+- `--test m2e_transport_guards --test m2e_a2_guards --test m0_f5_emergency_stop`:
+  1 / 54 passed; transport guards 38 passed, 1 failed, 1 ignored. SB1-S1 RED on
+  production: `0 admit_request( calls, want exactly 1`, `no RequestKind
+  mapping`; its planted red and green controls held.
+
+### 8.2 Commit 3 (`feat(kernel)`) — GREEN
+
+- `--lib inference`: 67 passed, 0 failed (12 SB1 + 55 retained, assertions
+  unchanged). Guards: 1 / 54 / 39 passed, 0 failed, 1 ignored (the existing
+  inventory print).
+- K7/K8 (with all SB1 rows) 10× serial (`--test-threads=1`): 10/10 green, 12
+  passed each. Whole inference module 10× parallel (`--test-threads=16`): 10/10
+  green, 67 passed each.
+
+### 8.3 Plants (each applied to the commit-3 tree, run, restored byte-for-byte by SHA-256; none committed)
+
+Run: `cargo test -p nexus-kernel --locked --lib inference` (MP-SB1-6 also
+`--test m2e_transport_guards sb1`). Every plant compiled and was killed at runtime.
+
+| Plant | Required target | Result (failing tests) |
+|---|---|---|
+| MP-SB1-1 delete the call | K3, K4, K5, K7 | RED: all 11 non-K1 SB1 rows, incl. K3, K4, K5, K7 |
+| MP-SB1-2 hook at `exchange()` entry | K6 | RED: K6, K7, O2 |
+| MP-SB1-3 hook after the notice | K5 notices | RED: K5, K6, K7, K8a, K8b, O2, O3 |
+| MP-SB1-4 `let _ =` | K3, K4, K5 | RED: 10 rows incl. K3, K4, K5 |
+| MP-SB1-5 re-call after `Err` | K9 | RED: K9, K3, K4, K5, K6, K8b, O3 |
+| MP-SB1-6a Chat→Metadata | K2; S1 | RED: K2, K5, K9; S1 |
+| MP-SB1-6b `_` arm | S1 | RED: S1 (behavioural rows green, as expected: same mapping) |
+| MP-SB1-7 hook on the first request only | K3 i≥1, K4 i≥1 | RED: all 11 non-K1 rows, incl. K3, K4 |
+| MP-SB-6-default Gate override removed | K7 | RED: K7 and 9 other Gate rows |
+| MP-SB1-8 Gate CAS → plain store | K8 ingress-wins | RED: K8a only |
+| MP-SB1-9 default `Ok` always | K1 | RED: K1, O2 |
+| MP-SB1-10 default `Err` always | K1; E-O5 positive | RED: K1, E-O5 and 53 others (54 of 67) |
+
+No plant was masked; none required weakening another guard.
