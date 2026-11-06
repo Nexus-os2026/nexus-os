@@ -372,3 +372,34 @@ deleted contact scanner does not replace these kernel inventories. The same
 159 named acceptance tests/loading contracts, HM rules and source-promotion
 controls remain. LIVE_STAGE stays 1; no production code, manifest, lockfile,
 existing guard, phase or trust boundary changes.
+
+
+## K02 registration (LIVE_STAGE = 2)
+
+`test(retirement)` — K02 extracts `AgentId` to `kernel/src/agent_identity.rs`
+and `FsPermissionLevel` to `kernel/src/workspace_permissions.rs`, each with the
+registered same-type transitional export left at `supervisor.rs` / `manifest.rs`.
+`LIVE_STAGE` advances from 1 to 2, so the live loader now runs the staged
+successor against the real tree, and the stage-1-only inventories (module
+edges, logging sinks) give way to their staged equivalents. The history above
+describes K01 and is kept as written.
+
+Derived, with no fixture edit: the two destinations enter through `paths_at(2)`,
+the `lib.rs` module edges for them are derived from the manifest row, and
+`manifest.jsonl` and `module-edges.json` are unchanged. Types and goldens keep
+their assertions; only their import lines follow the types to the new homes.
+
+One reviewed registration: `production-paths.txt` grows from 327 to 330 seeds,
+and the seed-count assertion with it. Activating the live successor was the
+first time K01's inventory met the real tree, and the production scanner already
+loads three one-line stub crate sources of the shared desktop-tripwire fixture
+(`kernel/tests/desktop_tripwire/fixture/{member,webkit6,wrapper}/src/lib.rs`, each
+`//! G0 fixture stub: no code.`). K01's synthetic trees never contained them, so
+the live check reported exactly those three as unregistered kernel files
+(`f7-dependency`). They are registered by name, not by pattern; no seed was
+removed, no check relaxed, and a fourth unregistered kernel file still fails.
+
+`kernel/tests/k02_extraction_parity.rs` is the pre-registered K02 parity oracle.
+Its two `transitional_*_export_is_the_same_type_as_its_new_home` tests name the
+old paths on purpose and are deleted with them: `supervisor` at K14,
+`manifest` at K19. K22 still requires no old-path export or import anywhere.

@@ -227,6 +227,9 @@ kernel/src/typed_tools.rs
 kernel/src/web_conduct.rs
 kernel/src/workspace.rs
 kernel/src/workspace_authority.rs
+kernel/tests/desktop_tripwire/fixture/member/src/lib.rs
+kernel/tests/desktop_tripwire/fixture/webkit6/src/lib.rs
+kernel/tests/desktop_tripwire/fixture/wrapper/src/lib.rs
 mother/desktop/src/app.rs
 mother/desktop/src/confirm.rs
 mother/desktop/src/inspector.rs
