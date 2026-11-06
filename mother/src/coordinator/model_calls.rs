@@ -1,10 +1,8 @@
-//! Accounting is replayable; the private live entitlement is not. C1a has
-//! no production meter constructor or model lane admission.
+//! Replay accounting never restores the borrowed live caller or its deny latch.
 use super::*;
 use nexus_governed_control::inference::{CallMeter, Charged, MeterRefusal};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Weak,
 };
 
 /// Memory-only deny latch for one invocation; never replayed or reset.
@@ -79,10 +77,6 @@ impl CallAccounting {
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "C1a exposes no production model caller")
-)]
 pub(super) struct LaneCalls {
     pub(super) liveness: InvocationLiveness,
     invocation: InvocationId,
@@ -188,20 +182,14 @@ pub(super) fn reserve_lane(
     Ok(Then::Go(input))
 }
 
-// Intentionally no production construction route until C1b. Keeping the
-// private implementation compiled lets Clippy check the future adapter seam.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "C1a exposes no production model caller")
-)]
-pub(super) struct ModelMeter<P: EffectPort> {
-    pub(super) coordinator: Weak<Coordinator<P>>,
-    pub(super) invocation: InvocationId,
-    pub(super) generation: u64,
+pub(super) struct BorrowedMeter<'a, P: EffectPort> {
+    coordinator: &'a Coordinator<P>,
+    invocation: InvocationId,
+    generation: u64,
 }
-impl<P: EffectPort> CallMeter for ModelMeter<P> {
+impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
-        let c = self.coordinator.upgrade().ok_or(MeterRefusal::Stale)?;
+        let c = self.coordinator;
         if c.port.emergency_stopped() {
             return Err(MeterRefusal::Stale);
         }
@@ -290,9 +278,7 @@ impl<P: EffectPort> CallMeter for ModelMeter<P> {
         result
     }
     fn settle(&self, call: u32) {
-        let Some(c) = self.coordinator.upgrade() else {
-            return;
-        };
+        let c = self.coordinator;
         let _ =
             c.try_with_lock(|i| {
                 if i.usable().is_err() {
@@ -313,5 +299,24 @@ impl<P: EffectPort> CallMeter for ModelMeter<P> {
                 }
                 Ok(())
             });
+    }
+}
+
+#[cfg(test)]
+pub(super) struct ModelMeter<P: EffectPort> {
+    pub(super) coordinator: std::sync::Weak<Coordinator<P>>,
+    pub(super) invocation: InvocationId,
+    pub(super) generation: u64,
+}
+#[cfg(test)]
+impl<P: EffectPort> CallMeter for ModelMeter<P> {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        let c = self.coordinator.upgrade().ok_or(MeterRefusal::Stale)?;
+        BorrowedMeter { coordinator: &c, invocation: self.invocation, generation: self.generation }.charge()
+    }
+    fn settle(&self, call: u32) {
+        if let Some(c) = self.coordinator.upgrade() {
+            BorrowedMeter { coordinator: &c, invocation: self.invocation, generation: self.generation }.settle(call);
+        }
     }
 }
