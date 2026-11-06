@@ -1,18 +1,12 @@
 //! Replay accounting never restores the borrowed live caller or its deny latch.
 use super::*;
 use nexus_governed_control::inference::{CallMeter, Charged, MeterRefusal};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Memory-only deny latch for one invocation; never replayed or reset.
 /// This observation seam grants no permission of its own.
 #[derive(Clone)]
 pub(crate) struct InvocationLiveness(Arc<AtomicBool>);
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "private future session bridge seam")
-)]
 impl InvocationLiveness {
     fn new() -> Self {
         Self(Arc::new(AtomicBool::new(false)))
@@ -312,11 +306,208 @@ pub(super) struct ModelMeter<P: EffectPort> {
 impl<P: EffectPort> CallMeter for ModelMeter<P> {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
         let c = self.coordinator.upgrade().ok_or(MeterRefusal::Stale)?;
-        BorrowedMeter { coordinator: &c, invocation: self.invocation, generation: self.generation }.charge()
+        BorrowedMeter {
+            coordinator: &c,
+            invocation: self.invocation,
+            generation: self.generation,
+        }
+        .charge()
     }
     fn settle(&self, call: u32) {
         if let Some(c) = self.coordinator.upgrade() {
-            BorrowedMeter { coordinator: &c, invocation: self.invocation, generation: self.generation }.settle(call);
+            BorrowedMeter {
+                coordinator: &c,
+                invocation: self.invocation,
+                generation: self.generation,
+            }
+            .settle(call);
         }
+    }
+}
+
+use crate::effect::ModelAttempt;
+use crate::lane::{ModelCallError, ModelCaller};
+use nexus_governed_control::inference::{CallDeadline, ModelReply, ModelRequest};
+
+/// Absolute values copied from the reservation, never reconstructed per call.
+struct MissionDeadline {
+    clock: Arc<dyn Clock>,
+    mono: u64,
+    wall: u64,
+}
+impl CallDeadline for MissionDeadline {
+    fn expired(&self) -> bool {
+        self.clock.monotonic_ms() >= self.mono || self.clock.wall_ms() >= self.wall
+    }
+}
+pub(super) struct Caller<'a, P: EffectPort> {
+    meter: BorrowedMeter<'a, P>,
+    liveness: InvocationLiveness,
+    deadline: MissionDeadline,
+    hash: String,
+    request: String,
+    identity: [u8; 32],
+}
+impl<'a, P: EffectPort> Caller<'a, P> {
+    pub(super) fn reserved(
+        c: &'a Coordinator<P>,
+        inner: &mut Inner,
+        invocation: InvocationId,
+        generation: u64,
+    ) -> Result<Self, CoordinatorError> {
+        let m = inner.mission(invocation.mission)?;
+        let live = m.lane_calls.as_ref().ok_or(CoordinatorError::Stopped)?;
+        let identity = hex::decode(
+            &m.contract()?
+                .model
+                .as_ref()
+                .ok_or(CoordinatorError::NoConsent)?
+                .identity,
+        )
+        .ok()
+        .and_then(|v| v.try_into().ok())
+        .ok_or(CoordinatorError::NoConsent)?;
+        let caller = Self {
+            meter: BorrowedMeter {
+                coordinator: c,
+                invocation,
+                generation,
+            },
+            liveness: live.liveness.clone(),
+            deadline: MissionDeadline {
+                clock: c.clock.clone(),
+                mono: live.at_mono_ms,
+                wall: live.at_wall_ms,
+            },
+            hash: m.contract_ref.contract_hash.to_hex(),
+            request: m
+                .consent_request
+                .clone()
+                .ok_or(CoordinatorError::NoConsent)?,
+            identity,
+        };
+        c.file
+            .as_ref()
+            .ok_or(CoordinatorError::Stopped)?
+            .model_active
+            .store(true, Ordering::Release);
+        Ok(caller)
+    }
+    pub(super) fn admit(&self) -> Result<(), crate::effect::EffectRefusal> {
+        self.meter.coordinator.port.admit_inference(
+            self.meter.invocation.mission,
+            &self.hash,
+            &self.request,
+            self.identity,
+        )
+    }
+    fn live(&self) -> bool {
+        !self.liveness.is_revoked()
+            && self
+                .meter
+                .coordinator
+                .file
+                .as_ref()
+                .is_some_and(|f| !f.cell.is_engaged())
+            && !self.meter.coordinator.port.emergency_stopped()
+    }
+    fn deny(&self, reason: BlockReason) {
+        let c = self.meter.coordinator;
+        let _ = c.file_latch_terminal(super::lite_intent::FileTerminal::Failure {
+            id: self.meter.invocation.mission,
+            trigger: Trigger::Block { reason },
+        });
+    }
+}
+impl<P: EffectPort> Drop for Caller<'_, P> {
+    fn drop(&mut self) {
+        // A panic/lost result is an outstanding obligation, never a joined call.
+        if !std::thread::panicking() {
+            if let Some(f) = &self.meter.coordinator.file {
+                f.model_active.store(false, Ordering::Release);
+            }
+        }
+    }
+}
+impl<P: EffectPort> ModelCaller for Caller<'_, P> {
+    fn call(&self, request: &ModelRequest) -> Result<ModelReply, ModelCallError> {
+        if !self.live() {
+            return Err(ModelCallError::Invalidated);
+        }
+        let c = self.meter.coordinator;
+        let attempt = c
+            .port
+            .model_call(self.meter.invocation.mission, request, self, self);
+        // Recording is independent of liveness and the first terminal cause.
+        if matches!(attempt, Ok(ModelAttempt::Unrecorded(_))) {
+            c.file
+                .as_ref()
+                .expect("File caller")
+                .model_debt
+                .store(true, Ordering::Release);
+            self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
+            return Err(ModelCallError::RecordUnavailable);
+        }
+        if self.deadline.expired()
+            || matches!(attempt, Ok(ModelAttempt::Failed(BrokerClass::ModelTimeout)))
+        {
+            self.deny(BlockReason::BudgetTime);
+        } else if matches!(
+            attempt,
+            Ok(ModelAttempt::Failed(BrokerClass::ModelOverBudget))
+        ) {
+            self.deny(BlockReason::BudgetModelCalls);
+        }
+        #[cfg(test)]
+        if matches!(attempt, Ok(ModelAttempt::Replied(_))) {
+            c.hooks.model_replied.fire();
+        }
+        match attempt {
+            Ok(ModelAttempt::Failed(class)) => Err(ModelCallError::Failed(class)),
+            Err(refusal) => Err(ModelCallError::Refused(refusal.class)),
+            Ok(ModelAttempt::Replied(reply)) if self.live() => Ok(reply),
+            _ => Err(ModelCallError::Invalidated),
+        }
+    }
+}
+
+impl<P: EffectPort> Coordinator<P> {
+    pub(super) fn model_obligations(&self) -> Result<(), CoordinatorError> {
+        if let Some(f) = &self.file {
+            if f.model_debt.load(Ordering::Acquire) {
+                return Err(CoordinatorError::Recording);
+            }
+            if f.model_active.load(Ordering::Acquire) {
+                return Err(CoordinatorError::Busy);
+            }
+        }
+        Ok(())
+    }
+}
+
+// Publish denial at the callback, before the broker's attempt recording.
+impl<P: EffectPort> CallMeter for Caller<'_, P> {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        let result = self.meter.charge();
+        match result {
+            Err(MeterRefusal::Exhausted | MeterRefusal::InFlight) => {
+                self.deny(BlockReason::BudgetModelCalls)
+            }
+            Err(MeterRefusal::OutOfTime) => self.deny(BlockReason::BudgetTime),
+            _ => {}
+        }
+        result
+    }
+    fn settle(&self, call: u32) {
+        self.meter.settle(call);
+    }
+}
+impl<P: EffectPort> CallDeadline for Caller<'_, P> {
+    fn expired(&self) -> bool {
+        let expired = self.deadline.expired();
+        if expired {
+            self.deny(BlockReason::BudgetTime);
+        }
+        expired
     }
 }
