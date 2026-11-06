@@ -943,6 +943,65 @@ fn clean_tree(stage: u8) -> Tree {
     static CLEAN: std::sync::OnceLock<Vec<Tree>> = std::sync::OnceLock::new();
     CLEAN.get_or_init(|| (2..=22).map(build_clean_tree).collect())[usize::from(stage - 2)].clone()
 }
+/// R-8: live retained source copied into a historical synthetic stage loses
+/// only the nested module edges registered by later, already-live extraction
+/// rows, and their own new-home paths revert to the registered old home. Each
+/// projected declaration must occur exactly once in its registered form;
+/// anything else is left in place and judged at every stage.
+fn project_live_source(stage: u8, path: &str, raw: String) -> String {
+    let mut raw = raw;
+    let mut projected = Vec::new();
+    for row in stages()
+        .iter()
+        .filter(|r| r.stage > stage && r.stage <= LIVE_STAGE)
+    {
+        for extraction in &row.extract {
+            let destination = extraction
+                .destination
+                .trim_start_matches("kernel/src/")
+                .trim_end_matches(".rs");
+            let Some((parent, child)) = destination.split_once('/') else {
+                continue;
+            };
+            if path != format!("kernel/src/{parent}.rs") {
+                continue;
+            }
+            let declaration = format!("pub mod {child};\n");
+            if raw.contains(&declaration) {
+                assert_eq!(
+                    raw.matches(&declaration).count(),
+                    1,
+                    "K{}: {path} must declare {child} once",
+                    row.stage
+                );
+                raw = raw.replacen(&format!("{declaration}\n"), "", 1);
+                raw = raw.replacen(&declaration, "", 1);
+            }
+            let old = extraction
+                .source
+                .trim_start_matches("kernel/src/")
+                .trim_end_matches(".rs")
+                .replace('/', "::");
+            for name in &extraction.payload {
+                if name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    raw = raw.replace(
+                        &format!("crate::{parent}::{child}::{name}"),
+                        &format!("crate::{old}::{name}"),
+                    );
+                }
+            }
+            projected.push((row.stage, parent, child));
+        }
+    }
+    for (row, parent, child) in projected {
+        assert!(
+            !module_names(&raw).contains(child)
+                && !raw.contains(&format!("crate::{parent}::{child}::")),
+            "K{row}: {path} keeps an unprojected {child} edge"
+        );
+    }
+    raw
+}
 fn build_clean_tree(stage: u8) -> Tree {
     let mut tree = Tree {
         files: paths_at(stage)
@@ -1025,7 +1084,7 @@ fn build_clean_tree(stage: u8) -> Tree {
         );
     }
     for sink in logs() {
-        let mut raw = read(&sink.path);
+        let mut raw = project_live_source(stage, &sink.path, read(&sink.path));
         if stage >= 4 && sink.path == "kernel/src/config.rs" {
             for kind in [
                 "BackupScheduleConfig",

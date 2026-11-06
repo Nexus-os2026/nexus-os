@@ -520,3 +520,32 @@ this candidate does not satisfy the zero-failure exit condition.
 The separate no-fail-fast diagnostic ran all 23 binaries not reached after
 that failure: 201 passed, 0 failed, 13 ignored. Combined candidate inventory:
 2046 passed, 11 failed, 28 ignored; this is not a green single-command result.
+
+
+## K04 R-8 historical projection registration (LIVE_STAGE = 4)
+
+`test(oracle-fix)` — Architect Ruling R-8. The K04 module edge
+`kernel/src/config.rs -> schema_compat` stays registered with stage 4 only, by
+the existing manifest-derived `build_module_edges`; `module-edges.json` and
+every other inventory are unchanged. The defect was in `build_clean_tree`: it
+copied today's `config.rs` (which declares the K04 child) into synthetic K02 and
+K03, whose stage-correct inventories do not contain that edge.
+
+Old: `let mut raw = read(&sink.path);`
+New: `let mut raw = project_live_source(stage, &sink.path, read(&sink.path));`
+
+`project_live_source` is derived from the manifest. For each extraction row
+later than the replayed stage and no later than LIVE_STAGE whose nested
+destination's parent is the copied file, it removes exactly the one registered
+`pub mod <child>;` declaration and reverts that row's identifier payload paths
+to their registered old home. A duplicate declaration or any residual child
+edge panics. For stage 3 the projected `config.rs` equals the pre-K04 bytes
+(bd883593) exactly. The K01 forward rewrite for stage >= 4 is kept unchanged.
+
+Nothing else is projected. The new R-8 control proves at every stage 2..=22
+that an unregistered `pub mod` in the projected parent, an unregistered file
+under `kernel/src/config/`, and the K04 child name declared in another parent
+are each `f7-dependency`; at K02/K03 the K04 declaration itself is still RED.
+A live plant (`kernel/src/config/planted_unregistered.rs` plus its declaration)
+was RED and then restored byte for byte; it was never committed. The completed
+K04 BLOCKED note above is historical and superseded by this registration.

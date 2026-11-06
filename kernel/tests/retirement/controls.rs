@@ -605,6 +605,42 @@ fn r5_kernel_module_file_and_logging_growth_still_require_registration() {
 }
 
 #[test]
+fn r8_later_stage_edges_are_projected_but_unregistered_modules_stay_red() {
+    let parent = "kernel/src/config.rs";
+    for stage in 2..=22 {
+        let tree = clean_tree(stage);
+        let names = module_names(&prod(&tree[parent]).0);
+        // Only the K04-registered child is stage scoped; nothing else changes.
+        assert_eq!(names.contains("schema_compat"), stage >= 4, "K{stage}");
+        if stage < 4 {
+            assert!(!tree[parent].contains("schema_compat"), "K{stage}");
+            assert!(tree[parent].contains("crate::backup::BackupScheduleConfig"));
+            assert!(tree[parent].contains("crate::rate_limit::ApiHardeningConfig"));
+        }
+        for (path, plant) in [
+            (parent, "\npub mod unregistered_compat;\n"),
+            (
+                "kernel/src/config/unregistered_compat.rs",
+                "pub fn harmless() {}",
+            ),
+            ("kernel/src/privacy.rs", "\npub mod schema_compat;\n"),
+        ] {
+            let mut tree = clean_tree(stage);
+            tree.entry(path.into()).or_default().push_str(plant);
+            rejected(stage, &tree, "f7-dependency", path);
+        }
+        if stage < 4 {
+            // A replayed earlier stage still rejects the later edge itself.
+            let mut tree = clean_tree(stage);
+            tree.get_mut(parent)
+                .unwrap()
+                .insert_str(0, "pub mod schema_compat;\n");
+            rejected(stage, &tree, "f7-dependency", parent);
+        }
+    }
+}
+
+#[test]
 fn r5_classifier_subject_allows_unrelated_helpers_but_keeps_refusal_bytes() {
     let raw = read("crates/nexus-governed-control/src/planned.rs");
     assert!(classifier_ok(&format!(
