@@ -280,6 +280,28 @@ Commit 1 compiled and ran with inert stubs (offline, fixed target directory):
 - Sandbox failures: retained F5 loopback bind denied (EPERM); seven retained
   evidence tests refuse runtime-root ancestry (UID 65534 on root directories).
 - Full logs: exported alongside the report as `01-*.log`.
-Commit-2 GREEN and plant receipts pending.
+Commit 2: K1/K3 2/0/0; emergency-stop unit command 12/0/1 (K2 green);
+evidence-store command 61/7/2 (K4 green); stop-seal 3/0/0. Counts are
+passed/failed/ignored. The same retained sandbox failures above remain:
+F5 0/1/0; evidence has seven runtime-root refusals. Overall gate is BLOCKED,
+not green. No retained assertion or frozen oracle changed.
+Formatting and warning-denied all-target Clippy both passed. K2 and K4 each
+passed 10 serial runs and 10 concurrent runs (20 test processes), zero failures.
+
+| Plant | Actual result |
+|---|---|
+| P1 | killed: K1 and K3 runtime RED |
+| P2 | not exercised: K1/K3 stayed green; K3 does not observe the unlock-to-store interval |
+| P3 | killed: K2 completion watchdog RED |
+| P4 | killed: K4 completion watchdog RED |
+| P5 | killed: K4 Some(default) vs None RED |
+| P6 | killed: K4 poisoned observation refused RED |
+
+All six compiled. All six source restorations were byte-identical (SHA-256).
+Logs, command exits, counts and restoration hashes accompany `report.md`.
+`Cargo.lock` is unchanged; scope remains five allowed files, with no Git writes.
+A second explicit security self-review confirmed mirror publication at the sole
+number mutation under state, fail-closed contention/poison handling, bounded
+owned test cleanup, unchanged blocking methods and no caller/phase change.
 Plants are temporary, run one at a time, restored byte-for-byte, never committed.
 Exact-SHA CI, fresh-context review and Owner merge remain external gates.

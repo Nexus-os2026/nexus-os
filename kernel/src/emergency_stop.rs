@@ -79,7 +79,7 @@
 use std::collections::VecDeque;
 use std::io;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Output};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -221,6 +221,8 @@ struct State {
 #[derive(Debug, Default)]
 pub struct StopAuthority {
     state: Mutex<State>,
+    /// Last stop number, published under `state` before releasing its lock.
+    number_now: AtomicU64,
     changed: Condvar,
     notify: tokio::sync::Notify,
     /// The process's authority (its controller is claimed only through
@@ -292,6 +294,7 @@ impl StopAuthority {
             let mut state = self.lock();
             state.stopped = true;
             state.number = state.number.saturating_add(1);
+            self.number_now.store(state.number, Ordering::Release);
             state.number
         };
         self.changed.notify_all();
@@ -501,9 +504,11 @@ impl std::fmt::Debug for StopWatch {
 }
 
 impl StopWatch {
-    /// Observe this watch without waiting on the authority's state lock.
+    /// Observe the stop-number mirror without waiting on the state lock.
+    /// A stop permanently halts older watches, including after resume.
+    /// This is a snapshot; a later stop can still halt this work.
     pub fn halted_now(&self) -> bool {
-        false
+        self.authority.number_now.load(Ordering::Acquire) != self.admitted_at
     }
 
     /// Refuse work halted by a stop, without waiting on a lock.

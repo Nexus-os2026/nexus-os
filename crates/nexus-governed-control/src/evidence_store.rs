@@ -61,7 +61,7 @@ use rusqlite::{params, Connection, ErrorCode, OpenFlags};
 use sha2::{Digest as _, Sha256};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 
 /// The format the identity row names.
 pub(crate) const FORMAT: &str = "p3-evidence/1";
@@ -877,13 +877,23 @@ impl EvidenceStore {
     }
 
     /// A memory-only observation; contention refuses with `None`.
+    /// Poison latches the store just as `inner()` does; no I/O is performed.
     pub(crate) fn try_health(&self) -> Option<EvidenceHealth> {
+        let inner = match self.inner.try_lock() {
+            Ok(inner) => inner,
+            Err(TryLockError::WouldBlock) => return None,
+            Err(TryLockError::Poisoned(poisoned)) => {
+                let mut inner = poisoned.into_inner();
+                inner.latched = true;
+                inner
+            }
+        };
         Some(EvidenceHealth {
-            latched: false,
-            owed: 0,
-            recovery_required: false,
-            unsettled: 0,
-            unclean_sessions: 0,
+            latched: inner.latched,
+            owed: inner.owed.len(),
+            recovery_required: inner.known.recovery_required(),
+            unsettled: inner.known.unacknowledged(),
+            unclean_sessions: inner.known.unclean.len(),
         })
     }
 
