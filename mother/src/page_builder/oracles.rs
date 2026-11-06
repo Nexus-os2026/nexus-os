@@ -354,7 +354,7 @@ fn m3c_scalar_and_collection_boundaries() {
         let make = |count: usize| {
             let mut v: serde_json::Value = serde_json::from_str(DRAFT).unwrap();
             let t = "é ".repeat(count / 2) + if count % 2 == 1 { "é" } else { "" };
-            let t = if count % 2 == 0 {
+            let t = if count.is_multiple_of(2) {
                 format!("{}x", &t[..t.len() - 1])
             } else {
                 t
