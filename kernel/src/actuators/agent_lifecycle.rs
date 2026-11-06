@@ -4,8 +4,8 @@
 //! and are persisted with `parent_agent_id` lineage metadata.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::autonomy::AutonomyLevel;
-use crate::cognitive::types::PlannedAction;
 use crate::manifest::AgentManifest;
 use nexus_persistence::{NexusDatabase, StateStore};
 use serde_json::Value;

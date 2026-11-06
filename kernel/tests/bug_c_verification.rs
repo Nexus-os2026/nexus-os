@@ -1,9 +1,9 @@
 //! P0-002 supersedes the old Option B outside-workspace write expectation.
 
+use nexus_kernel::action_types::PlannedAction;
 use nexus_kernel::actuators::types::Actuator;
 use nexus_kernel::actuators::{ActuatorContext, ActuatorError, GovernedFilesystem};
 use nexus_kernel::autonomy::AutonomyLevel;
-use nexus_kernel::cognitive::PlannedAction;
 use std::collections::HashSet;
 use std::path::Path;
 use tempfile::TempDir;

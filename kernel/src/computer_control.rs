@@ -24,14 +24,7 @@ static INPUT_KILL_SWITCH_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-/// A rectangular screen region for targeted capture.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ScreenRegion {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
+pub use crate::screen_region::ScreenRegion;
 
 /// Mouse button identifiers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

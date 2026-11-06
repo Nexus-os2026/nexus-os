@@ -1,8 +1,8 @@
 //! GovernedShell actuator — allowlisted argv command execution (not an OS sandbox).
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 
 /// Command execution timeout in seconds.
 const COMMAND_TIMEOUT_SECS: u64 = 60;

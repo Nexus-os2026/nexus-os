@@ -4,13 +4,13 @@
 #[path = "retirement/web_search_source.rs"]
 mod web_search_source;
 
+use nexus_kernel::action_types::PlannedAction;
 use nexus_kernel::actuators::{
     Actuator, ActuatorContext, ActuatorRegistry, CurlWebBackend, GovernedWeb, WebSearchBackend,
     WebSearchResult,
 };
 use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::AutonomyLevel;
-use nexus_kernel::cognitive::types::PlannedAction;
 use nexus_kernel::test_support::HermeticSearchBackend;
 use std::sync::Arc;
 

@@ -6,10 +6,10 @@
 //! - Allowlist permits monitoring commands
 //! - Blocklist blocks dangerous commands
 
+use nexus_kernel::action_types::PlannedAction;
 use nexus_kernel::actuators::{ActuatorContext, ActuatorRegistry};
 use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::AutonomyLevel;
-use nexus_kernel::cognitive::PlannedAction;
 use std::collections::HashSet;
 
 fn make_exec_context() -> (tempfile::TempDir, ActuatorContext) {

@@ -1,7 +1,7 @@
 use super::filesystem::GovernedFilesystem;
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 use std::env;
 use std::io::Write;
 use std::path::PathBuf;

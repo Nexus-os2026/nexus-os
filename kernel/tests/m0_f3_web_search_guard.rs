@@ -13,12 +13,13 @@
 //! only from `fetch_content`); WebFetch is a recorded follow-up, not part of
 //! this fix.
 
+use nexus_kernel::action_types::PlannedAction;
 use nexus_kernel::actuators::{
     ActuatorContext, ActuatorRegistry, GovernedWeb, WebSearchBackend, WebSearchResult,
 };
 use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::AutonomyLevel;
-use nexus_kernel::cognitive::{ActionExecutor, PlannedAction, RegistryExecutor};
+use nexus_kernel::cognitive::{ActionExecutor, RegistryExecutor};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::Supervisor;
 use nexus_kernel::test_support::HermeticSearchBackend;

@@ -7,8 +7,8 @@
 //! step of a unit ([`Actuator::execute_in`]); without one they are refused.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, ActuatorScope};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 use crate::hm::{Parent, RecallSpec, RecordTable, MAX_RECORDS};
 
 const FUEL_COST_GRAPH_UPDATE: f64 = 4.0;

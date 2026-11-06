@@ -1,7 +1,7 @@
 //! Core types for the actuator subsystem — governed real-world action execution.
 
+use crate::action_types::PlannedAction;
 use crate::autonomy::AutonomyLevel;
-use crate::cognitive::types::PlannedAction;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -112,7 +112,7 @@ pub trait Actuator: Send + Sync {
     /// Execute the given action within the provided governance context.
     fn execute(
         &self,
-        action: &crate::cognitive::types::PlannedAction,
+        action: &crate::action_types::PlannedAction,
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError>;
 
@@ -122,7 +122,7 @@ pub trait Actuator: Send + Sync {
     /// API; the default runs [`Actuator::execute`].
     fn execute_in(
         &self,
-        action: &crate::cognitive::types::PlannedAction,
+        action: &crate::action_types::PlannedAction,
         context: &ActuatorContext,
         scope: &mut ActuatorScope<'_>,
     ) -> Result<ActionResult, ActuatorError> {

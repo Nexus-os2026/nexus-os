@@ -9,8 +9,8 @@
 //! connection. The built-in `CurlWebBackend` serves agent fetches only.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use crate::action_types::PlannedAction;
 use crate::capabilities::has_capability;
-use crate::cognitive::types::PlannedAction;
 use regex::Regex;
 use std::process::{Command, Stdio};
 use std::sync::Arc;

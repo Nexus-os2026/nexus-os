@@ -1687,7 +1687,7 @@ fn m4_unit(issuer: &M4Issuer) -> nexus_kernel::hm::DispatchContext {
 fn m4_graph(
     issuer: &M4Issuer,
     unit: &mut nexus_kernel::hm::DispatchContext,
-    action: nexus_kernel::cognitive::PlannedAction,
+    action: nexus_kernel::action_types::PlannedAction,
 ) -> (
     Result<nexus_kernel::actuators::ActionResult, nexus_kernel::actuators::ActuatorError>,
     Vec<nexus_kernel::hm::RecalledRecord>,
@@ -1716,8 +1716,11 @@ fn m4_graph(
     (result, std::mem::take(&mut scope.recalled))
 }
 
-fn m4_update(entities: &[&str], relationships: &[&str]) -> nexus_kernel::cognitive::PlannedAction {
-    nexus_kernel::cognitive::PlannedAction::KnowledgeGraphUpdate {
+fn m4_update(
+    entities: &[&str],
+    relationships: &[&str],
+) -> nexus_kernel::action_types::PlannedAction {
+    nexus_kernel::action_types::PlannedAction::KnowledgeGraphUpdate {
         entities: entities.iter().map(|s| s.to_string()).collect(),
         relationships: relationships.iter().map(|s| s.to_string()).collect(),
     }
@@ -1909,7 +1912,7 @@ fn hm_m3_n6_child_am4_phase2() {
     let (queried, recalled) = m4_graph(
         &issuer,
         &mut unit,
-        nexus_kernel::cognitive::PlannedAction::KnowledgeGraphQuery {
+        nexus_kernel::action_types::PlannedAction::KnowledgeGraphQuery {
             query: "SYNTH".into(),
         },
     );

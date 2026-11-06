@@ -403,3 +403,50 @@ removed, no check relaxed, and a fourth unregistered kernel file still fails.
 Its two `transitional_*_export_is_the_same_type_as_its_new_home` tests name the
 old paths on purpose and are deleted with them: `supervisor` at K14,
 `manifest` at K19. K22 still requires no old-path export or import anywhere.
+
+## K03 oracle registration (before extraction; LIVE_STAGE = 2)
+
+`test(oracle-add)` — `kernel/tests/k03_extraction_parity.rs` adds independent
+Rust constructions for all 46 planned variants against K01's unchanged JSON
+bytes and labels, including every temporary `required_capabilities` result.
+The existing K01 goldens independently cover all six browser variants. Both
+binaries run before the move through the old paths and afterwards through the
+registered new homes; only their import lines follow the definitions.
+
+Additional K03 assertions pin all six `string_or_vec` consumers (including
+missing, null, scalar, object and nested-array inputs), strict vectors outside
+that codec, optional-field defaults, malformed-action refusal and each of the
+four screen-region fields at and beyond the u32 boundary. The current Debug
+output and derives remain unchanged. No fixture is regenerated or amended.
+The same-type old-path checks retire with cognitive at K11 and computer_control
+at K13; K22 still forbids old-path imports/exports. The capability parity check
+must retire with the temporary helper at K12.
+
+## K03 F3 import formatting registration (before extraction)
+
+`test(oracle-amend)` — K01's staged F3 source expectation replaced the type
+path in place. Rustfmt moves the new `action_types` import ahead of `actuators`;
+leaving it at the old `cognitive` position cannot pass both exact source equality
+and fmt. Before extraction, `web_test_source(3..)` now registers exactly that
+path replacement and import relocation. The new reversal control reconstructs
+K01's frozen snapshot byte for byte and rejects the old-position rendering.
+The snapshot itself, every test body/assertion, the classifier hash, all JSON
+fixtures and all inventories remain unchanged. No old-or-new acceptance is added.
+
+## K03 extraction registration (LIVE_STAGE = 3)
+
+`refactor` — move the complete `BrowserAction`, `PlannedAction`,
+`string_or_vec::deserialize`, `action_type` and temporary `required_capabilities`
+payloads unchanged from `cognitive/types.rs` to `action_types.rs`. Move
+`ScreenRegion` unchanged from `computer_control.rs` to `screen_region.rs`.
+Keep exactly the three registered same-type exports at the old homes. All
+existing inline behavioral tests remain present; no Debug redaction is included.
+Kernel callers, the broker classifier and its typed test fixtures import the
+same definitions at their new homes. The cognitive export group is unchanged.
+
+No fixture inventory amendment is needed: `paths_at(3)` and the staged module
+edges derive both new homes and the codec module from the unchanged manifest.
+`production-paths.txt` stays at 330 seeds; all JSONL bytes/hashes, module edges,
+logging/HM/retained-test inventories and classifier bytes stay unchanged. The
+only oracle amendment is the pre-registered F3 import formatting above. Stage 3
+activates the registered live checks; it authorizes no later retirement step.

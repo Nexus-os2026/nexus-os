@@ -8,8 +8,9 @@ use super::memory_manager::AgentMemoryManager;
 use super::planner::{CognitivePlanner, PlanningRecall};
 use super::types::{
     AgentGoal, AgentStep, CognitiveEvent, CognitivePhase, CognitiveStatusResponse, CycleResult,
-    GoalStatus, LoopConfig, PlannedAction, PlanningContext, StepStatus,
+    GoalStatus, LoopConfig, PlanningContext, StepStatus,
 };
+use crate::action_types::PlannedAction;
 use crate::actuators::{ActuatorContext, ActuatorRegistry, ActuatorScope};
 use crate::audit::{AuditTrail, AuditWriter, EventType};
 use crate::autonomy::AutonomyLevel;
