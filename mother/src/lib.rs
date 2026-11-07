@@ -245,6 +245,7 @@ pub mod effect;
 pub mod evidence;
 pub mod journal;
 pub mod lane;
+mod page_builder;
 pub mod private;
 pub mod state;
 pub mod verifier;
