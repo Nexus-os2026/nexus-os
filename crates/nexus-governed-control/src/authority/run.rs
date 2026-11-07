@@ -2106,7 +2106,9 @@ impl RunRegistry {
         let cell = door_cell
             .as_ref()
             .is_none_or(|door| entry.file_cell.as_ref().is_some_and(|c| c.same(door)));
-        if !s || !d || !r || !cell {
+        // As host_prerequisites: the stored entry is this run.
+        let id = entry.view.id == b.run;
+        if !s || !d || !r || !cell || !id {
             return Err(AuthorityError::NotMember);
         }
         let files = entry
