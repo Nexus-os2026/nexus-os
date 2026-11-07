@@ -1942,6 +1942,30 @@ pub(crate) struct OriginalGrant<'a> {
     pub(crate) grant: super::ids::GrantId,
     pub(crate) clock: (u64, u64),
 }
+impl OriginalGrant<'_> {
+    /// Live on both clocks with a Files scope equal to the run's workspace;
+    /// contention refuses, poison also fails the session.
+    fn live(&self, files: &FilesAdmission, cell: &HaltCell) -> Result<(), AuthorityError> {
+        use super::policy::{GrantObservation, GrantScope};
+        let grant = self
+            .grants
+            .try_live_at(self.grant, self.clock.0, self.clock.1)
+            .map_err(|error| {
+                if error == GrantObservation::Poisoned {
+                    cell.fail_session();
+                }
+                AuthorityError::Unavailable("model grant hold unavailable")
+            })?;
+        match grant {
+            Some(GrantScope::Files {
+                workspace,
+                identity,
+                ..
+            }) if workspace == files.workspace.id && identity == files.workspace.identity => Ok(()),
+            _ => Err(AuthorityError::GrantNotLive),
+        }
+    }
+}
 impl RunRegistry {
     // No producer/model hold is carried here. Ordinary calls are unchanged.
     pub(crate) fn admit_session_attempt(
@@ -1951,12 +1975,12 @@ impl RunRegistry {
         grant: &OriginalGrant<'_>,
         invocation: &crate::inference::InvocationObserver,
     ) -> Result<SessionAttempt, AuthorityError> {
-        // SB-3B interface only: enforced by the feat commit, not here.
-        let _ = (grant.grants, grant.grant, grant.clock, invocation);
-        let mut table = self
-            .runs
-            .try_lock()
-            .map_err(|_| AuthorityError::Unavailable("model run hold unavailable"))?;
+        let mut table = self.runs.try_lock().map_err(|error| {
+            if matches!(error, TryLockError::Poisoned(_)) {
+                original.fail_session();
+            }
+            AuthorityError::Unavailable("model run hold unavailable")
+        })?;
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -2008,6 +2032,7 @@ impl RunRegistry {
             .model_attempts
             .checked_add(1)
             .ok_or(AuthorityError::Capacity)?;
+        grant.live(files, &cell)?;
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.granted");
         let ticket = SessionAttempt {
@@ -2021,6 +2046,10 @@ impl RunRegistry {
             cell: cell.clone(),
         };
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        // The live invocation, last among predicates, before the CAS.
+        if invocation.is_revoked() {
+            return Err(AuthorityError::Halted);
+        }
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.checked");
         cell.admit()?; // Original retained Q's real same-word CAS; never refresh.

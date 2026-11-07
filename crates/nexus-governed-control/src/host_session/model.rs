@@ -586,7 +586,48 @@ impl SessionDoor {
         request: &ModelRequest,
         invocation: &InvocationObserver,
     ) -> Result<Attempt, AuthorityError> {
-        let _ = (run, request, invocation);
-        Err(AuthorityError::Halted) // Deny-only stub until the feat commit.
+        let DoorKind::Original { file_grant } = self.kind else {
+            return Err(AuthorityError::Halted); // A continuation never calls.
+        };
+        if request.is_conversation() {
+            return Err(AuthorityError::ModelCall(ModelError::ConfigMismatch));
+        }
+        if !self.context.scope.live(self.core.cell.session_word()) || invocation.is_revoked() {
+            return Err(AuthorityError::Halted);
+        }
+        // Installed M, observed without waiting; released before the run table.
+        let identity = {
+            let s = hold(&self.core).map_err(|_| AuthorityError::Unavailable("model slot"))?;
+            let r = s
+                .registration
+                .as_ref()
+                .ok_or(AuthorityError::ModelNotRegistered)?;
+            if self.core.model.uncertain.load(Ordering::SeqCst) || r.watch.check_now().is_err() {
+                return Err(AuthorityError::Halted);
+            }
+            r.digest
+        };
+        let backend = self.door.session_backend();
+        let q = self.context.scope.mother_run.get();
+        if !q.is_some_and(|(control, known)| control.ptr_eq(&backend) && *known == run) {
+            return Err(AuthorityError::NotMember); // Q's own File run only.
+        }
+        let control = backend.upgrade().ok_or(AuthorityError::Halted)?;
+        let authority = control.authority();
+        let clock = authority.clock();
+        let grant = OriginalGrant {
+            grants: authority.grants(),
+            grant: file_grant,
+            clock: (clock.monotonic_ms(), clock.wall_ms()),
+        };
+        let key = (run, self.door.agent(), self.door.origin(), identity);
+        Attempt::acquire(
+            &self.core,
+            authority,
+            key,
+            &self.context.cell,
+            &grant,
+            invocation,
+        )
     }
 }
