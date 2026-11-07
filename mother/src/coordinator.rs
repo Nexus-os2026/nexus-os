@@ -1639,7 +1639,15 @@ impl<P: EffectPort> Coordinator<P> {
             if mission.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
-            let trigger = if phase == MissionState::Verifying {
+            // M3-Dc1: a page passes only on its recorded all-pass checks.
+            let unproven = mission.contract()?.page_facts.is_some()
+                && self.file.is_some()
+                && mission.proof.verified != Some(true);
+            let trigger = if phase == MissionState::Verifying && unproven {
+                Trigger::VerifyFail {
+                    reason: VerifyFailReason::VerifierGaveNoVerdict,
+                }
+            } else if phase == MissionState::Verifying {
                 Trigger::VerifyPass
             } else {
                 Trigger::PhaseDone
@@ -1833,9 +1841,15 @@ impl<P: EffectPort> Coordinator<P> {
             }
             // Identity observation is outside the coordinator hold; native admission
             // independently rechecks it against the same original run and consent.
+            // M3-Dc1: a File page's Verifier runs only on its durable proof.
+            let verification = match self.page_verification(id, generation, *role, report)? {
+                Ok(verification) => verification,
+                Err(state) => return Ok(Ended::Ended(state)),
+            };
             let cap = lane.max_model_calls();
             let model = (cap > 0).then(|| self.port.model_identity()).flatten();
             let (step, caller) = self.step(|inner| {
+                inner.mission(id)?.proof.input = verification;
                 if identity.role != *role {
                     return Ok((Then::End(BlockReason::LaneIdentityChanged), None));
                 }
@@ -1977,6 +1991,12 @@ impl<P: EffectPort> Coordinator<P> {
                 input_hash: input_hash(&input),
                 output_hash: hash,
             });
+            let page = contract.page_facts.is_some() && self.file.is_some();
+            if *role == LaneRole::Verifier && page {
+                if let Some(state) = self.page_verdict(id, generation, &input, &output, report)? {
+                    return Ok(Ended::Ended(state));
+                }
+            }
 
             // The verdict: a code; the lane's own reason is the Owner's
             // working detail (memory only).
@@ -3283,6 +3303,12 @@ fn replay(
                 Trigger::Start if !mission.consented() => {
                     return Err(V::WorkWithoutConsent);
                 }
+                // M3-Dc1: a retained page passes only on its recorded checks.
+                Trigger::VerifyPass
+                    if mission.proof.retained.is_some() && mission.proof.verified != Some(true) =>
+                {
+                    return Err(V::ProofOutOfPlace);
+                }
                 // A wait follows the settlement of the effect it waits on.
                 Trigger::AwaitApproval { effect, .. }
                     if mission.awaiting_settled != Some(*effect) =>
@@ -3368,6 +3394,7 @@ fn replay(
         }
         Event::LaneInvoked {
             invocation,
+            role,
             model_cap,
             model_budget,
             ..
@@ -3392,6 +3419,7 @@ fn replay(
             }
             mission.pending_lane = Some(*invocation);
             mission.proof.returned = None;
+            mission.proof.invoked = Some(*role);
             mission.model_calls = mission
                 .model_calls
                 .checked_add(1)

@@ -65,9 +65,21 @@ impl VerificationInput {
     /// The candidate and facts parts recomputed here; the receipt's from
     /// the journal. Facts that cannot be approved give no input.
     pub(crate) fn new(candidate: Vec<u8>, facts: &PageFacts, r: &ReceiptFields) -> Option<Self> {
-        // M3-Dc1 inert stub: no input is made until the implementation.
-        let _ = (candidate, facts, r, content_identity);
-        None
+        let (candidate_sha256, candidate_bytes, facts_hash) = content_identity(&candidate, facts)?;
+        let identity = VerificationIdentity {
+            candidate_sha256,
+            candidate_bytes,
+            facts_hash,
+            receipt_sha256: r.sha256.clone(),
+            receipt_bytes: r.bytes,
+            receipt_policy_hash: r.policy_hash.clone(),
+            receipt_overtaken: r.overtaken,
+        };
+        Some(Self {
+            candidate,
+            facts: facts.clone(),
+            identity,
+        })
     }
 
     pub fn identity(&self) -> &VerificationIdentity {
@@ -123,11 +135,25 @@ impl Serialize for VerificationReport {
 
 impl VerificationReport {
     fn of(input: &VerificationInput) -> Self {
-        // M3-Dc1 inert stub: no check runs.
-        let _ = (verify_page, input.receipt());
+        let own = content_identity(&input.candidate, &input.facts);
+        let i = &input.identity;
+        let checks = own
+            .filter(|own| {
+                *own == (
+                    i.candidate_sha256.clone(),
+                    i.candidate_bytes,
+                    i.facts_hash.clone(),
+                )
+            })
+            .and_then(|_| input.facts.approved().ok())
+            .map(|facts| {
+                let receipt = input.receipt();
+                let report = verify_page(&input.candidate, &facts, receipt.as_ref());
+                report.checks().map(|(_, result)| result)
+            });
         Self {
             identity: input.identity.clone(),
-            checks: None,
+            checks,
         }
     }
 
@@ -157,7 +183,7 @@ impl VerificationReport {
         if self.passed() {
             return None;
         }
-        let first = self.checks?.into_iter().find_map(|r| match r {
+        let first = self.checks.into_iter().flatten().find_map(|r| match r {
             CheckResult::Fail(code) => Some(code),
             _ => None,
         });
@@ -168,9 +194,11 @@ impl VerificationReport {
 /// The frozen report digest: SHA-256 of the domain and the compact JSON of
 /// the ordered `(id, code)` checks.
 pub fn report_digest(entries: &[(String, String)]) -> String {
-    // M3-Dc1 inert stub.
-    let _ = (entries, REPORT_DOMAIN);
-    String::new()
+    let json = serde_json::to_vec(entries).expect("checks serialize");
+    let mut h = Sha256::new();
+    h.update(REPORT_DOMAIN);
+    h.update(json);
+    hex::encode(h.finalize())
 }
 
 /// `page-verifier`/`m3-1`: zero model calls, no effects.
@@ -186,9 +214,7 @@ impl Lane for PageVerifierLane {
     }
 
     fn invoke(&self, input: &LaneInput) -> LaneOutput {
-        // M3-Dc1 inert stub: no typed report.
-        let report: Option<VerificationReport> = None;
-        let _ = input.verification.as_ref().map(VerificationReport::of);
+        let report = input.verification.as_ref().map(VerificationReport::of);
         let verdict = match report.as_ref().map(|r| (r.passed(), r.failure())) {
             Some((true, _)) => Verdict::Pass,
             Some((false, Some(code))) => Verdict::Fail {

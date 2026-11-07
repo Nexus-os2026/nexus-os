@@ -24,6 +24,7 @@ use crate::private::MAX_CONTENT_BYTES;
 use crate::state::Trigger;
 use crate::verifier::{CheckCode, CheckId};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
+use nexus_governed_control::inert_page::{FactCode, RefusalCode, POLICY_V1};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
@@ -482,14 +483,35 @@ impl VerifyCode {
 
 /// Every V0-V5 failure code, with its check: the closed registry.
 pub fn check_codes() -> Vec<(CheckId, CheckCode)> {
-    // M3-Dc1 inert stub: an empty registry.
-    Vec::new()
+    use CheckCode as C;
+    use CheckId::{V0, V1, V2, V3, V4, V5};
+    let hours = 0..POLICY_V1.facts_hours_max_lines as u8;
+    let fact = |code| (V3, C::FactMissing(code));
+    let mut v = vec![(V0, C::NoPublication), (V1, C::PublishedMismatch)];
+    v.extend(RefusalCode::CODES.map(|code| (V2, C::PageNotInert(code))));
+    v.push((V2, C::PolicyChanged));
+    v.extend([fact(FactCode::NameNotHeading), fact(FactCode::NameNotTitle)]);
+    v.extend(
+        hours
+            .clone()
+            .map(|index| fact(FactCode::HoursLineMissing { index })),
+    );
+    v.extend([fact(FactCode::PhoneMissing), fact(FactCode::ForeignNumber)]);
+    v.push((V4, C::NameNotVisible));
+    v.extend(hours.map(|index| (V4, C::HoursLineNotVisible(index))));
+    v.extend([(V4, C::PhoneNotVisible), (V4, C::ReaderUnsupported)]);
+    v.push((V5, C::EmailNotSupported));
+    v
 }
 
 /// Whether `id` may journal `code`: `pass`, `not_run` or `fail:<its code>`.
 pub fn is_check_result(id: CheckId, code: &str) -> bool {
-    let _ = (id, code);
-    false
+    matches!(code, "pass" | "not_run")
+        || code.strip_prefix("fail:").is_some_and(|code| {
+            check_codes()
+                .iter()
+                .any(|(of, c)| *of == id && c.to_string() == code)
+        })
 }
 
 impl VerifyFailReason {
@@ -507,11 +529,17 @@ impl VerifyFailReason {
 
     /// Every value (the registry).
     pub fn every() -> Vec<Self> {
-        // M3-Dc1 inert stub: check codes are not registered yet.
-        vec![
+        let mut every = vec![
             VerifyFailReason::VerifierFailed,
             VerifyFailReason::VerifierGaveNoVerdict,
-        ]
+            VerifyFailReason::Check(VerifyCode::Identity),
+        ];
+        every.extend(
+            check_codes()
+                .into_iter()
+                .map(|(_, code)| VerifyFailReason::Check(VerifyCode::Check(code))),
+        );
+        every
     }
 }
 
@@ -1168,8 +1196,18 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
                 && RunId::parse(&action.run).is_some()
                 && CommitmentId::parse(&action.commitment).is_some()
         }
-        // M3-Dc1 inert stub: not yet evidence.
-        Event::VerificationRecorded { .. } => false,
+        Event::VerificationRecorded {
+            report_digest,
+            checks,
+            ..
+        } => {
+            checks.len() == CheckId::ALL.len()
+                && CheckId::ALL
+                    .iter()
+                    .zip(checks)
+                    .all(|(id, (name, code))| name == id.as_str() && is_check_result(*id, code))
+                && *report_digest == crate::page_verifier::report_digest(checks)
+        }
     };
     if ok {
         Ok(())

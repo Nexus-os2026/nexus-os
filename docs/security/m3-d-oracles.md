@@ -243,13 +243,14 @@ the current proof. After the answer: no typed report (or effects) →
 `verifier_gave_no_verdict`; report not bound to the input → identity code;
 otherwise `verification_recorded` is appended, then the first table-order
 failure becomes `VerifyFail{check:<code>}`, or a recorded all-pass (and a
-Pass verdict) proceeds. A page mission's VerifyPass, live and at replay,
-requires a recorded all-pass. Append failure: Failed `journal_failed`,
+Pass verdict) proceeds. A File page mission's VerifyPass requires a
+recorded all-pass. Append failure: Failed `journal_failed`,
 `written; proof not recorded`, journal poisoned, no VerifyPass.
 Replay: the record must follow the Verifier's own LaneReturned in
 Verifying, after a clean receipt of its effect, once (`ProofOutOfPlace`,
-`ProofConflict`). Non-File coordinators keep invoking their Verifier lane
-(Da's D-I2 counts it) but a page mission there can never pass.
+`ProofConflict`). Gates apply in File sessions; a non-File coordinator
+(which cannot publish) keeps legacy Verifier semantics, as Da's D-I2 needs.
+Replay holds no contract body: it gates VerifyPass where a page was retained.
 
 ## Oracle-first matrix (Dc1)
 

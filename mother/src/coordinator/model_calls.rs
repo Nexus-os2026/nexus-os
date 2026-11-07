@@ -100,6 +100,15 @@ pub(super) fn reserve_lane(
     inner.usable()?;
     let seq = inner.next_seq;
     let m = inner.mission(id)?;
+    // M3-Dc1: the Verifier's input, only as built from the current proof.
+    let verification = m.proof.input.take();
+    let verification = verification.filter(|_| identity.role == LaneRole::Verifier);
+    if verification
+        .as_ref()
+        .is_some_and(|v| !super::page_proof::bound(&m.proof, v))
+    {
+        return Err(CoordinatorError::Stopped);
+    }
     m.not_held()?;
     if m.generation != generation
         || !m.state.is_working()
@@ -160,7 +169,7 @@ pub(super) fn reserve_lane(
             identity.role,
         )
         .map_err(CoordinatorError::Contract)?,
-        verification: None,
+        verification,
     };
     inner.append(
         id,
