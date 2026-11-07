@@ -241,6 +241,12 @@ fn session_literal_oracle_provenance_is_frozen_independently_of_product_classifi
 // faults.c (2349a9e6): old "no echo-write hold" -> "echo-hold plus native
 // Stop-recording receipt". Original death/torn/receipt checks are unchanged.
 // Old digest eb49fa95f07b430062cc396c80a3c1677a42dff75bb652599eb83990e0078de5.
+// Oracle amendment TH-R2 (Architect-approved): support/faults.rs (9bc0602e)
+// only moves where faults.so is built, from a never-removed per-process
+// temp_dir()/m2dd-interpose-<pid> to <fixture root>/interpose, so the
+// Fixture's owned-root removal deletes it. Death, torn-line and receipt
+// checks are unchanged.
+// Old digest d2e637a4a287bb02301a776403ab63ef2eb4ea47a9d6f83ff8543b43b82ba53d.
 // Keep the exact source-digest assertions below; any further edit must fail.
 #[test]
 fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitutions() {
@@ -251,7 +257,7 @@ fn session_death_harness_provenance_rejects_error_torn_and_fake_receipt_substitu
         ),
         (
             "mother/host/tests/support/faults.rs",
-            "d2e637a4a287bb02301a776403ab63ef2eb4ea47a9d6f83ff8543b43b82ba53d",
+            "2986c8ed245a2c95f6d5003b8925950e2ef47de8c640e11fb7fec9dd40ea4b56",
         ),
         (
             "mother/host/tests/support/faults.c",
