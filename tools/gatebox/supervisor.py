@@ -332,7 +332,7 @@ def main():
             state = read_config('admission.json')
             stage_name = admission_stage(request,uid,registry[request['repo_id']],identity,state,evidence)
             held = admission.acquire()
-            reply = {'status':'ACCEPTED' if held else 'BUSY','stage':stage_name,'peer_uid':uid}
+            reply = {'status':'ACCEPTED' if held else 'BUSY'}
             if held:
                 run = uuid.uuid4().hex
                 marker = STATE/'pending'/('.'+run)
@@ -350,6 +350,7 @@ def main():
             sock.settimeout(2)
             sock.sendall(struct.pack('!I',len(data))+data)
         except (ValueError,OSError) as exc:
+            if worker: return  # Admitted work survives a lost reply; it was not rejected.
             try:
                 reply = {'status':'UNQUALIFIED' if str(exc).startswith('QUALIFICATION_') else 'REJECTED',
                          'reason':str(exc)}
