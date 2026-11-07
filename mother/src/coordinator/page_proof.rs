@@ -18,6 +18,11 @@ pub(super) struct Proof {
     pub(super) returned: Option<InvocationId>,
     pub(super) retained: Option<Retained>,
     pub(super) receipt: Option<u64>,
+    /// Replay only: the action of a settlement receipt journaled before any
+    /// pending identity (Db-R1 L4); the Settled line must name it.
+    pub(super) early: Option<PendingAction>,
+    /// In memory only: a written page whose proof the journal lacks.
+    pub(super) unrecorded: bool,
 }
 
 /// A retained deliverable, by reference.
@@ -41,7 +46,7 @@ fn raw_sha(bytes: &[u8]) -> String {
 }
 
 /// No effects, exactly the one `index.html` create, or neither.
-fn deliverable(effects: &[EffectRequest]) -> Result<Option<&FileCreate>, ()> {
+pub(super) fn deliverable(effects: &[EffectRequest]) -> Result<Option<&FileCreate>, ()> {
     match effects {
         [] => Ok(None),
         [EffectRequest::CreateFile(create)] if create.name == "index.html" => Ok(Some(create)),
@@ -81,13 +86,51 @@ pub(super) fn receipt_event(
 /// A failed proof append: the mission fails in memory (the journal is
 /// poisoned) and the Owner is told the page was written.
 pub(super) fn unrecorded(m: &mut Mission, report: &mut Advance) {
+    fail_unrecorded(m);
+    report.to = MissionState::Failed;
+    report.reason = m.reason.clone();
+    report.explanation = Some(WRITTEN.into());
+}
+
+/// Rulings 7 and Db-R1a, in memory only: Failed `journal_failed`. Closure
+/// and ack stay unwritten, so the obligation remains visible.
+pub(super) fn fail_unrecorded(m: &mut Mission) {
     m.invalidate_calls();
     m.state = MissionState::Failed;
     m.generation += 1;
     m.reason = Some(BlockReason::JournalFailed.to_string());
-    report.to = MissionState::Failed;
-    report.reason = m.reason.clone();
-    report.explanation = Some(WRITTEN.into());
+    m.proof.unrecorded = true;
+}
+
+/// Db-R1 H1: a page File approved (its ack owed) without a durable receipt.
+pub(super) fn unproven(m: &Mission) -> bool {
+    m.proof.retained.as_ref().is_some_and(|r| {
+        m.proof.receipt != Some(r.effect)
+            && (m.open_action.as_ref())
+                .is_some_and(|(e, pending)| *e == r.effect && m.acks.contains(pending))
+    })
+}
+
+/// Db2-R1 L3: a Settled line for an early receipt's effect that names
+/// another action (or none).
+pub(super) fn early_conflict(m: &Mission, effect: u64, action: Option<&PendingAction>) -> bool {
+    m.proof.receipt == Some(effect) && m.proof.early.as_ref().is_some_and(|e| action != Some(e))
+}
+
+/// Db-R1 M3: the settlement end replay expects for a page publication.
+pub(super) fn settled_end(
+    m: &Mission,
+    effect: u64,
+    published: bool,
+) -> Option<crate::evidence::SettlementEnd> {
+    let retained = m
+        .proof
+        .retained
+        .as_ref()
+        .is_some_and(|r| r.effect == effect);
+    (published && retained && m.proof.receipt != Some(effect)).then_some(
+        crate::evidence::SettlementEnd::Block(BlockReason::ReceiptMissing),
+    )
 }
 
 /// Replay: order and linkage of the proof records.
@@ -137,22 +180,30 @@ pub(super) fn replay(m: &mut Mission, entry: &Entry) -> Result<(), ReplayViolati
             {
                 return Err(V::ProofOutOfPlace);
             }
-            if m.proof.receipt.is_some() || m.open_action != Some((*effect, action.clone())) {
-                return Err(V::ProofConflict);
-            }
-            // After its clean approval, or as settlement evidence.
-            let clean = policy_hash.is_some()
-                && m.state.may_wait()
-                && m.waiting.is_none()
-                && m.unresolved_file.is_none();
+            // After its clean approval, or as settlement evidence (whose
+            // action may precede its journaled pending identity: Db-R1 L4).
             let settling = *overtaken
                 && m.unresolved_file == Some(*effect)
                 && match m.settlement {
                     Some((started, _)) => started == *effect,
                     None => m.waiting.as_ref().is_some_and(|w| w.effect == *effect),
                 };
+            let linked = match &m.open_action {
+                Some(open) => *open == (*effect, action.clone()),
+                None => settling && m.settlement.is_some(),
+            };
+            if m.proof.receipt.is_some() || !linked {
+                return Err(V::ProofConflict);
+            }
+            let clean = policy_hash.is_some()
+                && m.state.may_wait()
+                && m.waiting.is_none()
+                && m.unresolved_file.is_none();
             if !clean && !settling {
                 return Err(V::ProofOutOfPlace);
+            }
+            if m.open_action.is_none() {
+                m.proof.early = Some(action.clone());
             }
             m.proof.receipt = Some(*effect);
         }

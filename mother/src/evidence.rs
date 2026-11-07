@@ -591,9 +591,12 @@ pub enum BlockReason {
     ModelNotPinned,
     ModelIdentityChanged,
     ModelAdmissionRefused,
+    /// M3-Db (Db-R1 M3): a page's observed publication settled without the
+    /// broker's receipt.
+    ReceiptMissing,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 21] = [
+const BLOCK_CODES: [(BlockReason, &str); 22] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -642,6 +645,7 @@ const BLOCK_CODES: [(BlockReason, &str); 21] = [
         BlockReason::ModelAdmissionRefused,
         "model_admission_refused",
     ),
+    (BlockReason::ReceiptMissing, "receipt_missing"),
 ];
 
 /// M2d-C round 4 (addendum 5): what the Owner is told of a mission ended

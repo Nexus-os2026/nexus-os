@@ -2019,6 +2019,12 @@ impl<P: EffectPort> Coordinator<P> {
                 return Ok(Ended::Ended(self.end_with(id, trigger)?));
             }
 
+            // Db-R1 L5: a page Builder's answer shape before any generic check.
+            let page = *role == LaneRole::Builder && contract.page_facts.is_some();
+            if page && page_proof::deliverable(&output.effects).is_err() {
+                let reason = FailReason::DeliverableInvalid;
+                return Ok(Ended::Ended(self.end_with(id, Trigger::Fail { reason })?));
+            }
             // Mother's own checks of every effect, before any is sent.
             if output.effects.len() > MAX_EFFECTS_PER_CALL {
                 return Ok(Ended::Ended(self.end(id, BlockReason::TooManyEffects)?));
@@ -2438,13 +2444,18 @@ impl<P: EffectPort> Coordinator<P> {
     /// Journal the mission's open action closed, once the port confirms
     /// the broker no longer holds it open. `Ok(false)`: not confirmed.
     fn close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
-        let (open, file_action) = self.step(|inner| {
+        let (open, file_action, unrecorded) = self.step(|inner| {
             let m = inner.mission(id)?;
             Ok((
                 m.open_action.clone(),
                 m.file_mode && m.dispatched_kind == Some(EffectKind::File),
+                m.proof.unrecorded,
             ))
         })?;
+        // Db2-R1 L2: an unrecorded proof's action is never journaled closed.
+        if unrecorded {
+            return Ok(false);
+        }
         if file_action {
             return self.file_close_action(id);
         }
@@ -2833,11 +2844,10 @@ impl<P: EffectPort> Coordinator<P> {
             if inner.closed {
                 return Err(CoordinatorError::Closed);
             }
-            if inner
-                .missions
-                .values()
-                .any(|m| m.file_mode && (!m.state.is_terminal() || m.terminal_uncertain))
-            {
+            if inner.missions.values().any(|m| {
+                m.file_mode
+                    && (!m.state.is_terminal() || m.terminal_uncertain || m.proof.unrecorded)
+            }) {
                 return Err(CoordinatorError::FileUnfinished);
             }
             if inner.missions.values().any(|m| m.busy) {
@@ -3333,6 +3343,10 @@ fn replay(
                         }
                         None => return Err(V::SettlementOutOfPlace),
                     };
+                    let published = matches!(outcome, SettlementOutcome::Published { .. });
+                    let expected =
+                        page_proof::settled_end(mission, *effect, published && action.is_some())
+                            .or(expected);
                     if expected != Some(*end) {
                         return Err(V::SettlementConflict);
                     }
@@ -3340,6 +3354,9 @@ fn replay(
                         if open == effect && action.as_ref() != Some(pending) {
                             return Err(V::SettlementConflict);
                         }
+                    }
+                    if page_proof::early_conflict(mission, *effect, action.as_ref()) {
+                        return Err(V::ProofConflict);
                     }
                 }
                 _ => {}
