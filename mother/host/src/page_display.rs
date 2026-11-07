@@ -3,13 +3,22 @@
 //! `coordinator::page_display` selects from the verified journal, or her
 //! explanation. Both can hold the Owner's words, a folder name or lane text.
 //! Data-only (R12 (2)): nothing in the scripted `run` flow calls it; M-5 does.
-use nexus_governed_control::authority::evidence::escaped;
+use nexus_governed_control::authority::evidence::{escaped, shown};
 
-/// `text` for the terminal: every line through `evidence::escaped`, its line
-/// breaks kept.
+/// `text` for the terminal, split only at its line breaks: Mother escapes
+/// untrusted fields before she assembles the template (M3E-R17), so every
+/// break is the template's. A line that is all shown characters is printed
+/// as it is; any other line is escaped whole (defence in depth).
 #[allow(dead_code)] // Consumed by M-5's page-mode wiring.
 pub(crate) fn page_text(text: &str) -> String {
-    text.split('\n').map(escaped).collect::<Vec<_>>().join("\n")
+    let line = |line: &str| {
+        if line.chars().all(shown) {
+            line.to_string()
+        } else {
+            escaped(line)
+        }
+    };
+    text.split('\n').map(line).collect::<Vec<_>>().join("\n")
 }
 
 // R14 (Q2): the emit function is crate-private, so its oracle is here.

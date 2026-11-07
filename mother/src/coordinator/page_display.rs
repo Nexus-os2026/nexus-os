@@ -32,6 +32,7 @@ use crate::teaching::{
     T7_BEFORE_FILE, T9_DECLINED, T9_EXPIRED, T9_STOPPED, T9_UNCERTAIN,
 };
 use crate::verifier::CheckId;
+use nexus_governed_control::authority::evidence::escaped;
 
 /// The publication the broker recorded for the mission, if any.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -186,15 +187,16 @@ impl PageView {
         let mut lines = Vec::new();
         match &self.publication {
             Publication::Written { sha256, bytes } => {
+                // M3E-R17: untrusted fields are escaped before assembly.
                 let folder = contract.requested_folder.as_deref().unwrap_or_default();
-                lines.push(t10(folder, *bytes, sha256));
+                lines.push(t10(&escaped(folder), *bytes, &escaped(sha256)));
                 match self.recorded() {
                     Some(Ok(())) => {
                         lines.push(T11_CHECKED.into());
                         lines.push(t12_passed());
-                        lines.push(t13(facts_file));
+                        lines.push(t13(&escaped(facts_file)));
                     }
-                    Some(Err(code)) => lines.push(t12_failed(&code)),
+                    Some(Err(code)) => lines.push(t12_failed(&escaped(&code))),
                     None => lines.push(t12_unchecked()),
                 }
             }

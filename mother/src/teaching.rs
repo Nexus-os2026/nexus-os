@@ -8,6 +8,7 @@
 
 use crate::contract::MissionContract;
 use crate::journal::MissionId;
+use nexus_governed_control::authority::evidence::escaped;
 
 /// The S1a label of a passed inert check, mandatory wherever it applies.
 pub const LABEL_PASSED: &str = nexus_governed_control::inert_page::LABEL_PASSED;
@@ -164,8 +165,10 @@ pub fn explain(
         !contract.pass_criteria.is_empty() && contract.pass_criteria.iter().all(|c| holds(&c.id));
     let mut lines = vec![
         format!("Mission {id} is done."),
-        format!("You asked: {}", contract.owner_words.trim()),
-        format!("I understood: {}", contract.restatement),
+        // M3E-R17: untrusted fields are escaped before assembly, so a line
+        // break in them is a visible escape and never starts a line.
+        format!("You asked: {}", escaped(contract.owner_words.trim())),
+        format!("I understood: {}", escaped(&contract.restatement)),
         if all { HEADER_CHECKED } else { HEADER_PLAIN }.into(),
     ];
     for criterion in &contract.pass_criteria {
@@ -174,7 +177,7 @@ pub fn explain(
         } else {
             NOT_RECORDED
         };
-        lines.push(format!("  - {}: {state}", criterion.text));
+        lines.push(format!("  - {}: {state}", escaped(&criterion.text)));
     }
     if page && all {
         lines.push(T11_CHECKED.into());
