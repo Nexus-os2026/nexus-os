@@ -298,7 +298,7 @@ fn m3d_builder_input_is_the_consented_snapshot() {
         .collect();
     let w = world_with(lanes);
     let id = w.approved(c.clone());
-    for _ in 0..5 {
+    for _ in 0..4 {
         w.mother.advance(id).unwrap();
     }
     let inputs = seen.lock().unwrap();
