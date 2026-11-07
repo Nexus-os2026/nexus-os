@@ -241,7 +241,7 @@ fn m3cb_marker_source_is_broker_only() {
         let invoke = norm(invoke);
         if invoke.matches("matchmarker()").count() != 1
             || hex::encode(Sha256::digest(invoke.as_bytes()))
-                != "19bab345de1243d60e485ce075c30a77bda0352db54da36f6baf70b3f3f6df63"
+                != "12eb4d612abfb323c3951e37c727e492b8217ceabd45af6b4f6c000b0924e0d6"
         {
             return false;
         }

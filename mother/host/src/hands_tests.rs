@@ -357,8 +357,19 @@ fn review2_startup_receipts(scenario: &str, test: &str) {
     if scenario == "panic-startup" {
         p.expect("STOP RECORDING FAILED");
     } else if scenario == "recovery" {
-        p.expect("STOP RECORDING COMPLETED count=1");
-        p.expect("STOP RECORDING COMPLETED count=2");
+        // Up to four Stop workers record concurrently, so outcome receipts
+        // follow completion order. Both must arrive while recovery is held.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !["count=1 (", "count=2 ("].iter().all(|event| {
+            p.output
+                .contains(&format!("STOP RECORDING COMPLETED {event}"))
+        }) {
+            assert!(
+                p.read_once(deadline),
+                "both Stop outcome receipts while recovery is held: {}",
+                p.output
+            );
+        }
     }
     held.write_all(b"R").unwrap();
     if scenario != "panic-startup" {
@@ -596,4 +607,77 @@ fn session_lift_is_unavailable_before_and_after_emergency_without_dialogue() {
     }
     f.empty();
     p.quit();
+}
+
+// PTY-R1 A1: Quit accepted by the live reader before main continues startup.
+// Test-only hold after Terminal::open; condvar wait with a deadline, no sleeps.
+const PTYR1: &str = "M2DD_PTYR1_EARLY_QUIT_CHILD";
+pub(crate) fn ptyr1_after_terminal_open(screen: &Shared) {
+    if std::env::var(PTYR1).is_err() {
+        return;
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut input = screen.input();
+    while input.quit.is_none() {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(!left.is_zero(), "bounded early Quit acceptance");
+        input = screen.changed.wait_timeout(input, left).unwrap().0;
+    }
+}
+#[test]
+fn ptyr1_quit_before_startup_still_reports_recovery_and_unclean_close() {
+    if std::env::var(PTYR1).is_ok() {
+        let args = std::env::var("M2DD_PTYR1_ARGS").unwrap();
+        assert!(
+            !run(args.split('\n').map(str::to_owned)),
+            "early Quit over invalid history is never a clean close"
+        );
+        return;
+    }
+    use nexus_mother::journal::{Entry, Event, GENESIS, SESSION};
+    let f = Fixture::new();
+    nexus_mother::adapter::create_private(&f.home).unwrap();
+    let raw = format!(
+        "{}\n",
+        Entry::chained(0, GENESIS, SESSION, Event::SessionClosed).to_line()
+    );
+    let journal = f.home.join("mother-journal.jsonl");
+    std::fs::write(&journal, &raw).unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "hands_tests::ptyr1_quit_before_startup_still_reports_recovery_and_unclean_close",
+            "--nocapture",
+        ])
+        .env(PTYR1, "1")
+        .env(
+            "M2DD_PTYR1_ARGS",
+            format!(
+                "--home\n{}\n--workspace\n{}\n--name\nhello.txt\n--text\nmust not start",
+                f.home.display(),
+                f.workspace.display()
+            ),
+        );
+    let mut p = Pty::start(command);
+    p.line("quit");
+    assert!(
+        p.finish().success(),
+        "child: run() returned non-success: {}",
+        p.output
+    );
+    for required in [
+        "SOURCES mother_verified=false",
+        "RECOVERY FAILED mother_history",
+        "RESULT: ",
+    ] {
+        assert!(
+            p.output.contains(required),
+            "early Quit must still show {required:?}: {}",
+            p.output
+        );
+    }
+    assert!(!p.output.contains("HANDS READY"), "{}", p.output);
+    assert_eq!(std::fs::read_to_string(&journal).unwrap(), raw);
+    f.empty();
 }

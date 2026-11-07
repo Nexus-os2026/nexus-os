@@ -6,14 +6,14 @@ use std::os::linux::net::SocketAddrExt;
 use std::os::unix::net::{SocketAddr, UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::OnceLock;
 
-fn library() -> &'static PathBuf {
-    static LIBRARY: OnceLock<PathBuf> = OnceLock::new();
-    LIBRARY.get_or_init(|| {
-        let dir = std::env::temp_dir().join(format!("m2dd-interpose-{}", std::process::id()));
+// Built inside the fixture's own root, so the Fixture's Drop removes it with
+// that root; a per-process temp directory was never removed.
+fn library(f: &Fixture) -> PathBuf {
+    let dir = f.root.join("interpose");
+    let lib = dir.join("faults.so");
+    if !lib.is_file() {
         std::fs::create_dir(&dir).unwrap();
-        let lib = dir.join("faults.so");
         let output = Command::new("cc")
             .args([
                 "-shared", "-fPIC", "-std=c11", "-Wall", "-Wextra", "-Werror", "-o",
@@ -28,8 +28,8 @@ fn library() -> &'static PathBuf {
             "native fixture: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        lib
-    })
+    }
+    lib
 }
 
 pub struct Fault {
@@ -57,7 +57,7 @@ impl Fault {
     }
     pub fn attach(&self, f: &Fixture, command: &mut Command) {
         command
-            .env("LD_PRELOAD", library())
+            .env("LD_PRELOAD", library(f))
             .env("M2DD_FAULT", self.kind)
             .env("M2DD_ARM", &self.arm)
             .env("M2DD_SOCKET", &self.name)

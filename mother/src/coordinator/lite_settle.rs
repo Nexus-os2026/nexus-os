@@ -405,6 +405,7 @@ impl<P: EffectPort> Coordinator<P> {
                 _ => end,
             };
             if let Some(Ok(event)) = proof {
+                let receipt = page_proof::recorded(&event);
                 if let Err(error) = inner.append(id, event) {
                     // Db-R1 M2: ruling 7, as on the clean path.
                     if !matches!(error, CoordinatorError::Journal(_)) {
@@ -413,7 +414,7 @@ impl<P: EffectPort> Coordinator<P> {
                     page_proof::fail_unrecorded(inner.mission(id)?);
                     return Ok(None);
                 }
-                inner.mission(id)?.proof.receipt = Some(effect);
+                inner.mission(id)?.proof.receipt = receipt;
             }
             let trigger = Trigger::Settled {
                 effect,

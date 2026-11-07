@@ -22,7 +22,9 @@ use crate::journal::{Event, ReplayViolation};
 use crate::lane::{LaneIdentity, LaneRole};
 use crate::private::MAX_CONTENT_BYTES;
 use crate::state::Trigger;
+use crate::verifier::{CheckCode, CheckId};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
+use nexus_governed_control::inert_page::{FactCode, RefusalCode, POLICY_V1};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
@@ -451,15 +453,97 @@ impl PublicationCause {
     }
 }
 
-codes! {
-    /// Why the Verifier failed a mission.
-    VerifyFailReason {
-        /// The Verifier judged a criterion does not hold (its reason is
-        /// working detail).
-        VerifierFailed => "verifier_fail",
-        VerifierGaveNoVerdict => "verifier_gave_no_verdict",
+/// Why the Verifier failed a mission.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VerifyFailReason {
+    /// The Verifier judged a criterion does not hold (its reason is
+    /// working detail).
+    VerifierFailed,
+    VerifierGaveNoVerdict,
+    /// M3-Dc1: a page check's closed code, never a lane's text.
+    Check(VerifyCode),
+}
+
+/// M3-Dc1: a page verification's failure: a V0-V5 code, or a payload that
+/// is not its declared identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VerifyCode {
+    Identity,
+    Check(CheckCode),
+}
+
+impl VerifyCode {
+    pub fn as_str(&self) -> String {
+        match self {
+            VerifyCode::Identity => "verification_identity".into(),
+            VerifyCode::Check(code) => code.to_string(),
+        }
     }
 }
+
+/// Every V0-V5 failure code, with its check: the closed registry.
+pub fn check_codes() -> Vec<(CheckId, CheckCode)> {
+    use CheckCode as C;
+    use CheckId::{V0, V1, V2, V3, V4, V5};
+    let hours = 0..POLICY_V1.facts_hours_max_lines as u8;
+    let fact = |code| (V3, C::FactMissing(code));
+    let mut v = vec![(V0, C::NoPublication), (V1, C::PublishedMismatch)];
+    v.extend(RefusalCode::CODES.map(|code| (V2, C::PageNotInert(code))));
+    v.push((V2, C::PolicyChanged));
+    v.extend([fact(FactCode::NameNotHeading), fact(FactCode::NameNotTitle)]);
+    v.extend(
+        hours
+            .clone()
+            .map(|index| fact(FactCode::HoursLineMissing { index })),
+    );
+    v.extend([fact(FactCode::PhoneMissing), fact(FactCode::ForeignNumber)]);
+    v.push((V4, C::NameNotVisible));
+    v.extend(hours.map(|index| (V4, C::HoursLineNotVisible(index))));
+    v.extend([(V4, C::PhoneNotVisible), (V4, C::ReaderUnsupported)]);
+    v.push((V5, C::EmailNotSupported));
+    v
+}
+
+/// Whether `id` may journal `code`: `pass`, `not_run` or `fail:<its code>`.
+pub fn is_check_result(id: CheckId, code: &str) -> bool {
+    matches!(code, "pass" | "not_run")
+        || code.strip_prefix("fail:").is_some_and(|code| {
+            check_codes()
+                .iter()
+                .any(|(of, c)| *of == id && c.to_string() == code)
+        })
+}
+
+impl VerifyFailReason {
+    pub fn as_str(&self) -> String {
+        match self {
+            VerifyFailReason::VerifierFailed => "verifier_fail".into(),
+            VerifyFailReason::VerifierGaveNoVerdict => "verifier_gave_no_verdict".into(),
+            VerifyFailReason::Check(code) => format!("check:{}", code.as_str()),
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::every().into_iter().find(|r| r.as_str() == text)
+    }
+
+    /// Every value (the registry).
+    pub fn every() -> Vec<Self> {
+        let mut every = vec![
+            VerifyFailReason::VerifierFailed,
+            VerifyFailReason::VerifierGaveNoVerdict,
+            VerifyFailReason::Check(VerifyCode::Identity),
+        ];
+        every.extend(
+            check_codes()
+                .into_iter()
+                .map(|(_, code)| VerifyFailReason::Check(VerifyCode::Check(code))),
+        );
+        every
+    }
+}
+
+by_code!(VerifyFailReason);
 
 /// Mother's own refusal of a lane's effect, before any port call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1115,6 +1199,18 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
                 && is_size(*bytes)
                 && RunId::parse(&action.run).is_some()
                 && CommitmentId::parse(&action.commitment).is_some()
+        }
+        Event::VerificationRecorded {
+            report_digest,
+            checks,
+            ..
+        } => {
+            checks.len() == CheckId::ALL.len()
+                && CheckId::ALL
+                    .iter()
+                    .zip(checks)
+                    .all(|(id, (name, code))| name == id.as_str() && is_check_result(*id, code))
+                && *report_digest == crate::page_verifier::report_digest(checks)
         }
     };
     if ok {

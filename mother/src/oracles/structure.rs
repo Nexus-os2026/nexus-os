@@ -45,7 +45,8 @@ fn structure_the_manifest_pins_the_dependencies() {
             "serde",
             "serde_json",
             "sha2",
-            "hex"
+            "hex",
+            "nix"
         ]
     );
 }

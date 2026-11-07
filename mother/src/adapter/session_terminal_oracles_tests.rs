@@ -44,6 +44,7 @@ impl Lane for FailVerifier {
     }
     fn invoke(&self, _: &LaneInput) -> LaneOutput {
         LaneOutput {
+            verification: None,
             text: "fixture failure".into(),
             effects: vec![],
             verdict: Verdict::Fail {
