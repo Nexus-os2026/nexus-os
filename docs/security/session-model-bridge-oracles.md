@@ -1185,3 +1185,23 @@ Plants, each killed at its named assertion and restored by sha256:
 - step 1 left unclassified ("the literal class");
 - the constants or the rows not flipped, and DEFERRED not emptied (the
   validator).
+
+### 13.14 B1f baseline replay (SB3B-R20 (b), evidence only)
+Codex B1f review-1 (oracle), MED: the probe `model.call.sampled` first
+appeared in the fix commit, so on the base the step-1 cases failed at
+"the fault landed" and never reached the class. No history is changed.
+
+Replay: a disposable copy of the B1e head a0aadd84, plus the oracle-add
+9719b561, plus only the guarded probe (two lines in `host_session/model.rs`).
+Each (side, class) ran on its own at all four gates. All six are RED at
+gate 0:
+- step 1 (`r5_sample:after`), wall and monotonic narrowing: "the literal
+  class (model_cancelled)";
+- step 1, Q expiry: "the next gate refuses" (the old seam ignores the
+  sample, so step 1 refuses);
+- CAS (`r5_cas:before`), wall and monotonic narrowing: "the literal
+  class (model_cancelled)";
+- CAS, Q expiry: "the next gate refuses".
+The frozen oracle-add test, run unmodified on that copy, is RED at
+"r5_cas:before/mission_wall_narrowed gate 0: the literal class
+(model_cancelled)".
