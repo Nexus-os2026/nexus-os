@@ -24,7 +24,8 @@
 //!   M-5 to call;
 //! - M3E-R19: a receipt joins only the File's effect with a 64 lower-case hex
 //!   digest, else it is [`Publication::Unconfirmed`] (T9 uncertain); checks
-//!   count only as a valid V0..V5 record of the receipt's effect.
+//!   count only as a valid record (V0..V5 at most once, closed codes) of the
+//!   receipt's effect.
 
 use crate::contract::{EffectKind, MissionContract};
 use crate::coordinator::page_receipt::{is_digest, valid_checks};

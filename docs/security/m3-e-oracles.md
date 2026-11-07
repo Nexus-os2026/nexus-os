@@ -486,3 +486,13 @@ effect. The host names each gap by kind (`unavailable:`, `missing:`,
 | `m3e_u10_r19_values_are_validated_before_projection` | Non-hex or upper-case receipt digest, non-hex policy hash, an unknown check code, a non-hex report digest: each listed `invalid` by field, never copied (publication or checks `None`); the canary absent from the receipt's Debug and from T16; no success phrase on an invalid receipt or check record. |
 | `m3e_u10_r19_real_uncertain_settlement_is_missing_evidence` | LiteHome, real broker: the approved action held executing past Mother's held deadline; the real settlement records `Uncertain` (reason `file_publication_uncertain`) and no receipt; the receipt lists `publication_receipt` missing, no publication; T16 unconfirmed, none recorded. |
 | `m3e_u10_r19_host_names_each_gap` (host) | Missing, mismatched and invalid gaps named by kind in order; checks and report digest shown `invalid`, never their values. The M-6 host labels are amended to the same kinds (`unavailable:`, `missing:`, `mismatched:`). |
+
+### Plants
+
+| Plant | Mutation | Killing oracle (named assertion) |
+|---|---|---|
+| P-R19a | a settled Uncertain with no receipt not counted missing | unavailable publication: `missing == ["publication_receipt"]` |
+| P-R19b | an absent receipt policy hash not counted missing | unavailable publication: `missing == ["publication_policy"]` |
+| P-R19c | a receipt accepted with no action identity for its effect | action link: `missing == ["action-link"]` |
+| P-R19d | T16 success from checks not joined to the receipt | joined evidence: T16 unchecked, none recorded |
+| P-R19e | the receipt digest copied without validation | value domains: `invalid == ["receipt_sha256"]` |
