@@ -112,3 +112,83 @@ A change needed to `ApprovedFacts` policy, credential rules or the §9.5
 manifest; running-image identity unavailable on the test platform; a new
 dependency version or `Cargo.lock` change beyond the host package's own
 dependency list.
+
+## M-2 — `check-page`, bare and with `--facts` (S1a-E)
+
+Code: `mother/host/src/check_page.rs`; dispatch in `mother/desktop/src/main.rs`
+before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
+`mother/desktop/tests/check_page_cli.rs`, and the in-module unit test in
+`check_page.rs`. Rulings M3E-R1..R6; design §5.5, T14.
+
+### Frozen behaviour (M3E-R6)
+
+- **Command.** Exactly `nexus-mother check-page <file> [--facts <file>]`.
+  Paths are used as given (relative or absolute, UTF-8 or not), never
+  canonicalized; a path that is empty or starts with `--`, a missing,
+  duplicate, unknown or extra argument is usage. Any other first argument
+  runs the desktop exactly as before.
+- **Read-only.** The page (at most 65,536 + 1 bytes) and the facts file are
+  read once each through the M-1 adapter reader (`input_files`: no final
+  link, no blocking, regular file, bounded read) and the M-1 facts parser.
+  Nothing is written, fixed, rendered or sent; no model, network, browser,
+  home, journal or GTK.
+- **Output golden** (stdout, one item per line):
+  1. `binary sha256 <hex>` (the running image, M-1);
+  2. `policy <hex>  css <hex>`;
+  3. `file bytes <n> sha256 <hex>`, or for a page over 65,536 B
+     `file bytes unavailable (over 65536) sha256 unavailable` (no prefix hash);
+  4. `LABEL_PASSED`, or `refused: <s1a_code> at line L, column C` (the
+     kernel's `Refusal`, 1-based, columns in characters), or
+     `refused: input_too_large`;
+  5. the OPEN line (`not checked: how the page looks in a browser (375 px and
+     1366 px are OPEN)`);
+  6. bare: `facts: not checked (no --facts given)`; with `--facts`, three
+     lines: `facts file sha256 <hex>  facts hash <hex|unavailable>` (the facts
+     hash is `ApprovedFacts::hash`, as the consent dialog shows it);
+     `facts present as given: name, hours (N lines), phone` (the policy's
+     template, only when V3 passes) or `… refused <code>` or `… not run`;
+     `visible text: pass` / `refused <code>` / `not run`;
+  7. `result: PASS` or `result: REFUSED <code>`;
+  8. T14 (frozen, `teaching.rs`): `t14_passed(<escaped facts path>, <facts
+     hash>)` only for a with-facts PASS; `t14_refused(<code>, <location>)` for
+     every refusal (the location only for a page-check refusal); nothing for a
+     bare PASS.
+- **Order and codes.** First failure in V2 → V3 → V4 → V5 order. V2 is the
+  bare S1a code (`script_element`, …) or `input_too_large`. V3 is a facts-file
+  refusal (`facts_file_invalid (facts file line L)`, `facts_word_too_long
+  (facts file line L)`, `ApprovedFacts` codes, `input_not_utf8`) or the first
+  missing fact (`name_not_heading`, `name_not_title`, `hours_line_missing:<i>`,
+  `phone_missing`, `foreign_number`). V4 is `reader_unsupported`,
+  `name_not_visible`, `hours_line_not_visible:<i>`, `phone_not_visible`. V5 is
+  `email_not_supported`. V3/V4 are `not run` after a page refusal; each key
+  that runs is printed.
+- **Exit.** 0 PASS. 1 any refusal, including semantic facts refusals and a
+  page over 65,536 B. 2 usage (`ERROR usage: nexus-mother check-page <file>
+  [--facts <file>]`), a read refusal of the page or facts file (`ERROR <code>
+  (page)` / `ERROR <code> (facts file)`, M-1 codes, no OS text; a facts file
+  over 2,048 B included), or the running image unavailable (`ERROR
+  self_identity_unavailable`, before any read).
+- **Claim.** Bare never claims facts. With `--facts`, a PASS means agreement
+  with the supplied snapshot only; acceptance compares the printed facts hash
+  with the consent's. No fictitious publication receipt is made.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `s1ae_bare_receipt_has_no_facts_claim` (S-O17, M3-O41) | Bakery and S1a reference pages: exact golden, exit 0, no facts claim, facts hash or T14 pass; email-shaped page exit 1 `email_not_supported` with T14 refused. Binary, policy, CSS and file hashes independent. |
+| `s1ae_supplied_facts_two_keys` (M3-O41) | Matching facts: exact golden with facts-file sha256, facts hash, policy facts line, `visible text: pass`, T14 pass; non-fact edit passes; changed name/hours/phone: its own facts hash, both keys refused with their exact codes, V3's code first, no location; a foreign number: V3 refuses while V4 passes. |
+| `s1ae_refusal_location_and_exit_contract` | `<a href>` on its planted line, `<script>` and the old template: the kernel's exact code, line and column, bare and with facts (V3/V4 `not run`); invalid facts syntax: facts line only; cap + 1: no prefix hash; at cap: hashed and refused by the kernel; read refusals and usage exit 2 with fixed lines; non-UTF-8 and relative paths; canaries absent. |
+| `s1ae_self_identity_unavailable_refuses_before_any_read` (unit) | Image unavailable: exactly `ERROR self_identity_unavailable`, exit 2, nothing read. |
+| `s1ae_headless_binary_has_no_home_side_effect` (desktop) | The real binary, no display, fresh HOME/XDG roots: `sha256sum`-equal hashes, exit 0/1/2, no stderr, HOME stays empty, inputs untouched. |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| MP-M3-14 | `check-page` ignores `--facts` | two_keys: matching facts golden |
+| MP-M3-24 | bare run prints a facts line | bare: golden |
+| P-U2a | skip V5 | bare: email page refuses |
+| P-U2b-3 | force V3 to pass | two_keys: changed name refuses with V3's code |
+| P-U2b-4 | force V4 to pass | two_keys: changed name `visible text: refused` |
+| P-U2c | run GTK before the dispatch | desktop headless: exit 0 |
