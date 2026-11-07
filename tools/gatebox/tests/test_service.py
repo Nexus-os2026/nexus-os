@@ -298,7 +298,9 @@ class OfflineServiceTests(unittest.TestCase):
         self.full_run(False)
     def test_review1_validation_failure_publishes_and_reopens(self):
         self.full_run(True)
-    def full_run(self, invalid):
+    def test_q4_same_named_other_package_runs_end_to_end(self):
+        self.full_run(False, same_named=True)
+    def full_run(self, invalid, same_named=False):
         # Pipes replace only denied AF_UNIX transport; collect/coverage/publish are real.
         class Pipe:
             def __init__(self, fd): self.fd = fd
@@ -330,7 +332,8 @@ class OfflineServiceTests(unittest.TestCase):
                      ('nexus-verifier-sandbox','phase2_live_sandbox',cases)]
             artifacts = [dict(reason='compiler-artifact',profile={'test':True},
                               package_id='path+file:///work/src/'+p+'#0.1.0',
-                              manifest_path='/work/src/'+p+'/Cargo.toml',target={'name':t},
+                              manifest_path='/work/src/'+p+'/Cargo.toml',
+                              target={'name':'phase2_live_sandbox' if same_named and p=='nexus-mother-host' else t},
                               executable='/work/target/'+t) for p,t,names in specs]
             for p,t,names in specs:
                 directory = root/'src'/p
@@ -393,6 +396,9 @@ class OfflineServiceTests(unittest.TestCase):
             self.assertEqual(item['status'],'FAILED' if invalid else 'PASS_SCOPED',item['missing_evidence'])
             if invalid: self.assertIn('snapshot identity','; '.join(item['missing_evidence']))
             else: self.assertEqual(errors,[])
+            if same_named:
+                self.assertIn(['/work/target/host'],routed)
+                self.assertEqual(item['coverage']['artifacts'][0]['target'],'phase2_live_sandbox')
             self.assertFalse(marker.exists())
             admission = supervisor.Admission(root/'pending')
             self.assertTrue(admission.acquire())

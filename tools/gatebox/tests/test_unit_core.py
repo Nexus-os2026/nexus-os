@@ -287,7 +287,8 @@ class ReceiptTests(unittest.TestCase):
             if change == 'omit-exclusion': coverage['excluded'].pop()
             if change == 'reorder-exclusion': coverage['excluded'].reverse()
             if change == 'excluded-passed': coverage['passed'].append(coverage['excluded'][0]['name'])
-            if change == 'excluded-artifact': coverage['artifacts'][0]['target'] = 'phase2_live_sandbox'
+            if change == 'excluded-artifact':
+                coverage['artifacts'][0].update(package='nexus-verifier-sandbox',target='phase2_live_sandbox')
             if change == 'missing-artifact': summary['commands'].pop(3)
             if change in ('ignored','filtered'): summary['commands'][3]['inventory'][change] = ['host_test']
             if change == 'argv': summary['commands'][0]['argv'] = ['/bin/true']
@@ -295,6 +296,15 @@ class ReceiptTests(unittest.TestCase):
             if change == 'invocation': summary['commands'].pop(0)
             if change == 'commands': summary['commands'] = []
             with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
+    def test_exclusion_identity_is_package_and_target(self):
+        # Q4: the same target in another package remains required coverage.
+        summary = self.success()
+        summary['coverage']['artifacts'][0]['target'] = 'phase2_live_sandbox'
+        receipt.validate_summary(summary)
+        summary['commands'] = [c for c in summary['commands']
+                               if not (c['gate_id'] == 'workspace' and c.get('artifact_id') == 'host-bin')]
+        with self.assertRaisesRegex(ValueError,'missing artifact execution'):
+            receipt.validate_summary(summary)
     def test_pinned_invocations_and_host_inventory(self):
         for change in ('host-argv','whitespace-argv','command-env','summary-env','empty-host','wrong-host','empty-host-workspace'):
             summary = self.success()
