@@ -96,15 +96,23 @@ fn criteria(c: &MissionContract, holds: &[bool]) -> Vec<String> {
     body
 }
 
-/// The explanation with each exact Owner-approved criterion text removed
-/// (ruling Dc2-R1 Q6): what remains is Mother's own wording.
+/// The explanation without each complete Owner-approved criterion line
+/// (rulings Dc2-R1 Q6 and Dc2-R3): only a whole line equal to a criterion
+/// with its permitted status is left out; everything else, including
+/// embedded or extended criterion text, is Mother's own wording.
 fn mothers_own(text: &str, c: &MissionContract) -> String {
-    text.lines()
-        .map(|line| {
-            c.pass_criteria.iter().fold(line.to_string(), |line, k| {
-                line.replacen(&format!("  - {}: ", k.text), "  - ", 1)
-            })
+    let approved: Vec<String> = c
+        .pass_criteria
+        .iter()
+        .flat_map(|k| {
+            [
+                format!("  - {}: holds", k.text),
+                format!("  - {}{NOT_RECORDED}", k.text),
+            ]
         })
+        .collect();
+    text.lines()
+        .filter(|line| !approved.iter().any(|a| a == line))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -294,6 +302,33 @@ fn m3d_teaching_goldens_and_claims_guard() {
     ] {
         assert!(!text.is_empty());
         assert_eq!(claims_guard(&text), Ok(()), "{text}");
+    }
+    // The exclusion (Dc2-R3): only a complete approved criterion line with
+    // its permitted status is left out; embedded or extended criterion
+    // text stays Mother's own, and is scanned.
+    let page = page_contract();
+    let v3 = &page.pass_criteria[3].text;
+    for exact in [
+        format!("  - {v3}: holds"),
+        format!("  - {v3}{NOT_RECORDED}"),
+    ] {
+        assert_eq!(claims_guard(&mothers_own(&exact, &page)), Ok(()), "{exact}");
+    }
+    for crafted in [
+        format!("Mother says  - {v3}: holds"),
+        format!("I add:  - {v3}: not independently recorded as checked"),
+        format!("  - {v3}: holds, and more"),
+        format!("  - {v3}: holds."),
+        format!("  - {v3}"),
+        format!("  - {v3}: "),
+        format!("  -  {v3}: holds"),
+    ] {
+        let text = [crafted.as_str(), "Lane calls: 2 of 50."].join("\n");
+        assert_eq!(
+            claims_guard(&mothers_own(&text, &page)),
+            Err("no other phone"),
+            "{crafted}"
+        );
     }
     // A free "rendered", v1's T12, and every banned phrase in any case.
     assert_eq!(claims_guard("The page is rendered."), Err("rendered"));
