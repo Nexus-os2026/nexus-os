@@ -235,7 +235,8 @@ or `model_unavailable` with fail:lane_fail:builder). Records cases require
 the staged File iff success and, after dropping the scenario, read-only
 SQLite finds the `mission_consented` row, one `model_call` row per native
 attempt (rows with `detail.call` equal ModelCallCharged) and
-`coding_run_ledger` rows iff success.
+file-ledger rows iff success (Cb2-R3: summed over every non-`sqlite_*`
+table listed in `ledger.db`'s `sqlite_master`; no table is named).
 MP-Cb2-13 (caller refuses at entry, mc): pre-amend oracle (31648a1f) passes
 all four plain records cases; amended oracle RED on all four at the exact
 caller-results assertion (`["invalidated"]`). MP-Cb2-7r against the
@@ -257,3 +258,15 @@ including setup); `pgrep -af MP-Cb2-14` afterwards found nothing; file
 restored by sha256. Cb1's `transport/pre` python check in
 `m3cb_lane_oracles.rs` is outside the Cb2 allowlist: unchanged, carried to
 Dd. Size after Cb2-R2 vs 622c6bdb: 1,093 changed lines (cap 1,500).
+
+## Cb2-R3 — composed kernel guard p1a_nc_30
+
+The merged main (c94ace67) guard rejects Mother sources naming the
+primitive's ledger table. `test(oracle-fix)`: no exemption, no name
+splitting; the native check sums rows over every non-`sqlite_*` table in
+`ledger.db` and requires tables and rows iff success. After the fix: guard
+`coding_run::tests` 264 passed (1 pre-existing ignored helper child);
+m3cb 32/32 (success records cases green); MP-Cb2-13 still RED on all four
+amended plain records cases (`["invalidated"]`), restored by sha256.
+Lesson recorded: test-only slices also run the kernel guard binaries.
+Size after Cb2-R3 vs 622c6bdb: 11342 changed lines (cap 1,500).
