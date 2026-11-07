@@ -1963,21 +1963,16 @@ pub(crate) struct OriginalGrant<'a> {
 }
 impl<'a> OriginalGrant<'a> {
     /// Live on both clocks with a Files scope equal to the run's workspace;
-    /// contention refuses, poison also fails the session. The grant store
-    /// stays held (run -> grant) for as long as the returned guard lives.
-    fn live(
-        &self,
-        files: &FilesAdmission,
-        cell: &HaltCell,
-    ) -> Result<impl Drop + 'a, AuthorityError> {
+    /// contention refuses; poison is GRANT_POISONED. The grant store stays
+    /// held (run -> grant) for as long as the returned guard lives.
+    fn live(&self, files: &FilesAdmission) -> Result<impl Drop + 'a, AuthorityError> {
         use super::policy::{GrantObservation, GrantScope};
         let (grant, held) = self
             .grants
             .try_live_at(self.grant, self.clock.0, self.clock.1)
             .map_err(|error| {
                 if error == GrantObservation::Poisoned {
-                    cell.fail_session();
-                    return AuthorityError::Unavailable(GRANT_POISONED);
+                    return AuthorityError::Unavailable(GRANT_POISONED); // Caller fails.
                 }
                 AuthorityError::Unavailable("model grant hold unavailable")
             })?;
@@ -1993,7 +1988,8 @@ impl<'a> OriginalGrant<'a> {
         }
     }
 }
-/// The grant store was poisoned: the session has failed.
+/// The grant store was poisoned; the caller fails the session once the
+/// run table is released (no clock is read under the hold).
 pub(crate) const GRANT_POISONED: &str = "model grant hold poisoned";
 /// SB-3B1b R5: the run table, taken with `try_lock` at one call gate.
 pub(crate) struct RequestHold<'a>(MutexGuard<'a, Table>, &'a RunRegistry);
@@ -2026,7 +2022,7 @@ impl RequestHold<'_> {
             .files_admission
             .as_ref()
             .ok_or(AuthorityError::NotAdmitted)?;
-        grant.live(files, &t.cell)
+        grant.live(files)
     }
 }
 impl RunRegistry {
@@ -2104,7 +2100,7 @@ impl RunRegistry {
             .ok_or(AuthorityError::Capacity)?;
         // Held through the observer read, Q's CAS and the count/pin mutation:
         // a revocation lands before (refused) or after the CAS (entered).
-        let _grant_held = grant.live(files, &cell)?;
+        let _grant_held = grant.live(files)?;
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.granted");
         let ticket = SessionAttempt {
@@ -2259,7 +2255,7 @@ impl RunRegistry {
             .try_live_at(b.grant, b.clock.0, b.clock.1)
             .map_err(|error| {
                 if error == super::policy::GrantObservation::Poisoned {
-                    b.original.fail_session();
+                    return AuthorityError::Unavailable(GRANT_POISONED); // Caller fails.
                 }
                 AuthorityError::Unavailable("model grant hold unavailable")
             })?;

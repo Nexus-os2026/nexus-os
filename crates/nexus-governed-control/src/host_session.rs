@@ -69,6 +69,8 @@ impl MissionDeadlines {
     }
 }
 type Admitted = Result<(), crate::authority::AuthorityError>;
+/// SB-3B1b: `Instant` and mission clocks read before any hold.
+pub(crate) type Sample = (Instant, (u64, u64));
 impl RequestScope {
     pub(crate) fn fail(&self) {
         if let Some(core) = self.core.upgrade() {
@@ -89,11 +91,12 @@ impl RequestScope {
         };
         same && self.eligible(None)
     }
-    fn eligible(&self, at: Option<(u64, u64)>) -> bool {
+    fn eligible(&self, at: Option<Sample>) -> bool {
         #[cfg(test)] // SB-3B1b seam: scope admission reads Instant.
-        if let Some(core) = self.core.upgrade() {
+        if let Some(core) = self.core.upgrade().filter(|_| at.is_none()) {
             crate::authority::file_session::probe(Some(&core.cell), "scope.clock");
         }
+        let (now, at) = at.map_or_else(|| (Instant::now(), None), |(n, c)| (n, Some(c)));
         #[cfg(test)]
         if self
             .core
@@ -103,7 +106,7 @@ impl RequestScope {
             return false;
         }
         let invalid = self.core.strong_count() == 0
-            || Instant::now() >= self.deadline
+            || now >= self.deadline
             || self
                 .mission_deadlines
                 .get()
@@ -120,7 +123,7 @@ impl RequestScope {
     pub(crate) fn admit(&self, cell: &HaltCell) -> Result<(), crate::authority::AuthorityError> {
         self.admit_at(cell, None)
     }
-    pub(crate) fn admit_at(&self, cell: &HaltCell, at: Option<(u64, u64)>) -> Admitted {
+    pub(crate) fn admit_at(&self, cell: &HaltCell, at: Option<Sample>) -> Admitted {
         use crate::authority::AuthorityError;
         if !self.eligible(at) {
             return Err(AuthorityError::Halted);
