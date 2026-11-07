@@ -249,6 +249,7 @@ mod oracles {
             end: "done",
             missing: vec![],
             mismatched: vec![],
+            invalid: vec![],
         }
     }
     fn build_lines() -> String {
@@ -389,5 +390,36 @@ overall: incomplete (external and timing fields are not provided)\n",
         for word in ["sent_mono_ms", "returned_mono_ms", "stop_mono_ms"] {
             assert!(!text.contains(word));
         }
+    }
+
+    // M3E-R19: each gap is named by its kind; invalid values are never shown.
+    #[test]
+    fn m3e_u10_r19_host_names_each_gap() {
+        let i = inputs();
+        let host = HostMeasured {
+            binary_sha256: Ok([1; 32]),
+            inputs: &i,
+        };
+        let mut m = mission(snapshot_hash(&i));
+        m.publication = None;
+        m.checks = None;
+        m.report_digest = None;
+        m.missing = vec!["publication_receipt", "publication_policy", "action-link"];
+        m.mismatched = vec!["action"];
+        m.invalid = vec!["checks", "report_digest"];
+        let text = receipts(&host, &m);
+        assert!(
+            text.contains("publication receipt: unavailable (mother journal)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("checks: invalid (mother journal)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("report digest: invalid (mother journal)\n"),
+            "{text}"
+        );
+        assert!(text.contains("host-measured: incomplete (missing:publication_receipt, missing:publication_policy, missing:action-link, mismatched:action, invalid:checks, invalid:report_digest)\n"), "{text}");
     }
 }

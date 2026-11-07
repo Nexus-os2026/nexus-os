@@ -460,3 +460,28 @@ NEW `mother/host/src/receipts.rs` (assemble and render). Tests:
 | P-U10b | a missing self-hash shown as a zero hash | host missing is not zero |
 | P-U10c | T16 labels the run CORROBORATED | summary: the frozen T16 golden |
 | P-U10d | the facts file digest re-derived from the parsed facts instead of the snapshot | host exact schema |
+
+## M-6b — R19: confirmed vs unavailable evidence (stacked on M-6)
+
+`mission_receipt` separates three kinds of gap, each named and never
+shown as a value: `missing` (evidence the run should have produced and the
+journal does not hold: a publication receipt for a File that was asked and
+not confirmed unpublished, the receipt's policy hash, the receipt's link to
+its approved action), `mismatched` (evidence joined to another effect or
+action) and `invalid` (a journal value outside its domain: digests are 64
+lower-case hex, check records are the six closed V0..V5 codes once each).
+An invalid value is never copied into the receipt or any summary. T16's
+success phrase needs the receipt and the check record joined to the File
+effect. The host names each gap by kind (`unavailable:`, `missing:`,
+`mismatched:`, `invalid:`).
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_u10_r19_unavailable_publication_is_missing` | Settled `Uncertain` with no receipt: `publication_receipt` missing. A receipt with no policy hash: `publication_policy` missing. Denied, approval expired, settled `NotPublished`, stopped before the ask: nothing missing. |
+| `m3e_u10_r19_every_receipt_needs_its_action_link` | No pending and no settlement identity, or a pending for another effect only: `action-link` missing. A pending naming another action: `action` mismatched. A settlement identity alone links it. |
+| `m3e_u10_r19_summary_success_only_on_joined_evidence` | All-pass checks recorded for another effect: T16 unchecked, none recorded. A receipt for another effect than the File's: unconfirmed, none recorded. |
+| `m3e_u10_r19_values_are_validated_before_projection` | Non-hex or upper-case receipt digest, non-hex policy hash, an unknown check code, a non-hex report digest: each listed `invalid` by field, never copied (publication or checks `None`); the canary absent from the receipt's Debug and from T16; no success phrase on an invalid receipt or check record. |
+| `m3e_u10_r19_real_uncertain_settlement_is_missing_evidence` | LiteHome, real broker: the approved action held executing past Mother's held deadline; the real settlement records `Uncertain` (reason `file_publication_uncertain`) and no receipt; the receipt lists `publication_receipt` missing, no publication; T16 unconfirmed, none recorded. |
+| `m3e_u10_r19_host_names_each_gap` (host) | Missing, mismatched and invalid gaps named by kind in order; checks and report digest shown `invalid`, never their values. The M-6 host labels are amended to the same kinds (`unavailable:`, `missing:`, `mismatched:`). |

@@ -52,6 +52,8 @@ pub struct MissionReceipt {
     pub end: &'static str,
     pub missing: Vec<&'static str>,
     pub mismatched: Vec<&'static str>,
+    /// Journal values outside their domain, never copied (M3E-R19).
+    pub invalid: Vec<&'static str>,
 }
 
 /// Mission `id`'s receipt from `entries` (a verified journal), for
@@ -174,5 +176,6 @@ pub fn mission_receipt(
         end: page_view(entries, id).end().as_str(),
         missing,
         mismatched,
+        invalid: Vec::new(),
     })
 }

@@ -299,6 +299,7 @@ fn m3e_u10_receipt_identities_join_and_missing_is_listed() {
         end: "done",
         missing: vec![],
         mismatched: vec![],
+        invalid: vec![],
     };
     assert_eq!(got, expected);
     // Repeated: identical; the journal unchanged.
@@ -402,6 +403,206 @@ fn m3e_u10_request_identity_is_the_frozen_bytes() {
     assert_eq!(corrections, frozen);
 }
 
+// M3E-R19: confirmed vs unavailable publication evidence, the action link,
+// joined evidence for T16, and value domains.
+fn receipt_with(effect: u64, sha256: &str, policy: Option<&str>, act: PendingAction) -> Entry {
+    entry(
+        6,
+        Event::PublicationReceipt {
+            effect,
+            action: act,
+            sha256: sha256.into(),
+            bytes: 1697,
+            policy_hash: policy.map(str::to_string),
+            overtaken: false,
+        },
+    )
+}
+fn r(j: &[Entry], c: &MissionContract) -> MissionReceipt {
+    mission_receipt(j, MissionId(ID), c).unwrap()
+}
+fn settled(outcome: SettlementOutcome, act: Option<PendingAction>) -> Entry {
+    transition(
+        8,
+        Trigger::Settled {
+            effect: 1,
+            action: act,
+            outcome,
+            end: SettlementEnd::Stop(StopReason::Owner),
+        },
+    )
+}
+
+#[test]
+fn m3e_u10_r19_unavailable_publication_is_missing() {
+    let c = page_contract();
+    let none: Vec<&str> = vec![];
+    // Unavailable: an Uncertain settlement with no receipt; an absent policy.
+    let j = [asked(&c), vec![settled(SettlementOutcome::Uncertain, None)]].concat();
+    assert_eq!(r(&j, &c).missing, vec!["publication_receipt"]);
+    let j = [asked(&c), vec![receipt_with(1, SHA, None, action())]].concat();
+    assert_eq!(r(&j, &c).missing, vec!["publication_policy"]);
+    // Confirmed non-publication: nothing missing.
+    let expired = Trigger::ApprovalLapsed {
+        effect: 1,
+        reason: LapseReason::ApprovalExpired,
+    };
+    for end in [
+        transition(8, Trigger::ActionDenied { effect: 1 }),
+        transition(8, expired),
+    ] {
+        assert_eq!(r(&[asked(&c), vec![end]].concat(), &c).missing, none);
+    }
+    let j = [
+        asked(&c),
+        vec![settled(SettlementOutcome::NotPublished, None)],
+    ]
+    .concat();
+    assert_eq!(r(&j, &c).missing, none);
+    let stop = transition(
+        2,
+        Trigger::Stop {
+            reason: StopReason::Owner,
+        },
+    );
+    assert_eq!(
+        r(&[asked(&c)[..1].to_vec(), vec![stop]].concat(), &c).missing,
+        none
+    );
+}
+
+#[test]
+fn m3e_u10_r19_every_receipt_needs_its_action_link() {
+    let c = page_contract();
+    let other = PendingAction {
+        run: "run".into(),
+        commitment: "another".into(),
+        deadline_mono_ms: 1,
+    };
+    // No pending and no settlement identity for the receipt's effect.
+    let mut j = asked(&c);
+    j.retain(|e| !matches!(e.event, Event::ApprovalPending { .. }));
+    j.push(receipt(1, false));
+    assert_eq!(r(&j, &c).missing, vec!["action-link"]);
+    // A pending for another effect only.
+    let mut j = asked(&c);
+    if let Event::ApprovalPending { effect, .. } = &mut j[4].event {
+        *effect = 2;
+    }
+    j.push(receipt(1, false));
+    assert_eq!(r(&j, &c).missing, vec!["action-link"]);
+    // The pending names another action.
+    let j = [
+        asked(&c),
+        vec![receipt_with(1, SHA, Some(&"bb".repeat(32)), other)],
+    ]
+    .concat();
+    assert_eq!(r(&j, &c).mismatched, vec!["action"]);
+    // A settlement identity alone links it (early settlement).
+    let mut j = asked(&c);
+    j.retain(|e| !matches!(e.event, Event::ApprovalPending { .. }));
+    j.push(receipt(1, false));
+    let published = SettlementOutcome::Published {
+        recovery_required: false,
+        interrupted: vec![],
+    };
+    j.push(settled(published, Some(action())));
+    let got = r(&j, &c);
+    assert_eq!((got.missing, got.mismatched), (vec![], vec![]));
+}
+
+#[test]
+fn m3e_u10_r19_summary_success_only_on_joined_evidence() {
+    let c = page_contract();
+    // All-pass checks recorded for another effect: no success phrase.
+    let j = [asked(&c), vec![receipt(1, false), recorded(2, PASS)]].concat();
+    assert_eq!(
+        summary(&j, &c),
+        Ok(Some(t16(T16_UNCHECKED, T16_NONE_RECORDED)))
+    );
+    // A receipt for another effect than the File's: unconfirmed.
+    let j = [asked(&c), vec![receipt(2, false), recorded(2, PASS)]].concat();
+    let unconfirmed = "I could not confirm what became of the request";
+    assert_eq!(
+        summary(&j, &c),
+        Ok(Some(t16(unconfirmed, T16_NONE_RECORDED)))
+    );
+}
+
+#[test]
+fn m3e_u10_r19_values_are_validated_before_projection() {
+    let c = page_contract();
+    let canary = "PRIVATE_CANARY_R19 page text";
+    let bad = |j: Vec<Entry>, field: &str| {
+        let got = r(&j, &c);
+        assert_eq!(got.invalid, vec![field], "{field}");
+        assert!(
+            !format!("{got:?}").contains("PRIVATE_CANARY_R19"),
+            "{field}"
+        );
+        let shown = summary(&j, &c).unwrap().unwrap_or_default();
+        assert!(!shown.contains("PRIVATE_CANARY_R19"), "{field}");
+        if field != "report_digest" {
+            // An invalid receipt or check record is no passed check.
+            assert!(!shown.contains(T16_PASSED), "{field}");
+        }
+        got
+    };
+    let got = bad(
+        [
+            asked(&c),
+            vec![receipt_with(1, canary, Some(&"bb".repeat(32)), action())],
+        ]
+        .concat(),
+        "receipt_sha256",
+    );
+    assert_eq!(got.publication, None);
+    bad(
+        [
+            asked(&c),
+            vec![receipt_with(1, SHA, Some(canary), action())],
+        ]
+        .concat(),
+        "receipt_policy_hash",
+    );
+    let mut checks = recorded(
+        1,
+        [
+            "pass",
+            "pass",
+            "pass",
+            "fail:PRIVATE_CANARY_R19",
+            "pass",
+            "pass",
+        ],
+    );
+    let got = bad(
+        [asked(&c), vec![receipt(1, false), checks.clone()]].concat(),
+        "checks",
+    );
+    assert_eq!(got.checks, None);
+    if let Event::VerificationRecorded { report_digest, .. } = &mut checks.event {
+        *report_digest = canary.into();
+    }
+    if let Event::VerificationRecorded { checks: list, .. } = &mut checks.event {
+        list[3].1 = "pass".into();
+    }
+    bad(
+        [asked(&c), vec![receipt(1, false), checks]].concat(),
+        "report_digest",
+    );
+    // Upper-case hex is outside the domain too.
+    let upper = "AA".repeat(32);
+    bad(
+        [
+            asked(&c),
+            vec![receipt_with(1, &upper, Some(&"bb".repeat(32)), action())],
+        ]
+        .concat(),
+        "receipt_sha256",
+    );
+}
+
 /// A real broker page mission, run to Done (one broker per process).
 const CHILD: &str = "oracles::m3e_receipts::m3e_u10_child";
 
@@ -409,6 +610,135 @@ const CHILD: &str = "oracles::m3e_receipts::m3e_u10_child";
 #[test]
 fn m3e_u10_receipts_from_a_real_page_mission() {
     crate::adapter::m3d_publication_oracles::run_child(CHILD, "done");
+}
+
+/// M3E-R19: the real settlement path (lite_settle) ends a File whose broker
+/// action is still executing at Mother's held deadline `Uncertain`, with no
+/// receipt: the receipt lists it missing, and T16 claims nothing.
+#[cfg(target_os = "linux")]
+#[test]
+fn m3e_u10_r19_real_uncertain_settlement_is_missing_evidence() {
+    crate::adapter::m3d_publication_oracles::run_child(CHILD, "uncertain");
+}
+
+#[cfg(target_os = "linux")]
+fn uncertain_case() {
+    use crate::adapter::lite_clock::{past_the_start, LiteHome};
+    use crate::adapter::m2c_support::port_for;
+    use crate::adapter::m3d_publication_oracles::{scratch, BAKERY};
+    use crate::adapter::{create_private, mother_agent};
+    use crate::coordinator::{Coordinator, Lanes};
+    use crate::effect::EffectPort;
+    use crate::journal::{verify, MemoryJournal};
+    use crate::lane::{Lane, ScriptedLane, Verdict};
+    use crate::oracles::lite_support::{file, FilesOwner};
+    use crate::oracles::{m2c_confirmers::answering, Yes};
+    use nexus_governed_control::authority::clock::{Clock, SystemClock};
+    use nexus_governed_control::authority::ids::{CommitmentId, RunId};
+    use nexus_governed_control::governed::GrantRequest;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{mpsc, Arc};
+    use std::time::Duration;
+    let temp = scratch("m3e-r19");
+    let home = LiteHome::open(&temp.join("home")).unwrap();
+    let ws = temp.join("workspace");
+    create_private(&ws).unwrap();
+    let info = home.control.register_workspace(&ws, &[]).unwrap();
+    let owner = FilesOwner::default();
+    let files = GrantRequest::Files { workspace: info.id };
+    home.control
+        .request_grant(&files, Duration::from_secs(86400), &owner)
+        .unwrap();
+    let port = Arc::new(port_for(&home.control, true).with_workspace(info.name.clone()));
+    let mut lanes: Vec<Arc<dyn Lane>> = crate::oracles::keyed_lanes()
+        .into_iter()
+        .filter(|l| !matches!(l.identity().role, LaneRole::Builder | LaneRole::Verifier))
+        .collect();
+    let builder = ScriptedLane::new(LaneRole::Builder, "built", Verdict::Continue);
+    lanes.push(Arc::new(builder.asking(vec![file("index.html", BAKERY)])));
+    lanes.push(Arc::new(crate::page_verifier::PageVerifierLane));
+    let journal = MemoryJournal::default();
+    let m = Coordinator::open(
+        journal.clone(),
+        port.clone(),
+        Lanes::new(lanes).unwrap(),
+        Arc::new(SystemClock::default()),
+        home.private(),
+    )
+    .unwrap()
+    .into_file_session()
+    .unwrap();
+    let mut c = page_contract();
+    c.requested_folder = Some(info.name.clone());
+    let id = m.draft(c.clone()).unwrap();
+    m.submit(id).unwrap();
+    answering(&Yes, || m.request_consent(id)).unwrap();
+    // As lite_recognition's deadline cases: the broker prepares 30 s later.
+    let clock = home.clock.clone();
+    port.in_broker_action.arm(0, move || {
+        let reads = AtomicUsize::new(0);
+        let advance = clock.clone();
+        clock.arm(
+            move || reads.fetch_add(1, Ordering::SeqCst) == 1,
+            move || advance.advance(Duration::from_secs(30)),
+        );
+    });
+    for _ in 0..3 {
+        m.advance(id).unwrap();
+    }
+    let pending = port.pending(id).unwrap();
+    let run = RunId::parse(&pending.run).unwrap();
+    let commitment = CommitmentId::parse(&pending.commitment).unwrap();
+    home.control
+        .authorize(commitment, &mother_agent(), run, &owner)
+        .unwrap();
+    // The approved action is held executing at the broker.
+    let (entered_tx, entered) = mpsc::sync_channel(1);
+    let (release, release_rx) = mpsc::sync_channel::<()>(1);
+    home.clock.arm(past_the_start(&home, run), move || {
+        entered_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    });
+    let broker = home.control.clone();
+    let worker = std::thread::spawn(move || broker.execute(commitment, &mother_agent(), run));
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let left = pending
+        .deadline_mono_ms
+        .saturating_sub(home.clock.monotonic_ms());
+    home.clock.advance(Duration::from_millis(left + 1));
+    m.advance(id).unwrap();
+    assert_eq!(
+        m.reason(id).unwrap().as_deref(),
+        Some("file_publication_uncertain")
+    );
+    let entries = verify(&journal.lines()).unwrap();
+    release.send(()).unwrap();
+    let _ = worker.join().unwrap();
+    let uncertain = |e: &Entry| {
+        matches!(
+            &e.event,
+            Event::Transition {
+                trigger: Trigger::Settled {
+                    outcome: SettlementOutcome::Uncertain,
+                    ..
+                }
+            }
+        )
+    };
+    assert!(
+        entries.iter().any(uncertain),
+        "the real Uncertain settlement"
+    );
+    let got = mission_receipt(&entries, id, &c).unwrap();
+    assert_eq!(
+        (got.publication.clone(), got.missing.clone()),
+        (None, vec!["publication_receipt"])
+    );
+    let unconfirmed = "I could not confirm what became of the request";
+    assert_eq!(
+        page_view(&entries, id).summary(&c),
+        Ok(Some(t16(unconfirmed, T16_NONE_RECORDED)))
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -423,6 +753,11 @@ fn m3e_u10_child() {
     let Some(case) = child_case() else {
         return;
     };
+    if case == "uncertain" {
+        uncertain_case();
+        println!("m3d-db-receipt:{case}");
+        return;
+    }
     let f = PageFx::new();
     let mut lanes: Vec<Arc<dyn Lane>> = crate::oracles::keyed_lanes()
         .into_iter()
