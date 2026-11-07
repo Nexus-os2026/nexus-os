@@ -10,7 +10,6 @@ pub mod autonomy;
 pub mod backup;
 pub mod behavioral_profile;
 pub mod capabilities;
-pub mod checkpoint;
 /// Governed coding run primitive (Phase One P1A-002; Linux support profile).
 #[cfg(target_os = "linux")]
 pub mod coding_run;

@@ -1,6 +1,16 @@
 //! The typed File-only port path. Legacy adoption and Stop remain in mod.rs.
 use super::*;
 
+/// M3-Db (tests): rewrites the broker's receipt of this thread's next reads.
+#[cfg(test)]
+type ReceiptSeam = Option<fn(Option<FileReceipt>) -> Option<FileReceipt>>;
+#[cfg(test)]
+thread_local! {
+    pub(crate) static RECEIPT_SEAM: std::cell::Cell<ReceiptSeam> = const { std::cell::Cell::new(None) };
+}
+#[cfg(test)]
+use nexus_governed_control::files::FileReceipt;
+
 impl GovernedPort {
     /// Non-File retirement retains the legacy final-state rules. Unlike
     /// admission, this read must work after the File session's halt engages.
@@ -121,20 +131,26 @@ impl GovernedPort {
         };
         let id = CommitmentId::parse(&pending.commitment)
             .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
-        let (publication, state) = match self
+        let (publication, state, receipt) = match self
             .door
             .file_observation(id)
             .map_err(|e| refused_by(e.class()))?
         {
+            // M3-Db: the receipt of this exact commitment only.
             Lookup::Mine((view, read)) if view.run.to_string() == pending.run => {
-                (read, Some(view.state))
+                (read, Some(view.state), self.door.file_receipt(id))
             }
-            _ => (PublicationClass::Uncertain, None),
+            _ => (PublicationClass::Uncertain, None, None),
         };
+        #[cfg(test)]
+        let receipt = RECEIPT_SEAM
+            .with(|s| s.get())
+            .map_or(receipt, |seam| seam(receipt));
         Ok(Some(FileSnapshot {
             action: pending,
             publication,
             state,
+            receipt,
         }))
     }
 

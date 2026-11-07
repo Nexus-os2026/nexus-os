@@ -1,0 +1,34 @@
+id	test	boundary	expected	stage
+SB2-R1	sb2_registration_records_before_install_once	version,status,tags,show,record,install	four peer requests; one durable record before final installation; no retry	SB-2a
+SB2-R2	sb2_unrecorded_failed_or_late_registration_is_absent	failed verification,record,install,expiry,Quit	no installed model; one attempt; readiness denied	SB-2a
+SB2-R2-live	sb2_failed_verification_is_not_retried	malformed response independently at version,status,tags,show; cancellation live	exactly one verification prefix and gate count; no install; caller retry denied	SB-2a oracle-fix
+SB2-R3	sb2_bootstrap_cannot_overtake_registration	reservation,ready	pending/failed denied; installed/no-model ready	SB-2a
+SB2-G1	session_override_required_at_each_request	real override at four metadata requests	positive control reaches four gates; selected boundary held; cancellation live; exact gate and peer prefixes; no observer configured	SB-2a
+SB2-G2	pre_gate_ingress_request_count_eq_zero	pre-admission at four requests	ingress wins; no current or successor request	SB-2a
+SB2-G3	sb2_paused_before_cas_ingress_wins_dispatches_nothing	predicate observed; original CAS paused	ingress wins CAS; no current or successor request	SB-2a
+SB2-G5	sb2_held_registration_request_cancels_and_joins	peer entered at four requests	one entered request; peer closed; method joined <1s; no successor	SB-2a
+SB2-T1	sb2_registration_uses_original_deadline_and_watch	fixed dual-clock deadline; original watch	either expiry refuses; Stop/resume cannot renew watch; Chat refused	SB-2a
+SB2-A3	sb2_one_session_operation_active	reservation,owner return	second refuses; conclusive return preserves one-shot	SB-2a registration only
+SB2-D2	sb2_owner_drop_never_discharges_debt	Drop under owning lock	no wait or I/O; uncertainty and denial retained	SB-2a registration only
+SB2-C1	sb2_unjoined_or_owed_prevents_clean_close	operation completion,record	unknown blocks quiescence; returned method does not join producer	SB-2a registration only
+SB2-C2	sb2_shutdown_fallback_reports_model_unknown_when_close_worker_is_skipped	formatter injected snapshot/fallback	unknown ownership,child,record; no affirmative notice	O4; composed SB-3 pending
+SB2-C3	sb2_same_shutdown_deadline_and_no_post_seal_model_events	shutdown,seal	original deadline retained; post-seal reserve denied	SB-2a
+SB2-X1	sb2_restart_has_no_model_authority_or_network	death before record/after record/after install prefixes	restart reports unclean history, no model authority	SB-2a registration only
+SB2-P1	sb2_model_inventory_and_records_are_content_free	record,inventory,WAL/SHM	metadata canary absent	SB-2a
+SB2-S1	c1_s1_sealed_session_denies_inference	SessionPort	retained default refusal and zero charge	retained C1 behavioral oracle
+SB2-S2	sb2_private_model_submodules_expose_no_callable_route	recursive facade scan	nested public escape rejected	SB-2a
+NA	NA	Q,R,C,L,attempt,charge,call metadata,chat,reply	no registration mission binding; SB-2b accounting and SB-3 composition deferred	N/A
+SB2-F1	sb2_facade_rejects_multiline_registration	exact module declarations; reviewer multiline public wrapper	module/status green; wrapper red	review-1
+SB2-F2	sb2_failed_startup_reports_model_unknown	actual startup fallback formatter	explicit model uncertainty	review-1
+SB2-F3	sb2_install_completion_is_atomic_to_close_observers	installed receipt before owner completion; concurrent close observation	same hold; no spurious uncertainty; old-gap mutation red	review-1
+SB2-F4	sb2_close_report_has_one_model_line	zero/one/two resource failures; unknown/none model snapshot	exactly one model line	review-1
+SB2-A1	sb2_attempt_count_and_retention_are_one_admission	run-table original CAS,1..8,9	1..8 counted/pinned together; 9 OverBudget; failed CAS changes neither; no refund	SB-2b
+SB2-A2	sb2_attempt_record_keeps_original_run_and_consent	cancel,finish,capacity,record,owner return	one record; original run/agent/door/hash/consent string/identity/ordinal; exact model pin	SB-2b
+SB2-D1	sb2_record_debt_blocks_seal_and_reuse	Recorded/Owed/Uncertain,owner completion	separate statuses; cancel/meter settlement never discharges debt; only Recorded releases pin	SB-2b
+SB2-D2	sb2_attempt_drop_panic_and_poison_retain_ownership	Drop with lock held; panic; poison	uncertainty,denial,pin retained; no Drop I/O or join	SB-2b
+SB2-L1	sb2_attempt_recording_does_not_block_ingress	evidence callback on real record path	no model/producer/run hold; ingress succeeds; settlement uses no new Work admission	SB-2b
+SB2-X2	sb2_missing_outcome_is_unknown_not_success	missing/owed/uncertain/recorded end	exact established fact only; missing is unknown	SB-2b
+SB2-C2	sb2_attempt_fallback_keeps_all_debt_statuses	O4 injected accounting snapshot	all debt statuses preserved; unavailable is unknown; no affirmative notice	SB-2b; composed schedule SB-3 pending
+SB2-A3	sb2_attempt_binding_refusals_issue_no_ticket	wrong Core/run/agent/door/model	zero count and pins; positive acquisition remains reachable	SB-2b
+SB2-C4	sb2_attempt_recorded_end_survives_failed_delivery	real seal/Mother end/primary end/dropped delivery	Mother and primary Recorded survive failed delivery; no affirmative notice	SB-2b
+SB2-X1	sb2_attempt_death_prefixes_are_report_only	ticket,before real result record,recorded,settled	verified durable ends only; missing unknown; two restarts recreate zero authority	SB-2b accounting only

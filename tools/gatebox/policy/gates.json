@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "gate_set_id": "full",
+  "success_status": "PASS_SCOPED",
+  "no_fail_fast": true,
+  "gates": [
+    {
+      "id": "format",
+      "argv": [
+        "/opt/rust/bin/cargo",
+        "--offline",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ]
+    },
+    {
+      "id": "clippy",
+      "argv": [
+        "/opt/rust/bin/cargo",
+        "--offline",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    },
+    {
+      "id": "compile-tests",
+      "argv": [
+        "/opt/rust/bin/cargo",
+        "--offline",
+        "test",
+        "--workspace",
+        "--locked",
+        "--no-run",
+        "--message-format=json"
+      ]
+    },
+    {
+      "id": "workspace",
+      "adapter": "libtest",
+      "artifacts": "every eligible emitted test artifact",
+      "list_before_execute": true
+    },
+    {
+      "id": "doctests",
+      "argv": [
+        "/opt/rust/bin/cargo",
+        "--offline",
+        "test",
+        "--workspace",
+        "--locked",
+        "--doc",
+        "--no-fail-fast"
+      ]
+    },
+    {
+      "id": "host",
+      "adapter": "reconcile-all-artifacts",
+      "package": "nexus-mother-host",
+      "argv": null,
+      "internal": true
+    },
+    {
+      "id": "desktop-live",
+      "adapter": "libtest-repeat",
+      "package": "nexus-mother-desktop",
+      "target": "live",
+      "minimum": 14,
+      "expected_names": [
+        "h1_the_child_never_uses_an_inherited_display",
+        "s1_the_front_door_holds_the_stop_controller_after_start",
+        "s2_a_real_click_on_stop_stops_the_broker_and_the_kernel",
+        "s2_the_shortcut_stops_too",
+        "s3_without_a_display_the_home_was_opened_first",
+        "s9_gtk_debug_interactive_means_the_app_does_not_start",
+        "s6_a_real_click_reaches_memory_while_the_store_is_stalled",
+        "s7_the_main_loop_keeps_running_while_the_backend_is_stalled",
+        "a1_a_second_stop_does_not_wait_behind_the_first_stop_s_write",
+        "a3_at_the_cap_a_press_still_does_its_ingress_and_is_coalesced",
+        "a3_the_route_coalesces_at_the_cap_without_the_window",
+        "a3_quit_with_the_store_still_stalled_is_never_clean",
+        "g13_the_desktop_owns_no_bus_name_and_exports_nothing",
+        "g14_the_content_area_is_labels_frames_and_the_stop_button",
+        "g13_only_a_vanished_name_is_tolerated",
+        "r1_a_clean_quit_closes_the_evidence_session_and_a_relaunch_finds_it_closed",
+        "h6_a_child_that_closes_its_streams_but_lives_is_killed_and_reaped",
+        "h7_a_failed_group_signal_fails_and_only_a_gone_group_is_gone",
+        "h8_cleanup_role",
+        "h8_the_whole_cleanup_is_bounded_even_when_kill_would_hang",
+        "h9_supervision_s_final_signal_reaches_only_its_held_leader",
+        "h10_nothing_is_signalled_on_inference",
+        "h11_a_failed_shutdown_of_xvfb_or_the_bus_fails_the_test"
+      ]
+    },
+    {
+      "id": "walk",
+      "argv": [
+        "/opt/rust/bin/cargo",
+        "--offline",
+        "build",
+        "-p",
+        "nexus-mother-host",
+        "--locked",
+        "--example",
+        "walk"
+      ]
+    },
+    {
+      "id": "whitespace",
+      "adapter": "snapshot-whitespace",
+      "label": "approximation to git diff --check",
+      "argv": null,
+      "internal": true
+    }
+  ],
+  "coverage": {
+    "reject_unknown_harness": true,
+    "reconcile_names_and_results": true,
+    "missing_artifact_fails": true,
+    "compile_excluded_target": true,
+    "execute_excluded_target": false,
+    "excluded_target": "phase2_live_sandbox",
+    "exclusions_file": "exclusions.json"
+  },
+  "limitations": [
+    "Host toolchain and registry are mutable trusted inputs; inventories do not defeat change-and-restore attacks.",
+    "Candidate-produced assertions are not independent correctness proofs.",
+    "GitHub forced-live verifier coverage and current advisory audits remain authoritative and outside this offline gate set."
+  ],
+  "environment": {
+    "PATH": "/opt/rust/bin:/usr/bin:/bin",
+    "HOME": "/work/home",
+    "PWD": "/work/src",
+    "CARGO_HOME": "/work/cargo",
+    "CARGO_TARGET_DIR": "/work/target",
+    "CARGO_BUILD_JOBS": "4",
+    "RUST_TEST_THREADS": "4",
+    "CARGO_TERM_COLOR": "never",
+    "CARGO_NET_OFFLINE": "true",
+    "RUST_BACKTRACE": "1",
+    "TMPDIR": "/run/gate/tmp",
+    "XDG_RUNTIME_DIR": "/run/gate/xdg",
+    "XDG_CACHE_HOME": "/work/cache",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TZ": "UTC",
+    "CI": "true"
+  }
+}

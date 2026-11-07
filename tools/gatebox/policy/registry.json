@@ -1,0 +1,8 @@
+{
+  "mother": {
+    "object_format": "sha1",
+    "common_directory": "/home/nexus/NEXUS/nexus-os/.git",
+    "fixture_sha": "899e3872c5b61223c87b905f63c66947a816259b",
+    "qualification_gate_set": "full"
+  }
+}

@@ -85,6 +85,24 @@ pub(crate) struct RegisteredModel {
     pub(crate) identity: [u8; 32],
 }
 
+impl RegisteredModel {
+    /// A verified transport with its identity and Owner-facing view. Only
+    /// this file names the kernel transport trait (E-O65 allowlist).
+    pub(crate) fn verified(transport: VerifiedOllama) -> Self {
+        let identity = transport.identity().digest();
+        let view = ModelIdentityView {
+            name: transport.identity().name().to_string(),
+            digest: transport.identity().model_digest().to_string(),
+            identity: hex::encode(identity),
+        };
+        Self {
+            transport: Arc::new(transport),
+            view,
+            identity,
+        }
+    }
+}
+
 #[derive(Default)]
 enum Slot {
     #[default]
@@ -171,22 +189,14 @@ impl LocalModels {
         let quitting = Quitting(authority.runs().clone());
         let transport = VerifiedOllama::verify(endpoint, spec, &quitting, &deadline, &watch)
             .map_err(AuthorityError::ModelCall)?;
-        let identity = transport.identity().digest();
-        let view = ModelIdentityView {
-            name: transport.identity().name().to_string(),
-            digest: transport.identity().model_digest().to_string(),
-            identity: hex::encode(identity),
-        };
+        let model = RegisteredModel::verified(transport);
+        let view = model.view.clone();
         // Evidence first: an unrecorded model is not registered.
         authority.record_model_registered(vec![
             ("model_digest".into(), view.digest.clone()),
             ("identity".into(), view.identity.clone()),
         ])?;
-        reservation.fill(RegisteredModel {
-            transport: Arc::new(transport),
-            view: view.clone(),
-            identity,
-        });
+        reservation.fill(model);
         Ok(view)
     }
 
