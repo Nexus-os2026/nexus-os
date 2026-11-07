@@ -325,6 +325,19 @@ fn sb2_facade_rejects_multiline_registration() {
     .all(sb2_facade_line));
 }
 #[test]
+fn sb2_facade_rejects_model_module_aliases() {
+    for plant in [
+        "use model as hidden;",
+        "use self::model as hidden;",
+        "use super::{model as hidden};",
+    ] {
+        assert!(
+            !sb2_facade_line(plant),
+            "reject model module alias: {plant}"
+        );
+    }
+}
+#[test]
 fn c1_s1_session_sources_have_no_model_route() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     fn walk(path: &Path, files: &mut Vec<std::path::PathBuf>) {

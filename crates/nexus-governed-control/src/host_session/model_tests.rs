@@ -5,7 +5,10 @@ use crate::test_hooks::Gate;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Receiver};
-use std::sync::{atomic::AtomicUsize, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize},
+    Mutex,
+};
 const PATHS: [&str; 4] = ["/api/version", "/api/status", "/api/tags", "/api/show"];
 const CANARY: &str = "SB2_METADATA_PRIVATE_CANARY";
 pub(super) fn pin() -> ModelPinSpec {
@@ -882,10 +885,13 @@ impl Accounting {
         }
     }
     pub(super) fn acquire(&self) -> Result<model::Attempt, SessionError> {
+        self.acquire_run(self.run)
+    }
+    fn acquire_run(&self, run: RunId) -> Result<model::Attempt, SessionError> {
         model::Attempt::acquire(
             &self.seed.core,
             &self.authority,
-            self.run,
+            run,
             &self.agent,
             self.group,
             [42; 32],
@@ -1241,4 +1247,87 @@ fn sb2_bootstrap_model_contention_is_unavailable() {
         f.session.finish_bootstrap(),
         Err(SessionError::Unavailable)
     ));
+}
+
+// Force each real cleanup hold to meet an observer; no timing-based release.
+fn attempt_observer_schedule(case: usize) {
+    let sink = end_sink();
+    let f = Accounting::new(sink.clone());
+    let mut attempt = (case != 1).then(|| f.acquire().unwrap());
+    let record = |attempt: &mut model::Attempt| attempt.record_return(&f.authority, Ok(()));
+    if case == 2 {
+        record(attempt.as_mut().unwrap()).unwrap();
+    }
+    let (start_tx, start_rx) = std::sync::mpsc::channel();
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let retried = Arc::new(AtomicBool::new(false));
+    let seen = retried.clone();
+    let release = release_tx.clone();
+    f.seed.core.cell.1.arm("model.complete.contended", move || {
+        if case == 0 {
+            assert_eq!(
+                sink.memory.records().len(),
+                1,
+                "record I/O precedes metadata hold"
+            );
+        }
+        seen.store(true, Ordering::SeqCst);
+        release.send(()).unwrap();
+    });
+    let point = [
+        "model.attempt.return",
+        "model.attempt.refused",
+        "model.settle.before",
+    ][case];
+    f.seed.core.cell.1.arm(point, move || {
+        start_tx.send(()).unwrap();
+        held_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    });
+    std::thread::scope(|scope| {
+        let f = &f;
+        scope.spawn(move || {
+            start_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+            let _observer = if case == 2 {
+                (None, Some(f.authority.runs().model_observer()))
+            } else {
+                (Some(f.seed.core.model.state.lock().unwrap()), None)
+            };
+            held_tx.send(()).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        });
+        let result = match case {
+            0 => record(attempt.as_mut().unwrap()).map(|_| ()),
+            1 => f.acquire_run(RunId::fresh()).map(|_| ()),
+            _ => attempt.take().unwrap().complete(),
+        };
+        let _ = release_tx.send(());
+        assert_eq!(
+            result.is_ok(),
+            case != 1,
+            "conclusive result after observer"
+        );
+    });
+    assert!(
+        retried.load(Ordering::SeqCst),
+        "ordinary contention must retry"
+    );
+    if let Some(mut attempt) = attempt {
+        assert!(attempt.record_return(&f.authority, Ok(())).is_err());
+        attempt.complete().unwrap();
+    }
+    assert_eq!(f.counts(), (u32::from(case != 1), 0));
+    assert!(f.seed.core.model.quiescent() && !f.seed.failed());
+}
+#[test]
+fn sb2_attempt_record_survives_held_observer() {
+    attempt_observer_schedule(0);
+}
+#[test]
+fn sb2_attempt_refusal_survives_held_observer() {
+    attempt_observer_schedule(1);
+}
+#[test]
+fn sb2_attempt_settlement_survives_held_observer() {
+    attempt_observer_schedule(2);
 }

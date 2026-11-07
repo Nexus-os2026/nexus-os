@@ -394,8 +394,10 @@ fn sb2_signature_collection_catches_qualified_model_aliases() {
         "async ",
         "unsafe ",
         "extern \"C\" ",
+        "extern ",
         "const unsafe ",
         "unsafe extern \"C\" ",
+        "unsafe extern ",
     ] {
         let plant = format!(
             "pub {qualifiers}fn raw(\n&self,\n) -> model::RegistrationReceipt {{ unreachable!() }}"

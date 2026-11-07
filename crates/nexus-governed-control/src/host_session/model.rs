@@ -404,6 +404,8 @@ impl Attempt {
         {
             Ok(ticket) => ticket,
             Err(error) => {
+                #[cfg(test)]
+                crate::authority::file_session::probe(Some(&core.cell), "model.attempt.refused");
                 let mut s = hold(core)?;
                 (s.attempt, s.owner_complete, s.child_complete, s.record) = previous;
                 s.active = false; // Conclusive pre-ticket refusal: no result owed.
@@ -442,6 +444,8 @@ impl Attempt {
         self.record_started = true; // A panic must not permit a second write.
         self.result = Some(result);
         let ticket = self.ticket.as_ref().ok_or(SessionError::Restricted)?;
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&self.owner.core.cell), "model.attempt.return");
         hold(&self.owner.core)?.child_complete = true;
         let mut detail = vec![
             ("op".into(), "model_call".into()),

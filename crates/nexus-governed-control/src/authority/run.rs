@@ -1864,6 +1864,9 @@ impl RunRegistry {
 
 #[cfg(test)]
 impl RunRegistry {
+    pub(crate) fn model_observer(&self) -> impl Drop + '_ {
+        self.runs.lock().unwrap()
+    }
     pub(crate) fn model_accounting(&self, run: RunId) -> Option<(u32, usize)> {
         let table = self
             .runs
@@ -1978,6 +1981,8 @@ impl RunRegistry {
         if !std::ptr::eq(self, ticket.registry.as_ptr()) {
             return Err(AuthorityError::WrongRun);
         }
+        #[cfg(test)]
+        super::file_session::probe(Some(&ticket.cell), "model.settle.before");
         let mut table = self
             .runs
             .try_lock()
