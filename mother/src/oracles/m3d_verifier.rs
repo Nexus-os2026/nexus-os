@@ -209,6 +209,7 @@ fn m3d_page_verifier_is_zero_call_and_effect_free() {
     assert_eq!(lane.max_model_calls(), 0);
     let calls = Calls(AtomicUsize::new(0));
     let context = LaneContext {
+        contract: None,
         model: Some(&calls),
     };
     for page in [BAKERY.to_string(), other_page()] {
