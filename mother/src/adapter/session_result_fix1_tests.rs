@@ -58,6 +58,7 @@ impl Lane for HeldResearch {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
         LaneOutput {
+            verification: None,
             text: "bounded entered lane".into(),
             effects: vec![],
             verdict: Verdict::Continue,

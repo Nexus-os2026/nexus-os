@@ -166,6 +166,15 @@ pub enum Event {
         policy_hash: Option<String>,
         overtaken: bool,
     },
+    /// M3-Dc1: the page Verifier's ordered `(id, code)` checks for the
+    /// receipt of `effect`, and their digest; after its answer, before
+    /// the verdict's transition. Closed codes only.
+    VerificationRecorded {
+        invocation: InvocationId,
+        effect: u64,
+        report_digest: String,
+        checks: Vec<(String, String)>,
+    },
 }
 
 /// One journal entry.

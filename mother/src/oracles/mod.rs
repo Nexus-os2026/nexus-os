@@ -578,6 +578,7 @@ impl Lane for KeyedLane {
             .map(str::to_string)
             .unwrap_or_else(|| format!("{} looked at the goal", self.role.as_str()));
         LaneOutput {
+            verification: None,
             text,
             effects,
             verdict,
@@ -644,6 +645,7 @@ impl Lane for HeldLane {
             gate = self.changed.wait_timeout(gate, left).unwrap().0;
         }
         LaneOutput {
+            verification: None,
             text: "held lane answered".into(),
             effects: self.effects.clone(),
             verdict: Verdict::Continue,

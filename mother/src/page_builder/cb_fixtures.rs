@@ -34,6 +34,7 @@ pub(crate) fn input(c: &MissionContract) -> LaneInput {
         pass_criteria: c.pass_criteria.clone(),
         prior_outputs: vec![],
         builder_input: Some(PageBuildInput::unvalidated_for_test(c, invocation)),
+        verification: None,
     }
 }
 pub(crate) fn user(c: &MissionContract, m: &str, correction: &str) -> String {
