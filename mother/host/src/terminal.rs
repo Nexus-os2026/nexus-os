@@ -77,14 +77,13 @@ impl LineBuffer {
     pub(crate) fn buffered(&self) -> usize {
         self.bytes.len()
     }
+    /// The buffer's own stale marking (its unit contract). The reader's
+    /// invalidation is the stream-level owner's (M3E-R13).
+    #[cfg(test)]
     pub(crate) fn invalidate(&mut self) {
         if !self.bytes.is_empty() || self.overflow {
             self.stale = true;
         }
-    }
-    /// M3E-R11: a line has begun and its terminator has not arrived.
-    pub(crate) fn pending(&self) -> bool {
-        !self.bytes.is_empty() || self.overflow || self.stale
     }
     pub(crate) fn push(&mut self, byte: u8) -> Option<Line> {
         if byte == 4 {
@@ -216,6 +215,8 @@ pub(crate) struct Input {
     pub(crate) goal: bool,
     /// M-3a: the first goal line the reader produced in goal mode.
     pub(crate) goal_line: Option<Result<String, crate::inputs::InputError>>,
+    /// M3E-R13: which goal read this is (a goal line's owner).
+    pub(crate) goal_read: u64,
     pub(crate) fatal: Option<Failure>,
     pub(crate) eof: bool,
     pub(crate) quit: Option<SessionRequest>,
@@ -346,6 +347,7 @@ impl Shared {
             input.typing = false;
             input.goal = true;
             input.goal_line = None;
+            input.goal_read = input.goal_read.wrapping_add(1);
         }
         let result = self.read_goal_inner(deadline, epoch);
         let mut input = self.input();
@@ -1189,23 +1191,34 @@ impl Drop for Terminal {
 }
 
 /// The single reader's two line buffers: commands and codes (64 bytes) and
-/// the typed goal (M-3a).
+/// the typed goal (M-3a). They are storage only (M3E-R13): the line's owner
+/// and the CR flag are the stream's.
 #[derive(Default)]
 pub(crate) struct Buffers {
     pub(crate) line: LineBuffer,
     pub(crate) goal: GoalBuffer,
-    /// The buffer that took the last byte, if it was a CR: its LF follows it.
-    cr: Option<Target>,
+    owner: Owner,
+    last_was_cr: bool,
 }
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Target {
-    Line,
-    Goal,
+/// M3E-R13: who owns the line under way. Set by its first byte, cleared only
+/// by its CR, LF or EOF; never derived from buffer contents.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Owner {
+    #[default]
+    None,
+    Command,
+    Goal(u64),
+    DiscardGoal,
+    DiscardCommand,
 }
 impl Buffers {
+    /// A boundary: the line under way can no longer act as live input.
     pub(crate) fn invalidate(&mut self) {
-        self.line.invalidate();
-        self.goal.invalidate();
+        self.owner = match self.owner {
+            Owner::Command => Owner::DiscardCommand,
+            Owner::Goal(_) => Owner::DiscardGoal,
+            other => other,
+        };
     }
 }
 
@@ -1222,76 +1235,78 @@ pub(crate) fn reader_mode(shared: &Shared, boundary: Option<u64>) -> (bool, bool
     )
 }
 
-/// One read's bytes through the buffers. After a goal line the rest of the
-/// read is discarded command input (Stop, Quit and EOF still act).
+/// One read's bytes through the buffers. A line finishes with the owner its
+/// first byte gave it. After a goal-mode line the rest of the read is
+/// discarded input (Stop, Quit and EOF still act).
 pub(crate) fn route(
     shared: &Shared,
     buffers: &mut Buffers,
     bytes: &[u8],
     mut discard: bool,
-    mut goal: bool,
+    goal: bool,
 ) {
     if discard {
         buffers.invalidate();
     }
+    let mut read = goal.then(|| shared.input().goal_read);
     let mut echo = String::new();
     let mut pending = None;
-    for b in bytes {
-        // M3E-R11: a line finishes in the buffer it started in. A line
-        // already under way keeps its buffer; only a new line follows the mode.
-        let target = match buffers.cr.take() {
-            Some(target) if *b == b'\n' => target,
-            _ if buffers.line.pending() => Target::Line,
-            _ if buffers.goal.pending() => Target::Goal,
-            _ if goal => Target::Goal,
-            _ => Target::Line,
-        };
-        if *b == b'\r' {
-            buffers.cr = Some(target);
+    for &b in bytes {
+        // A LF directly after a CR on the stream is that CR's partner.
+        let partner = b == b'\n' && buffers.last_was_cr;
+        buffers.last_was_cr = b == b'\r';
+        if partner {
+            continue;
         }
-        if target == Target::Goal {
-            // Outside a ready goal read, a goal line is read on to its end as
-            // discarded input; exact stop/quit and EOF still act.
-            if goal {
-                buffers.goal.echo(*b, &mut echo);
+        if b == 4 {
+            buffers.owner = Owner::None;
+            buffers.line = LineBuffer::default();
+            buffers.goal = GoalBuffer::default();
+            shared.receive(Line::Eof, true);
+            continue;
+        }
+        let owner = match buffers.owner {
+            Owner::None if discard => Owner::DiscardCommand,
+            Owner::None => read.map_or(Owner::Command, Owner::Goal),
+            Owner::Command if discard || read.is_some() => Owner::DiscardCommand,
+            Owner::Goal(r) if read != Some(r) => Owner::DiscardGoal,
+            other => other,
+        };
+        let end = b == b'\r' || b == b'\n';
+        buffers.owner = if end { Owner::None } else { owner };
+        // The buffers see one terminator: pairing is the stream's.
+        let b = if end { b'\n' } else { b };
+        if let Owner::Goal(_) | Owner::DiscardGoal = owner {
+            let live = owner != Owner::DiscardGoal;
+            if live {
+                buffers.goal.echo(b, &mut echo);
             }
-            let line = buffers.goal.push(*b);
-            if !goal {
-                buffers.goal.invalidate();
-            }
-            if let Some(line) = line {
+            if let Some(line) = buffers.goal.push(b) {
                 match line {
                     // Delivered after the rest of this read, so a Stop, Quit
                     // or EOF typed with it is seen first.
-                    GoalLine::Goal(result) => {
-                        if goal {
-                            pending = Some(result);
-                        }
-                    }
+                    GoalLine::Goal(result) if live => pending = Some(result),
+                    GoalLine::Goal(_) => {}
                     other => shared.goal_line(other),
                 }
-                if goal {
-                    goal = false;
+                if live {
+                    read = None;
                     discard = true;
                 }
             }
             continue;
         }
-        // A command line finished inside goal mode began before it: stale.
-        let line_discard = discard || goal;
+        let line_discard = owner == Owner::DiscardCommand;
         if !line_discard {
-            buffers.line.echo(*b, &mut echo);
+            buffers.line.echo(b, &mut echo);
         }
-        if let Some(line) = buffers.line.push(*b) {
+        if let Some(line) = buffers.line.push(b) {
             // Emergency/close ingress always precedes echo queueing.
             // Ordinary lines are echoed before waking their consumer.
             if matches!(line, Line::Answer(_)) && !echo.is_empty() {
                 let _queued = shared.queue_frame(std::mem::take(&mut echo));
             }
             shared.receive(line, line_discard);
-        }
-        if line_discard {
-            buffers.line.invalidate();
         }
     }
     if !echo.is_empty() {
