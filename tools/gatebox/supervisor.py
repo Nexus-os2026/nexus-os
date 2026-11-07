@@ -169,13 +169,14 @@ def collect(run, listeners, evidence, logs):
     streams, buffers, ended = {}, {}, set()
     for kind, sock in listeners.items(): selector.register(sock,selectors.EVENT_READ,('listen',kind))
     began = time.monotonic()
-    deadline = began+14430
+    deadline, next_poll = began+14430, began
     try:
         while len(ended) < 2:
             now = time.monotonic()
             if now >= deadline: raise TimeoutError('capture deadline')
             events = selector.select(.1)
-            if not events:
+            if not events and now >= next_poll:
+                next_poll = now+1
                 state = unit_state(run)
                 if state.get('ActiveState') == 'failed' or (now-began >= 30 and state.get('ActiveState') == 'inactive'):
                     raise ValueError('unit exited before capture completion: '+str(state))
