@@ -2,8 +2,9 @@
 //! only so that one control can alter a live mission's retained reference;
 //! everything else goes through the public lifecycle or the journal.
 use crate::adapter::m3d_publication_oracles::{
-    at, count, is_approved, is_dispatch, is_receipt, is_retained, lanes_after, other_page,
-    run_child, sha, PageFx, BAKERY, WRITTEN,
+    at, count, is_approved, is_dispatch, is_receipt, is_retained, lanes_after, load_lines,
+    other_page, run_child, run_child_with, save_lines, scratch, sha, FailOn, PageFx, BAKERY,
+    WRITTEN,
 };
 use crate::coordinator::inspect_history_lines;
 use crate::effect::PendingAction;
@@ -110,12 +111,98 @@ fn m3d_deliverable_tamper_stops_without_fallback() {
     }
 }
 
+/// Db-R1 H1 / Db-R1a: a crash between ActionApproved and its receipt. Every
+/// prefix between them and closure is recovered by a fresh broker; the
+/// unproven one twice, identically, with no closure or ack.
+#[test]
+fn m3d_recovery_never_closes_an_unproven_publication() {
+    let dir = scratch("h1");
+    let env = [("M3D_DB_DIR", dir.display().to_string())];
+    run_child_with(CHILD, "h1-publish", &env);
+    let lines = load_lines(&dir);
+    let events: Vec<Event> = crate::journal::verify(&lines)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.event)
+        .collect();
+    let a = at(&events, is_approved).unwrap();
+    let closed = at(&events, |e| matches!(e, Event::ApprovalClosed { .. })).unwrap();
+    assert_eq!(at(&events, is_receipt), Some(a + 1));
+    let recover = |n: usize| {
+        let mut env = env.to_vec();
+        env.push(("M3D_DB_PREFIX", n.to_string()));
+        let out = run_child_with(CHILD, "h1-recover", &env);
+        let at = out.find("H1-OBS ").expect("observation");
+        out[at..].lines().next().unwrap().to_string()
+    };
+    let unproven = format!(
+        "H1-OBS open=ok state=Some(Failed) reason=Some(\"journal_failed\") notice=Ok(Some({WRITTEN:?})) close=err closures=0 acks=0"
+    );
+    let first = recover(a + 1);
+    assert_eq!(first, unproven);
+    assert_eq!(
+        recover(a + 1),
+        first,
+        "the same crash prefix recovers the same"
+    );
+    for n in a + 2..=closed {
+        let proven = recover(n);
+        assert!(
+            proven.ends_with("closures=1 acks=1"),
+            "prefix {n}: {proven}"
+        );
+    }
+}
+
+/// Db-R1 M2: the settlement receipt append fails (ruling 7 handling).
+#[test]
+fn m3d_settlement_receipt_append_failure_reports_written() {
+    run_child(CHILD, "m2-stop");
+}
+
 #[test]
 fn m3d_replay_rejects_relinked_or_out_of_order_proof() {
     run_child(CHILD, "dr1");
 }
 
 type Records = Vec<(MissionId, Event)>;
+
+/// A fresh broker recovers the saved journal's first `M3D_DB_PREFIX` lines.
+fn recover_prefix(dir: &std::path::Path) {
+    use crate::adapter::m2c_support::{port_for, Home};
+    let n: usize = std::env::var("M3D_DB_PREFIX").unwrap().parse().unwrap();
+    let journal = crate::journal::MemoryJournal::new();
+    journal.set_lines(load_lines(dir)[..n].to_vec());
+    let home = Home::fresh_temp("m3db-h1").unwrap();
+    let port = std::sync::Arc::new(port_for(&home.control, true));
+    let opened = crate::coordinator::Coordinator::open(
+        journal.clone(),
+        port.clone(),
+        crate::coordinator::Lanes::new(crate::oracles::keyed_lanes()).unwrap(),
+        std::sync::Arc::new(nexus_governed_control::authority::clock::SystemClock::default()),
+        home.private(),
+    );
+    let added: Vec<Event> = crate::journal::verify(&journal.lines()).unwrap()[n..]
+        .iter()
+        .map(|e| e.event.clone())
+        .collect();
+    let closures = count(&added, |e| matches!(e, Event::ApprovalClosed { .. }));
+    let id = MissionId(1);
+    let seen = match &opened {
+        Ok(c) => format!(
+            "open=ok state={:?} reason={:?} notice={:?} close={}",
+            c.state(id),
+            c.reason(id),
+            c.file_notice(id),
+            if c.close_ref().is_err() { "err" } else { "ok" }
+        ),
+        Err(_) => "open=err".into(),
+    };
+    println!(
+        "H1-OBS {seen} closures={closures} acks={}",
+        port.acks_tried()
+    );
+}
 
 /// `event` with its JSON field `key` set to `value`.
 fn with_json(event: &Event, key: &str, value: serde_json::Value) -> Event {
@@ -150,7 +237,58 @@ fn m3d_db_internal_child() {
     let Some(case) = crate::adapter::m3d_publication_oracles::child_case() else {
         return;
     };
+    let dir = std::env::var("M3D_DB_DIR").map(std::path::PathBuf::from);
+    if case == "h1-recover" {
+        recover_prefix(&dir.unwrap());
+        println!("m3d-db-receipt:{case}");
+        return;
+    }
     let f = PageFx::new();
+    if case == "h1-publish" || case == "m2-stop" {
+        let m = if case == "m2-stop" {
+            let needle = "\"event\":\"publication_receipt\"";
+            f.session(
+                vec![file("index.html", BAKERY)],
+                FailOn {
+                    memory: f.journal.clone(),
+                    needle,
+                },
+            )
+        } else {
+            f.session(vec![file("index.html", BAKERY)], f.journal.clone())
+        };
+        let id = f.waiting(&m);
+        f.publish(id);
+        if case == "h1-publish" {
+            m.advance(id).unwrap();
+            save_lines(&dir.unwrap(), &f.journal.lines());
+        } else {
+            assert_eq!(m.stop(id), Ok(MissionState::Failed));
+            assert_eq!(m.coordinator.file_notice(id), Ok(Some(WRITTEN)));
+            assert_eq!(m.coordinator.reason(id).as_deref(), Some("journal_failed"));
+            let events = f.events();
+            assert_eq!(count(&events, is_receipt), 0);
+            let ended = |e: &Event| {
+                matches!(e, Event::ApprovalClosed { .. })
+                    || matches!(
+                        e,
+                        Event::Transition {
+                            trigger: Trigger::Settled { .. }
+                        }
+                    )
+            };
+            assert_eq!(
+                count(&events, ended),
+                0,
+                "no closure and no unproven terminal"
+            );
+            assert_eq!(f.port.acks_tried(), 0);
+            assert!(f.journal.is_poisoned());
+            assert_eq!(f.written().unwrap(), BAKERY.as_bytes());
+        }
+        println!("m3d-db-receipt:{case}");
+        return;
+    }
     let m = f.session(vec![file("index.html", BAKERY)], f.journal.clone());
     let id = f.waiting(&m);
     if let Some(kind) = case.strip_prefix("o33b-") {

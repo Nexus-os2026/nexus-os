@@ -37,13 +37,31 @@ pub(crate) fn sha(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+/// Db-R1 L6: page, fact and note canaries; `leaks` is the one detector.
+pub(crate) const CANARIES: [&str; 4] = [
+    "Lemon drizzle",
+    "555-0142",
+    "Rosa's Bakery",
+    "NOTE_CANARY_DB",
+];
+pub(crate) fn leaks(surface: &str) -> Vec<&'static str> {
+    CANARIES
+        .into_iter()
+        .filter(|c| surface.contains(c))
+        .collect()
+}
+
 /// Run `case` of the child test at `path` in a fresh process.
-pub(crate) fn run_child(path: &str, case: &str) {
-    let output = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", path, "--nocapture", "--test-threads=1"])
-        .env(CASE, case)
-        .output()
-        .unwrap();
+pub(crate) fn run_child(path: &str, case: &str) -> String {
+    run_child_with(path, case, &[])
+}
+pub(crate) fn run_child_with(path: &str, case: &str, env: &[(&str, String)]) -> String {
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.args(["--exact", path, "--nocapture", "--test-threads=1"]);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = command.env(CASE, case).output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         output.status.success(),
@@ -54,6 +72,24 @@ pub(crate) fn run_child(path: &str, case: &str) {
         stdout.contains(&format!("m3d-db-receipt:{case}")),
         "{case} ran"
     );
+    stdout.into_owned()
+}
+
+/// A fresh scratch directory and journal lines kept in it (test host I/O).
+pub(crate) fn scratch(label: &str) -> std::path::PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let dir = std::env::temp_dir().join(format!("nexus-m3db-{label}-{nanos}"));
+    create_private(&dir).unwrap();
+    dir
+}
+pub(crate) fn save_lines(dir: &std::path::Path, lines: &[String]) {
+    std::fs::write(dir.join("journal.lines"), lines.join("\n")).unwrap();
+}
+pub(crate) fn load_lines(dir: &std::path::Path) -> Vec<String> {
+    let text = std::fs::read_to_string(dir.join("journal.lines")).unwrap();
+    text.lines().map(str::to_string).collect()
 }
 
 pub(crate) fn child_case() -> Option<String> {
@@ -143,7 +179,7 @@ impl PageFx {
         c.deliverable = Some("index.html".into());
         c.notes = vec![Note {
             label: "notes".into(),
-            text: "Fresh bread every morning.".into(),
+            text: "NOTE_CANARY_DB Fresh bread every morning.".into(),
         }];
         c.page_facts = Some(PageFacts {
             name: "Rosa's Bakery".into(),
@@ -254,7 +290,13 @@ const CHILD: &str = "adapter::m3d_publication_oracles::m3d_db_broker_child";
 
 #[test]
 fn m3d_deliverable_is_private_before_dispatch() {
-    for case in ["o33a-one", "o33a-name", "o33a-two", "o33a-mixed"] {
+    for case in [
+        "o33a-one",
+        "o33a-name",
+        "o33a-two",
+        "o33a-mixed",
+        "o33a-spend",
+    ] {
         run_child(CHILD, case);
     }
 }
@@ -284,6 +326,23 @@ fn m3d_proof_append_failure_prevents_success() {
 fn m3d_overtaken_publication_keeps_marked_settlement_evidence() {
     run_child(CHILD, "overtaken-stop");
     run_child(CHILD, "overtaken-nopolicy");
+}
+
+#[test]
+fn m3d_settlement_without_receipt_reports_receipt_missing() {
+    run_child(CHILD, "m3-stop");
+}
+
+#[test]
+fn m3d_early_publication_settles_with_replayable_proof() {
+    run_child(CHILD, "l4-early");
+}
+
+fn kept_page(f: &PageFx, content: &crate::private::ContentId) -> Vec<u8> {
+    f.home
+        .private()
+        .get(ContentKind::Deliverable, content)
+        .unwrap()
 }
 
 #[test]
@@ -321,16 +380,25 @@ fn m3d_db_broker_child() {
             assert_eq!(bytes, BAKERY.len() as u64);
             let kept = f.home.private().get(ContentKind::Deliverable, &content);
             assert_eq!(kept.unwrap(), BAKERY.as_bytes());
-            let lines = f.journal.lines().join("\n");
-            for canary in ["Lemon drizzle", "555-0142", "Rosa's Bakery"] {
-                assert!(!lines.contains(canary), "{canary}");
-            }
+            // L6 positive control: the detector finds each canary where it is.
+            let note = &f.contract().notes[0].text;
+            assert_eq!(leaks(&format!("{BAKERY} {note} Rosa's Bakery")), CANARIES);
+            assert_eq!(
+                leaks(&String::from_utf8(kept_page(&f, &content)).unwrap()).len(),
+                2
+            );
+            assert_eq!(leaks(&f.journal.lines().join("\n")), Vec::<&str>::new());
             assert_eq!(f.written(), None, "nothing published before approval");
         }
-        "o33a-name" | "o33a-two" | "o33a-mixed" => {
+        "o33a-name" | "o33a-two" | "o33a-mixed" | "o33a-spend" => {
             let effects = match case.as_str() {
                 "o33a-name" => vec![file("page.html", BAKERY)],
                 "o33a-two" => vec![file("index.html", BAKERY); 2],
+                // Db-R1 L5: an actual non-file effect, shape-checked first.
+                "o33a-spend" => vec![EffectRequest::Spend {
+                    amount_minor: 1,
+                    purpose: "flour".into(),
+                }],
                 _ => vec![file("index.html", BAKERY), file("notes.txt", "notes\n")],
             };
             let m = f.session(effects, f.journal.clone());
@@ -340,6 +408,8 @@ fn m3d_db_broker_child() {
             let events = f.events();
             assert_eq!(count(&events, is_retained), 0);
             assert_eq!(count(&events, is_dispatch), 0);
+            let refused = |e: &Event| matches!(e, Event::EffectRefused { .. });
+            assert_eq!(count(&events, refused), 0);
             assert_eq!(f.written(), None);
             assert!(!f.ws.join("page.html").exists());
         }
@@ -359,6 +429,7 @@ fn m3d_db_broker_child() {
             assert_eq!(m.advance(id).unwrap().to, MissionState::Verifying);
             let disk = f.written().unwrap();
             assert_eq!(disk, BAKERY.as_bytes());
+            assert_eq!(leaks(&f.journal.lines().join("\n")), Vec::<&str>::new());
             let events = f.events();
             assert_eq!(count(&events, is_receipt), 1);
             let p = at(&events, is_receipt).unwrap();
@@ -451,7 +522,13 @@ fn m3d_db_broker_child() {
             let reasons = format!("{events:?} {r:?}");
             assert!(!reasons.contains("not_published") && !reasons.contains("NotPublished"));
             // Terminal, no retry: nothing more is asked or written.
-            assert!(m.advance(id).is_err());
+            let again = m.advance(id);
+            assert!(again.is_err());
+            let surface = format!("{reasons} {:?} {:?} {again:?}", r.reason, r.explanation);
+            assert_eq!(
+                leaks(&format!("{surface} {}", f.journal.lines().join(" "))),
+                Vec::<&str>::new()
+            );
             assert_eq!(m.state(id), Ok(Some(MissionState::Failed)));
             assert_eq!(f.events(), events);
         }
@@ -488,7 +565,11 @@ fn m3d_db_broker_child() {
                 let after = at(&events, is_dispatch).unwrap();
                 assert_eq!(lanes_after(&events, after), 0);
                 assert!(f.journal.is_poisoned());
-                assert!(m.advance(id).is_err(), "nothing continues");
+                let again = m.advance(id);
+                assert!(again.is_err(), "nothing continues");
+                let surface = format!("{r:?} {:?} {:?} {again:?}", r.reason, r.explanation);
+                let lines = f.journal.lines().join(" ");
+                assert_eq!(leaks(&format!("{surface} {lines}")), Vec::<&str>::new());
             }
         }
         "overtaken-stop" => {
@@ -543,6 +624,71 @@ fn m3d_db_broker_child() {
             assert_eq!(count(&events, is_approved), 0, "no success transition");
             assert_eq!(lanes_after(&events, p), 0, "no verifier");
             assert_eq!(m.state(id), Ok(Some(MissionState::Blocked)));
+        }
+        "m3-stop" => {
+            // Db-R1 M3: settlement of an observed publication without receipt.
+            let m = f.session(vec![file("index.html", BAKERY)], f.journal.clone());
+            let id = f.waiting(&m);
+            f.publish(id);
+            seam(|_| None);
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked));
+            assert_eq!(m.reason(id), Ok(Some("receipt_missing".into())));
+            let events = f.events();
+            assert_eq!(count(&events, is_receipt), 0);
+            let settled = events.iter().find_map(|e| match e {
+                Event::Transition {
+                    trigger: Trigger::Settled { outcome, .. },
+                } => Some(outcome.clone()),
+                _ => None,
+            });
+            assert!(matches!(
+                settled,
+                Some(crate::evidence::SettlementOutcome::Published { .. })
+            ));
+            assert_eq!(f.written().unwrap(), BAKERY.as_bytes());
+            assert!(crate::coordinator::inspect_history_lines(&f.journal.lines()).is_ok());
+            assert_eq!(leaks(&f.journal.lines().join(" ")), Vec::<&str>::new());
+        }
+        "l4-early" => {
+            // Db-R1 L4: published before ApprovalPending is journaled, then Stop.
+            let m = Arc::new(f.session(vec![file("index.html", BAKERY)], f.journal.clone()));
+            let id = f.started(&m, 2);
+            let (entered, at_hook) = std::sync::mpsc::channel();
+            let (go, wait_go) = std::sync::mpsc::channel::<()>();
+            m.hooks_for_test().file_after_perform_check.arm(0, move || {
+                entered.send(()).unwrap();
+                wait_go.recv_timeout(Duration::from_secs(30)).unwrap();
+            });
+            let worker = {
+                let m = m.clone();
+                std::thread::spawn(move || m.advance(id).map(|r| r.to))
+            };
+            at_hook.recv_timeout(Duration::from_secs(30)).unwrap();
+            f.publish(id);
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked));
+            go.send(()).unwrap();
+            assert!(worker.join().unwrap().is_err());
+            let events = f.events();
+            assert!(!events
+                .iter()
+                .any(|e| matches!(e, Event::ApprovalPending { .. })));
+            let p = at(&events, is_receipt).expect("settlement evidence");
+            assert!(matches!(
+                &events[p],
+                Event::PublicationReceipt {
+                    overtaken: true,
+                    ..
+                }
+            ));
+            assert!(matches!(
+                &events[p + 1],
+                Event::Transition {
+                    trigger: Trigger::Settled { .. }
+                }
+            ));
+            // Replay accepts exactly what live wrote.
+            let replayed = crate::coordinator::inspect_history_lines(&f.journal.lines());
+            assert!(replayed.is_ok(), "{replayed:?}");
         }
         other => panic!("unknown case {other}"),
     }
