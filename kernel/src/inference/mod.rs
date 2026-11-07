@@ -31,8 +31,11 @@ mod exchange;
 pub mod grammar;
 mod identity;
 pub mod ollama;
+mod purpose;
 mod request;
 
+#[cfg(test)]
+mod purpose_tests;
 #[cfg(test)]
 mod tests;
 
@@ -44,6 +47,9 @@ pub use endpoint::LoopbackEndpoint;
 pub use exchange::{AbsoluteDeadline, DeadlineClock, SystemClocks, CALL_HARD_TIMEOUT};
 pub use identity::{ModelIdentity, ModelPinSpec, RuntimeConfig, Think, LOCAL_PROVIDER};
 pub use ollama::VerifiedOllama;
+pub use purpose::{
+    freeze_floor, qualified_floor, Floor, Purpose, QualificationRecord, QUALIFICATIONS,
+};
 pub use request::{
     Conversation, ConversationConfig, MessageRole, ModelReply, ModelRequest, ResponseSchema,
     RetainedAnswer, ANSWER_CAP, CONVERSATION_CONFIG, DELIMITER_INVENTORY,
