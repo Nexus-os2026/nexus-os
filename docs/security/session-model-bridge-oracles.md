@@ -1153,3 +1153,15 @@ Plants, each killed at its named assertion and restored by sha256:
   OPEN on an unlisted cell, IDENTICAL_POINT to a tagged cell, LIFECYCLE
   at the first sink;
 - join guard: an unwrapped held-join test.
+
+### 13.14 B1e oracle re-check (SB3B-R20 (a))
+Codex review-2 found one LOW in the join guard. The guard now requires
+the complete parent-return wrapper `if watched("name") { return; }`,
+compared whitespace-insensitively. It also binds `#[test]` to its fn
+across intervening attributes and blank or comment lines, and scans
+`pub(super)` and `pub(crate)` fns too. Two in-guard controls cover the
+review's escapes: a wrapper without its return, and an intervening
+attribute. Plants, all killed at "a join outside a watched child":
+- the return removed from the grant-revocation wrapper;
+- an attribute between `#[test]` and the fn, with the wrapper removed;
+- the wrapper removed.
