@@ -3685,7 +3685,7 @@ fn sb3_deadline_lapsed_under_the_hold_times_out() {
                 _ => format!("at:model_timeout:{step}"),
             };
             for i in 0..4 {
-                let (f, outcome) = schedule(class, side, i);
+                let (f, outcome) = run_schedule(class, side, i);
                 judge(&f, (side, class, i), &expected, outcome);
             }
         }

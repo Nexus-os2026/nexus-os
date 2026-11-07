@@ -1242,7 +1242,7 @@ attribute. Plants, all killed at "a join outside a watched child":
 - an attribute between `#[test]` and the fn, with the wrapper removed;
 - the wrapper removed.
 
-### 13.15 B1e join guard fails closed (SB3B-R21)
+### 13.17 B1e join guard fails closed (SB3B-R21; 13.15 on the B1e branch)
 Codex review-3, 1 LOW: the guard missed nested-module and macro tests,
 multiline attributes, helpers defined in other files, and aliased
 helpers. It now fails on any form it cannot positively classify:
