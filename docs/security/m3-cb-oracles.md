@@ -53,19 +53,19 @@ QM-MIN pins 708/1301 bytes and d339e4d57e7ad041a4f18d4dc933063be52d15eef2620de30
 Counter reads are on the lane thread before invocation, at second caller entry,
 and immediately after actual invocation; synchronized values cross threads.
 Test-only seams inject marker results, post-render size, and unvalidated inputs.
-The source control pins the complete marker acquisition body and rejects fixed,
-counter, timestamp, seeded and cached replacements (including v4-shaped data).
+The source control pins marker() and invoke_in: exactly one match marker(), no
+other generator; helper/call-site deterministic substitutes are rejected (Cb1-R3).
 
 | Oracle (m3cb_ prefix) | Frozen judgment | Inert observation |
 |---|---|---|
 | identity_and_context_are_fixed | identity/cap, role/caller/binding precedence | RED: inert identity/cap |
 | validates_immediately_before_borrow | hash/contract/invocation/skipped content; positive caller | RED: assembler_fault vs page_input_identity |
 | contract_credential_screen_is_not_ca_validation | Ca accepts synthetic credential; contract/lane refuse; normal/Unicode caller | RED: assembler_fault vs page_input_invalid |
-| facts_ready_precedes_answer | email/41-character facts refused before caller; ready positive | RED: assembler_fault vs facts_not_page_ready |
+| facts_ready_precedes_answer | email/41-character facts refused before caller; ready positive; lane.rs readiness branch masked by validate (defense in depth, coverage unresolved) | RED: assembler_fault vs facts_not_page_ready |
 | caller_errors_are_terminal_and_content_free | all BrokerClass Refused/Failed, invalidated/debt; exact closed output, one entry | RED: assembler_fault vs model_invalidated |
 | oversize_never_enters_caller | actual checked constructor: 3937 refused, 3936 enters | RED: assembler_fault vs model_request_too_large |
 | marker_failure_fails_closed (direct) | typed/format faults, clear fault/default control | RED: assembler_fault vs model_record_unavailable |
-| marker_source_is_broker_only | complete source body and deterministic negative controls | RED: source body absent |
+| marker_source_is_broker_only | pinned helper/invoke_in bodies, single acquisition; helper/call-site counter negative controls | RED: source body absent |
 | real_lane_charges_each_attempt | 1/1/1/1 or 2/2/2/2; exact full File bytes; one reservation | sandbox_blocked |
 | corrections_are_exact_and_content_free | all eight literal blocks; exact two-message wire, fresh marker, canary absent | sandbox_blocked |
 | needles_and_transport_failures_do_not_retry | needle/truncated/tool/thinking/transport/pre-dispatch; exact codes/counts | sandbox_blocked |
@@ -120,3 +120,11 @@ Linux test convention: `python3`) asserts exactly one `model_call` body with
 `detail.op = model_call`, `detail.outcome = unavailable`, and no `detail.call`
 index. Neither the record nor the meaning of `attempts()` changes. No retry,
 production/lifecycle change or assertion weakening is authorized.
+
+## Cb1-R1 / R3 — authorized controls and scope ledger
+
+R1.1: identifier-boundary `model_record` guard; real non-test seam remains RED,
+three cfg(test) sites retained. R1.2: stacked Linux/test cfg; R1.3: capture alias.
+Scope ledger: `c1b_port_oracles.rs` authorized by R1.1/R2; no production changes.
+R3: additive call-site source control; local v4-counter plant must fail it.
+L2 same-process cross-invocation freshness and L3 cap-positive Verifier stay Cb2.
