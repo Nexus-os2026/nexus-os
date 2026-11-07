@@ -303,10 +303,17 @@ fn sb2_public_model_item(line: &str) -> bool {
         }
 }
 fn sb2_facade_line(line: &str) -> bool {
-    (!line.contains("inference") && !line.contains("model_"))
+    (!line.contains("inference")
+        && !line.contains("model_")
+        && !line
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|w| w == "model"))
         || matches!(
             line,
             "mod model;" | "mod model_tests;" | "mod model_death_tests;"
+                // Existing private Core storage and its initialization only.
+                | "model: model::ModelSlot," | "model: model::ModelSlot::default(),"
+                | "if !self.core.model.ready()? {"
         )
 }
 #[test]
@@ -321,6 +328,19 @@ fn sb2_facade_rejects_multiline_registration() {
     ]
     .into_iter()
     .all(sb2_facade_line));
+}
+#[test]
+fn sb2_facade_rejects_model_module_aliases() {
+    for plant in [
+        "use model as hidden;",
+        "use self::model as hidden;",
+        "use super::{model as hidden};",
+    ] {
+        assert!(
+            !sb2_facade_line(plant),
+            "reject model module alias: {plant}"
+        );
+    }
 }
 #[test]
 fn c1_s1_session_sources_have_no_model_route() {
@@ -755,4 +775,13 @@ fn c1_s6_model_codes_are_closed_and_round_trip() {
 /// Reuse the existing cfg(test) seam from the fixture module already scanned.
 pub(crate) fn record_next(port: &GovernedPort, status: EndStatus) {
     *port.model_record.lock().unwrap() = Some(status);
+}
+
+#[test]
+fn sb2_facade_rejects_multiline_model_alias() {
+    let plant = "pub unsafe fn raw(\n&self,\n) -> model::RegistrationReceipt { unreachable!() }";
+    assert!(
+        !plant.lines().map(str::trim).all(sb2_facade_line),
+        "alias facade escape"
+    );
 }
