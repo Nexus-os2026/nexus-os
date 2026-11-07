@@ -10,6 +10,7 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import mmap
 import os
 from pathlib import Path
 import platform
@@ -170,8 +171,25 @@ def isolation(context):
     require(not any(Path('/work/target').iterdir()),'target must start cold')
     return dict(target_cold=True,pid=1,uid=os.getuid(),namespaces=namespaces,mounts=records,fsync=True,caps_zero=True,nnp=1,readonly=True,awk=loader)
 
+def non_native_abi():
+    # i386 getpid via int 0x80, independent of the Python/native syscall ABI.
+    pid = os.fork()
+    if pid == 0:
+        try:
+            with mmap.mmap(-1,4096,prot=mmap.PROT_READ|mmap.PROT_WRITE|mmap.PROT_EXEC) as code:
+                code.write(bytes.fromhex('b814000000cd80c3'))
+                address = ctypes.addressof(ctypes.c_char.from_buffer(code))
+                result = ctypes.CFUNCTYPE(ctypes.c_int)(address)()
+                os._exit(0 if result == -errno.EPERM else 1)
+        except BaseException: os._exit(2)
+    _,status = os.waitpid(pid,0)
+    if os.WIFSIGNALED(status) and os.WTERMSIG(status)==signal.SIGSYS: return 'SIGSYS'
+    require(os.WIFEXITED(status) and os.WEXITSTATUS(status)==0,'non-native ABI not denied')
+    return 'EPERM'
+
 def syscall_probe():
     require(platform.machine()=='x86_64','native ABI probe requires frozen x86_64 host')
+    non_native = non_native_abi()
     libc = ctypes.CDLL(None,use_errno=True); libc.syscall.restype = ctypes.c_long; L = ctypes.c_long
     calls = {'ptrace':(101,16,999999,0,0),'process_vm_readv':(310,os.getpid(),0,0,0,0,0),
              'pidfd_getfd':(438,-1,0,0),'perf_event_open':(298,0,0,-1,-1,0)}
@@ -195,7 +213,7 @@ def syscall_probe():
     program = Program(len(ins),array)
     require(libc.syscall(L(317),L(1),L(0),ctypes.byref(program))==0,'nested seccomp installation')
     inner = observed(); require(set(inner.values())=={'ENOSYS'},'nested syscall precedence')
-    return dict(openat2=True,outer=outer,inner=inner,abi=platform.machine())
+    return dict(openat2=True,outer=outer,inner=inner,abi=platform.machine(),non_native_abi=non_native)
 
 def process_identity(text):
     # comm may contain spaces and parentheses; starttime is field 22, after comm.
@@ -338,7 +356,8 @@ def validate_sensor(row,value):
     if row=='A6':
         calls = value['syscalls']
         require(calls.get('openat2') and set(calls.get('outer',{}).values())=={'EPERM'}
-                and set(calls.get('inner',{}).values())=={'ENOSYS'},'syscall observations')
+                and set(calls.get('inner',{}).values())=={'ENOSYS'}
+                and calls.get('non_native_abi') in ('SIGSYS','EPERM'),'syscall observations')
 
 def payload(private_fds=()):
     context = json.loads(Path('/gate/policy/probe-context.json').read_bytes())
