@@ -2444,13 +2444,18 @@ impl<P: EffectPort> Coordinator<P> {
     /// Journal the mission's open action closed, once the port confirms
     /// the broker no longer holds it open. `Ok(false)`: not confirmed.
     fn close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
-        let (open, file_action) = self.step(|inner| {
+        let (open, file_action, unrecorded) = self.step(|inner| {
             let m = inner.mission(id)?;
             Ok((
                 m.open_action.clone(),
                 m.file_mode && m.dispatched_kind == Some(EffectKind::File),
+                m.proof.unrecorded,
             ))
         })?;
+        // Db2-R1 L2: an unrecorded proof's action is never journaled closed.
+        if unrecorded {
+            return Ok(false);
+        }
         if file_action {
             return self.file_close_action(id);
         }
@@ -3349,6 +3354,9 @@ fn replay(
                         if open == effect && action.as_ref() != Some(pending) {
                             return Err(V::SettlementConflict);
                         }
+                    }
+                    if page_proof::early_conflict(mission, *effect, action.as_ref()) {
+                        return Err(V::ProofConflict);
                     }
                 }
                 _ => {}

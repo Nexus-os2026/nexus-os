@@ -458,6 +458,10 @@ impl<P: EffectPort> Coordinator<P> {
         })
     }
 
+    pub(super) fn file_unrecorded(&self, id: MissionId) -> Result<bool, CoordinatorError> {
+        self.try_with_lock(|inner| Ok(inner.missions.get(&id).is_some_and(|m| m.proof.unrecorded)))
+    }
+
     /// This path is reachable only from a ConfirmedNotPublished snapshot.
     /// The proof survives cancellation; first-cause Stop still takes precedence.
     pub(super) fn file_nonpublication_end(
@@ -508,7 +512,13 @@ impl<P: EffectPort> Coordinator<P> {
     pub(super) fn file_ack_all(&self, id: MissionId) -> Result<(), CoordinatorError> {
         let acks = self.try_with_lock(|inner| {
             inner.usable()?;
-            Ok(inner.mission(id)?.acks.clone())
+            let m = inner.mission(id)?;
+            // Db2-R1 L2: an unrecorded proof's ack stays owed, on every path.
+            Ok(if m.proof.unrecorded {
+                Vec::new()
+            } else {
+                m.acks.clone()
+            })
         })?;
         let mut first = None;
         for action in acks {
@@ -536,7 +546,7 @@ impl<P: EffectPort> Coordinator<P> {
         self.try_with_lock(|inner| {
             inner.usable()?;
             let m = inner.mission(id)?;
-            if m.terminal_uncertain || m.unresolved_file.is_some() {
+            if m.terminal_uncertain || m.unresolved_file.is_some() || m.proof.unrecorded {
                 return Ok(false);
             }
             let Some((effect, pending)) = m.open_action.clone() else {

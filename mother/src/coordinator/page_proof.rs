@@ -18,6 +18,9 @@ pub(super) struct Proof {
     pub(super) returned: Option<InvocationId>,
     pub(super) retained: Option<Retained>,
     pub(super) receipt: Option<u64>,
+    /// Replay only: the action of a settlement receipt journaled before any
+    /// pending identity (Db-R1 L4); the Settled line must name it.
+    pub(super) early: Option<PendingAction>,
     /// In memory only: a written page whose proof the journal lacks.
     pub(super) unrecorded: bool,
 }
@@ -108,6 +111,12 @@ pub(super) fn unproven(m: &Mission) -> bool {
     })
 }
 
+/// Db2-R1 L3: a Settled line for an early receipt's effect that names
+/// another action (or none).
+pub(super) fn early_conflict(m: &Mission, effect: u64, action: Option<&PendingAction>) -> bool {
+    m.proof.receipt == Some(effect) && m.proof.early.as_ref().is_some_and(|e| action != Some(e))
+}
+
 /// Db-R1 M3: the settlement end replay expects for a page publication.
 pub(super) fn settled_end(
     m: &Mission,
@@ -192,6 +201,9 @@ pub(super) fn replay(m: &mut Mission, entry: &Entry) -> Result<(), ReplayViolati
                 && m.unresolved_file.is_none();
             if !clean && !settling {
                 return Err(V::ProofOutOfPlace);
+            }
+            if m.open_action.is_none() {
+                m.proof.early = Some(action.clone());
             }
             m.proof.receipt = Some(*effect);
         }
