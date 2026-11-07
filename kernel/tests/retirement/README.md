@@ -549,3 +549,14 @@ are each `f7-dependency`; at K02/K03 the K04 declaration itself is still RED.
 A live plant (`kernel/src/config/planted_unregistered.rs` plus its declaration)
 was RED and then restored byte for byte; it was never committed. The completed
 K04 BLOCKED note above is historical and superseded by this registration.
+
+## K05 oracle registration (LIVE_STAGE = 5, before deletion)
+
+`test(oracle-add)` — Frozen 2026-11-07 ruling: activate stage 5 before removal.
+Live path, declaration and symbol assertions must compile and fail at runtime.
+The eleven distinctive checkpoint identities are forbidden before the retiring
+exemption; colliding SideEffect/StepOutput names and comments remain allowed.
+Inert private fixture stubs exercise retained, later-retiring and unknown paths
+at K05–K22. Existing R-5/R-6/R-8, inventories and all retained tests stay unchanged.
+The 32 checkpoint inline tests retire with their implementation; the 13 governed
+restore tests remain mandatory. No later retirement or integration is authorized.

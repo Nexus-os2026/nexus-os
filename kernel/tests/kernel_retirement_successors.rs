@@ -1,5 +1,5 @@
-//! Registered POLICY successors. K01 runs these ONLY on synthetic trees.
-//! LIVE_STAGE remains 1. Activation requires the matching reviewed K deletion;
+//! Registered POLICY successors: synthetic K02–K22 and the explicit live stage.
+//! K05 preregisters runtime-red absence controls before the reviewed deletion;
 //! existing F7/HM/logging/web/acceptance guards are not bypassed here.
 #[allow(dead_code)]
 mod retirement;
@@ -590,6 +590,19 @@ const NO_HANDOFF: [&str; 26] = [
 /// Kernel inventories and staged retirement absence rules under R-6. This is
 /// a source oracle, not a semantic Rust/data-flow proof. Existing authority,
 /// labelled-write, transport, broker, privacy and resolved-graph guards remain.
+const CHECKPOINT_SYMBOLS: [&str; 11] = [
+    "ExecutionCheckpoint",
+    "SideEffectType",
+    "CompensationAction",
+    "RollbackResult",
+    "RecoveryStrategy",
+    "StepInfo",
+    "CheckpointPolicy",
+    "CheckpointError",
+    "SideEffectTracker",
+    "CheckpointManager",
+    "CheckpointStats",
+];
 fn successor(stage: u8, tree: &Tree) -> Findings {
     assert!((2..=22).contains(&stage));
     let mut found = Findings::new();
@@ -766,6 +779,14 @@ fn successor(stage: u8, tree: &Tree) -> Findings {
                 .any(|word| identifier(&code, word) || identifier(&text, word))
         {
             found.insert(("hm-no-handoff", path.clone()));
+        }
+        // K05 applies even inside a subject scheduled for later retirement.
+        if stage >= 5
+            && CHECKPOINT_SYMBOLS
+                .iter()
+                .any(|name| identifier(&code, name))
+        {
+            found.insert(("f7-dependency", path.clone()));
         }
         if retiring(path, stage) {
             continue;
