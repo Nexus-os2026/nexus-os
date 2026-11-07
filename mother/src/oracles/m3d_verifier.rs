@@ -16,9 +16,9 @@ use crate::lane::{input_hash, output_hash, InvocationId, Lane, LaneContext, Lane
 use crate::lane::{LaneInput, LaneOutput, LaneRole, ModelCallError, ModelCaller};
 use crate::lane::{ScriptedLane, Verdict};
 use crate::oracles::lite_support::file;
-use crate::oracles::{contract_with, keyed_lanes};
+use crate::oracles::{contract_with, keyed_lanes, m3d_manifest::maximum_contract, world_with};
 use crate::page_inputs::PageFacts;
-use crate::page_verifier::VerificationInput;
+use crate::page_verifier::{report_digest, VerificationInput};
 use crate::page_verifier::{PageVerifierLane, ReceiptFields, VerificationIdentity};
 use crate::state::{MissionState, Trigger};
 use crate::verifier::{verify_page, CheckCode, CheckId, Receipt, VerifierReport};
@@ -241,6 +241,8 @@ fn m3d_verifier_requires_live_clean_publication() {
         "o34-other-action",
         "o34-other-mission",
         "o34-no-policy",
+        "o34-deadline",
+        "o34-uncertain",
     ] {
         run_child(CHILD, case);
     }
@@ -280,6 +282,20 @@ fn m3d_durable_checks_gate_verify_pass() {
     ] {
         assert_eq!(is_check_result(id, code), ok, "{code}");
     }
+    // Dc1-R1: no File session, no checks: a passing Verifier runs (D-I2), no pass.
+    let (calls, mut lanes) = (Arc::new(AtomicUsize::new(0)), keyed_lanes());
+    lanes.retain(|l| l.identity().role != LaneRole::Verifier);
+    let pass = Arc::new(ScriptedLane::new(LaneRole::Verifier, "ok", Verdict::Pass));
+    lanes.push(Arc::new(Counted(calls.clone(), pass)));
+    let w = world_with(lanes);
+    let id = w.approved(maximum_contract('A'));
+    (0..4).for_each(|_| drop(w.mother.advance(id).unwrap()));
+    let (reason, journal) = (w.mother.reason(id), w.mother.journal().unwrap());
+    assert_eq!(w.mother.state(id), Some(MissionState::Failed));
+    assert_eq!(reason.as_deref(), Some("verifier_gave_no_verdict"));
+    let events: Vec<_> = journal.into_iter().map(|e| e.event).collect();
+    assert_eq!(calls.load(SeqCst), 1);
+    assert_eq!(count(&events, is_verification) + count(&events, is_pass), 0);
     for case in [
         "clean",
         "dv2-mismatch",
@@ -314,6 +330,8 @@ fn m3d_replay_rejects_relinked_verification_proof() {
     let bad = |edit: &dyn Fn(&mut Checks, &mut String)| {
         let (mut c, mut d) = (checks.clone(), PASS_DIGEST.to_string());
         edit(&mut c, &mut d);
+        let stale = d != PASS_DIGEST; // Dc1-R1: else recomputed
+        let d = if stale { d } else { report_digest(&c) };
         let e = Event::VerificationRecorded {
             invocation: InvocationId {
                 mission: MissionId(1),
@@ -497,10 +515,16 @@ fn m3d_dc1_child() {
             assert_eq!(m.advance(id).unwrap().to, MissionState::Done);
             assert_eq!(calls.load(SeqCst), 1);
         }
-        "o34-denied" | "o34-lapsed" | "o34-stopped" => {
+        "o34-denied" | "o34-lapsed" | "o34-stopped" | "o34-deadline" | "o34-uncertain" => {
             let id = f.waiting(&m);
             match case.as_str() {
                 "o34-denied" => f.deny(id),
+                "o34-deadline" | "o34-uncertain" => {
+                    let mut inner = m.coordinator.inner.lock().unwrap();
+                    let held = inner.missions.get_mut(&id).unwrap().open_action.as_mut();
+                    let d = &mut held.unwrap().1.deadline_mono_ms; // passed / not the broker's
+                    *d = if case == "o34-deadline" { 0 } else { *d + 1 };
+                }
                 "o34-lapsed" => {
                     let run = RunId::parse(&f.port.pending(id).unwrap().run).unwrap();
                     f.home.control.cancel_run(run).unwrap();
@@ -688,8 +712,14 @@ fn m3d_dc1_child() {
                     "checks code",
                     NotEvidence,
                     Box::new(move |r: &mut Records| {
-                        if let Event::VerificationRecorded { checks, .. } = record(r, v) {
+                        if let Event::VerificationRecorded {
+                            checks,
+                            report_digest,
+                            ..
+                        } = record(r, v)
+                        {
                             checks[2].1 = format!("fail:{CANARY}");
+                            *report_digest = crate::page_verifier::report_digest(checks);
                         }
                     }),
                 ),

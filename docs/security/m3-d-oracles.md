@@ -273,13 +273,13 @@ the current proof. After the answer: no typed report (or effects) →
 `verifier_gave_no_verdict`; report not bound to the input → identity code;
 otherwise `verification_recorded` is appended, then the first table-order
 failure becomes `VerifyFail{check:<code>}`, or a recorded all-pass (and a
-Pass verdict) proceeds. A File page mission's VerifyPass requires a
-recorded all-pass. Append failure: Failed `journal_failed`,
+Pass verdict) proceeds. A page mission's VerifyPass, live and at replay,
+requires a recorded all-pass. Append failure: Failed `journal_failed`,
 `written; proof not recorded`, journal poisoned, no VerifyPass.
 Replay: the record must follow the Verifier's own LaneReturned in
 Verifying, after a clean receipt of its effect, once (`ProofOutOfPlace`,
-`ProofConflict`). Gates apply in File sessions; a non-File coordinator
-(which cannot publish) keeps legacy Verifier semantics, as Da's D-I2 needs.
+`ProofConflict`). Non-File coordinators keep invoking their Verifier lane
+(Da's D-I2 counts it) but a page mission there can never pass.
 Replay holds no contract body: it gates VerifyPass where a page was retained.
 
 ## Oracle-first matrix (Dc1)
@@ -295,10 +295,11 @@ Replay holds no contract body: it gates VerifyPass where a page was retained.
 | D-P3 (verification append) | m3d_verification_append_failure_prevents_success | red: verifier_gave_no_verdict, not journal_failed |
 
 O34 exercises denied, lapsed (run cancelled), stopped, overtaken
-(Stop after publication), no publication, and tampered in-memory proof
-(overtaken, other action, other mission, no policy). Expired and uncertain
-end in the same pre-Verifying terminal paths; they are not separately
-exercised here (no real-broker clock seam in scope).
+(Stop after publication), no publication, tampered in-memory proof
+(overtaken, other action, other mission, no policy), and Mother's held
+deadline moved past or off the broker's (both end file_publication_uncertain;
+a broker-clock `approval_expired` is not exercised: no clock seam here).
+Dc1-R1 on aaecb642: red D-V2 non-File scripted pass (Done); green D-R1 recomputed digests, O34 deadline/uncertain.
 
 Every Da/Db oracle stayed green on the inert surface. All seven are
 behavioral runtime failures; nothing failed to compile.
@@ -312,7 +313,8 @@ behavioral runtime failures; nothing failed to compile.
 | MP-D-V2 omit each identity field (7) | m3d_verification_identity_hashes_every_field |
 | MP-D-V3 trust the skipped payload | m3d_verification_payload_mismatch_is_refused |
 | MP-D-V4 accept arbitrary lane text as a check code | m3d_durable_checks_gate_verify_pass |
-| MP-D-R1 omit verification replay ordering/linkage | m3d_replay_rejects_relinked_verification_proof |
+| MP-D-R1 omit verification replay ordering/linkage, or length/order/code | m3d_replay_rejects_relinked_verification_proof |
+| MP-D-R1-2 pass a non-File page with no recorded checks | m3d_durable_checks_gate_verify_pass |
 
 # M3-Dc2 oracle register: teaching, claims guard, explain() gate
 
