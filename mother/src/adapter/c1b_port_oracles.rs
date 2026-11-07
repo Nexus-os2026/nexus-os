@@ -544,7 +544,10 @@ fn c1_s3_record_seam_is_test_only() {
             let text = std::fs::read_to_string(&path).unwrap();
             let lines: Vec<&str> = text.lines().map(str::trim).collect();
             for (at, line) in lines.iter().enumerate() {
-                if line.contains("model_record") {
+                if line
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|token| token == "model_record")
+                {
                     let above = lines[..at].iter().rev().find(|l| !l.is_empty());
                     assert_eq!(
                         above,
