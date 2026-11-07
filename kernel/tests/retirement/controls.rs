@@ -715,6 +715,9 @@ fn k05_checkpoint_no_return_controls() {
                 "kernel/src/replacement_checkpoint.rs",
             ] {
                 // Inert private stubs: fixture code only, never a replacement runtime.
+                // replacement_checkpoint.rs is an unregistered path, so it is
+                // f7-dependency by path; it is not counted as symbol coverage
+                // (privacy.rs and stage-5 persistence.rs prove the symbol rule).
                 let mut tree = clean_tree(stage);
                 tree.entry(path.into())
                     .or_default()

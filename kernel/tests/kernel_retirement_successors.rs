@@ -587,9 +587,7 @@ const NO_HANDOFF: [&str; 26] = [
     "task_context",
 ];
 
-/// Kernel inventories and staged retirement absence rules under R-6. This is
-/// a source oracle, not a semantic Rust/data-flow proof. Existing authority,
-/// labelled-write, transport, broker, privacy and resolved-graph guards remain.
+/// K05 checkpoint identities banned in non-test kernel code (kernel/ only; R-6).
 const CHECKPOINT_SYMBOLS: [&str; 11] = [
     "ExecutionCheckpoint",
     "SideEffectType",
@@ -603,6 +601,10 @@ const CHECKPOINT_SYMBOLS: [&str; 11] = [
     "CheckpointManager",
     "CheckpointStats",
 ];
+
+/// Kernel inventories and staged retirement absence rules under R-6. This is
+/// a source oracle, not a semantic Rust/data-flow proof. Existing authority,
+/// labelled-write, transport, broker, privacy and resolved-graph guards remain.
 fn successor(stage: u8, tree: &Tree) -> Findings {
     assert!((2..=22).contains(&stage));
     let mut found = Findings::new();

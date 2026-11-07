@@ -560,3 +560,12 @@ Inert private fixture stubs exercise retained, later-retiring and unknown paths
 at K05–K22. Existing R-5/R-6/R-8, inventories and all retained tests stay unchanged.
 The 32 checkpoint inline tests retire with their implementation; the 13 governed
 restore tests remain mandatory. No later retirement or integration is authorized.
+
+## K05 deletion (done)
+
+`refactor(kernel)` cdc707ba removed `kernel/src/checkpoint.rs` and its `lib.rs`
+declaration under the stage-5 oracle above; no caller or re-export remained.
+Limit: the symbol ban scans masked, non-`cfg(test)` code under `kernel/` only.
+Other crates are not scanned (R-6: the compiler resolves cross-crate use), so
+this is not a workspace-wide absence claim. The `replacement_checkpoint.rs`
+plant is an unregistered-path receipt, not symbol-rule coverage.
