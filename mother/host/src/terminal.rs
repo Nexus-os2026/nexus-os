@@ -1283,25 +1283,6 @@ pub(crate) fn reader_state(shared: &Shared, boundary: Option<u64>) -> ReaderMode
         read: ready.then_some(input.goal_read),
     }
 }
-/// Test form of [`reader_state`]: whether discarded, and whether goal input.
-#[cfg(test)]
-pub(crate) fn reader_mode(shared: &Shared, boundary: Option<u64>) -> (bool, bool) {
-    let mode = reader_state(shared, boundary);
-    (mode.discard, mode.read.is_some())
-}
-/// Test form of [`route_read`]: goal input is the current goal read's.
-#[cfg(test)]
-pub(crate) fn route(
-    shared: &Shared,
-    buffers: &mut Buffers,
-    bytes: &[u8],
-    discard: bool,
-    goal: bool,
-) {
-    let read = goal.then(|| shared.input().goal_read);
-    route_read(shared, buffers, bytes, ReaderMode { discard, read });
-}
-
 /// One read's bytes through the buffers. A line finishes with the owner its
 /// first byte gave it. After a goal-mode line the rest of the read is
 /// discarded input (Stop, Quit and EOF still act).

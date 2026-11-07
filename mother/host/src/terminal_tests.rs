@@ -693,7 +693,7 @@ mod m3a {
     use super::scripted;
     use crate::goal_input::{goal_display, read_typed_goal, GoalBuffer, GoalLine, GOAL_PROMPT};
     use crate::inputs::{validate_goal, InputError};
-    use crate::terminal::{reader_mode, route, Buffers, Frame, Shared};
+    use crate::terminal::{reader_state, route_read, Buffers, Frame, ReaderMode, Shared};
     use nexus_governed_control::authority::evidence::shown;
     use std::sync::{mpsc::Receiver, Arc};
     use std::thread::JoinHandle;
@@ -855,9 +855,13 @@ mod m3a {
         drop(input);
         let mut buffers = Buffers::default();
         // A whole line typed during the display gap: stale, never a goal.
-        let (discard, goal) = reader_mode(&shared, Some(boundary));
-        assert_eq!((discard, goal), (true, false));
-        route(&shared, &mut buffers, gap, discard, goal);
+        let mode = reader_state(&shared, Some(boundary));
+        let stale = ReaderMode {
+            discard: true,
+            read: None,
+        };
+        assert_eq!(mode, stale);
+        route_read(&shared, &mut buffers, gap, mode);
         let mut input = shared.input();
         input.acknowledged = boundary;
         drop(input);
@@ -866,8 +870,8 @@ mod m3a {
         (shared, frames, buffers, worker)
     }
     fn type_in(shared: &Shared, buffers: &mut Buffers, bytes: &[u8]) {
-        let (discard, goal) = reader_mode(shared, None);
-        route(shared, buffers, bytes, discard, goal);
+        let mode = reader_state(shared, None);
+        route_read(shared, buffers, bytes, mode);
     }
     fn frames_until(frames: &Receiver<Frame>, last: &str) -> Vec<String> {
         let mut seen = Vec::new();
@@ -1024,7 +1028,7 @@ mod m3a_r13 {
     use super::scripted;
     use crate::goal_input::GOAL_PROMPT;
     use crate::inputs::{validate_goal, InputError};
-    use crate::terminal::{reader_state, route, route_read, Buffers, Frame, HookPoint, Shared};
+    use crate::terminal::{reader_state, route_read, Buffers, Frame, HookPoint, Shared};
     use std::sync::mpsc::Receiver;
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
@@ -1669,7 +1673,8 @@ mod m3a_r13 {
         assert!(!timeout.timed_out());
         let boundary = input.boundary;
         drop(input);
-        route(shared, buffers, &[], true, false);
+        let mode = reader_state(shared, Some(boundary));
+        route_read(shared, buffers, &[], mode);
         shared.input().acknowledged = boundary;
         shared.changed.notify_all();
         loop {
@@ -1681,8 +1686,8 @@ mod m3a_r13 {
         worker
     }
     fn type_in(shared: &Shared, buffers: &mut Buffers, bytes: &[u8]) {
-        let (discard, goal) = crate::terminal::reader_mode(shared, None);
-        route(shared, buffers, bytes, discard, goal);
+        let mode = reader_state(shared, None);
+        route_read(shared, buffers, bytes, mode);
     }
 
     // Review-2 MED: `Please `, timeout, then Ctrl-U and `run\r` (and the
@@ -1770,7 +1775,8 @@ mod m3a_r13 {
         let shared = c.shared.clone();
         let mut buffers = Buffers::default();
         let (a, boundary) = begin_read(&shared, &frames, Duration::from_millis(1500));
-        route(&shared, &mut buffers, &[], true, false);
+        let mode = reader_state(&shared, Some(boundary));
+        route_read(&shared, &mut buffers, &[], mode);
         shared.acknowledge(boundary);
         until_frame(&frames, "INPUT READY\n");
         let (paused_tx, paused) = std::sync::mpsc::channel();
@@ -1826,5 +1832,32 @@ mod m3a_r13 {
         for b_ready in [false, true] {
             paused_handoff(HookPoint::Start, b"x\r", b_ready);
         }
+    }
+
+    // M3E-R17: a snapshot the test path saved while read A was ready never
+    // publishes to read B, which began and became ready afterwards.
+    #[test]
+    fn m3e_m3a_r17_a_saved_snapshot_never_publishes_to_a_newer_read() {
+        let (c, frames) = scripted();
+        let shared = c.shared.clone();
+        let mut buffers = Buffers::default();
+        let (a, boundary) = begin_read(&shared, &frames, Duration::from_millis(1500));
+        let mode = reader_state(&shared, Some(boundary));
+        route_read(&shared, &mut buffers, &[], mode);
+        shared.acknowledge(boundary);
+        until_frame(&frames, "INPUT READY\n");
+        let saved = reader_state(&shared, None);
+        assert!(saved.read.is_some(), "A is ready at the snapshot");
+        assert_eq!(a.join().unwrap(), Err("goal_timed_out"), "A ends");
+        let (b, boundary) = begin_read(&shared, &frames, Duration::from_secs(10));
+        let mode = reader_state(&shared, Some(boundary));
+        route_read(&shared, &mut buffers, &[], mode);
+        shared.acknowledge(boundary);
+        until_frame(&frames, "INPUT READY\n");
+        // The reader routes bytes it read under A's snapshot.
+        route_read(&shared, &mut buffers, b"x\r", saved);
+        assert!(shared.input().goal_line.is_none(), "A's line is not B's");
+        type_in(&shared, &mut buffers, b"new goal\r");
+        assert_eq!(b.join().unwrap(), Ok("new goal".into()), "B's own line");
     }
 }

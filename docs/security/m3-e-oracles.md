@@ -307,7 +307,9 @@ size is at its cap). Code: `mother/host/src/terminal.rs`. Tests: the
   the snapshot), `Byte(i)` and `Publish` (before publication). The goal
   read's transitions are named production functions (`goal_begin`,
   `goal_ready`, `goal_end`, `acknowledge`), used by `read_goal`, the reader
-  and the harness alike. `reader_mode` and `route` are test-only forms.
+  and the harness alike. Every test routes through `reader_state` and
+  `route_read` with the complete `ReaderMode` (R17: the split test adapters
+  are removed).
 
 ### Oracles
 
@@ -317,6 +319,7 @@ size is at its cap). Code: `mother/host/src/terminal.rs`. Tests: the
 | `m3e_m3a_r15_interrupted_publication_never_reaches_another_read` | Five named schedules (timeout, or timeout and a new read, at publication or inside the read): each read returns only its own line; the model agrees. |
 | `m3e_m3a_r15_a_goal_paused_before_publication_never_reaches_the_next_read` | Real `read_goal` workers. A's `old goal` is complete, the reader pauses before publication, A times out, B begins (not ready, then ready), the reader resumes: no goal is published to B; B returns its own `new goal`; two production read ids. |
 | `m3e_m3a_r15_a_stale_mode_snapshot_never_takes_the_next_read_id` | The same, paused right after the reader's mode snapshot (A ready) and before routing `x\r`: `x` never reaches B. |
+| `m3e_m3a_r17_a_saved_snapshot_never_publishes_to_a_newer_read` (R17) | Through the test path: a snapshot saved while A is ready; A times out; B begins and is ready through the reader's own boundary path; routing `x\r` under the saved snapshot publishes nothing to B; B returns its own `new goal`. |
 
 ## M-3b — page teaching display (data-only) and O34
 
