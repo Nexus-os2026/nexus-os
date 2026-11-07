@@ -150,6 +150,8 @@ struct RunEntry {
     inference_admission: Option<InferenceAdmission>,
     /// M2e-B: the model calls this run attempted (never refunded).
     model_attempts: u32,
+    /// Exact outstanding model owners, distinct from File commitment pins.
+    model_pins: BTreeSet<u32>,
 }
 
 /// M2d-B1: which yes of the Owner's a cached consent is.
@@ -386,6 +388,7 @@ impl Table {
             .filter(|(_, e)| {
                 (e.view.cancelled || e.view.finished)
                     && e.retained == 0
+                    && e.model_pins.is_empty()
                     // Keep an admitted session's provenance even before its
                     // first commitment pin. Bounded by RUN_CAPACITY; capacity
                     // pressure refuses new runs, never erases the cell.
@@ -582,6 +585,7 @@ impl RunRegistry {
             files_admission: None,
             inference_admission: None,
             model_attempts: 0,
+            model_pins: BTreeSet::new(),
         };
         let mut runs = self
             .runs
@@ -1865,6 +1869,134 @@ impl RunRegistry {
             .runs
             .try_lock()
             .expect("no run hold across evidence I/O");
-        table.runs.get(&run).map(|e| (e.model_attempts, 0))
+        table
+            .runs
+            .get(&run)
+            .map(|e| (e.model_attempts, e.model_pins.len()))
+    }
+}
+
+// Opaque, non-Clone ownership of one original-scope result obligation.
+pub(crate) struct SessionAttempt {
+    pub(crate) run: RunId,
+    pub(crate) agent: AgentId,
+    pub(crate) group: GroupId,
+    pub(crate) admission: InferenceAdmission,
+    pub(crate) ordinal: u32,
+    pub(crate) door: String,
+    registry: Weak<RunRegistry>,
+    cell: HaltCell,
+}
+impl RunRegistry {
+    // No producer/model hold is carried here. Ordinary calls are unchanged.
+    pub(crate) fn admit_session_attempt(
+        self: &Arc<Self>,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+        identity: [u8; 32],
+        original: &HaltCell,
+    ) -> Result<SessionAttempt, AuthorityError> {
+        let mut table = self
+            .runs
+            .try_lock()
+            .map_err(|_| AuthorityError::Unavailable("model run hold unavailable"))?;
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let door = crate::governed::AgentDoor::retained_identity(
+            &live_door(&mut table.doors, group, agent)?.life,
+            group,
+            agent,
+            original,
+        )
+        .ok_or(AuthorityError::NotMember)?;
+        let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        live_member(&table, entry, agent, group)?;
+        host_prerequisites(&table, entry, self.stop_number.load(Ordering::SeqCst))?;
+        let cell = entry
+            .file_cell
+            .as_ref()
+            .filter(|c| c.host() && c.same(original))
+            .ok_or(AuthorityError::NotMember)?
+            .clone();
+        if entry.opened_by != Some(group) {
+            return Err(AuthorityError::NotMember);
+        }
+        let files = entry
+            .files_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        let admission = entry
+            .inference_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        if admission.identity != identity {
+            return Err(AuthorityError::ModelIdentityMismatch);
+        }
+        if admission.contract_hash != files.contract_hash
+            || admission.request != files.request
+            || admission.evidence_seq != files.evidence_seq
+            || admission.kind != files.kind
+            || admission.consented_wall_ms != files.consented_wall_ms
+        {
+            return Err(AuthorityError::NoConsent);
+        }
+        if entry.model_attempts >= MAX_MODEL_ATTEMPTS {
+            return Err(AuthorityError::ModelCall(ModelError::OverBudget));
+        }
+        let ordinal = entry
+            .model_attempts
+            .checked_add(1)
+            .ok_or(AuthorityError::Capacity)?;
+        let ticket = SessionAttempt {
+            run,
+            agent: agent.clone(),
+            group,
+            admission: admission.clone(),
+            ordinal,
+            door,
+            registry: Arc::downgrade(self),
+            cell: cell.clone(),
+        };
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        #[cfg(test)]
+        super::file_session::probe(Some(&cell), "model.attempt.checked");
+        cell.admit()?; // Original retained Q's real same-word CAS; never refresh.
+        entry.model_attempts = ordinal;
+        entry.model_pins.insert(ordinal);
+        Ok(ticket)
+    }
+    // Settlement only: cancellation/finish/Stop cannot erase established debt.
+    pub(crate) fn settle_session_attempt(
+        &self,
+        ticket: SessionAttempt,
+    ) -> Result<(), AuthorityError> {
+        if !std::ptr::eq(self, ticket.registry.as_ptr()) {
+            return Err(AuthorityError::WrongRun);
+        }
+        let mut table = self
+            .runs
+            .try_lock()
+            .map_err(|_| AuthorityError::Unavailable("model settlement hold unavailable"))?;
+        let entry = table
+            .runs
+            .get_mut(&ticket.run)
+            .ok_or(AuthorityError::UnknownRun)?;
+        if entry.view.agent != ticket.agent
+            || entry.opened_by != Some(ticket.group)
+            || entry.inference_admission.as_ref() != Some(&ticket.admission)
+            || !entry
+                .file_cell
+                .as_ref()
+                .is_some_and(|c| c.same(&ticket.cell))
+            || !entry.model_pins.remove(&ticket.ordinal)
+        {
+            return Err(AuthorityError::WrongRun);
+        }
+        Ok(())
     }
 }

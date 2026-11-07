@@ -91,6 +91,21 @@ impl fmt::Debug for AgentDoor {
 }
 
 impl AgentDoor {
+    // Correlation only, recovered from the original broker-owned door life.
+    pub(crate) fn retained_identity(
+        life: &std::sync::Weak<dyn std::any::Any + Send + Sync>,
+        group: GroupId,
+        agent: &AgentId,
+        original: &HaltCell,
+    ) -> Option<String> {
+        let life = life.upgrade()?;
+        let core = life.downcast_ref::<DoorCore>()?;
+        (core.group == group
+            && &core.agent == agent
+            && core.session_cell.as_ref().is_some_and(|c| c.same(original)))
+        .then(|| core.id.clone())
+    }
+
     pub(crate) fn session_backend(&self) -> std::sync::Weak<GovernedControl> {
         Arc::downgrade(&self.control)
     }
