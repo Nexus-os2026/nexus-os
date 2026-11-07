@@ -300,6 +300,8 @@ class OfflineServiceTests(unittest.TestCase):
         self.full_run(True)
     def test_q4_same_named_other_package_runs_end_to_end(self):
         self.full_run(False, same_named=True)
+    def test_q5_n4_validation_exception_publishes_and_reopens(self):
+        self.full_run('TypeError')
     def full_run(self, invalid, same_named=False):
         # Pipes replace only denied AF_UNIX transport; collect/coverage/publish are real.
         class Pipe:
@@ -395,11 +397,17 @@ class OfflineServiceTests(unittest.TestCase):
             stack.enter_context(patch.object(lifecycle,'check_start'))
             stack.enter_context(patch.object(supervisor,'sibling',side_effect=lambda name: lifecycle if name=='lifecycle' else init))
             identity = {k:'c'*64 for k in ('bundle_sha256','policy_sha256','gates_sha256')}
+            if invalid == 'TypeError':
+                validate = supervisor.receipt.validate_summary
+                def prevalidate(summary):
+                    if summary['status'] == 'PASS_SCOPED': raise TypeError('fixture malformed validation')
+                    return validate(summary)
+                stack.enter_context(patch.object(supervisor.receipt,'validate_summary',side_effect=prevalidate))
             supervisor.execute(RUN,REQUEST,1234,{'device':1,'inode':2},identity,marker,'qualifying')
             for worker in workers: worker.join(5)
             item = supervisor.receipt.verify_integrity(root/'receipts'/RUN,os.getuid())['summary']
             self.assertEqual(item['status'],'FAILED' if invalid else 'PASS_SCOPED',item['missing_evidence'])
-            if invalid: self.assertIn('snapshot identity','; '.join(item['missing_evidence']))
+            if invalid: self.assertIn('validation: TypeError' if invalid=='TypeError' else 'snapshot identity','; '.join(item['missing_evidence']))
             else: self.assertEqual(errors,[])
             if same_named:
                 self.assertIn(['/work/target/host'],routed)
