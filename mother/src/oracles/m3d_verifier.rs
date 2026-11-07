@@ -310,7 +310,8 @@ fn m3d_replay_rejects_relinked_verification_proof() {
     assert_eq!(serde_json::to_string(&record).unwrap(), json);
     assert_eq!(serde_json::from_str::<Event>(&json).unwrap(), record);
     assert_eq!(check(&record), Ok(()));
-    let bad = |edit: &dyn Fn(&mut Vec<(String, String)>, &mut String)| {
+    type Checks = Vec<(String, String)>;
+    let bad = |edit: &dyn Fn(&mut Checks, &mut String)| {
         let (mut c, mut d) = (checks.clone(), PASS_DIGEST.to_string());
         edit(&mut c, &mut d);
         let e = Event::VerificationRecorded {
