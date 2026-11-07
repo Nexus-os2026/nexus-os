@@ -175,9 +175,7 @@ fn s1ae_headless_binary_has_no_home_side_effect() {
 
     // Nothing else happened: no stderr, and the home and XDG roots are
     // still empty (no journal, private store or GTK state).
-    for ran in [nexus_mother(&home, &[check, &page])] {
-        assert_eq!(ran.stderr, "");
-    }
+    assert_eq!(nexus_mother(&home, &[check, &page]).stderr, "");
     let left: Vec<_> = std::fs::read_dir(&home).unwrap().collect();
     assert!(left.is_empty(), "home side effects: {left:?}");
     assert_eq!(
