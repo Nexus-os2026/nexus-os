@@ -127,7 +127,9 @@ fn m3e_m3b_t10_requires_a_journaled_broker_receipt() {
     journal.push(receipt(RECEIPT_SHA, 1697, false));
     let got = lines(&journal, &c).unwrap();
     assert_eq!(got.first(), Some(&t10(FOLDER, 1697, RECEIPT_SHA)));
-    assert!(got.iter().all(|l| !l.contains(CANDIDATE_SHA) && !l.contains("999 bytes")));
+    assert!(got
+        .iter()
+        .all(|l| !l.contains(CANDIDATE_SHA) && !l.contains("999 bytes")));
     // The folder is the consented contract's; another contract is refused.
     let mut other = c.clone();
     other.requested_folder = Some("elsewhere".into());
@@ -159,7 +161,12 @@ fn m3e_m3b_teaching_follows_recorded_checks() {
     let mut j = written();
     j.push(checks(PASS));
     j.push(transition(Trigger::VerifyPass));
-    let all = vec![t10.clone(), T11_CHECKED.into(), t12_passed(), t13(FACTS_FILE)];
+    let all = vec![
+        t10.clone(),
+        T11_CHECKED.into(),
+        t12_passed(),
+        t13(FACTS_FILE),
+    ];
     assert_eq!(lines(&j, &c), Ok(all));
     // A recorded failure: its bare code, no T11, no T13.
     let mut j = written();
@@ -192,12 +199,18 @@ fn m3e_m3b_teaching_follows_recorded_checks() {
     assert_eq!(lines(&j, &c), Ok(vec![t10, t12_unchecked()]));
     // Every T12 form keeps every OPEN line.
     for line in [t12_passed(), t12_unchecked(), t12_failed("x")] {
-        assert!(OPEN_LINES.iter().all(|open| line.contains(open)), "OPEN kept");
+        assert!(
+            OPEN_LINES.iter().all(|open| line.contains(open)),
+            "OPEN kept"
+        );
     }
     // Phase lines are the frozen ones.
     assert_eq!(phase_line(PagePhase::Drafting), T5_DRAFTING);
     assert_eq!(phase_line(PagePhase::BeforeFileDialog), T7_BEFORE_FILE);
-    assert_eq!(phase_line(PagePhase::UndoRefusedAfterEdit), T15_UNDO_REFUSED);
+    assert_eq!(
+        phase_line(PagePhase::UndoRefusedAfterEdit),
+        T15_UNDO_REFUSED
+    );
 }
 
 #[test]
@@ -215,7 +228,11 @@ fn m3e_m3b_t9_follows_the_recorded_end() {
     assert_eq!(lines(&deny_consent, &c), Err(ViewError::NotConsented));
     let ends: Vec<(Vec<Entry>, &str)> = vec![
         (
-            [asked(&c), vec![transition(Trigger::ActionDenied { effect: 1 })]].concat(),
+            [
+                asked(&c),
+                vec![transition(Trigger::ActionDenied { effect: 1 })],
+            ]
+            .concat(),
             T9_DECLINED,
         ),
         (
@@ -335,9 +352,7 @@ fn page_lanes() -> crate::coordinator::Lanes {
 #[cfg(target_os = "linux")]
 fn verifier_calls(entries: &[Entry]) -> usize {
     use crate::lane::LaneRole;
-    let verifier = |e: &&Entry| {
-        matches!(e.event, Event::LaneInvoked { role, .. } if role == LaneRole::Verifier)
-    };
+    let verifier = |e: &&Entry| matches!(e.event, Event::LaneInvoked { role, .. } if role == LaneRole::Verifier);
     entries.iter().filter(verifier).count()
 }
 
@@ -492,7 +507,13 @@ fn expiry_case(expired: bool) {
     let pending = port.pending(id).unwrap();
     let run = RunId::parse(&pending.run).unwrap();
     let commitment = CommitmentId::parse(&pending.commitment).unwrap();
-    let record = || home.control.authority().commitments().view(commitment).unwrap();
+    let record = || {
+        home.control
+            .authority()
+            .commitments()
+            .view(commitment)
+            .unwrap()
+    };
     let left = pending
         .deadline_mono_ms
         .saturating_sub(home.clock.monotonic_ms());
@@ -504,7 +525,11 @@ fn expiry_case(expired: bool) {
         left - 1000
     }));
     let live = record();
-    assert_eq!(live.state, CommitmentState::Prepared, "the broker record is live");
+    assert_eq!(
+        live.state,
+        CommitmentState::Prepared,
+        "the broker record is live"
+    );
     assert!(live.expires_wall_ms > home.clock.wall_ms());
     if !expired {
         assert_eq!(m.advance(id).unwrap().to, MissionState::AwaitingApproval);
@@ -533,14 +558,16 @@ fn expiry_case(expired: bool) {
     assert!(!view
         .iter()
         .any(|e| matches!(e.event, Event::VerificationRecorded { .. })));
-    let pass = |e: &Entry| {
-        matches!(&e.event, Event::Transition { trigger } if *trigger == Trigger::VerifyPass)
-    };
+    let pass = |e: &Entry| matches!(&e.event, Event::Transition { trigger } if *trigger == Trigger::VerifyPass);
     assert!(!view.iter().any(pass), "no VerifyPass");
     assert!(!ws.join("index.html").exists(), "no page");
     assert_eq!(
         page_view(&view, id).lines(&c, FACTS_FILE),
         Ok(vec![T9_EXPIRED.to_string()])
     );
-    assert_eq!(record().state, CommitmentState::Revoked, "withdrawn, never Expired");
+    assert_eq!(
+        record().state,
+        CommitmentState::Revoked,
+        "withdrawn, never Expired"
+    );
 }
