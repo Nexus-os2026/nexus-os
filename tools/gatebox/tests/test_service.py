@@ -21,6 +21,9 @@ import tempfile
 import threading
 import time
 import unittest
+import subprocess
+import sys
+from contextlib import ExitStack
 from unittest.mock import patch, Mock
 
 HERE = Path(__file__).resolve().parents[1]
@@ -286,3 +289,107 @@ class OfflineServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'framing/reply deadline'):
                 supervisor.receive_request(peer,REGISTRY)
         self.assertLessEqual(peer.now,2.)
+
+    def test_review1_full_run_publishes_validated_pass(self):
+        self.full_run(False)
+    def test_review1_validation_failure_publishes_and_reopens(self):
+        self.full_run(True)
+    def full_run(self, invalid):
+        # Pipes replace only denied AF_UNIX transport; collect/coverage/publish are real.
+        class Pipe:
+            def __init__(self, fd): self.fd = fd
+            def fileno(self): return self.fd
+            def getsockopt(self, *args): return struct.pack('3i',1,0,0)
+            def recv(self, count): return os.read(self.fd,count)
+            def setblocking(self, value): os.set_blocking(self.fd,value)
+            def bind(self, path): pass
+            def listen(self, count): pass
+            def close(self): os.close(self.fd)
+        class Listener(Pipe):
+            def __init__(self):
+                ready, trigger = os.pipe()
+                super().__init__(ready)
+                os.write(trigger,b'x')
+                os.close(trigger)
+                read, self.write = os.pipe()
+                self.stream = Pipe(read)
+            def accept(self): return self.stream, None
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            for name in ('staging','pending','receipts','src'): (root/name).mkdir(mode=0o700)
+            marker = root/'pending'/('.'+RUN)
+            marker.touch()
+            desktop = json.loads((HERE/'policy/gates.json').read_bytes())['gates'][6]['expected_names']
+            cases = json.loads((HERE/'policy/exclusions.json').read_bytes())['cases']
+            specs = [('nexus-mother-host','host',['host_test']),
+                     ('nexus-mother-desktop','live',desktop),
+                     ('nexus-verifier-sandbox','phase2_live_sandbox',cases)]
+            artifacts = [dict(reason='compiler-artifact',profile={'test':True},
+                              package_id='path+file:///work/src/'+p+'#0.1.0',
+                              manifest_path='/work/src/'+p+'/Cargo.toml',target={'name':t},
+                              executable='/work/target/'+t) for p,t,names in specs]
+            for p,t,names in specs:
+                directory = root/'src'/p
+                directory.mkdir()
+                (directory/'Cargo.toml').write_text('[package]\nname = '+json.dumps(p)+'\nversion = "0.1.0"\n')
+            routed = []
+            popen = subprocess.Popen
+            def spawn(argv, **options):
+                routed.append(argv)
+                if argv[0] == '/opt/rust/bin/cargo':
+                    output = '\n'.join(json.dumps(a) for a in artifacts) if '--no-run' in argv else 'done\n'
+                else:
+                    names = next(n for p,t,n in specs if argv[0] == '/work/target/'+t)
+                    if '--list' in argv: output = ''.join(n+': test\n' for n in names)
+                    else:
+                        self.assertNotEqual(argv[0],'/work/target/phase2_live_sandbox')
+                        output = ''.join('test '+n+' ... ok\n' for n in names)
+                        output += f'test result: ok. {len(names)} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
+                options['cwd'] = str(root/'src')
+                return popen([sys.executable,'-c','import sys; sys.stdout.write(sys.argv[1]); sys.stderr.write("Finished test build\\n")',output],**options)
+            def payload_path(path):
+                value = str(path)
+                if value.startswith('/gate/policy/'): return HERE/'policy'/Path(value).name
+                if value.startswith('/work/src'): return root/'src'/value.removeprefix('/work/src').lstrip('/')
+                return Path(value)
+            listeners = [Listener(),Listener()]
+            errors, workers = [], []
+            def payload():
+                runner = init.Runner(listeners[0].write,listeners[1].write)
+                try:
+                    runner.gates()
+                    for name, value in {'inputs':{'before':{'rust':'same'},'after':{'rust':'same'}},
+                                        'resources':{'fixture':True},'isolation':{'fixture':True},
+                                        'versions':{'fixture':True}}.items():
+                        runner.output(name,json.dumps(value).encode())
+                    init.packet(runner.status,{'event':'complete'})
+                except Exception as exc: errors.append(str(exc))
+                finally:
+                    for listener in listeners: os.close(listener.write)
+            def launch(verb, run):
+                worker = threading.Thread(target=payload)
+                workers.append(worker)
+                worker.start()
+            def exported(source, sha, path):
+                path.mkdir()
+                return dict(commit=sha,content_sha256='invalid' if invalid else 'a'*64,lockfile_sha256='b'*64)
+            for obj, name, value in [(init,'Path',payload_path),(init.subprocess,'Popen',spawn),
+                    (supervisor,'STATE',root),(supervisor,'CONTROL',root),(supervisor,'shim',launch),
+                    (supervisor,'unit_state',lambda run:{'ActiveState':'active'}),
+                    (supervisor,'stop_and_confirm',lambda run:{'complete':True}),
+                    (supervisor.socket,'socket',Mock(side_effect=listeners)),
+                    (supervisor.snapshot,'GitSource',Mock()),(supervisor.snapshot,'export',exported)]:
+                stack.enter_context(patch.object(obj,name,value))
+            stack.enter_context(patch.object(lifecycle,'check_start'))
+            stack.enter_context(patch.object(supervisor,'sibling',side_effect=lambda name: lifecycle if name=='lifecycle' else init))
+            identity = {k:'c'*64 for k in ('bundle_sha256','policy_sha256','gates_sha256')}
+            supervisor.execute(RUN,REQUEST,1234,{'device':1,'inode':2},identity,marker,'qualifying')
+            for worker in workers: worker.join(5)
+            item = supervisor.receipt.verify_integrity(root/'receipts'/RUN,os.getuid())['summary']
+            self.assertEqual(item['status'],'FAILED' if invalid else 'PASS_SCOPED',item['missing_evidence'])
+            if invalid: self.assertIn('snapshot identity','; '.join(item['missing_evidence']))
+            else: self.assertEqual(errors,[])
+            self.assertFalse(marker.exists())
+            admission = supervisor.Admission(root/'pending')
+            self.assertTrue(admission.acquire())
+            admission.release()
