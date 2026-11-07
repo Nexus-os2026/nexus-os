@@ -1026,3 +1026,10 @@ Receipts on the B1c head:
   host 166, m2e_a2 54, m2e_transport 39; fmt, clippy (3 crates),
   diff --check.
 - Repeats: 10 serial + 10 parallel, 69/69 each.
+- SB3B-R14 oracle-amend: L2 now compares the actual CommitmentView
+  fields. Its Debug output redacts target and summary to sizes, so the
+  comparison takes `target`, `summary` and `binding_short` directly, with
+  Debug for the rest. A model call that rewrites the target to a
+  same-length value and each summary line to a same-length line is
+  killed at "the populated commitment is unchanged". Governed-control
+  lib 916; fmt, clippy, diff --check.
