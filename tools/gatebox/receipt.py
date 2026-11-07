@@ -111,7 +111,9 @@ def validate_summary(summary):
                 or command.get('signal') is not None
                 or any(command.get(k) is not False for k in ('timed_out','oom'))
                 or any(command.get(k) is not True for k in ('status_complete','collector_complete'))
-                or not command.get('log') or command.get('log_sha256') != logs.get(command.get('log'))):
+                or not isinstance(command.get('log'),str) or command['log'] not in logs
+                or not isinstance(command.get('log_sha256'),str) or not HEX.fullmatch(command['log_sha256'])
+                or command['log_sha256'] != logs[command['log']]):
             raise ValueError('failed/incomplete command')
         if gate.get('adapter') in ('libtest','libtest-repeat','reconcile-all-artifacts'):
             inventory = command.get('inventory',{})
