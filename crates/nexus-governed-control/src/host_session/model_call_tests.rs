@@ -1890,6 +1890,18 @@ fn sb3_r5_holds_contend_and_poison_exactly() {
                     .arm("model.attempt.return", move || {
                         let _ = release.send(());
                     });
+                // Latched at the refusal: read at return, before settlement.
+                let (seen, core) = (
+                    Arc::new(Mutex::new(None)),
+                    Arc::downgrade(&f.b.session.core),
+                );
+                let keep_seen = seen.clone();
+                f.hook("model.attempt.return", 0, move || {
+                    let core = core.upgrade().unwrap();
+                    let failed = core.cell.session_word() & FAILED != 0;
+                    *keep_seen.lock().unwrap() =
+                        Some((core.model.uncertain.load(Ordering::SeqCst), failed));
+                });
                 let outcome = f.call().expect("ticketed attempt");
                 if let Some(h) = holder.lock().unwrap().take() {
                     let _ = h.join();
@@ -1898,6 +1910,12 @@ fn sb3_r5_holds_contend_and_poison_exactly() {
                 assert_eq!(class(&outcome), "model_cancelled", "{what}");
                 assert_eq!(f.sent(), CALL[..i], "{what}: boundary and successors 0");
                 assert_eq!(f.latched(), (poisoned, poisoned), "{what}: latches");
+                let refused = *seen.lock().unwrap();
+                assert_eq!(
+                    refused,
+                    Some((poisoned, poisoned)),
+                    "{what}: latched at refusal"
+                );
             }
         }
     }

@@ -242,8 +242,11 @@ impl Peer {
                     }
                     head.push(b[0]);
                 }
-                let head = String::from_utf8(head).unwrap();
-                let path = head.split_whitespace().nth(1).unwrap().to_owned();
+                let head = String::from_utf8_lossy(&head).into_owned();
+                // A connection aborted before its request line (Stop) is no request.
+                let Some(path) = head.split_whitespace().nth(1).map(str::to_owned) else {
+                    continue;
+                };
                 let length = head
                     .lines()
                     .find_map(|l| {
@@ -321,7 +324,11 @@ fn reply(s: &mut TcpStream, body: &str) {
 impl Drop for Peer {
     fn drop(&mut self) {
         self.done.store(true, Ordering::SeqCst);
-        self.thread.take().unwrap().join().unwrap();
+        let joined = self.thread.take().map(std::thread::JoinHandle::join);
+        // Never a second panic while a failing test unwinds.
+        if !std::thread::panicking() {
+            joined.unwrap().unwrap();
+        }
     }
 }
 pub(super) fn nth(
