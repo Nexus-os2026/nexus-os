@@ -2,7 +2,7 @@
 //! sheet §4, rulings Dc-R1 and Dc2-R1), the explanation built only from
 //! journaled check results, and the claims guard (§7.2).
 //!
-//! T13–T15 are constants only (M3-E wires them); T16 is deferred to M3-E;
+//! T13–T15 are constants only (M3-E wires them); T16 is the summary (M-6);
 //! T6 and T8 are the broker's own dialogs. The claims guard is a pure
 //! function with no runtime call site here.
 
@@ -51,6 +51,30 @@ pub const T12_PASSED: &str = "This page passed the fixed inert-format check. Its
 /// T15: undo after the Owner's edit.
 pub const T15_UNDO_REFUSED: &str =
     "Undo now refuses: the file has changed, so it is yours now, and I will not remove your work.";
+
+/// T16's closed «backend outcome» phrases (M3E-R18 (3)).
+pub const T16_PASSED: &str = "index.html was written and the second check passed";
+pub const T16_UNCHECKED: &str = "index.html was written; no second check is recorded";
+pub const T16_UNCONFIRMED: &str = "I could not confirm what became of the request";
+pub const T16_DECLINED: &str = "you said no; nothing was written";
+pub const T16_EXPIRED: &str = "the file dialog timed out; nothing was written";
+pub const T16_STOPPED: &str = "you stopped; nothing was written";
+/// T16's «recorded checks» when none is recorded.
+pub const T16_NONE_RECORDED: &str = "none recorded";
+
+/// T16's outcome after a recorded failed check `code` (escaped by the caller).
+pub fn t16_failed(code: &str) -> String {
+    let _ = code;
+    String::new()
+}
+
+/// T16, the summary: `outcome` is one of the closed phrases above, `checked`
+/// the recorded checks or [`T16_NONE_RECORDED`]. It labels nothing OBSERVED
+/// or CORROBORATED; it says when each would apply.
+pub fn t16(outcome: &str, checked: &str) -> String {
+    let _ = (outcome, checked);
+    String::new()
+}
 
 /// The claims guard's refusals (design §7.2), ASCII case-insensitive.
 pub const BANNED: [&str; 16] = [

@@ -24,6 +24,7 @@ mod m3a_verifier;
 pub(crate) mod m3d_manifest;
 mod m3d_teaching;
 mod m3e_display;
+mod m3e_receipts;
 mod mn01;
 mod review;
 mod state;

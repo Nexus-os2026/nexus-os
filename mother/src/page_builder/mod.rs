@@ -16,6 +16,27 @@ mod prompt;
 use crate::effect::EffectRequest;
 use nexus_governed_control::inert_page::ApprovedFacts;
 
+/// M3E-R18 (8): the SHA-256 of each fixed part of the Builder's request (the
+/// system prompt, the task template, the schema and each correction block),
+/// never their text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequestIdentity {
+    pub system: [u8; 32],
+    pub task: [u8; 32],
+    pub schema: [u8; 32],
+    /// `(code, sha256)` of each correction block, in the codes' order.
+    pub corrections: Vec<(&'static str, [u8; 32])>,
+}
+
+pub fn request_identity() -> RequestIdentity {
+    RequestIdentity {
+        system: [0; 32],
+        task: [0; 32],
+        schema: [0; 32],
+        corrections: Vec::new(),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DraftCode {
     NotOneObject,

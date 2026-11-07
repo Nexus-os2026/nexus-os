@@ -398,3 +398,56 @@ crate-private). Rulings M3E-R1, R8, R12, R14.
 A first P-U3d (`ApprovalStatus::Expired` mapped to approved in the non-File
 waiting path) survived: a File mission's expiry never takes that path; it
 ends at Mother's held deadline in `lite_settle`.
+
+## M-6 — T16 and the content-free receipts (data-only)
+
+Code: T16 in `mother/src/teaching.rs`, its selection
+(`PageView::summary`) in `mother/src/coordinator/page_display.rs`, the
+mission receipt in NEW `mother/src/coordinator/page_receipt.rs`,
+`request_identity()` in `mother/src/page_builder/mod.rs` (hashes only), and
+NEW `mother/host/src/receipts.rs` (assemble and render). Tests:
+`mother/src/oracles/m3e_receipts.rs` and the `oracles` module of
+`mother/host/src/receipts.rs`. Rulings M3E-R1 (D6, D7, D8), R18.
+
+### Frozen behaviour (R18)
+
+- **Data-only.** No terminal `receipts` alias and no hands projection; M-5
+  calls the export. The walk is byte-identical.
+- **T16.** The mission's frozen text, with closed «backend outcome» phrases
+  (written and the second check passed; written, the second check reported
+  «code»; written, no second check is recorded; I could not confirm what
+  became of the request (also overtaken); you said no / the file dialog
+  timed out / you stopped, nothing was written) and «recorded checks» as
+  recorded, or `none recorded`. Selected only from the journal projection;
+  untrusted parts escaped before assembly; no current OBSERVED or
+  CORROBORATED label. `None` while nothing has ended or been written.
+- **Mission receipt.** From the verified journal and the consented contract
+  only: contract hash; the consent's journal seq, entry hash and wall time
+  (its broker `evidence_seq` is not journaled); the consented facts hash;
+  lane calls per role; model calls charged; effects dispatched; the broker
+  receipt; recorded checks and report digest; the recorded end. A field the
+  journal should hold but does not is `missing` (never zero); a receipt or
+  check record of another effect, or a receipt for another action, is
+  `mismatched`. Content-free, pure, consumes no working detail.
+- **Export.** Fixed `key: value` lines, each with its provenance: measured
+  at start (the start-time self-hash, the input file digests, the snapshot
+  facts hash), this build (policy, CSS, system/task prompt, schema and the
+  eight correction-block hashes), mother journal, `unavailable (external)`
+  (the other binary, build/CI/toolchain/installed/host metadata),
+  `unavailable (model not registered)`, `not measured (D6 deferred)`. No
+  page, notes, facts text, answers or path. `host-measured: complete` only
+  when every host and journal field is present and the identities join (the
+  snapshot facts hash equals the consented one); the last line always says
+  the export is incomplete overall.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_u10_summary_never_promotes_evidence` | All-pass: the frozen T16 byte for byte. Failed: its first code and the recorded checks. Written unrecorded, scripted VerifyPass: unchecked, none recorded. Overtaken, settled Uncertain: unconfirmed. Denied, expired, settled NotPublished: their phrases. Waiting: no summary. Another contract: `NotConsented`. No current OBSERVED/CORROBORATED wording; the claims guard passes; rendering changes nothing. |
+| `m3e_u10_receipt_identities_join_and_missing_is_listed` | The exact receipt of a published, all-pass journal; repeated identical; journal unchanged. A receipt and a check record of other effects: `receipt_effect`, `verification_effect`. Approved with no receipt: `publication_receipt` missing. Declined: nothing missing. `NotConsented`, `NotAPage`. |
+| `m3e_u10_request_identity_is_the_frozen_bytes` | The system, task and schema hashes and the eight correction-block hashes equal the design's frozen values (§4, §9.5). |
+| `m3e_u10_receipts_from_a_real_page_mission` | Real broker page mission to Done: receipt digest and size equal the bakery page; all checks pass; facts hash equals the consented facts'; one Verifier call; nothing missing or mismatched; no page, fact or note canary in the receipt's Debug; repeated identical; journal unchanged; T16 all-pass. |
+| `m3e_u10_receipts_exact_schema_and_privacy` (host) | The exact export, line for line; note, fact and path canaries absent from the export and every Debug; repeated identical. |
+| `m3e_u10_receipts_missing_is_not_zero` (host) | No self-hash, no journaled receipt, no consented facts hash: `unavailable`, `host-measured: incomplete (…)` naming them, no zero hash. Not applicable is `none`; timing is `not measured`; overall always incomplete. |
+| `m3e_u10_timestamps_and_identities_join` (host) | Snapshot and consented facts hashes differ: `incomplete (identity:facts)`. Mismatched effects: named. No dispatch, return or stop timestamp is ever exported (D6). |

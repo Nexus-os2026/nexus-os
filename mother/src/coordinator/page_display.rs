@@ -28,8 +28,10 @@ use crate::evidence::{LapseReason, SettlementOutcome};
 use crate::journal::{Entry, Event, MissionId};
 use crate::state::Trigger;
 use crate::teaching::{
-    t10, t12_failed, t12_passed, t12_unchecked, t13, T11_CHECKED, T15_UNDO_REFUSED, T5_DRAFTING,
-    T7_BEFORE_FILE, T9_DECLINED, T9_EXPIRED, T9_STOPPED, T9_UNCERTAIN,
+    t10, t12_failed, t12_passed, t12_unchecked, t13, t16, t16_failed, T11_CHECKED,
+    T15_UNDO_REFUSED, T16_DECLINED, T16_EXPIRED, T16_NONE_RECORDED, T16_PASSED, T16_STOPPED,
+    T16_UNCHECKED, T16_UNCONFIRMED, T5_DRAFTING, T7_BEFORE_FILE, T9_DECLINED, T9_EXPIRED,
+    T9_STOPPED, T9_UNCERTAIN,
 };
 use crate::verifier::CheckId;
 use nexus_governed_control::authority::evidence::escaped;
@@ -54,6 +56,21 @@ pub enum PageEnd {
     Other,
 }
 
+impl PageEnd {
+    /// Its closed code (M-6 receipts).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PageEnd::Open => "open",
+            PageEnd::Declined => "declined",
+            PageEnd::Expired => "expired",
+            PageEnd::Stopped => "stopped",
+            PageEnd::Uncertain => "uncertain",
+            PageEnd::Done => "done",
+            PageEnd::Other => "other",
+        }
+    }
+}
+
 /// Content-free projection of one page mission's journal.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PageView {
@@ -69,6 +86,8 @@ pub struct PageView {
 pub enum ViewError {
     /// The contract given is not the one the journal records consent to.
     NotConsented,
+    /// The contract is not a page mission's.
+    NotAPage,
 }
 
 /// A phase whose line M-5 prints at that moment.
@@ -164,6 +183,14 @@ impl PageView {
     pub fn end(&self) -> PageEnd {
         self.end
     }
+
+    /// T16 (M3E-R18 (3)) for `contract` (the consented one), from the
+    /// journaled facts only. `None` while nothing has ended or been written,
+    /// or for a mission that is not a page.
+    pub fn summary(&self, contract: &MissionContract) -> Result<Option<String>, ViewError> {
+        let _ = (contract, &self.consented);
+        Ok(None)
+}
 
     /// The recorded checks, if the Verifier's record exists.
     pub fn checks(&self) -> Option<&[(String, String)]> {
