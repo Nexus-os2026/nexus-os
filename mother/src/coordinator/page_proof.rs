@@ -62,15 +62,18 @@ pub(super) fn receipt_event(
         return Err(FailReason::DeliverableInvalid);
     }
     let receipt = receipt.ok_or(FailReason::ReceiptMissing)?;
-    let policy = receipt
-        .policy_hash
-        .ok_or(FailReason::ReceiptPolicyMissing)?;
+    // Db-Q4: only settlement evidence may lack a policy.
+    let policy = match (receipt.policy_hash, overtaken) {
+        (Some(policy), _) => Some(hex::encode(policy)),
+        (None, true) => None,
+        (None, false) => return Err(FailReason::ReceiptPolicyMissing),
+    };
     Ok(Event::PublicationReceipt {
         effect,
         action: action.clone(),
         sha256: hex::encode(receipt.sha256),
         bytes: receipt.bytes,
-        policy_hash: hex::encode(policy),
+        policy_hash: policy,
         overtaken: overtaken || receipt.overtaken,
     })
 }
@@ -124,6 +127,7 @@ pub(super) fn replay(m: &mut Mission, entry: &Entry) -> Result<(), ReplayViolati
             effect,
             action,
             overtaken,
+            policy_hash,
             ..
         } => {
             if m.proof
@@ -137,7 +141,10 @@ pub(super) fn replay(m: &mut Mission, entry: &Entry) -> Result<(), ReplayViolati
                 return Err(V::ProofConflict);
             }
             // After its clean approval, or as settlement evidence.
-            let clean = m.state.may_wait() && m.waiting.is_none() && m.unresolved_file.is_none();
+            let clean = policy_hash.is_some()
+                && m.state.may_wait()
+                && m.waiting.is_none()
+                && m.unresolved_file.is_none();
             let settling = *overtaken
                 && m.unresolved_file == Some(*effect)
                 && match m.settlement {

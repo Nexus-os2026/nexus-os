@@ -155,13 +155,15 @@ pub enum Event {
         bytes: u64,
     },
     /// M3-Db: the broker's receipt for that effect's exact commitment,
-    /// appended before its closure or ack. `overtaken`: settlement evidence.
+    /// appended before its closure or ack. `overtaken`: settlement evidence,
+    /// which keeps a receipt the broker gave without policy (Db-Q4).
     PublicationReceipt {
         effect: u64,
         action: PendingAction,
         sha256: String,
         bytes: u64,
-        policy_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        policy_hash: Option<String>,
         overtaken: bool,
     },
 }

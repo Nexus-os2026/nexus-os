@@ -1107,7 +1107,7 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
             ..
         } => {
             is_digest(sha256)
-                && is_digest(policy_hash)
+                && policy_hash.as_deref().is_none_or(is_digest)
                 && is_size(*bytes)
                 && RunId::parse(&action.run).is_some()
                 && CommitmentId::parse(&action.commitment).is_some()
