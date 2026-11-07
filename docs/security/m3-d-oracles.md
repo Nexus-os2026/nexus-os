@@ -366,6 +366,19 @@ O32 also runs two real-broker child cases (`m3d_dc2_child`): a clean live
 File page mission's explanation, and a legacy scripted mission's. Every
 Da/Db/Db2/Dc1 oracle stays green on the inert surface.
 
+Not covered here (ruling Dc2-R2(b)): explain() after a reopen, from
+replayed checks, has no oracle in Dc2. Replay restores the recorded
+checks, but the coverage is CARRIED to the held-mission resume slice;
+only the live path is exercised.
+
+Oracle amendment (ruling Dc2-R3, strictly stronger): O36's exclusion
+leaves out only a complete approved criterion line with its permitted
+status (`  - «text»: holds`, `  - «text»: not independently recorded as
+checked`), anchored to the whole line. Controls: criterion text embedded
+in a Mother sentence, or a criterion line extended past its status, is
+still scanned and refused (V3's `no other phone`). Against the previous
+unanchored filter these controls were red; with the anchored one, green.
+
 ## Dc2 mutation map
 
 | Plant | Named test |
