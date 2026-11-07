@@ -403,11 +403,13 @@ fn sb3c_public_binding_is_exact_and_idempotent() {
         ("unregistered", "model_not_registered"),
     ] {
         let f = Pub::with(case != "unregistered", case != "files");
+        // SB3C-R4 (2): observed before the operation, compared after; the
+        // second session (S) is the receiving fixture.
+        let other = (case == "s").then(Pub::new);
+        let seen = |p: &Pub| (p.paths().len(), p.records("model_call"), p.accounting());
+        let (before, other_before) = (f.paths().len(), other.as_ref().map(seen));
         let got = match case {
-            "s" => {
-                let other = Pub::new();
-                other.door.admit_inference(f.run, HASH, LABEL, f.identity)
-            }
+            "s" => (other.as_ref().unwrap().door).admit_inference(f.run, HASH, LABEL, f.identity),
             "q" => {
                 let q2 = f.session.ingress().accept(CommandKind::Run, 2).unwrap();
                 let door = f.session.open_file_door(&q2).unwrap();
@@ -435,7 +437,12 @@ fn sb3c_public_binding_is_exact_and_idempotent() {
         };
         assert_eq!(got.map_err(|e| e.class()), Err(class), "binding {case}");
         assert!(!f.bound(), "binding {case}: nothing bound");
-        f.untouched(case, &Meter::default(), f.paths().len());
+        f.untouched(case, &Meter::default(), before);
+        if let Some(other) = &other {
+            let after = Some(seen(other));
+            assert_eq!(after, other_before, "binding s: the receiving session");
+            assert!(!other.bound(), "binding s: the receiver binds nothing");
+        }
     }
     // The consent-association fields: cited to A's private tamper oracle.
     assert!(CITED.contains("fn sb3_inference_binding_is_exact_and_idempotent()"));
