@@ -503,3 +503,11 @@ effect. The host names each gap by kind (`unavailable:`, `missing:`,
 |---|---|
 | `m3e_u10_r21_t16_join_needs_a_file_dispatch` | Consent, pending, receipt and all-pass checks of effect 1 with no File dispatch: T16 unconfirmed, none recorded, never the success phrase; the receipt lists `receipt_effect` mismatched. Control: with the dispatch, the all-pass T16. |
 | `m3e_u10_r21_any_conflicting_action_is_reported` | Pending A, receipt A, settlement B for the same effect: `mismatched == ["action"]`, nothing missing. Pending A, receipt A, settlement A: nothing reported. (Settlement-only linkage stays valid: `m3e_u10_r19_every_receipt_needs_its_action_link`.) |
+
+| Plant | Mutation | Killing oracle (named assertion) |
+|---|---|---|
+| P-R21a | a pending approval stands in for the File dispatch | File-dispatch join: T16 unconfirmed, none recorded |
+| P-R21b | one matching identity hides a conflicting one | conflicting action: `mismatched == ["action"]` |
+
+The M-3b display fixture (`asked`) is amended (oracle-amend) to journal the File dispatch
+before the pending approval, as the coordinator does; no assertion changed.
