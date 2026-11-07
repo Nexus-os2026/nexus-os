@@ -519,10 +519,12 @@ fn m3e_u1_facts_grammar_and_manifest() {
     let mut two = contract(bakery(), notes_of(b"a"));
     two.notes.push(notes_of(b"b"));
     assert_eq!(two.validate(), Err(ContractError::PageNoteInvalid));
-    // CRLF notes are not normalized: the contract refuses the CR.
+    // CRLF notes are not normalized: the host refuses any CR (M3E-R3 2).
+    let dir = Dir::new("crlf");
+    let crlf = snap(InputKind::Notes, &dir.file("n", b"a\r\nb\r\n")).unwrap();
     assert_eq!(
-        contract(bakery(), notes_of(b"a\r\nb\r\n")).validate(),
-        Err(ContractError::NoteNotPlain { index: 0 })
+        crlf.parse().map_err(|e| e.code()),
+        Err("notes_carriage_return")
     );
 }
 
