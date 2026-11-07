@@ -137,6 +137,23 @@ class SnapshotTests(unittest.TestCase):
         sha = source.put('commit', b'tree '+tree.encode()+b'\n\nx')
         with patch.dict(snapshot.LIMITS, {'depth':2}), self.assertRaises(ValueError):
             snapshot.export(source, sha, self.root/'deep')
+    def test_git_administration_indirection(self):
+        admin, common = self.root/'admin', self.root/'common'
+        for directory in (admin,common):
+            (directory/'objects/info').mkdir(parents=True)
+            (directory/'refs').mkdir()
+            (directory/'HEAD').write_text('ref: refs/heads/main\n')
+            (directory/'config').write_text('[core]\nrepositoryformatversion = 0\nbare = true\n')
+        (common/'objects/info/alternates').write_text(str(admin/'objects')+'\n')
+        info = admin.stat()
+        snapshot.GitSource(admin,info.st_dev,info.st_ino)
+        for name in ('commondir','gitdir'):
+            marker = admin/name
+            marker.write_text(str(common)+'\n')
+            try:
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError,'indirection'):
+                    snapshot.GitSource(admin,info.st_dev,info.st_ino)
+            finally: marker.unlink()
     def test_raw_git_source_and_administration(self):
         # Synthetic loose-object fixture: Python writes data; no Git mutation command.
         source, sha = fixture()
