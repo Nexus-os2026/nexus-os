@@ -822,3 +822,27 @@ monotonic-only and wall-only expiry (SplitClock) and same-id different
 workspace identity each `grant_not_live`. (5) every pre-ticket refusal
 (`nothing`) compares the retained binding before/after (Debug bytes and
 equality; poison-tolerant ledger).
+
+### 13.3 SB-3B1a receipts (local, final head 9d8d73ba + this record)
+RED: e137e136 stub 38 passed / 5 failed, f572d111 stub 38 / 8, each new
+oracle at its first assertion; F11 controls fail on the e137e136 scanner.
+GREEN: 46/46 `host_session::model`. Plants (15, each killed at the named
+assertion, files restored by sha256): MP-SB-3-grant-ignore "R3 revoked";
+-grant-substitute "R3 substitute"; MP-SB-4-conversation "conversation";
+MP-SB-5-count "attempt 1 never refunded"; -pin "the exact ordinal"; -slot
+"slot debt latched"; MP-SB-A1-R3-ignore "R3 observes the invocation";
+early cached observer read "read after the grant"; contention setting
+uncertainty "grants: contention latches nothing"; wall clock dropped "R3
+wall"; monotonic clock dropped "R3 monotonic"; identity comparison removed
+"R3 identity"; binding cleared on refusal "revoked: binding"; F11 sibling
+leak and nested-comment leak "model.rs: a seam reachable outside
+cfg(test)". Gates, each binary alone: governed-control lib 891/891; Mother
+lib 316/316; host --no-fail-fast 166/166 (on c0b82242 and on a rerun at
+9d8d73ba; one run at 9d8d73ba failed `hands_tests::review2_receipts_while_recovery_reporting_is_held`
+at a PTY transcript wait, not reproduced in 10 isolated runs or the full
+rerun; no host or Mother code changed; recorded, not classified);
+m2e_a2_guards 54/54; m2e_transport_guards 39/39; fmt; clippy (3 crates,
+all targets, -D warnings, after 9d8d73ba removed the now-fulfilled
+`Attempt::acquire` dead-code expectation); diff --check. Repeats: 10 serial
+and 10 parallel runs of `host_session::model`, 46/46 each. Size: B1a vs
+c3bffa92 recorded in the report.
