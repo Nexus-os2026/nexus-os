@@ -719,15 +719,17 @@ impl CallGate<'_> {
             }
             ("refused:hold", Cancelled) // Benign contention latches nothing.
         })?;
-        // SB3B-R18: a Q or mission deadline lapsed by now (narrowing
-        // included) is an expiry, judged from the pre-hold sample.
-        if expired || scope.expired_at(at) {
+        if expired {
+            return Err(("refused:1", Timeout));
+        }
+        // SB3B-R18/R20: one reading of Q and the mission limits against the
+        // pre-hold sample; a lapse it finds (narrowing included) is expiry.
+        let judged = scope.judge(Some(at));
+        if judged == Err(crate::host_session::Lapse::Expired) {
             return Err(("refused:1", Timeout));
         }
         let word = core.cell.session_word();
-        if core.model.uncertain.load(Ordering::SeqCst)
-            || word != scope.snapshot
-            || !scope.eligible(Some(at))
+        if core.model.uncertain.load(Ordering::SeqCst) || word != scope.snapshot || judged.is_err()
         {
             return Err(("refused:1", Cancelled));
         }
@@ -764,14 +766,14 @@ impl CallGate<'_> {
         }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.observed");
-        if let Err(error) = scope.admit_at(&self.door.context.cell, Some(at)) {
+        if let Err((error, lapse)) = scope.admit_judged(&self.door.context.cell, Some(at)) {
             drop((_held, hold)); // An exhausted counter fails the session after release.
             if matches!(error, E::Capacity) {
                 self.door.context.fail();
                 return Err(("refused:8", Cancelled));
             }
-            // SB3B-R18: a CAS refused for a lapsed deadline is an expiry.
-            let expired = scope.expired_at(at);
+            // SB3B-R18/R20: the CAS's own eligibility reading found expiry.
+            let expired = lapse == Some(crate::host_session::Lapse::Expired);
             return Err(("refused:8", if expired { Timeout } else { Cancelled }));
         }
         #[cfg(test)]

@@ -1205,3 +1205,28 @@ gate 0:
 The frozen oracle-add test, run unmodified on that copy, is RED at
 "r5_cas:before/mission_wall_narrowed gate 0: the literal class
 (model_cancelled)".
+
+### 13.15 B1f single-reading eligibility (SB3B-R20 (c))
+Codex B1f review-1 (production), LOW: step 1 read the mission limits
+twice, first in `expired_at` and then in `eligible`. A narrowing between
+the two reads was refused as Cancelled.
+- `RequestScope::judge(sample)` reads Q and the limits once. It returns
+  Ok, `Lapse::Expired` (Q or a mission deadline past, narrowing included)
+  or `Lapse::Denied` (anything else, including limits without a sampled
+  reading). `eligible` is `judge().is_ok()`.
+- Step 1 still checks the pre-hold result first. It then makes one
+  `judge` under the hold: `Expired` is Timeout, any other refusal stays
+  Cancelled.
+- Step 8 uses `admit_judged`, which returns the CAS eligibility reason
+  from its own single evaluation. `Expired` is Timeout. Counter
+  exhaustion, CAS word failures and every other refusal stay Cancelled.
+- New cfg(test) probe: `scope.limits`, immediately before the one
+  reading, when a sample is supplied.
+
+Oracle: `sb3_narrowing_at_the_eligibility_read_times_out`, which arms at
+`model.call.sampled` and narrows at the next `scope.limits` (wall and
+monotonic, each gate), expects `at:model_timeout:refused:1`.
+- RED on the previous head: "narrowed at the read" (no probe).
+- With only the probe added to the two-read form: "the literal class
+  (model_cancelled)".
+- Plant: the two-read step 1 restored, RED at "the literal class".
