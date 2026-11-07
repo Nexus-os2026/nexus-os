@@ -138,10 +138,12 @@ class InstallReviewOracles(unittest.TestCase):
                        installed=dict(identity,stage='qualifying'),run_id='a'*32,peer_uid=1234)
         provenance = dict(uid=1234,context='claude',ancestor_pid=456,accepted=dict(status='ACCEPTED',run_id='a'*32),
                           refused=dict(status='UNQUALIFIED',reason='QUALIFICATION_ONLY'),codex='unsupported (runner denies AF_UNIX)')
-        rows = ['B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS']
+        rows = ['B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS','C1-SEALED','C2-CANARY','C3-RESTART']
         value = dict(identity=identity,passed=rows,evidence={r:dict(run_id='a'*32,
                      summary_sha256=hashlib.sha256(json.dumps(summary,sort_keys=True).encode()).hexdigest()) for r in rows})
         value['evidence']['CLIENTS']['client_provenance'] = provenance
+        for row in ('C1-SEALED','C2-CANARY','C3-RESTART'):
+            value['evidence'][row]['custody'] = dict(row=row,passed=True,observations={'real':'decision fixture'})
         check = installer()['acceptance_check']; state = dict(identity=identity,stage='qualifying')
         check(identity,value,state,lambda run: {'summary':summary})
         for bad in ({},dict(provenance,context='host'),dict(provenance,uid=0),dict(provenance,ancestor_pid=0)):
