@@ -476,6 +476,17 @@ class OfflineServiceTests(unittest.TestCase):
                 patch.object(verify,'host_ancestry'), patch.object(verify.pwd,'getpwnam',return_value=Mock(pw_uid=os.getuid())):
             self.assertEqual(verify.authenticate(fixture.run_id)['summary']['status'],'PASS_SCOPED')
 
+    def test_q5_n3_manager_polling_is_rate_limited(self):
+        ticks = [0,0,.1,.3,1.,1.2,2.,2.8,14431]
+        polls = []
+        selector = Mock()
+        selector.select.return_value = []
+        with patch.object(supervisor.selectors,'DefaultSelector',return_value=selector), \
+                patch.object(supervisor.time,'monotonic',side_effect=ticks) as clock, \
+                patch.object(supervisor,'unit_state',side_effect=lambda run:polls.append(ticks[clock.call_count-1]) or {'ActiveState':'active'}):
+            with self.assertRaises(TimeoutError): supervisor.collect(RUN,{},supervisor.Evidence(),{})
+        self.assertEqual(polls,[0,1.,2.])
+
     def test_review4_collect_detects_failed_start(self):
         selector = Mock()
         selector.select.return_value = []
