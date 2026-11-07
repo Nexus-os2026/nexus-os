@@ -345,7 +345,7 @@ overall: incomplete (external and timing fields are not provided)\n",
         assert!(text.contains("publication receipt: unavailable (mother journal)\n"));
         assert!(text.contains("facts hash, consented: unavailable (mother journal)\n"));
         assert!(
-            text.contains("host-measured: incomplete (nexus-mother sha256, publication_receipt)\n")
+            text.contains("host-measured: incomplete (unavailable:nexus-mother sha256, missing:publication_receipt)\n")
         );
         assert!(!text.contains(&"0".repeat(64)), "no invented zero hash");
         assert!(!text.contains("host-measured: complete"));
@@ -376,7 +376,7 @@ overall: incomplete (external and timing fields are not provided)\n",
         // The consented facts are not the snapshot the host read: incomplete.
         let text = receipts(&host, &mission("ab".repeat(32)));
         assert!(
-            text.contains("host-measured: incomplete (identity:facts)\n"),
+            text.contains("host-measured: incomplete (mismatched:facts)\n"),
             "{text}"
         );
         // A receipt or record for another effect: incomplete, named.
@@ -384,7 +384,7 @@ overall: incomplete (external and timing fields are not provided)\n",
         m.mismatched = vec!["receipt_effect", "verification_effect"];
         let text = receipts(&host, &m);
         assert!(text.contains(
-            "host-measured: incomplete (identity:receipt_effect, identity:verification_effect)\n"
+            "host-measured: incomplete (mismatched:receipt_effect, mismatched:verification_effect)\n"
         ));
         // No dispatch, return or t_stop value is ever exported (D6).
         for word in ["sent_mono_ms", "returned_mono_ms", "stop_mono_ms"] {
