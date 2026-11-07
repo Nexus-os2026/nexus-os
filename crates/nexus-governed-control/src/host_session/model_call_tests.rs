@@ -2554,6 +2554,7 @@ fn sb3_b1b_test_seams_are_test_only() {
     }
     let mut seams: Vec<&str> = fields.iter().chain(&helpers).copied().collect();
     seams.push("registered_identity_for_test"); // read by tests only
+    seams.extend(["expired_request", "expire_request_for_test"]); // SB3B-R18 Q seam
     let parent = include_str!("../host_session.rs");
     let (code, mut scanned) = (mask(parent), 0);
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host_session");
@@ -2592,6 +2593,13 @@ fn sb3_b1b_test_seams_are_test_only() {
         let uncfg = model.replace(&declared, &format!("    pub(super) {seam}:"));
         assert!(leaks(&uncfg, &[seam]) >= 1, "{seam}: cfg removal is RED");
     }
+    let declared = "    #[cfg(test)]\n    expired_request:";
+    assert_eq!(parent.matches(declared).count(), 1, "Q seam declaration");
+    let uncfg = parent.replace(declared, "    expired_request:");
+    assert!(
+        leaks(&uncfg, &["expired_request"]) >= 1,
+        "Q seam: cfg removal is RED"
+    );
     for seam in &seams {
         let used = format!("{model}\nfn production() {{\n    {seam}();\n}}\n");
         assert!(
@@ -3034,6 +3042,7 @@ fn schedule(
         "charge:before" => ("meter.entry", false),
         "charge:after" => ("meter.charged", false),
         "r5_observer:before" => ("model.call.gate", false),
+        "r5_sample:after" => ("model.call.sampled", false), // B1f: before the hold
         "r5_cas:before" => ("model.call.observed", true),
         _ => ("model.call.admitted", true),
     };
@@ -3285,4 +3294,29 @@ fn sb3_schedule_matrix_cells_are_complete() {
         );
     }
     assert!(exists(MATRIX) && !exists("sb3_no_such_oracle"), "controls");
+}
+
+/// SB3B-R18 (B1f): a Q or mission deadline found lapsed under the hold is
+/// an expiry, `model_timeout`, at step 1 (after the pre-hold check, before
+/// the hold) and at the CAS (step 8). A narrowed mission deadline is judged
+/// there from the pre-hold sample; a Q deadline passing after the sample is
+/// invisible to it (the seam is sample-faithful) and ends at the next poll.
+#[test]
+fn sb3_deadline_lapsed_under_the_hold_times_out() {
+    positive("positive control");
+    for (side, step) in [
+        ("r5_cas:before", "refused:8"),
+        ("r5_sample:after", "refused:1"),
+    ] {
+        for class in ["mission_wall_narrowed", "mission_mono_narrowed", "q_expiry"] {
+            let expected = match class {
+                "q_expiry" => "next:model_timeout:poll".to_owned(),
+                _ => format!("at:model_timeout:{step}"),
+            };
+            for i in 0..4 {
+                let (f, outcome) = schedule(class, side, i);
+                judge(&f, (side, class, i), &expected, outcome);
+            }
+        }
+    }
 }
