@@ -128,3 +128,80 @@ of manifest(). Review-specific mutations and all PR-1 plants are recorded in
 the external repair report; each mutated source is restored byte-for-byte.
 Missing-status and desktop-no-op mutations exercise schema primitives only;
 installed private-status authority and actual desktop execution remain PR-2.
+
+## Q9 / F5 custody amendment (Owner mission, 2026-11-07)
+
+This bounded stacked amendment starts at 0b2a37079969a4baf7700f0b6cefcbda62f0b303,
+branch mother/gatebox-slice1-custody. It implements proposal §3 Design A only.
+The earlier PR-1-only wording describes that historical checkpoint, not this
+mission. #111 and this slice form one integration unit; #115 must compose and
+rerun. Q8 installation HOLD remains. No Git writes, network, sudo, installation,
+host service actions, phase advancement or installed acceptance are authorized.
+
+The external frozen sheet remains historical text. Q9 overrides exactly its
+§3/§4/§5/§7/§8 custody provisions below. policy/custody.json records literal
+replacements to the original frozen unit text; tests apply only those exact
+replacements and still pin the rest of all three units. The tmpfiles text is
+pinned independently in tests/test_custody.py.
+
+- §3 storage/shim: /run/mothergate-control is root:root 0755; incoming is
+  mothergate:mothergate 0700; sealed is root:root 0700. Lifecycle exclusively
+  creates sealed/RUN_ID root:root 0700 and root-owned used/pending markers.
+  Protected ancestry, modes, ownership and ACLs are checked without following
+  directory links. A bounded root lock serializes both verbs. Only the two
+  incoming leaf entries are renamed with directory descriptors; a supervisor
+  directory is never moved. After relocation both leaves must be real sockets,
+  mothergate-owned, mode 0700 (service UMask=0077), without ACLs or hard links.
+  Only then may the fixed bounded blocking start execute. Used IDs cannot recur
+  within this runtime. Any root pending marker blocks another start.
+- §4 capture: supervisor binds incoming/RUN_ID.{log,status}.sock, retains both
+  listener descriptors and collects through them after handoff. Root custody
+  protects sealed/RUN_ID/{log,status}.sock. Supervisor closes descriptors but
+  never unlinks sealed entries. Capture protocol and init.py remain unchanged.
+- §5 units/provisioning: mothergate.service has one common writable mount at
+  /run/mothergate-control and no RuntimeDirectory ownership directive. Both
+  payload file: outputs name sealed/%i/{log,status}.sock. The fixed root-owned
+  policy/mothergate-control.conf must be installed as tmpfiles configuration
+  and applied before service start, including boot-time recreation. Installer
+  composition, installed identity coverage and host provisioning belong to
+  #115; this slice contains no installer and runs no host commands.
+- §7 B2/B4: start is blocking with a 40-second client bound against the existing
+  30-second unit start bound. Lock acquisition is bounded to five seconds.
+  Stop is bounded to 25 seconds; manager show to five seconds. The outer shim
+  caller allows 90 seconds. Timeout never proves cancellation. Before cleanup,
+  stop the exact instance, prove exactly empty Job=, inactive/failed state and no populated
+  exact cgroup. Missing or ambiguous evidence retains custody and blocks.
+  Normal cleanup validates both leaves and removes only those fixed names,
+  the empty root run directory and its pending marker. Never recursively
+  delete a quarantined object; unexpected directories require maintenance.
+- §8 MP-9: restore the vulnerable file: path, remove post-relocation validation,
+  and allow recursive quarantine deletion as separate plants. Each must turn
+  its named oracle RED; a pre-existing failure masking it is NOT EXERCISED.
+  Restore exact bytes after each plant. Offline fixtures model socket types
+  with FIFOs; actual AF_UNIX rename/connect and root/mothergate DAC tests remain
+  separately named. A8 must rerun installed with no descriptor leaks.
+
+Pre-registered custody oracles: deterministic pre-relocation replacement with
+unchanged canary and no start; post-relocation validation of both leaves;
+missing/regular/dangling/directory/mode/owner/ACL/unsafe-ancestor negatives;
+duplicate ID; concurrent start/stop; timeout and collector loss across restart;
+normal cleanup; active/pending/populated/ambiguous completion retains custody;
+quarantine canary survives; supervisor closes descriptors without unlinking.
+Installed-only cases explicitly skip with their root/manager prerequisite;
+AF_UNIX EPERM is sandbox_blocked, never an installed PASS. Deferred staging,
+receipt and bind-input compromise risks under sheet §12 remain disclosed.
+
+## Q12 / #116 review-1 amendment (Owner mission, 2026-11-07)
+
+Q12 supersedes the Q9 no-job sentinel: only an empty Job value proves no job;
+any nonempty value, including "0", retains custody. The fixed bounded stop is
+issued before layout/lock validation; settle and cleanup still require both.
+A failed start cleans only incoming leaves successfully bound by this supervisor,
+including partial bind failure. Relocated sealed leaves remain exclusively root
+custody. The optional endpoint preflight is legacy offline coverage, never the
+production custody check. F-3 negatives isolate directory ownership/GID, endpoint
+GID/link count, unsafe/symlinked lock files and disappeared pending custody.
+Oracles precede fixes in numbered checkpoint folders. Real custody and its plants
+require an outside run with protected TMPDIR (Q11); no ownership-remap modelling.
+Q12 F-6 remains #115 installer scope. No installation, host action, Git write,
+network, phase advancement or installed acceptance is performed by this mission.
