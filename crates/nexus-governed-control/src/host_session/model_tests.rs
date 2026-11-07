@@ -786,6 +786,7 @@ pub(super) struct Accounting {
     agent: AgentId,
     group: u64,
     door_id: String,
+    setup: (Arc<IssuedEvidence>, usize),
     _door: crate::governed::AgentDoor,
     _root: crate::harness_tests::TempRoot,
 }
@@ -880,6 +881,7 @@ impl Accounting {
             agent,
             group,
             door_id,
+            setup: (issued.clone(), issued.1.records().len()),
             _door: door,
             _root: root,
         }
@@ -898,6 +900,11 @@ impl Accounting {
         )
     }
     fn counts(&self) -> (u32, usize) {
+        assert_eq!(
+            self.setup.0 .1.records().len(),
+            self.setup.1,
+            "setup memory unchanged after fixture"
+        );
         self.authority.runs().model_accounting(self.run).unwrap()
     }
 }
