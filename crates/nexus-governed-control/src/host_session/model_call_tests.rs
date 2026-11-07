@@ -3569,3 +3569,48 @@ fn sb3_deadline_lapsed_under_the_hold_times_out() {
     }
     println!("{HELD_DONE} sb3_deadline_lapsed_under_the_hold_times_out");
 }
+
+/// SB3B-R20 (c): a mission deadline narrowed past the sample after the
+/// pre-hold check, at step 1's eligibility read (`scope.limits`, inside the
+/// one evaluation under the hold), ends `model_timeout` at step 1. Two
+/// readings of the limits would let the narrowing fall between them.
+#[test]
+fn sb3_narrowing_at_the_eligibility_read_times_out() {
+    positive("positive control");
+    for class in ["mission_wall_narrowed", "mission_mono_narrowed"] {
+        for i in 0..4 {
+            let f = Call::new();
+            let (c, far) = (f.b.clock.clone(), 1 << 50);
+            f.b.door
+                .context()
+                .narrow_mission_deadlines(c, far, far)
+                .unwrap();
+            let (narrow, armed) = (
+                matrix_fault(&f, class, &Keep::default()),
+                Arc::new(AtomicBool::new(false)),
+            );
+            let (arm, landed) = (armed.clone(), Arc::new(AtomicBool::new(false)));
+            f.hook("model.call.sampled", i, move || {
+                arm.store(true, Ordering::SeqCst)
+            });
+            let done = landed.clone();
+            f.b.session.core.cell.1.every("scope.limits", move || {
+                if armed.swap(false, Ordering::SeqCst) {
+                    narrow();
+                    done.store(true, Ordering::SeqCst);
+                }
+            });
+            let outcome = f.call();
+            assert!(
+                landed.load(Ordering::SeqCst),
+                "{class} {i}: narrowed at the read"
+            );
+            judge(
+                &f,
+                ("r5_sample:after", class, i),
+                "at:model_timeout:refused:1",
+                outcome,
+            );
+        }
+    }
+}
