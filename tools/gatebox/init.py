@@ -161,7 +161,7 @@ class Runner:
                     self.serial += 1
                     name = 'c'+str(self.serial)
                     packet(self.status,dict(event='start',id=name,gate_id=kind,
-                           argv=gate['argv'],cwd='/work/src',environment=ENV))
+                           argv=None,internal=True,cwd='/work/src',environment=ENV))
                     self.output(name,(kind+' internal reconciliation complete\n').encode())
                     packet(self.status,dict(event='end',id=name,exit_code=0,signal=None))
             except (ValueError,OSError,subprocess.SubprocessError) as exc:

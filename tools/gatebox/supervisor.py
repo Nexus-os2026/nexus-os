@@ -94,10 +94,11 @@ class Evidence:
         if self.events > 512 or self.complete or not isinstance(event,dict): raise ValueError('status bound/order')
         kind = event.get('event')
         if kind == 'start':
-            if (set(event) != {'event','id','gate_id','argv','cwd','environment'} or self.active
+            fields = {'event','id','gate_id','argv','cwd','environment'}
+            if event.get('gate_id') in ('host','whitespace'): fields.add('internal')
+            if (set(event) != fields or self.active
                     or not isinstance(event['id'],str) or any(c['id']==event['id'] for c in self.commands)
-                    or not isinstance(event['argv'],list) or not event['argv']
-                    or not all(type(a) is str for a in event['argv']) or event['cwd'] != '/work/src'
+                    or not receipt.valid_invocation(event) or event['cwd'] != '/work/src'
                     or not isinstance(event['environment'],dict)):
                 raise ValueError('invalid command start')
             self.active = {k:v for k,v in event.items() if k != 'event'}
