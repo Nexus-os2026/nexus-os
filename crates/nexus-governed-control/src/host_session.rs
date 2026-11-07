@@ -12,6 +12,8 @@ pub mod approval;
 pub mod close;
 mod model;
 #[cfg(test)]
+mod model_call_tests;
+#[cfg(test)]
 mod model_death_tests;
 #[cfg(test)]
 mod model_tests;
@@ -560,6 +562,17 @@ pub struct SessionDoor {
     origin_request: u64,
     context: SessionContext,
     core: Arc<Core>,
+    kind: DoorKind,
+}
+
+/// SB-3 (O2/F9): set by the constructor. Only an original door, whose
+/// context is its original request, retains the File grant it was issued.
+#[derive(Clone, Copy)]
+enum DoorKind {
+    Original {
+        file_grant: crate::authority::ids::GrantId,
+    },
+    Continuation,
 }
 
 impl HostSession {
@@ -783,8 +796,12 @@ impl HostSession {
         if request.kind != CommandKind::Run {
             return Err(SessionError::Restricted);
         }
-        self.grant_files(request, grant_lifetime, &*self.confirmer)?;
-        self.activate_file_door(request, self.confirmer.clone())
+        let file_grant = self.grant_files(request, grant_lifetime, &*self.confirmer)?;
+        self.activate_file_door(
+            request,
+            self.confirmer.clone(),
+            DoorKind::Original { file_grant },
+        )
     }
 
     fn grant_files(
@@ -813,6 +830,7 @@ impl HostSession {
         &self,
         request: &SessionRequest,
         confirmer: Arc<dyn crate::authority::approval::ControlConfirmer + Send + Sync>,
+        kind: DoorKind,
     ) -> Result<SessionDoor, SessionError> {
         let context = self.context(request)?;
         let door = self
@@ -828,6 +846,7 @@ impl HostSession {
             door: Arc::new(door),
             context,
             core: self.core.clone(),
+            kind,
         })
     }
 
@@ -841,12 +860,12 @@ impl HostSession {
         if request.kind != CommandKind::Run {
             return Err(SessionError::Restricted);
         }
-        self.grant_files(
+        let file_grant = self.grant_files(
             request,
             request.deadline.saturating_duration_since(Instant::now()),
             &*confirmer,
         )?;
-        self.activate_file_door(request, confirmer)
+        self.activate_file_door(request, confirmer, DoorKind::Original { file_grant })
     }
 
     pub fn cleanup(
@@ -1362,7 +1381,8 @@ impl HostSession {
         &self,
         request: &SessionRequest,
     ) -> Result<SessionDoor, SessionError> {
-        self.activate_file_door(request, self.confirmer.clone())
+        // Its grant was not retained: deny-only for every session route.
+        self.activate_file_door(request, self.confirmer.clone(), DoorKind::Continuation)
     }
     pub(crate) fn control_for_test(&self) -> Arc<crate::governed::GovernedControl> {
         self.control.clone()

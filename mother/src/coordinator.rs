@@ -395,7 +395,9 @@ impl Mission {
     /// charged total or declared budgets. Dropping live state revokes its
     /// retained atomic observers before this owning boundary is released.
     fn invalidate_calls(&mut self) {
-        self.lane_calls = None;
+        if let Some(live) = self.lane_calls.take() {
+            live.owner.revoke(); // O1: before journal I/O, still owning the lock.
+        }
         self.call_accounting = None;
     }
 

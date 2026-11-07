@@ -505,3 +505,68 @@ pub(super) fn historical_outcome(end: Option<EndStatus>) -> &'static str {
         None => "unknown",
     }
 }
+
+// SB-3A R2: the private original-door inference binding; no public route.
+impl SessionDoor {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-3A: private binding, wired by SB-3C; session route unavailable"
+        )
+    )]
+    pub(super) fn bind_inference_private(
+        &self,
+        run: RunId,
+        contract_hash: &str,
+        request: &str,
+        expected_identity: [u8; 32],
+    ) -> Result<(), crate::authority::AuthorityError> {
+        use crate::authority::AuthorityError as E;
+        let DoorKind::Original { file_grant } = self.kind else {
+            return Err(E::Halted); // A continuation never binds.
+        };
+        if !self.context.scope.live(self.core.cell.session_word()) {
+            return Err(E::Halted);
+        }
+        // Installed M, observed without waiting; released before the run table.
+        let identity = {
+            let s = hold(&self.core).map_err(|_| E::Unavailable("model slot unavailable"))?;
+            let r = s.registration.as_ref().ok_or(E::ModelNotRegistered)?;
+            if self.core.model.uncertain.load(Ordering::SeqCst) || r.watch.check_now().is_err() {
+                return Err(E::Halted);
+            }
+            r.digest
+        };
+        if identity != expected_identity {
+            return Err(E::ModelIdentityMismatch);
+        }
+        let backend = self.door.session_backend();
+        let q_run = match self.context.scope.mother_run.get() {
+            Some((control, known)) if control.ptr_eq(&backend) => Some(*known),
+            Some(_) => return Err(E::NotMember),
+            None => None,
+        };
+        let control = backend.upgrade().ok_or(E::Halted)?;
+        let authority = control.authority();
+        let clock = (
+            authority.clock().monotonic_ms(),
+            authority.clock().wall_ms(),
+        );
+        authority
+            .runs()
+            .admit_session_inference(crate::authority::run::SessionBinding {
+                run,
+                agent: self.door.agent(),
+                group: self.door.origin(),
+                contract_hash,
+                request,
+                identity,
+                original: &self.context.cell,
+                q_run,
+                grants: authority.grants(),
+                grant: file_grant,
+                clock,
+            })
+    }
+}
