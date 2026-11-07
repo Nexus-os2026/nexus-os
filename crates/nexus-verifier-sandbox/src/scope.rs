@@ -241,8 +241,9 @@ fn read_populated(dir: &dyn CgroupDir) -> io::Result<Occupancy> {
 
 /// Whether any process remains in the retained cgroup. A retained cgroup is
 /// a non-root cgroup v2 directory (verified by its file system, and named
-/// for its unit), and every one has `cgroup.events`; that file goes only
-/// with the directory, whose listing must then be empty.
+/// for its unit). Removal unlinks files one at a time, so a missing
+/// `cgroup.events` confirms removal only with an empty directory listing.
+/// A single observation of an intermediate state remains an error.
 fn occupancy(dir: &dyn CgroupDir) -> io::Result<Occupancy> {
     match read_populated(dir) {
         Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
@@ -316,7 +317,23 @@ impl Scope {
     pub fn wait_empty(&self, timeout: Duration) -> io::Result<bool> {
         let start = Instant::now();
         loop {
-            if self.occupancy()? != Occupancy::Populated {
+            // Removal is not atomic: missing events with entries remaining,
+            // or ENODEV from a deactivated kernfs node, is undecided here
+            // only. Neither confirms cleanup nor restarts the deadline.
+            let empty = match read_populated(self.dir.as_ref()) {
+                Ok(Occupancy::Empty | Occupancy::Removed) => true,
+                Ok(Occupancy::Populated) => false,
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                    match self.dir.listing_is_empty() {
+                        Ok(empty) => empty,
+                        Err(error) if error.raw_os_error() == Some(libc::ENODEV) => false,
+                        Err(error) => return Err(error),
+                    }
+                }
+                Err(error) if error.raw_os_error() == Some(libc::ENODEV) => false,
+                Err(error) => return Err(error),
+            };
+            if empty {
                 return Ok(true);
             }
             if start.elapsed() >= timeout {
