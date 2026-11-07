@@ -100,6 +100,14 @@ class SnapshotTests(unittest.TestCase):
         sha = source.put('commit', b'tree '+tree.encode()+b'\n\nx')
         with self.assertRaises(ValueError):
             snapshot.export(source, sha, self.root/'duplicate')
+    def test_composed_link_escape(self):
+        source = Objects()
+        subtree = source.tree([('120000','l',source.put('blob',b'..'))])
+        sha = source.commit([('100644','Cargo.lock',source.put('blob',b'lock')),
+                             ('40000','d',subtree),('120000','x',source.put('blob',b'd/l/..'))])
+        with self.assertRaisesRegex(ValueError,'composed link escape'):
+            snapshot.export(source,sha,self.root/'out')
+        self.assertFalse((self.root/'out').exists())
     def test_bounds_before_export(self):
         for field, value in [('blob',3),('tree',3),('commit',3),('entries',1),
                              ('objects',1),('bytes',3),('export',3),('path',3),('component',3),('seconds',0)]:
@@ -237,6 +245,33 @@ class ReceiptTests(unittest.TestCase):
         alias.symlink_to(self.receipts, target_is_directory=True)
         with self.assertRaises(ValueError):
             receipt.verify_integrity(alias/self.run_id, os.getuid())
+    def test_success_single_change_negatives(self):
+        for change in ('omit-exclusion','reorder-exclusion','excluded-passed','excluded-artifact',
+                       'missing-artifact','ignored','filtered','argv','missing-log','invocation','commands'):
+            summary = self.success()
+            coverage = summary['coverage']
+            if change == 'omit-exclusion': coverage['excluded'].pop()
+            if change == 'reorder-exclusion': coverage['excluded'].reverse()
+            if change == 'excluded-passed': coverage['passed'].append(coverage['excluded'][0]['name'])
+            if change == 'excluded-artifact': coverage['artifacts'][0]['target'] = 'phase2_live_sandbox'
+            if change == 'missing-artifact': summary['commands'].pop(3)
+            if change in ('ignored','filtered'): summary['commands'][3]['inventory'][change] = ['host_test']
+            if change == 'argv': summary['commands'][0]['argv'] = ['/bin/true']
+            if change == 'missing-log': summary['logs'] = []
+            if change == 'invocation': summary['commands'].pop(0)
+            if change == 'commands': summary['commands'] = []
+            with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
+    def test_publication_destination_race(self):
+        # A competing publisher wins after lexists; only NOREPLACE prevents clobbering it.
+        destination = self.receipts/self.run_id
+        def race(path):
+            self.assertEqual(path,destination)
+            destination.mkdir()
+            return False
+        with patch.object(receipt.os.path,'lexists',side_effect=race):
+            with self.assertRaises(FileExistsError): self.publish()
+        self.assertEqual(list(destination.iterdir()),[])
+        self.assertTrue((self.pending/self.run_id/'summary.json').exists())
     def test_schema_and_fabricated_success(self):
         receipt.validate_summary(self.summary)
         for change in ({'status':'pass'},{'status':'PASS_SCOPED'},{'schema_version':2},
