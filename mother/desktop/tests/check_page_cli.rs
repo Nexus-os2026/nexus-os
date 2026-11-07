@@ -185,3 +185,21 @@ fn s1ae_headless_binary_has_no_home_side_effect() {
     );
     assert_eq!(std::fs::read(&page).unwrap(), BAKERY.as_bytes());
 }
+
+// M3E-R9 (1): `check-page` anywhere but first, `--` included, is usage
+// (exit 2) before any desktop start: no home, no GTK.
+#[test]
+fn s1ae_misplaced_check_page_never_reaches_the_desktop() {
+    let d = Dir::new("misplaced");
+    let home = d.sub("home");
+    let page = d.sub("work").join("index.html");
+    std::fs::write(&page, BAKERY).unwrap();
+    let usage = "ERROR usage: nexus-mother check-page <file> [--facts <file>]\n";
+    for lead in ["--", "x", "--check-page"] {
+        let ran = nexus_mother(&home, &[Path::new(lead), Path::new("check-page"), &page]);
+        assert_eq!((ran.code, ran.stdout.as_str()), (Some(2), usage), "{lead}");
+        assert_eq!(ran.stderr, "", "{lead}");
+        let left: Vec<_> = std::fs::read_dir(&home).unwrap().collect();
+        assert!(left.is_empty(), "{lead}: home side effects: {left:?}");
+    }
+}

@@ -414,3 +414,28 @@ fn s1ae_refusal_location_and_exit_contract() {
     let (_, out) = cli(&[&d.file("c2.html", &edited)]);
     assert!(!out.iter().any(|l| l.contains(CANARY)) && !out.iter().any(|l| l.contains("Rosa")));
 }
+
+// M3E-R9 (2): after a page refusal V3 and V4 are `not run`, even when the
+// facts file is malformed too; the result is V2's code.
+#[test]
+fn s1ae_page_refusal_precedes_malformed_facts() {
+    let d = Dir::new();
+    let script = BAKERY.replace("<main>\n", "<main>\n<script>alert(1)</script>\n");
+    let r = check(script.as_bytes()).expect_err("script page");
+    let (code, at) = (r.code.as_str(), (u64::from(r.line), u64::from(r.column)));
+    let bad = "name: Rosa's Bakery\nopen: daily\n";
+    let expected = lines(
+        head(script.as_bytes()),
+        &[
+            &format!("refused: {code} at line {}, column {}", r.line, r.column),
+            OPEN_LINES[0],
+            &format!("facts file sha256 {}  facts hash unavailable", sha(bad)),
+            "facts present as given: not run",
+            "visible text: not run",
+            &format!("result: REFUSED {code}"),
+            &t14_refused(code, Some(at)),
+        ],
+    );
+    let page = d.file("script.html", &script);
+    assert_eq!(with_facts(&page, &d.file("bad.txt", bad)), (1, expected));
+}
