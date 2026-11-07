@@ -168,3 +168,142 @@ class InstalledAcceptance(unittest.TestCase):
     def test_b4(self): self.check('B4','complete-evidence-or-failure')
     def test_clients(self): self.check('CLIENTS','claude-qualification')
     def test_e2e(self): self.check('E2E','899e3872c5b61223c87b905f63c66947a816259b full PASS_SCOPED')
+
+class Q8F1Oracles(unittest.TestCase):
+    def test_canary_open_denial(self):
+        import errno
+        probe = load('probe')
+        for error in (errno.EACCES,errno.EPERM,errno.ENOENT):
+            with patch.object(probe.os,'open',side_effect=OSError(error,'denied')) as opened:
+                probe.host_pty_denied('/dev/pts/99')
+                opened.assert_called_once_with('/dev/pts/99',os.O_RDWR|os.O_NOCTTY)
+        with patch.object(probe.os,'open',return_value=987), patch.object(probe.os,'close') as closed:
+            with self.assertRaisesRegex(ValueError,'host PTY'): probe.host_pty_denied('/dev/pts/99')
+            closed.assert_called_once_with(987)
+        with patch.object(probe.os,'open',side_effect=OSError(errno.EIO,'broken')):
+            with self.assertRaises(ValueError): probe.host_pty_denied('/dev/pts/99')
+        self.assertIn("host_pty_denied(context['pty']['path'])",(HERE/'probe.py').read_text())
+
+class Q8F2Oracles(unittest.TestCase):
+    def test_api_mount_skeleton_inventory(self):
+        tree = ast.parse((HERE/'install.sh').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
+        loops = [n for n in ast.walk(tree) if isinstance(n,ast.For) and isinstance(n.iter,ast.Tuple)]
+        directories = next(ast.literal_eval(n.iter) for n in loops if 'dev/shm' in ast.literal_eval(n.iter))
+        self.assertTrue({'proc','sys'} <= set(directories))
+        text = (HERE/'install.sh').read_text()
+        self.assertLess(text.index("'proc'"),text.index("record(CONFIG/'skeleton.json',inventory)"))
+
+class Q8F3Oracles(unittest.TestCase):
+    def test_private_stage_validates_before_publish(self):
+        scope = installer()
+        files = {'tools/gatebox/'+n:(HERE/n).read_bytes() for n in scope['FILES']}
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(scope,protected=lambda p: None):
+            stage = Path(tmp); os.chmod(stage,0o700); calls = []
+            def validate(argv):
+                paths = argv[3:] if argv[1]=='verify' else argv[2:]
+                self.assertTrue(paths)
+                for p in paths: self.assertEqual(Path(p).parent,stage); self.assertTrue(Path(p).is_file())
+                calls.append(argv)
+            with patch.dict(scope,run=validate):
+                staged = scope['stage_security'](files,1234,5678,stage)
+            self.assertEqual(len(staged),5)
+            self.assertEqual({c[0] for c in calls},{'/usr/sbin/visudo','/usr/bin/systemd-analyze'})
+            self.assertEqual(os.stat(stage).st_mode & 0o777,0o700)
+            for source,target in staged: self.assertEqual(source.parent,stage)
+        text = (HERE/'install.sh').read_text()
+        self.assertIn('os.rename(staged,target)',text)
+
+class Q8F4Oracles(unittest.TestCase):
+    def test_preflight_before_mutation_and_manual_removal(self):
+        text = (HERE/'install.sh').read_text()
+        self.assertLess(text.index('preflight_accounts(args.submit_user)'),text.index('apply_accounts(' ,text.index('def main():')))
+        self.assertLess(text.index('stage_security(files,' ,text.index('def main():')),text.index('apply_accounts(',text.index('def main():')))
+        doc = (HERE/'README.md').read_text()
+        for fragment in ('Manual removal','systemctl disable --now mothergate.socket',
+                         'systemctl stop mothergate.service','gpasswd -d nexus gatesubmit',
+                         'userdel mothergate','userdel gaterun','/var/lib/gatebox-source',
+                         '/usr/lib/gatebox/root','/etc/polkit-1/rules.d/00-gatebox-deny.rules'):
+            self.assertIn(fragment,doc)
+
+class Q8F6Oracles(unittest.TestCase):
+    def test_active_non_native_abi_and_sensor_binding(self):
+        import signal
+        probe = load('probe')
+        for status,expected in ((signal.SIGSYS,'SIGSYS'),(0,'EPERM'),(256,None)):
+            with patch.object(probe.os,'fork',return_value=777), patch.object(probe.os,'waitpid',return_value=(777,status)):
+                if expected: self.assertEqual(probe.non_native_abi(),expected)
+                else:
+                    with self.assertRaises(ValueError): probe.non_native_abi()
+        text = (HERE/'probe.py').read_text()
+        self.assertIn('int 0x80',text)
+        self.assertIn('non_native_abi()',text[text.index('def syscall_probe'):text.index('def process_identity')])
+        value = dict(tiocsti_denied=True,host_hidden=True,reaped=True,syscalls=dict(openat2=True,outer={'p':'EPERM'},inner={'p':'ENOSYS'}))
+        with self.assertRaises(ValueError): probe.validate_sensor('A6',value)
+        value['syscalls']['non_native_abi']='SIGSYS'; probe.validate_sensor('A6',value)
+
+class Q8F7Oracles(unittest.TestCase):
+    def test_clients_heuristic_and_claude_shell_prefix(self):
+        doc = (HERE/'README.md').read_text()
+        self.assertIn('process-ancestry heuristic',doc)
+        self.assertIn('!sudo /usr/bin/python3 -I -B -m unittest discover',doc)
+        self.assertIn('not an attestation',doc)
+
+class Q8F8Oracles(unittest.TestCase):
+    def test_archive_uses_hashed_buffer(self):
+        import io
+        scope = installer(); path = unittest.mock.Mock()
+        path.stat.return_value.st_size = 0; path.read_bytes.return_value = b'checked bytes'
+        class Stop(Exception): pass
+        def opened(*args,**kwargs):
+            self.assertEqual(args,())
+            self.assertIsInstance(kwargs['fileobj'],io.BytesIO)
+            self.assertEqual(kwargs['fileobj'].getvalue(),b'checked bytes')
+            raise Stop
+        with patch.object(scope['tarfile'],'open',side_effect=opened):
+            with self.assertRaises(Stop): scope['bundle_files'](path,hashlib.sha256(b'checked bytes').hexdigest())
+
+class Q8F9Oracles(unittest.TestCase):
+    def test_reproducible_bundle_and_extraction_contract(self):
+        doc = (HERE/'README.md').read_text()
+        for fragment in ("tar --exclude='__pycache__'",'--files-from=-','members=members',
+                         "for parent in path.parents",'§10','needs `--bundle-sha256'):
+            self.assertIn(fragment,doc)
+
+class Q8F10Oracles(unittest.TestCase):
+    def test_synthetic_machine_identity(self):
+        text = (HERE/'install.sh').read_text()
+        self.assertIn("write(ROOT/'etc/machine-id',b'0123456789abcdef0123456789abcdef\\n')",text)
+        self.assertNotIn("('ld.so.cache','machine-id'",text)
+
+class Q8F12Oracles(unittest.TestCase):
+    def test_account_collisions_and_existing_submit_members(self):
+        from types import SimpleNamespace as NS
+        scope = installer()
+        users = [NS(pw_name=n,pw_uid=u,pw_gid=g,pw_shell='/usr/sbin/nologin') for n,u,g in
+                 [('nexus',1000,1000),('mothergate',901,901),('gaterun',902,902)]]
+        groups = [NS(gr_name=n,gr_gid=g,gr_mem=m) for n,g,m in
+                  [('nexus',1000,[]),('mothergate',901,[]),('gaterun',902,[]),('gatesubmit',903,['nexus'])]]
+        def check(): return scope['preflight_accounts']('nexus')
+        with patch.object(scope['pwd'],'getpwall',return_value=users), patch.object(scope['grp'],'getgrall',return_value=groups), \
+                patch.object(scope['os'],'getgrouplist',side_effect=lambda n,g:[g]), patch.dict(scope,run=lambda argv: b'name L'):
+            check()
+            for extra in (NS(pw_name='alias',pw_uid=901,pw_gid=999),NS(pw_name='alias',pw_uid=1000,pw_gid=999),
+                          NS(pw_name='intruder',pw_uid=1111,pw_gid=903)):
+                users.append(extra)
+                with self.assertRaises(ValueError): check()
+                users.pop()
+            groups[-1].gr_mem.append('intruder')
+            with self.assertRaises(ValueError): check()
+
+class Q8F13Oracles(unittest.TestCase):
+    def test_documented_host_effects_and_prerequisites(self):
+        doc = (HERE/'README.md').read_text()
+        for fragment in eval("""('bash -euo pipefail <<'OWNER'','persists at boot','Host changes',
+                         '/etc/systemd/system/mothergate-run@.service','/run/mothergate-control',
+                         '/var/lib/mothergate','groupdel gatesubmit')"""):
+            self.assertIn(fragment,doc)
+        text = (HERE/'install.sh').read_text()
+        tree = ast.parse(text.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
+        prerequisites = next(ast.literal_eval(n.iter) for n in ast.walk(tree) if isinstance(n,ast.For)
+                             and isinstance(n.target,ast.Name) and n.target.id=='executable')
+        self.assertIn('xdotool',prerequisites)
