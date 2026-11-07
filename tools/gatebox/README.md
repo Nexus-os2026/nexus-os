@@ -58,6 +58,11 @@ Root cannot submit. Install never enables normal admission. Existing outputs
 are refused; interrupted installations need review, not an automatic overwrite.
 Make the new gatesubmit membership effective in the actual Claude context.
 
+CLIENTS context is a process-ancestry heuristic based on process command lines,
+not an attestation of agent identity; it can be spoofed by the registered user.
+Run sudo commands via Claude Code's `!` shell prefix to retain that ancestry:
+`!sudo /usr/bin/python3 -I -B -m unittest discover -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v`.
+
 Run qualification from the actual Claude Code process context, with Owner
 approval for host/root testing. The suite records the Claude ancestor, invokes
 `runuser -u nexus -- /usr/bin/python3 -I -B client.py ...`, retains the accepted
