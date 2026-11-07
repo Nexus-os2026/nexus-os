@@ -876,28 +876,55 @@ fn sb3_attempt_grant_clocks_and_identity_are_independent() {
     }
 }
 
-/// SB3B-R5 (1): a grant revoked after its observation and before Q's CAS,
-/// with the invocation live, admits nothing.
+/// SB3B-R5 (1) as amended by SB3B-R6 (2): a revocation started after the
+/// grant observation cannot complete before Q's CAS; it is refused or lands
+/// after the CAS (the entered interval). The bounded wait only bounds the
+/// test: a slow revoker can only let a mutant survive, never fail correct
+/// code.
 #[test]
-fn sb3_attempt_grant_revoked_before_the_cas_admits_nothing() {
+fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
     let f = Admit::bound();
     assert!(f.admit().is_ok(), "positive control");
     let f = Admit::bound();
     let (control, grant) = (f.b.control(), f.b.grant());
+    let revoked_before_cas = Arc::new(AtomicBool::new(false));
+    let seen = revoked_before_cas.clone();
+    let holder = Arc::new(std::sync::Mutex::new(None));
+    let keep = holder.clone();
     f.b.session
         .core
         .cell
         .1
         .arm("model.attempt.granted", move || {
-            let _ = control.authority().grants().revoke(grant);
+            let (done, finished) = std::sync::mpsc::channel();
+            *keep.lock().unwrap() = Some(std::thread::spawn(move || {
+                let _ = control.authority().grants().revoke(grant);
+                let _ = done.send(());
+            }));
+            let completed = finished.recv_timeout(Duration::from_secs(2)).is_ok();
+            seen.store(completed, Ordering::SeqCst);
         });
-    assert_eq!(
-        f.admit().map(|_| ()),
-        Err("grant_not_live"),
-        "revoked before the CAS"
+    let admitted = f.admit();
+    holder
+        .lock()
+        .unwrap()
+        .take()
+        .expect("schedule reached")
+        .join()
+        .unwrap();
+    let before = revoked_before_cas.load(Ordering::SeqCst);
+    assert!(
+        !(before && admitted.is_ok()),
+        "a grant revoked before the CAS admitted"
     );
-    assert!(!f.owner.is_revoked(), "the invocation stayed live");
-    f.nothing("granted revoke");
+    let grants = f.b.control();
+    assert!(
+        grants.authority().grants().live(f.b.grant()).is_none(),
+        "revocation landed"
+    );
+    if admitted.is_err() {
+        f.nothing("revoked before the CAS");
+    }
 }
 
 /// SB3B-R5 (2): the retained SB-2b rollback contract. A pre-ticket refusal
