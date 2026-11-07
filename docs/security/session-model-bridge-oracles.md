@@ -305,3 +305,218 @@ number mutation under state, fail-closed contention/poison handling, bounded
 owned test cleanup, unchanged blocking methods and no caller/phase change.
 Plants are temporary, run one at a time, restored byte-for-byte, never committed.
 Exact-SHA CI, fresh-context review and Owner merge remain external gates.
+
+## 10. SB-2a private registration (frozen before implementation)
+
+Base 899e3872; route remains unavailable. Rulings O1–O6, Rulings 2 and Q1
+bind this checkpoint. SB-2a owns registration only, not SB-2b attempts or
+SB-3 composed inference. Exact cases and literal observations are in
+`mother/host/tests/session/model-bridge-cases.tsv`; oracle bodies in private
+`host_session/model_tests.rs`, `model_death_tests.rs`, host
+`sb2_close_tests.rs`, and recursive `session_sealing.rs` are frozen here.
+Retained behavioral C1-S1 and ordinary inference assertions stay unchanged.
+
+C1-S1-SB2 changes only the lexical structural guard. Enumerated exceptions:
+`host_session/model.rs`, `host_session/close.rs`,
+`host_session/model_tests.rs`, `host_session/model_death_tests.rs` (all under
+`crates/nexus-governed-control/src`). Recursive scans still reject public
+model/inference methods and raw/checked-closure exposure. ModelObligations
+and the CloseObligations.model field are content-free observation only.
+The facade permits only the exact `mod model;`, `mod model_tests;` and
+`mod model_death_tests;` lines. Full C1-S1-SB remains pending SB-3.
+
+Owning holds: reservation and readiness share Core.producers then model;
+metadata and installation use model.try_lock, current PrimaryEvidence.try_health,
+original StopWatch.check_now and original Bootstrap CAS. No such hold crosses
+transport, record I/O or joins. Seal uses producers then conclusive model
+observation. Drop latches uncertainty/denial without a lock. Reporting uses
+nonblocking observations, with unavailable facts Unknown. No observer is
+configured during verification; peer prefixes are mandatory gate evidence.
+
+Q1 exact dead-code expectations (entry outside tests; receipt fields in both
+builds, each with the prescribed reason): HostSession::register_model_private; RegistrationReceipt.sequence,
+RegistrationReceipt.digest, RegistrationReceipt.model, RegistrationReceipt.watch.
+These retained fields are private; SB-3 must remove expectations when wired.
+No allow, module-level or crate-level suppression is authorized.
+
+Plants frozen: MP-SB-2-record/reset/install target R2; MP-SB-6-default targets
+G1 independently at four real metadata boundaries; MP-SB-6-CAS targets G3;
+MP-SB-6-once targets G2; MP-SB-6-retry-registration targets R2/G2;
+MP-SB-5-slot targets A3/C1; MP-SB-11-drop targets D2; MP-SB-11-seal targets
+C1; MP-SB-12-fallback targets C2; MP-SB-12-clock targets C3;
+MP-SB-13-lock targets G1; MP-SB-14-replay targets X1;
+MP-SB-15-content targets P1; MP-SB-4-exposure targets S2.
+Attempt pin/count/record/meter plants, missing-attempt reporting and composed
+end/worker controls belong to SB-2b/SB-3, not registration proof. G5 supplies
+the peer-entered sink-wins schedule; R1 supplies no-interference. Registration
+has no mission Q/R/C/L. O4 permits formatter snapshots only; real composed
+worker-timeout evidence is explicitly PENDING for SB-3/M2e-D.
+
+Commit 1 uses inert private stubs. Runtime denial is not a gate kill: a gate
+oracle blocked before its target is reported not exercised. Tests must compile;
+red lines and fixture hashes are appended as receipts without changing oracles.
+
+### 10.1 Q2 oracle amendment and inert checkpoint
+
+Binding Q2 a–f: host tests move to `mother/host/src/hands/sb2_close_tests.rs`
+with normal cfg(test) module discovery. C2 is renamed (name only) to
+`sb2_shutdown_fallback_reports_model_unknown_when_close_worker_is_skipped`;
+its assertions are unchanged. No scan.rs amendment. The new sealing guard
+recognizes the retained CommitmentId namespace and matches Authority as a
+type token rather than a substring of settle_close_authority. Its positive
+controls still reject raw Authority. C1 scans colon-containing public lines,
+including typed parameters. Both corrected guards have an old-bug red plant.
+The two Clippy range loops use iterators; assertions are unchanged.
+
+Q2e strengthens C1 with the real seal_close and a conclusive-seal positive
+control, R2 with direct installed-object absence, and X1 with real registration
+before-record/after-record/after-install death boundaries. X1 owns a bounded
+child watchdog, surfaces stderr, reopens the real HostSession twice, checks no
+replayed operation/model, and independently checks the peer prefix unchanged.
+These are oracle amendments before implementation, not post-result weakening.
+
+Rewritten snapshot 01 COMPILES. `cargo test -p nexus-governed-control --locked
+--lib host_session::model -- --nocapture`: 1/13/0. Meaningful inert runtime RED:
+A3 model_tests.rs:45, D2 :65, T1 :548 (`operation reservation: Unavailable`).
+The other ten fail sandbox setup, not their intended behavioral assertion.
+Host `cargo test -p nexus-mother-host --locked --lib sb2_ -- --nocapture`:
+0/2/0; fallback :13 and recorded-fact :30 are runtime RED. Logs:
+`q2-01-red-control.log`, `q2-01-red-host.log`. No gate kill is inferred at 01.
+
+Final review-1 fixture SHA-256 (supersedes the stale Q2 hashes; same bytes in both snapshots):
+
+- `crates/nexus-governed-control/src/host_session/model_tests.rs`: `189b804626c5b9cf296091b605c93043af941d44d027d4ab4ff22da33a5a5beb`
+- `crates/nexus-governed-control/src/host_session/model_death_tests.rs`: `d08a319f0080621c105bf9f020d93c8141cacfb286f53e1c576a800e656590f2`
+- `mother/host/src/hands/sb2_close_tests.rs`: `738a254b1195aadb71b3f2e3e0b364057c2d25ab011939f4621c063e285736f9`
+- `mother/host/tests/session/model-bridge-cases.tsv`: `05e50d6b70daf66cb6a9d157209cdfa583e5720fab3358f94e25c01d2c085652`
+
+### 10.2 SB-2a actual implementation receipts — SANDBOX-BLOCKED
+
+Base/HEAD remains 899e3872c5b61223c87b905f63c66947a816259b. Snapshots are
+`01-oracles-inert`, `02-private-registration`, not commits. No Git write,
+remote operation, public model route, host activation, production flag,
+dependency/lockfile/workflow or persistent-format change was made.
+
+Sheet §8 commands (passed/failed/ignored): governed-control lib 441/418/39;
+Mother 235/61/0; host 24/14/0; kernel inference 13/54/0; combined kernel
+guards 0/1/0 (stops at F5; later binaries not reached). Format, diff check,
+and warning-denied all-target Clippy pass. Full core completed (226.07s),
+without the previous outer timeout. The 408 retained core failure names match
+the supplied baseline; ten new failures are RuntimeRoot ancestry or loopback
+EPERM. Other retained failures are preserved with exact errors; not all are
+proven sandbox-only. Full logs and classifications accompany report.md.
+
+Real private focused suite: 4/10/0; host formatters 2/0/0; C1 structural 1/0/0;
+recursive sealing 8/0/0. Three meaningful core inert reds and both host reds
+now pass. No runtime registration, cancellation, death or seal success is
+claimed from fixture refusals. O4's composed worker schedule remains pending.
+
+Compiled and killed: MP-SB-5-slot, MP-SB-11-drop, MP-SB-12-fallback,
+MP-SB-12-clock, Q2-c-sealing-old-bug, Q2-c-C1-old-bug. Compiled but NOT
+EXERCISED: MP-SB-2-record, MP-SB-6-default, MP-SB-6-CAS, MP-SB-11-seal
+(fixture refusal). All ten files restored byte-for-byte with verified SHA-256.
+Other plants and ten-run gate schedules are not claimed as exercised here.
+`plants-outside.sh` contains exact registration mutations (including default
+substitution independently at four metadata boundaries), commands, restoration
+hash checks, and ten serial plus ten parallel private-suite repetitions.
+It records KILLED only for a compiled named-test runtime failure without a
+sandbox refusal; SURVIVED is never a kill. No outside results are invented.
+
+Separate AGENTS §18 self-review: original Bootstrap/same-word CAS and fixed
+30-second deadline; retained original watch and actual record sequence/digest;
+current nonblocking health/watch observation; no authority hold across evidence
+or transport; atomic-only Drop denial; producer-ordered reservation/readiness
+and seal; unknown observations remain debt. Ordinary inference is unchanged.
+This self-review is not independent acceptance. Outside runtime proof,
+fresh-context review, exact-SHA CI and Owner acceptance remain unverified;
+network and Git writes are prohibited. SB-2b/SB-3 and phase advancement remain
+unauthorized. Final verdict is BLOCKED, not a green registration claim.
+
+
+### 10.3 Surviving outside plants — oracle-fix (2026-11-07)
+
+The supplied `outside-run.log` and the five per-plant logs show compilation
+and a **passing named test** for MP-SB-6-default-gate-0..3 and
+MP-SB-6-retry-registration. Those are surviving plants, not kills or setup
+refusals. Their old runner's generic "not exercised" suffix did not establish
+a setup block.
+
+Source diagnosis of default-gate-0..3: `RequestScope.next_step` counts scope
+admissions, not metadata requests. `fixture()` registers a workspace first:
+the governed entry, Files entry, project-select boundary and workspace install
+each admit the Bootstrap scope. Reservation admits it again. Consequently the
+four `model.gate.before` callbacks see next_step 5, 6, 7, 8 on this Linux path;
+old plant predicates 1, 2, 3, 4 never substituted the default. This numeric
+trace is source-derived, not measured inside the sandbox. The revised plans
+count only metadata callbacks in a per-verification wrapper and use the real
+`CallCancel` default at exactly the selected callback, retaining ordinary
+cancellation polling and the before-boundary probe. All other callbacks call
+the real session override. No product field or counter was added.
+
+G1 now also proves successful no-interference reachability of all four real
+gates, the exact peer prefix at contention, successful acquisition of the
+owning lock by the holder, live deny-only cancellation inputs, arrival at the
+selected boundary, and the exact number of gate entries before refusal. The
+existing error and peer-prefix assertions remain. A holder timeout is a failed
+schedule. No observer is configured by registration.
+
+Source diagnosis of retry-registration: ingress makes the original scope
+non-live. The planted second `verify` reaches the transport's early guard,
+which refuses before the final admission callback and before HTTP. Thus peer
+counts cannot distinguish one verification from this forbidden retry. The
+retained pre-ingress oracle remains unchanged. Additive R2-live
+`sb2_failed_verification_is_not_retried` supplies one malformed response
+independently at each of the four metadata boundaries, with cancellation live.
+It requires exactly i+1 gate calls and the exact i+1 peer prefix, failure,
+absence of installation/readiness, and denial of a later caller retry. A
+second verify can now reach the live peer and is observable. The retry plan's
+mutation is unchanged; its named oracle is R2-live.
+
+No production defect was found in this diagnosis; no production repair was
+made. The revised final suite compiled locally: 4 passed, 11 failed, 0 ignored
+(`oracle-fix-model-final.log`). Ten failures are RuntimeRoot writable-ancestor
+refusals; the death fixture is blocked by socket PermissionDenied. All five
+revised plants compiled locally but stopped at RuntimeRoot before their target
+assertions, and restoration hashes matched. These results prove neither RED
+nor GREEN for registration. The Architect must rerun `plants-outside.sh` on
+the final tree with an accepted RuntimeRoot and loopback-test permission. All
+five plants require that fixture. Outside mutation kills and final positive
+controls remain unconfirmed. The private route and phase boundaries are
+unchanged.
+
+### 10.4 Review-1 oracle amendment (before repairs)
+F1: `sb2_facade_rejects_multiline_registration` rejects the reviewer's literal
+multiline wrapper; exact three module declarations and a plain status method pass.
+F2: `sb2_failed_startup_reports_model_unknown` requires MODEL_UNKNOWN in startup output.
+F3: `sb2_install_completion_is_atomic_to_close_observers` pauses after installation,
+observes quiescent/close_obligations concurrently, requires the install hold still
+owned, then requires successful completion and recorded, non-uncertain quiescence.
+F4: `sb2_close_report_has_one_model_line` covers zero/two resource snapshot failures
+with unknown/none model snapshots: exactly one model line in every report.
+F5: final candidate fixture hashes supersede stale hashes; all plants must rerun
+outside. The schedule's RuntimeRoot refusal is neither a behavioral red nor green.
+
+### 10.5 Review-1 final candidate (Q5; uncommitted bytes)
+F1/F2/F4 had intended assertion RED then GREEN (`review1-f1-{red,green}.log`,
+`review1-host-{red,green}.log`). F3's original-gap schedule compiled but was
+RuntimeRoot-blocked before its target (`review1-f3-red.log`); no runtime kill
+or green is inferred. Installation now completes the owner under its state hold.
+No evidence/transport I/O was moved into that hold; Drop remains latch/fail-only.
+The outside runner plants the literal F1 wrapper in a cfg-disabled impl so the
+source oracle, not a compiler error, must reject it. F2 removes startup unknown;
+F3 restores the install/completion gap; F4 restores the duplicate model line.
+The runner pins the entire final candidate, requires positive controls first,
+then runs ALL plants and 10 serial/10 parallel G1/G3/CAS repeats. Final-tree
+outside results remain PENDING; earlier kills are historical only. Fixture
+hashes above identify final candidate bytes, not a new commit. Git writes and
+network remain prohibited; route UNAVAILABLE. Exact results, RuntimeRoot-blocked
+tests, snapshot reproduction and measured Q5 size are in `sb2a-out/report.md`.
+
+Final local targeted results: broker 4/12/0 (11 RuntimeRoot refusals, one
+loopback EPERM); host formatters 4/0/0; facade control 1/0/0; sealing 8/0/0.
+C1 source guard passes; two retained C1 behavioral fixtures refuse with
+Backend("unavailable"). Final fmt and warning-denied all-target Clippy pass.
+Local F1/F2/F4 plants and the adapted fallback plant are killed and restored;
+F3 mutation compiles but stops at RuntimeRoot. Stale fixture metadata refuses;
+final metadata verifies. The runner has 26 unique in-scope plant plans; its
+outside all-plant run and repetitions remain unobserved on these bytes.

@@ -474,6 +474,18 @@ impl Authority {
         self.record(&self.model_record(EvidencePhase::ModelRegistered, None, None, detail))
     }
 
+    /// Private session registration retains the real gating-record sequence.
+    pub(crate) fn record_session_model_registered(
+        &self,
+        detail: Vec<(String, String)>,
+    ) -> Result<u64, AuthorityError> {
+        write_record(
+            &*self.evidence,
+            &self.model_record(EvidencePhase::ModelRegistered, None, None, detail),
+        )
+        .map_err(|_| AuthorityError::EvidenceUnavailable)
+    }
+
     /// M2e-B: one attempted model call of `run` (an end record: the call
     /// has happened).
     pub(crate) fn record_model_call(

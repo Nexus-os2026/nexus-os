@@ -293,25 +293,85 @@ fn session_denies() {
 /// Static seal: the host session facade names no model or inference route;
 /// SessionPort keeps the three model methods' default denial; the session
 /// door's arms refuse.
+fn sb2_public_model_item(line: &str) -> bool {
+    line.starts_with("pub ")
+        && line != "pub struct ModelObligations {"
+        && !line.starts_with("pub model: ModelObligations,")
+        && {
+            let lower = line.to_ascii_lowercase();
+            lower.contains("model") || lower.contains("inference")
+        }
+}
+fn sb2_facade_line(line: &str) -> bool {
+    (!line.contains("inference") && !line.contains("model_"))
+        || matches!(
+            line,
+            "mod model;" | "mod model_tests;" | "mod model_death_tests;"
+        )
+}
+#[test]
+fn sb2_facade_rejects_multiline_registration() {
+    let plant = "pub fn register_local(\n&self,\nspec: &crate::inference::ModelPinSpec,\n) -> Result<crate::inference::ModelIdentityView, _> { self.register_model_private(..) }";
+    assert!(!plant.lines().map(str::trim).all(sb2_facade_line));
+    assert!([
+        "mod model;",
+        "mod model_tests;",
+        "mod model_death_tests;",
+        "pub fn status(&self) {}"
+    ]
+    .into_iter()
+    .all(sb2_facade_line));
+}
 #[test]
 fn c1_s1_session_sources_have_no_model_route() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut files = vec![root.join("crates/nexus-governed-control/src/host_session.rs")];
-    for entry in
-        std::fs::read_dir(root.join("crates/nexus-governed-control/src/host_session")).unwrap()
-    {
-        let path = entry.unwrap().path();
-        if path.extension().is_some_and(|e| e == "rs") {
-            files.push(path);
+    fn walk(path: &Path, files: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, files);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                files.push(path);
+            }
         }
     }
+    let facade = "crates/nexus-governed-control/src/host_session.rs";
+    let mut files = vec![root.join(facade)];
+    walk(
+        &root.join("crates/nexus-governed-control/src/host_session"),
+        &mut files,
+    );
+    let private = [
+        "crates/nexus-governed-control/src/host_session/model.rs",
+        "crates/nexus-governed-control/src/host_session/close.rs",
+        "crates/nexus-governed-control/src/host_session/model_tests.rs",
+        "crates/nexus-governed-control/src/host_session/model_death_tests.rs",
+    ];
     assert!(files.len() > 1);
+    assert!(sb2_public_model_item(
+        "pub fn model_call(&self, id: u64) {}"
+    ));
+    assert!(!sb2_public_model_item(
+        "pub(crate) fn model_call(id: u64) {}"
+    ));
+    assert!(!sb2_public_model_item("pub model: ModelObligations,"));
     for path in files {
         let text = std::fs::read_to_string(&path).unwrap();
+        let permitted = private.iter().any(|p| path == root.join(p));
         for line in text.lines().map(str::trim).filter(|l| !l.starts_with("//")) {
+            if path == root.join(facade) {
+                assert!(sb2_facade_line(line), "facade: {line}");
+            } else if !permitted {
+                assert!(
+                    !line.contains("inference") && !line.contains("model_"),
+                    "{}: {line}",
+                    path.display()
+                );
+            }
+            // C1-S1-SB2: private machinery and content-free close fields only.
             assert!(
-                !line.contains("inference") && !line.contains("model_"),
-                "{}: {line}",
+                !sb2_public_model_item(line),
+                "public model route: {}: {line}",
                 path.display()
             );
         }

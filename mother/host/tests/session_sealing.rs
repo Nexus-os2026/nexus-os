@@ -276,3 +276,81 @@ fn fix1_f13_published_hands_build_is_self_contained() {
         "run the artifact built by the documented command"
     );
 }
+
+// C1-S1-SB2 adds private machinery, never a public nested escape.
+fn sb2_public_escape(text: &str) -> bool {
+    let text = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if signatures(&text).iter().any(|s| {
+        let s = s
+            .replace("crate::authority::ids::CommitmentId", "CommitmentId")
+            .to_ascii_lowercase();
+        [
+            "model",
+            "inference",
+            "governedcontrol",
+            "agentdoor",
+            "transport",
+            "stopwatch",
+            "fnonce",
+            "fnmut",
+            "fn(",
+        ]
+        .iter()
+        .any(|n| s.contains(n))
+            || s.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .any(|w| w == "authority")
+    }) {
+        return true;
+    }
+    text.lines().map(str::trim).any(|l| {
+        l.starts_with("pub use ")
+            || l.starts_with("pub type ")
+            || (l.starts_with("pub ")
+                && !l.contains("fn ")
+                && [
+                    "GovernedControl",
+                    "AgentDoor",
+                    "Transport",
+                    "StopWatch",
+                    "Authority",
+                ]
+                .iter()
+                .any(|n| l.contains(n)))
+    })
+}
+#[test]
+fn sb2_private_model_submodules_expose_no_callable_route() {
+    fn visit(path: &Path) {
+        if path.is_dir() {
+            for e in std::fs::read_dir(path).unwrap() {
+                visit(&e.unwrap().path());
+            }
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            assert!(
+                !sb2_public_escape(&code(path)),
+                "nested escape {}",
+                path.display()
+            );
+        }
+    }
+    visit(&root().join("crates/nexus-governed-control/src/host_session"));
+    assert!(!sb2_public_escape(
+        "pub fn lookup(id: crate::authority::ids::CommitmentId) {}"
+    ));
+    assert!(sb2_public_escape(
+        "pub fn raw() -> crate::authority::Authority {}"
+    ));
+    assert!(!sb2_public_escape(
+        "pub fn settle_close_authority(&self) {}"
+    ));
+    for plant in [
+        "pub fn raw(&self) -> Arc<GovernedControl> { unreachable!() }",
+        "pub fn model_identity(&self) -> String { unreachable!() }",
+    ] {
+        assert!(sb2_public_escape(plant));
+    }
+}
