@@ -239,7 +239,7 @@ SB3B1e-M/r5_observer:after/cancel_run	IDENTICAL_POINT:r5_cas:before/cancel_run	r
 SB3B1e-M/r5_observer:after/door_halt	IDENTICAL_POINT:r5_cas:before/door_halt	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
 SB3B1e-M/r5_observer:after/quit	IDENTICAL_POINT:r5_cas:before/quit	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
 SB3B1e-M/r5_observer:after/session_failure	IDENTICAL_POINT:r5_cas:before/session_failure	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
-SB3B1e-M/r5_observer:after/q_expiry	DEFERRED:SB3B-B1f	r5_observer:after	no sample-faithful Q seam (SB3B-R18 2)	SB-3B1e-M
+SB3B1e-M/r5_observer:after/q_expiry	IDENTICAL_POINT:r5_cas:before/q_expiry	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
 SB3B1e-M/r5_observer:after/mission_wall	IDENTICAL_POINT:r5_cas:before/mission_wall	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
 SB3B1e-M/r5_observer:after/mission_mono	IDENTICAL_POINT:r5_cas:before/mission_mono	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
 SB3B1e-M/r5_observer:after/native_halt	IDENTICAL_POINT:r5_cas:before/native_halt	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
@@ -262,7 +262,7 @@ SB3B1e-M/r5_cas:before/cancel_run	sb3_matrix_r5_cas_before	r5_cas:before	next:mo
 SB3B1e-M/r5_cas:before/door_halt	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
 SB3B1e-M/r5_cas:before/quit	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
 SB3B1e-M/r5_cas:before/session_failure	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
-SB3B1e-M/r5_cas:before/q_expiry	DEFERRED:SB3B-B1f	r5_cas:before	no sample-faithful Q seam (SB3B-R18 2)	SB-3B1e-M
+SB3B1e-M/r5_cas:before/q_expiry	sb3_matrix_r5_cas_before	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
 SB3B1e-M/r5_cas:before/mission_wall	sb3_matrix_r5_cas_before	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
 SB3B1e-M/r5_cas:before/mission_mono	sb3_matrix_r5_cas_before	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
 SB3B1e-M/r5_cas:before/native_halt	sb3_matrix_r5_cas_before	r5_cas:before	next:model_stopped:poll	SB-3B1e-M
@@ -280,8 +280,8 @@ SB3B1e-M/r5_cas:before/closing_restricted	sb3_matrix_r5_cas_before	r5_cas:before
 SB3B1e-M/r5_cas:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
 SB3B1e-M/r5_cas:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
 SB3B1e-M/r5_cas:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
-SB3B1e-M/r5_cas:before/mission_wall_narrowed	OPEN:SB3B-B1f	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
-SB3B1e-M/r5_cas:before/mission_mono_narrowed	OPEN:SB3B-B1f	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_wall_narrowed	sb3_matrix_r5_cas_before	r5_cas:before	at:model_timeout:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_mono_narrowed	sb3_matrix_r5_cas_before	r5_cas:before	at:model_timeout:refused:8	SB-3B1e-M
 SB3B1e-M/r5_cas:after/emergency	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
 SB3B1e-M/r5_cas:after/cancel_run	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
 SB3B1e-M/r5_cas:after/door_halt	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M

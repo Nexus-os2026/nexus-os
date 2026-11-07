@@ -2967,14 +2967,14 @@ const STATES: [&str; 8] = [
     "closed_clean",
     "closed_unclean",
 ];
-/// SB3B-R18 (1): a mission deadline lapsed at the CAS by narrowing is
-/// refused `model_cancelled`; asserted as it is now, until SB3B-B1f.
-const KNOWN_DEFECT: [&str; 2] = [
+/// SB3B-R18 (1): the two narrowing cells, beyond the class dimension.
+const NARROWED: [&str; 2] = [
     "r5_cas:before/mission_wall_narrowed",
     "r5_cas:before/mission_mono_narrowed",
 ];
-/// SB3B-R18 (2): the Q seam ignores the sample; no evidence until B1f.
-const DEFERRED: [&str; 2] = ["r5_observer:after/q_expiry", "r5_cas:before/q_expiry"];
+/// SB3B-R18, closed by B1f: no cell is open or deferred any more.
+const KNOWN_DEFECT: [&str; 0] = [];
+const DEFERRED: [&str; 0] = [];
 /// SB3B-R19 (6): each N/A reason, the states it may cover, whether it may
 /// cover the first sink, and its one named oracle.
 const NA_TABLE: [(&str, &[&str], bool, &str); 2] = [
@@ -3397,7 +3397,7 @@ fn sb3_matrix_r5_cas_before() {
     if watched("sb3_matrix_r5_cas_before") {
         return;
     }
-    assert_eq!(matrix_side("r5_cas:before"), 80, "every executed cell ran");
+    assert_eq!(matrix_side("r5_cas:before"), 84, "every executed cell ran");
     println!("{HELD_DONE} sb3_matrix_r5_cas_before");
 }
 #[test]
@@ -3431,7 +3431,7 @@ fn sb3_schedule_matrix_cells_are_complete() {
         .iter()
         .flat_map(|s| all.clone().map(move |c| format!("{s}/{c}")))
         .collect();
-    want.extend(KNOWN_DEFECT.map(String::from));
+    want.extend(NARROWED.map(String::from));
     let mut got: Vec<String> = rows.iter().map(cell).collect();
     want.sort();
     got.sort();
@@ -3548,6 +3548,9 @@ fn unwatched(source: &str) -> Vec<String> {
 /// invisible to it (the seam is sample-faithful) and ends at the next poll.
 #[test]
 fn sb3_deadline_lapsed_under_the_hold_times_out() {
+    if watched("sb3_deadline_lapsed_under_the_hold_times_out") {
+        return;
+    }
     positive("positive control");
     for (side, step) in [
         ("r5_cas:before", "refused:8"),
@@ -3564,4 +3567,5 @@ fn sb3_deadline_lapsed_under_the_hold_times_out() {
             }
         }
     }
+    println!("{HELD_DONE} sb3_deadline_lapsed_under_the_hold_times_out");
 }
