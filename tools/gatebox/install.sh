@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 DEST = Path('/usr/libexec/gatebox')
 CONFIG = Path('/etc/gatebox')
@@ -117,6 +118,22 @@ def account(name):
         raise ValueError('unsafe gate identity: '+name)
     return entry
 
+def stage_security(files,uid,gid,stage):
+    protected(stage)
+    if stat.S_IMODE(stage.stat().st_mode) != 0o700: raise ValueError('private staging required')
+    outputs = []
+    for name in ('mothergate.socket','mothergate.service','mothergate-run@.service'):
+        path = stage/name
+        write(path,render(files['tools/gatebox/units/'+name].decode(),uid,gid).encode())
+        outputs.append((path,Path('/etc/systemd/system')/name))
+    for name,target,mode in (('sudoers','/etc/sudoers.d/gatebox',0o440),
+                             ('deny-systemd.rules','/etc/polkit-1/rules.d/00-gatebox-deny.rules',0o644)):
+        path = stage/name; write(path,files['tools/gatebox/policy/'+name],mode)
+        outputs.append((path,Path(target)))
+    run(['/usr/sbin/visudo','-cf',str(stage/'sudoers')])
+    run(['/usr/bin/systemd-analyze','verify',*[str(p) for p,t in outputs[:3]]])
+    return outputs
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('action',choices=['install','enable-qualified'])
@@ -171,63 +188,62 @@ def main():
     protected(Path('/opt/google/chrome/chrome'))
     manager,payload = account('mothergate'),account('gaterun')
     if manager.pw_uid == payload.pw_uid or manager.pw_gid == payload.pw_gid: raise ValueError('distinct identities required')
-    try: grp.getgrnam('gatesubmit')
-    except KeyError: run(['/usr/sbin/groupadd','--system','gatesubmit'])
-    run(['/usr/sbin/usermod','--append','--groups','gatesubmit',args.submit_user])
-    for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
-    for name in FILES:
-        target = DEST/name; target.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
-        write(target,files['tools/gatebox/'+name],0o755 if name in ('install.sh','lifecycle.py') else 0o644)
-    write(DEST/'policy/phase2_live_sandbox.rs',files[HARNESS])
-    for name in ('staging','pending','receipts'):
-        path = STATE/name; path.mkdir(mode=0o755 if name == 'receipts' else 0o700)
-        os.chown(path,manager.pw_uid,manager.pw_gid)
-    for name in ('usr/bin','usr/sbin','usr/lib','usr/lib64','opt/google/chrome','opt/rust','inputs/registry',
-                 'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm'):
-        (ROOT/name).mkdir(parents=True,exist_ok=True,mode=0o755)
-    write(ROOT/'gate/request.json',b'',0o444)
-    for name,target in {'bin':'usr/bin','sbin':'usr/sbin','lib':'usr/lib','lib64':'usr/lib64','var/run':'/run','var/tmp':'/tmp'}.items():
-        (ROOT/name).symlink_to(target)
-    for name,text in {'passwd':f'root:x:0:0::/nonexistent:/usr/sbin/nologin\ngaterun:x:{payload.pw_uid}:{payload.pw_gid}::/work/home:/usr/sbin/nologin\n',
-                      'group':f'root:x:0:\ngaterun:x:{payload.pw_gid}:\n','nsswitch.conf':'passwd: files\ngroup: files\nhosts: files\n',
-                      'hosts':'127.0.0.1 localhost\n::1 localhost\n','resolv.conf':''}.items():
-        write(ROOT/'etc'/name,text.encode())
-    for name in ('ld.so.cache','machine-id','localtime','fonts','alternatives','dbus-1'):
-        host = Path('/etc')/name
-        if host.is_dir(): shutil.copytree(host,ROOT/'etc'/name,symlinks=True)
-        else: shutil.copyfile(host,ROOT/'etc'/name)
-    # Enumerate every skeleton byte/link. The manifest is checked before qualification.
-    inventory = {}
-    for path in sorted(ROOT.rglob('*')):
-        key = str(path.relative_to(ROOT)); mode = path.lstat().st_mode
-        if stat.S_ISLNK(mode): inventory[key] = {'link':os.readlink(path)}
-        elif stat.S_ISREG(mode): inventory[key] = {'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
-        elif stat.S_ISDIR(mode): inventory[key] = {'directory':True}
-        else: raise ValueError('special skeleton entry: '+key)
-    record(CONFIG/'skeleton.json',inventory)
-    registration = {'mother':dict(uid=submit.pw_uid,user=args.submit_user,object_format='sha1',common_directory=str(source),
-                                  device=info.st_dev,inode=info.st_ino,fixture_sha=FIXTURE,qualification_gate_set='full')}
-    record(CONFIG/'registry.json',registration)
-    outputs = []
-    for name in ('mothergate.socket','mothergate.service','mothergate-run@.service'):
-        target = Path('/etc/systemd/system')/name
-        write(target,render((DEST/'units'/name).read_text(),payload.pw_uid,payload.pw_gid).encode()); outputs.append(target)
-    for path,name,mode in (('/etc/sudoers.d/gatebox','policy/sudoers',0o440),('/etc/polkit-1/rules.d/00-gatebox-deny.rules','policy/deny-systemd.rules',0o644)):
-        target = Path(path); write(target,(DEST/name).read_bytes(),mode); outputs.append(target)
-    for name,data in payload_policies(files).items():
-        write(CONFIG/name,data); outputs.append(CONFIG/name)
-    record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
-    outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json']
-    record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
-    sys.path.insert(0,str(DEST))
-    import probe
-    current = probe.installed_identity()
-    record(CONFIG/'identity.json',current)
-    record(CONFIG/'qualification.json',PLACEHOLDER)
-    record(CONFIG/'admission.json',{'stage':'qualifying','identity':current})
-    run(['/usr/sbin/visudo','-cf','/etc/sudoers.d/gatebox'])
-    run(['/usr/bin/systemd-analyze','verify',*[str(p) for p in outputs[:3]]])
-    print('Installed in qualifying stage; start socket, qualify, then enable-qualified.')
+    with tempfile.TemporaryDirectory(prefix='.gatebox-',dir='/etc') as temporary:
+        staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,Path(temporary))
+        try: grp.getgrnam('gatesubmit')
+        except KeyError: run(['/usr/sbin/groupadd','--system','gatesubmit'])
+        run(['/usr/sbin/usermod','--append','--groups','gatesubmit',args.submit_user])
+        for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
+        for name in FILES:
+            target = DEST/name; target.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
+            write(target,files['tools/gatebox/'+name],0o755 if name in ('install.sh','lifecycle.py') else 0o644)
+        write(DEST/'policy/phase2_live_sandbox.rs',files[HARNESS])
+        for name in ('staging','pending','receipts'):
+            path = STATE/name; path.mkdir(mode=0o755 if name == 'receipts' else 0o700)
+            os.chown(path,manager.pw_uid,manager.pw_gid)
+        for name in ('usr/bin','usr/sbin','usr/lib','usr/lib64','opt/google/chrome','opt/rust','inputs/registry',
+                     'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm'):
+            (ROOT/name).mkdir(parents=True,exist_ok=True,mode=0o755)
+        write(ROOT/'gate/request.json',b'',0o444)
+        for name,target in {'bin':'usr/bin','sbin':'usr/sbin','lib':'usr/lib','lib64':'usr/lib64','var/run':'/run','var/tmp':'/tmp'}.items():
+            (ROOT/name).symlink_to(target)
+        for name,text in {'passwd':f'root:x:0:0::/nonexistent:/usr/sbin/nologin\ngaterun:x:{payload.pw_uid}:{payload.pw_gid}::/work/home:/usr/sbin/nologin\n',
+                          'group':f'root:x:0:\ngaterun:x:{payload.pw_gid}:\n','nsswitch.conf':'passwd: files\ngroup: files\nhosts: files\n',
+                          'hosts':'127.0.0.1 localhost\n::1 localhost\n','resolv.conf':''}.items():
+            write(ROOT/'etc'/name,text.encode())
+        for name in ('ld.so.cache','machine-id','localtime','fonts','alternatives','dbus-1'):
+            host = Path('/etc')/name
+            if host.is_dir(): shutil.copytree(host,ROOT/'etc'/name,symlinks=True)
+            else: shutil.copyfile(host,ROOT/'etc'/name)
+        # Enumerate every skeleton byte/link. The manifest is checked before qualification.
+        inventory = {}
+        for path in sorted(ROOT.rglob('*')):
+            key = str(path.relative_to(ROOT)); mode = path.lstat().st_mode
+            if stat.S_ISLNK(mode): inventory[key] = {'link':os.readlink(path)}
+            elif stat.S_ISREG(mode): inventory[key] = {'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+            elif stat.S_ISDIR(mode): inventory[key] = {'directory':True}
+            else: raise ValueError('special skeleton entry: '+key)
+        record(CONFIG/'skeleton.json',inventory)
+        registration = {'mother':dict(uid=submit.pw_uid,user=args.submit_user,object_format='sha1',common_directory=str(source),
+                                      device=info.st_dev,inode=info.st_ino,fixture_sha=FIXTURE,qualification_gate_set='full')}
+        record(CONFIG/'registry.json',registration)
+        outputs = []
+        for staged,target in staged_security:
+            if target.exists() or target.is_symlink(): raise ValueError('output appeared: '+str(target))
+            os.rename(staged,target); outputs.append(target)
+        for name,data in payload_policies(files).items():
+            write(CONFIG/name,data); outputs.append(CONFIG/name)
+        record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
+        outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json']
+        record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
+        sys.path.insert(0,str(DEST))
+        import probe
+        current = probe.installed_identity()
+        record(CONFIG/'identity.json',current)
+        record(CONFIG/'qualification.json',PLACEHOLDER)
+        record(CONFIG/'admission.json',{'stage':'qualifying','identity':current})
+        print('Installed in qualifying stage; start socket, qualify, then enable-qualified.')
+
 
 if __name__ == '__main__': main()
 PY
