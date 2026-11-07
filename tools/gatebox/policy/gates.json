@@ -63,7 +63,15 @@
     {
       "id": "host",
       "adapter": "reconcile-all-artifacts",
-      "package": "nexus-mother-host"
+      "package": "nexus-mother-host",
+      "argv": [
+        "/usr/bin/python3",
+        "-I",
+        "-B",
+        "/gate/bin/init.py",
+        "--gate",
+        "host"
+      ]
     },
     {
       "id": "desktop-live",
@@ -113,7 +121,15 @@
     {
       "id": "whitespace",
       "adapter": "snapshot-whitespace",
-      "label": "approximation to git diff --check"
+      "label": "approximation to git diff --check",
+      "argv": [
+        "/usr/bin/python3",
+        "-I",
+        "-B",
+        "/gate/bin/init.py",
+        "--gate",
+        "whitespace"
+      ]
     }
   ],
   "coverage": {
@@ -129,5 +145,13 @@
     "Host toolchain and registry are mutable trusted inputs; inventories do not defeat change-and-restore attacks.",
     "Candidate-produced assertions are not independent correctness proofs.",
     "GitHub forced-live verifier coverage and current advisory audits remain authoritative and outside this offline gate set."
-  ]
+  ],
+  "environment": {
+    "PATH": "/opt/rust/bin:/usr/bin:/bin",
+    "LANG": "C.UTF-8",
+    "HOME": "/work/home",
+    "CARGO_HOME": "/work/cargo",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_TARGET_DIR": "/work/target"
+  }
 }

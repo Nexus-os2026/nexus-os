@@ -56,6 +56,7 @@ def validate_summary(summary):
     if len({log['file'] for log in summary['logs']}) != len(summary['logs']): raise ValueError('duplicate log')
     if summary['status'] != 'PASS_SCOPED': return
     gates, exclusions = policy()
+    if summary['environment'] != gates['environment']: raise ValueError('gate environment mismatch')
     expected = [g['id'] for g in gates['gates']]
     coverage = summary['coverage']
     if (summary['missing_evidence'] or summary['cleanup'].get('complete') is not True
@@ -99,6 +100,7 @@ def validate_summary(summary):
     logs = {log['file']:log['sha256'] for log in summary['logs']}
     for command in summary['commands']:
         gate = next(g for g in gates['gates'] if g['id'] == command.get('gate_id',command['id']))
+        if command['environment'] != gates['environment']: raise ValueError('command environment mismatch')
         if 'argv' in gate and command['argv'] != gate['argv']: raise ValueError('gate argv mismatch')
         if gate['id'] in ('workspace','desktop-live'):
             artifact = eligible.get(command.get('artifact_id'))
@@ -123,6 +125,13 @@ def validate_summary(summary):
                     or any(inventory.get(k) != [] for k in ('failed','ignored','filtered'))):
                 raise ValueError('test reconciliation')
             if gate['id'] == 'desktop-live' and names != gate['expected_names']: raise ValueError('desktop inventory')
+    host_names = set()
+    for command in workspace:
+        if command['artifact_id'] in host: host_names.update(command['inventory']['expected'])
+    for command in summary['commands']:
+        if command.get('gate_id',command['id']) == 'host':
+            if not host_names or set(command['inventory']['expected']) != host_names:
+                raise ValueError('host test inventory mismatch')
 
 def check(info, owner_uid, directory=False):
     if (info.st_uid != owner_uid or info.st_mode & 0o022
