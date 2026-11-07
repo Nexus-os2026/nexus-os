@@ -306,21 +306,30 @@ impl Shared {
         }
     }
     /// M-3a: a goal-mode line from the reader. Stop, Quit and EOF are the
-    /// same ingress as in command mode; a goal never reaches the queue.
+    /// same ingress as in command mode; a goal never reaches the queue. A
+    /// goal is published only with its read id ([`Shared::publish_goal`]).
     pub(crate) fn goal_line(&self, line: GoalLine) {
         match line {
             GoalLine::Stop => self.receive(Line::Stop, false),
             GoalLine::Quit => self.receive(Line::Quit, false),
             GoalLine::Eof => self.receive(Line::Eof, true),
-            GoalLine::Goal(goal) => {
-                let mut input = self.input();
-                if input.goal {
-                    input.goal_line.get_or_insert(goal);
-                }
-                drop(input);
-                self.changed.notify_all();
-            }
+            GoalLine::Goal(_) => {}
         }
+    }
+    /// M3E-R15: goal read `read`'s completed line, published only if `read`
+    /// is the current READY read; otherwise it is discarded.
+    pub(crate) fn publish_goal(&self, read: u64, goal: Result<String, crate::inputs::InputError>) {
+        let mut input = self.input();
+        let ready = input.goal
+            && input.active
+            && input.typing
+            && input.boundary == input.acknowledged
+            && input.goal_read == read;
+        if ready {
+            input.goal_line.get_or_insert(goal);
+        }
+        drop(input);
+        self.changed.notify_all();
     }
     /// M-3a (R8): read one typed goal through the single reader, by
     /// `deadline`. The prompt is displayed, earlier input is invalidated at
@@ -1303,7 +1312,8 @@ pub(crate) fn route_read(shared: &Shared, buffers: &mut Buffers, bytes: &[u8], m
     if discard {
         buffers.invalidate();
     }
-    let mut read = mode.read.map(|_| shared.input().goal_read);
+    // The read id is the snapshot's, never reread (M3E-R15).
+    let mut read = mode.read;
     let mut echo = String::new();
     let mut pending = None;
     for (_i, &b) in bytes.iter().enumerate() {
@@ -1342,8 +1352,11 @@ pub(crate) fn route_read(shared: &Shared, buffers: &mut Buffers, bytes: &[u8], m
                 match line {
                     // Delivered after the rest of this read, so a Stop, Quit
                     // or EOF typed with it is seen first.
-                    GoalLine::Goal(result) if live => pending = Some(result),
-                    GoalLine::Goal(_) => {}
+                    GoalLine::Goal(result) => {
+                        if let Owner::Goal(r) = owner {
+                            pending = Some((r, result));
+                        }
+                    }
                     other => shared.goal_line(other),
                 }
                 if live {
@@ -1371,8 +1384,8 @@ pub(crate) fn route_read(shared: &Shared, buffers: &mut Buffers, bytes: &[u8], m
     }
     #[cfg(test)]
     buffers.fire(HookPoint::Publish);
-    if let Some(result) = pending {
-        shared.goal_line(GoalLine::Goal(result));
+    if let Some((read, result)) = pending {
+        shared.publish_goal(read, result);
     }
 }
 
