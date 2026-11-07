@@ -274,9 +274,22 @@ mod marker_tests {
     }
 
     /// The length of the string or char literal starting `code`, if any.
+    /// Raw strings are not lexed; `rejects_section` refuses them first.
     fn literal_len(code: &[u8]) -> Option<usize> {
         match code {
-            [b'\'', c, b'\'', ..] if *c != b'\\' => Some(3),
+            [b'\'', b'\\', ..] => {
+                let end = code.iter().skip(3).take(10).position(|&c| c == b'\'');
+                end.map(|j| j + 4)
+            }
+            [b'\'', c, ..] => {
+                let n = match c {
+                    0xf0.. => 4,
+                    0xe0.. => 3,
+                    0xc0.. => 2,
+                    _ => 1,
+                };
+                (code.get(1 + n) == Some(&b'\'')).then_some(n + 2)
+            }
             [b'"', rest @ ..] => {
                 let mut i = 0;
                 while i < rest.len() && rest[i] != b'"' {
@@ -322,27 +335,63 @@ mod marker_tests {
         String::from_utf8(out).unwrap_or_default()
     }
 
-    /// Declarations that could rebind `::getrandom`/`::hex` or shadow them.
-    const REBINDINGS: &[&str] = &[
-        "extern crate",
-        "mod getrandom",
-        "mod hex",
-        " as getrandom",
-        " as hex",
+    /// Adjacent word pairs that could rebind `::getrandom`/`::hex` or shadow them.
+    const REBINDINGS: &[[&str; 2]] = &[
+        ["extern", "crate"],
+        ["mod", "getrandom"],
+        ["mod", "hex"],
+        ["as", "getrandom"],
+        ["as", "hex"],
     ];
+    /// The header that ends the checked production section.
+    const CUT: &str = "\n#[cfg(test)]\nmod marker_tests {";
+
+    /// Whether `code` holds a raw string, byte/C raw string or raw identifier.
+    fn has_raw_prefix(code: &str) -> bool {
+        let b = code.as_bytes();
+        let ident = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+        (0..b.len()).any(|i| {
+            let starts = match i.checked_sub(1).map(|p| b[p]) {
+                None => true,
+                Some(b'b' | b'c') => i < 2 || !ident(b[i - 2]),
+                Some(p) => !ident(p),
+            };
+            b[i] == b'r' && starts && matches!(b.get(i + 1), Some(b'"' | b'#'))
+        })
+    }
+
+    /// Fail closed on anything the stripper does not lex exactly (raw literals),
+    /// and on a rebinding pair in the raw text or the comment-stripped text, so
+    /// neither a comment nor a mis-lex can split or hide one.
+    fn rejects_section(raw: &str) -> bool {
+        let stripped = code_only(raw);
+        let pairs = |text: &str| -> bool {
+            let words: Vec<&str> = text
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .filter(|w| !w.is_empty())
+                .collect();
+            words.windows(2).any(|w| REBINDINGS.iter().any(|r| w == r))
+        };
+        has_raw_prefix(&stripped) || pairs(raw) || pairs(&stripped)
+    }
 
     /// The unique, ungated production definition's body, comments removed.
     fn production_body(source: &str) -> Option<String> {
         let source = source.replace("\r\n", "\n");
-        let raw = &source[..source.find("\n#[cfg(test)]\nmod marker_tests {")?];
+        if source.matches(CUT).count() != 1 {
+            return None;
+        }
+        let raw = &source[..source.find(CUT)?];
+        if rejects_section(raw) {
+            return None;
+        }
         let production = code_only(raw);
         let ok = production.matches("fresh_page_marker").count() == 1
             && production.matches("mod marker_fault").count() == 1
             && production
                 .matches("\n#[cfg(test)]\nmod marker_fault {")
                 .count()
-                == 1
-            && !REBINDINGS.iter().any(|r| production.contains(r));
+                == 1;
         let at = production.find(SIGNATURE).filter(|_| ok)?;
         if production[..at].trim_end().ends_with(']') {
             return None;
@@ -523,8 +572,7 @@ mod marker_tests {
                 failures.push(format!("mis-lexable literal accepted: {plant:?}"));
             }
         }
-        let cut = "\n#[cfg(test)]\nmod marker_tests {";
-        if approved_source(&edited(source, cut, FAKE_CUT, true)) {
+        if approved_source(&edited(source, CUT, FAKE_CUT, true)) {
             failures.push("second test-module header accepted".to_string());
         }
         for comment in COMMENTS {
@@ -533,11 +581,8 @@ mod marker_tests {
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");
-        let crate_root = code_only(include_str!("../lib.rs"));
-        assert!(
-            !crate_root.contains("extern crate"),
-            "no crate-root rebinding"
-        );
+        let crate_root = include_str!("../lib.rs").replace("\r\n", "\n");
+        assert!(!rejects_section(&crate_root), "no crate-root rebinding");
         let manifest = include_str!("../../Cargo.toml").replace("\r\n", "\n");
         for dependency in ["\ngetrandom = \"0.2\"\n", "\nhex = \"0.4\"\n"] {
             assert!(manifest.contains(dependency), "unrenamed {dependency:?}");

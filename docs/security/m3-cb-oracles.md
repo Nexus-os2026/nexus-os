@@ -44,5 +44,16 @@ comments and string/char literals, so a `// }` or `/* } */` comment cannot end
 the body early. Controls: unpinned body and both shadows fail; both harmless
 comments pass. All five were RED on the prior checker and production.
 
+Review-2 fix (Codex, LOW, crafted-only): the checker fails closed rather than
+lexing everything. It rejects any raw string, byte/C raw string or raw
+identifier outside comments in the production section and `lib.rs`; lexes
+escaped and multi-byte char literals exactly; matches the rebinding pairs
+(`extern crate`, `mod`/`as` + `getrandom`/`hex`) as adjacent words in both the
+raw and comment-stripped text, so whitespace or comments between tokens do not
+split them; and requires exactly one test-module header. Controls: seven split
+rebindings, five mis-lexable literals and a second header are rejected (12 of
+13 RED on the prior checker; the exact `extern\ncrate self as getrandom` form
+was already rejected); both harmless comments still pass.
+
 Structural equality pins source text; it is not a statistical proof of
 unpredictability. MP-Cb-9 (fallback after typed failure) is owned by Cb1.
