@@ -159,8 +159,10 @@ publication record. Unreadable or mismatched deliverable → Stop
 reports `written; proof not recorded`. An append failure of ActionApproved
 or the receipt fails the mission in memory, returns that same statement in
 the Advance, and leaves closure/ack undone (journal poisoned).
-Settlement of a published page (Stop/budget/interruption): a valid receipt
-is appended with `overtaken: true` immediately before the Settled line.
+Settlement of a published page (Stop/budget/interruption): its receipt is
+appended with `overtaken: true` immediately before the Settled line; per
+Db-Q4 a receipt without policy is kept too (`policy_hash` omitted), with no
+verification or success claim. A clean-path receipt must carry its policy.
 Replay codes: `ProofOutOfPlace` (order/linkage), `ProofConflict` (second
 record, other action, after closure).
 
@@ -175,6 +177,7 @@ record, other action, after closure).
 | D-P2 | m3d_missing_page_receipt_never_claims_nonpublication | red: continues |
 | D-P3 | m3d_proof_append_failure_prevents_success | red: no proof |
 | R7 overtaken | m3d_overtaken_publication_keeps_marked_settlement_evidence | red |
+| Db-Q4 no-policy settlement (2nd oracle-add) | same test, case overtaken-nopolicy; D-R1 clean receipt without policy | red on 9d316d59 |
 | D-R1 (Db) | m3d_replay_rejects_relinked_or_out_of_order_proof | red: no proof |
 
 Real-broker scenarios run one fresh broker per child process. A test-only
@@ -193,3 +196,4 @@ thread-local seam in lite_port.rs rewrites only the broker receipt read
 | MP-D-V1 ignore overtaken / wrong action | m3d_overtaken_publication_keeps_marked_settlement_evidence, m3d_replay_rejects_relinked_or_out_of_order_proof |
 | MP-D-R1 omit replay ordering/linkage | m3d_replay_rejects_relinked_or_out_of_order_proof |
 | MP-D-P0 raw page content in a proof record | m3d_deliverable_is_private_before_dispatch |
+| MP-D-Q4 drop the no-policy settlement receipt | m3d_overtaken_publication_keeps_marked_settlement_evidence |

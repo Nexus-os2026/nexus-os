@@ -283,6 +283,7 @@ fn m3d_proof_append_failure_prevents_success() {
 #[test]
 fn m3d_overtaken_publication_keeps_marked_settlement_evidence() {
     run_child(CHILD, "overtaken-stop");
+    run_child(CHILD, "overtaken-nopolicy");
 }
 
 #[test]
@@ -510,6 +511,38 @@ fn m3d_db_broker_child() {
             assert_eq!(count(&events, is_approved), 0);
             assert_eq!(lanes_after(&events, p), 0);
             assert_eq!(f.written().unwrap(), BAKERY.as_bytes());
+        }
+        "overtaken-nopolicy" => {
+            // Db-Q4: settlement evidence is kept even without a policy.
+            let m = f.session(vec![file("index.html", BAKERY)], f.journal.clone());
+            let id = f.waiting(&m);
+            f.publish(id);
+            seam(|r| {
+                r.map(|mut r| {
+                    r.policy_hash = None;
+                    r
+                })
+            });
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked));
+            let events = f.events();
+            assert_eq!(count(&events, is_receipt), 1, "the receipt is not dropped");
+            let p = at(&events, is_receipt).unwrap();
+            let json = serde_json::to_value(&events[p]).unwrap();
+            assert_eq!(json["overtaken"], true);
+            assert!(
+                json.get("policy_hash").is_none(),
+                "policy absent, not invented"
+            );
+            assert_eq!(json["sha256"], sha(BAKERY.as_bytes()));
+            assert!(matches!(
+                &events[p + 1],
+                Event::Transition {
+                    trigger: Trigger::Settled { .. }
+                }
+            ));
+            assert_eq!(count(&events, is_approved), 0, "no success transition");
+            assert_eq!(lanes_after(&events, p), 0, "no verifier");
+            assert_eq!(m.state(id), Ok(Some(MissionState::Blocked)));
         }
         other => panic!("unknown case {other}"),
     }

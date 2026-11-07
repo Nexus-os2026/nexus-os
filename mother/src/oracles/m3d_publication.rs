@@ -84,17 +84,14 @@ fn m3d_proof_records_are_frozen_evidence() {
         }
         _ => {}
     });
-    bad(&|e| {
-        if let Event::PublicationReceipt {
-            policy_hash,
-            action,
-            ..
-        } = e
-        {
-            *policy_hash = "Lemon drizzle".into();
-            action.run = "run-x".into();
-        }
-    });
+    // Db-Q4: written through JSON so the policy field's type is not assumed.
+    let policy = with_json(&receipt, "policy_hash", "Lemon drizzle".into());
+    assert_eq!(check(&policy), Err(ReplayViolation::NotEvidence));
+    let run = serde_json::json!({"run": "run-x", "commitment": CMT, "deadline_mono_ms": 5});
+    assert_eq!(
+        check(&with_json(&receipt, "action", run)),
+        Err(ReplayViolation::NotEvidence)
+    );
     for (reason, code) in [
         (FailReason::ReceiptMissing, "receipt_missing"),
         (FailReason::ReceiptPolicyMissing, "receipt_policy_missing"),
@@ -119,6 +116,13 @@ fn m3d_replay_rejects_relinked_or_out_of_order_proof() {
 }
 
 type Records = Vec<(MissionId, Event)>;
+
+/// `event` with its JSON field `key` set to `value`.
+fn with_json(event: &Event, key: &str, value: serde_json::Value) -> Event {
+    let mut v = serde_json::to_value(event).unwrap();
+    v[key] = value;
+    serde_json::from_value(v).unwrap()
+}
 
 fn op(edit: impl Fn(&mut Records) + 'static) -> Box<dyn Fn(&mut Records)> {
     Box::new(edit)
@@ -307,10 +311,15 @@ fn m3d_db_internal_child() {
             (
                 "receipt policy",
                 NotEvidence,
+                field(p, |e| *e = with_json(e, "policy_hash", "".into())),
+            ),
+            (
+                "clean receipt without policy",
+                ProofOutOfPlace,
                 field(p, |e| {
-                    if let Event::PublicationReceipt { policy_hash, .. } = e {
-                        policy_hash.clear();
-                    }
+                    let mut v = serde_json::to_value(&*e).unwrap();
+                    v.as_object_mut().unwrap().remove("policy_hash");
+                    *e = serde_json::from_value(v).expect("a receipt may lack a policy");
                 }),
             ),
         ];
