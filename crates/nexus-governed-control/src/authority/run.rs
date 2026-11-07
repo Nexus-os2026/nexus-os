@@ -2195,6 +2195,7 @@ impl RunRegistry {
         match what {
             "groups" => entry.groups.clear(),
             "opened_by" => entry.opened_by = Some(u64::MAX),
+            "view_id" => entry.view.id = RunId::fresh(),
             _ => {}
         }
         let files = entry.files_admission.as_mut().unwrap();

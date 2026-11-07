@@ -175,7 +175,7 @@ impl Bind {
                 self.door_with(self.session.context(&q2).unwrap(), self.door.kind)
             }
             "continuation" => self.door_with(self.door.context(), DoorKind::Continuation),
-            "groups" | "opened_by" | "door_cell" | "seq" | "kind" | "time" | "life" => {
+            "groups" | "opened_by" | "view_id" | "door_cell" | "seq" | "kind" | "time" | "life" => {
                 self.runs().tamper_for_test(self.run, case);
                 return self.bind();
             }
@@ -283,6 +283,7 @@ fn sb3_inference_binding_is_exact_and_idempotent() {
         ("groups", "not_member"),
         ("opened_by", "not_member"),
         ("door_cell", "not_member"),
+        ("view_id", "not_member"),
         ("unknown_run", "unknown_run"),
         ("files", "not_admitted"),
         ("consent", "no_consent"),
