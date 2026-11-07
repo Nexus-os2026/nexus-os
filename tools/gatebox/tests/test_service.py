@@ -503,3 +503,12 @@ class OfflineServiceTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError): supervisor.stop_and_confirm(RUN)
                 shim.assert_called_once_with('stop',RUN)
+
+    def test_review2_other_package_target_receipt_is_included(self):
+        from test_unit_core import ReceiptTests
+        fixture = ReceiptTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        summary = fixture.success()
+        summary['coverage']['artifacts'][0]['target'] = 'phase2_live_sandbox'
+        supervisor.receipt.validate_summary(summary)
