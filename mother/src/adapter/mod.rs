@@ -56,6 +56,7 @@ use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+pub mod input_files;
 mod lite_port;
 mod session_port;
 use session_port::PortDoor;
