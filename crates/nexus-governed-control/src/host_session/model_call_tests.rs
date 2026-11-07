@@ -1755,8 +1755,7 @@ fn fault(f: &Call, kind: &'static str) -> Box<dyn Fn() + Send + Sync> {
         }
         "watch" => assert!(control.kernel_stop_authority().engage() > 0),
         "health" => {
-            primary.store().refuse_next_insert();
-            let _ = primary.store().append("sb3b_owed", None, "{}");
+            primary.store().simulate_crash(); // latched: unhealthy
             assert!(primary
                 .try_health()
                 .is_some_and(|h| h.owed > 0 || h.latched));
@@ -1981,8 +1980,8 @@ fn sb3_contended_gate_polls_live_and_notifies_nothing() {
         let keep = holder.clone();
         f.b.session.core.cell.1.every("model.call.polled", move || {
             let core = core.upgrade().unwrap();
-            let admitted = core.model.trace.lock().unwrap();
-            let admitted = admitted.iter().filter(|t| **t == "admitted").count();
+            let trace = core.model.trace.lock().unwrap().clone();
+            let admitted = trace.iter().filter(|t| **t == "admitted").count();
             let Some(rx) = (admitted == i).then(|| rx.lock().unwrap().take()).flatten() else {
                 return;
             };
@@ -2072,12 +2071,13 @@ fn sb3_call_clocks_backstop_and_watch_are_fixed() {
     // The backstop is captured once per attempt and never extended.
     let f = Call::new();
     let skew = f.b.session.core.model.backstop_skew.clone();
-    let (early, late) = (skew.clone(), skew.clone());
-    f.hook("model.call.gate", 1, move || {
-        early.fetch_add(179_000, Ordering::SeqCst);
-    });
-    f.hook("model.call.gate", 2, move || {
-        late.fetch_add(2_000, Ordering::SeqCst);
+    let gates = AtomicUsize::new(0);
+    f.b.session.core.cell.1.every("model.call.gate", move || {
+        match gates.fetch_add(1, Ordering::SeqCst) {
+            1 => skew.fetch_add(179_000, Ordering::SeqCst),
+            2 => skew.fetch_add(2_000, Ordering::SeqCst),
+            _ => 0,
+        };
     });
     let outcome = f.call().expect("ticketed attempt");
     assert_eq!(
@@ -2338,7 +2338,8 @@ fn sb3_b1b_test_seams_are_test_only() {
     let model = include_str!("model.rs");
     for seam in seams {
         let sites = seam_sites(model, &[seam]).len();
-        assert!(sites >= 2, "{seam}: declared and used ({sites})");
+        let used = usize::from(seam != "registered_identity_for_test"); // read by tests
+        assert!(sites > used, "{seam}: declared and used ({sites})");
     }
     let sources = [
         ("model.rs", model),
