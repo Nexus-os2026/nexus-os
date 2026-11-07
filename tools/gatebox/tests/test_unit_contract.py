@@ -72,7 +72,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(policy['coverage'],{'reject_unknown_harness':True,'reconcile_names_and_results':True,'missing_artifact_fails':True,'compile_excluded_target':True,'execute_excluded_target':False,'excluded_target':'phase2_live_sandbox','exclusions_file':'exclusions.json'})
     def test_exact_exclusions(self):
         exclusions = json.loads((HERE/'policy/exclusions.json').read_text())
-        self.assertEqual(set(exclusions),{'target','reason','cases'})
+        self.assertEqual(set(exclusions),{'target','reason','cases','source_blob'})
+        self.assertEqual(exclusions['source_blob'],'6cf914ba5ae1eeffc1b61376ba6b768be8a0ffdb')
         self.assertEqual(exclusions['target'],'phase2_live_sandbox')
         self.assertEqual(exclusions['reason'],'needs nested namespaces (D-E2-10)')
         self.assertEqual(len(exclusions['cases']),39)

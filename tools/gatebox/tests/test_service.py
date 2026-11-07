@@ -333,15 +333,20 @@ class OfflineServiceTests(unittest.TestCase):
             artifacts = [dict(reason='compiler-artifact',profile={'test':True},
                               package_id='path+file:///work/src/'+p+'#0.1.0',
                               manifest_path='/work/src/'+p+'/Cargo.toml',
-                              target={'name':'phase2_live_sandbox' if same_named and p=='nexus-mother-host' else t},
+                              target={'name':'phase2_live_sandbox' if same_named and p=='nexus-mother-host' else t,
+                                      'src_path':'/work/src/crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'},
                               executable='/work/target/'+t) for p,t,names in specs]
             for p,t,names in specs:
                 directory = root/'src'/p
                 directory.mkdir()
                 (directory/'Cargo.toml').write_text('[package]\nname = '+json.dumps(p)+'\nversion = "0.1.0"\n')
+            source = root/'src/crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
+            source.parent.mkdir(parents=True)
+            source.write_bytes((HERE.parents[1]/'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs').read_bytes())
             routed = []
             popen = subprocess.Popen
             def spawn(argv, **options):
+                self.assertNotEqual(argv[0],'/work/target/phase2_live_sandbox','excluded harness=false executable spawned')
                 routed.append(argv)
                 if argv[0] == '/opt/rust/bin/cargo':
                     output = '\n'.join(json.dumps(a) for a in artifacts) if '--no-run' in argv else 'done\n'
@@ -411,30 +416,43 @@ class OfflineServiceTests(unittest.TestCase):
             self.assertEqual(init.artifact_package({'manifest_path':str(manifest),
                               'package_id':'path+file:///work/src/cj#0.1.0'}),'nexus-verifier-sandbox')
 
-    def test_review2_exact_excluded_artifact_and_listing(self):
-        policy, exclusions = supervisor.receipt.policy()
-        policy['gates'] = [g for g in policy['gates'] if g['id'] in ('compile-tests','workspace')]
-        def artifact(package, executable):
-            return dict(reason='compiler-artifact',profile={'test':True},package=package,
-                        target={'name':exclusions['target']},executable='/work/target/'+executable)
-        excluded = artifact('nexus-verifier-sandbox','excluded')
-        other = artifact('other-crate','included')
-        for variant in ('valid','missing','duplicate','names-changed'):
-            items = [other]+([] if variant=='missing' else [excluded]*(2 if variant=='duplicate' else 1))
-            names = exclusions['cases'][:-1] if variant=='names-changed' else exclusions['cases']
-            command = Mock(side_effect=lambda gate,argv: ('c1',0,
-                           '\n'.join(json.dumps(a) for a in items) if gate=='compile-tests'
-                           else ''.join(n+': test\n' for n in names)))
-            runner = init.Runner(-1,-1)
-            with patch.object(init.Path,'read_bytes',side_effect=[json.dumps(policy).encode(),json.dumps(exclusions).encode()]), \
-                    patch.object(init,'artifact_package',side_effect=lambda a:a['package']), \
-                    patch.object(runner,'command',command), patch.object(runner,'output'), patch.object(runner,'libtest') as execute:
-                if variant=='valid':
-                    runner.gates()
-                    self.assertEqual([a.args[1]['package'] for a in execute.call_args_list],['other-crate'])
-                    self.assertIn(['/work/target/excluded','--list','--format','terse'],[a.args[1] for a in command.call_args_list])
-                else:
-                    with self.subTest(variant=variant), self.assertRaises(ValueError): runner.gates()
+    def test_q5_n1_static_exclusion_never_spawns(self):
+        source = (HERE.parents[1]/'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs').read_bytes()
+        for variant in ('valid','missing','duplicate','path','symlink','blob','missing-name','extra-name','duplicate-name'):
+            with self.subTest(variant=variant):
+                policy, exclusions = supervisor.receipt.policy()
+                policy['gates'] = [g for g in policy['gates'] if g['id'] in ('compile-tests','workspace')]
+                exclusions['source_blob'] = '6cf914ba5ae1eeffc1b61376ba6b768be8a0ffdb'
+                data = source
+                if variant == 'blob': exclusions['source_blob'] = '0'*40
+                if variant == 'missing-name': exclusions['cases'] = exclusions['cases'][:-1]
+                if variant == 'extra-name': exclusions['cases'].append('p2r1_live_extra')
+                if variant == 'duplicate-name':
+                    data += ('\n"'+exclusions['cases'][0]+'"\n').encode()
+                    exclusions['source_blob'] = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+                def artifact(package, executable):
+                    return dict(reason='compiler-artifact',profile={'test':True},package=package,
+                                target={'name':exclusions['target'],'src_path':'/work/src/crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'},
+                                executable='/work/target/'+executable)
+                excluded = artifact('nexus-verifier-sandbox','excluded')
+                if variant == 'path': excluded['target']['src_path'] = '/work/src/wrong.rs'
+                items = [artifact('other-crate','included')]+([] if variant=='missing' else [excluded]*(2 if variant=='duplicate' else 1))
+                def command(gate, argv):
+                    # harness=false dispatcher: --list exits 2; any spawn violates Q5.
+                    result = ('c1',2,'unsupported --list') if argv[0]=='/work/target/excluded' else ('c1',0,'\n'.join(json.dumps(a) for a in items))
+                    self.assertNotEqual(argv[0],'/work/target/excluded','excluded executable spawned')
+                    return result
+                runner = init.Runner(-1,-1)
+                with patch.object(init.Path,'read_bytes',side_effect=[json.dumps(policy).encode(),json.dumps(exclusions).encode(),data]), \
+                        patch.object(init.Path,'is_symlink',return_value=variant=='symlink'), \
+                        patch.object(init,'artifact_package',side_effect=lambda a:a['package']), \
+                        patch.object(runner,'command',side_effect=command), patch.object(runner,'output'), patch.object(runner,'libtest') as execute:
+                    if variant == 'valid':
+                        runner.gates()
+                        self.assertEqual([a.args[1]['package'] for a in execute.call_args_list],['other-crate'])
+                    else:
+                        reason = 'ARTIFACT' if variant in ('missing','duplicate') else 'SOURCE' if variant in ('path','symlink') else 'BLOB' if variant=='blob' else 'CASES'
+                        with self.assertRaisesRegex(ValueError,'EXCLUSION_'+reason): runner.gates()
 
     def test_review4_collect_detects_failed_start(self):
         selector = Mock()
