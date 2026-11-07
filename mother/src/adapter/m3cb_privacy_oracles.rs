@@ -159,8 +159,12 @@ def q(db, sql):
         return c.execute(sql).fetchall()
 calls = [json.loads(b)['detail'] for (b,) in q('/broker/p3-evidence/evidence.sqlite3', "SELECT body FROM record WHERE phase='model_call'")]
 consent = q('/broker/p3-evidence/evidence.sqlite3', "SELECT count(*) FROM record WHERE phase='mission_consented'")[0][0]
-ledger = q('/broker/files/ledger.db', "SELECT count(*) FROM coding_run_ledger")[0][0] if sys.argv[2] == '1' else 0
-print(json.dumps({'calls': len(calls), 'charged': sum('call' in d for d in calls), 'ops': sorted({d['op'] for d in calls}), 'consent': consent, 'ledger': ledger}))
+tables, ledger = [], 0
+if sys.argv[2] == '1':
+    names = q('/broker/files/ledger.db', "SELECT name FROM sqlite_master WHERE type='table'")
+    tables = [n for (n,) in names if not n.startswith('sqlite_')]
+    ledger = sum(q('/broker/files/ledger.db', 'SELECT count(*) FROM "%s"' % n.replace('"', '""'))[0][0] for n in tables)
+print(json.dumps({'calls': len(calls), 'charged': sum('call' in d for d in calls), 'ops': sorted({d['op'] for d in calls}), 'consent': consent, 'tables': len(tables), 'ledger': ledger}))
 "#;
     let out = bounded(
         std::process::Command::new("python3")
@@ -184,10 +188,16 @@ print(json.dumps({'calls': len(calls), 'charged': sum('call' in d for d in calls
         "charged records match ModelCallCharged"
     );
     assert!(attempts == 0 || v["ops"] == serde_json::json!(["model_call"]));
+    // Generic file-ledger check: every non-internal table's rows (Cb2-R3).
+    assert_eq!(
+        v["tables"].as_u64().unwrap() > 0,
+        success,
+        "file ledger tables"
+    );
     assert_eq!(
         v["ledger"].as_u64().unwrap() > 0,
         success,
-        "File ledger rows"
+        "file ledger rows"
     );
 }
 fn drafts(s: &Scenario, case: &str) {
