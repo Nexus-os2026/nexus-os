@@ -2766,3 +2766,266 @@ fn r3r1_x_the_host_qualification_reads_the_identity_production_records() {
     assert!(harness.contains("let mut passed = 10;"));
     assert!(harness.contains("let scoped: [ScopedCase; 29]"));
 }
+
+// CI-R1: non-atomic cgroup removal, without a real cgroup, bus or helper.
+// Each events read advances one poll; no transition depends on a sleep.
+mod ci_r1 {
+    use super::*;
+    use crate::scope::Scope;
+    use std::time::Instant;
+
+    #[derive(Clone, Copy, Debug)]
+    enum Site {
+        Events,
+        Listing,
+    }
+
+    #[derive(Debug)]
+    enum Mode {
+        Staged {
+            advance: bool,
+        },
+        Fault {
+            site: Site,
+            errno: i32,
+            polls: usize,
+        },
+        Text(&'static str),
+    }
+
+    #[derive(Debug)]
+    struct Observation {
+        polls: usize,
+        listings: usize,
+        files: VecDeque<&'static str>,
+        removed_files: Vec<&'static str>,
+        removed: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    struct RemovalDir {
+        mode: Arc<Mode>,
+        state: Arc<Mutex<Observation>>,
+    }
+
+    impl RemovalDir {
+        fn new(mode: Mode) -> Self {
+            let files = match mode {
+                Mode::Staged { advance: true } => {
+                    VecDeque::from(["cgroup.events", "cgroup.max.depth", "cgroup.stat"])
+                }
+                Mode::Staged { advance: false } => VecDeque::from(["cgroup.stat"]),
+                _ => VecDeque::new(),
+            };
+            Self {
+                mode: Arc::new(mode),
+                state: Arc::new(Mutex::new(Observation {
+                    polls: 0,
+                    listings: 0,
+                    files,
+                    removed_files: Vec::new(),
+                    removed: false,
+                })),
+            }
+        }
+
+        fn scope(&self) -> Scope {
+            Scope {
+                unit: "ci-r1.scope".to_string(),
+                dir: Box::new(self.clone()),
+                instance: model_instance(1),
+            }
+        }
+    }
+
+    impl CgroupDir for RemovalDir {
+        fn read(&self, name: &str) -> io::Result<String> {
+            assert_eq!(name, "cgroup.events");
+            let mut state = self.state.lock().unwrap();
+            state.polls += 1;
+            match *self.mode {
+                Mode::Staged { advance: true } => {
+                    if let Some(file) = state.files.pop_front() {
+                        state.removed_files.push(file);
+                    } else {
+                        state.removed = true;
+                    }
+                }
+                // CgroupDir::read propagates both openat and read errors.
+                Mode::Fault {
+                    site: Site::Events,
+                    errno,
+                    polls,
+                } if state.polls <= polls => return Err(io::Error::from_raw_os_error(errno)),
+                Mode::Text(text) => return Ok(text.to_string()),
+                _ => {}
+            }
+            Err(io::Error::from_raw_os_error(libc::ENOENT))
+        }
+
+        fn listing_is_empty(&self) -> io::Result<bool> {
+            let mut state = self.state.lock().unwrap();
+            state.listings += 1;
+            if let Mode::Fault {
+                site: Site::Listing,
+                errno,
+                polls,
+            } = *self.mode
+            {
+                if state.listings <= polls {
+                    return Err(io::Error::from_raw_os_error(errno));
+                }
+            }
+            Ok(state.files.is_empty())
+        }
+
+        fn kill(&self) -> io::Result<()> {
+            panic!("observation must not kill anything")
+        }
+
+        fn cgroup_id(&self) -> io::Result<u64> {
+            Ok(1)
+        }
+    }
+
+    const DEADLINE: Duration = Duration::from_millis(20);
+
+    fn unconfirmed_at_deadline(dir: &RemovalDir) {
+        let start = Instant::now();
+        assert!(
+            !dir.scope().wait_empty(DEADLINE).expect("must keep polling"),
+            "transient/populated state is not cleanup confirmation"
+        );
+        assert!(start.elapsed() >= DEADLINE, "returned before the deadline");
+        assert!(dir.state.lock().unwrap().polls >= 2);
+        // execution::end maps this Ok(false) to retained Cleanup::Failed.
+        // This tests its input verdict without changing the kill/owner path.
+    }
+
+    #[test]
+    fn staged_removal_confirms_only_after_entries_are_gone() {
+        let dir = RemovalDir::new(Mode::Staged { advance: true });
+        assert!(dir.scope().wait_empty(Duration::from_secs(1)).unwrap());
+        {
+            let state = dir.state.lock().unwrap();
+            assert_eq!(state.polls, 3, "must poll past each remaining entry");
+            assert_eq!(
+                state.removed_files,
+                ["cgroup.events", "cgroup.max.depth", "cgroup.stat"]
+            );
+            assert!(state.files.is_empty());
+            assert!(!state.removed, "an empty directory already confirms");
+        }
+        assert_eq!(dir.scope().occupancy().unwrap(), Occupancy::Removed);
+        assert!(dir.state.lock().unwrap().removed, "directory removed last");
+    }
+
+    #[test]
+    fn enodev_then_empty_confirms() {
+        for site in [Site::Events, Site::Listing] {
+            let dir = RemovalDir::new(Mode::Fault {
+                site,
+                errno: libc::ENODEV,
+                polls: 3,
+            });
+            assert!(dir.scope().wait_empty(Duration::from_secs(1)).unwrap());
+            assert_eq!(dir.state.lock().unwrap().polls, 4, "{site:?}");
+        }
+    }
+
+    #[test]
+    fn staged_removal_past_deadline_is_unconfirmed() {
+        unconfirmed_at_deadline(&RemovalDir::new(Mode::Staged { advance: false }));
+    }
+
+    #[test]
+    fn enodev_past_deadline_is_unconfirmed() {
+        for site in [Site::Events, Site::Listing] {
+            unconfirmed_at_deadline(&RemovalDir::new(Mode::Fault {
+                site,
+                errno: libc::ENODEV,
+                polls: usize::MAX,
+            }));
+        }
+    }
+
+    #[test]
+    fn other_errno_is_an_immediate_error() {
+        for site in [Site::Events, Site::Listing] {
+            for errno in [libc::EACCES, libc::EIO, libc::EINVAL, libc::ENOTDIR] {
+                let dir = RemovalDir::new(Mode::Fault {
+                    site,
+                    errno,
+                    polls: usize::MAX,
+                });
+                assert_eq!(
+                    dir.scope().wait_empty(DEADLINE).unwrap_err().raw_os_error(),
+                    Some(errno),
+                    "{site:?}: {errno}"
+                );
+                assert_eq!(dir.state.lock().unwrap().polls, 1, "must not retry");
+            }
+        }
+        // ENOENT from listing itself is not the known missing-events state.
+        let dir = RemovalDir::new(Mode::Fault {
+            site: Site::Listing,
+            errno: libc::ENOENT,
+            polls: usize::MAX,
+        });
+        assert_eq!(
+            dir.scope().wait_empty(DEADLINE).unwrap_err().raw_os_error(),
+            Some(libc::ENOENT)
+        );
+        assert_eq!(dir.state.lock().unwrap().polls, 1);
+    }
+
+    #[test]
+    fn malformed_events_is_an_immediate_error() {
+        for text in ["", "frozen 0\n", "populated 2\n", "populated nope\n"] {
+            let dir = RemovalDir::new(Mode::Text(text));
+            assert_eq!(
+                dir.scope().wait_empty(DEADLINE).unwrap_err().raw_os_error(),
+                Some(libc::EINVAL)
+            );
+            let state = dir.state.lock().unwrap();
+            assert_eq!(state.polls, 1);
+            assert_eq!(state.listings, 0);
+        }
+    }
+
+    #[test]
+    fn populated_forever_is_unconfirmed_at_deadline() {
+        unconfirmed_at_deadline(&RemovalDir::new(Mode::Text("populated 1\nfrozen 0\n")));
+    }
+
+    #[test]
+    fn populated_zero_confirms_without_listing() {
+        let dir = RemovalDir::new(Mode::Text("populated 0\nfrozen 0\n"));
+        assert!(dir.scope().wait_empty(DEADLINE).unwrap());
+        let state = dir.state.lock().unwrap();
+        assert_eq!(state.polls, 1);
+        assert_eq!(state.listings, 0);
+    }
+
+    #[test]
+    fn single_occupancy_on_transient_stays_strict() {
+        let dir = RemovalDir::new(Mode::Staged { advance: false });
+        assert_eq!(
+            dir.scope().occupancy().unwrap_err().raw_os_error(),
+            Some(libc::ENOENT)
+        );
+        assert_eq!(dir.state.lock().unwrap().polls, 1);
+        for site in [Site::Events, Site::Listing] {
+            let dir = RemovalDir::new(Mode::Fault {
+                site,
+                errno: libc::ENODEV,
+                polls: usize::MAX,
+            });
+            assert_eq!(
+                dir.scope().occupancy().unwrap_err().raw_os_error(),
+                Some(libc::ENODEV)
+            );
+            assert_eq!(dir.state.lock().unwrap().polls, 1);
+        }
+    }
+}
