@@ -304,6 +304,41 @@ mod marker_tests {
         None
     }
 
+    /// The pre-review body: `getrandom`/`hex` resolved relative to this module.
+    const UNPINNED: &str = "{
+        let mut bytes = [0u8; 16];
+        let filled = getrandom::getrandom(&mut bytes);
+        #[cfg(test)]
+        let filled = marker_fault::inject(filled);
+        filled.map_err(|_| MarkerUnavailable)?;
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        Ok(hex::encode(bytes))
+    }";
+    /// Production-only modules that would capture a relative path.
+    const SHADOWS: &[&str] = &[
+        "#[cfg(not(test))]\nmod getrandom {\n    pub fn getrandom(b: &mut [u8]) \
+         -> Result<(), ::getrandom::Error> {\n        b.fill(0x5a);\n        Ok(())\n    }\n}\n\n",
+        "#[cfg(not(test))]\nmod hex {\n    pub fn encode(_: [u8; 16]) -> String {\n        \
+         \"5a\".repeat(16)\n    }\n}\n\n",
+    ];
+    /// Harmless comments inside the production body.
+    const COMMENTS: &[&str] = &["\n    // } temporary buffer", "\n    /* } */"];
+
+    /// The source with `insert` placed after the first `at` (the production one).
+    fn edited(source: &str, at: &str, insert: &str, before: bool) -> String {
+        let with = if before {
+            format!("{insert}{at}")
+        } else {
+            format!("{at}{insert}")
+        };
+        source.replacen(at, &with, 1)
+    }
+
+    fn approved_source(source: &str) -> bool {
+        production_body(source).is_some_and(approved)
+    }
+
     // Deterministic substitutes whose outputs look like fresh v4 markers.
     macro_rules! substitutes {
         ($($name:ident $body:block)*) => {
@@ -380,7 +415,24 @@ mod marker_tests {
                 "{name}: deterministic substitute must fail"
             );
         }
-        let body = production_body(include_str!("ids.rs"));
+        let source = include_str!("ids.rs");
+        let mut failures = Vec::new();
+        if approved(UNPINNED) {
+            failures.push("relative getrandom/hex paths accepted".to_string());
+        }
+        for shadow in SHADOWS {
+            let doc = "/// A fresh page-framing marker";
+            if approved_source(&edited(source, doc, shadow, true)) {
+                failures.push(format!("shadow accepted: {shadow:?}"));
+            }
+        }
+        for comment in COMMENTS {
+            if !approved_source(&edited(source, SIGNATURE, comment, false)) {
+                failures.push(format!("harmless comment rejected: {comment:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+        let body = production_body(source);
         assert!(
             body.is_some_and(approved),
             "non-test fresh_page_marker is not the approved fallible getrandom path: {body:?}"
