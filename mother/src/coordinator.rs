@@ -1641,7 +1641,6 @@ impl<P: EffectPort> Coordinator<P> {
             }
             // M3-Dc1: a page passes only on its recorded all-pass checks.
             let unproven = mission.contract()?.page_facts.is_some()
-                && self.file.is_some()
                 && mission.proof.verified != Some(true);
             let trigger = if phase == MissionState::Verifying && unproven {
                 Trigger::VerifyFail {
