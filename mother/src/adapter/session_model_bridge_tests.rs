@@ -9,6 +9,7 @@ use crate::adapter::session_model_bridge_support::{advance_in, signal, within, S
 use crate::effect::EffectPort;
 use crate::evidence::BrokerClass;
 use crate::lane::{LaneOutput, Verdict};
+use crate::state::MissionState;
 use nexus_governed_control::host_session::CommandKind;
 use nexus_governed_control::inference::{
     CallDeadline, CallMeter, Charged, InvocationOwner, MeterRefusal, ModelIdentity,
@@ -122,10 +123,13 @@ fn s1() {
 fn sb3_unconfigured_session_retains_default_denial() {
     children(
         "sb3_unconfigured_session_retains_default_denial",
-        &["s2/unconfigured", "s2/restricted"],
+        &["s2/unconfigured", "s2/restricted", "s2/debt"],
     );
 }
 fn s2(arg: &str) {
+    if arg == "debt" {
+        return s2_debt();
+    }
     let f = if arg == "unconfigured" {
         SFx::unregistered()
     } else {
@@ -157,6 +161,68 @@ fn s2(arg: &str) {
     assert_eq!(meter.0.load(Ordering::SeqCst), 0, "{arg}: nothing charged");
     assert_eq!(f.fake.count("/api/chat"), 0, "{arg}: no chat");
     assert_eq!(f.home.session.run_count(), 1, "{arg}: no new run");
+}
+
+/// A meter whose charge unwinds: the broker's attempt is dropped unfinished.
+struct Unwinding;
+impl CallMeter for Unwinding {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        panic!("the meter unwinds (test)")
+    }
+    fn settle(&self, _: u32) {}
+}
+/// SB3C-R4 (5): real debt through SessionPort. Inside the live invocation a
+/// bound run's attempt unwinds in its meter (the broker drops the ticket
+/// unfinished, so debt latches); SessionPort then keeps the broker's own
+/// class, never the absence mapping. A poisoned broker hold is not
+/// reachable here: no broker hold crosses a caller callback (P1).
+fn s2_debt() {
+    let f = SFx::new();
+    f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
+    let (port, mission) = (f.home.port.clone(), Arc::new(Mutex::new(None)));
+    let (seen, at): (Seen, _) = (Arc::default(), mission.clone());
+    let s = seen.clone();
+    let m = f.mother(2, move |ctx| {
+        let first = ask(ctx);
+        let id = at.lock().unwrap().unwrap();
+        let owner = InvocationOwner::new();
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            port.model_call(id, &request("SB3C"), &Unwinding, &Never, &owner.observer())
+                .map(|_| ())
+                .map_err(|r| r.class)
+        }));
+        let meter = Meter::default();
+        let admit = port.admit_inference(id, &"ab".repeat(32), "request", identity_bytes());
+        let call = port.model_call(id, &request("SB3C"), &meter, &Never, &owner.observer());
+        let second = ask(ctx);
+        assert!(unwound.is_err(), "the attempt unwound in its meter");
+        assert_eq!(
+            admit.map_err(|r| r.class),
+            Err(BrokerClass::Halted),
+            "debt: admission"
+        );
+        let call = call.map(|_| ()).map_err(|r| r.class);
+        assert_eq!(call, Err(BrokerClass::Halted), "debt: call");
+        assert!(port.model_identity().is_none(), "debt: no identity");
+        assert_eq!(meter.0.load(Ordering::SeqCst), 0, "debt: nothing charged");
+        s.lock()
+            .unwrap()
+            .extend([outcome(&first), outcome(&second)]);
+        draft("sb3c")
+    });
+    let id = f.building(&m, f.contract());
+    *mission.lock().unwrap() = Some(id);
+    assert!(m.advance(id).is_err(), "the debt stops the mission");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["ok", "invalidated"],
+        "Mother's calls"
+    );
+    assert_eq!(
+        (f.charges(), f.fake.count("/api/chat")),
+        (1, 1),
+        "debt: one call"
+    );
 }
 
 // ------------------------------------------------------------------- R4
@@ -222,8 +288,11 @@ fn sb3_revocation_after_entry_is_entered_only() {
 /// successor request is sent (MP-SB-C-observer's named assertion).
 fn l2_metadata() {
     let f = Arc::new(SFx::new());
-    let m = f.mother(1, |ctx| {
-        let _ = ask(ctx);
+    let seen: Seen = Arc::default();
+    let s = seen.clone();
+    let m = f.mother(1, move |ctx| {
+        let r = ask(ctx);
+        s.lock().unwrap().push(outcome(&r));
         quiet()
     });
     let id = f.building(&m, f.contract());
@@ -242,7 +311,7 @@ fn l2_metadata() {
     within(&entered_rx);
     m.overtake_model_for_test(id).unwrap();
     release_tx.send(()).unwrap();
-    let _ = adv.join().unwrap();
+    let advanced = adv.join().unwrap();
     assert_eq!(f.fake.count("/api/version"), 2, "the entered request once");
     assert_eq!(
         f.fake.count("/api/status"),
@@ -251,6 +320,18 @@ fn l2_metadata() {
     );
     assert_eq!(f.fake.count("/api/chat"), 0, "no chat");
     assert_eq!(f.charges(), 0, "no charge");
+    // SB3C-R4 (4): the call's and the advance's results, and Mother's zeros.
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["failed:model_cancelled"],
+        "the call result"
+    );
+    let building = m.state(id).unwrap() == Some(MissionState::Building);
+    assert!(advanced.is_err() || !building, "the advance: {advanced:?}");
+    assert_eq!(f.model_lane_returned(), 0, "no LaneReturned");
+    assert_eq!(f.dispatched(), 0, "no File dispatch");
+    let journal = f.home.lines().concat();
+    assert!(!journal.contains("sb3c model lane"), "no accepted output");
 }
 fn l2(arg: &str) {
     assert_eq!(arg, "metadata");

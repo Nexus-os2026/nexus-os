@@ -1384,6 +1384,9 @@ mod session_model_bridge_support;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod session_model_bridge_tests;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_model_composition_tests;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
