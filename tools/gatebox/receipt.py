@@ -96,7 +96,8 @@ def validate_summary(summary):
                 or not artifact['executable'].startswith('/work/target/')
                 or '..' in artifact['executable'].split('/')
                 or any(not isinstance(artifact.get(k),str) or not artifact[k] for k in ('package','target'))
-                or artifact['target'] == exclusions['target']): raise ValueError('unsupported/invalid artifact')
+                or (artifact['package'],artifact['target']) == ('nexus-verifier-sandbox',exclusions['target'])):
+            raise ValueError('unsupported/invalid artifact')
         eligible[artifact['id']] = artifact
     workspace = [c for c in summary['commands'] if c.get('gate_id',c['id']) == 'workspace']
     executed = [c.get('artifact_id') for c in workspace]
