@@ -227,3 +227,165 @@ settlement is retried. The unrecorded-proof barrier holds at every ack and
 closure. An early settlement receipt's action must equal the Settled action
 (`ProofConflict`). Journal appends still write and sync under the coordinator
 lock, by existing design. Plants: MP-D-M1, MP-D-L2, MP-D-L3.
+
+# M3-Dc1 oracle register: page Verifier, typed checks, proof gates
+
+Stacked on 30ba3b5f (Db candidate). Ruling Dc-R1: Dc1 only. No teaching,
+claims guard or explain() change (Dc2): **explain() still prints an
+unconditional `holds` for every criterion until Dc2 lands, so Dc1 alone is
+not truthful-success complete.** No model route, host flag or broker change.
+
+## Frozen encoding and codes
+
+LaneInput: optional `verification` after `builder_input`; LaneOutput:
+optional `verification` after `verdict`; absent fields are omitted, so legacy
+bytes and hashes are unchanged (Da's input golden; this slice's literal
+output golden and its independent hash).
+VerificationInput serializes only `identity`, fields in this order:
+`candidate_sha256`, `candidate_bytes`, `facts_hash`, `receipt_sha256`,
+`receipt_bytes`, `receipt_policy_hash`, `receipt_overtaken`. Candidate bytes
+and facts are skipped; Debug shows the identity only. Candidate and facts
+parts are recomputed from content at construction; the receipt part is
+copied from the journaled `publication_receipt`. The lane recomputes them
+again: a payload that is not its identity runs no check and fails
+`check:verification_identity`.
+PageVerifierLane: `page-verifier`/`m3-1`, role Verifier, zero model calls,
+no effects; it runs M3-A's `verify_page` unchanged. Its typed report holds
+the judged identity and six results; it can be built only in
+page_verifier.rs.
+Report digest: raw SHA-256 of `nexus-m3/verification-report/1` + one NUL
+byte + compact serde_json of the ordered `[[id, code], ...]`, codes being
+`pass`, `not_run` or `fail:<V-code>`. All-pass digest pinned by literal.
+Event `verification_recorded`: `invocation`, `effect` (the receipt's),
+`report_digest`, `checks`. Evidence check: six entries `v0`..`v5` in order,
+each code in that check's closed registry, digest recomputed.
+`VerifyFailReason::Check` serializes `check:<code>`: the 69 V0-V5 codes
+(44 S1a refusals under V2; hours indices 0..6) plus `verification_identity`.
+
+## Frozen gates
+
+File-session page Verifier runs only when the mission's retained deliverable
+and a clean (policy-bearing, not overtaken) receipt of the same effect and
+mission are journaled; otherwise Fail `check:no_publication`, verifier calls
+0. Unreadable/mismatched deliverable: Stop `private_content_unavailable`,
+`written; proof not recorded`. Reservation refuses an input not built from
+the current proof. After the answer: no typed report (or effects) →
+`verifier_gave_no_verdict`; report not bound to the input → identity code;
+otherwise `verification_recorded` is appended, then the first table-order
+failure becomes `VerifyFail{check:<code>}`, or a recorded all-pass (and a
+Pass verdict) proceeds. A page mission's VerifyPass, live and at replay,
+requires a recorded all-pass. Append failure: Failed `journal_failed`,
+`written; proof not recorded`, journal poisoned, no VerifyPass.
+Replay: the record must follow the Verifier's own LaneReturned in
+Verifying, after a clean receipt of its effect, once (`ProofOutOfPlace`,
+`ProofConflict`). Non-File coordinators keep invoking their Verifier lane
+(Da's D-I2 counts it) but a page mission there can never pass.
+Replay holds no contract body: it gates VerifyPass where a page was retained.
+
+## Oracle-first matrix (Dc1)
+
+| Oracle | Test | Commit 1 |
+|---|---|---|
+| O34 | m3d_verifier_requires_live_clean_publication | red: clean case Failed, not Explaining |
+| O38a | m3d_verification_identity_hashes_every_field | red: no input is built |
+| O38b | m3d_verification_payload_mismatch_is_refused | red: no input is built |
+| D-V1 | m3d_page_verifier_is_zero_call_and_effect_free | red: no input is built |
+| D-V2 | m3d_durable_checks_gate_verify_pass | red: registry empty (0 of 69) |
+| D-R1 (verification) | m3d_replay_rejects_relinked_verification_proof | red: check refuses the record |
+| D-P3 (verification append) | m3d_verification_append_failure_prevents_success | red: verifier_gave_no_verdict, not journal_failed |
+
+O34 exercises denied, lapsed (run cancelled), stopped, overtaken
+(Stop after publication), no publication, tampered in-memory proof
+(overtaken, other action, other mission, no policy), and Mother's held
+deadline moved past or off the broker's (both end file_publication_uncertain;
+a broker-clock `approval_expired` is not exercised: no clock seam here).
+Dc1-R1 on aaecb642: red D-V2 non-File scripted pass (Done); green D-R1 recomputed digests, O34 deadline/uncertain.
+
+Every Da/Db oracle stayed green on the inert surface. All seven are
+behavioral runtime failures; nothing failed to compile.
+
+## Dc1 mutation map
+
+| Plant | Named test |
+|---|---|
+| MP-M3-10 invoke the page Verifier without its durable proof | m3d_verifier_requires_live_clean_publication |
+| MP-D-V1 ignore overtaken / wrong-action proof | m3d_verifier_requires_live_clean_publication |
+| MP-D-V2 omit each identity field (7) | m3d_verification_identity_hashes_every_field |
+| MP-D-V3 trust the skipped payload | m3d_verification_payload_mismatch_is_refused |
+| MP-D-V4 accept arbitrary lane text as a check code | m3d_durable_checks_gate_verify_pass |
+| MP-D-R1 omit verification replay ordering/linkage, or length/order/code | m3d_replay_rejects_relinked_verification_proof |
+| MP-D-R1-2 pass a non-File page with no recorded checks | m3d_durable_checks_gate_verify_pass |
+
+# M3-Dc2 oracle register: teaching, claims guard, explain() gate
+
+Stacked on aaecb642 (Dc1 + Db2 merge). Rulings Dc-R1 (TEACHING TEXTS) and
+Dc2-R1. After Dc2, explain() says `holds` only for a criterion with a
+recorded passing check; otherwise `  - «text»: not independently recorded
+as checked`. No host, broker, model-route or display change (M3-E wires
+T1-T15; T16 is deferred; T6/T8 are the broker's own dialogs).
+
+## Frozen texts (mother/src/teaching.rs; goldens in oracles/m3d_teaching.rs)
+
+T1, T3, T4, T5, T7, T9d, T13, T15: design §7.1 exact (T5 ASCII `15-60 s`;
+T13 with its backticks; «goal», «facts file» substituted verbatim). T2, T10,
+T11, T12 success: sheet §4. T9 expired/stopped/uncertain and T12 failed and
+no-record: Dc-R1, laid out per Dc2-R1 Q3 (failed: status, undo line, three
+OPEN lines, look line; no-record: status, OPEN lines, look line; «code» is
+the bare CheckCode display). T14: design template, facts hash full
+lowercase hex, `, at line L, column C` only with a location (Q5).
+`LABEL_PASSED` equals the kernel's; the OPEN lines are
+`not checked: how the page looks in a browser (375 px and 1366 px are OPEN)`,
+`OPEN: the page's other sentences have not been verified.`,
+`OPEN: no backup yet.`
+
+## explain() (Dc2-R1 Q1, Q2)
+
+Header `The Verifier checked every pass criterion you set before work
+began:` only when every criterion has a recorded pass, else `The pass
+criteria you set before work began:`. A criterion holds only when its
+check (`V<k>` ↔ `v<k>`) is recorded as `pass` on a page mission (facts
+present); a legacy mission's criteria never hold. Page mission with a
+recorded all-pass: criteria, T11, T12's five lines, then the tally line;
+otherwise criteria and the three OPEN lines only. The recorded
+`(id, code)` pairs are kept in memory, live and at replay.
+
+## Claims guard (§7.2, Dc2-R1 Q6)
+
+Pure `teaching::claims_guard`, no runtime call site: removes every exact
+`LABEL_PASSED` and S1a OPEN line, then refuses the sixteen §7.2 phrases,
+ASCII case-insensitive. O36 applies it to controls, every frozen text and
+variant, and to O32's explain() outputs with the exact Owner-approved
+criterion texts removed.
+
+## Oracle-first matrix (Dc2)
+
+| Oracle | Test | Commit 1 (inert stubs) |
+|---|---|---|
+| O32 | m3d_explain_uses_only_journaled_checks | red: no report still `holds` |
+| O36 | m3d_teaching_goldens_and_claims_guard | red: `LABEL_PASSED` is "" |
+
+O32 also runs two real-broker child cases (`m3d_dc2_child`): a clean live
+File page mission's explanation, and a legacy scripted mission's. Every
+Da/Db/Db2/Dc1 oracle stays green on the inert surface.
+
+Not covered here (ruling Dc2-R2(b)): explain() after a reopen, from
+replayed checks, has no oracle in Dc2. Replay restores the recorded
+checks, but the coverage is CARRIED to the held-mission resume slice;
+only the live path is exercised.
+
+Oracle amendment (ruling Dc2-R3, strictly stronger): O36's exclusion
+leaves out only a complete approved criterion line with its permitted
+status (`  - «text»: holds`, `  - «text»: not independently recorded as
+checked`), anchored to the whole line. Controls: criterion text embedded
+in a Mother sentence, or a criterion line extended past its status, is
+still scanned and refused (V3's `no other phone`). Against the previous
+unanchored filter these controls were red; with the anchored one, green.
+
+## Dc2 mutation map
+
+| Plant | Named test |
+|---|---|
+| MP-M3-9 restore unconditional explain() claims | m3d_explain_uses_only_journaled_checks |
+| MP-M3-12 drop an OPEN line | m3d_teaching_goldens_and_claims_guard, m3d_explain_uses_only_journaled_checks |
+| MP-M3-19 ban the mandatory LABEL_PASSED | m3d_teaching_goldens_and_claims_guard |
+| MP-M3-22 restore v1 T12 | m3d_teaching_goldens_and_claims_guard |

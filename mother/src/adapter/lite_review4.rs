@@ -312,6 +312,7 @@ impl crate::lane::Lane for FailingVerifier {
     }
     fn invoke(&self, _: &LaneInput) -> crate::lane::LaneOutput {
         crate::lane::LaneOutput {
+            verification: None,
             text: "verification failed".into(),
             effects: vec![],
             verdict: Verdict::Fail {
