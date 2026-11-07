@@ -1553,8 +1553,16 @@ fn sb3_revocation_between_observer_read_and_cas_is_entered_only() {
         let crate::governed::AgentOutcome::AwaitingApproval(view) = proposed else {
             panic!("a populated commitment awaiting approval");
         };
-        let snapshot = || format!("{:?}", f.b.door.commitment(view.id));
-        let populated = snapshot().starts_with("Mine(") && snapshot().contains("Prepared");
+        // The actual fields (Debug redacts target and summary to sizes).
+        let snapshot = || match f.b.door.commitment(view.id) {
+            crate::governed::Lookup::Mine(v) => {
+                let fields = format!("{v:?}");
+                Some((fields, v.target, v.summary, v.binding_short))
+            }
+            _ => None,
+        };
+        let content = snapshot().filter(|s| s.0.contains("Prepared"));
+        let populated = content.is_some_and(|s| !s.1.is_empty() && !s.2.is_empty());
         assert!(populated, "{i}: a populated, prepared commitment");
         let (before, steps, held) = (broker(&f), file_steps(&f), snapshot());
         let outcome = f.call().expect("ticketed attempt");
