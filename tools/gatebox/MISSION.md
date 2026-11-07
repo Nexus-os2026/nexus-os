@@ -217,3 +217,22 @@ against installed-files.json. Attribution of denial to that rule and precedence
 over earlier conflicting policy remain UNVERIFIED. The Owner must close agents,
 remove nexus from docker and reboot before install (README H1). This amendment
 claims no host action, installed PASS, phase advancement or CI parity.
+
+## Q15 installer correction (supersedes Q13 custody procedure)
+
+C2 is the real installed F5 pre-handoff substitution, runs LAST, and leaves
+root quarantine until a mandatory reviewed reboot. Enable-qualified requires
+content-checked row/run_id/pre-reboot boot_id evidence, a different current
+boot_id, and clean custody. C1 covers the two endpoint files only. C1/C3 call
+lifecycle.py directly as root and collect on the host as mothergate; these
+proofs do not exercise privilege elevation or the service collector sandbox.
+Cleanup is registered before setUp writes, continues after stop errors, proves
+settlement before exact-name persistent removal as mothergate, reports errors
+and retained paths, and fails qualification on unexpected leftovers. README
+specifies failed-proof recovery and the reboot; no generic custody deletion.
+Linux oracle socket addresses use an open private parent descriptor and a
+short absolute /proc/self/fd name, independent of cwd and TMPDIR length.
+The installed FILES allowlist remains exact and unchanged (27 files). The
+host-only plant removes lifecycle's post-relocation endpoint check: Owner must
+observe installed C2 RED, restore the SHA-256-verified reviewed bytes and reboot.
+This mission claims no installed PASS, CI parity or phase advancement.

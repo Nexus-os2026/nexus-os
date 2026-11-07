@@ -122,19 +122,16 @@ def write(path,data,mode=0o644):
 
 def record(path,value): write(path,(json.dumps(value,sort_keys=True)+'\n').encode())
 
-def acceptance_check(identity,value,state,authenticate):
+def acceptance_check(identity,value,state,authenticate,*,sensors=None):
     custody = {'C1-SEALED','C2-CANARY','C3-RESTART'}
     rows = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'} | custody
     if (value.get('identity') != identity or set(value.get('passed',[])) != rows
             or state != {'identity':identity,'stage':'qualifying'}
             or set(value.get('evidence',{})) != rows):
         raise ValueError('qualification incomplete/stale or provenance missing')
+    if sensors is None: import probe as sensors
+    sensors.acceptance_custody(value)
     for row, evidence in value['evidence'].items():
-        if row in custody:
-            proof = evidence.get('custody')
-            if (not isinstance(proof,dict) or proof.get('row') != row or proof.get('passed') is not True
-                    or not isinstance(proof.get('observations'),dict) or not proof['observations']):
-                raise ValueError('installed custody proof missing/failed: '+row)
         summary = authenticate(evidence['run_id'])['summary']
         if (summary['status'] != 'PASS_SCOPED' or summary['request'] != dict(repo_id='mother',full_sha=FIXTURE,gate_set_id='full')
                 or summary['installed'] != dict(identity,stage='qualifying')

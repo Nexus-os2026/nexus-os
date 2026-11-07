@@ -547,7 +547,7 @@ def offline_oracles(row):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(core.SnapshotTests if row=='B1' else core.ReceiptTests))
     # Pin all nested oracle temporaries outside the immutable installed tree,
     # independent of a caller's TMPDIR or tempfile's cached default.
-    with tempfile.TemporaryDirectory(prefix='gbx-offline-',dir='/var/tmp') as temporary:
+    with tempfile.TemporaryDirectory(prefix='g',dir='/var/tmp') as temporary:
         previous = tempfile.tempdir
         try:
             tempfile.tempdir = temporary
@@ -589,6 +589,8 @@ def custody_oracle(row):
         require(result.testsRun==1 and result.wasSuccessful() and not result.skipped,
                 'installed custody failed/skipped: '+str(result.errors+result.failures+result.skipped))
         observations = getattr(tests[0],'observations',None)
+        require(isinstance(observations,dict),'missing custody observations')
+        observations['row'] = row
         proof = dict(row=row,passed=True,observations=observations)
         validate_custody(row,proof)
         return proof
@@ -598,6 +600,76 @@ def validate_custody(row,proof):
     require(isinstance(proof,dict) and proof.get('row')==row and proof.get('passed') is True
             and isinstance(proof.get('observations'),dict) and bool(proof['observations']),
             'installed custody proof missing/failed: '+row)
+    observed = proof['observations']
+    require(isinstance(observed.get('run_id'),str) and re.fullmatch('[0-9a-f]{32}',observed['run_id']),
+            'custody run_id missing/invalid')
+    require(valid_boot(observed.get('boot_id')) and observed.get('row')==row,'custody boot_id/row missing/invalid')
+    if row=='C1-SEALED':
+        denied = observed.get('denied')
+        require(isinstance(denied,list) and len(denied)==6 and all(isinstance(v,list) and len(v)==3
+            and v[2] in (errno.EACCES,errno.EPERM) for v in denied) and
+            {(v[0],v[1]) for v in denied}=={(k,a) for k in ('log','status') for a in ('unlink','rename','symlink')},
+            'custody endpoint denials missing')
+    elif row=='C2-CANARY':
+        require(all(observed.get(k) is True for k in ('rejected','no_invocation','canary_unchanged',
+                'dangling_absent','custody_held')),'custody pre-handoff proof missing')
+    elif row=='C3-RESTART':
+        before=observed.get('supervisor_before',{}).get('MainPID','')
+        after=observed.get('supervisor_after',{}).get('MainPID','')
+        require(observed.get('retained') is True and isinstance(before,str) and isinstance(after,str)
+                and before.isdecimal() and after.isdecimal() and min(int(before),int(after))>1
+                and before!=after,'custody restart evidence missing')
+    else: raise ValueError('unknown custody row')
+
+def valid_boot(value):
+    return isinstance(value,str) and re.fullmatch('[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}',value) is not None
+
+def boot_id():
+    value = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    require(valid_boot(value),'current boot_id unavailable')
+    return value
+
+def clean_custody(held_run=None):
+    # No manager calls. Inspect protected directory descriptors, not caller paths.
+    # Used-ID markers alone are harmless; all other leftovers block qualification.
+    bridge = sibling('lifecycle').Custody(owner=pwd.getpwnam('mothergate').pw_uid,
+                                        owner_gid=pwd.getpwnam('mothergate').pw_gid)
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        for path in ('/var/lib/mothergate/pending','/var/lib/mothergate/staging',
+                     '/run/mothergate-control/incoming'):
+            fd=stack.enter_context(bridge.directory(Path(path),bridge.owner,0o700))
+            if os.listdir(fd): return False
+        stack.enter_context(bridge.directory(bridge.control,mode=0o755))
+        sealed=stack.enter_context(bridge.directory(bridge.control/'sealed',mode=0o700))
+        names=set(os.listdir(sealed))
+        for name in list(names):
+            if re.fullmatch(r'\.used-[0-9a-f]{32}',name):
+                fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW,dir_fd=sealed)
+                try: bridge.root_file(fd)
+                finally: os.close(fd)
+                names.remove(name)
+        if held_run is None: return not names
+        require(re.fullmatch('[0-9a-f]{32}',held_run),'invalid held run')
+        if names!={held_run,'.pending-'+held_run}: return False
+        fd=os.open('.pending-'+held_run,os.O_RDONLY|os.O_NOFOLLOW,dir_fd=sealed)
+        try: bridge.root_file(fd)
+        finally: os.close(fd)
+        directory=stack.enter_context(bridge.directory(bridge.control/'sealed'/held_run,mode=0o700))
+        if set(os.listdir(directory))!={'log.sock','status.sock'}: return False
+        for kind,target in (('log','canary'),('status','missing')):
+            info=os.stat(kind+'.sock',dir_fd=directory,follow_symlinks=False)
+            if not stat.S_ISLNK(info.st_mode) or info.st_uid!=bridge.owner or info.st_gid!=bridge.owner_gid: return False
+            if os.readlink(kind+'.sock',dir_fd=directory)!='/run/gatebox-custody-'+held_run+'/'+target: return False
+        return True
+
+def acceptance_custody(value):
+    for row in CUSTODY_TESTS: validate_custody(row,value.get('evidence',{}).get(row,{}).get('custody'))
+    current = boot_id()
+    require(valid_boot(current),'current boot_id unavailable')
+    previous = value['evidence']['C2-CANARY']['custody']['observations']['boot_id']
+    require(previous!=current,'C2 requires a different boot_id after reboot')
+    require(clean_custody(),'custody leftovers; reviewed recovery required')
 
 def e2e(summary):
     sibling('receipt').validate_summary(summary)
@@ -614,11 +686,18 @@ def e2e(summary):
 
 def qualify(row):
     require(row in REQUIRED_ROWS,'unknown oracle')
-    require_installed(); summary,clients = fixture()
+    require_installed()
+    prior = config('qualification.json')
+    require('C2-CANARY' not in prior['passed'],'C2 already recorded; reboot then enable-qualified')
+    if row=='C2-CANARY': require(set(prior['passed'])==REQUIRED_ROWS-{'C2-CANARY'},'C2 must run LAST')
+    require(clean_custody(),'custody leftovers; reviewed recovery required')
+    current_boot = boot_id()
+    summary,clients = fixture()
     require(summary['installed']==dict(config('identity.json'),stage='qualifying'),'receipt installed binding')
     custody = None
     if row in CUSTODY_TESTS:
         custody = custody_oracle(row); validate_custody(row,custody)
+        require(custody['observations']['boot_id']==current_boot,'custody proof from a different boot')
     elif row.startswith('A'): validate_sensor(row,summary['isolation'][row])
     elif row in ('B1','B2','B3','B4'):
         offline_oracles(row)
@@ -628,6 +707,9 @@ def qualify(row):
     elif row=='E2E': e2e(summary)
     elif row=='CLIENTS': clients_check(clients,summary,config('registry.json')['mother']['uid'])
     else: raise ValueError('unknown oracle')
+    require(boot_id()==current_boot,'boot changed during qualification')
+    require(clean_custody(held_run=custody['observations']['run_id'] if row=='C2-CANARY' else None),
+            'custody leftovers after proof; reviewed recovery required')
     # Serialize acceptance updates; only this host-root process writes them.
     fd = os.open(CONFIG/'qualification.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
     try:
@@ -635,6 +717,8 @@ def qualify(row):
         value = config('qualification.json'); identity = installed_identity()
         if value=={'identity':None,'passed':[]}: value = dict(identity=identity,passed=[],evidence={})
         require(value.get('identity')==identity,'stale acceptance evidence')
+        require('C2-CANARY' not in value['passed'],'qualification already sealed by C2')
+        if row=='C2-CANARY': require(set(value['passed'])==REQUIRED_ROWS-{'C2-CANARY'},'C2 must run LAST')
         value['evidence'][row] = dict(run_id=summary['run_id'],
             summary_sha256=hashlib.sha256(json.dumps(summary,sort_keys=True).encode()).hexdigest(),
             client_provenance=clients if row=='CLIENTS' else None)
