@@ -288,6 +288,10 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
             (CONTROL/(run+'.'+kind+'.sock')).unlink(missing_ok=True)
         summary['resources']['duration_seconds'] = time.monotonic()-started
         summary['logs'] = [dict(file=name,sha256=hashlib.sha256(data).hexdigest()) for name,data in logs.items()]
+        try: receipt.validate_summary(summary)
+        except ValueError as exc:
+            summary['status'] = 'FAILED'
+            summary['missing_evidence'].append('validation: '+str(exc))
         try:
             receipt.publish(STATE/'pending',STATE/'receipts',run,summary,logs)
             if summary['cleanup']['complete']:

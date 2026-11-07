@@ -13,6 +13,7 @@ import shutil
 import signal
 import struct
 import time
+import tomllib
 ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
        'CARGO_HOME':'/work/cargo','CARGO_TARGET_DIR':'/work/target','CARGO_BUILD_JOBS':'4',
        'RUST_TEST_THREADS':'4','CARGO_TERM_COLOR':'never','CARGO_NET_OFFLINE':'true',
@@ -41,6 +42,9 @@ def packet(fd, value):
         if not count: raise ValueError('collector lost')
         data = data[count:]
 
+def artifact_package(item):
+    return tomllib.loads(Path(item['manifest_path']).read_text())['package']['name']
+
 class Runner:
     def __init__(self, log, status):
         self.log, self.status = log, status
@@ -56,11 +60,14 @@ class Runner:
         name = 'c'+str(self.serial)
         packet(self.status,dict(event='start',id=name,gate_id=gate,argv=argv,
                                 cwd='/work/src',environment=ENV))
-        proc = subprocess.Popen(argv,**child_options(subprocess.PIPE))
+        options = child_options(subprocess.PIPE)
+        if gate == 'compile-tests': options['stderr'] = subprocess.PIPE
+        proc = subprocess.Popen(argv,**options)
         self.children.add(proc)
         output = bytearray()
         selector = selectors.DefaultSelector()
         selector.register(proc.stdout,selectors.EVENT_READ)
+        if proc.stderr is not None: selector.register(proc.stderr,selectors.EVENT_READ)
         try:
             while selector.get_map():
                 if time.monotonic() >= self.deadline: raise TimeoutError('payload deadline')
@@ -69,7 +76,7 @@ class Runner:
                     if not block: selector.unregister(key.fileobj)
                     else:
                         self.output(name,block)
-                        output.extend(block)
+                        if key.fileobj is proc.stdout: output.extend(block)
             code = proc.wait(timeout=max(.001,self.deadline-time.monotonic()))
             packet(self.status,dict(event='end',id=name,exit_code=code,signal=-code if code < 0 else None))
             self.results[name] = (gate,argv,code)
@@ -77,6 +84,7 @@ class Runner:
         finally:
             selector.close()
             proc.stdout.close()
+            if proc.stderr is not None: proc.stderr.close()
             # The owned unreaped leader reserves its process group until wait.
             if proc.poll() is None:
                 os.killpg(proc.pid,signal.SIGKILL)
@@ -101,7 +109,15 @@ class Runner:
         for gate in policy['gates']:
             try:
                 kind = gate['id']
-                if 'argv' in gate:
+                if kind == 'host':
+                    if not any(a['package'] == gate['package'] for a in self.artifacts): raise ValueError('host coverage missing')
+                elif kind == 'whitespace':
+                    for path in Path('/work/src').rglob('*'):
+                        if not path.is_file() or path.is_symlink(): continue
+                        data = path.read_bytes()
+                        if b'\0' not in data and any(line.rstrip(b' \t') != line for line in data.splitlines()):
+                            raise ValueError('snapshot whitespace approximation: '+str(path))
+                elif 'argv' in gate:
                     _, code, output = self.command(kind,gate['argv'])
                     if code: raise ValueError(kind+' nonzero')
                     if kind == 'compile-tests':
@@ -115,7 +131,7 @@ class Runner:
                             if (not executable.startswith('/work/target/') or '..' in executable.split('/')
                                     or Path(executable).resolve() != Path(executable)):
                                 raise ValueError('artifact escaped private target')
-                            package = item['package_id'].split('#')[-1].split('@')[0].split(' ')[0]
+                            package = artifact_package(item)
                             self.artifacts.append(dict(id='a'+str(len(self.artifacts)),adapter='libtest',
                                                        package=package,target=target,executable=executable))
                 elif kind == 'workspace':
@@ -127,19 +143,11 @@ class Runner:
                     desktop = [a for a in self.artifacts if (a['package'],a['target']) == (gate['package'],gate['target'])]
                     if len(desktop) != 1: raise ValueError('missing/duplicate desktop artifact')
                     self.libtest(kind,desktop[0],gate['expected_names'])
-                elif kind == 'host':
-                    if not any(a['package'] == gate['package'] for a in self.artifacts): raise ValueError('host coverage missing')
-                elif kind == 'whitespace':
-                    for path in Path('/work/src').rglob('*'):
-                        if not path.is_file() or path.is_symlink(): continue
-                        data = path.read_bytes()
-                        if b'\0' not in data and any(line.rstrip(b' \t') != line for line in data.splitlines()):
-                            raise ValueError('snapshot whitespace approximation: '+str(path))
                 if kind in ('host','whitespace'):
                     self.serial += 1
                     name = 'c'+str(self.serial)
                     packet(self.status,dict(event='start',id=name,gate_id=kind,
-                           argv=['trusted-init-internal',kind],cwd='/work/src',environment=ENV))
+                           argv=gate['argv'],cwd='/work/src',environment=ENV))
                     self.output(name,(kind+' internal reconciliation complete\n').encode())
                     packet(self.status,dict(event='end',id=name,exit_code=0,signal=None))
             except (ValueError,OSError,subprocess.SubprocessError) as exc:
