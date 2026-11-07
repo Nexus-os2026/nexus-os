@@ -92,3 +92,93 @@ impl Fixture {
         self.session.approve_file(&request)
     }
 }
+
+// TH-R1: the PID-reuse collision, made deterministic. One child leaks its
+// home (exit without Drop, its session unclosed, like a crashed owner). The
+// parent moves that home to the name a second, waiting child would derive
+// from its own PID, then lets it build its fixture. Each fixture must still
+// get a fresh, startup-ready home; the leaked one is never reopened.
+#[test]
+fn session_fixture_never_reuses_a_leaked_home() {
+    use std::io::{BufRead, Write};
+    use std::process::{Command, Stdio};
+    const MODE: &str = "M2DD_TH_R1_CHILD";
+    const TEST: &str = "adapter::session_support::session_fixture_never_reuses_a_leaked_home";
+    match std::env::var(MODE).as_deref() {
+        Ok("leak") => {
+            let home = Fixture::new("stale-home");
+            println!("TH-HOME {}", home.dir.display());
+            std::process::exit(0);
+        }
+        Ok("fresh") => {
+            let mut go = String::new();
+            std::io::stdin().read_line(&mut go).unwrap();
+            let home = Fixture::new("stale-home");
+            assert!(home.session.startup_report().ready());
+            println!("TH-HOME {}", home.dir.display());
+            return;
+        }
+        _ => {}
+    }
+    let home_of = |text: &str| {
+        let line = text
+            .lines()
+            .find_map(|l| l.strip_prefix("TH-HOME "))
+            .unwrap();
+        PathBuf::from(line)
+    };
+    let leak = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", TEST, "--nocapture"])
+        .env(MODE, "leak")
+        .output()
+        .unwrap();
+    assert!(leak.status.success());
+    let leaked = home_of(&String::from_utf8_lossy(&leak.stdout));
+    let mut fresh = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", TEST, "--nocapture"])
+        .env(MODE, "fresh")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let name = leaked.file_name().unwrap().to_str().unwrap().replacen(
+        &format!("-{}", leak_pid(&leaked)),
+        &format!("-{}", fresh.id()),
+        1,
+    );
+    let planted = leaked.with_file_name(name);
+    std::fs::rename(&leaked, &planted).unwrap();
+    let journal = std::fs::read(planted.join("mother-journal.jsonl")).ok();
+    fresh.stdin.take().unwrap().write_all(b"go\n").unwrap();
+    let stdout = std::io::BufReader::new(fresh.stdout.take().unwrap());
+    let reader = std::thread::spawn(move || stdout.lines().map(Result::unwrap).collect::<Vec<_>>());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let status = loop {
+        if let Some(status) = fresh.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() >= deadline {
+            fresh.kill().unwrap();
+            break fresh.wait().unwrap();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    let out = reader.join().unwrap().join("\n");
+    let mut err = String::new();
+    std::io::Read::read_to_string(&mut fresh.stderr.take().unwrap(), &mut err).unwrap();
+    let reused = std::fs::read(planted.join("mother-journal.jsonl")).ok() != journal;
+    let _ = std::fs::remove_dir_all(&planted);
+    assert!(
+        status.success(),
+        "a leaked home at this PID's name must not be reopened: {out}{err}"
+    );
+    assert_ne!(home_of(&out), planted, "fresh home, never the leaked one");
+    assert!(!reused, "the leaked home is left untouched");
+}
+fn leak_pid(home: &std::path::Path) -> u32 {
+    // m2dd-stale-home-{pid}[-...]: the first numeric component after the label.
+    let name = home.file_name().unwrap().to_str().unwrap();
+    let rest = name.strip_prefix("m2dd-stale-home-").unwrap();
+    rest.split('-').next().unwrap().parse().unwrap()
+}
