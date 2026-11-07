@@ -3493,19 +3493,40 @@ fn sb3_thread_joins_run_in_watched_children() {
     let via =
         format!("{source}\n#[test]\nfn sb3_via() {{\n    keep_join(&Holder::default());\n}}\n");
     assert_eq!(unwatched(&via), ["sb3_via"], "a join through a helper");
+    // SB3B-R20 (a): a wrapper without the parent's return, and a test whose
+    // `#[test]` is separated from its fn by another attribute.
+    let open = format!("{source}\n#[test]\nfn sb3_open() {{\n    if watched(\"sb3_open\") {{\n    }}\n    keep_join(&Holder::default());\n}}\n");
+    assert_eq!(
+        unwatched(&open),
+        ["sb3_open"],
+        "a wrapper without its return"
+    );
+    let attr = format!("{source}\n#[test]\n#[allow(unused)]\nfn sb3_attr() {{\n    keep_join(&Holder::default());\n}}\n");
+    assert_eq!(unwatched(&attr), ["sb3_attr"], "an intervening attribute");
 }
 /// Top-level fns: (name, is a test, body); bodies from the masked source.
+/// A fn is a test when `#[test]` is among the attributes directly above it.
 fn unwatched(source: &str) -> Vec<String> {
     let code = mask(source);
     let mut fns = Vec::new();
-    for (at, _) in code.match_indices("\nfn ") {
-        let name: String = code[at + 4..]
+    for (at, _) in code.match_indices('\n') {
+        let line = &code[at + 1..];
+        let Some(head) = ["fn ", "pub(super) fn ", "pub(crate) fn "]
+            .iter()
+            .find_map(|p| line.strip_prefix(p))
+        else {
+            continue;
+        };
+        let name: String = head
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
             .collect();
+        let above = code[..at].lines().rev();
+        let attrs = above.take_while(|l| l.trim().is_empty() || l.trim_start().starts_with("#["));
+        let test = attrs.into_iter().any(|l| l.trim() == "#[test]");
         let open = at + code[at..].find('{').unwrap();
         let close = open + code[open..].find("\n}").unwrap();
-        fns.push((name, code[..at].ends_with("#[test]"), open, close));
+        fns.push((name, test, open, close));
     }
     let calls = |body: &str, name: &str| {
         body.match_indices(&format!("{name}(")).any(|(i, _)| {
@@ -3530,10 +3551,11 @@ fn unwatched(source: &str) -> Vec<String> {
     let joins = |o: usize, c: usize| {
         code[o..c].contains(".join()") || joiners.iter().any(|j| calls(&code[o..c], j))
     };
+    // The complete parent-return wrapper, whitespace-insensitive.
     let watched = |n: &str, o: usize| {
-        source[o + 1..]
-            .trim_start()
-            .starts_with(&format!("if watched(\"{n}\") {{"))
+        let wrapper = format!("if watched(\"{n}\") {{ return; }}");
+        let tokens = source[o + 1..].split_whitespace().take(5);
+        tokens.collect::<Vec<_>>().join(" ") == wrapper
     };
     fns.iter()
         .filter(|(n, test, o, c)| *test && joins(*o, *c) && !watched(n, *o))
