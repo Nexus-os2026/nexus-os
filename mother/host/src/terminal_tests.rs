@@ -821,13 +821,11 @@ mod m3a {
         assert!(echo.chars().all(|c| shown(c) || c == '\x08' || c == '\n'));
     }
 
+    /// The goal read's worker: the goal text or its refusal code.
+    type Worker = JoinHandle<Result<String, &'static str>>;
+
     /// A goal read on a worker; the test plays the reader through `route`.
-    fn session() -> (
-        Arc<Shared>,
-        Receiver<Frame>,
-        Buffers,
-        JoinHandle<Result<String, &'static str>>,
-    ) {
+    fn session() -> (Arc<Shared>, Receiver<Frame>, Buffers, Worker) {
         let (c, frames) = scripted();
         let shared = c.shared.clone();
         let worker_shared = shared.clone();
