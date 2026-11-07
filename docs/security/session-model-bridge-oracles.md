@@ -1033,3 +1033,8 @@ Receipts on the B1c head:
   same-length value and each summary line to a same-length line is
   killed at "the populated commitment is unchanged". Governed-control
   lib 916; fmt, clippy, diff --check.
+- SB3B-R17 oracle-amend: Debug truncates `id` and `run` to eight hex
+  digits, so L2 also compares the typed `id` and `run`. A model call that
+  substitutes a commitment id, or its run, differing only beyond the
+  Debug prefix is killed at "the populated commitment is unchanged"; the
+  same plants pass against the R14 oracle.
