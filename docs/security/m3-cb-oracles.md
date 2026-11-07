@@ -193,7 +193,7 @@ Cb2-allowlisted files); L2 forwards to the ordinary broker port because
 `ModelRequest` exposes no content; `mod.rs` 6 lines (stacked cfg, R1.2) vs
 3 estimated; per-file sizes vs 622c6bdb (added+deleted): lifecycle 584
 (est 450), privacy 174 (240), support 106 (100), mod.rs 6 (3), this
-register 73 (60); total 943 (est 853), under the 1,500 cap.
+register 76 (60); total 946 (est 853), under the 1,500 cap.
 
 Plants (each applied alone, never committed, restored with equal sha256;
 receipts `cb2-plants/receipts.json`, logs `cb2-plants/MP-Cb2-*.log` under
