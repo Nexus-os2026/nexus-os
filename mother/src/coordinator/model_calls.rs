@@ -153,6 +153,13 @@ pub(super) fn reserve_lane(
         restatement: c.restatement.clone(),
         pass_criteria: c.pass_criteria.clone(),
         prior_outputs: m.prior_outputs.clone(),
+        builder_input: crate::page_inputs::prepare(
+            c,
+            m.contract_ref.contract_hash,
+            invocation,
+            identity.role,
+        )
+        .map_err(CoordinatorError::Contract)?,
     };
     inner.append(
         id,

@@ -125,3 +125,8 @@ impl Builder {
         }
     }
 }
+
+/// Readiness only: no caller, model route, correction or effect construction.
+pub(crate) fn facts_page_ready(facts: &ApprovedFacts) -> bool {
+    assemble::facts_ready(facts).is_ok()
+}
