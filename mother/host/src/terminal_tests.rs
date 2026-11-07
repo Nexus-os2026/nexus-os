@@ -1569,7 +1569,8 @@ mod m3a_r13 {
     /// Publication interrupted: the line completes, then (before it is
     /// published) its read times out and another begins; the goal each read
     /// returns.
-    fn interrupted_cases() -> Vec<(Vec<Step>, Vec<(u64, &'static str)>)> {
+    type Interrupted = (Vec<Step>, Vec<(u64, &'static str)>);
+    fn interrupted_cases() -> Vec<Interrupted> {
         use Ev::{Ready, Timeout};
         let read = |b: &[u8], e: Vec<(usize, Ev)>| Step::Read(b.to_vec(), e);
         vec![

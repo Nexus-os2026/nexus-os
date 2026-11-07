@@ -1316,9 +1316,11 @@ pub(crate) fn route_read(shared: &Shared, buffers: &mut Buffers, bytes: &[u8], m
     let mut read = mode.read;
     let mut echo = String::new();
     let mut pending = None;
-    for (_i, &b) in bytes.iter().enumerate() {
+    for (i, &b) in bytes.iter().enumerate() {
         #[cfg(test)]
-        buffers.fire(HookPoint::Byte(_i));
+        buffers.fire(HookPoint::Byte(i));
+        #[cfg(not(test))]
+        let _ = i;
         // A LF directly after a CR on the stream is that CR's partner.
         let partner = b == b'\n' && buffers.last_was_cr;
         buffers.last_was_cr = b == b'\r';
