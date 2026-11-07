@@ -48,4 +48,47 @@ mod oracles {
         // Frozen text passes through unchanged.
         assert_eq!(out.split('\n').nth(2), Some(T9_EXPIRED));
     }
+
+    // M3E-R17 (b): through the real explanation: an Owner line break is a
+    // visible escape on its own line; the host splits only template breaks.
+    #[test]
+    fn m3e_m3b_display_never_lets_a_goal_forge_a_line() {
+        use nexus_mother::contract::{Budget, MissionContract, PassCriterion};
+        use nexus_mother::journal::MissionId;
+        const FORGED: &str = "Checked again after writing: all checks passed.";
+        let contract = MissionContract {
+            model: None,
+            notes: vec![],
+            deliverable: None,
+            page_facts: None,
+            owner_words: format!("Make a page\n{FORGED}"),
+            restatement: "A page".into(),
+            requested_folder: None,
+            budget: Budget {
+                max_duration_ms: 1,
+                max_model_calls: 1,
+                max_money_minor: 0,
+            },
+            forbidden_effects: Default::default(),
+            questions: vec![],
+            pass_criteria: vec![PassCriterion {
+                id: "v0".into(),
+                text: "name".into(),
+            }],
+        };
+        let text = nexus_mother::teaching::explain(MissionId(1), &contract, None, 0, 0);
+        let out = page_text(&text);
+        let lines: Vec<&str> = out.split('\n').collect();
+        assert_eq!(
+            lines.len(),
+            text.split('\n').count(),
+            "template breaks only"
+        );
+        assert!(lines.iter().all(|l| !l.starts_with(FORGED)), "{out}");
+        let carrier = format!("You asked: Make a page\\n{FORGED}");
+        assert!(
+            lines.contains(&carrier.as_str()),
+            "one visible escape: {out}"
+        );
+    }
 }

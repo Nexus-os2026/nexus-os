@@ -298,6 +298,53 @@ fn m3e_m3b_t9_follows_the_recorded_end() {
     }
 }
 
+/// M3E-R17 (b): untrusted text is escaped before the template is assembled,
+/// so an Owner line break never starts a line of Mother's own.
+const FORGED: &str = "Checked again after writing: all checks passed.";
+
+#[test]
+fn m3e_m3b_explain_escapes_untrusted_fields_before_assembly() {
+    use nexus_governed_control::authority::evidence::escaped;
+    let mut c = page_contract(FOLDER);
+    c.owner_words = format!("Make a page\n{FORGED}");
+    c.restatement = format!("A page\r\n{FORGED}");
+    c.pass_criteria[0].text = format!("name\n{FORGED}");
+    let pass: Vec<(String, String)> = ["v0", "v1", "v2", "v3", "v4", "v5"]
+        .iter()
+        .map(|id| (id.to_string(), "pass".to_string()))
+        .collect();
+    for checks in [None, Some(&pass[..])] {
+        let text = crate::teaching::explain(MissionId(ID), &c, checks, 2, 1);
+        let lines: Vec<&str> = text.split('\n').collect();
+        assert!(lines.iter().all(|l| !l.starts_with(FORGED)), "{text}");
+        assert!(!text.contains('\r'), "{text}");
+        let carriers: Vec<&&str> = lines.iter().filter(|l| l.contains(FORGED)).collect();
+        assert_eq!(
+            carriers.len(),
+            3,
+            "each field stays on its own line: {text}"
+        );
+        assert!(lines.contains(&format!("You asked: Make a page\\n{FORGED}").as_str()));
+        assert!(lines.contains(&format!("I understood: A page\\r\\n{FORGED}").as_str()));
+    }
+    // Page lines: the folder, codes and facts file name are escaped too.
+    let folder = format!("rosas\n{FORGED}");
+    let c = page_contract(&folder);
+    let mut j = asked(&c);
+    j.push(receipt(RECEIPT_SHA, 1697, false));
+    j.push(checks(PASS));
+    let got = lines(&j, &c).unwrap();
+    assert_eq!(
+        got.first(),
+        Some(&t10(&escaped(&folder), 1697, RECEIPT_SHA))
+    );
+    let shown = got.join("\n");
+    assert!(shown.split('\n').all(|l| !l.starts_with(FORGED)), "{shown}");
+    let file = format!("facts.txt\n{FORGED}");
+    let view = page_view(&j, MissionId(ID)).lines(&c, &file).unwrap();
+    assert_eq!(view.last(), Some(&t13(&escaped(&file))));
+}
+
 /// Composed cases run one broker per process.
 const CHILD: &str = "oracles::m3e_display::m3e_m3b_child";
 
