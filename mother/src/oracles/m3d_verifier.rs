@@ -289,7 +289,7 @@ fn m3d_durable_checks_gate_verify_pass() {
     lanes.push(Arc::new(Counted(calls.clone(), pass)));
     let w = world_with(lanes);
     let id = w.approved(maximum_contract('A'));
-    (0..5).for_each(|_| drop(w.mother.advance(id).unwrap()));
+    (0..4).for_each(|_| drop(w.mother.advance(id).unwrap()));
     let (reason, journal) = (w.mother.reason(id), w.mother.journal().unwrap());
     assert_eq!(w.mother.state(id), Some(MissionState::Failed));
     assert_eq!(reason.as_deref(), Some("verifier_gave_no_verdict"));
