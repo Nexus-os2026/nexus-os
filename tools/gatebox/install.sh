@@ -5,6 +5,7 @@ umask 022
 exec /usr/bin/python3 -I -B - "$@" <<'PY'
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -55,7 +56,7 @@ def bundle_files(path,digest):
         raise ValueError('bundle SHA-256 mismatch')
     expected = {'tools/gatebox/'+n for n in FILES}|{HARNESS}
     result = {}
-    with tarfile.open(path,'r:') as archive:
+    with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as archive:
         for item in archive:
             name = item.name
             parts = Path(name).parts
