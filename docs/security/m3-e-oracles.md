@@ -287,6 +287,37 @@ is a separate unit).
 
 P-R11-1 and P-R11-2 mutate code that R13 replaced; their oracles still pass.
 
+## M-3a2 — goal publication carries its read id (M3E-R15)
+
+Stacked review unit on `mother/m3e-m3a2-publish` (base 861654c3; M-3a's own
+size is at its cap). Code: `mother/host/src/terminal.rs`. Tests: the
+`m3a_r13` module of `mother/host/src/terminal_tests.rs`.
+
+### Frozen behaviour (R15)
+
+- **Read id end to end.** A completed goal line carries the id of the goal
+  read that owns it to publication. `Shared::publish_goal` stores it only if
+  that id is the current READY read's (`goal`, `active`, `typing`, boundary
+  acknowledged, same `goal_read`); otherwise the line is discarded. Exact
+  `stop`/`quit` lines and EOF still act.
+- **One snapshot.** `reader_state` returns the discard flag and the ready
+  read's id together, under one lock; `route_read` uses that id and never
+  rereads it.
+- **Seams (tests only).** `Buffers::hook` runs at `HookPoint::Start` (after
+  the snapshot), `Byte(i)` and `Publish` (before publication). The goal
+  read's transitions are named production functions (`goal_begin`,
+  `goal_ready`, `goal_end`, `acknowledge`), used by `read_goal`, the reader
+  and the harness alike. `reader_mode` and `route` are test-only forms.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_m3a_r13_generative_routing_keeps_i1_to_i5` (amended by R15) | Drives readiness through the production read-id path and puts events inside reads at the reader's hook points. Every sequence of up to 3 over the whole alphabet in every partition into reads; every sequence of 4 in both extreme partitions; every sequence of up to 5 over one byte per class and both events in every partition; 200,000 seeded sequences of up to 7 tokens with random cuts; the explicit split-position cases (`stop`, `quit`, `run` split at every index, across reads and across a read's start or timeout, in command and goal mode); the publication-interrupted cases. I1–I5 against the stream model, with returned goals recorded under the production read id. Control: in every case production `goal_read` equals the reads begun, and some case reaches two reads. |
+| `m3e_m3a_r15_interrupted_publication_never_reaches_another_read` | Five named schedules (timeout, or timeout and a new read, at publication or inside the read): each read returns only its own line; the model agrees. |
+| `m3e_m3a_r15_a_goal_paused_before_publication_never_reaches_the_next_read` | Real `read_goal` workers. A's `old goal` is complete, the reader pauses before publication, A times out, B begins (not ready, then ready), the reader resumes: no goal is published to B; B returns its own `new goal`; two production read ids. |
+| `m3e_m3a_r15_a_stale_mode_snapshot_never_takes_the_next_read_id` | The same, paused right after the reader's mode snapshot (A ready) and before routing `x\r`: `x` never reaches B. |
+
 ## M-3b — page teaching display (data-only) and O34
 
 Code: `mother/src/coordinator/page_display.rs` (projection and selection),
