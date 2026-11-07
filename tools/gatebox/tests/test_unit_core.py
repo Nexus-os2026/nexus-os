@@ -67,7 +67,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse((self.root/'out/.git').exists())
         self.assertEqual(result['commit'], sha)
         self.assertEqual(result['lockfile_sha256'], hashlib.sha256(b'lock\n').hexdigest())
-        self.assertEqual(result['content_sha256'], snapshot.manifest(self.root/'out')[0])
+        self.assertEqual(result['content_sha256'], 'b7b1f881eb82ce334f3b644e69c0bf3858eb8bcbfcd2495ee2e2ddaf0a80c773')
     def test_wrong_hash_rejected(self):
         source, sha = fixture()
         key = next(k for k, v in source.objects.items() if v == ('blob', b'lock\n'))
