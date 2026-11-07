@@ -24,6 +24,7 @@ impl Lane for MixedBuilder {
 
     fn invoke(&self, _: &LaneInput) -> LaneOutput {
         LaneOutput {
+            verification: None,
             text: "File A, Owner-approved POST, File B".into(),
             effects: vec![
                 file("one.txt", &content_of("MKFILE", "one.txt").unwrap()),

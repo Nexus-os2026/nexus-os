@@ -22,6 +22,7 @@ use crate::journal::{Event, ReplayViolation};
 use crate::lane::{LaneIdentity, LaneRole};
 use crate::private::MAX_CONTENT_BYTES;
 use crate::state::Trigger;
+use crate::verifier::{CheckCode, CheckId};
 use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -451,15 +452,70 @@ impl PublicationCause {
     }
 }
 
-codes! {
-    /// Why the Verifier failed a mission.
-    VerifyFailReason {
-        /// The Verifier judged a criterion does not hold (its reason is
-        /// working detail).
-        VerifierFailed => "verifier_fail",
-        VerifierGaveNoVerdict => "verifier_gave_no_verdict",
+/// Why the Verifier failed a mission.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VerifyFailReason {
+    /// The Verifier judged a criterion does not hold (its reason is
+    /// working detail).
+    VerifierFailed,
+    VerifierGaveNoVerdict,
+    /// M3-Dc1: a page check's closed code, never a lane's text.
+    Check(VerifyCode),
+}
+
+/// M3-Dc1: a page verification's failure: a V0-V5 code, or a payload that
+/// is not its declared identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VerifyCode {
+    Identity,
+    Check(CheckCode),
+}
+
+impl VerifyCode {
+    pub fn as_str(&self) -> String {
+        match self {
+            VerifyCode::Identity => "verification_identity".into(),
+            VerifyCode::Check(code) => code.to_string(),
+        }
     }
 }
+
+/// Every V0-V5 failure code, with its check: the closed registry.
+pub fn check_codes() -> Vec<(CheckId, CheckCode)> {
+    // M3-Dc1 inert stub: an empty registry.
+    Vec::new()
+}
+
+/// Whether `id` may journal `code`: `pass`, `not_run` or `fail:<its code>`.
+pub fn is_check_result(id: CheckId, code: &str) -> bool {
+    let _ = (id, code);
+    false
+}
+
+impl VerifyFailReason {
+    pub fn as_str(&self) -> String {
+        match self {
+            VerifyFailReason::VerifierFailed => "verifier_fail".into(),
+            VerifyFailReason::VerifierGaveNoVerdict => "verifier_gave_no_verdict".into(),
+            VerifyFailReason::Check(code) => format!("check:{}", code.as_str()),
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::every().into_iter().find(|r| r.as_str() == text)
+    }
+
+    /// Every value (the registry).
+    pub fn every() -> Vec<Self> {
+        // M3-Dc1 inert stub: check codes are not registered yet.
+        vec![
+            VerifyFailReason::VerifierFailed,
+            VerifyFailReason::VerifierGaveNoVerdict,
+        ]
+    }
+}
+
+by_code!(VerifyFailReason);
 
 /// Mother's own refusal of a lane's effect, before any port call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1112,6 +1168,8 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
                 && RunId::parse(&action.run).is_some()
                 && CommitmentId::parse(&action.commitment).is_some()
         }
+        // M3-Dc1 inert stub: not yet evidence.
+        Event::VerificationRecorded { .. } => false,
     };
     if ok {
         Ok(())

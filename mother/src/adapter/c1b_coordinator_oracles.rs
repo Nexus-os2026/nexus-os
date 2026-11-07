@@ -112,6 +112,7 @@ fn outcome(result: &Result<ModelReply, ModelCallError>) -> String {
 }
 fn draft(content: &str) -> LaneOutput {
     LaneOutput {
+        verification: None,
         text: "c1b model lane".into(),
         effects: vec![file("index.html", &format!("{content}\n"))],
         verdict: Verdict::Continue,
@@ -119,6 +120,7 @@ fn draft(content: &str) -> LaneOutput {
 }
 fn quiet() -> LaneOutput {
     LaneOutput {
+        verification: None,
         text: "c1b model lane".into(),
         effects: vec![],
         verdict: Verdict::Continue,

@@ -87,6 +87,9 @@ pub struct LaneInput {
     pub prior_outputs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_input: Option<crate::page_inputs::PageBuildInput>,
+    /// M3-Dc1: the page Verifier's identity-bound input; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification: Option<crate::page_verifier::VerificationInput>,
 }
 
 /// A lane's judgement.
@@ -112,6 +115,9 @@ pub struct LaneOutput {
     pub text: String,
     pub effects: Vec<EffectRequest>,
     pub verdict: Verdict,
+    /// M3-Dc1: the page Verifier's typed report; absent for other lanes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification: Option<crate::page_verifier::VerificationReport>,
 }
 
 /// A borrowed, invocation-bound model route. Scripted lanes receive none.
@@ -183,6 +189,7 @@ impl ScriptedLane {
                 text: text.into(),
                 effects: vec![],
                 verdict,
+                verification: None,
             },
         }
     }

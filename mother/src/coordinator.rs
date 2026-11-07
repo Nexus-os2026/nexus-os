@@ -1750,7 +1750,7 @@ impl<P: EffectPort> Coordinator<P> {
                 report.to = to;
                 if let Some(Ok(event)) = &proof {
                     inner.append(id, event.clone())?;
-                    inner.mission(id)?.proof.receipt = Some(waiting.effect);
+                    inner.mission(id)?.proof.receipt = page_proof::recorded(event);
                 }
                 Ok(())
             });
@@ -3503,7 +3503,9 @@ fn replay(
             mission.held = None;
             mission.held_journaled = false;
         }
-        Event::DeliverableRetained { .. } | Event::PublicationReceipt { .. } => {
+        Event::DeliverableRetained { .. }
+        | Event::PublicationReceipt { .. }
+        | Event::VerificationRecorded { .. } => {
             page_proof::replay(mission, entry)?;
         }
     }
@@ -3542,6 +3544,7 @@ fn journal_work(event: &Event) -> bool {
         | Event::Held { .. }
         | Event::SettlementStarted { .. }
         | Event::DeliverableRetained { .. }
-        | Event::PublicationReceipt { .. } => false,
+        | Event::PublicationReceipt { .. }
+        | Event::VerificationRecorded { .. } => false,
     }
 }

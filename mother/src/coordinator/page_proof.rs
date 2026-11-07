@@ -4,6 +4,7 @@
 //! authority: a receipt is read only from the broker's snapshot of the exact
 //! pending commitment, never made from Mother's candidate.
 use super::*;
+use crate::page_verifier::VerificationInput;
 use nexus_governed_control::files::{FileCreate, FileReceipt};
 use sha2::{Digest, Sha256};
 
@@ -17,7 +18,44 @@ pub(super) struct Proof {
     /// Replay only: the lane answer last journaled (the retention's source).
     pub(super) returned: Option<InvocationId>,
     pub(super) retained: Option<Retained>,
-    pub(super) receipt: Option<u64>,
+    pub(super) receipt: Option<Recorded>,
+    /// Replay only: the role of the lane call last journaled.
+    pub(super) invoked: Option<LaneRole>,
+    /// Live only, within one lock hold: the Verifier input to reserve.
+    pub(super) input: Option<VerificationInput>,
+    /// Whether the journaled checks all passed, once recorded.
+    pub(super) verified: Option<bool>,
+}
+
+/// A journaled receipt's fields (M3-Dc1 reads them for verification).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Recorded {
+    pub(super) effect: u64,
+    pub(super) sha256: String,
+    pub(super) bytes: u64,
+    pub(super) policy_hash: Option<String>,
+    pub(super) overtaken: bool,
+}
+
+/// The fields of a `PublicationReceipt` record.
+pub(super) fn recorded(event: &Event) -> Option<Recorded> {
+    match event {
+        Event::PublicationReceipt {
+            effect,
+            sha256,
+            bytes,
+            policy_hash,
+            overtaken,
+            ..
+        } => Some(Recorded {
+            effect: *effect,
+            sha256: sha256.clone(),
+            bytes: *bytes,
+            policy_hash: policy_hash.clone(),
+            overtaken: *overtaken,
+        }),
+        _ => None,
+    }
 }
 
 /// A retained deliverable, by reference.
@@ -154,8 +192,10 @@ pub(super) fn replay(m: &mut Mission, entry: &Entry) -> Result<(), ReplayViolati
             if !clean && !settling {
                 return Err(V::ProofOutOfPlace);
             }
-            m.proof.receipt = Some(*effect);
+            m.proof.receipt = recorded(&entry.event);
         }
+        // M3-Dc1 inert stub: no verification record is accepted yet.
+        Event::VerificationRecorded { .. } => return Err(V::ProofOutOfPlace),
         _ => {}
     }
     Ok(())
@@ -256,3 +296,8 @@ impl<P: EffectPort> Coordinator<P> {
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod oracles;
+
+#[path = "../oracles/m3d_verifier.rs"]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod verifier_oracles;

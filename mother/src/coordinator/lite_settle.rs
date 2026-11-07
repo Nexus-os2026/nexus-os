@@ -396,8 +396,9 @@ impl<P: EffectPort> Coordinator<P> {
                 _ => None,
             };
             if let Some(event) = proof {
+                let receipt = page_proof::recorded(&event);
                 inner.append(id, event)?;
-                inner.mission(id)?.proof.receipt = Some(effect);
+                inner.mission(id)?.proof.receipt = receipt;
             }
             let trigger = Trigger::Settled {
                 effect,

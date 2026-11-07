@@ -160,6 +160,7 @@ pub(super) fn reserve_lane(
             identity.role,
         )
         .map_err(CoordinatorError::Contract)?,
+        verification: None,
     };
     inner.append(
         id,

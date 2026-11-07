@@ -69,6 +69,7 @@ fn input(c: &MissionContract) -> LaneInput {
         pass_criteria: c.pass_criteria.clone(),
         prior_outputs: vec![],
         builder_input: None,
+        verification: None,
     }
 }
 fn no_work(w: &World) {
@@ -342,6 +343,7 @@ impl Lane for Capture {
     fn invoke(&self, i: &LaneInput) -> LaneOutput {
         self.seen.lock().unwrap().push(i.clone());
         LaneOutput {
+            verification: None,
             text: "done".into(),
             effects: vec![],
             verdict: if self.role == LaneRole::Verifier {

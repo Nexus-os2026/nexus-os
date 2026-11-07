@@ -197,3 +197,88 @@ thread-local seam in lite_port.rs rewrites only the broker receipt read
 | MP-D-R1 omit replay ordering/linkage | m3d_replay_rejects_relinked_or_out_of_order_proof |
 | MP-D-P0 raw page content in a proof record | m3d_deliverable_is_private_before_dispatch |
 | MP-D-Q4 drop the no-policy settlement receipt | m3d_overtaken_publication_keeps_marked_settlement_evidence |
+
+# M3-Dc1 oracle register: page Verifier, typed checks, proof gates
+
+Stacked on 30ba3b5f (Db candidate). Ruling Dc-R1: Dc1 only. No teaching,
+claims guard or explain() change (Dc2): **explain() still prints an
+unconditional `holds` for every criterion until Dc2 lands, so Dc1 alone is
+not truthful-success complete.** No model route, host flag or broker change.
+
+## Frozen encoding and codes
+
+LaneInput: optional `verification` after `builder_input`; LaneOutput:
+optional `verification` after `verdict`; absent fields are omitted, so legacy
+bytes and hashes are unchanged (Da's input golden; this slice's literal
+output golden and its independent hash).
+VerificationInput serializes only `identity`, fields in this order:
+`candidate_sha256`, `candidate_bytes`, `facts_hash`, `receipt_sha256`,
+`receipt_bytes`, `receipt_policy_hash`, `receipt_overtaken`. Candidate bytes
+and facts are skipped; Debug shows the identity only. Candidate and facts
+parts are recomputed from content at construction; the receipt part is
+copied from the journaled `publication_receipt`. The lane recomputes them
+again: a payload that is not its identity runs no check and fails
+`check:verification_identity`.
+PageVerifierLane: `page-verifier`/`m3-1`, role Verifier, zero model calls,
+no effects; it runs M3-A's `verify_page` unchanged. Its typed report holds
+the judged identity and six results; it can be built only in
+page_verifier.rs.
+Report digest: raw SHA-256 of `nexus-m3/verification-report/1` + one NUL
+byte + compact serde_json of the ordered `[[id, code], ...]`, codes being
+`pass`, `not_run` or `fail:<V-code>`. All-pass digest pinned by literal.
+Event `verification_recorded`: `invocation`, `effect` (the receipt's),
+`report_digest`, `checks`. Evidence check: six entries `v0`..`v5` in order,
+each code in that check's closed registry, digest recomputed.
+`VerifyFailReason::Check` serializes `check:<code>`: the 69 V0-V5 codes
+(44 S1a refusals under V2; hours indices 0..6) plus `verification_identity`.
+
+## Frozen gates
+
+File-session page Verifier runs only when the mission's retained deliverable
+and a clean (policy-bearing, not overtaken) receipt of the same effect and
+mission are journaled; otherwise Fail `check:no_publication`, verifier calls
+0. Unreadable/mismatched deliverable: Stop `private_content_unavailable`,
+`written; proof not recorded`. Reservation refuses an input not built from
+the current proof. After the answer: no typed report (or effects) →
+`verifier_gave_no_verdict`; report not bound to the input → identity code;
+otherwise `verification_recorded` is appended, then the first table-order
+failure becomes `VerifyFail{check:<code>}`, or a recorded all-pass (and a
+Pass verdict) proceeds. A page mission's VerifyPass, live and at replay,
+requires a recorded all-pass. Append failure: Failed `journal_failed`,
+`written; proof not recorded`, journal poisoned, no VerifyPass.
+Replay: the record must follow the Verifier's own LaneReturned in
+Verifying, after a clean receipt of its effect, once (`ProofOutOfPlace`,
+`ProofConflict`). Non-File coordinators keep invoking their Verifier lane
+(Da's D-I2 counts it) but a page mission there can never pass.
+
+## Oracle-first matrix (Dc1)
+
+| Oracle | Test | Commit 1 |
+|---|---|---|
+| O34 | m3d_verifier_requires_live_clean_publication | red: clean case Failed, not Explaining |
+| O38a | m3d_verification_identity_hashes_every_field | red: no input is built |
+| O38b | m3d_verification_payload_mismatch_is_refused | red: no input is built |
+| D-V1 | m3d_page_verifier_is_zero_call_and_effect_free | red: no input is built |
+| D-V2 | m3d_durable_checks_gate_verify_pass | red: registry empty (0 of 69) |
+| D-R1 (verification) | m3d_replay_rejects_relinked_verification_proof | red: check refuses the record |
+| D-P3 (verification append) | m3d_verification_append_failure_prevents_success | red: verifier_gave_no_verdict, not journal_failed |
+
+O34 exercises denied, lapsed (run cancelled), stopped, overtaken
+(Stop after publication), no publication, and tampered in-memory proof
+(overtaken, other action, other mission, no policy). Expired and uncertain
+end in the same pre-Verifying terminal paths; they are not separately
+exercised here (no real-broker clock seam in scope).
+
+Every Da/Db oracle stayed green on the inert surface. All seven are
+behavioral runtime failures; nothing failed to compile.
+
+## Dc1 mutation map
+
+| Plant | Named test |
+|---|---|
+| MP-M3-10 invoke the page Verifier without its durable proof | m3d_verifier_requires_live_clean_publication |
+| MP-D-V1 ignore overtaken / wrong-action proof | m3d_verifier_requires_live_clean_publication |
+| MP-D-V2 omit each identity field (7) | m3d_verification_identity_hashes_every_field |
+| MP-D-V3 trust the skipped payload | m3d_verification_payload_mismatch_is_refused |
+| MP-D-V4 accept arbitrary lane text as a check code | m3d_durable_checks_gate_verify_pass |
+| MP-D-R1 omit verification replay ordering/linkage | m3d_replay_rejects_relinked_verification_proof |

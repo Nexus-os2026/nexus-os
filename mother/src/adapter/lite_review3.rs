@@ -52,6 +52,7 @@ impl Lane for MixedBuilder {
     }
     fn invoke(&self, _: &LaneInput) -> LaneOutput {
         LaneOutput {
+            verification: None,
             text: "File A, R2 POST, File B".into(),
             effects: vec![
                 file("a.txt", "A\n"),

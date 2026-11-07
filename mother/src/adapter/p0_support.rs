@@ -339,6 +339,7 @@ impl Lane for P0Lane {
             Verdict::Continue
         };
         LaneOutput {
+            verification: None,
             text: format!("{} says {}", self.role.as_str(), self.reason),
             effects,
             verdict,
