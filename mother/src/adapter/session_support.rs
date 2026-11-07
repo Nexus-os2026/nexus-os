@@ -4,9 +4,12 @@ use crate::journal::JournalStore;
 use crate::oracles::session_support::Owner;
 use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::host_session::{CommandKind, HostSession, SessionSeed};
+use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+static NEXT_HOME: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) struct Fixture {
     pub dir: PathBuf,
@@ -25,8 +28,25 @@ impl Fixture {
         Self::with_inspector(label, true)
     }
     fn with_inspector(label: &str, canonical: bool) -> Self {
-        let dir = std::env::temp_dir().join(format!("m2dd-{label}-{}", std::process::id()));
-        create_private(&dir).unwrap();
+        // A PID alone is reused after wrap; a leaked or concurrent home is
+        // never reopened, and this fixture removes only the home it created.
+        let parent = std::env::temp_dir();
+        create_private(&parent).unwrap();
+        let dir = parent.join(format!(
+            "m2dd-{label}-{}-{}-{}",
+            std::process::id(),
+            NEXT_HOME.fetch_add(1, Ordering::SeqCst),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                panic!("fixture home must be fresh: {}", dir.display())
+            }
+            created => created.unwrap(),
+        }
         let broker = dir.join("broker");
         let evidence = nexus_governed_control::evidence_store::PrimaryEvidence::open(
             &broker.join("p3-evidence/evidence.sqlite3"),
@@ -90,6 +110,12 @@ impl Fixture {
             .accept(CommandKind::Approve, sequence)
             .unwrap();
         self.session.approve_file(&request)
+    }
+}
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        // Only the uniquely named home this fixture created.
+        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
