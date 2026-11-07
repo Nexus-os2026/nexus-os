@@ -393,3 +393,10 @@ class OfflineServiceTests(unittest.TestCase):
             admission = supervisor.Admission(root/'pending')
             self.assertTrue(admission.acquire())
             admission.release()
+
+    def test_review3_manifest_package_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp)/'Cargo.toml'
+            manifest.write_text('[package]\nname = "nexus-verifier-sandbox"\nversion = "0.1.0"\n')
+            self.assertEqual(init.artifact_package({'manifest_path':str(manifest),
+                              'package_id':'path+file:///work/src/cj#0.1.0'}),'nexus-verifier-sandbox')
