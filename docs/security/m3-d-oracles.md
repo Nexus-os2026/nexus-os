@@ -198,6 +198,36 @@ thread-local seam in lite_port.rs rewrites only the broker receipt read
 | MP-D-P0 raw page content in a proof record | m3d_deliverable_is_private_before_dispatch |
 | MP-D-Q4 drop the no-policy settlement receipt | m3d_overtaken_publication_keeps_marked_settlement_evidence |
 
+## M3-Db2 (Db-R1 / Db-R1a repairs, stacked on 30ba3b5f)
+
+| Finding | Oracle | On 30ba3b5f |
+|---|---|---|
+| H1 crash between ActionApproved and its receipt | m3d_recovery_never_closes_an_unproven_publication (every prefix, unproven one twice) | red: closure 1, ack 1, Stopped |
+| M2 settlement receipt append failure | m3d_settlement_receipt_append_failure_reports_written | red: Err(Journal) |
+| M3 settlement without receipt | m3d_settlement_without_receipt_reports_receipt_missing | red: owner_stop reason |
+| L4 publish before ApprovalPending, then Stop | m3d_early_publication_settles_with_replayable_proof | red: ProofConflict |
+| L5 non-file page Builder effect (Spend) | m3d_deliverable_is_private_before_dispatch (o33a-spend) | red: Blocked |
+| L6 canaries on receipts, note, failure surfaces | positive-control detector in o33a-one; scans in dp1/dp2/dp3/m3 | green (coverage; no leak exists) |
+
+H1 recovery and M2 settlement failure are in memory only: Failed
+`journal_failed`, notice `written; proof not recorded`, no closure or ack,
+clean close refused. M3 ends Blocked `receipt_missing` with the Settled
+outcome still Published. Plants: MP-D-H1, MP-D-M2, MP-D-M3, MP-D-L6.
+
+## M3-Db2 review-1 (Db2-R1 repairs, stacked on 7ac984cb)
+
+| Finding | Oracle | On 7ac984cb |
+|---|---|---|
+| M1 public notice()/reason() after a settlement receipt append failure | m3d_settlement_receipt_append_failure_reports_written (public API, asked twice, no new line) | red: Err(Journal(FailedEarlier)) |
+| L2 ack/closure after recovery via into_file_session() + stop(), close | m3d_recovery_never_closes_an_unproven_publication (H1-LIFE, then a second fresh-broker recovery) | red: acks=1 |
+| L3 early receipt relinked to another valid identity | m3d_replay_rejects_relinked_or_out_of_order_proof (D-R1, l4-early history: other commitment, other run) | red: replay accepts |
+
+Notice and reason of an unrecorded proof are a read-only observation: no
+settlement is retried. The unrecorded-proof barrier holds at every ack and
+closure. An early settlement receipt's action must equal the Settled action
+(`ProofConflict`). Journal appends still write and sync under the coordinator
+lock, by existing design. Plants: MP-D-M1, MP-D-L2, MP-D-L3.
+
 # M3-Dc1 oracle register: page Verifier, typed checks, proof gates
 
 Stacked on 30ba3b5f (Db candidate). Ruling Dc-R1: Dc1 only. No teaching,

@@ -349,7 +349,7 @@ impl<P: EffectPort> Coordinator<P> {
             inner.usable()?;
             let m = inner.mission(id)?;
             if m.state.is_terminal() {
-                return Ok(m.state);
+                return Ok(Some(m.state));
             }
             let (effect, end) = match (m.settlement, reserved) {
                 (Some((effect, cause)), None) => (effect, cause.end(&read)),
@@ -391,13 +391,29 @@ impl<P: EffectPort> Coordinator<P> {
             let proof = match (&action, &read) {
                 (Some(pending), SettlementOutcome::Published { .. }) if page => {
                     let retained = m.proof.retained.as_ref();
-                    page_proof::receipt_event(retained, effect, pending, receipt, true).ok()
+                    Some(page_proof::receipt_event(
+                        retained, effect, pending, receipt, true,
+                    ))
                 }
                 _ => None,
             };
-            if let Some(event) = proof {
+            // Db-R1 M3: an observed publication without receipt ends terminal.
+            let end = match proof {
+                Some(Err(FailReason::ReceiptMissing)) => {
+                    crate::evidence::SettlementEnd::Block(BlockReason::ReceiptMissing)
+                }
+                _ => end,
+            };
+            if let Some(Ok(event)) = proof {
                 let receipt = page_proof::recorded(&event);
-                inner.append(id, event)?;
+                if let Err(error) = inner.append(id, event) {
+                    // Db-R1 M2: ruling 7, as on the clean path.
+                    if !matches!(error, CoordinatorError::Journal(_)) {
+                        return Err(error);
+                    }
+                    page_proof::fail_unrecorded(inner.mission(id)?);
+                    return Ok(None);
+                }
                 inner.mission(id)?.proof.receipt = receipt;
             }
             let trigger = Trigger::Settled {
@@ -406,10 +422,14 @@ impl<P: EffectPort> Coordinator<P> {
                 outcome: read.clone(),
                 end,
             };
-            inner.fire_settling(id, trigger, self.clock.monotonic_ms())
+            inner
+                .fire_settling(id, trigger, self.clock.monotonic_ms())
+                .map(Some)
         });
         // No ack after a failed terminal append. An uncertainty never enters acks.
-        let state = result?;
+        let Some(state) = result? else {
+            return Ok(MissionState::Failed);
+        };
         let withdrawn = if reserved.is_some() {
             self.port
                 .withdraw(id)
@@ -430,11 +450,17 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
     ) -> Result<Option<&'static str>, CoordinatorError> {
         self.try_with_lock(|inner| {
-            Ok(inner
-                .mission(id)?
-                .terminal_uncertain
-                .then_some(FILE_UNCERTAIN_NOTICE))
+            let m = inner.mission(id)?;
+            Ok(if m.terminal_uncertain {
+                Some(FILE_UNCERTAIN_NOTICE)
+            } else {
+                m.proof.unrecorded.then_some(page_proof::WRITTEN)
+            })
         })
+    }
+
+    pub(super) fn file_unrecorded(&self, id: MissionId) -> Result<bool, CoordinatorError> {
+        self.try_with_lock(|inner| Ok(inner.missions.get(&id).is_some_and(|m| m.proof.unrecorded)))
     }
 
     /// This path is reachable only from a ConfirmedNotPublished snapshot.
@@ -487,7 +513,13 @@ impl<P: EffectPort> Coordinator<P> {
     pub(super) fn file_ack_all(&self, id: MissionId) -> Result<(), CoordinatorError> {
         let acks = self.try_with_lock(|inner| {
             inner.usable()?;
-            Ok(inner.mission(id)?.acks.clone())
+            let m = inner.mission(id)?;
+            // Db2-R1 L2: an unrecorded proof's ack stays owed, on every path.
+            Ok(if m.proof.unrecorded {
+                Vec::new()
+            } else {
+                m.acks.clone()
+            })
         })?;
         let mut first = None;
         for action in acks {
@@ -515,7 +547,7 @@ impl<P: EffectPort> Coordinator<P> {
         self.try_with_lock(|inner| {
             inner.usable()?;
             let m = inner.mission(id)?;
-            if m.terminal_uncertain || m.unresolved_file.is_some() {
+            if m.terminal_uncertain || m.unresolved_file.is_some() || m.proof.unrecorded {
                 return Ok(false);
             }
             let Some((effect, pending)) = m.open_action.clone() else {
@@ -619,7 +651,7 @@ impl<P: EffectPort> Coordinator<P> {
             let unresolved = self.try_with_lock(|inner| {
                 let m = inner.mission(id)?;
                 if m.state.is_terminal() {
-                    return Ok(false);
+                    return Ok(Some(false));
                 }
                 if let Some(effect) = m.unresolved_file {
                     if m.settlement.is_none() {
@@ -627,7 +659,11 @@ impl<P: EffectPort> Coordinator<P> {
                         inner.append(id, Event::SettlementStarted { effect, cause })?;
                         inner.mission(id)?.settlement = Some((effect, cause));
                     }
-                    Ok(true)
+                    Ok(Some(true))
+                } else if page_proof::unproven(m) {
+                    // Db-R1 H1: never close or ack an unproven publication.
+                    page_proof::fail_unrecorded(m);
+                    Ok(None)
                 } else {
                     inner.fire(
                         id,
@@ -636,9 +672,12 @@ impl<P: EffectPort> Coordinator<P> {
                         },
                         self.clock.monotonic_ms(),
                     )?;
-                    Ok(false)
+                    Ok(Some(false))
                 }
             })?;
+            let Some(unresolved) = unresolved else {
+                continue;
+            };
             if unresolved {
                 let effect = self.try_with_lock(|inner| {
                     inner
