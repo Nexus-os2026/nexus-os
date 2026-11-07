@@ -438,3 +438,130 @@ class Q15Oracles(unittest.TestCase):
             grp=SimpleNamespace(getgrnam=lambda n:lookup(groups,n)),subprocess=SimpleNamespace(run=remove))
         exec(code,scope); exec(code,scope)
         self.assertEqual(calls,[['/usr/sbin/userdel','mothergate'],['/usr/sbin/groupdel','gatesubmit']])
+
+class Q16Oracles(unittest.TestCase):
+    """Q16 decision oracles: fake time/host interfaces, real proof code."""
+    def fixture_cleanup(self, delay, retained=()):
+        probe = load('probe'); run = 'c'*32; elapsed = 0.0
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            for name in ('pending','staging','receipts'): (root/name).mkdir()
+            marker = root/'pending'/('.'+run); marker.touch()
+            stage = root/'staging'/run; stage.mkdir()
+            (root/'receipts'/run).mkdir()  # receipt precedes both cleanup leaves
+            def path(value):
+                value = str(value)
+                prefix = '/var/lib/mothergate/'
+                return root/value[len(prefix):] if value.startswith(prefix) else Path(value)
+            def sleep(seconds):
+                nonlocal elapsed
+                self.assertGreater(seconds,0,'poll must yield')
+                elapsed += seconds
+                self.assertLessEqual(elapsed,5.000001,'cleanup exceeded five-second bound')
+                if elapsed >= delay:
+                    if 'pending' not in retained: marker.unlink(missing_ok=True)
+                    if 'staging' not in retained and stage.exists(): stage.rmdir()
+            summary = dict(status='PASS_SCOPED')
+            sock = Mock(); sock.getsockname.return_value = ('127.0.0.1',12345)
+            replacements = dict(Path=path,require_installed=Mock(),
+                config=Mock(return_value={'mother':{'uid':1234}}),claude_context=Mock(return_value={}),
+                atomic_config=Mock(),client_request=Mock(side_effect=[
+                    {'status':'UNQUALIFIED','reason':'QUALIFICATION_ONLY'},
+                    {'status':'ACCEPTED','run_id':run}]),
+                sibling=Mock(return_value=SimpleNamespace(authenticate=Mock(return_value={'summary':summary}))),
+                time=SimpleNamespace(monotonic=lambda:elapsed,sleep=sleep),
+                socket=SimpleNamespace(AF_INET=2,AF_UNIX=1,socket=Mock(return_value=sock)),
+                pty=SimpleNamespace(openpty=lambda:(501,502)),
+                pwd=SimpleNamespace(getpwnam=lambda n:SimpleNamespace(pw_uid=1235)),
+                os=SimpleNamespace(getpid=lambda:42,ttyname=lambda n:'/dev/pts/1',
+                    readlink=lambda n:'namespace',close=Mock()))
+            for name,value in replacements.items(): stack.enter_context(patch.object(probe,name,value))
+            if retained:
+                with self.assertRaisesRegex(ValueError,'custody leftovers after proof; reviewed recovery required'):
+                    probe.fixture()
+                self.assertIsNone(probe.SESSION,'timeout must not cache success')
+            else:
+                self.assertEqual(probe.fixture()[0],summary)
+                self.assertFalse(marker.exists() or stage.exists(),'receipt returned before cleanup')
+            self.assertGreaterEqual(elapsed,.062,'no post-receipt wait')
+            self.assertLessEqual(elapsed,5.000001)
+
+    def test_fixture_delayed_cleanup_62ms(self):
+        self.fixture_cleanup(.062)
+
+    def test_fixture_cleanup_bound(self):
+        for retained in (('pending',),('staging',),('pending','staging')):
+            with self.subTest(retained=retained): self.fixture_cleanup(5.062,retained)
+
+    def test_c2_rejection_message(self):
+        from test_custody import InstalledCustodyTests
+        method = 'test_systemd_output_never_writes_disposable_root_canary'
+        for message in ('unsafe sealed endpoint','unrelated start dependency failed'):
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as tmp:
+                case = InstalledCustodyTests(method); case.root = Path(tmp)
+                case.run = 'c'*32; case.unit = 'mothergate-run@'+case.run+'.service'
+                case.control = case.root/'control'; (case.control/'sealed').mkdir(parents=True)
+                case.sealed = case.control/'sealed'/case.run; case.sealed.mkdir()
+                case.observations = {}
+                case.state = Mock(return_value=dict(Job='',InvocationID='',ActiveEnterTimestampMonotonic='0',MainPID='0'))
+                def command(argv,**kwargs):
+                    if argv[0]=='/usr/sbin/runuser':
+                        for kind,target in zip(('log','status'),argv[-2:]): (case.sealed/(kind+'.sock')).symlink_to(target)
+                        (case.control/'sealed'/('.pending-'+case.run)).touch()
+                    return SimpleNamespace(returncode=1,stderr=message)
+                case.command = command
+                if message=='unsafe sealed endpoint': getattr(case,method)()
+                else:
+                    with self.assertRaises(AssertionError): getattr(case,method)()
+
+    def test_early_setup_no_launcher_cleanup(self):
+        from test_custody import InstalledCustodyTests
+        for settle_fails in (False,True):
+            with self.subTest(settle_fails=settle_fails), tempfile.TemporaryDirectory() as tmp:
+                case = InstalledCustodyTests('test_mothergate_cannot_unlink_rename_or_symlink_after_relocation')
+                case.run='c'*32; case.unit='mothergate-run@'+case.run+'.service'; case.blocker='gatebox-custody-'+case.run+'.service'
+                case.root=Path(tmp)/'root'; case.root.mkdir(); case.fifo=case.root/'release'; case.fifo.touch()
+                case.control=Path(tmp)/'control'; (case.control/'incoming').mkdir(parents=True)
+                (case.control/'sealed').mkdir(); case.sealed=case.control/'sealed'/case.run
+                case.stage=Path(tmp)/'stage'; case.marker=Path(tmp)/'marker'
+                case.files={}; case.launch=None; case.collector=None; case.hold_custody=False
+                case.owner=SimpleNamespace(pw_uid=os.getuid(),pw_gid=os.getgid())
+                case.observations={}; case.probe=SimpleNamespace(protected=Mock())
+                case._outcome=SimpleNamespace(result=SimpleNamespace(failures=[],errors=[]))
+                case.manager=Mock(side_effect=AssertionError('no unit stop without launcher'))
+                case.bridge=Mock()
+                case.bridge.run.side_effect=subprocess.CalledProcessError(5,['stop'])
+                if settle_fails: case.bridge.settled.side_effect=ValueError('unsettled')
+                def remove(): case.bridge.settled.assert_called_once_with(case.run)
+                case.remove_persistent=Mock(side_effect=remove)
+                with patch.object(subprocess,'run',side_effect=AssertionError('unexpected subprocess')):
+                    with self.assertRaises(AssertionError): case.cleanup()  # original error remains observable
+                case.manager.assert_not_called()
+                case.bridge.run.assert_called_once_with('stop',case.run)
+                case.bridge.settled.assert_called_once_with(case.run)
+                self.assertEqual(case.remove_persistent.call_count,0 if settle_fails else 1)
+                self.assertEqual(case.fifo.exists(),settle_fails)
+
+    def test_readme_reset_procedure(self):
+        source=(HERE/'README.md').read_text()
+        self.assertIn("<<'RESET'",source)
+        block=source.split("<<'RESET'",1)[1].split('\nRESET',1)[0]
+        tree=ast.parse(block)
+        calls=[ast.unparse(n) for n in ast.walk(tree) if isinstance(n,ast.Call)]
+        self.assertIn("probe.atomic_config('qualification.json', {'identity': None, 'passed': []})",calls)
+        for call in ('probe.require_installed()','probe.clean_custody()',"probe.config('admission.json')"):
+            self.assertIn(call,calls)
+        self.assertIn('qualification-reset-',block)  # retain the failed evidence
+        self.assertIn('LOCK_EX',block)
+
+    def test_readme_pin_object_integrity(self):
+        source=(HERE/'README.md').read_text()
+        block=source.split("<<'PIN'",1)[1].split('\nPIN',1)[0]
+        tree=ast.parse(block)
+        argv=[ast.literal_eval(n) for n in ast.walk(tree) if isinstance(n,ast.List)
+              and n.elts and isinstance(n.elts[0],ast.Constant) and n.elts[0].value=='git']
+        self.assertIn(['git','--no-replace-objects','for-each-ref','--format=%(refname)','refs/replace'],argv)
+        self.assertIn("['git', '--no-replace-objects', 'fsck'",ast.unparse(tree))
+        self.assertLess(block.index("'fsck'"),block.index("tarfile.open"))
+        self.assertIn("['git','--no-replace-objects','show'",block)
+        self.assertIn("['git','--no-replace-objects','ls-tree'",block)
