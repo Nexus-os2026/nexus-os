@@ -393,6 +393,7 @@ crate-private). Rulings M3E-R1, R8, R12, R14.
 | P-U3d | Mother ignores her held deadline (an expired approval could still be approved and verified) | O34 expired: still AwaitingApproval, not Blocked |
 | P-U3e | raw, unescaped display text | host escape: control characters shown raw |
 | P-M3b-1 | `journal_view` calls `touch()` | view: the child fails once the budget lapses |
+| P-R17b | escape after assembly (raw owner words; lines escaped after the join) | explain oracle (forged line starts its own line); host forge oracle |
 
 A first P-U3d (`ApprovalStatus::Expired` mapped to approved in the non-File
 waiting path) survived: a File mission's expiry never takes that path; it
