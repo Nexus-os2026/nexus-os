@@ -412,6 +412,9 @@ fn sb3_stop_before_binding_installs_nothing() {
 
 #[test]
 fn sb3_binding_contention_refuses_without_latching() {
+    if watched("sb3_binding_contention_refuses_without_latching") {
+        return;
+    }
     let failed = |f: &Bind| f.session.core.cell.session_word() & FAILED != 0;
     let f = Bind::new();
     let runs = f.runs();
@@ -444,6 +447,7 @@ fn sb3_binding_contention_refuses_without_latching() {
         assert_eq!(f.bind(), Err("unavailable"), "{poisoned} poison refuses");
         assert!(failed(&f), "{poisoned} poison latches session failure");
     }
+    println!("{HELD_DONE} sb3_binding_contention_refuses_without_latching");
 }
 
 // SB-3B1a frozen oracles (SB3B-R3): R3 attempt admission through the
@@ -539,6 +543,9 @@ use crate::authority::evidence::EndStatus;
 /// G0 (R3) and F8: only the original live grant admits an attempt.
 #[test]
 fn sb3_attempt_admission_requires_the_original_grant() {
+    if watched("sb3_attempt_admission_requires_the_original_grant") {
+        return;
+    }
     let f = Admit::bound();
     let attempt = f.admit().expect("the original live grant admits");
     assert_eq!(f.counts(), (1, 1), "ticket, ordinal and pin together");
@@ -589,6 +596,7 @@ fn sb3_attempt_admission_requires_the_original_grant() {
         "R3 run-table poison"
     );
     assert!(f.failed(), "run-table poison latches session failure");
+    println!("{HELD_DONE} sb3_attempt_admission_requires_the_original_grant");
 }
 
 /// R3: the live invocation is required before acquisition and is the last
@@ -827,6 +835,9 @@ fn sb3_attempt_observer_is_read_after_the_grant() {
 /// neither issues an attempt, pin, record or binding change.
 #[test]
 fn sb3_attempt_contention_and_poison_latch_exactly() {
+    if watched("sb3_attempt_contention_and_poison_latch_exactly") {
+        return;
+    }
     let f = Admit::bound();
     assert!(f.admit().is_ok(), "positive control");
     let latched = |f: &Admit| {
@@ -875,6 +886,7 @@ fn sb3_attempt_contention_and_poison_latch_exactly() {
         assert!(f.failed(), "{poisoned}: poison latches session failure");
         f.nothing(poisoned);
     }
+    println!("{HELD_DONE} sb3_attempt_contention_and_poison_latch_exactly");
 }
 
 /// SB3B-R4 (4): each grant clock and the workspace identity independently.
@@ -901,6 +913,9 @@ fn sb3_attempt_grant_clocks_and_identity_are_independent() {
 /// code.
 #[test]
 fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
+    if watched("sb3_attempt_grant_revocation_cannot_precede_the_cas") {
+        return;
+    }
     let f = Admit::bound();
     assert!(f.admit().is_ok(), "positive control");
     let f = Admit::bound();
@@ -943,6 +958,7 @@ fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
     if admitted.is_err() {
         f.nothing("revoked before the CAS");
     }
+    println!("{HELD_DONE} sb3_attempt_grant_revocation_cannot_precede_the_cas");
 }
 
 /// SB3B-R5 (2): the retained SB-2b rollback contract. A pre-ticket refusal
@@ -950,6 +966,9 @@ fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
 /// no ticket, pin or record exists.
 #[test]
 fn sb3_attempt_rollback_hold_expiry_latches_uncertainty() {
+    if watched("sb3_attempt_rollback_hold_expiry_latches_uncertainty") {
+        return;
+    }
     let f = Admit::bound();
     f.b.control()
         .authority()
@@ -997,6 +1016,7 @@ fn sb3_attempt_rollback_hold_expiry_latches_uncertainty() {
         "no ticket"
     );
     assert_eq!(binding, f.binding, "binding kept");
+    println!("{HELD_DONE} sb3_attempt_rollback_hold_expiry_latches_uncertainty");
 }
 
 /// F11 (SB3B-R1 2, SB3B-R4 1): every B1a seam is reachable only under
@@ -1464,6 +1484,9 @@ fn sb3_held_request_cancels_and_joins() {
 /// G1: the actual override at each call request, under its owning hold.
 #[test]
 fn sb3_call_override_required_at_each_request() {
+    if watched("sb3_call_override_required_at_each_request") {
+        return;
+    }
     let f = Call::new();
     let gates = Arc::new(AtomicUsize::new(0));
     let seen = gates.clone();
@@ -1503,6 +1526,7 @@ fn sb3_call_override_required_at_each_request() {
         );
         assert!(recorded(&outcome) && f.counts() == (1, 0), "{i}");
     }
+    println!("{HELD_DONE} sb3_call_override_required_at_each_request");
 }
 
 /// G2: a restriction after construction, before the actual gate.
@@ -1944,6 +1968,9 @@ fn sb3_r5_each_predicate_refuses_literally() {
 /// each gate refuses and latches nothing; poison latches both.
 #[test]
 fn sb3_r5_holds_contend_and_poison_exactly() {
+    if watched("sb3_r5_holds_contend_and_poison_exactly") {
+        return;
+    }
     positive("positive control");
     for hold in ["runs", "grants"] {
         for poisoned in [false, true] {
@@ -2010,6 +2037,7 @@ fn sb3_r5_holds_contend_and_poison_exactly() {
             }
         }
     }
+    println!("{HELD_DONE} sb3_r5_holds_contend_and_poison_exactly");
 }
 /// Joins a poisoning holder (its panic is the poison) inside the gate.
 fn keep_join(keep: &Holder) -> bool {
@@ -2069,6 +2097,9 @@ fn sb3_r5_predicate_order_is_exact() {
 /// per gate (no local retry); the session transport passes no observer.
 #[test]
 fn sb3_contended_gate_polls_live_and_notifies_nothing() {
+    if watched("sb3_contended_gate_polls_live_and_notifies_nothing") {
+        return;
+    }
     positive("positive control");
     let inference = include_str!("../inference.rs");
     let transport = inference
@@ -2138,6 +2169,7 @@ fn sb3_contended_gate_polls_live_and_notifies_nothing() {
             ("model_cancelled", (false, false))
         );
     }
+    println!("{HELD_DONE} sb3_contended_gate_polls_live_and_notifies_nothing");
 }
 
 /// F4: each mission clock alone; a fixed backstop; a second attempt that
@@ -2286,6 +2318,9 @@ fn sb3_call_r3_refusals_charge_nothing() {
 /// clock blocks, both holds are free and the call still completes.
 #[test]
 fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
+    if watched("sb3_call_gate_reads_clocks_and_deadline_before_any_hold") {
+        return;
+    }
     positive("positive control");
     for schedule in ["plain", "poison", "exhausted"] {
         let poison = schedule == "poison";
@@ -2391,6 +2426,7 @@ fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
             "a blocking clock delays, never refuses"
         );
     }
+    println!("{HELD_DONE} sb3_call_gate_reads_clocks_and_deadline_before_any_hold");
 }
 /// A caller deadline that checks, at every reading, that no hold is held.
 struct Probing(Arc<dyn Fn(&'static str) + Send + Sync>, AtomicUsize);
@@ -2410,6 +2446,9 @@ impl CallDeadline for Probing {
 /// removes evidence; it can never fail correct code.
 #[test]
 fn sb3_call_grant_revocation_cannot_precede_the_cas() {
+    if watched("sb3_call_grant_revocation_cannot_precede_the_cas") {
+        return;
+    }
     positive("positive control");
     for i in 0..4 {
         let f = Call::new();
@@ -2460,6 +2499,7 @@ fn sb3_call_grant_revocation_cannot_precede_the_cas() {
         );
         assert!(recorded(&outcome), "{i}: one recorded result");
     }
+    println!("{HELD_DONE} sb3_call_grant_revocation_cannot_precede_the_cas");
 }
 
 /// SB3B-R13 (P2): mission limits installed after a gate sampled none (so
@@ -2684,19 +2724,39 @@ fn sb3_concurrent_operation_refuses_before_ticket() {
     gate.arm("model.reserved", move || pause.hold());
     std::thread::scope(|s| {
         let registration = s.spawn(|| r.session.register_model_private(&p.endpoint, &pin()));
+        let open = Finally(|| paused.open()); // Released even if an assertion fails.
         paused.reached();
         let q = r.session.ingress().accept(CommandKind::Run, 1);
         let no_door = q.is_err() || r.session.open_file_door(&q.unwrap()).is_err();
         assert!(no_door, "registration: no door to acquire through");
+        let sent = p.paths.lock().unwrap().len();
+        let second = model::reserve(&r.session.core, &r.session.bootstrap.scope);
+        assert!(second.is_err(), "registration: second acquisition refused");
+        // SB3B-R19 (1): no run exists, so no attempt; no model_call record;
+        // no CallMeter exists before READY, and no chat request was sent.
+        let attempts = r
+            .session
+            .control_for_test()
+            .authority()
+            .runs()
+            .len_for_test();
         let rows = r.primary.store().rows();
         let records = rows.iter().filter(|row| row.phase == "model_call").count();
-        let slot = r.session.core.model.snapshot().expect("slot observable");
+        let paths = p.paths.lock().unwrap().clone();
+        let charges = paths.iter().filter(|path| *path == "/api/chat").count();
         assert_eq!(
-            (slot.operation, records, slot.record),
-            ("registration", 0, "pending"),
-            "registration held: attempts/records/charges 0/0/0"
+            (attempts, records, charges, paths.len()),
+            (0, 0, 0, sent),
+            "registration held: attempts/records/charges 0/0/0, nothing sent"
         );
-        paused.open();
+        let slot = r.session.core.model.snapshot().expect("slot observable");
+        let held = (slot.operation, slot.active, slot.record);
+        assert_eq!(
+            held,
+            ("registration", true, "pending"),
+            "registration: slot"
+        );
+        drop(open);
         assert!(registration.join().unwrap().is_ok());
     });
     for what in ["metadata", "chat", "recording", "owner_completion"] {
@@ -2713,6 +2773,11 @@ fn sb3_concurrent_operation_refuses_before_ticket() {
         std::thread::scope(|s| {
             let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
             let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+            // SB3B-R19 (3): the held worker is released even if an assertion fails.
+            let release = Finally(|| match &gate {
+                Some(gate) => gate.open(),
+                None => f.restriction("emergency_restrict")(),
+            });
             match &gate {
                 Some(gate) => gate.reached(),
                 None => f.entered(if what == "metadata" { 1 } else { 4 }),
@@ -2721,14 +2786,19 @@ fn sb3_concurrent_operation_refuses_before_ticket() {
             assert!(f.call().is_err(), "{what}: second acquisition refused");
             let after = (f.counts(), f.records(), f.charged().0);
             assert_eq!(after, before, "{what}: 0/0/0");
-            match &gate {
-                Some(gate) => gate.open(),
-                None => f.restriction("emergency_restrict")(),
-            }
+            drop(release);
             assert!(call.join().unwrap().is_ok_and(|o| recorded(&o)), "{what}");
         });
     }
     println!("{HELD_DONE} sb3_concurrent_operation_refuses_before_ticket");
+}
+
+/// Runs its closure when dropped, on unwinding too (SB3B-R19 (3)).
+struct Finally<F: Fn()>(F);
+impl<F: Fn()> Drop for Finally<F> {
+    fn drop(&mut self) {
+        (self.0)();
+    }
 }
 
 /// F9 (SB3B-R2 9): exactly one native result record, carrying the admitted
@@ -2742,6 +2812,13 @@ fn one_correlated_record(f: &Call, outcome: &ModelCallOutcome) {
     };
     let (calls, doors) = (json("model_call"), json("agent_door_opened"));
     assert_eq!(calls.len(), 1, "exactly one native result record");
+    let (run, agent) = (calls[0]["run"].as_str(), calls[0]["agent"].as_str());
+    let own = f.b.run.to_string();
+    assert_eq!(
+        (run, agent),
+        (Some(&*own), Some("mother")),
+        "record run and agent"
+    );
     let door = doors.last().expect("door record")["detail"]["door"].clone();
     let code = match outcome.result() {
         Err(crate::authority::AuthorityError::ModelCall(error)) => error.code(),
@@ -2851,7 +2928,7 @@ fn sb3_registration_gate_contention_latches_nothing() {
 // SB-3B1e F10b (SB3B-R15, R16, R18): the schedule matrix. Its literal rows
 // are `model-bridge-cases.tsv` stage `SB-3B1e-M`, one per (side, class).
 const CASES: &str = include_str!("../../../../mother/host/tests/session/model-bridge-cases.tsv");
-const SIDES: [&str; 9] = [
+const SIDES: [&str; 10] = [
     "r3_reserve:before",
     "r3_reserve:after",
     "r3_cas:before",
@@ -2859,6 +2936,7 @@ const SIDES: [&str; 9] = [
     "charge:before",
     "charge:after",
     "r5_observer:before",
+    "r5_observer:after", // SB3B-R19 (5): IDENTICAL_POINT to r5_cas:before.
     "r5_cas:before",
     "r5_cas:after",
 ];
@@ -2896,8 +2974,30 @@ const KNOWN_DEFECT: [&str; 2] = [
     "r5_cas:before/mission_mono_narrowed",
 ];
 /// SB3B-R18 (2): the Q seam ignores the sample; no evidence until B1f.
-const DEFERRED: [&str; 1] = ["r5_cas:before/q_expiry"];
-const MATRIX: &str = "sb3_schedule_matrix_is_judged_exactly";
+const DEFERRED: [&str; 2] = ["r5_observer:after/q_expiry", "r5_cas:before/q_expiry"];
+/// SB3B-R19 (6): each N/A reason, the states it may cover, whether it may
+/// cover the first sink, and its one named oracle.
+const NA_TABLE: [(&str, &[&str], bool, &str); 2] = [
+    (
+        "BOOTSTRAP_NO_MISSION",
+        &["bootstrap"],
+        true,
+        "sb3_concurrent_operation_refuses_before_ticket",
+    ),
+    (
+        "LIFECYCLE_DENIES_BEFORE_THIS_SINK",
+        &["sealed", "closed_clean", "closed_unclean"],
+        false,
+        "sb2_unjoined_or_owed_prevents_clean_close",
+    ),
+];
+/// SB3B-R19 (6): identical instants (side, side), same class or state: the
+/// observer read is immediately followed by `model.call.observed`.
+const IDENTICAL: [(&str, &str); 1] = [("r5_observer:after", "r5_cas:before")];
+/// The one test executing a side's cells; a direct citation names it.
+fn matrix_test(side: &str) -> String {
+    format!("sb3_matrix_{}", side.replace(':', "_"))
+}
 type Row = (&'static str, &'static str, &'static str, &'static str);
 /// The matrix rows: (side, class, test or tag, expected).
 fn matrix() -> Vec<Row> {
@@ -2932,9 +3032,9 @@ fn matrix_fault(f: &Call, class: &'static str, keep: &Keep) -> Arc<dyn Fn() + Se
     );
     let (context, runs, keep) = (f.b.door.context(), f.b.runs(), keep.clone());
     match class {
-        "emergency" => Arc::new(f.restriction("emergency_restrict")),
+        "emergency" | "emergency_state" => Arc::new(f.restriction("emergency_restrict")),
         "cancel_run" | "door_halt" => Arc::new(f.restriction(class)),
-        "quit" => Arc::new(f.restriction("close_restrict")),
+        "quit" | "closing_normal" => Arc::new(f.restriction("close_restrict")),
         "closing_restricted" => {
             let (emergency, quit) = (f.restriction("emergency_restrict"), f.restriction("quit"));
             Arc::new(move || {
@@ -2961,7 +3061,7 @@ fn matrix_fault(f: &Call, class: &'static str, keep: &Keep) -> Arc<dyn Fn() + Se
             };
             assert_eq!(session.ingress().state(), state, "{class}");
         }),
-        "session_failure" => Arc::new(move || context.fail()),
+        "session_failure" | "failed" => Arc::new(move || context.fail()),
         "mission_wall" => Arc::new(move || clock.wall_only(Duration::from_secs(2))),
         "mission_mono" => Arc::new(move || clock.mono_only(Duration::from_secs(2))),
         "mission_wall_narrowed" | "mission_mono_narrowed" => Arc::new(move || {
@@ -3206,13 +3306,14 @@ fn class_of(outcome: &ModelCallOutcome) -> &'static str {
     class(outcome)
 }
 
-#[test]
-fn sb3_schedule_matrix_is_judged_exactly() {
+/// Runs `side`'s executed cells (each class fault at its probe point).
+/// One test per side keeps each watched child well inside its deadline.
+fn matrix_side(side: &str) -> usize {
     positive("positive control");
     let mut schedules = 0;
-    for (side, class, test, expected) in matrix() {
-        let known = test == "OPEN:SB3B-B1f" && KNOWN_DEFECT.contains(&&*format!("{side}/{class}"));
-        if test != MATRIX && !known {
+    for (at, class, test, expected) in matrix() {
+        let known = test == "OPEN:SB3B-B1f" && KNOWN_DEFECT.contains(&&*format!("{at}/{class}"));
+        if at != side || test != matrix_test(side) && !known {
             continue;
         }
         for i in 0..if side.starts_with("r5") { 4 } else { 1 } {
@@ -3221,39 +3322,110 @@ fn sb3_schedule_matrix_is_judged_exactly() {
             schedules += 1;
         }
     }
-    assert_eq!(schedules, 295, "every executed cell ran");
+    schedules
+}
+#[test]
+fn sb3_matrix_r3_reserve_before() {
+    if watched("sb3_matrix_r3_reserve_before") {
+        return;
+    }
+    assert_eq!(
+        matrix_side("r3_reserve:before"),
+        22,
+        "every executed cell ran"
+    );
+    println!("{HELD_DONE} sb3_matrix_r3_reserve_before");
+}
+#[test]
+fn sb3_matrix_r3_reserve_after() {
+    if watched("sb3_matrix_r3_reserve_after") {
+        return;
+    }
+    assert_eq!(
+        matrix_side("r3_reserve:after"),
+        19,
+        "every executed cell ran"
+    );
+    println!("{HELD_DONE} sb3_matrix_r3_reserve_after");
+}
+#[test]
+fn sb3_matrix_r3_cas_before() {
+    if watched("sb3_matrix_r3_cas_before") {
+        return;
+    }
+    assert_eq!(matrix_side("r3_cas:before"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r3_cas_before");
+}
+#[test]
+fn sb3_matrix_r3_cas_after() {
+    if watched("sb3_matrix_r3_cas_after") {
+        return;
+    }
+    assert_eq!(matrix_side("r3_cas:after"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r3_cas_after");
+}
+#[test]
+fn sb3_matrix_charge_before() {
+    if watched("sb3_matrix_charge_before") {
+        return;
+    }
+    assert_eq!(matrix_side("charge:before"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_charge_before");
+}
+#[test]
+fn sb3_matrix_charge_after() {
+    if watched("sb3_matrix_charge_after") {
+        return;
+    }
+    assert_eq!(matrix_side("charge:after"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_charge_after");
+}
+#[test]
+fn sb3_matrix_r5_observer_before() {
+    if watched("sb3_matrix_r5_observer_before") {
+        return;
+    }
+    assert_eq!(
+        matrix_side("r5_observer:before"),
+        76,
+        "every executed cell ran"
+    );
+    println!("{HELD_DONE} sb3_matrix_r5_observer_before");
+}
+#[test]
+fn sb3_matrix_r5_cas_before() {
+    if watched("sb3_matrix_r5_cas_before") {
+        return;
+    }
+    assert_eq!(matrix_side("r5_cas:before"), 80, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r5_cas_before");
+}
+#[test]
+fn sb3_matrix_r5_cas_after() {
+    if watched("sb3_matrix_r5_cas_after") {
+        return;
+    }
+    assert_eq!(matrix_side("r5_cas:after"), 76, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r5_cas_after");
 }
 
-/// F10b validator (SB3B-R15 (2), R16 (a), R18): every matrix cell exactly
-/// once; each cites an existing test fn, a closed-list N/A (LIFECYCLE names
-/// its earlier denial oracle), an IDENTICAL_POINT whose cell cites one, or
-/// a B1f tag on exactly the listed cells. Anything else fails.
+/// F10b validator (SB3B-R15 (2), R16 (a), R18, R19 (6)): every matrix
+/// cell exactly once; each cites its side's matrix test, an N/A from the
+/// closed table (reason, states, oracle), an IDENTICAL_POINT on an
+/// allowlisted side pair with the same class or state whose cell is
+/// executed, or a B1f tag on exactly the listed cells. Anything else fails.
 #[test]
 fn sb3_schedule_matrix_cells_are_complete() {
-    const NA: [&str; 7] = [
-        "BOOTSTRAP_NO_MISSION",
-        "PREBIND_NO_RUN_OR_CONSENT",
-        "NO_INVOCATION_AT_REGISTRATION",
-        "METADATA_HAS_NO_CHARGE",
-        "SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION",
-        "LIFECYCLE_DENIES_BEFORE_THIS_SINK",
-        "LEGACY_FINALIZATION_ONLY",
-    ];
     let source = [
         include_str!("model_call_tests.rs"),
         include_str!("model_tests.rs"),
     ]
     .concat();
-    let exists = |name: &str| {
-        let word = !name.is_empty()
-            && name
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
-        word && source.contains(&format!("#[test]\nfn {name}()"))
-    };
+    let exists = |name: &str| source.contains(&format!("#[test]\nfn {name}() {{"));
     let rows = matrix();
     let cell = |r: &Row| format!("{}/{}", r.0, r.1);
-    let cites = |at: &str| rows.iter().find(|r| cell(r) == at).map(|r| r.2);
+    let cites = |at: &str| rows.iter().find(|r| cell(r) == at).map(|r| (r.0, r.2));
+    let direct = |side: &str, test: &str| test == matrix_test(side) && exists(test);
     let all = CLASSES.iter().chain(&STATES);
     let mut want: Vec<String> = SIDES
         .iter()
@@ -3265,35 +3437,108 @@ fn sb3_schedule_matrix_cells_are_complete() {
     got.sort();
     assert_eq!(got, want, "exactly the matrix cells, each once");
     for r in &rows {
-        let (at, test) = (cell(r), r.2);
+        let (at, (side, class, test)) = (cell(r), (r.0, r.1, r.2));
         let ok = if let Some(na) = test.strip_prefix("N/A:") {
-            let (reason, oracle) = na
-                .strip_suffix(')')
-                .and_then(|n| n.split_once('('))
-                .unwrap_or((na, ""));
-            let named = oracle.is_empty() && reason != NA[5] || exists(oracle);
-            NA.contains(&reason) && named
+            NA_TABLE.iter().any(|(reason, states, first, oracle)| {
+                na == format!("{reason}({oracle})")
+                    && states.contains(&class)
+                    && (*first || side != SIDES[0])
+                    && exists(oracle)
+            })
         } else if let Some(other) = test.strip_prefix("IDENTICAL_POINT:") {
-            other != at && !r.3.is_empty() && cites(other).is_some_and(exists)
+            let pair = other
+                .split_once('/')
+                .filter(|(s, c)| *c == class && IDENTICAL.contains(&(side, *s)) && !r.3.is_empty());
+            pair.is_some() && cites(other).is_some_and(|(s, t)| direct(s, t))
         } else {
             match test {
                 "OPEN:SB3B-B1f" => KNOWN_DEFECT.contains(&&*at),
                 "DEFERRED:SB3B-B1f" => DEFERRED.contains(&&*at),
-                _ => exists(test),
+                _ => direct(side, test),
             }
         };
-        assert!(ok, "{at}: {test} is no existing oracle or allowed tag");
+        assert!(ok, "{at}: {test} is no allowed citation for this cell");
     }
     for (cells, tag) in [
         (&KNOWN_DEFECT[..], "OPEN:SB3B-B1f"),
         (&DEFERRED[..], "DEFERRED:SB3B-B1f"),
     ] {
-        assert!(
-            cells.iter().all(|c| cites(c) == Some(tag)),
-            "{tag}: the listed cells"
-        );
+        let tagged = cells
+            .iter()
+            .all(|c| cites(c).is_some_and(|(_, t)| t == tag));
+        assert!(tagged, "{tag}: the listed cells");
     }
-    assert!(exists(MATRIX) && !exists("sb3_no_such_oracle"), "controls");
+    let control = direct("r3_cas:after", "sb3_matrix_r3_cas_after");
+    assert!(
+        control && !direct("r3_cas:after", "sb3_matrix_r3_cas_before"),
+        "controls"
+    );
+}
+
+/// SB3B-R19 (2): every test that joins a thread (`.join()`, directly or
+/// through a helper that does) runs in a watched child under the 30 s
+/// deadline. `watched` itself, the parent side, is the only exception.
+#[test]
+fn sb3_thread_joins_run_in_watched_children() {
+    let source = include_str!("model_call_tests.rs");
+    assert_eq!(
+        unwatched(source),
+        Vec::<String>::new(),
+        "a join outside a watched child"
+    );
+    let leak = format!(
+        "{source}\n#[test]\nfn sb3_leak() {{\n    std::thread::spawn(|| ()).join().unwrap();\n}}\n"
+    );
+    assert_eq!(unwatched(&leak), ["sb3_leak"], "leak control");
+    let via =
+        format!("{source}\n#[test]\nfn sb3_via() {{\n    keep_join(&Holder::default());\n}}\n");
+    assert_eq!(unwatched(&via), ["sb3_via"], "a join through a helper");
+}
+/// Top-level fns: (name, is a test, body); bodies from the masked source.
+fn unwatched(source: &str) -> Vec<String> {
+    let code = mask(source);
+    let mut fns = Vec::new();
+    for (at, _) in code.match_indices("\nfn ") {
+        let name: String = code[at + 4..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        let open = at + code[at..].find('{').unwrap();
+        let close = open + code[open..].find("\n}").unwrap();
+        fns.push((name, code[..at].ends_with("#[test]"), open, close));
+    }
+    let calls = |body: &str, name: &str| {
+        body.match_indices(&format!("{name}(")).any(|(i, _)| {
+            !body[..i].ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+        })
+    };
+    let mut joiners: Vec<&str> = Vec::new();
+    loop {
+        let more: Vec<&str> = fns
+            .iter()
+            .filter(|(n, test, ..)| !test && n != "watched" && !joiners.contains(&&**n))
+            .filter(|(_, _, o, c)| {
+                code[*o..*c].contains(".join()") || joiners.iter().any(|j| calls(&code[*o..*c], j))
+            })
+            .map(|(n, ..)| &**n)
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        joiners.extend(more);
+    }
+    let joins = |o: usize, c: usize| {
+        code[o..c].contains(".join()") || joiners.iter().any(|j| calls(&code[o..c], j))
+    };
+    let watched = |n: &str, o: usize| {
+        source[o + 1..]
+            .trim_start()
+            .starts_with(&format!("if watched(\"{n}\") {{"))
+    };
+    fns.iter()
+        .filter(|(n, test, o, c)| *test && joins(*o, *c) && !watched(n, *o))
+        .map(|(n, ..)| n.clone())
+        .collect()
 }
 
 /// SB3B-R18 (B1f): a Q or mission deadline found lapsed under the hold is

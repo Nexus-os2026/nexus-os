@@ -1067,7 +1067,7 @@ Gates, each binary alone:
 Repeats: 10 serial + 10 parallel, 73/73 each.
 
 F10b (schedule matrix and validator) stopped at the gap count, per
-SB3B-R15; it landed under SB3B-R16 and R18 (section 13.11).
+SB3B-R15; it landed under SB3B-R16 and R18 (section 13.11), amended by SB3B-R19 (13.12).
 
 ### 13.11 B1e F10b schedule matrix (SB3B-R16, R18)
 Test-only. Literal rows: `model-bridge-cases.tsv` stage `SB-3B1e-M`, one
@@ -1116,3 +1116,40 @@ Plants, each killed at its named assertion and restored by sha256:
 - (iii) the chat gate admits once charged: "the next gate refuses";
 - validator: unknown test, missing cell, OPEN on an unlisted cell,
   IDENTICAL_POINT to a tagged cell, LIFECYCLE without its oracle.
+
+### 13.12 B1e oracle review-1 corrections (SB3B-R19)
+Test-only. Codex review-1 (oracle): 3 MED, 3 LOW, all addressed:
+- (1) A2 registration stage: a second reservation is refused. Attempts
+  (no run exists), model_call records and chat requests (no CallMeter
+  exists before READY) are 0/0/0, nothing new is sent, and the slot
+  shows registration, active, pending.
+- (2) Every test that joins a thread, directly or through a helper, runs
+  in a watched child. Ten tests are newly wrapped, and the matrix is
+  split into one watched test per executed side.
+  `sb3_thread_joins_run_in_watched_children` scans for `.join()` outside
+  watched children, with a direct and a through-helper leak control.
+- (3) A2 releases its held worker in a drop guard. MP-B1e-A2 is now a
+  clean named kill: the child fails at "second acquisition refused" and
+  the parent fails in 5.6 s, with no 30 s timeout.
+- (4) F9 also compares the record's run and agent.
+- (5) The side `r5_observer:after` is explicit. Its cells are
+  IDENTICAL_POINT to `r5_cas:before`, since the observer read is followed
+  immediately by `model.call.observed`; the Q-expiry cell is deferred to
+  B1f.
+- (6) The validator uses closed tables:
+  - each N/A reason with its states, first-sink rule and one oracle;
+  - IDENTICAL_POINT only on allowlisted side pairs, with the same class
+    or state and an executed target;
+  - a direct citation must be that side's matrix test.
+  The Emergency, Failed and Closing (normal) state cells are now
+  executed. The matrix has 232 rows and 349 schedules.
+
+Plants, each killed at its named assertion and restored by sha256:
+- A2 slot released;
+- matrix (i), (ii) and (iii);
+- validator: both crafted escapes (unrelated N/A oracle and unrelated
+  direct citation for `r3_reserve:after/sealed`; `emergency_state`
+  aliasing `r5_cas:after/grant_expiry`), unknown test, missing cell,
+  OPEN on an unlisted cell, IDENTICAL_POINT to a tagged cell, LIFECYCLE
+  at the first sink;
+- join guard: an unwrapped held-join test.
