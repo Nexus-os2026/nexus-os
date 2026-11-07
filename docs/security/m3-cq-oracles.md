@@ -96,3 +96,10 @@ accepted, one charge).
 
 MP-M3-25 (original, "floor read from the request") is recorded EQUIVALENT while O-3's mismatch
 rejection holds.
+
+## Cq-0 results
+
+Oracle-add on the inert stubs: C0-1, C0-2 RED at their named assertions; C0-3 RED in its
+fixture (the stub `freeze_floor` makes no `Floor`); C0-4 GREEN (fail-closed negative). After
+the feat commit all four GREEN. Plants P-Cq-0a, P-Cq-0b, P-Cq-2 each killed at the named
+assertion above, restored by sha256, never committed.
