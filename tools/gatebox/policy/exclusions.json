@@ -1,4 +1,5 @@
 {
+  "source_blob": "6cf914ba5ae1eeffc1b61376ba6b768be8a0ffdb",
   "target": "phase2_live_sandbox",
   "reason": "needs nested namespaces (D-E2-10)",
   "cases": [
