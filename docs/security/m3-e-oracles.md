@@ -451,3 +451,12 @@ NEW `mother/host/src/receipts.rs` (assemble and render). Tests:
 | `m3e_u10_receipts_exact_schema_and_privacy` (host) | The exact export, line for line; note, fact and path canaries absent from the export and every Debug; repeated identical. |
 | `m3e_u10_receipts_missing_is_not_zero` (host) | No self-hash, no journaled receipt, no consented facts hash: `unavailable`, `host-measured: incomplete (…)` naming them, no zero hash. Not applicable is `none`; timing is `not measured`; overall always incomplete. |
 | `m3e_u10_timestamps_and_identities_join` (host) | Snapshot and consented facts hashes differ: `incomplete (identity:facts)`. Mismatched effects: named. No dispatch, return or stop timestamp is ever exported (D6). |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| P-U10a | the notes text exported in place of its digest | host exact schema and privacy |
+| P-U10b | a missing self-hash shown as a zero hash | host missing is not zero |
+| P-U10c | T16 labels the run CORROBORATED | summary: the frozen T16 golden |
+| P-U10d | the facts file digest re-derived from the parsed facts instead of the snapshot | host exact schema |
