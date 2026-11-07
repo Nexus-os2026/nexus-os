@@ -754,8 +754,8 @@ fn m3e_u1_running_binary_identity_child() {
     let mut line = String::new();
     std::io::stdin().read_line(&mut line).unwrap();
     match running_binary_sha256() {
-        Ok(d) => println!("SELF {}", hex(&d)),
-        Err(e) => println!("SELF {}", e.code()),
+        Ok(d) => println!("\nSELF {}", hex(&d)),
+        Err(e) => println!("\nSELF {}", e.code()),
     }
 }
 
