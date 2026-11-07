@@ -124,7 +124,7 @@ fn quiet() -> LaneOutput {
         verdict: Verdict::Continue,
     }
 }
-fn within<T>(rx: &Receiver<T>) -> T {
+pub(crate) fn within<T>(rx: &Receiver<T>) -> T {
     rx.recv_timeout(PATIENCE)
         .expect("the schedule step happens")
 }
@@ -145,15 +145,15 @@ fn identity_hex() -> String {
 /// journal line that contains its needle is appended.
 type ProbeHook = (&'static str, Box<dyn FnOnce() + Send>);
 #[derive(Clone, Default)]
-struct Probe(Arc<Mutex<Vec<ProbeHook>>>);
+pub(crate) struct Probe(Arc<Mutex<Vec<ProbeHook>>>);
 impl Probe {
-    fn at(&self, needle: &'static str, hook: impl FnOnce() + Send + 'static) {
+    pub(crate) fn at(&self, needle: &'static str, hook: impl FnOnce() + Send + 'static) {
         self.0.lock().unwrap().push((needle, Box::new(hook)));
     }
 }
-struct ProbeJournal {
-    journal: MemoryJournal,
-    probe: Probe,
+pub(crate) struct ProbeJournal {
+    pub(crate) journal: MemoryJournal,
+    pub(crate) probe: Probe,
 }
 impl JournalStore for ProbeJournal {
     fn load(&self) -> Result<Vec<String>, JournalError> {
@@ -175,21 +175,21 @@ impl JournalStore for ProbeJournal {
     }
 }
 
-struct Fx {
-    home: Home,
-    fake: Arc<FakeOllama>,
-    port: Arc<GovernedPort>,
-    journal: MemoryJournal,
-    probe: Probe,
-    clock: Arc<ManualClock>,
-    folder: String,
+pub(crate) struct Fx {
+    pub(crate) home: Home,
+    pub(crate) fake: Arc<FakeOllama>,
+    pub(crate) port: Arc<GovernedPort>,
+    pub(crate) journal: MemoryJournal,
+    pub(crate) probe: Probe,
+    pub(crate) clock: Arc<ManualClock>,
+    pub(crate) folder: String,
     invoked: Arc<AtomicUsize>,
 }
 impl Fx {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with(true)
     }
-    fn with(register: bool) -> Self {
+    pub(crate) fn with(register: bool) -> Self {
         let base = PortFx::with(register);
         let (home, fake, port, folder) = (base.home, Arc::new(base.fake), base.port, base.folder);
         Self {
@@ -234,7 +234,7 @@ impl Fx {
             .unwrap(),
         )
     }
-    fn contract(&self) -> MissionContract {
+    pub(crate) fn contract(&self) -> MissionContract {
         let mut c = contract_with("");
         c.requested_folder = Some(self.folder.clone());
         c.budget.max_duration_ms = 60_000;
@@ -248,7 +248,7 @@ impl Fx {
     }
     /// Consented and advanced to Building: the next advance invokes the
     /// model lane. Returns the native request the Owner was asked.
-    fn building(
+    pub(crate) fn building(
         &self,
         m: &FileSession<GovernedPort>,
         c: MissionContract,
@@ -269,27 +269,27 @@ impl Fx {
         let asked = owner.0.lock().unwrap()[0].clone();
         (id, asked)
     }
-    fn events(&self) -> Vec<Event> {
+    pub(crate) fn events(&self) -> Vec<Event> {
         verify(&self.journal.lines())
             .unwrap()
             .into_iter()
             .map(|e| e.event)
             .collect()
     }
-    fn charges(&self) -> usize {
+    pub(crate) fn charges(&self) -> usize {
         self.events()
             .iter()
             .filter(|e| matches!(e, Event::ModelCallCharged { .. }))
             .count()
     }
-    fn dispatched(&self) -> usize {
+    pub(crate) fn dispatched(&self) -> usize {
         self.events()
             .iter()
             .filter(|e| matches!(e, Event::EffectDispatched { .. }))
             .count()
     }
     /// Answers journaled for the model lane's invocations.
-    fn model_lane_returned(&self) -> usize {
+    pub(crate) fn model_lane_returned(&self) -> usize {
         let events = self.events();
         let model: Vec<_> = events
             .iter()
@@ -307,14 +307,14 @@ impl Fx {
             .filter(|e| matches!(e, Event::LaneReturned { invocation, .. } if model.contains(invocation)))
             .count()
     }
-    fn model_invocations(&self) -> usize {
+    pub(crate) fn model_invocations(&self) -> usize {
         self.events()
             .iter()
             .filter(|e| matches!(e, Event::LaneInvoked { model_cap, .. } if *model_cap > 0))
             .count()
     }
     /// The terminal transition of `id`, as `kind:code`.
-    fn end(&self, id: MissionId) -> String {
+    pub(crate) fn end(&self, id: MissionId) -> String {
         let entries = verify(&self.journal.lines()).unwrap();
         let trigger = entries
             .iter()
@@ -341,19 +341,19 @@ impl Fx {
                 ))
         })
     }
-    fn attempts(&self) -> usize {
+    pub(crate) fn attempts(&self) -> usize {
         self.home.gate.count("model_call")
     }
-    fn index_exists(&self) -> bool {
+    pub(crate) fn index_exists(&self) -> bool {
         self.home.dir.join("workspace/index.html").exists()
     }
-    fn hold(&self, path: &'static str) {
+    pub(crate) fn hold(&self, path: &'static str) {
         self.fake
             .route(move |at| (at == path).then_some(Answer::Hold));
         self.fake.drain();
     }
 }
-fn advance_in(
+pub(crate) fn advance_in(
     m: &Arc<FileSession<GovernedPort>>,
     id: MissionId,
 ) -> std::thread::JoinHandle<Result<crate::coordinator::Advance, CoordinatorError>> {
