@@ -15,10 +15,14 @@
 #![deny(unsafe_code)]
 
 #[cfg(target_os = "linux")]
+pub mod binary_identity;
+#[cfg(target_os = "linux")]
 pub mod hands;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod hands_tests;
+#[cfg(target_os = "linux")]
+pub mod inputs;
 #[cfg(target_os = "linux")]
 mod legacy_stop;
 #[cfg(target_os = "linux")]
