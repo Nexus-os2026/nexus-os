@@ -5,7 +5,7 @@ use crate::inference::{
 };
 use nexus_kernel::emergency_stop::StopWatch;
 use nexus_kernel::inference::{
-    CallCancel, CancelCause, LoopbackEndpoint, ModelTransport, RequestKind, VerifiedOllama,
+    CallCancel, CancelCause, LoopbackEndpoint, RequestKind, VerifiedOllama,
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard, TryLockError};
@@ -258,12 +258,8 @@ impl HostSession {
             let endpoint = LoopbackEndpoint::parse(endpoint).map_err(model_error)?;
             let transport = VerifiedOllama::verify(endpoint, spec, &gate, &deadline, &watch)
                 .map_err(model_error)?;
-            let identity = transport.identity().digest();
-            let view = ModelIdentityView {
-                name: transport.identity().name().into(),
-                digest: transport.identity().model_digest().into(),
-                identity: hex::encode(identity),
-            };
+            let model = crate::inference::RegisteredModel::verified(transport);
+            let (identity, view) = (model.identity, model.view.clone());
             hold(&self.core)?.child_complete = true;
             // The active owner prevents seal while the lock-free append runs.
             record = "unknown";
@@ -285,11 +281,7 @@ impl HostSession {
             s.registration = Some(RegistrationReceipt {
                 sequence,
                 digest: identity,
-                model: Arc::new(crate::inference::RegisteredModel {
-                    transport: Arc::new(transport),
-                    view: view.clone(),
-                    identity,
-                }),
+                model: Arc::new(model),
                 watch: watch.clone(),
             });
             #[cfg(test)]
