@@ -28,6 +28,8 @@ pub(super) struct Proof {
     pub(super) input: Option<VerificationInput>,
     /// Whether the journaled checks all passed, once recorded.
     pub(super) verified: Option<bool>,
+    /// The journaled `(id, code)` checks, once recorded (M3-Dc2 explain()).
+    pub(super) checks: Option<Vec<(String, String)>>,
     /// Replay only: the action of a settlement receipt journaled before any
     /// pending identity (Db-R1 L4); the Settled line must name it.
     pub(super) early: Option<PendingAction>,
@@ -280,6 +282,7 @@ pub(super) fn replay(m: &mut Mission, entry: &Entry) -> Result<(), ReplayViolati
                 return Err(V::ProofOutOfPlace);
             }
             m.proof.verified = Some(checks.iter().all(|(_, code)| code == "pass"));
+            m.proof.checks = Some(checks.clone());
         }
         _ => {}
     }
@@ -407,7 +410,7 @@ impl<P: EffectPort> Coordinator<P> {
                 invocation: input.invocation,
                 effect,
                 report_digest: report_digest(&checks),
-                checks,
+                checks: checks.clone(),
             };
             match inner.append(id, event) {
                 Err(CoordinatorError::Journal(_)) => {
@@ -416,7 +419,9 @@ impl<P: EffectPort> Coordinator<P> {
                 }
                 Err(e) => Err(e),
                 Ok(_) => {
-                    inner.mission(id)?.proof.verified = Some(typed.passed());
+                    let m = inner.mission(id)?;
+                    m.proof.verified = Some(typed.passed());
+                    m.proof.checks = Some(checks.clone());
                     Ok(true)
                 }
             }
