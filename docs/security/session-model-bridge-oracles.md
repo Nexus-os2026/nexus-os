@@ -727,3 +727,32 @@ refusal reflects that no File is unresolved in this pending-lane state; it
 is not a general no-pending-lane grammar rule. F12 test-only seams are
 accepted for A; carry to C: R4/R2 composition oracles vary S, Q and
 Continuation with real second doors and the real continuation constructor.
+
+### 12.3 SB3A-R2 (Codex review-1, two LOW): checked equivalence table
+Fixes: R2 now also requires the run's cell to be the door's retained cell
+(as `live_member`), and the File-consent association is checked on every
+success, idempotent rebind included. Oracles: R2 isolated `door_cell`;
+`sb3_idempotent_rebind_revalidates_file_consent`. Each helper check is
+mapped to its inline R2 counterpart in
+`crates/nexus-governed-control/src/authority/run.rs` (line numbers at the
+fix commit). No check is unmapped.
+
+| Helper check (run.rs line) | R2 inline counterpart (run.rs line) |
+|---|---|
+| live_member agent (1702) WrongAgent | 2082 WrongAgent |
+| live_member class Agent (1705) WrongRun | 2085 WrongRun |
+| live_member groups contains group (1708) | D, 2103 |
+| live_member run cell == door retained cell (1711) | cell, 2106-2109 |
+| live_member cell engaged / halted group (1720) Halted | 2087 Halted |
+| live_member finished (1723) RunNotActive | 2093 |
+| live_member cancelled (1726) RunCancelled | 2096 |
+| host_prerequisites host-cell applicability (305) | S requires host, 2099-2101 (always applies) |
+| host_prerequisites opened_by door (308-309) | R 2104 + live_door(group) 2070 |
+| host_prerequisites door active/alive/!halted (310-312) | live_door 1686-1689 via 2070 |
+| host_prerequisites door agent == run agent (313) | live_door agent 1689 + 2082 |
+| host_prerequisites door members has run (314) | D listed, 2071/2103 |
+| host_prerequisites run groups has group (315) | D, 2103 |
+| host_prerequisites consent matches File hash/request/seq/page facts (321-324) | selected consent 2073-2079 + association 2148-2153 (adds kind/time), every success |
+| host_prerequisites consent life epoch/!halted/!closed (325-327) | `c.life == now` 2074 |
+| host_prerequisites only if Files admitted (319) | stricter: NotAdmitted 2115 |
+| admissible Stop / closing (shared) | 2059 / 2062 |

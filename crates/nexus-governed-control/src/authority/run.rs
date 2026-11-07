@@ -2069,6 +2069,7 @@ impl RunRegistry {
         };
         let door = live_door(&mut table.doors, b.group, b.agent)?;
         let listed = door.members.contains(&b.run);
+        let door_cell = door.file_cell.clone();
         let mut matching = door.consents.iter().filter(|c| {
             c.life == now && c.contract_hash == b.contract_hash && c.request == b.request
         });
@@ -2101,7 +2102,11 @@ impl RunRegistry {
             .is_some_and(|c| c.host() && c.same(b.original));
         let d = listed && entry.groups.contains(&b.group);
         let r = entry.opened_by == Some(b.group);
-        if !s || !d || !r {
+        // As live_member: the run's cell is the door's retained cell.
+        let cell = door_cell
+            .as_ref()
+            .is_none_or(|door| entry.file_cell.as_ref().is_some_and(|c| c.same(door)));
+        if !s || !d || !r || !cell {
             return Err(AuthorityError::NotMember);
         }
         let files = entry
@@ -2139,13 +2144,13 @@ impl RunRegistry {
             Some(_) => return Err(AuthorityError::AlreadyAdmitted),
             None => true,
         };
-        if fresh
-            && (consent.contract_hash != files.contract_hash
-                || consent.request != files.request
-                || consent.evidence_seq != files.evidence_seq
-                || consent.kind != files.kind
-                || consent.at_wall_ms != files.consented_wall_ms
-                || consent.page_facts != files.page_facts)
+        // Every success, idempotent included, keeps the exact File association.
+        if consent.contract_hash != files.contract_hash
+            || consent.request != files.request
+            || consent.evidence_seq != files.evidence_seq
+            || consent.kind != files.kind
+            || consent.at_wall_ms != files.consented_wall_ms
+            || consent.page_facts != files.page_facts
         {
             return Err(AuthorityError::NoConsent);
         }
