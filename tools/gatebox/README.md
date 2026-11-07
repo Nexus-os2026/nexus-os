@@ -16,6 +16,28 @@ copies its verified bytes to
 until the pinned policy is re-pinned through a reviewed PR.** The excluded
 executable is compiled but never spawned, including for discovery.
 
+Build the uncompressed bundle from the reviewed repository root, without root:
+
+```bash
+bash -euo pipefail <<'BUILD'
+python3 -I -B - <<'PY' | tar --exclude='__pycache__' --no-recursion --null --files-from=- -cf /home/nexus/NEXUS/gatebox-slice1.tar
+import ast, pathlib, stat, sys
+text = pathlib.Path('tools/gatebox/install.sh').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
+values = {n.targets[0].id: ast.literal_eval(n.value) for n in ast.parse(text).body
+          if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
+          and n.targets[0].id in ('FILES','HARNESS')}
+for name in ['tools/gatebox/'+n for n in values['FILES']]+[values['HARNESS']]:
+    if not stat.S_ISREG(pathlib.Path(name).lstat().st_mode): raise SystemExit('not a regular file')
+    sys.stdout.buffer.write(name.encode()+b'\0')
+PY
+sha256sum /home/nexus/NEXUS/gatebox-slice1.tar
+BUILD
+```
+
+Independently review the bundle and record its SHA-256. The sheet §10 installer
+command needs `--bundle-sha256 "$GBX_BUNDLE_SHA"`, as included below; the sheet
+itself is outside this PR's allowed files.
+
 Owner commands, from the host after independent bundle review (never run the
 checkout installer as root):
 
@@ -28,20 +50,27 @@ sudo /usr/bin/install -o root -g root -m 0600 \
   /home/nexus/NEXUS/gatebox-slice1.tar /root/gatebox-slice1/bundle.tar
 printf '%s  %s\n' "$GBX_BUNDLE_SHA" /root/gatebox-slice1/bundle.tar |
   sudo /usr/bin/sha256sum --check -
-sudo /usr/bin/python3 -I -B - <<'PY'
-import pathlib, tarfile
-root = pathlib.Path('/root/gatebox-slice1')
-with tarfile.open(root/'bundle.tar', 'r:') as archive:
-    seen = set()
-    for item in archive.getmembers():
-        p = pathlib.PurePosixPath(item.name)
-        allowed = (p.parts[:2] == ('tools', 'gatebox') or
-                   str(p) == 'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs')
-        if (not allowed or p.is_absolute() or '..' in p.parts or
-                item.name in seen or not (item.isfile() or item.isdir())):
+sudo /usr/bin/python3 -I -B - "$GBX_BUNDLE_SHA" <<'PY'
+import ast, hashlib, io, pathlib, sys, tarfile
+root = pathlib.Path('/root/gatebox-slice1'); data = (root/'bundle.tar').read_bytes()
+if hashlib.sha256(data).hexdigest()!=sys.argv[1]: raise SystemExit('bundle SHA-256 mismatch')
+with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as archive:
+    script = archive.extractfile('tools/gatebox/install.sh').read().decode()
+    body = script.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
+    values = {n.targets[0].id: ast.literal_eval(n.value) for n in ast.parse(body).body
+              if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
+              and n.targets[0].id in ('FILES','HARNESS')}
+    expected = {'tools/gatebox/'+n for n in values['FILES']}|{values['HARNESS']}
+    directories = {str(parent) for path in map(pathlib.PurePosixPath,expected)
+                   for parent in path.parents if str(parent)!='.'}
+    members = archive.getmembers(); seen = set()
+    for item in members:
+        if item.isdir() and item.name in directories: continue
+        if item.name not in expected or item.name in seen or not item.isfile() or item.size>2*1024**2:
             raise SystemExit('unsafe bundle member')
         seen.add(item.name)
-    archive.extractall(root, filter='data')
+    if seen!=expected: raise SystemExit('incomplete bundle')
+    archive.extractall(root,members=members,filter='data')
 PY
 sudo /bin/bash /root/gatebox-slice1/tools/gatebox/install.sh install \
   --bundle-sha256 "$GBX_BUNDLE_SHA" --repo-id mother \
