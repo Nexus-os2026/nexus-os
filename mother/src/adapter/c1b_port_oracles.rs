@@ -48,6 +48,17 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
         println!("case-ok:{case}");
         return;
     }
+    let _ = child_outputs(module, variable, test, cases);
+}
+/// Spawn fresh processes even when the caller is itself an isolated case.
+/// Retain stdout only after the existing exit/sentinel judgment succeeds.
+pub(crate) fn child_outputs(
+    module: &str,
+    variable: &str,
+    test: &str,
+    cases: &[&str],
+) -> Vec<String> {
+    let mut outputs = Vec::new();
     let mut failures = Vec::new();
     for case in cases {
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
@@ -86,9 +97,12 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
         let (out, err) = (out.join().unwrap(), err.join().unwrap());
         if !status.is_some_and(|s| s.success()) || !out.contains(&format!("case-ok:{case}")) {
             failures.push(format!("{case}: {status:?}\n{out}\n{err}"));
+        } else {
+            outputs.push(out);
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n---\n"));
+    outputs
 }
 
 fn run(case: &str) {
@@ -624,7 +638,10 @@ fn c1_s3_record_seam_is_test_only() {
             let text = std::fs::read_to_string(&path).unwrap();
             let lines: Vec<&str> = text.lines().map(str::trim).collect();
             for (at, line) in lines.iter().enumerate() {
-                if line.contains("model_record") {
+                if line
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|token| token == "model_record")
+                {
                     let above = lines[..at].iter().rev().find(|l| !l.is_empty());
                     assert_eq!(
                         above,
