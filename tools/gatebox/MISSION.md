@@ -205,3 +205,48 @@ Oracles precede fixes in numbered checkpoint folders. Real custody and its plant
 require an outside run with protected TMPDIR (Q11); no ownership-remap modelling.
 Q12 F-6 remains #115 installer scope. No installation, host action, Git write,
 network, phase advancement or installed acceptance is performed by this mission.
+
+## Q13 installer qualification amendment
+
+C1-SEALED, C2-CANARY and C3-RESTART are mandatory installed custody rows in
+qualification and admission. Without installed host root, direct custody tests
+skip; qualification rejects a skipped, failed or unavailable proof. Installed
+results remain UNVERIFIED until the Owner runs the separately reviewed procedure.
+B2 proves denial of tested manager calls and verifies the installed polkit rule
+against installed-files.json. Attribution of denial to that rule and precedence
+over earlier conflicting policy remain UNVERIFIED. The Owner must close agents,
+remove nexus from docker and reboot before install (README H1). This amendment
+claims no host action, installed PASS, phase advancement or CI parity.
+
+## Q15 installer correction (supersedes Q13 custody procedure)
+
+C2 is the real installed F5 pre-handoff substitution, runs LAST, and leaves
+root quarantine until a mandatory reviewed reboot. Enable-qualified requires
+content-checked row/run_id/pre-reboot boot_id evidence, a different current
+boot_id, and clean custody. C1 covers the two endpoint files only. C1/C3 call
+lifecycle.py directly as root and collect on the host as mothergate; these
+proofs do not exercise privilege elevation or the service collector sandbox.
+Cleanup is registered before setUp writes, continues after stop errors, proves
+settlement before exact-name persistent removal as mothergate, reports errors
+and retained paths, and fails qualification on unexpected leftovers. README
+specifies failed-proof recovery and the reboot; no generic custody deletion.
+Linux oracle socket addresses use an open private parent descriptor and a
+short absolute /proc/self/fd name, independent of cwd and TMPDIR length.
+The installed FILES allowlist remains exact and unchanged (27 files). The
+host-only plant removes lifecycle's post-relocation endpoint check in memory in
+the child only: Owner must use a root-owned 0700 copy of host_plant.py, verify
+its reviewed SHA-256, run without a TMPDIR override, observe installed C2 RED
+and reboot. Installed bytes remain unchanged; there is nothing to restore.
+This mission claims no installed PASS, CI parity or phase advancement.
+
+## Q16 pre-install correction
+
+After authenticating the fixture receipt, wait at most five seconds, polling,
+for that run's pending marker and staging tree to disappear. Timeout retains
+the existing leftover failure and never caches a successful session. C2 now
+asserts the endpoint rejection cause and stops an accidentally started exact
+instance before independently proving settlement; quarantine is retained.
+README records the reviewed Owner order, protected host-plant copy, saved
+qualification log, replacement-disabled/fsck PIN, evidence-preserving reset
+and exact recovery commands. FILES remains exactly 27. No installed acceptance,
+host action, CI parity or phase advancement is claimed.
