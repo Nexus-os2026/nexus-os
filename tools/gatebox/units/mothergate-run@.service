@@ -91,5 +91,5 @@ RemainAfterExit=no
 NotifyAccess=none
 
 StandardInput=null
-StandardOutput=file:/run/mothergate-control/%i.log.sock
-StandardError=file:/run/mothergate-control/%i.status.sock
+StandardOutput=file:/run/mothergate-control/sealed/%i/log.sock
+StandardError=file:/run/mothergate-control/sealed/%i/status.sock
