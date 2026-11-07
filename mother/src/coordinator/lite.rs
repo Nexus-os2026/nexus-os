@@ -373,7 +373,7 @@ impl<P: EffectPort> FileSession<P> {
         self.call(Coordinator::journal)
     }
     pub fn reason(&self, id: MissionId) -> Result<Option<String>, CoordinatorError> {
-        self.touch()?;
+        self.observe(id)?;
         self.call(|c| Ok(c.reason(id)))
     }
     /// Owner-only, take-once, memory-only detail through the typed lifecycle.
@@ -384,8 +384,16 @@ impl<P: EffectPort> FileSession<P> {
     }
     /// The exact Owner notice persists for uncertain terminal work.
     pub fn notice(&self, id: MissionId) -> Result<Option<&'static str>, CoordinatorError> {
-        self.touch()?;
+        self.observe(id)?;
         self.call(|c| c.file_notice(id))
+    }
+    /// Db2-R1 M1: an unrecorded proof is only observed, never settled again
+    /// against the journal that lost it.
+    fn observe(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        if self.call(|c| c.file_unrecorded(id))? {
+            return Ok(());
+        }
+        self.touch()
     }
     pub fn close(&self) -> Result<(), CoordinatorError> {
         self.coordinator.model_obligations()?;

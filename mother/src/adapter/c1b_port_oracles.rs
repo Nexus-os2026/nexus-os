@@ -48,6 +48,17 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
         println!("case-ok:{case}");
         return;
     }
+    let _ = child_outputs(module, variable, test, cases);
+}
+/// Spawn fresh processes even when the caller is itself an isolated case.
+/// Retain stdout only after the existing exit/sentinel judgment succeeds.
+pub(crate) fn child_outputs(
+    module: &str,
+    variable: &str,
+    test: &str,
+    cases: &[&str],
+) -> Vec<String> {
+    let mut outputs = Vec::new();
     let mut failures = Vec::new();
     for case in cases {
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
@@ -86,9 +97,12 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
         let (out, err) = (out.join().unwrap(), err.join().unwrap());
         if !status.is_some_and(|s| s.success()) || !out.contains(&format!("case-ok:{case}")) {
             failures.push(format!("{case}: {status:?}\n{out}\n{err}"));
+        } else {
+            outputs.push(out);
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n---\n"));
+    outputs
 }
 
 fn run(case: &str) {
@@ -303,10 +317,17 @@ fn sb2_public_model_item(line: &str) -> bool {
         }
 }
 fn sb2_facade_line(line: &str) -> bool {
-    (!line.contains("inference") && !line.contains("model_"))
+    (!line.contains("inference")
+        && !line.contains("model_")
+        && !line
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|w| w == "model"))
         || matches!(
             line,
             "mod model;" | "mod model_tests;" | "mod model_death_tests;"
+                // Existing private Core storage and its initialization only.
+                | "model: model::ModelSlot," | "model: model::ModelSlot::default(),"
+                | "if !self.core.model.ready()? {"
         )
 }
 #[test]
@@ -321,6 +342,19 @@ fn sb2_facade_rejects_multiline_registration() {
     ]
     .into_iter()
     .all(sb2_facade_line));
+}
+#[test]
+fn sb2_facade_rejects_model_module_aliases() {
+    for plant in [
+        "use model as hidden;",
+        "use self::model as hidden;",
+        "use super::{model as hidden};",
+    ] {
+        assert!(
+            !sb2_facade_line(plant),
+            "reject model module alias: {plant}"
+        );
+    }
 }
 #[test]
 fn c1_s1_session_sources_have_no_model_route() {
@@ -604,7 +638,10 @@ fn c1_s3_record_seam_is_test_only() {
             let text = std::fs::read_to_string(&path).unwrap();
             let lines: Vec<&str> = text.lines().map(str::trim).collect();
             for (at, line) in lines.iter().enumerate() {
-                if line.contains("model_record") {
+                if line
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|token| token == "model_record")
+                {
                     let above = lines[..at].iter().rev().find(|l| !l.is_empty());
                     assert_eq!(
                         above,
@@ -755,4 +792,13 @@ fn c1_s6_model_codes_are_closed_and_round_trip() {
 /// Reuse the existing cfg(test) seam from the fixture module already scanned.
 pub(crate) fn record_next(port: &GovernedPort, status: EndStatus) {
     *port.model_record.lock().unwrap() = Some(status);
+}
+
+#[test]
+fn sb2_facade_rejects_multiline_model_alias() {
+    let plant = "pub unsafe fn raw(\n&self,\n) -> model::RegistrationReceipt { unreachable!() }";
+    assert!(
+        !plant.lines().map(str::trim).all(sb2_facade_line),
+        "alias facade escape"
+    );
 }

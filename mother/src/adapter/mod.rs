@@ -1332,6 +1332,10 @@ mod lite;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+pub(crate) mod m3d_publication_oracles;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 pub(crate) mod lite_clock;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
@@ -1362,3 +1366,10 @@ pub(crate) mod session_support;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod c1b_coordinator_oracles;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod m3cb_lane_oracles;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod m3cb_support;
