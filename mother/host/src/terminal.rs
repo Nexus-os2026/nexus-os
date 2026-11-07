@@ -77,6 +77,9 @@ impl LineBuffer {
     pub(crate) fn buffered(&self) -> usize {
         self.bytes.len()
     }
+    /// The buffer's own stale marking (its unit contract). The reader's
+    /// invalidation is the stream-level owner's (M3E-R13).
+    #[cfg(test)]
     pub(crate) fn invalidate(&mut self) {
         if !self.bytes.is_empty() || self.overflow {
             self.stale = true;

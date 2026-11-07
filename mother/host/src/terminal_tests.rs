@@ -1232,10 +1232,18 @@ mod m3a_r13 {
             .commands
             .iter()
             .map(|c| c.name.clone())
-            .chain(input.lines.iter().map(|(_, l)| l.clone().unwrap_or_default()))
+            .chain(
+                input
+                    .lines
+                    .iter()
+                    .map(|(_, l)| l.clone().unwrap_or_default()),
+            )
             .collect();
         if queued != model.commands {
-            return Err(format!("I2/I4: commands {queued:?} != {:?}", model.commands));
+            return Err(format!(
+                "I2/I4: commands {queued:?} != {:?}",
+                model.commands
+            ));
         }
         if model.stopped != shared.stop.ingress.emergency_seen() {
             return Err(format!("I3: stop {}", model.stopped));
