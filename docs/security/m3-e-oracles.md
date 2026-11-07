@@ -377,3 +377,18 @@ crate-private). Rulings M3E-R1, R8, R12, R14.
 | `m3e_m3b_view_is_read_only_and_the_next_call_still_enforces_the_budget` | Real broker page mission waiting; three views live and three after the budget lapses: the same verified journal, journal length, lane calls, acks and pending action. The next `state()` ends the mission and the journal records BudgetTime. |
 | `m3e_m3b_native_approval_expired_runs_no_verifier` | LiteHome (TestClock, real broker) and the m3d page lanes. At Mother's held deadline, broker record `Prepared` and live: Blocked, `approval_expired`, 0 Verifier lane calls, no `VerificationRecorded`, no VerifyPass, no `index.html`, T9 expired, broker record ends `Revoked`, never `Expired`. Counter-control 1 s before (the clocks keep real time): still waiting; approved and run, Done with one Verifier call, a check record and the page. |
 | `m3e_m3b_display_escapes_goal_and_model_text` (host) | Hostile goal, folder and lane text (ESC, BEL, CR, bidi, zero-width, backslash): one display line per line, every character shown, each control visibly escaped, canaries readable, frozen text unchanged. |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| P-U3b | T10 from Mother's retained candidate (digest and size) | t10: the receipt's 1,697 bytes and digest |
+| P-U3c | a scripted VerifyPass treated as recorded checks | teaching: scripted pass is `t12_unchecked` |
+| P-U3c2 | the OPEN lines dropped from T12 | teaching: every T12 form keeps every OPEN line |
+| P-U3d | Mother ignores her held deadline (an expired approval could still be approved and verified) | O34 expired: still AwaitingApproval, not Blocked |
+| P-U3e | raw, unescaped display text | host escape: control characters shown raw |
+| P-M3b-1 | `journal_view` calls `touch()` | view: the child fails once the budget lapses |
+
+A first P-U3d (`ApprovalStatus::Expired` mapped to approved in the non-File
+waiting path) survived: a File mission's expiry never takes that path; it
+ends at Mother's held deadline in `lite_settle`.
