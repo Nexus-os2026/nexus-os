@@ -1322,3 +1322,42 @@ closed states keep their N/A citations. The validator binds `settled:`
 exactly to the executed settlement cells. No
 `SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION` cell is needed, since every reachable
 cell is executed.
+
+### 13.19 B2 oracle review-1 corrections (SB3B-R25)
+Codex review-1 found 3 MED and 2 LOW. All fixes are test-only.
+1. **H1 and H5 finalization.** The H1 positives, and H5 after its post-seal
+   case, run the rest of the existing A6 finalization: `begin_mother_end`,
+   the durable Mother `session_closed` line, `observe_mother_end`,
+   `close_primary` (one durable primary `session_closed` row), and
+   `finish_delivery`. Each final fact is asserted at each step and stays
+   distinct. The run ends in `ClosedClean`. After H5 closes, a call is still
+   `halted` and adds nothing.
+2. **H2-held through the deadline.** The real peer keeps the metadata or
+   chat request open until the first close deadline has passed. At that
+   point the slot is active, the child is unjoined, the record is pending,
+   the seal refuses and the connection is still open. After the release, the
+   attempt concludes, but no budget is renewed: the seal still refuses and
+   the deadline is unchanged.
+3. **P1 settlement and grant lock.** `Meter::settle` runs a hook inside
+   settlement. It reenters door observation and needs the producer, slot,
+   run-table and retained-grant locks to be free. The grant lock (the run →
+   grant order) is now checked at the meter, settlement and evidence hooks.
+4. **R23 marker bound to the child.** `watched` passes the parent's PID. The
+   child records its watched state in a process-local static only after it
+   verifies that the PID is its own parent's. `assert_watched` reads that
+   static, so an inherited or supplied environment value is not enough.
+   `sb3_join_paths_are_watched_or_scoped` enumerates every `.join()`,
+   `JoinHandle::join` value and `thread::scope` implicit join across the five
+   scanned files. Each must be a watched test, a helper whose first
+   statement is `assert_watched`, `watched` itself, or a row in
+   `SCOPED_JOINS` with its reason:
+   - `Peer::drop` joins the peer's own self-bounded server thread;
+   - eight SB-2a/b tests in model_tests.rs are retained accepted evidence,
+     outside the SB3B-R19 scope.
+5. **Exact Uncertain.** `settled:…:uncertain` asserts
+   `EndStatus::Uncertain` exactly.
+
+Plants are recorded with the unit report: a non-durable primary end, merged
+final facts, model facts discharged at the deadline, MP-SB-13-settle,
+MP-SB-13-grant, Owed substituted for Uncertain, a spoofed marker on an
+unwatched test, and an unscoped join.
