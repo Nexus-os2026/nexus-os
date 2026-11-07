@@ -54,6 +54,7 @@ pub use nexus_kernel::inference::{
     ModelError, ModelIdentity, ModelPinSpec, ModelReply, ModelRequest, ResponseSchema,
     RuntimeConfig, SystemClocks, Think, MAX_RENDERED_CONTENT_BYTES,
 };
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
@@ -331,6 +332,44 @@ impl ModelCallOutcome {
 
     pub fn into_result(self) -> Result<ModelReply, AuthorityError> {
         self.result
+    }
+}
+
+/// SB-3 (O1): one lane invocation's deny-only liveness, owned by Mother's
+/// live invocation. Not `Clone`, `Default` or serde; there is no reset,
+/// setter or raw accessor. Neither type confers any authority.
+pub struct InvocationOwner(Arc<AtomicBool>);
+
+/// A read-only view of one [`InvocationOwner`]'s revocation.
+#[derive(Clone)]
+pub struct InvocationObserver(Arc<AtomicBool>);
+
+impl InvocationOwner {
+    #[expect(clippy::new_without_default, reason = "O1: no Default constructor")]
+    pub fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+    /// Final and idempotent: there is no route back to live.
+    pub fn revoke(&self) {
+        self.0.store(true, AtomicOrdering::SeqCst);
+    }
+    pub fn observer(&self) -> InvocationObserver {
+        InvocationObserver(self.0.clone())
+    }
+    pub fn is_revoked(&self) -> bool {
+        self.0.load(AtomicOrdering::Acquire)
+    }
+}
+
+impl Drop for InvocationOwner {
+    fn drop(&mut self) {
+        self.revoke();
+    }
+}
+
+impl InvocationObserver {
+    pub fn is_revoked(&self) -> bool {
+        self.0.load(AtomicOrdering::Acquire)
     }
 }
 
