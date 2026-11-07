@@ -846,3 +846,19 @@ all targets, -D warnings, after 9d8d73ba removed the now-fulfilled
 `Attempt::acquire` dead-code expectation); diff --check. Repeats: 10 serial
 and 10 parallel runs of `host_session::model`, 46/46 each. Size: B1a vs
 c3bffa92 recorded in the report.
+
+### 13.4 SB3B-R5 (B1a review-1) corrections and carry
+Claims corrected (ruling 2): lock contention at the admission predicates
+(R3 grant store and run table) never latches; a pre-ticket refusal leaves
+the slot untouched UNLESS its rollback completion hold expires, which
+latches uncertainty and session failure per the retained SB-2b contract
+(oracle `sb3_attempt_rollback_hold_expiry_latches_uncertainty`). §13.1's
+"no active slot" holds only for refusals whose rollback completes.
+Carry (ruling 3, LOW, inherited): R3 still reaches clock callbacks under
+the run-table hold (`cell.admit()` -> `RequestScope::eligible()` mission
+clocks; earlier `is_engaged()` checks). B1b's call gate must capture every
+clock value before taking a hold, and its oracles must include a
+blocking-clock control.
+Ruling 1 (grant TOCTOU) and ruling 4 (escaped char literals in the F11
+masker): oracles in 206cf993; the fix is pending an Architect question
+(the grant-store guard lives in policy.rs, outside the B allowlist).
