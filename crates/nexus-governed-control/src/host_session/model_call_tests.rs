@@ -4421,6 +4421,10 @@ fn sb3_join_paths_are_watched_or_scoped() {
         ("model_call_tests.rs", include_str!("model_call_tests.rs")),
         ("model_tests.rs", include_str!("model_tests.rs")),
         ("model_death_tests.rs", include_str!("model_death_tests.rs")),
+        (
+            "model_exposure_tests.rs",
+            include_str!("model_exposure_tests.rs"),
+        ),
         ("test_hooks.rs", include_str!("../test_hooks.rs")),
         ("harness_tests.rs", include_str!("../harness_tests.rs")),
     ];
