@@ -307,7 +307,9 @@ size is at its cap). Code: `mother/host/src/terminal.rs`. Tests: the
   the snapshot), `Byte(i)` and `Publish` (before publication). The goal
   read's transitions are named production functions (`goal_begin`,
   `goal_ready`, `goal_end`, `acknowledge`), used by `read_goal`, the reader
-  and the harness alike. `reader_mode` and `route` are test-only forms.
+  and the harness alike. Every test routes through `reader_state` and
+  `route_read` with the complete `ReaderMode` (R17: the split test adapters
+  are removed).
 
 ### Oracles
 
