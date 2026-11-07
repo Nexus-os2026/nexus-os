@@ -263,3 +263,23 @@ class OfflineServiceTests(unittest.TestCase):
             self.assertEqual((state/'receipts'/RUN/'c1.log').read_bytes(),b'partial output')
             self.assertFalse(marker.exists())
             self.assertEqual(seen,[] if fail else [{'c1.log':b'partial output'}])
+    def test_b1_slow_fragments_share_one_framing_deadline(self):
+        # A virtual stream supplies one byte per 0.6 seconds and honours timeout.
+        # This tests deadline arithmetic; the real AF_UNIX tests remain blocked.
+        class SlowPeer:
+            def __init__(self): self.now, self.timeout, self.data = 0., 2., bytearray(frame(REQUEST))
+            def gettimeout(self): return self.timeout
+            def settimeout(self, value): self.timeout = value
+            def getsockopt(self, *args): return struct.pack('3i',1,os.getuid(),os.getgid())
+            def recv(self, count):
+                if self.timeout < .6: raise TimeoutError('slow peer')
+                self.now += .6
+                if not self.data: return b''
+                data = bytes(self.data[:1])
+                del self.data[:1]
+                return data
+        peer = SlowPeer()
+        with patch.object(supervisor.time,'monotonic',side_effect=lambda:peer.now):
+            with self.assertRaisesRegex(ValueError,'framing/reply deadline'):
+                supervisor.receive_request(peer,REGISTRY)
+        self.assertLessEqual(peer.now,2.)
