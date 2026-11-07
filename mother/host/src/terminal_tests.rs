@@ -685,3 +685,276 @@ fn session_dialogue_poison_cannot_reuse_an_earlier_affirmative_answer() {
     );
     assert!(c.shared.stop.ingress.failed());
 }
+
+// ---------------------------------------------------------------- M-3a goal
+// Rulings M3E-R1, R8: the typed goal through the single reader.
+
+mod m3a {
+    use super::scripted;
+    use crate::goal_input::{goal_display, read_typed_goal, GoalBuffer, GoalLine, GOAL_PROMPT};
+    use crate::inputs::{validate_goal, InputError};
+    use crate::terminal::{reader_mode, route, Buffers, Frame, Shared};
+    use nexus_governed_control::authority::evidence::shown;
+    use std::sync::{mpsc::Receiver, Arc};
+    use std::thread::JoinHandle;
+    use std::time::{Duration, Instant};
+
+    const CANARY: &str = "Zqgoalcanary";
+    const WAIT: Duration = Duration::from_secs(5);
+
+    fn feed(buffer: &mut GoalBuffer, bytes: &[u8]) -> Vec<GoalLine> {
+        bytes.iter().filter_map(|b| buffer.push(*b)).collect()
+    }
+    fn goal(bytes: &[u8]) -> Vec<GoalLine> {
+        let mut line = bytes.to_vec();
+        line.push(b'\r');
+        feed(&mut GoalBuffer::default(), &line)
+    }
+
+    #[test]
+    fn m3e_m3a_goal_line_rules_share_the_file_grammar() {
+        let e4096 = "é".repeat(4096);
+        let bread = "🍞".repeat(4096);
+        let ok = [
+            "  Make me a small page.  Keep it simple!  ",
+            "approve",
+            "deadbeef",
+            "stop now",
+            "Bäckerei 面包🍞",
+            e4096.as_str(),
+            bread.as_str(),
+        ];
+        for text in ok {
+            let expected = vec![GoalLine::Goal(Ok(text.to_string()))];
+            assert_eq!(goal(text.as_bytes()), expected, "{}", text.len());
+            assert_eq!(validate_goal(text.as_bytes()), Ok(text.to_string()));
+        }
+        let e4097 = "é".repeat(4097);
+        let refused: Vec<(Vec<u8>, InputError)> = vec![
+            (e4097.into_bytes(), InputError::GoalTooLong),
+            (vec![b'a'; 16_385], InputError::GoalTooLong),
+            (Vec::new(), InputError::GoalEmpty),
+            (b"   ".to_vec(), InputError::GoalEmpty),
+            (b"a\tb".to_vec(), InputError::GoalNotPlain),
+            ("a\u{202E}b".into(), InputError::GoalNotPlain),
+            ("a\u{200B}b".into(), InputError::GoalNotPlain),
+            (vec![b'a', 0x1b, b'b'], InputError::GoalNotPlain),
+            (vec![b'a', 0xff], InputError::NotUtf8),
+        ];
+        for (bytes, code) in refused {
+            assert_eq!(goal(&bytes), vec![GoalLine::Goal(Err(code))], "{code:?}");
+            if bytes.len() <= 16_384 {
+                assert_eq!(validate_goal(&bytes), Err(code), "same validator");
+            }
+        }
+        // Return ends the line in every form, once; CR never enters a goal.
+        let mut b = GoalBuffer::default();
+        assert_eq!(
+            feed(&mut b, b"one\r\ntwo\nthree\r"),
+            ["one", "two", "three"].map(|t| GoalLine::Goal(Ok(t.into())))
+        );
+        // Overflow discards every byte; the next line is fresh.
+        let mut b = GoalBuffer::default();
+        assert!(feed(&mut b, &vec![b'a'; 20_000]).is_empty());
+        assert_eq!(b.buffered(), 0);
+        assert_eq!(feed(&mut b, b"\rfresh\r").len(), 2);
+    }
+
+    #[test]
+    fn m3e_m3a_stop_quit_eof_and_stale_input_never_yield_a_goal() {
+        assert_eq!(goal(b"stop"), vec![GoalLine::Stop]);
+        assert_eq!(goal(b"quit"), vec![GoalLine::Quit]);
+        assert_eq!(
+            feed(&mut GoalBuffer::default(), &[b'a', 4]),
+            vec![GoalLine::Eof]
+        );
+        let mut b = GoalBuffer::default();
+        assert!(feed(&mut b, b"typed before").is_empty());
+        b.invalidate();
+        assert!(feed(&mut b, b" the prompt\r").is_empty(), "stale");
+        assert_eq!(
+            feed(&mut b, b"fresh\r"),
+            vec![GoalLine::Goal(Ok("fresh".into()))]
+        );
+        feed(&mut b, b"st");
+        b.invalidate();
+        assert_eq!(
+            feed(&mut b, b"op\r"),
+            vec![GoalLine::Stop],
+            "stop stays immediate"
+        );
+    }
+
+    #[test]
+    fn m3e_m3a_echo_and_editing_show_only_shown_characters() {
+        let mut b = GoalBuffer::default();
+        let mut echo = String::new();
+        for byte in "a\tb\x1b[31m面\u{202E}🍞\x07".as_bytes() {
+            b.echo(*byte, &mut echo);
+            b.push(*byte);
+        }
+        assert_eq!(echo, "ab[31m面🍞");
+        // Backspace removes one whole scalar; Ctrl-U the line.
+        for byte in [0x7f, 0x7f] {
+            b.echo(byte, &mut echo);
+            b.push(byte);
+        }
+        assert!(echo.ends_with("\x08 \x08"));
+        assert_eq!(
+            feed(&mut b, b"\r"),
+            vec![GoalLine::Goal(Err(InputError::GoalNotPlain))]
+        );
+        assert_eq!(
+            feed(&mut b, "ab面\x7f\r".as_bytes()),
+            vec![GoalLine::Goal(Ok("ab".into()))]
+        );
+        assert_eq!(
+            feed(&mut b, b"abc\x15d\r"),
+            vec![GoalLine::Goal(Ok("d".into()))]
+        );
+        let mut echo = String::new();
+        for byte in b"xy\x15" {
+            b.echo(*byte, &mut echo);
+            b.push(*byte);
+        }
+        assert_eq!(echo, "xy\x08 \x08\x08 \x08");
+        assert!(echo.chars().all(|c| shown(c) || c == '\x08' || c == '\n'));
+    }
+
+    /// A goal read on a worker; the test plays the reader through `route`.
+    fn session() -> (
+        Arc<Shared>,
+        Receiver<Frame>,
+        Buffers,
+        JoinHandle<Result<String, &'static str>>,
+    ) {
+        let (c, frames) = scripted();
+        let shared = c.shared.clone();
+        let worker_shared = shared.clone();
+        let worker = std::thread::spawn(move || {
+            worker_shared
+                .read_goal(Instant::now() + Duration::from_secs(10))
+                .map(|g| g.text().to_string())
+        });
+        let prompt = frames.recv_timeout(WAIT).expect("prompt");
+        assert_eq!(prompt.text, GOAL_PROMPT);
+        prompt.ack.send(Ok(())).unwrap();
+        let (input, timeout) = shared
+            .changed
+            .wait_timeout_while(shared.input(), WAIT, |i| i.boundary == i.acknowledged)
+            .unwrap();
+        assert!(!timeout.timed_out());
+        let boundary = input.boundary;
+        drop(input);
+        let mut buffers = Buffers::default();
+        // Typed during the display gap: stale, never a goal.
+        let (discard, goal) = reader_mode(&shared, Some(boundary));
+        assert_eq!((discard, goal), (true, false));
+        route(&shared, &mut buffers, b"approve", discard, goal);
+        let mut input = shared.input();
+        input.acknowledged = boundary;
+        drop(input);
+        shared.changed.notify_all();
+        assert_eq!(frames.recv_timeout(WAIT).unwrap().text, "INPUT READY\n");
+        (shared, frames, buffers, worker)
+    }
+    fn type_in(shared: &Shared, buffers: &mut Buffers, bytes: &[u8]) {
+        let (discard, goal) = reader_mode(shared, None);
+        route(shared, buffers, bytes, discard, goal);
+    }
+    fn frames_until(frames: &Receiver<Frame>, last: &str) -> Vec<String> {
+        let mut seen = Vec::new();
+        while let Ok(frame) = frames.recv_timeout(WAIT) {
+            let done = frame.text == last;
+            seen.push(frame.text);
+            if done {
+                break;
+            }
+        }
+        seen
+    }
+
+    #[test]
+    fn m3e_m3a_goal_read_through_the_single_reader() {
+        let (shared, frames, mut buffers, worker) = session();
+        let text = format!("  Make the {CANARY} page, approve  ");
+        type_in(
+            &shared,
+            &mut buffers,
+            format!("{text}\rstatus\r").as_bytes(),
+        );
+        assert_eq!(
+            worker.join().unwrap(),
+            Ok(text.clone()),
+            "verbatim, stale dropped"
+        );
+        let seen = frames_until(&frames, &goal_display(&text));
+        assert_eq!(seen.last(), Some(&goal_display(&text)), "{seen:?}");
+        assert!(goal_display(&text).starts_with("You asked:   Make the "));
+        let input = shared.input();
+        assert!(
+            input.commands.is_empty() && input.lines.is_empty(),
+            "no command"
+        );
+        assert!(!input.goal && !input.active && input.goal_line.is_none());
+        drop(input);
+        assert!(!shared.stop.ingress.emergency_seen());
+
+        // A refused goal: its code only.
+        let (shared, frames, mut buffers, worker) = session();
+        type_in(&shared, &mut buffers, format!("{CANARY}\tx\r").as_bytes());
+        assert_eq!(worker.join().unwrap(), Err("goal_not_plain"));
+        let seen = frames_until(&frames, "GOAL REFUSED goal_not_plain\n");
+        assert!(seen.iter().all(|f| !f.contains("You asked")), "{seen:?}");
+
+        // Stop, Quit and EOF end goal mode without a goal.
+        for (bytes, check) in [
+            (&b"stop\r"[..], 0),
+            (&b"quit\r"[..], 1),
+            (&[b'a', 4][..], 2),
+        ] {
+            let (shared, _frames, mut buffers, worker) = session();
+            type_in(&shared, &mut buffers, bytes);
+            assert_eq!(worker.join().unwrap(), Err("goal_interrupted"), "{check}");
+            match check {
+                0 => assert!(shared.stop.ingress.emergency_seen()),
+                1 => assert!(shared.input().quit.is_some()),
+                _ => assert!(shared.input().eof),
+            }
+        }
+        // Stop typed right after the goal, in the same read, acts and wins:
+        // no goal is returned.
+        let (shared, _frames, mut buffers, worker) = session();
+        type_in(&shared, &mut buffers, b"my goal\rstop\r");
+        assert_eq!(worker.join().unwrap(), Err("goal_interrupted"));
+        assert!(shared.stop.ingress.emergency_seen());
+
+        // Command mode is unchanged once goal mode ends.
+        let (c, _frames) = scripted();
+        let mut buffers = Buffers::default();
+        type_in(&c.shared, &mut buffers, b"status\r");
+        let input = c.shared.input();
+        assert_eq!(input.commands.len(), 1);
+        assert_eq!(input.commands[0].name, "status");
+    }
+
+    #[test]
+    fn m3e_m3a_goal_file_given_refuses_typed_mode_and_debug_is_content_free() {
+        let (c, frames) = scripted();
+        let refused = read_typed_goal(&c.shared, true, Instant::now() + WAIT);
+        assert_eq!(
+            refused.map(|g| g.text().to_string()),
+            Err("goal_already_given")
+        );
+        assert!(frames.try_recv().is_err(), "no prompt");
+        assert!(!c.shared.input().goal);
+        for line in [
+            GoalLine::Goal(Ok(CANARY.into())),
+            GoalLine::Goal(Err(InputError::GoalNotPlain)),
+        ] {
+            assert!(!format!("{line:?}").contains(CANARY));
+        }
+        let typed = crate::goal_input::TypedGoal::new(CANARY.into());
+        assert!(!format!("{typed:?}").contains(CANARY));
+    }
+}

@@ -1,5 +1,6 @@
 //! Linux terminal protocol: one reader, one renderer and one active dialogue.
 //! The reader owns freshness acknowledgement; backend ingress is atomic only.
+use crate::goal_input::{goal_display, GoalBuffer, GoalLine, TypedGoal, GOAL_PROMPT};
 use crate::session_home::DoorPrompt;
 use crate::stop::StopRoute;
 use nexus_governed_control::authority::approval::{
@@ -207,6 +208,10 @@ pub(crate) struct Input {
     pub(crate) acknowledged: u64,
     pub(crate) active: bool,
     typing: bool,
+    /// M-3a: the single reader is in typed-goal mode.
+    pub(crate) goal: bool,
+    /// M-3a: the first goal line the reader produced in goal mode.
+    pub(crate) goal_line: Option<Result<String, crate::inputs::InputError>>,
     pub(crate) fatal: Option<Failure>,
     pub(crate) eof: bool,
     pub(crate) quit: Option<SessionRequest>,
@@ -292,6 +297,128 @@ impl Shared {
             _ => {
                 self.fail(Failure::Output);
                 false
+            }
+        }
+    }
+    /// M-3a: a goal-mode line from the reader. Stop, Quit and EOF are the
+    /// same ingress as in command mode; a goal never reaches the queue.
+    pub(crate) fn goal_line(&self, line: GoalLine) {
+        match line {
+            GoalLine::Stop => self.receive(Line::Stop, false),
+            GoalLine::Quit => self.receive(Line::Quit, false),
+            GoalLine::Eof => self.receive(Line::Eof, true),
+            GoalLine::Goal(goal) => {
+                let mut input = self.input();
+                if input.goal {
+                    input.goal_line.get_or_insert(goal);
+                }
+                drop(input);
+                self.changed.notify_all();
+            }
+        }
+    }
+    /// M-3a (R8): read one typed goal through the single reader, by
+    /// `deadline`. The prompt is displayed, earlier input is invalidated at
+    /// a boundary, then `INPUT READY`; the goal is validated by the goal-file
+    /// grammar and displayed (T1, escaped, size, digest). Data-only: wired in
+    /// M-5.
+    #[allow(dead_code)]
+    pub(crate) fn read_goal(&self, deadline: Instant) -> Result<TypedGoal, &'static str> {
+        let _ = deadline;
+        Err("not_implemented") // M-3a oracle stub
+    }
+    fn goal_valid(&self, deadline: Instant, epoch: u64) -> bool {
+        let ingress = &self.stop.ingress;
+        Instant::now() < deadline
+            && epoch == ingress.generation()
+            && !ingress.emergency_seen()
+            && !ingress.failed()
+            && matches!(
+                ingress.state(),
+                SessionState::Bootstrap | SessionState::Normal
+            )
+            && !self.ended()
+            && self.input().quit.is_none()
+    }
+    fn goal_ended(&self, deadline: Instant) -> &'static str {
+        if Instant::now() >= deadline {
+            "goal_timed_out"
+        } else {
+            "goal_interrupted"
+        }
+    }
+    fn read_goal_inner(&self, deadline: Instant, epoch: u64) -> Result<TypedGoal, &'static str> {
+        let Ok(ack) = self.send(GOAL_PROMPT.into()) else {
+            return Err("goal_unavailable");
+        };
+        loop {
+            if !self.goal_valid(deadline, epoch) {
+                return Err(self.goal_ended(deadline));
+            }
+            match ack.recv_timeout(SLICE.min(deadline.saturating_duration_since(Instant::now()))) {
+                Ok(Ok(())) => break,
+                Ok(Err(e)) => {
+                    self.fail(e);
+                    return Err("goal_unavailable");
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(_) => {
+                    self.fail(Failure::Output);
+                    return Err("goal_unavailable");
+                }
+            }
+        }
+        let boundary = {
+            let mut input = self.input();
+            let Some(next) = input.boundary.checked_add(1) else {
+                drop(input);
+                self.fail(Failure::Capacity);
+                return Err("goal_unavailable");
+            };
+            input.boundary = next;
+            self.changed.notify_all();
+            next
+        };
+        loop {
+            if !self.goal_valid(deadline, epoch) {
+                return Err(self.goal_ended(deadline));
+            }
+            if self.input().acknowledged == boundary {
+                break;
+            }
+            self.wait();
+        }
+        let ready = {
+            let mut input = self.input();
+            let queued = self.enqueue_frame("INPUT READY\n".into());
+            input.typing = queued.is_ok();
+            queued
+        };
+        if ready.is_err() {
+            self.fail(Failure::Output);
+            return Err("goal_unavailable");
+        }
+        loop {
+            if !self.goal_valid(deadline, epoch) {
+                return Err(self.goal_ended(deadline));
+            }
+            let line = self.input().goal_line.take();
+            match line {
+                Some(Ok(goal)) => {
+                    // Stop, Quit or EOF in the same read was seen first.
+                    if !self.goal_valid(deadline, epoch) {
+                        return Err(self.goal_ended(deadline));
+                    }
+                    if self.send(goal_display(&goal)).is_err() {
+                        return Err("goal_unavailable");
+                    }
+                    return Ok(TypedGoal::new(goal));
+                }
+                Some(Err(e)) => {
+                    let _queued = self.send(format!("GOAL REFUSED {}\n", e.code()));
+                    return Err(e.code());
+                }
+                None => self.wait(),
             }
         }
     }
@@ -1029,6 +1156,39 @@ impl Drop for Terminal {
             }
         }
     }
+}
+
+/// The single reader's two line buffers: commands and codes (64 bytes) and
+/// the typed goal (M-3a).
+#[derive(Default)]
+pub(crate) struct Buffers {
+    pub(crate) line: LineBuffer,
+    pub(crate) goal: GoalBuffer,
+}
+impl Buffers {
+    pub(crate) fn invalidate(&mut self) {
+        self.line.invalidate();
+        self.goal.invalidate();
+    }
+}
+
+/// Whether the reader's next bytes are discarded, and whether they are goal
+/// input: only once a goal read has displayed `INPUT READY`.
+pub(crate) fn reader_mode(shared: &Shared, boundary: Option<u64>) -> (bool, bool) {
+    let _ = (shared, boundary);
+    (true, false) // M-3a oracle stub
+}
+
+/// One read's bytes through the buffers. After a goal line the rest of the
+/// read is discarded command input (Stop, Quit and EOF still act).
+pub(crate) fn route(
+    shared: &Shared,
+    buffers: &mut Buffers,
+    bytes: &[u8],
+    mut discard: bool,
+    mut goal: bool,
+) {
+    let _ = (shared, buffers, bytes, discard, goal); // M-3a oracle stub
 }
 
 fn read_input(shared: Arc<Shared>) {

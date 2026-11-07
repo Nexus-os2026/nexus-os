@@ -200,3 +200,61 @@ before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
 | P-R9-1 | drop the non-first-position `check-page` refusal | desktop misplaced: exit 2 + usage |
 | P-R9-2 | V3's facts refusal before the page-refusal precedence | precedence: `facts present as given: not run` |
 | P-R9-3 | omit V4 from the result aggregation | veto: exit 1 |
+
+## M-3a — typed goal mode and goal display
+
+Code: `mother/host/src/goal_input.rs`, the single reader in
+`mother/host/src/terminal.rs`, `inputs::validate_goal`. Tests: the `m3a`
+module of `mother/host/src/terminal_tests.rs`, `mother/host/tests/goal_input.rs`.
+Rulings M3E-R1, R8 (M-3b, the teaching/T10/T11/T12/explain display and O34,
+is a separate unit).
+
+### Frozen behaviour (M3E-R8 3 (a)–(h))
+
+- **Data-only.** `Shared::read_goal` / `goal_input::read_typed_goal` are not
+  called from the scripted `run` flow; the existing walk, PTY and usability
+  output is unchanged. M-5 wires them.
+- **One line, one reader.** The terminal's single reader switches to a
+  separate goal buffer only after the goal prompt is acknowledged, a boundary
+  invalidates earlier input, and `INPUT READY` is queued. Return (CR, LF or
+  CRLF) ends the goal; a typed goal holds no CR or LF.
+- **Bounds and grammar.** At most 16,384 bytes; more is `goal_too_long` and
+  every byte is discarded. The bytes then go through `inputs::validate_goal`,
+  the goal-file grammar (`input_not_utf8`, `goal_empty`, `goal_not_plain`,
+  `goal_too_long` over 4,096 scalars). The goal is kept verbatim.
+- **Ingress.** A line that is exactly `stop` or `quit` is Stop or Quit;
+  Ctrl-D is EOF; a read error is a failure. None yields a goal. A goal line is
+  delivered after the rest of its read, so Stop, Quit or EOF in the same read
+  wins (`goal_interrupted`). Every other text, `approve` and codes included,
+  is data and never reaches the command queue or a confirmation; the rest of
+  the read after a goal line is discarded command input.
+- **Echo and editing.** Only `shown` characters are echoed; Backspace removes
+  one scalar, Ctrl-U the line. The 64-byte command/code mode is unchanged.
+- **Display.** `teaching::t1` with the goal through `evidence::escaped`, then
+  `goal: <bytes> bytes, sha256 <hex>`. A refusal shows `GOAL REFUSED <code>`
+  only. `GoalLine` and `TypedGoal` `Debug` show sizes or codes, never text.
+- **Goal file given.** Typed mode is refused with `goal_already_given`; no
+  prompt is shown. Other refusals: `goal_unavailable` (no valid session or a
+  dialogue already open), `goal_timed_out`, `goal_interrupted`.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_m3a_goal_line_rules_share_the_file_grammar` | Verbatim goals (spaces, `approve`, a code, multibyte, 4,096 scalars, 16,384 B) accepted exactly; 4,097 scalars, 16,385 B, empty, blank, tab, bidi, zero-width, ESC and invalid UTF-8 refused with `validate_goal`'s own codes; CR, LF and CRLF each end one line; overflow keeps no byte. |
+| `m3e_m3a_stop_quit_eof_and_stale_input_never_yield_a_goal` | `stop`, `quit`, Ctrl-D; stale input before a boundary never completes a goal, and a stale `stop` still stops. |
+| `m3e_m3a_echo_and_editing_show_only_shown_characters` | No control, bidi or bell byte echoed; Backspace one scalar; Ctrl-U the line. |
+| `m3e_m3a_goal_read_through_the_single_reader` | Prompt, boundary, `INPUT READY`; input typed in the gap is dropped; the goal is returned verbatim and displayed exactly; no command or line queued; a refusal shows its code only; Stop, Quit and EOF interrupt; Stop in the same read wins; command mode is unchanged afterwards. |
+| `m3e_m3a_goal_file_given_refuses_typed_mode_and_debug_is_content_free` | `goal_already_given`, no prompt, goal mode never entered; canaries absent from `Debug`. |
+| `m3e_m3a_typed_and_file_goals_share_one_grammar` (host) | For each text, `validate_goal` equals the goal file's parse, with and without one final LF. |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| P-U3a | a goal line goes through the command path | single reader: no command queued / goal returned |
+| P-M3a-1 | bypass `validate_goal` (a second, laxer grammar) | grammar: 4,097 scalars refused |
+| P-M3a-2 | CR is data, not Return | grammar: CR ends a line |
+| P-M3a-3 | ignore stale input | stale: never completes a goal |
+| P-M3a-4 | echo every byte | echo: no control byte echoed |
+| P-M3a-5 | `stop` stored as a goal | stop/quit: `stop` is Stop |

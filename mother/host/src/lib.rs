@@ -19,6 +19,8 @@ pub mod binary_identity;
 #[cfg(target_os = "linux")]
 pub mod check_page;
 #[cfg(target_os = "linux")]
+mod goal_input;
+#[cfg(target_os = "linux")]
 pub mod hands;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
