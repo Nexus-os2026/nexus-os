@@ -757,7 +757,7 @@ impl crate::authority::approval::ControlConfirmer for IssueYes {
         false
     }
     fn confirm_grant(&self, _: &crate::authority::approval::GrantConfirmation) -> bool {
-        false
+        true
     }
     fn confirm_resume(&self, _: &crate::authority::approval::ResumeConfirmation) -> bool {
         false
@@ -786,6 +786,11 @@ pub(super) struct Accounting {
     agent: AgentId,
     group: u64,
     door_id: String,
+    // SB-3B: the R3 grant and live invocation every ticket requires.
+    live: (
+        crate::authority::ids::GrantId,
+        crate::inference::InvocationOwner,
+    ),
     setup: (Arc<IssuedEvidence>, usize),
     _door: crate::governed::AgentDoor,
     _root: crate::harness_tests::TempRoot,
@@ -831,6 +836,17 @@ impl Accounting {
                     .bytes()
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         );
+        let grant = (authority.grants())
+            .request(
+                crate::authority::policy::GrantScope::Files {
+                    workspace: "workspace".into(),
+                    root: "/sb2b/workspace".into(),
+                    identity: Digest::of("test", &[]),
+                },
+                Duration::from_secs(600),
+                &IssueYes,
+            )
+            .unwrap();
         let runs = authority.runs();
         let run = runs
             .open_with_cell(
@@ -881,6 +897,7 @@ impl Accounting {
             agent,
             group,
             door_id,
+            live: (grant, crate::inference::InvocationOwner::new()),
             setup: (issued.clone(), issued.1.records().len()),
             _door: door,
             _root: root,
@@ -890,13 +907,26 @@ impl Accounting {
         self.acquire_run(self.run)
     }
     fn acquire_run(&self, run: RunId) -> Result<model::Attempt, SessionError> {
-        model::Attempt::acquire(
-            &self.seed.core,
-            &self.authority,
-            run,
-            &self.agent,
-            self.group,
-            [42; 32],
+        self.acquire_as(&self.seed.core, (run, &self.agent, self.group, [42; 32]))
+    }
+    fn acquire_as(
+        &self,
+        core: &Arc<Core>,
+        key: (RunId, &AgentId, u64, [u8; 32]),
+    ) -> Result<model::Attempt, SessionError> {
+        let (grants, clock) = (self.authority.grants(), self.authority.clock());
+        let clock = (clock.monotonic_ms(), clock.wall_ms());
+        let grant = crate::authority::run::OriginalGrant {
+            grants,
+            grant: self.live.0,
+            clock,
+        };
+        let observer = self.live.1.observer();
+        model::Attempt::acquire(core, &self.authority, key, &core.cell, &grant, &observer).map_err(
+            |e| match e {
+                crate::authority::AuthorityError::ModelCall(e) => model::model_error(e),
+                _ => SessionError::Restricted,
+            },
         )
     }
     fn counts(&self) -> (u32, usize) {
@@ -1130,7 +1160,7 @@ fn sb2_attempt_binding_refusals_issue_no_ticket() {
         (&f.seed.core, f.run, f.agent.clone(), f.group + 1, [42; 32]),
         (&f.seed.core, f.run, f.agent.clone(), f.group, [43; 32]),
     ] {
-        assert!(model::Attempt::acquire(core, &f.authority, run, &agent, group, identity).is_err());
+        assert!(f.acquire_as(core, (run, &agent, group, identity)).is_err());
         assert_eq!(f.counts(), (0, 0));
         assert!(f.seed.core.model.quiescent());
     }
