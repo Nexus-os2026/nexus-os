@@ -23,6 +23,7 @@ import time
 import unittest
 import subprocess
 import sys
+import re
 from contextlib import ExitStack
 from unittest.mock import patch, Mock
 
@@ -199,9 +200,12 @@ class OfflineServiceTests(unittest.TestCase):
                     output+'test unknown ... ok\n'):
             with self.subTest(output=bad), self.assertRaises(ValueError): init.reconcile(names,bad)
     def test_policy_and_units_are_frozen(self):
-        hashes = json.loads('{"mothergate-run@.service": "0bf915285dee3187950045ada9d1721e32f279fa57ba0248f021dff16f70a595", "mothergate.service": "15cf0f59f01706639fb723761b553404e3e7af28556c726c50196155bff4aacd", "mothergate.socket": "4a8bf90e4c2da9c84239c963fdd137dd25457f7e3fafb122998df8db5c837d6a"}')
-        for name, expected in hashes.items():
-            self.assertEqual(hashlib.sha256((HERE/'units'/name).read_bytes()).hexdigest(),expected,name)
+        register = (HERE/'MISSION.md').read_text()
+        sheet = Path(re.search(r'^Frozen sheet: (.+)\.$',register,re.M)[1]).read_text()
+        units = re.findall(r'### `(mothergate[^`]+)`\n\n```ini\n(.*?)```',sheet,re.S)
+        self.assertEqual(len(units),3)
+        for name, expected in units:
+            self.assertEqual((HERE/'units'/name).read_text(),expected,name)
         self.assertEqual((HERE/'policy/sudoers').read_text(),
                          'Defaults:mothergate env_reset\nmothergate ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/lifecycle.py\n')
         self.assertIn('polkit.Result.NO',(HERE/'policy/deny-systemd.rules').read_text())
@@ -437,3 +441,65 @@ class OfflineServiceTests(unittest.TestCase):
     def test_review5_installer_placeholder_contract(self):
         self.assertEqual(supervisor.QUALIFICATION_PLACEHOLDER,{'identity':None,'passed':[]})
         self.assertFalse(supervisor.qualified({'bundle':'installed'},supervisor.QUALIFICATION_PLACEHOLDER))
+
+    def test_review6_main_connection_delivery(self):
+        for lost in (False,True):
+            with self.subTest(lost=lost), tempfile.TemporaryDirectory() as tmp:
+                state = Path(tmp)
+                (state/'pending').mkdir()
+                peer = Mock()
+                peer.getsockopt.return_value = struct.pack('3i',7,1234,1234)
+                if lost: peer.sendall.side_effect = [OSError('closed'),None]
+                listener = Mock(family=socket.AF_UNIX)
+                listener.getsockname.return_value = '/run/mothergate-submit.sock'
+                listener.accept.side_effect = [(peer,None),StopIteration]
+                registration = dict(uid=1234,fixture_sha=SHA,qualification_gate_set='full')
+                configs = {'registry.json':{'mother':registration},'identity.json':{},
+                           'admission.json':{'stage':'qualifying','identity':{}},
+                           'qualification.json':{'identity':None,'passed':[]}}
+                def thread(target,args=(),**kwargs): return Mock(start=lambda:target(*args))
+                with patch.dict(os.environ,LISTEN_PID=str(os.getpid()),LISTEN_FDS='1'), \
+                        patch.object(supervisor,'STATE',state), patch.object(supervisor,'read_config',side_effect=configs.__getitem__), \
+                        patch.object(supervisor.socket,'socket',return_value=listener), \
+                        patch.object(supervisor,'receive_request',return_value=REQUEST), \
+                        patch.object(supervisor.threading,'Thread',side_effect=thread), \
+                        patch.object(supervisor,'execute',side_effect=lambda *args:args[5].unlink()) as execute:
+                    with self.assertRaises(StopIteration): supervisor.main()
+                self.assertEqual(execute.call_count,1)
+                self.assertEqual(execute.call_args.args[-1],'qualifying')
+                self.assertEqual(peer.sendall.call_count,1)
+                reply = json.loads(peer.sendall.call_args_list[0].args[0][4:])
+                self.assertEqual(reply,{'status':'ACCEPTED','run_id':execute.call_args.args[0]})
+
+    def test_review7_init_main_status_descriptor_closed_to_child(self):
+        popen = subprocess.Popen
+        def spawn(argv, **options):
+            options['cwd'] = '/tmp'
+            return popen(argv,**options)
+        def gates(runner):
+            self.assertFalse(os.get_inheritable(runner.status))
+            script = 'import os,sys\ntry: os.fstat(int(sys.argv[1]))\nexcept OSError: sys.exit(0)\nsys.exit(9)'
+            _, code, _ = runner.command('format',[sys.executable,'-c',script,str(runner.status)])
+            self.assertEqual(code,0,'candidate inherited private status FD')
+        open_fd = os.open
+        with patch.object(init.os,'getpid',return_value=1), patch.object(init.os,'getuid',return_value=1234), \
+                patch.object(init.ctypes,'CDLL',return_value=Mock(prctl=Mock(return_value=0))), \
+                patch.object(init.os,'dup',side_effect=lambda fd:open_fd('/dev/null',os.O_RDWR)), \
+                patch.object(init.os,'dup2'), patch.object(init.signal,'signal'), patch.object(init,'Path'), \
+                patch.object(init.shutil,'copytree'), patch.object(init.os,'walk',return_value=[]), \
+                patch.object(init,'observations',return_value={'fixture':True}), patch.object(init,'resources',return_value={}), \
+                patch.object(init.Runner,'gates',gates), patch.object(init.subprocess,'Popen',spawn):
+            init.main()
+
+    def test_review7_stop_requires_empty_owned_cgroup(self):
+        group = '/system.slice/mothergate-run@'+RUN+'.service'
+        for state, events in [({'ActiveState':'active'},''),
+                ({'ActiveState':'inactive','ControlGroup':'/other'},''),
+                ({'ActiveState':'inactive','ControlGroup':group},'populated 1\n'),
+                ({'ActiveState':'inactive','ControlGroup':group},'populated 0\n')]:
+            with patch.object(supervisor,'shim') as shim, patch.object(supervisor,'unit_state',return_value=state), \
+                    patch.object(supervisor.Path,'read_text',return_value=events):
+                if events == 'populated 0\n': self.assertTrue(supervisor.stop_and_confirm(RUN)['complete'])
+                else:
+                    with self.assertRaises(ValueError): supervisor.stop_and_confirm(RUN)
+                shim.assert_called_once_with('stop',RUN)
