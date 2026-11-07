@@ -2253,7 +2253,7 @@ fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
             let table = std::thread::spawn(move || runs.model_accounting(run)).join();
             let (control, (tx, rx)) = (control.clone(), std::sync::mpsc::channel());
             let store = std::thread::spawn(move || {
-                let _held = control.authority().grants().hold_for_test();
+                drop(control.authority().grants().hold_for_test()); // Released, then free.
                 let _ = tx.send(());
             });
             let free = rx.recv_timeout(Duration::from_secs(2)).is_ok();
