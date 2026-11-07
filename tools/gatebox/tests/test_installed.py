@@ -227,7 +227,7 @@ class Q8F4Oracles(unittest.TestCase):
         doc = (HERE/'README.md').read_text()
         for fragment in ('Manual removal','systemctl disable --now mothergate.socket',
                          'systemctl stop mothergate.service','gpasswd -d nexus gatesubmit',
-                         'userdel mothergate','userdel gaterun','/var/lib/gatebox-source',
+                         '/etc/gatebox/created-accounts.json',"subprocess.run(['/usr/sbin/userdel',name],check=True)",'/var/lib/gatebox-source',
                          '/usr/lib/gatebox/root','/etc/polkit-1/rules.d/00-gatebox-deny.rules'):
             self.assertIn(fragment,doc)
 
@@ -306,7 +306,7 @@ class Q8F13Oracles(unittest.TestCase):
         doc = (HERE/'README.md').read_text()
         for fragment in ("bash -euo pipefail <<'OWNER'",'persists at boot','Host changes',
                          '/etc/systemd/system/mothergate-run@.service','/run/mothergate-control',
-                         '/var/lib/mothergate','groupdel gatesubmit'):
+                         '/var/lib/mothergate',"subprocess.run(['/usr/sbin/groupdel',name],check=True)","('groups',{'mothergate','gaterun','gatesubmit'})"):
             self.assertIn(fragment,doc)
         text = (HERE/'install.sh').read_text()
         tree = ast.parse(text.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
