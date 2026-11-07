@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from unittest.mock import Mock, patch
 from test_service import HERE, RUN, REQUEST, lifecycle, supervisor
 
@@ -46,7 +46,7 @@ class CustodyTests(unittest.TestCase):
         self.control.mkdir(mode=0o755)
         self.stage.mkdir(mode=0o700)
         for name in ('incoming','sealed'): (self.control/name).mkdir(mode=0o700)
-        self.state = {'Job':'0','ActiveState':'inactive','ControlGroup':''}
+        self.state = {'Job':'','ActiveState':'inactive','ControlGroup':''}
         self.calls = []
         self.runner = Mock(side_effect=self.manager)
         # No real socket operation is hidden: offline positive cases are FIFOs.
@@ -209,6 +209,7 @@ class CustodyTests(unittest.TestCase):
             self.assertTrue(entered.wait(2))
             with patch.object(lifecycle,'LOCK_TIMEOUT',0):
                 with self.assertRaises(TimeoutError): self.stop()
+            self.assertEqual(sum(c[1]=='stop' for c in self.calls),1)
             self.assertTrue((self.sealed()/'log.sock').exists())
         finally:
             release.set()
@@ -238,12 +239,105 @@ class CustodyTests(unittest.TestCase):
                 patch.object(supervisor,'collect',side_effect=RuntimeError('collector died')), \
                 patch.object(supervisor,'stop_and_confirm',side_effect=TimeoutError('manager pending')), \
                 patch.object(supervisor.receipt,'validate_summary'), patch.object(supervisor.receipt,'publish') as publish, \
-                patch.object(supervisor.Path,'unlink') as unlink:
+                patch.object(supervisor.Path,'unlink') as unlink, \
+                patch.object(supervisor.os,'unlink') as os_unlink:
             supervisor.execute(RUN,REQUEST,1234,{'device':1,'inode':2},{},marker,'qualifying')
         unlink.assert_not_called()
+        os_unlink.assert_not_called()
         self.assertTrue(marker.exists())
         self.assertFalse(publish.call_args.args[3]['cleanup']['complete'])
         for sock in sockets: sock.close.assert_called_once()
+    def test_nonempty_job_including_zero_keeps_custody(self):
+        self.start()
+        for job in ('0','73','0 ','unknown'):
+            with self.subTest(job=job):
+                self.state['Job'] = job
+                with self.assertRaisesRegex(ValueError,'manager not settled'): self.stop()
+                self.assertEqual(set(p.name for p in self.sealed().iterdir()),{'log.sock','status.sock'})
+                self.assertTrue((self.control/'sealed'/('.pending-'+RUN)).exists())
+    def test_endpoint_hardlink_fail_closed(self):
+        path = self.control/'incoming'/(RUN+'.status.sock')
+        os.link(path,self.root/'extra-link')
+        with self.assertRaisesRegex(ValueError,'unsafe sealed endpoint'): self.start()
+        self.assertFalse(any(c[1]=='start' for c in self.calls))
+    def test_endpoint_gid_fail_closed(self):
+        original = os.stat
+        def wrong_gid(path, **options):
+            value = original(path,**options)
+            if path == 'status.sock':
+                fields = list(value)
+                fields[5] = self.bridge.owner_gid+1
+                return os.stat_result(fields)
+            return value
+        with patch.object(lifecycle.os,'stat',side_effect=wrong_gid):
+            with self.assertRaisesRegex(ValueError,'unsafe sealed endpoint'): self.start()
+        self.assertFalse(any(c[1]=='start' for c in self.calls))
+    def directory_metadata(self, target, field, value):
+        original = os.fstat
+        identity = target.stat()
+        def swapped(fd):
+            info = original(fd)
+            if (info.st_dev,info.st_ino) == (identity.st_dev,identity.st_ino):
+                fields = list(info)
+                fields[field] = value
+                return os.stat_result(fields)
+            return info
+        return patch.object(lifecycle.os,'fstat',side_effect=swapped)
+    def test_directory_ancestor_owner_swap(self):
+        with self.directory_metadata(self.control,4,self.bridge.root_owner+1):
+            with self.assertRaisesRegex(ValueError,'unsafe protected ancestry'):
+                with self.bridge.directory(self.control/'sealed',mode=0o700): pass
+    def test_directory_leaf_root_swap(self):
+        # UID 0 is allowed by the ancestry predicate, but cannot replace mothergate.
+        with self.directory_metadata(self.control/'incoming',4,0):
+            with self.assertRaisesRegex(ValueError,'unsafe custody directory'):
+                with self.bridge.directory(self.control/'incoming',self.bridge.owner,0o700): pass
+    def test_directory_gid_fail_closed(self):
+        with self.directory_metadata(self.control/'incoming',5,self.bridge.owner_gid+1):
+            with self.assertRaisesRegex(ValueError,'unsafe custody directory'):
+                with self.bridge.directory(self.control/'incoming',self.bridge.owner,0o700): pass
+    def test_lock_mode_fail_closed(self):
+        lock = self.control/'lifecycle.lock'
+        lock.touch(mode=0o600)
+        lock.chmod(0o644)
+        with self.assertRaisesRegex(ValueError,'unsafe root custody state'): self.start()
+        self.assertEqual(self.calls,[])
+    def test_lock_symlink_fail_closed(self):
+        target = self.root/'lock-canary'
+        target.write_bytes(b'retain')
+        target.chmod(0o600)
+        (self.control/'lifecycle.lock').symlink_to(target)
+        with self.assertRaises(OSError): self.start()
+        self.assertEqual(target.read_bytes(),b'retain')
+        self.assertEqual(self.calls,[])
+    def test_lock_owner_fail_closed(self):
+        lock = self.control/'lifecycle.lock'
+        lock.touch(mode=0o600)
+        with self.directory_metadata(lock,4,self.bridge.root_owner+1):
+            with self.assertRaisesRegex(ValueError,'unsafe root custody state'): self.start()
+        self.assertEqual(self.calls,[])
+    def test_lock_gid_fail_closed(self):
+        lock = self.control/'lifecycle.lock'
+        lock.touch(mode=0o600)
+        with self.directory_metadata(lock,5,self.bridge.root_owner+1):
+            with self.assertRaisesRegex(ValueError,'unsafe root custody state'): self.start()
+        self.assertEqual(self.calls,[])
+    def test_lock_hardlink_fail_closed(self):
+        lock = self.control/'lifecycle.lock'
+        lock.touch(mode=0o600)
+        os.link(lock,self.root/'extra-lock')
+        with self.assertRaisesRegex(ValueError,'unsafe root custody state'): self.start()
+        self.assertEqual(self.calls,[])
+    def test_lock_type_fail_closed(self):
+        os.mkfifo(self.control/'lifecycle.lock',0o600)
+        with self.assertRaisesRegex(ValueError,'unsafe root custody state'): self.start()
+        self.assertEqual(self.calls,[])
+    def test_missing_run_with_pending_retains_marker(self):
+        pending = self.control/'sealed'/('.pending-'+RUN)
+        pending.touch(mode=0o600)
+        with self.assertRaisesRegex(ValueError,'custody disappeared'): self.stop()
+        self.assertTrue(pending.exists())
+        self.assertEqual([c[1] for c in self.calls],['stop','show'])
     def test_frozen_unit_and_tmpfiles_amendment(self):
         amendment = json.loads((HERE/'policy/custody.json').read_text())
         self.assertEqual(amendment,{'units':UNITS,'tmpfiles':LAYOUT})
@@ -252,6 +346,74 @@ class CustodyTests(unittest.TestCase):
         self.assertIn('StandardOutput=file:/run/mothergate-control/sealed/%i/log.sock',unit)
         self.assertIn('StandardError=file:/run/mothergate-control/sealed/%i/status.sock',unit)
         self.assertNotIn('RuntimeDirectory=',(HERE/'units/mothergate.service').read_text())
+
+class Q12DecisionTests(unittest.TestCase):
+    """Decision/ordering oracles; no custody ownership or real manager claims."""
+    def test_only_empty_job_is_settled(self):
+        runner = Mock(return_value=subprocess.CompletedProcess([],0,'Job=\nActiveState=inactive\nControlGroup=\n'))
+        bridge = lifecycle.Custody(owner=os.getuid(),runner=runner)
+        self.assertEqual(bridge.settled(RUN)['Job'],'')
+        for job in ('0','73','0 ','unknown'):
+            runner.return_value.stdout = 'Job='+job+'\nActiveState=inactive\nControlGroup=\n'
+            with self.subTest(job=job), self.assertRaisesRegex(ValueError,'manager not settled'):
+                bridge.settled(RUN)
+    def test_stop_precedes_layout_validation_failure(self):
+        self.stop_before_failure('directory',ValueError('unsafe layout'))
+    def test_stop_precedes_lock_failure(self):
+        self.stop_before_failure('locked',TimeoutError('lock deadline'))
+    def stop_before_failure(self, method, error):
+        runner = Mock(return_value=subprocess.CompletedProcess([],0,''))
+        bridge = lifecycle.Custody(owner=os.getuid(),runner=runner)
+        def reject(*args, **kwargs):
+            runner.assert_called_once()
+            self.assertEqual(runner.call_args.args[0],lifecycle.command(['stop',RUN]))
+            raise error
+        with patch.object(bridge,'directory',side_effect=lambda *a,**k:nullcontext(7)), \
+                patch.object(bridge,method,side_effect=reject), \
+                patch.object(bridge,'settled') as settled, patch.object(bridge,'cleanup') as cleanup:
+            with self.assertRaises(type(error)): bridge.run('stop',RUN)
+        settled.assert_not_called()
+        cleanup.assert_not_called()
+
+class Q12SupervisorTests(unittest.TestCase):
+    def test_start_failure_unlinks_own_incoming_leaves(self):
+        self.failed_start()
+    def test_partial_bind_failure_preserves_unowned_incoming_leaf(self):
+        self.failed_start(partial=True)
+    def failed_start(self, partial=False):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            for name in ('staging','pending','receipts','control/incoming','control/sealed'):
+                (root/name).mkdir(parents=True)
+            incoming = root/'control/incoming'
+            sealed = root/'control/sealed'
+            canary = sealed/'canary'
+            canary.write_bytes(b'retain sealed')
+            marker = root/'pending'/('.'+RUN)
+            marker.touch()
+            unowned = incoming/(RUN+'.status.sock')
+            if partial: unowned.write_bytes(b'not ours')
+            sockets = [Mock(),Mock()]
+            def bind(path):
+                # Real leaf creation; never replace an already-existing leaf.
+                with open(path,'xb') as stream: stream.write(b'owned')
+            for sock in sockets: sock.bind.side_effect = bind
+            for obj,name,value in [(supervisor,'STATE',root),(supervisor,'CONTROL',root/'control'),
+                    (supervisor.snapshot,'GitSource',Mock()),(supervisor.snapshot,'export',Mock(return_value={})),
+                    (supervisor.socket,'socket',Mock(side_effect=sockets)),
+                    (supervisor,'shim',Mock(side_effect=ValueError('start refused before relocation'))),
+                    (supervisor,'collect',Mock()),
+                    (supervisor,'stop_and_confirm',Mock(side_effect=ValueError('custody uncertain'))),
+                    (supervisor.receipt,'validate_summary',Mock()),(supervisor.receipt,'publish',Mock())]:
+                stack.enter_context(patch.object(obj,name,value))
+            supervisor.execute(RUN,REQUEST,1234,{'device':1,'inode':2},{},marker,'qualifying')
+            self.assertFalse((incoming/(RUN+'.log.sock')).exists())
+            if partial: self.assertEqual(unowned.read_bytes(),b'not ours')
+            else: self.assertFalse(unowned.exists())
+            self.assertEqual(canary.read_bytes(),b'retain sealed')
+            self.assertTrue(marker.exists())
+            supervisor.collect.assert_not_called()
+            for sock in sockets: sock.close.assert_called_once()
 
 class ListenerRenameTests(unittest.TestCase):
     def test_listener_keeps_accepting_after_rename(self):
