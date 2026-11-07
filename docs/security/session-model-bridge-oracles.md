@@ -1267,3 +1267,58 @@ Plants, all killed at "a join outside a watched child":
   attribute, a join helper in model_tests.rs reached through `nth` ("nth
   called outside a top-level fn", and the calling test unwatched), and
   an aliased `keep_join` ("used as a value").
+
+### 13.18 B2 broker close and death (SB3B-R22, R23; base 7055d350)
+Test-only. The route stays closed.
+
+Runtime join guarantee (SB3B-R23). Codex review-4 found three crafted-only
+escapes of the static guard (inclusion or module redirection, conditional
+test attributes, comment-separated calls). They are recorded, not patched
+statically (§12.2). Instead, every join-capable helper (`held_request_at`,
+`keep_join`, `release_holder`, `matrix_fault`, `run_schedule`,
+`matrix_side`) first calls `assert_watched`. It panics with "<helper>: a
+join-capable helper outside a watched child" unless the process carries the
+marker that only `watched` sets, in the child. The static guard stays as a
+lint.
+
+Close (stage `SB-3B2-C`, closed by `sb3_close_table_is_closed`):
+- H1 `sb3_completed_call_allows_existing_clean_close`: no-model, registered
+  and completed-call sessions seal through the real path (journal, Quit,
+  both settlements, `seal_close`), producers joined.
+- H2 `sb3_unjoined_or_owed_prevents_clean_close`: a held charge, record or
+  owner return (the slot is active, the seal is refused, then released,
+  joined and sealed); owed debt (meter settled, seal refused); a dropped
+  ticketed attempt; a meter panic; a poisoned model slot.
+- H2-held `sb3_open_model_request_at_deadline_blocks_seal`: metadata or chat
+  held open by a real peer. One connection, the seal refused, the first
+  shutdown deadline kept, then the request closes and joins.
+- H5 `sb3_post_seal_model_events_are_absent`: a seal raced against a late
+  completion refuses until it completes. After the seal, a call is
+  `halted` with no request, record or attempt, and the three final facts
+  stay distinct and pending.
+- P1 `sb3_meter_and_evidence_do_not_hold_broker_locks`: no broker hold at
+  the meter or the evidence write, ingress live under the record, and
+  contention refused, bounded.
+- X1-B `sb3_private_call_death_restarts_report_only` (model_death_tests.rs):
+  a real child dies after the ticket, during dispatch (killed with the chat
+  open), after the reply, after the record and after completion. The
+  verified prefix is kept; a missing end stays `unknown`; two restarts are
+  report-only, with no request, registration, run, consent, binding or
+  attempt.
+- Exchange-thread spawn failure: no kernel test injects it, so per SB3B-R22
+  (1) it is `DEFERRED:SB3B-KSPAWN` (a separate kernel-seam unit). The close
+  validator accepts that tag only for `seal/spawn_failure`.
+
+Matrix (stage `SB-3B2-M`): three settlement sides, `reply:after`
+(`model.attempt.return`), `record:before` (`model.attempt.record.before`)
+and `settle:before` (`model.settle.before`), each with 15 classes and 4
+reachable states. They are judged by `settled:C:R`: the returned class C
+stands, no request is added, one attempt, and R is either `recorded` or
+`uncertain` (never Recorded, uncertain and failed latched). Contention and
+poison are `uncertain` at every side, which is the spec outcome (SB3B-R22
+(2), SB-2b retained cleanup). So is evidence failure before the write; at
+`settle:before` the record is already written. Bootstrap and the sealed or
+closed states keep their N/A citations. The validator binds `settled:`
+exactly to the executed settlement cells. No
+`SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION` cell is needed, since every reachable
+cell is executed.

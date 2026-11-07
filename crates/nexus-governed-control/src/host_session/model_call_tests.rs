@@ -87,12 +87,12 @@ impl crate::authority::clock::Clock for SplitClock {
 
 /// Original Bootstrap registration, Q, D with its retained grant, cached
 /// native consent and the existing File run R: every R2 prerequisite.
-struct Bind {
-    session: Arc<HostSession>,
+pub(super) struct Bind {
+    pub(super) session: Arc<HostSession>,
     clock: Arc<SplitClock>,
     q: SessionRequest,
     door: SessionDoor,
-    run: RunId,
+    pub(super) run: RunId,
     identity: [u8; 32],
     primary: Arc<crate::evidence_store::PrimaryEvidence>,
     _keep: (
@@ -110,6 +110,14 @@ impl Bind {
     }
     /// SB-3B1b: registered on `peer` (its chat answered, its requests held).
     fn make(peer: Option<Peer>, files: bool) -> Self {
+        let endpoint = peer.as_ref().map(|p| p.endpoint.clone());
+        Self::build(peer, endpoint, files)
+    }
+    /// SB-3B2 X1-B: registered on a peer another process serves.
+    fn at(endpoint: &str) -> Self {
+        Self::build(None, Some(endpoint.to_owned()), true)
+    }
+    fn build(peer: Option<Peer>, endpoint: Option<String>, files: bool) -> Self {
         assert!(crate::files::make_non_dumpable());
         let root = crate::harness_tests::temp_root("sb3a-bind");
         let selected = crate::harness_tests::temp_root("sb3a-workspace");
@@ -132,9 +140,9 @@ impl Bind {
             .unwrap(),
         );
         session.bootstrap_workspace(&workspace, &[]).unwrap();
-        let identity = match &peer {
-            Some(p) => {
-                let view = session.register_model_private(&p.endpoint, &pin()).unwrap();
+        let identity = match &endpoint {
+            Some(endpoint) => {
+                let view = session.register_model_private(endpoint, &pin()).unwrap();
                 hex::decode(view.identity).unwrap().try_into().unwrap()
             }
             None => ModelIdentity::from_spec(&pin()).unwrap().digest(),
@@ -178,6 +186,39 @@ impl Bind {
     }
     fn peer(&self) -> &Peer {
         self._keep.0.as_ref().expect("this fixture's own peer")
+    }
+    /// Its Mother root and selected-workspace root.
+    pub(super) fn roots(&self) -> [&std::path::Path; 2] {
+        [self._keep.2[0].0.path(), self._keep.2[1].0.path()]
+    }
+    /// SB-3B2: the real close path. A Mother journal holding only
+    /// `session_opened`, then Quit, both settlements and the seal.
+    fn seal(&self) -> (SessionRequest, Result<close::CloseSeal, SessionError>) {
+        use sha2::{Digest as _, Sha256};
+        let (previous, event) = ("0".repeat(64), r#"{"event":"session_opened"}"#);
+        let mut hash = Sha256::new();
+        hash.update(b"nexus-mother-journal-v2\n");
+        for part in [
+            previous.as_bytes(),
+            &[2],
+            &[0; 8],
+            &[0; 8],
+            event.as_bytes(),
+        ] {
+            hash.update((part.len() as u64).to_be_bytes());
+            hash.update(part);
+        }
+        let hash = hex::encode(hash.finalize());
+        let line = format!(
+            r#"{{"format":2,"seq":0,"prev":"{previous}","mission":0,"event":{event},"hash":"{hash}"}}"#
+        );
+        std::fs::write(self.roots()[0].join("mother-journal.jsonl"), line + "\n").unwrap();
+        let quit = self.session.ingress().accept(CommandKind::Quit, 9).unwrap();
+        // A refused settlement is judged by the seal that follows.
+        let _ = self.session.settle_close_resources(&quit);
+        let _ = self.session.settle_close_authority(&quit);
+        let seal = self.session.seal_close(&quit);
+        (quit, seal)
     }
     fn grant(&self) -> GrantId {
         match self.door.kind {
@@ -1285,8 +1326,8 @@ fn positive(why: &str) {
 }
 
 /// A bound original door (SB-3A's R2), its live invocation and a C1 meter.
-struct Call {
-    b: Bind,
+pub(super) struct Call {
+    pub(super) b: Bind,
     owner: Arc<InvocationOwner>,
     meter: Meter,
 }
@@ -1297,6 +1338,10 @@ impl Call {
     fn serve(peer: Peer) -> Self {
         Self::bound(Bind::make(Some(peer), true))
     }
+    /// SB-3B2 X1-B: bound on a peer another process serves.
+    pub(super) fn at(endpoint: &str) -> Self {
+        Self::bound(Bind::at(endpoint))
+    }
     fn bound(b: Bind) -> Self {
         assert_eq!(b.bind(), Ok(()), "R2 binding");
         Self {
@@ -1305,7 +1350,7 @@ impl Call {
             meter: Meter::default(),
         }
     }
-    fn call(&self) -> Result<ModelCallOutcome, &'static str> {
+    pub(super) fn call(&self) -> Result<ModelCallOutcome, &'static str> {
         let observer = self.owner.observer();
         invoke(&self.b.door, self.b.run, &request(), &self.meter, &observer)
     }
@@ -1412,6 +1457,7 @@ fn contend(f: &Call, i: usize) -> (Arc<AtomicUsize>, Holder) {
 
 /// Request `i` entered and held open at the peer; `act` runs then.
 fn held_request_at(i: usize, act: impl FnOnce(&Call)) -> (Call, ModelCallOutcome, Duration) {
+    assert_watched("held_request_at");
     let f = Call::serve(Peer::chat(Some(4 + i), None));
     let (outcome, elapsed) = std::thread::scope(|s| {
         let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
@@ -2041,6 +2087,7 @@ fn sb3_r5_holds_contend_and_poison_exactly() {
 }
 /// Joins a poisoning holder (its panic is the poison) inside the gate.
 fn keep_join(keep: &Holder) -> bool {
+    assert_watched("keep_join");
     let handle = keep.lock().unwrap().take();
     handle.is_some_and(|h| h.join().is_err())
 }
@@ -2651,6 +2698,18 @@ fn sb3_b1b_test_seams_are_test_only() {
 
 // SB-3B1e: test-only evidence carries (SB3B-R3, SB3B-R15).
 
+/// F10a: set only in a watched child's environment, by `watched`.
+const HELD_CHILD: &str = "SB3B1E_HELD_CHILD";
+/// SB3B-R23: the runtime guarantee behind the static join guard. Every
+/// join-capable helper calls this first, so a helper reached outside a
+/// watched child panics, named, instead of joining unwatched.
+fn assert_watched(helper: &str) {
+    let child = std::env::var(HELD_CHILD).is_ok();
+    assert!(
+        child,
+        "{helper}: a join-capable helper outside a watched child"
+    );
+}
 /// F10a: the marker a held schedule's child prints when its body ends.
 const HELD_DONE: &str = "SB3B1E HELD BODY DONE";
 /// F10a: a held schedule runs only in a child process of this test binary,
@@ -2659,7 +2718,7 @@ const HELD_DONE: &str = "SB3B1E HELD BODY DONE";
 /// Returns true in the parent (the schedule ran in the child).
 fn watched(name: &str) -> bool {
     use std::io::Read;
-    const CHILD: &str = "SB3B1E_HELD_CHILD";
+    const CHILD: &str = HELD_CHILD;
     if std::env::var(CHILD).is_ok_and(|child| child == name) {
         return false;
     }
@@ -2928,7 +2987,7 @@ fn sb3_registration_gate_contention_latches_nothing() {
 // SB-3B1e F10b (SB3B-R15, R16, R18): the schedule matrix. Its literal rows
 // are `model-bridge-cases.tsv` stage `SB-3B1e-M`, one per (side, class).
 const CASES: &str = include_str!("../../../../mother/host/tests/session/model-bridge-cases.tsv");
-const SIDES: [&str; 10] = [
+const SIDES: [&str; 13] = [
     "r3_reserve:before",
     "r3_reserve:after",
     "r3_cas:before",
@@ -2939,6 +2998,9 @@ const SIDES: [&str; 10] = [
     "r5_observer:after", // SB3B-R19 (5): IDENTICAL_POINT to r5_cas:before.
     "r5_cas:before",
     "r5_cas:after",
+    "reply:after",   // SB-3B2: the transport returned; before the record.
+    "record:before", // SB-3B2: immediately before the native record write.
+    "settle:before", // SB-3B2: recorded; before the exact pin settles.
 ];
 const CLASSES: [&str; 15] = [
     "emergency",
@@ -2993,6 +3055,8 @@ const NA_TABLE: [(&str, &[&str], bool, &str); 2] = [
 ];
 /// SB3B-R19 (6): identical instants (side, side), same class or state: the
 /// observer read is immediately followed by `model.call.observed`.
+/// SB-3B2: the settlement sides, judged only by `settled:C:R`.
+const SETTLEMENT: [&str; 3] = ["reply:after", "record:before", "settle:before"];
 const IDENTICAL: [(&str, &str); 1] = [("r5_observer:after", "r5_cas:before")];
 /// The one test executing a side's cells; a direct citation names it.
 fn matrix_test(side: &str) -> String {
@@ -3004,7 +3068,7 @@ fn matrix() -> Vec<Row> {
     let rows = CASES
         .lines()
         .map(|line| line.split('\t').collect::<Vec<_>>());
-    let rows = rows.filter(|r| r.len() == 5 && r[4] == "SB-3B1e-M");
+    let rows = rows.filter(|r| r.len() == 5 && matches!(r[4], "SB-3B1e-M" | "SB-3B2-M"));
     rows.map(|r| (r[2], r[0].rsplit('/').next().unwrap(), r[1], r[3]))
         .collect()
 }
@@ -3017,6 +3081,7 @@ type Keep = Arc<
     )>,
 >;
 fn release_holder(keep: &Keep) {
+    assert_watched("release_holder");
     let (holder, release) = std::mem::take(&mut *keep.lock().unwrap());
     drop(release);
     if let Some(holder) = holder {
@@ -3024,6 +3089,7 @@ fn release_holder(keep: &Keep) {
     }
 }
 fn matrix_fault(f: &Call, class: &'static str, keep: &Keep) -> Arc<dyn Fn() + Send + Sync> {
+    assert_watched("matrix_fault");
     let (control, run, clock, session) = (
         f.b.control(),
         f.b.run,
@@ -3115,6 +3181,7 @@ fn run_schedule(
     side: &str,
     i: usize,
 ) -> (Call, Result<ModelCallOutcome, &'static str>) {
+    assert_watched("run_schedule");
     let f = Call::new();
     if let Some(kind) = class.strip_prefix("mission_") {
         let (c, far) = (f.b.clock.clone(), 1 << 50);
@@ -3144,6 +3211,9 @@ fn run_schedule(
         "r5_observer:before" => ("model.call.gate", false),
         "r5_sample:after" => ("model.call.sampled", false), // B1f: before the hold
         "r5_cas:before" => ("model.call.observed", true),
+        "reply:after" => ("model.attempt.return", false),
+        "record:before" => ("model.attempt.record.before", false),
+        "settle:before" => ("model.settle.before", false),
         _ => ("model.call.admitted", true),
     };
     let serial = held
@@ -3247,6 +3317,9 @@ fn judge(
         }
         return;
     }
+    if when == "settled" && SETTLEMENT.contains(&side) {
+        return settled(f, (side, class), literal, step, outcome);
+    }
     assert!(matches!(when, "at" | "next"), "{what}: {expected}");
     let outcome = outcome.unwrap_or_else(|e| panic!("{what}: refused before the ticket ({e})"));
     let base = match &side[..2] {
@@ -3302,6 +3375,41 @@ fn judge(
         );
     }
 }
+/// SB-3B2 (SB3B-R22 (4)): `settled:C:R` at a settlement side. The reply
+/// already returned stands as class C; no request is added; one attempt;
+/// R `recorded` (one native record, Recorded) or `uncertain` (the record
+/// or the exact pin could not settle: never Recorded, the session failed).
+fn settled(
+    f: &Call,
+    (side, class): (&str, &str),
+    literal: &str,
+    record: &str,
+    outcome: Result<ModelCallOutcome, &str>,
+) {
+    let what = format!("{side}/{class}");
+    let outcome = outcome.unwrap_or_else(|e| panic!("{what}: refused before the ticket ({e})"));
+    assert_eq!(f.sent(), CALL, "{what}: no request added");
+    assert_eq!(
+        class_of(&outcome),
+        literal,
+        "{what}: the returned class stands"
+    );
+    assert_eq!(f.charged(), (1, 1), "{what}: one charge, settled");
+    if class != "poison" {
+        assert_eq!(f.counts().0, 1, "{what}: one attempt");
+    }
+    if class != "evidence_failure" {
+        assert_eq!(f.records(), 1, "{what}: one native record");
+    }
+    match record {
+        "recorded" => assert!(recorded(&outcome), "{what}: Recorded"),
+        "uncertain" => {
+            assert!(!recorded(&outcome), "{what}: never Recorded");
+            assert_eq!(f.latched(), (true, true), "{what}: uncertain and failed");
+        }
+        _ => panic!("{what}: {record}"),
+    }
+}
 fn class_of(outcome: &ModelCallOutcome) -> &'static str {
     class(outcome)
 }
@@ -3309,6 +3417,7 @@ fn class_of(outcome: &ModelCallOutcome) -> &'static str {
 /// Runs `side`'s executed cells (each class fault at its probe point).
 /// One test per side keeps each watched child well inside its deadline.
 fn matrix_side(side: &str) -> usize {
+    assert_watched("matrix_side");
     positive("positive control");
     let mut schedules = 0;
     for (at, class, test, expected) in matrix() {
@@ -3401,6 +3510,30 @@ fn sb3_matrix_r5_cas_before() {
     println!("{HELD_DONE} sb3_matrix_r5_cas_before");
 }
 #[test]
+fn sb3_matrix_reply_after() {
+    if watched("sb3_matrix_reply_after") {
+        return;
+    }
+    assert_eq!(matrix_side("reply:after"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_reply_after");
+}
+#[test]
+fn sb3_matrix_record_before() {
+    if watched("sb3_matrix_record_before") {
+        return;
+    }
+    assert_eq!(matrix_side("record:before"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_record_before");
+}
+#[test]
+fn sb3_matrix_settle_before() {
+    if watched("sb3_matrix_settle_before") {
+        return;
+    }
+    assert_eq!(matrix_side("settle:before"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_settle_before");
+}
+#[test]
 fn sb3_matrix_r5_cas_after() {
     if watched("sb3_matrix_r5_cas_after") {
         return;
@@ -3458,6 +3591,13 @@ fn sb3_schedule_matrix_cells_are_complete() {
             }
         };
         assert!(ok, "{at}: {test} is no allowed citation for this cell");
+        let settled = r.3.starts_with("settled:") && !test.starts_with("N/A:");
+        let executed = !test.starts_with("N/A:");
+        assert_eq!(
+            settled,
+            executed && SETTLEMENT.contains(&side),
+            "{at}: settled:C:R exactly at the executed settlement cells"
+        );
     }
     for (cells, tag) in [
         (&KNOWN_DEFECT[..], "OPEN:SB3B-B1f"),
@@ -3740,4 +3880,401 @@ fn sb3_narrowing_at_the_eligibility_read_times_out() {
         }
     }
     println!("{HELD_DONE} sb3_narrowing_at_the_eligibility_read_times_out");
+}
+
+// SB-3B2: broker close and debt (SB3B-R1, R22). Test-only; route closed.
+
+/// H1: no-model, registered and completed-call sessions pass the real
+/// close path; producers joined, the model slot conclusive.
+#[test]
+fn sb3_completed_call_allows_existing_clean_close() {
+    for case in ["no_model", "registered", "completed"] {
+        let f = match case {
+            "no_model" => Call {
+                b: Bind::with(false, true),
+                owner: Arc::new(InvocationOwner::new()),
+                meter: Meter::default(),
+            },
+            _ => Call::new(),
+        };
+        if case == "completed" {
+            let done = f.call().is_ok_and(|o| o.result().is_ok() && recorded(&o));
+            assert!(done, "a completed, recorded call");
+        }
+        let o = f.obligations();
+        let conclusive = !o.active && o.owner_complete && o.child_complete && !o.uncertain;
+        assert!(conclusive, "{case}: the model slot is conclusive");
+        let (_, seal) = f.b.seal();
+        assert!(seal.is_ok(), "{case}: the existing clean close");
+        let after = f.b.session.close_obligations().unwrap();
+        assert_eq!(
+            (after.producers_live, after.producers_lost),
+            (0, 0),
+            "{case}: joined"
+        );
+    }
+}
+
+/// H2: a held charge, record or owner return, owed debt, a dropped or
+/// panicked attempt and a poisoned slot each prevent the seal; settlement
+/// of the meter cannot clear debt. A released attempt joins and seals.
+#[test]
+fn sb3_unjoined_or_owed_prevents_clean_close() {
+    if watched("sb3_unjoined_or_owed_prevents_clean_close") {
+        return;
+    }
+    for row in ["charge", "record", "owner_return"] {
+        let f = Call::new();
+        let gate = match row {
+            "charge" => {
+                let gate = crate::test_hooks::Gate::new();
+                let held = gate.clone();
+                *f.meter.at_charge.lock().unwrap() = Some(Box::new(move || held.hold()));
+                gate
+            }
+            "record" => f.hold("model.attempt.record.before"),
+            _ => f.hold("model.settle.before"),
+        };
+        std::thread::scope(|s| {
+            let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+            let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+            let open = Finally(|| gate.open()); // Released even if an assertion fails.
+            gate.reached();
+            let o = f.obligations();
+            let unresolved = o.active && !o.owner_complete && o.operation == "attempt";
+            assert!(unresolved, "{row}: the attempt is unresolved");
+            let (quit, seal) = f.b.seal();
+            assert!(
+                seal.is_err(),
+                "{row}: an unresolved attempt prevents the seal"
+            );
+            drop(open);
+            assert!(
+                call.join().unwrap().is_ok_and(|o| recorded(&o)),
+                "{row}: joined"
+            );
+            let sealed = f.b.session.seal_close(&quit);
+            assert!(sealed.is_ok(), "{row}: joined, then sealed");
+        });
+    }
+    // Owed: the reply is kept beside the debt; the settled meter clears nothing.
+    let f = Call::new();
+    f.b.primary.store().refuse_next_insert();
+    let outcome = f.call().expect("ticketed attempt");
+    let owed = !recorded(&outcome) && outcome.result().is_ok();
+    assert!(owed, "owed: debt beside the reply");
+    assert_eq!(f.charged(), (1, 1), "owed: the meter settled");
+    let o = f.obligations();
+    assert!(o.uncertain && o.record != "recorded", "owed: debt retained");
+    assert!(f.b.seal().1.is_err(), "owed: settlement cannot clear debt");
+    // Dropped: a ticketed attempt dropped without its record.
+    let a = Admit::bound();
+    drop(a.admit().expect("ticketed attempt"));
+    assert!(a.failed(), "dropped: the session fails");
+    let latched = a.b.session.close_obligations().unwrap().model.uncertain;
+    assert!(latched, "dropped: the debt latches uncertain");
+    assert!(
+        a.b.seal().1.is_err(),
+        "dropped: an unrecorded attempt prevents the seal"
+    );
+    // Panicked: the call unwinds from inside the C1 meter.
+    let f = Call::new();
+    *f.meter.at_charge.lock().unwrap() = Some(Box::new(|| panic!("meter panic (test)")));
+    std::thread::scope(|s| {
+        let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+        let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+        assert!(call.join().is_err(), "panicked: the call unwound");
+    });
+    assert!(f.latched().1, "panicked: the session fails");
+    assert!(
+        f.b.seal().1.is_err(),
+        "panicked: an unwound attempt prevents the seal"
+    );
+    // Poisoned: the model slot's own lock.
+    let f = Call::new();
+    assert!(
+        f.call().is_ok_and(|o| recorded(&o)),
+        "poisoned: a completed call first"
+    );
+    let core = f.b.session.core.clone();
+    let poisoner = std::thread::spawn(move || {
+        let _slot = core.model.state.lock().unwrap();
+        std::panic::resume_unwind(Box::new("poison the model slot (test)"));
+    });
+    assert!(poisoner.join().is_err(), "poisoned");
+    assert!(
+        f.b.session.close_obligations().is_err(),
+        "poisoned: obligations unknown"
+    );
+    assert!(
+        f.b.seal().1.is_err(),
+        "poisoned: a poisoned slot prevents the seal"
+    );
+    println!("{HELD_DONE} sb3_unjoined_or_owed_prevents_clean_close");
+}
+
+/// H2-held: a real peer holds metadata or chat open at the close boundary:
+/// one open connection, the slot active, the seal refused, the first
+/// shutdown deadline kept; release closes the request and joins.
+#[test]
+fn sb3_open_model_request_at_deadline_blocks_seal() {
+    if watched("sb3_open_model_request_at_deadline_blocks_seal") {
+        return;
+    }
+    for i in [0, 3] {
+        let f = Call::serve(Peer::chat(Some(4 + i), None));
+        std::thread::scope(|s| {
+            let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+            let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+            f.entered(i + 1);
+            let polled = f.hold("model.call.polled");
+            let open = Finally(|| polled.open());
+            polled.reached(); // The request stays open; its child is not joined.
+            let o = f.obligations();
+            let unresolved = o.active && !o.child_complete && o.record == "pending";
+            assert!(unresolved, "{i}: unresolved model facts");
+            let (_, seal) = f.b.seal();
+            assert!(seal.is_err(), "{i}: an open request prevents the seal");
+            let quiet = f.b.peer().events.try_recv();
+            assert_eq!(
+                quiet,
+                Err(std::sync::mpsc::TryRecvError::Empty),
+                "{i}: one open connection"
+            );
+            let ingress = f.b.session.ingress();
+            let first = ingress.close_deadline().expect("close deadline");
+            let later = ingress.begin_shutdown(Instant::now() + Duration::from_secs(1));
+            assert_eq!(later, first, "{i}: the first shutdown deadline is kept");
+            drop(open);
+            let closed = f.b.peer().events.recv_timeout(Duration::from_secs(2));
+            assert_eq!(
+                closed,
+                Ok((CALL[i].into(), true)),
+                "{i}: the request closed"
+            );
+            assert!(
+                call.join().unwrap().is_ok_and(|o| recorded(&o)),
+                "{i}: joined"
+            );
+        });
+    }
+    println!("{HELD_DONE} sb3_open_model_request_at_deadline_blocks_seal");
+}
+
+/// H5: a seal raced against a late completion refuses until the attempt
+/// completes; after the seal no request, record, attempt or obligation is
+/// added, and the three final facts stay distinct and pending.
+#[test]
+fn sb3_post_seal_model_events_are_absent() {
+    if watched("sb3_post_seal_model_events_are_absent") {
+        return;
+    }
+    let f = Call::new();
+    let late = f.hold("model.settle.before");
+    let seal = std::thread::scope(|s| {
+        let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+        let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+        let open = Finally(|| late.open());
+        late.reached();
+        let (quit, raced) = f.b.seal();
+        assert!(raced.is_err(), "late completion: the seal refuses");
+        drop(open);
+        assert!(
+            call.join().unwrap().is_ok_and(|o| recorded(&o)),
+            "completed"
+        );
+        f.b.session.seal_close(&quit).expect("then sealed")
+    });
+    let before = (f.sent().len(), f.records(), f.counts());
+    assert_eq!(
+        f.call().map(|_| ()),
+        Err("halted"),
+        "post-seal call refused"
+    );
+    let after = (f.sent().len(), f.records(), f.counts());
+    assert_eq!(after, before, "post-seal metadata/chat/records/attempts 0");
+    let o = f.obligations();
+    assert!(!o.active && o.record == "recorded", "no new obligation");
+    let finals = f.b.session.close_records();
+    let pending = [finals.mother, finals.primary, finals.delivery];
+    assert_eq!(
+        pending,
+        [close::FinalStatus::Pending; 3],
+        "three distinct final facts"
+    );
+    drop(seal);
+    println!("{HELD_DONE} sb3_post_seal_model_events_are_absent");
+}
+
+/// P1: the meter and the evidence write run with no broker hold; door
+/// observation reenters; ingress is not blocked; contention is a bounded
+/// refusal, never a wait.
+#[test]
+fn sb3_meter_and_evidence_do_not_hold_broker_locks() {
+    if watched("sb3_meter_and_evidence_do_not_hold_broker_locks") {
+        return;
+    }
+    // Each lock is tried in its own statement: no guard outlives its check.
+    let free = |session: &Arc<HostSession>, at: &str| {
+        let producers = session.core.producers.try_lock().is_ok();
+        let slot = session.core.model.state.try_lock().is_ok();
+        let runs = session
+            .control_for_test()
+            .authority()
+            .runs()
+            .try_request_hold()
+            .is_ok();
+        let observed = session.close_obligations().is_ok();
+        assert!(
+            producers && slot && runs && observed,
+            "{at}: no broker hold"
+        );
+    };
+    let watchdog = |f: &Call| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::scope(|s| {
+            let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+            s.spawn(move || tx.send(invoke(door, run, &request(), meter, &observer)));
+            let result = rx.recv_timeout(Duration::from_secs(1));
+            result
+                .expect("bounded: no broker hold blocks")
+                .expect("ticketed attempt")
+        })
+    };
+    let f = Call::new();
+    let (session, ran) = (f.b.session.clone(), Arc::new(AtomicUsize::new(0)));
+    let charged = ran.clone();
+    *f.meter.at_charge.lock().unwrap() = Some(Box::new(move || {
+        free(&session, "meter");
+        charged.fetch_add(1, Ordering::SeqCst);
+    }));
+    let (session, recording) = (f.b.session.clone(), ran.clone());
+    f.b.session
+        .core
+        .cell
+        .1
+        .arm("model.attempt.record.before", move || {
+            free(&session, "evidence");
+            assert!(
+                session.ingress().emergency().is_ok(),
+                "held evidence never blocks ingress"
+            );
+            recording.fetch_add(1, Ordering::SeqCst);
+        });
+    let outcome = watchdog(&f);
+    assert_eq!(
+        ran.load(Ordering::SeqCst),
+        2,
+        "the meter and record hooks ran"
+    );
+    assert!(recorded(&outcome), "recorded");
+    let f = Call::new();
+    let (_, holder) = contend(&f, 0);
+    let outcome = watchdog(&f);
+    if let Some(holder) = holder.lock().unwrap().take() {
+        holder.join().unwrap();
+    }
+    assert_eq!(
+        class(&outcome),
+        "model_cancelled",
+        "bounded contention refusal"
+    );
+    println!("{HELD_DONE} sb3_meter_and_evidence_do_not_hold_broker_locks");
+}
+
+/// SB-3B2-C (SB3B-R22 (4)): the close and death table, each cell bound to
+/// its one oracle. Exchange-thread spawn failure has no kernel test to cite,
+/// so it is deferred to a separate kernel-seam unit (SB3B-R22 (1)).
+const CLOSE: [(&str, &str); 20] = [
+    (
+        "seal/no_model",
+        "sb3_completed_call_allows_existing_clean_close",
+    ),
+    (
+        "seal/registered",
+        "sb3_completed_call_allows_existing_clean_close",
+    ),
+    (
+        "seal/completed",
+        "sb3_completed_call_allows_existing_clean_close",
+    ),
+    (
+        "seal/charge_held",
+        "sb3_unjoined_or_owed_prevents_clean_close",
+    ),
+    (
+        "seal/record_held",
+        "sb3_unjoined_or_owed_prevents_clean_close",
+    ),
+    (
+        "seal/owner_return_held",
+        "sb3_unjoined_or_owed_prevents_clean_close",
+    ),
+    ("seal/owed", "sb3_unjoined_or_owed_prevents_clean_close"),
+    ("seal/dropped", "sb3_unjoined_or_owed_prevents_clean_close"),
+    ("seal/panicked", "sb3_unjoined_or_owed_prevents_clean_close"),
+    ("seal/poisoned", "sb3_unjoined_or_owed_prevents_clean_close"),
+    ("seal/spawn_failure", "DEFERRED:SB3B-KSPAWN"),
+    (
+        "seal/metadata_held",
+        "sb3_open_model_request_at_deadline_blocks_seal",
+    ),
+    (
+        "seal/chat_held",
+        "sb3_open_model_request_at_deadline_blocks_seal",
+    ),
+    (
+        "seal/late_completion",
+        "sb3_post_seal_model_events_are_absent",
+    ),
+    ("post_seal/call", "sb3_post_seal_model_events_are_absent"),
+    (
+        "death/ticket",
+        "sb3_private_call_death_restarts_report_only",
+    ),
+    (
+        "death/dispatch",
+        "sb3_private_call_death_restarts_report_only",
+    ),
+    ("death/reply", "sb3_private_call_death_restarts_report_only"),
+    (
+        "death/record",
+        "sb3_private_call_death_restarts_report_only",
+    ),
+    (
+        "death/completed",
+        "sb3_private_call_death_restarts_report_only",
+    ),
+];
+#[test]
+fn sb3_close_table_is_closed() {
+    let rows: Vec<(String, &str)> = CASES
+        .lines()
+        .map(|line| line.split('\t').collect::<Vec<_>>())
+        .filter(|r| r.len() == 5 && r[4] == "SB-3B2-C")
+        .map(|r| (r[0].trim_start_matches("SB3B2-C/").to_owned(), r[1]))
+        .collect();
+    let mut got: Vec<(&str, &str)> = rows.iter().map(|(c, t)| (c.as_str(), *t)).collect();
+    let mut want = CLOSE.to_vec();
+    got.sort();
+    want.sort();
+    assert_eq!(
+        got, want,
+        "exactly the close cells, each with its one oracle"
+    );
+    let source = [
+        include_str!("model_call_tests.rs"),
+        include_str!("model_death_tests.rs"),
+    ]
+    .concat();
+    for (cell, test) in CLOSE {
+        let ok = match test.strip_prefix("DEFERRED:") {
+            Some(unit) => cell == "seal/spawn_failure" && unit == "SB3B-KSPAWN",
+            None => source.contains(&format!("#[test]\nfn {test}() {{")),
+        };
+        assert!(
+            ok,
+            "{cell}: {test} is an existing oracle or the one deferral"
+        );
+    }
 }
