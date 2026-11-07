@@ -2033,6 +2033,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "nexus-governed-control",
+ "nix",
  "serde",
  "serde_json",
  "sha2",
