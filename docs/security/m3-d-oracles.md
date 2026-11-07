@@ -129,3 +129,67 @@ route, host option, resource lifetime, persistent record format or replay
 mutation. Legacy replay/containment behavior remains owned by retained code.
 Sandbox-blocked retained gates still require Architect execution outside.
 No remote CI, Git integration, physical acceptance or phase advancement.
+
+# M3-Db oracle register: retained deliverable and publication receipt
+
+Stacked on 8df09f57 (Da). Rulings 5–7 apply exactly. No verifier transport,
+teaching, model route, host flag or session-port denial change (Dc/Dd/SB-3).
+
+## Frozen records and codes
+
+`ContentKind::Deliverable` (`deliverable`) keeps the accepted page Builder's
+one `CreateFile` named `index.html`, after LaneReturned and immediately
+before its EffectDispatched. Event `deliverable_retained`: `invocation`,
+`effect`, `content`, `sha256` (raw SHA-256 of the bytes), `bytes`.
+Event `publication_receipt`: `effect`, `action` (the journaled pending
+commitment), `sha256`, `bytes`, `policy_hash`, `overtaken`. Both are evidence
+only (digests, ids, sizes); goldens are literal in m3d_publication.rs.
+A page Builder answer with effects other than exactly that one create:
+Fail `deliverable_invalid`, nothing retained or dispatched. No effects: no
+publication (Dc gates verification).
+The receipt is read only through the File snapshot of the exact pending
+commitment (`FileSnapshot.receipt`, ruling 5); `Approved` is unchanged.
+Clean approval: the retained bytes are fetched and checked (content id, raw
+SHA-256, size); then ActionApproved and `publication_receipt` are appended
+under one lock, before closure and ack. Missing receipt → Fail
+`receipt_missing`; receipt without policy → Fail `receipt_policy_missing`;
+both terminal, no retry, no second publication, ActionApproved stays as the
+publication record. Unreadable or mismatched deliverable → Stop
+`private_content_unavailable`, no regeneration or fallback. Each of these
+reports `written; proof not recorded`. An append failure of ActionApproved
+or the receipt fails the mission in memory, returns that same statement in
+the Advance, and leaves closure/ack undone (journal poisoned).
+Settlement of a published page (Stop/budget/interruption): a valid receipt
+is appended with `overtaken: true` immediately before the Settled line.
+Replay codes: `ProofOutOfPlace` (order/linkage), `ProofConflict` (second
+record, other action, after closure).
+
+## Oracle-first matrix (Db)
+
+| Oracle | Test | Commit 1 |
+|---|---|---|
+| encoding/evidence | m3d_proof_records_are_frozen_evidence | red: check refuses |
+| O33a | m3d_deliverable_is_private_before_dispatch | red: no retention |
+| O33b | m3d_deliverable_tamper_stops_without_fallback | red: no retention |
+| D-P1 | m3d_receipt_is_broker_derived_and_action_bound | red: no receipt |
+| D-P2 | m3d_missing_page_receipt_never_claims_nonpublication | red: continues |
+| D-P3 | m3d_proof_append_failure_prevents_success | red: no proof |
+| R7 overtaken | m3d_overtaken_publication_keeps_marked_settlement_evidence | red |
+| D-R1 (Db) | m3d_replay_rejects_relinked_or_out_of_order_proof | red: no proof |
+
+Real-broker scenarios run one fresh broker per child process. A test-only
+thread-local seam in lite_port.rs rewrites only the broker receipt read
+(missing, policy-less, other digest); nothing else is mocked.
+
+## Db mutation map
+
+| Plant | Named test |
+|---|---|
+| MP-D-P1a skip retention | m3d_deliverable_is_private_before_dispatch |
+| MP-D-P1b ignore private-store identity mismatch | m3d_deliverable_tamper_stops_without_fallback |
+| MP-M3-11-D receipt digest from Mother's candidate | m3d_receipt_is_broker_derived_and_action_bound |
+| MP-D-P2 missing policy → current policy_hash() | m3d_missing_page_receipt_never_claims_nonpublication |
+| MP-D-P3 continue after proof append failure | m3d_proof_append_failure_prevents_success |
+| MP-D-V1 ignore overtaken / wrong action | m3d_overtaken_publication_keeps_marked_settlement_evidence, m3d_replay_rejects_relinked_or_out_of_order_proof |
+| MP-D-R1 omit replay ordering/linkage | m3d_replay_rejects_relinked_or_out_of_order_proof |
+| MP-D-P0 raw page content in a proof record | m3d_deliverable_is_private_before_dispatch |

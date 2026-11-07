@@ -134,6 +134,7 @@ impl<P: EffectPort> Coordinator<P> {
                     action: pending.clone(),
                     publication: PublicationClass::Uncertain,
                     state: None,
+                    receipt: None,
                 });
             let _ = resolved.set(snapshot);
             withdrawn

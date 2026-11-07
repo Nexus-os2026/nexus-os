@@ -145,6 +145,25 @@ pub enum Event {
     FileModeSelected,
     /// First cause, durably recorded before reconciliation.
     SettlementStarted { effect: u64, cause: SettleCause },
+    /// M3-Db: the accepted page Builder's one `index.html`, kept privately
+    /// before effect `effect` is dispatched: content id, raw SHA-256, size.
+    DeliverableRetained {
+        invocation: InvocationId,
+        effect: u64,
+        content: ContentId,
+        sha256: String,
+        bytes: u64,
+    },
+    /// M3-Db: the broker's receipt for that effect's exact commitment,
+    /// appended before its closure or ack. `overtaken`: settlement evidence.
+    PublicationReceipt {
+        effect: u64,
+        action: PendingAction,
+        sha256: String,
+        bytes: u64,
+        policy_hash: String,
+        overtaken: bool,
+    },
 }
 
 /// One journal entry.
@@ -253,6 +272,10 @@ pub enum ReplayViolation {
     ResumeNotHeld,
     SettlementOutOfPlace,
     SettlementConflict,
+    /// M3-Db: a retention or receipt record out of its order or linkage.
+    ProofOutOfPlace,
+    /// M3-Db: a second retention or receipt, or one for another action.
+    ProofConflict,
 }
 
 /// Why a journal cannot be read or written: closed codes and line numbers

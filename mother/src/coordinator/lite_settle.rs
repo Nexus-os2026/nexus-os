@@ -552,10 +552,12 @@ impl<P: EffectPort> Coordinator<P> {
             action,
             publication,
             state,
+            ..
         } = snapshot.unwrap_or(FileSnapshot {
             action: pending,
             publication: PublicationClass::Uncertain,
             state: None,
+            receipt: None,
         });
         let status = match &publication {
             PublicationClass::Pending if !elapsed => Some(ApprovalStatus::Waiting),

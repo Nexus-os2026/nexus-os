@@ -1,6 +1,16 @@
 //! The typed File-only port path. Legacy adoption and Stop remain in mod.rs.
 use super::*;
 
+/// M3-Db (tests): rewrites the broker's receipt of this thread's next reads.
+#[cfg(test)]
+type ReceiptSeam = Option<fn(Option<FileReceipt>) -> Option<FileReceipt>>;
+#[cfg(test)]
+thread_local! {
+    pub(crate) static RECEIPT_SEAM: std::cell::Cell<ReceiptSeam> = const { std::cell::Cell::new(None) };
+}
+#[cfg(test)]
+use nexus_governed_control::files::FileReceipt;
+
 impl GovernedPort {
     /// Non-File retirement retains the legacy final-state rules. Unlike
     /// admission, this read must work after the File session's halt engages.
@@ -135,6 +145,7 @@ impl GovernedPort {
             action: pending,
             publication,
             state,
+            receipt: None,
         }))
     }
 

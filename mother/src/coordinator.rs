@@ -100,6 +100,7 @@ pub use session_close::PreparedSessionEnd;
 #[cfg(test)]
 mod lite_oracles;
 mod lite_settle;
+mod page_proof;
 pub use lite::FileSession;
 mod session_result;
 pub use session_result::{TerminalFacts, TerminalIntent};
@@ -331,6 +332,8 @@ struct Mission {
     // Exact terminal append result, independent of later store failures and
     // readable-but-unacknowledged bytes. Never inferred from an older prefix.
     terminal_record: Option<(Trigger, Option<u64>)>,
+    /// M3-Db: the retained page and its receipt, by reference only.
+    proof: page_proof::Proof,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -384,6 +387,7 @@ impl Mission {
             acks: Vec::new(),
             terminal_uncertain: false,
             terminal_record: None,
+            proof: page_proof::Proof::default(),
         }
     }
 
@@ -3460,6 +3464,10 @@ fn replay(
             mission.held = None;
             mission.held_journaled = false;
         }
+        // M3-Db oracle stub: no proof record replays yet (fail closed).
+        Event::DeliverableRetained { .. } | Event::PublicationReceipt { .. } => {
+            return Err(V::ProofOutOfPlace);
+        }
     }
     Ok(())
 }
@@ -3494,6 +3502,8 @@ fn journal_work(event: &Event) -> bool {
         | Event::SessionOpened
         | Event::SessionClosed
         | Event::Held { .. }
-        | Event::SettlementStarted { .. } => false,
+        | Event::SettlementStarted { .. }
+        | Event::DeliverableRetained { .. }
+        | Event::PublicationReceipt { .. } => false,
     }
 }
