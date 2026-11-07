@@ -73,10 +73,12 @@ pub struct Admission {
 }
 
 /// One broker read: publication proof and the corresponding display state.
+/// M3-Db: the broker's receipt of this exact commitment, if it published.
 pub struct FileSnapshot {
     pub action: PendingAction,
     pub publication: PublicationClass,
     pub state: Option<nexus_governed_control::authority::commitment::CommitmentState>,
+    pub receipt: Option<nexus_governed_control::files::FileReceipt>,
 }
 
 /// What a performed effect came to.

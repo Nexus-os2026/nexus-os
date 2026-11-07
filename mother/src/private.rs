@@ -38,15 +38,22 @@ pub enum ContentKind {
     Contract,
     /// A paused phase's rest: the asking lane's remaining effect requests.
     PausedPhase,
+    /// M3-Db: the accepted page Builder's one `index.html`, before dispatch.
+    Deliverable,
 }
 
 impl ContentKind {
-    pub const ALL: [ContentKind; 2] = [ContentKind::Contract, ContentKind::PausedPhase];
+    pub const ALL: [ContentKind; 3] = [
+        ContentKind::Contract,
+        ContentKind::PausedPhase,
+        ContentKind::Deliverable,
+    ];
 
     pub fn as_str(self) -> &'static str {
         match self {
             ContentKind::Contract => "contract",
             ContentKind::PausedPhase => "paused_phase",
+            ContentKind::Deliverable => "deliverable",
         }
     }
 }

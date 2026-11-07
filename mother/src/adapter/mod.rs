@@ -1332,6 +1332,10 @@ mod lite;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+pub(crate) mod m3d_publication_oracles;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 pub(crate) mod lite_clock;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
