@@ -204,9 +204,11 @@ class ReceiptTests(unittest.TestCase):
         summary['snapshot'] = dict(commit='1'*40, content_sha256='2'*64, lockfile_sha256='3'*64)
         summary['installed'] = {key:'4'*64 for key in ('bundle_sha256','policy_sha256','gates_sha256')}
         summary['input_observations'] = {'before':{'rust':'5'*64},'after':{'rust':'5'*64}}
-        summary['environment'] = {'PATH':'/opt/rust/bin:/usr/bin:/bin','LANG':'C.UTF-8',
-                                  'HOME':'/work/home','CARGO_HOME':'/work/cargo',
-                                  'CARGO_NET_OFFLINE':'true','CARGO_TARGET_DIR':'/work/target'}
+        summary['environment'] = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
+                                  'CARGO_HOME':'/work/cargo','CARGO_TARGET_DIR':'/work/target','CARGO_BUILD_JOBS':'4',
+                                  'RUST_TEST_THREADS':'4','CARGO_TERM_COLOR':'never','CARGO_NET_OFFLINE':'true',
+                                  'RUST_BACKTRACE':'1','TMPDIR':'/run/gate/tmp','XDG_RUNTIME_DIR':'/run/gate/xdg',
+                                  'XDG_CACHE_HOME':'/work/cache','LANG':'C.UTF-8','LC_ALL':'C.UTF-8','TZ':'UTC','CI':'true'}
         artifacts = [dict(id='host-bin',adapter='libtest',executable='/work/target/host-bin',
                           package='nexus-mother-host',target='host'),
                      dict(id='desktop-bin',adapter='libtest',executable='/work/target/desktop-bin',
