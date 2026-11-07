@@ -90,3 +90,33 @@ validation; 2 correction marker reuse; 3 deterministic source; 4 third entry;
 8 recording retry; 9 marker fallback; 10 context omitted/wrong; 11 context leak.
 Each must fail its named §5 assertion and be restored byte-for-byte. RuntimeRoot
 or AF_UNIX failure is sandbox_blocked, never a kill. Cb-D1/D2 belong to Cb0.
+
+## Cb1-R2 — authorized oracle/fixture correction
+
+Defects were found in outside execution: `m3cb1-out/outside-mother.log`
+and `m3cb1-out/diag-m3cb_{marker_failure_fails_closed,markers_fresh_per_request,needles_and_transport_failures_do_not_retry}-{1,2}.log`;
+these paths are under
+`/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/`.
+Diagnosis: `m3cb1-out/report-r2-diagnosis.md`; approved proposal A:
+`m3cb1-out/proposed-marker-fixtures.diff`. No production code changed.
+
+**SCOPE NOTE (binding):** "subsequent normal invocation" = a separate real
+invocation of the actual lane (separate process), not the same FileSession;
+same-thread seam consumption is covered by the direct oracle
+`cb_oracles::m3cb_marker_failure_fails_closed`; within-invocation correction-fault
+keeps the first charge (`markers/failure`). Production lifetime rules are NOT
+relaxed.
+
+Proposal A uses the existing bounded child runner with unchanged exit/sentinel
+judgment. Independent File missions retain baseline `(1,1,1,1)`, failure
+`(0,0,0,0)`, recovery `(1,1,1,1)`, cumulative `(1,1,1,1)` then `(2,2,2,2)`;
+the third marker is compared with both earlier markers. Duplicate-marker and
+within-invocation correction-fault judgments remain intact.
+
+`transport/pre` expects `(1,0,0,1)`: one caller entry, zero chats/charges,
+one admitted failed attempt. After live assertions, the fixture is dropped to
+release the store's exclusive lock; a read-only native SQLite query (existing
+Linux test convention: `python3`) asserts exactly one `model_call` body with
+`detail.op = model_call`, `detail.outcome = unavailable`, and no `detail.call`
+index. Neither the record nor the meaning of `attempts()` changes. No retry,
+production/lifecycle change or assertion weakening is authorized.
