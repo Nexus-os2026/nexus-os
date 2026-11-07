@@ -286,3 +286,63 @@ is a separate unit).
 | P-R13-2 | per-buffer CR flag (CR fed to the buffers, no stream pairing) | generative (2,073 cases); old-CR reproducer |
 
 P-R11-1 and P-R11-2 mutate code that R13 replaced; their oracles still pass.
+
+## M-3b — page teaching display (data-only) and O34
+
+Code: `mother/src/coordinator/page_display.rs` (projection and selection),
+`FileSession::journal_view` in `mother/src/coordinator/lite.rs`,
+`mother/host/src/page_display.rs` (escape and emit only). Tests:
+`mother/src/oracles/m3e_display.rs`, and the `oracles` module of
+`mother/host/src/page_display.rs` (R14 Q2: the emit function is
+crate-private). Rulings M3E-R1, R8, R12, R14.
+
+### Frozen behaviour
+
+- **Data-only (R12 (2)).** Nothing in the scripted `run` flow calls it; M-5
+  wires it. The walk is byte-identical.
+- **Touch-free view (R12 (1)(a)).** `journal_view` is `store.load()` plus
+  `verify` under the coordinator lock: no budget check, no `file_stop`, no
+  state change, no action or authority. Display reads only this; the next
+  real interaction still enforces a lapse.
+- **Projection.** A content-free `PageView` of one mission: the consented
+  contract hash, whether a File was asked for, the broker receipt
+  (`PublicationReceipt`: sha256, bytes, overtaken), the recorded checks
+  (`VerificationRecorded`), and the recorded end. Lines are selected only for
+  the consented contract (`NotConsented` otherwise) and only for a page
+  mission.
+- **T10 (R12 (4)).** Folder from the consented contract's `requested_folder`;
+  bytes and digest only from the journaled receipt, never from Mother's
+  retained candidate. No receipt, no T10. Overtaken: `t12_unchecked`, never
+  T10 or success.
+- **T11/T12/T13.** T11, `t12_passed` and T13 only when V0..V5 are all
+  recorded `pass`; the first recorded failure (or a missing check,
+  `not_recorded`) is `t12_failed(code)`; written with no record is
+  `t12_unchecked`. A scripted VerifyPass is no recorded check. Every T12 form
+  keeps every OPEN line.
+- **T9.** Declined (consent or action denied), expired (`ApprovalLapsed`
+  approval_expired), stopped (Stop with nothing asked, or a settled
+  NotPublished), uncertain (a settled Uncertain, another lapse, or a File
+  asked for with no receipt and no other end).
+- **Phase lines (R12 (6)).** `phase_line` gives T5, T7 and T15; M-5 calls it.
+- **Host.** `page_text` escapes every line through `evidence::escaped` and
+  keeps the line breaks.
+- **O34 (R14).** Broker-clock expiry is unreachable by design: Mother's held
+  deadline is never later than the broker's. The port takes its deadline as
+  `asked_at + lifetime`, read before the broker prepares
+  (`adapter/mod.rs:598–610`); the broker expires an action only at or after
+  its own deadline on either clock (`commitment.rs:1262`, `:2149`); Mother
+  withdraws an elapsed wait before reading the broker (`lite_settle.rs:581`).
+  O34 is therefore `approval_expired` at Mother's held deadline, with the
+  broker record still `Prepared` and the mission budget live. The R12
+  "deadline live" clause is withdrawn as unsatisfiable.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_m3b_t10_requires_a_journaled_broker_receipt` | Pending: no line. T10 is the receipt's bytes and digest with the consented folder, never the retained candidate's; another contract is `NotConsented`; overtaken is `t12_unchecked` only; a non-page mission has no line. |
+| `m3e_m3b_teaching_follows_recorded_checks` | All-pass: T10, T11, `t12_passed`, T13. A recorded failure: `t12_failed(first code)`, no T11/T13. A missing check: `not_recorded`. A scripted VerifyPass: `t12_unchecked`. Every T12 form keeps every OPEN line. T5, T7, T15 phase lines. |
+| `m3e_m3b_t9_follows_the_recorded_end` | Declined consent: `NotConsented`. ActionDenied: T9 declined; approval_expired: expired; Stop before a File, settled NotPublished: stopped; settled Uncertain, Stop after a File with no settlement: uncertain. |
+| `m3e_m3b_view_is_read_only_and_the_next_call_still_enforces_the_budget` | Real broker page mission waiting; three views live and three after the budget lapses: the same verified journal, journal length, lane calls, acks and pending action. The next `state()` ends the mission and the journal records BudgetTime. |
+| `m3e_m3b_native_approval_expired_runs_no_verifier` | LiteHome (TestClock, real broker) and the m3d page lanes. At Mother's held deadline, broker record `Prepared` and live: Blocked, `approval_expired`, 0 Verifier lane calls, no `VerificationRecorded`, no VerifyPass, no `index.html`, T9 expired, broker record ends `Revoked`, never `Expired`. Counter-control 1 s before (the clocks keep real time): still waiting; approved and run, Done with one Verifier call, a check record and the page. |
+| `m3e_m3b_display_escapes_goal_and_model_text` (host) | Hostile goal, folder and lane text (ESC, BEL, CR, bidi, zero-width, backslash): one display line per line, every character shown, each control visibly escaped, canaries readable, frozen text unchanged. |

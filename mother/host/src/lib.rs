@@ -32,6 +32,8 @@ mod legacy_stop;
 #[cfg(target_os = "linux")]
 pub mod legacy_terminal;
 #[cfg(target_os = "linux")]
+mod page_display;
+#[cfg(target_os = "linux")]
 mod session_home;
 #[cfg(target_os = "linux")]
 mod stop;

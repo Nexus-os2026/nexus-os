@@ -100,6 +100,7 @@ pub use session_close::PreparedSessionEnd;
 #[cfg(test)]
 mod lite_oracles;
 mod lite_settle;
+pub mod page_display;
 mod page_proof;
 pub use lite::FileSession;
 mod session_result;
