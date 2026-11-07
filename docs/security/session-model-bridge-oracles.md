@@ -1322,3 +1322,61 @@ closed states keep their N/A citations. The validator binds `settled:`
 exactly to the executed settlement cells. No
 `SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION` cell is needed, since every reachable
 cell is executed.
+
+## 14. SB-3 C1: public session exposure (SB3C-R1, SB3C-R2)
+
+Branch `mother/sb3c-session-exposure` on the composed B1 head `4c40c8c6`, with
+`b134dbda` and B2's head `834f7a99` merged in. C1 is a review unit only: C1, C2 and D integrate as one
+unit, and CI and plants for that unit run on D's final head. No activation:
+the Cq qualification gate stays all-None.
+
+**I-E3 reconciliation (spec §4.2).** SessionPort passes the original consent
+binding, the C1 meter and deadline, and the sealed caller's deny-only
+invocation observer.
+
+### 14.1 Surface
+
+- `HostSession::register_local_model(endpoint, ModelPinSpec)`: R0, Bootstrap only, over SB-2a's private registration.
+- `SessionDoor::model_identity()`: R1, read-only. NEW private `model_identity_private`: an Original door, live Q, installed M, not uncertain, a live registration watch, a nonblocking model-slot hold.
+- `SessionDoor::admit_inference(..)`: R2, over SB-3A's `bind_inference_private`.
+- `SessionDoor::model_call(..)`: R3–R8, over SB-3B's `model_call_private`.
+- Mother: the `PortDoor::Session` arms call these. SessionPort overrides the three EffectPort model methods by forwarding. Only `model_not_registered` becomes `NoBrokerRoute` (`unconfigured`); every other class is preserved.
+
+### 14.2 Oracles
+
+| Oracle | Assertions | RED on the inert surface |
+|---|---|---|
+| `host_session::model_exposure_tests::sb3c_public_route_executes_one_recorded_call` (S1) | Registration's 4 paths; R1 view; R2; one recorded call (paths version/status/tags/chat), attempts/pins (1,0), one native record, one charge, run count 1 | "R1 returns the registered view" |
+| `…::sb3c_unconfigured_session_retains_default_denial` (S2) | identity None; admit `model_not_registered`; **`model_attempts == 0` before the call's class** (MP-SB-1b); zero records, charges and requests; slot inactive; one run; the absent-registration accounting itself is reachable (it issues a ticket) | admit `halted` ≠ `model_not_registered` |
+| `…::sb3c_registration_is_bootstrap_only_once` (R0) | one record before readiness; a second registration sends and records nothing; a late one (after readiness) likewise; a failed one is not ready | phase 0 (fully inert): `is_ok()`; GREEN once R0 is wired (see 14.3) |
+| `…::sb3c_identity_is_original_request_read_only` (R1) | repeated reads change nothing; Continuation, expired Q, restriction, the old watch (Stop + resume), poison, missing M → None | the first read |
+| `…::sb3c_public_binding_is_exact_and_idempotent` (R2, F12) | idempotent; changed sticky → `already_admitted`; one real component at a time (route column, Q4): binding → s `unknown_run` (a real second session's broker does not know R), q `not_member`, unknown R, files, consent, identity, grant `grant_not_live`, expired Q `halted`, Continuation `halted`, unregistered; call gate → expired Q `model_timeout`, conversation `model_config_mismatch`, Continuation `halted`; ninth `model_over_budget` with no request or charge | the first binding |
+| `…::sb3c_stop_before_public_binding_installs_nothing` (R3) | emergency at `model.bind.checked` wins; nothing installed | "paused at the actual CAS" |
+| `…::sb3c_public_continuation_conversation_and_grant` (R4, G0) | Continuation: no identity, halted admit and call, zero work; the grant lapsing after binding → `grant_not_live` at the call with zero work; the valid grant reaches chat | the first binding |
+| `adapter::session_model_bridge_tests::sb3_registered_session_executes_one_recorded_call` (S1, Mother) | the real C1 caller → SessionPort → broker → fake peer: the exact reply reaches the lane; version/status/tags 2, show 1, chat 1; one charge; one run | "the exact recorded reply" (phase 2) |
+| `…::sb3_unconfigured_session_retains_default_denial` (S2 at SessionPort; MP-SB-C-absence) | on the existing File run: `NoBrokerRoute`, zero charge, chat and runs; a registered, emergency-restricted session keeps `Halted` | "unconfigured: admission" |
+| `…::sb3_continuation_and_conversation_never_call` (R4, Mother) | the real continuation constructor (`approval_continuation` → `SessionPort::continue_approval`): no identity; admit and call `Halted`; zero charges and chats | GREEN (fail-closed negative) |
+| `…::sb3_revocation_after_entry_is_entered_only` (composed L2, metadata half; SB3B-R3 Q1 carry) | revoked while version is entered: status stays at registration's 1, chat 0, charge 0 (MP-SB-C-observer's kill) | "the schedule step happens" (no entry) |
+| `adapter::c1b_port_oracles::c1_s1_sealed_session_denies_inference` (amended to S2's meaning, §11) | the unconfigured session on its File run: `NoBrokerRoute`, nothing charged | `Halted` ≠ `NoBrokerRoute` |
+| `adapter::c1b_port_oracles::c1_s1_session_sources_have_no_model_route` (amended: exact allowlist) | the facade's model lines are exactly SB3C_FACADE_LINES / SB3C_FACADE_PUBLIC; SessionPort overrides each method once by forwarding; `unconfigured` maps absence only; the arms call the public session methods | GREEN (structure) |
+| `mother/host/tests/session_sealing.rs::session_public_facade_…` (amended) + `sb3_only_registered_session_surfaces_are_exposed` (S3) | exactly the three model-named exposed signatures are exempt; raw transport/watch/lane-registration getters, qualified, aliased, closure and trailing-comma variants are not | GREEN (structure) |
+
+**Moved to C2 (SB3C-R2, option c).** The pure composition evidence names no
+C1 production plant and moves to C2: C1 (`sb3_durable_charge_precedes_chat`),
+C3 (`sb3_caps_and_budget_keep_existing_goldens`), O4
+(`sb3_charge_is_work_not_settlement`) and the chat half of composed L2, with
+their journal probe (`ProbeStore`) and counters. C1 keeps L2's metadata half
+and every oracle that names a C1 production plant.
+
+**Cited, not re-seamed (Q3).** The consent-association rows (groups,
+opened_by, door_cell, view_id, seq, kind, time, life) stay A's private
+`sb3_inference_binding_is_exact_and_idempotent`. The R2 oracle checks that
+the cited test and each of its rows exist.
+
+### 14.3 RED evidence (disclosed)
+
+- **Phase 0 (fully inert surface):** every public method refuses. Most oracles stop at registration.
+- **Phase 1:** R0 wired (`register_local_model` → the private registration). This is the committed inert state. The broker oracles fail at their named assertions (table above); R0 is GREEN.
+- **Phase 2 (evidence replay, not committed; accepted by SB3C-R2):** R0 and R1 wired. The Mother composition oracles fail at their named assertions, since phase 1 refuses the model lane at draft (`ModelLaneUnavailable`).
+
+Logs are in the builder scratchpad (`c1/replay-p1-*`, `c1/replay-p2-*`).

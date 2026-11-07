@@ -1380,6 +1380,13 @@ mod c1b_coordinator_oracles;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+mod session_model_bridge_support;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_model_bridge_tests;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod m3cb_lane_oracles;
 #[cfg(target_os = "linux")]
 #[cfg(test)]

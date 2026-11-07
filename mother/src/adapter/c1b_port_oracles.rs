@@ -280,25 +280,27 @@ fn admit(
 
 // ---------------------------------------------------------------- C1-S1
 
-/// The sealed session keeps inference default-deny: no identity, no
-/// admission, no attempt (nothing charged).
+/// The unconfigured session keeps inference default-deny (SB-3 §11: the
+/// meaning of "session denial" after SB-3): no identity, no admission, no
+/// attempt (nothing charged), on the mission's existing File run.
 #[test]
 fn c1_s1_sealed_session_denies_inference() {
     port_children("c1_s1_sealed_session_denies_inference", &["session"]);
 }
 fn session_denies() {
-    assert!(nexus_governed_control::files::make_non_dumpable());
-    let home = super::session_support::Fixture::new("c1b1-s1");
-    let port = home.port.clone();
+    let f = super::session_model_bridge_support::SFx::unregistered();
+    let m = f.file_mother();
+    let mission = f.awaiting(&m);
+    let port = f.home.port.clone();
     assert!(port.model_identity().is_none(), "no model identity");
     assert_eq!(
-        port.admit_inference(MissionId(1), &"ab".repeat(32), "request", identity_bytes())
+        port.admit_inference(mission, &"ab".repeat(32), "request", identity_bytes())
             .map_err(|r| r.class),
         Err(BrokerClass::NoBrokerRoute)
     );
     let meter = Meter::default();
     assert_eq!(
-        port.model_call(MissionId(1), &request(), &meter, &Never, &live())
+        port.model_call(mission, &request(), &meter, &Never, &live())
             .map(|_| ())
             .map_err(|r| r.class),
         Err(BrokerClass::NoBrokerRoute)
@@ -310,13 +312,38 @@ fn session_denies() {
     );
 }
 
-/// Static seal: the host session facade names no model or inference route;
-/// SessionPort keeps the three model methods' default denial; the session
-/// door's arms refuse.
+/// Static seal (C1-S1-SB, SB-3 C oracle amendment): the host session facade
+/// names exactly the SB-3 C model route below and nothing else; SessionPort
+/// overrides exactly the three model methods by forwarding; the session
+/// door's arms call exactly the public session methods.
+const SB3C_FACADE_PUBLIC: [&str; 4] = [
+    "pub fn register_local_model(",
+    "pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {",
+    "pub fn admit_inference(",
+    "pub fn model_call(",
+];
+const SB3C_FACADE_LINES: [&str; 15] = [
+    "mod model_exposure_tests;",
+    "pub fn admit_inference(",
+    "spec: crate::inference::ModelPinSpec,",
+    ") -> Result<crate::inference::ModelIdentityView, SessionError> {",
+    "self.register_model_private(endpoint, &spec)",
+    "self.model_identity_private()",
+    "self.bind_inference_private(run, contract_hash, request, expected_identity)",
+    "request: &crate::inference::ModelRequest,",
+    "meter: &dyn crate::inference::CallMeter,",
+    "deadline: &dyn crate::inference::CallDeadline,",
+    "invocation: &crate::inference::InvocationObserver,",
+    ") -> Result<crate::inference::ModelCallOutcome, SessionFailure> {",
+    "self.model_call_private(run, request, meter, deadline, invocation)",
+    "pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {",
+    "pub fn model_call(",
+];
 fn sb2_public_model_item(line: &str) -> bool {
     line.starts_with("pub ")
         && line != "pub struct ModelObligations {"
         && !line.starts_with("pub model: ModelObligations,")
+        && !SB3C_FACADE_PUBLIC.contains(&line)
         && {
             let lower = line.to_ascii_lowercase();
             lower.contains("model") || lower.contains("inference")
@@ -335,6 +362,7 @@ fn sb2_facade_line(line: &str) -> bool {
                 | "model: model::ModelSlot," | "model: model::ModelSlot::default(),"
                 | "if !self.core.model.ready()? {"
         )
+        || SB3C_FACADE_LINES.contains(&line)
 }
 #[test]
 fn sb2_facade_rejects_multiline_registration() {
@@ -387,6 +415,7 @@ fn c1_s1_session_sources_have_no_model_route() {
         "crates/nexus-governed-control/src/host_session/model_tests.rs",
         "crates/nexus-governed-control/src/host_session/model_death_tests.rs",
         "crates/nexus-governed-control/src/host_session/model_call_tests.rs",
+        "crates/nexus-governed-control/src/host_session/model_exposure_tests.rs",
     ];
     assert!(files.len() > 1);
     assert!(sb2_public_model_item(
@@ -426,18 +455,44 @@ fn c1_s1_session_sources_have_no_model_route() {
         .next()
         .unwrap();
     assert!(block.contains("fn withdraw"), "the impl block was found");
-    for method in ["fn model_identity", "fn admit_inference", "fn model_call"] {
-        assert!(!block.contains(method), "SessionPort overrides {method}");
+    // Exactly one forwarding override each; only absence becomes no route.
+    for (method, forward) in [
+        ("fn model_identity(", "self.inner.model_identity()"),
+        ("fn admit_inference(", ".map_err(unconfigured)"),
+        ("fn model_call(", ".map_err(unconfigured)"),
+    ] {
+        assert_eq!(
+            block.matches(method).count(),
+            1,
+            "SessionPort overrides {method}"
+        );
+        let body = block
+            .split(method)
+            .nth(1)
+            .unwrap()
+            .split("\n    fn ")
+            .next()
+            .unwrap();
+        assert!(body.contains(forward), "SessionPort {method} forwards");
     }
+    let mapping = port
+        .split("fn unconfigured(")
+        .nth(1)
+        .expect("the unconfigured mapping")
+        .split("\n}\n")
+        .next()
+        .unwrap();
+    assert!(mapping.contains("if refusal.class == BrokerClass::ModelNotRegistered {"));
+    assert_eq!(mapping.matches("BrokerClass::").count(), 2, "absence only");
     for (method, refusal) in [
-        ("fn model_identity(", "Self::Session(_) => None"),
+        ("fn model_identity(", "Self::Session(door) => door.model_identity()"),
         (
             "fn admit_inference(",
-            "Self::Session(_) => Err(AuthorityError::Unavailable(",
+            "Self::Session(door) => door\n                .admit_inference(",
         ),
         (
             "fn model_call(",
-            "Self::Session(_) => Err(AuthorityError::Unavailable(",
+            "Self::Session(door) => door\n                .model_call(run, request, meter, deadline, invocation)",
         ),
     ] {
         let body = port
@@ -449,7 +504,7 @@ fn c1_s1_session_sources_have_no_model_route() {
             .unwrap();
         assert!(
             body.contains(refusal),
-            "PortDoor {method}: the session arm refuses"
+            "PortDoor {method}: the session arm calls the public session method"
         );
     }
 }

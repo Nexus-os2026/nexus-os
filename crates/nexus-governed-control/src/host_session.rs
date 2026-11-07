@@ -16,6 +16,8 @@ mod model_call_tests;
 #[cfg(test)]
 mod model_death_tests;
 #[cfg(test)]
+mod model_exposure_tests;
+#[cfg(test)]
 mod model_tests;
 pub mod outcome;
 mod receipt;
@@ -808,6 +810,16 @@ impl HostSession {
             .map_err(|error| SessionError::Backend(error.class()))
     }
 
+    /// SB-3 C (R0): register the trusted local model during Bootstrap only,
+    /// before `finish_bootstrap`: verified, recorded once, then installed.
+    pub fn register_local_model(
+        &self,
+        endpoint: &str,
+        spec: crate::inference::ModelPinSpec,
+    ) -> Result<crate::inference::ModelIdentityView, SessionError> {
+        self.register_model_private(endpoint, &spec)
+    }
+
     /// Last bootstrap transition, invoked by the trusted host only after its
     /// three-source report has succeeded. A late result never installs ready.
     pub fn finish_bootstrap(&self) -> Result<(), SessionError> {
@@ -1421,6 +1433,39 @@ impl SessionDoor {
         let result = receipt::ack(self, id).map_err(Into::into);
         call.joined();
         result
+    }
+
+    /// SB-3 C (R1): the installed model's identity at an original door
+    /// whose request, session and registration watch are live. No authority.
+    pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {
+        None // SB-3 C1 inert surface
+    }
+
+    /// SB-3 C (R2): bind this original door's own File run, once, to its
+    /// cached consent and the registered model `expected_identity`.
+    pub fn admit_inference(
+        &self,
+        run: crate::authority::ids::RunId,
+        contract_hash: &str,
+        request: &str,
+        expected_identity: [u8; 32],
+    ) -> Result<(), SessionFailure> {
+        let _ = (run, contract_hash, request, expected_identity);
+        Err(crate::authority::AuthorityError::Halted.into()) // SB-3 C1 inert surface
+    }
+
+    /// SB-3 C (R3-R8): one model call of the bound run, charged to the C1
+    /// `meter`, ended by `deadline` and by the caller's `invocation`.
+    pub fn model_call(
+        &self,
+        run: crate::authority::ids::RunId,
+        request: &crate::inference::ModelRequest,
+        meter: &dyn crate::inference::CallMeter,
+        deadline: &dyn crate::inference::CallDeadline,
+        invocation: &crate::inference::InvocationObserver,
+    ) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {
+        let _ = (run, request, meter, deadline, invocation);
+        Err(crate::authority::AuthorityError::Halted.into()) // SB-3 C1 inert surface
     }
 }
 

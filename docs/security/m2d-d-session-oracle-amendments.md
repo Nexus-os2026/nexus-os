@@ -812,3 +812,20 @@ resource accounting, and exactly one outstanding producer. Its existing
 bounded PTY deadline, held storage, nonzero exit and absence of a successful
 close remain required. This strengthens the oracle; no production notice is
 changed to recover the obsolete subtotal wording.
+
+## SB-3 C1: C1-S1-SB exposure amendment (spec §8.1)
+
+The C1-S1/SB-2 denial results are historical evidence of the earlier scope.
+After SB-3, "session denial" means unconfigured-session denial: identity None,
+`NoBrokerRoute` on the mission's existing File run, zero attempts, charges and
+chats.
+
+Blanket structural denial is replaced by exact allowlists, with the recursive,
+alias, typed-parameter and qualified/multiline escape controls retained:
+- `session_sealing.rs`: the three model-named exposed signatures (`SB3C_EXPOSED`). The other guards are unchanged, and `sb2_private_model_submodules…` still finds no public item under `host_session/`.
+- `c1b_port_oracles.rs`: `SB3C_FACADE_LINES` / `SB3C_FACADE_PUBLIC`; one forwarding SessionPort override per method; `unconfigured` maps absence only; the Session arms call the public methods.
+
+The two deny-only observer types (`InvocationOwner`, `InvocationObserver`)
+stay outside the facade allowlist. No unrestricted public-item exception is
+added. The no-model lane-submit refusal and the configured ordinary-broker
+positives are unchanged.

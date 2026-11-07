@@ -34,7 +34,7 @@ const CASE: &str = "NEXUS_M2E_C1B_CASE";
 const BOUND: Duration = Duration::from_secs(2);
 const NOTE: &str = "C1B_NOTE_CANARY";
 const PROMPT: &str = "C1B_PROMPT_CANARY";
-const REPLY: &str = "C1B_REPLY_CANARY";
+pub(crate) const REPLY: &str = "C1B_REPLY_CANARY";
 const ERROR: &str = "C1B_ERROR_CANARY";
 
 // ---------------------------------------------------------------- harness
@@ -64,13 +64,14 @@ fn run(case: &str) {
     }
 }
 
-type Script = Box<dyn Fn(&LaneContext<'_>) -> LaneOutput + Send + Sync>;
+pub(crate) type Script = Box<dyn Fn(&LaneContext<'_>) -> LaneOutput + Send + Sync>;
 
-/// The Builder with a model cap; its behaviour is the case's script.
-struct ModelLane {
-    cap: u32,
-    script: Script,
-    invoked: Arc<AtomicUsize>,
+/// The Builder with a model cap; its behaviour is the case's script
+/// (SB-3 C: also the session model-bridge oracles' lane).
+pub(crate) struct ModelLane {
+    pub(crate) cap: u32,
+    pub(crate) script: Script,
+    pub(crate) invoked: Arc<AtomicUsize>,
 }
 impl Lane for ModelLane {
     fn identity(&self) -> LaneIdentity {
@@ -92,17 +93,17 @@ impl Lane for ModelLane {
     }
 }
 
-fn request(user: &str) -> ModelRequest {
+pub(crate) fn request(user: &str) -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
     ModelRequest::new("C1B system".into(), user.into(), schema).unwrap()
 }
-fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
+pub(crate) fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
     context
         .model
         .expect("a model lane gets a caller")
         .call(&request(PROMPT))
 }
-fn outcome(result: &Result<ModelReply, ModelCallError>) -> String {
+pub(crate) fn outcome(result: &Result<ModelReply, ModelCallError>) -> String {
     match result {
         Ok(_) => "ok".into(),
         Err(ModelCallError::Invalidated) => "invalidated".into(),
@@ -111,7 +112,7 @@ fn outcome(result: &Result<ModelReply, ModelCallError>) -> String {
         Err(ModelCallError::RecordUnavailable) => "record_unavailable".into(),
     }
 }
-fn draft(content: &str) -> LaneOutput {
+pub(crate) fn draft(content: &str) -> LaneOutput {
     LaneOutput {
         verification: None,
         text: "c1b model lane".into(),
@@ -141,7 +142,7 @@ fn completes(what: &str, body: impl FnOnce() + Send + 'static) {
     });
     assert!(rx.recv_timeout(BOUND).is_ok(), "blocked: {what}");
 }
-fn identity_hex() -> String {
+pub(crate) fn identity_hex() -> String {
     hex::encode(ModelIdentity::from_spec(&spec()).unwrap().digest())
 }
 /// Runs a hook once, under the coordinator lock, just before the first

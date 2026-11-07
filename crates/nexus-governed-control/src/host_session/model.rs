@@ -258,13 +258,6 @@ impl CallCancel for RegistrationGate<'_> {
     }
 }
 impl HostSession {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-2a: private, wired by SB-3; session route unavailable"
-        )
-    )]
     pub(super) fn register_model_private(
         &self,
         endpoint: &str,

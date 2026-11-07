@@ -978,3 +978,13 @@ These are the remaining material builder choices and the frozen answers supplied
 - **Accepted, with disclosure in the PR.** No history is rewritten.
 - From here on: commit ALL remaining oracles, the model coverage, schedule execution and the amended host oracles **before any further production commit**. Every later fix commit must name the oracle commit it satisfies.
 - Process deviations like this one are disclosed and the work continues. They are not STOP conditions. STOP only for the spec's defined conditions.
+
+## SB-3 C1 exposure note (2026-11-07)
+
+I-E3 now applies: SessionPort implements exactly `model_identity`,
+`admit_inference` and `model_call`, by forwarding to the original SessionDoor's
+public R1/R2/R5 route. It passes the original consent binding, the C1
+meter/deadline and the sealed caller's deny-only invocation observer. An
+approval continuation, a restricted or closing session and an unconfigured
+session expose no inference. The production host still registers no model
+(M2e-D).

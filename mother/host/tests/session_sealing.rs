@@ -109,7 +109,16 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
     );
     let signatures = signatures(&text);
     assert!(!signatures.is_empty());
-    for sig in signatures {
+    let exposed: Vec<_> = signatures
+        .iter()
+        .filter(|sig| sb3c_exposed_signature(sig))
+        .collect();
+    assert_eq!(
+        exposed.len(),
+        SB3C_EXPOSED.len(),
+        "exactly the SB-3 C route"
+    );
+    for sig in signatures.iter().filter(|sig| !sb3c_exposed_signature(sig)) {
         for forbidden in [
             "GovernedControl",
             "Authority",
@@ -124,8 +133,14 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
         ] {
             assert!(!sig.contains(forbidden), "public session escape: {sig}");
         }
+        // Any case: a qualified model type names a model too (S3).
+        assert!(
+            !sig.to_lowercase().contains("model"),
+            "public session model escape: {sig}"
+        );
     }
     for line in text.lines().map(str::trim) {
+        assert!(!aliased(line), "the facade renames no import: {line}");
         assert!(
             !line.starts_with("pub use "),
             "session cannot re-export legacy authority: {line}"
@@ -147,6 +162,58 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
             }
         }
     }
+}
+
+/// SB-3 C (spec §8.1, S3): the exposed session model route is exactly these
+/// receivers, methods and signatures (whitespace-free); any other public
+/// signature naming a model still fails the facade guard.
+const SB3C_EXPOSED: [&str; 3] = [
+    "pubfnregister_local_model(&self,endpoint:&str,spec:crate::inference::ModelPinSpec,)->Result<crate::inference::ModelIdentityView,SessionError>",
+    "pubfnmodel_identity(&self)->Option<crate::inference::ModelIdentityView>",
+    "pubfnmodel_call(&self,run:crate::authority::ids::RunId,request:&crate::inference::ModelRequest,meter:&dyncrate::inference::CallMeter,deadline:&dyncrate::inference::CallDeadline,invocation:&crate::inference::InvocationObserver,)->Result<crate::inference::ModelCallOutcome,SessionFailure>",
+];
+/// A renaming import would let a public signature name a model type
+/// without the word (S3).
+fn aliased(line: &str) -> bool {
+    line.starts_with("use ") && line.contains(" as ")
+}
+fn sb3c_exposed_signature(sig: &str) -> bool {
+    let flat: String = sig.split_whitespace().collect();
+    SB3C_EXPOSED.contains(&flat.as_str())
+}
+
+/// S3 escape controls: raw transport/watch/registration getters, qualified,
+/// aliased, multiline-renamed and generic-closure variants of the exposed
+/// signatures are not exempt and still trip the facade guard.
+#[test]
+fn sb3_only_registered_session_surfaces_are_exposed() {
+    let exposed = "pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {";
+    assert!(sb3c_exposed_signature(&signatures(exposed)[0]));
+    // A trailing-comma variant is another signature, not an exemption.
+    let reformatted =
+        "pub fn model_identity(\n    &self,\n) -> Option<crate::inference::ModelIdentityView> {";
+    assert!(!sb3c_exposed_signature(&signatures(reformatted)[0]));
+    for plant in [
+        "pub fn model_transport(&self) -> Arc<VerifiedOllama> {",
+        "pub fn model_watch(&self) -> StopWatch {",
+        "pub fn register_model_for_lane(&self, lane: &str) -> Result<(), SessionError> {",
+        "pub unsafe fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {",
+        "pub fn model_identity(&self) -> Option<model::RegistrationReceipt> {",
+        "pub fn model_identity_with(&self, f: impl FnOnce() -> bool) -> Option<crate::inference::ModelIdentityView> {",
+        "pub fn model_call(&self,\nrun: crate::authority::ids::RunId,\n) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {",
+        "pub fn view_raw(\n    &self,\n) -> Option<\n    crate::inference::ModelIdentityView,\n> {",
+    ] {
+        let parsed = signatures(&plant);
+        assert_eq!(parsed.len(), 1, "collect {plant}");
+        assert!(!sb3c_exposed_signature(&parsed[0]), "not exempt: {plant}");
+        let lower = parsed[0].to_lowercase();
+        assert!(lower.contains("model"), "the facade guard rejects {plant}");
+    }
+    assert!(aliased("use crate::inference::ModelIdentityView as View;"));
+    assert!(aliased(
+        "use crate::inference::{ModelIdentityView as View};"
+    ));
+    assert!(!aliased("use std::fmt;"));
 }
 
 #[test]
