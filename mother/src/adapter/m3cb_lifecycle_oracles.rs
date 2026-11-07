@@ -15,7 +15,8 @@ use crate::page_builder::{cb_fixtures::*, lane::PageBuilderLane};
 use crate::state::MissionState;
 use nexus_governed_control::authority::{evidence::EndStatus, file_session::FileSessionError};
 use nexus_governed_control::inference::{
-    CallDeadline, CallMeter, Charged, MeterRefusal, ModelIdentity, ModelReply, ModelRequest,
+    CallDeadline, CallMeter, Charged, InvocationOwner, MeterRefusal, ModelIdentity, ModelReply,
+    ModelRequest,
 };
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{mpsc::channel, Arc};
@@ -476,7 +477,14 @@ impl CallDeadline for Direct<'_> {
 }
 impl ModelCaller for Direct<'_> {
     fn call(&self, r: &ModelRequest) -> Result<ModelReply, ModelCallError> {
-        match self.0.fx.port.model_call(self.0.id, r, self, self) {
+        // SB-3A (#127): the ordinary port ignores the caller's observer; keep one live.
+        let owner = InvocationOwner::new();
+        match self
+            .0
+            .fx
+            .port
+            .model_call(self.0.id, r, self, self, &owner.observer())
+        {
             Ok(ModelAttempt::Replied(reply)) => Ok(reply),
             _ => Err(ModelCallError::Invalidated),
         }
