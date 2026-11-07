@@ -79,7 +79,7 @@
 use std::collections::VecDeque;
 use std::io;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Output};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -221,6 +221,8 @@ struct State {
 #[derive(Debug, Default)]
 pub struct StopAuthority {
     state: Mutex<State>,
+    /// Last stop number, published under `state` before releasing its lock.
+    number_now: AtomicU64,
     changed: Condvar,
     notify: tokio::sync::Notify,
     /// The process's authority (its controller is claimed only through
@@ -292,6 +294,7 @@ impl StopAuthority {
             let mut state = self.lock();
             state.stopped = true;
             state.number = state.number.saturating_add(1);
+            self.number_now.store(state.number, Ordering::Release);
             state.number
         };
         self.changed.notify_all();
@@ -501,6 +504,22 @@ impl std::fmt::Debug for StopWatch {
 }
 
 impl StopWatch {
+    /// Observe the stop-number mirror without waiting on the state lock.
+    /// A stop permanently halts older watches, including after resume.
+    /// This is a snapshot; a later stop can still halt this work.
+    pub fn halted_now(&self) -> bool {
+        self.authority.number_now.load(Ordering::Acquire) != self.admitted_at
+    }
+
+    /// Refuse work halted by a stop, without waiting on a lock.
+    pub fn check_now(&self) -> Result<(), EmergencyStopped> {
+        if self.halted_now() {
+            Err(EmergencyStopped)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Whether a stop was engaged since this work was admitted.
     pub fn halted(&self) -> bool {
         self.authority.lock().number != self.admitted_at
@@ -1191,5 +1210,47 @@ mod tests {
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout).contains("HELPER_READY"));
         assert!(stop.halts().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod sb2k_nonblocking_watch {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn sb2k_check_now_never_waits_on_the_state_lock() {
+        let stop = StopAuthority::new();
+        let watch = stop.admit().unwrap();
+        for expected in [Ok(()), Err(EmergencyStopped)] {
+            if expected.is_err() {
+                stop.engage();
+            }
+            let (ready, held) = mpsc::channel();
+            let (release, released) = mpsc::channel();
+            let holder = {
+                let stop = stop.clone();
+                std::thread::spawn(move || {
+                    let _guard = stop.lock();
+                    ready.send(()).unwrap();
+                    // Outer watchdog also releases the guard on test failure.
+                    let _ = released.recv_timeout(Duration::from_secs(10));
+                })
+            };
+            held.recv_timeout(Duration::from_secs(5)).unwrap();
+            let (done, completed) = mpsc::channel();
+            let observer = {
+                let watch = watch.clone();
+                std::thread::spawn(move || done.send(watch.check_now()).unwrap())
+            };
+            let result = completed.recv_timeout(Duration::from_secs(2));
+            release.send(()).unwrap();
+            holder.join().unwrap();
+            observer.join().unwrap();
+            assert_eq!(
+                result.expect("K2: check_now waited on state lock"),
+                expected
+            );
+        }
     }
 }

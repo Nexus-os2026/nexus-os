@@ -237,3 +237,71 @@ Run: `cargo test -p nexus-kernel --locked --lib inference` (MP-SB1-6 also
 | MP-SB1-10 default `Err` always | K1; E-O5 positive | RED: K1, E-O5 and 53 others (54 of 67) |
 
 No plant was masked; none required weakening another guard.
+
+
+## 9. SB-2k nonblocking observations (frozen 2026-11-06)
+
+Owner-approved scope: base `67c050b8`, `mother/sb2k-nonblocking-watch`.
+Only `StopWatch::halted_now` / `check_now` and evidence `try_health` are added.
+No caller, session route, inference, dependency or workflow change is authorized.
+Commit 1 registers these oracles with inert surfaces; commit 2 implements them.
+Oracle assertions and retained tests are frozen before implementation.
+
+| Oracle | Test | Required observation |
+|---|---|---|
+| SB2K-K1 | `sb2k_check_now_agrees_with_check` | Fresh Ok; engaged Err; resumed old watches stay Err; three admission numbers |
+| SB2K-K2 | `sb2k_check_now_never_waits_on_the_state_lock` | Completion channel within 2s while another thread holds state; last published fresh and stopped values |
+| SB2K-K3 | `sb2k_engage_publishes_before_returning` | 1,000 post-engage joined observers see halted; zero failures |
+| SB2K-K4 | `sb2k_try_health_refuses_under_contention` | Store and primary return None under hold, full health after release, poison returns and persists latched health |
+| SB2K-K5 | retained emergency-stop and evidence-store tests | Existing assertions unchanged and green |
+
+K1/K3 use the new integration binary. K2 is a `#[cfg(test)]` unit module in
+`emergency_stop.rs`; K4 is a `#[cfg(test)]` module in `evidence_store.rs`.
+Their private lock-holding helpers use readiness/release channels, a 10s outer
+release watchdog and a 2s completion bound. No production seam is exposed.
+
+| Plant | Mutation | Required kill |
+|---|---|---|
+| P1 | Omit engage mirror store | K1, K3 |
+| P2 | Publish after releasing state | K3, or honestly not exercised |
+| P3 | check_now takes state lock | K2 watchdog |
+| P4 | try_health uses blocking lock | K4 watchdog |
+| P5 | Contention returns default Some | K4 |
+| P6 | Poison refuses or does not latch | K4 |
+
+### 9.1 SB-2k receipts
+
+Commit 1 compiled and ran with inert stubs (offline, fixed target directory):
+- K1 RED: `sb2k_nonblocking_watch.rs:18`, `K1: after engage`, Ok vs Err.
+- K2 RED: `emergency_stop.rs:1245`, Ok vs Err(EmergencyStopped).
+- K3 RED: `sb2k_nonblocking_watch.rs:39`, unpublished stop at iteration 0.
+- K4 RED: `evidence_store.rs:1588`, Some(default) vs None under contention.
+- Retained: stop-seal 3/0/0; emergency-stop unit controls 11/0/1.
+- Sandbox failures: retained F5 loopback bind denied (EPERM); seven retained
+  evidence tests refuse runtime-root ancestry (UID 65534 on root directories).
+- Full logs: exported alongside the report as `01-*.log`.
+Commit 2: K1/K3 2/0/0; emergency-stop unit command 12/0/1 (K2 green);
+evidence-store command 61/7/2 (K4 green); stop-seal 3/0/0. Counts are
+passed/failed/ignored. The same retained sandbox failures above remain:
+F5 0/1/0; evidence has seven runtime-root refusals. Overall gate is BLOCKED,
+not green. No retained assertion or frozen oracle changed.
+Formatting and warning-denied all-target Clippy both passed. K2 and K4 each
+passed 10 serial runs and 10 concurrent runs (20 test processes), zero failures.
+
+| Plant | Actual result |
+|---|---|
+| P1 | killed: K1 and K3 runtime RED |
+| P2 | not exercised: K1/K3 stayed green; K3 does not observe the unlock-to-store interval |
+| P3 | killed: K2 completion watchdog RED |
+| P4 | killed: K4 completion watchdog RED |
+| P5 | killed: K4 Some(default) vs None RED |
+| P6 | killed: K4 poisoned observation refused RED |
+
+All six compiled. All six source restorations were byte-identical (SHA-256).
+Logs, command exits, counts and restoration hashes accompany `report.md`.
+`Cargo.lock` is unchanged; scope remains five allowed files, with no Git writes.
+A second explicit security self-review confirmed mirror publication at the sole
+number mutation under state, fail-closed contention/poison handling, bounded
+owned test cleanup, unchanged blocking methods and no caller/phase change.
+Plants are temporary, run one at a time, restored byte-for-byte, never committed.
+Exact-SHA CI, fresh-context review and Owner merge remain external gates.
