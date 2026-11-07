@@ -60,7 +60,7 @@ impl MissionSummary {
             model: contract.model.clone(),
             notes: contract.notes.clone(),
             deliverable: contract.deliverable.clone(),
-            page_facts: None,
+            page_facts: contract.page_facts.clone(),
             owner_words: contract.owner_words.clone(),
             restatement: contract.restatement.clone(),
             requested_folder: contract.requested_folder.clone(),
@@ -138,7 +138,10 @@ impl MissionSummary {
             contract_hash: self.hash.to_hex(),
             request,
             summary: self.lines(),
-            page_facts: None,
+            page_facts: self
+                .page_facts
+                .as_ref()
+                .map(crate::page_inputs::PageFacts::view),
         }
     }
 }

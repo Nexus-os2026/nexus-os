@@ -104,3 +104,28 @@ Runtime assertion locations (no compiler failure counted):
 - m3d_summary_and_confirmation_share_contract_facts: mother/src/oracles/mod.rs:842; Err(Contract(FactsNotPageReady)).
 - m3d_present_facts_bind_every_value: mother/src/oracles/m3d_inputs.rs:89; Err(FactsNotPageReady) != Ok(()).
 - m3d_input_diagnostics_and_records_are_content_free: mother/src/oracles/mod.rs:842; Err(Contract(FactsNotPageReady)).
+
+## Observed implementation and review
+
+Da: 9/0/0. All six assigned plants killed their named assertion at runtime;
+each source was restored byte-for-byte. No plant appears in a checkpoint.
+The full final Mother run: 260/61/0 unit tests, 28/0/0 doctests. Retained
+failures stop at sandbox broker/session setup. Host failure-frontier evidence
+and each exact sandbox error are in the external mission report.
+Fmt, all-target two-package clippy with warnings denied, scope and diff checks
+pass. Retained oracle files are unchanged except the authorized None literal
+and module registration. New oracle bytes equal checkpoint 1.
+
+A registration regression exposed by the existing source guard was repaired:
+its parser requires cfg(test) directly before mod. Reordering the path/cfg
+attributes preserves the private child test module and the unchanged guard.
+
+Second review: snapshot fields private, immutable borrowed access only;
+recompute payload digest plus exact contract/payload and invocation equality;
+no deserializer or caller-owned authority; full contract admission is repeated
+before LaneInvoked and before reservation accounting. Consent uses the same
+contract facts; diagnostics and lane identity omit payload text. No new I/O,
+route, host option, resource lifetime, persistent record format or replay
+mutation. Legacy replay/containment behavior remains owned by retained code.
+Sandbox-blocked retained gates still require Architect execution outside.
+No remote CI, Git integration, physical acceptance or phase advancement.

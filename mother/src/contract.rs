@@ -248,6 +248,9 @@ impl MissionContract {
     /// Check every bound (not the answers). Nothing is drafted that fails
     /// one.
     pub fn validate(&self) -> Result<(), ContractError> {
+        if self.page_facts.is_some() {
+            crate::page_inputs::validate_page(self)?;
+        }
         if self.owner_words.trim().is_empty() {
             return Err(ContractError::EmptyOwnerWords);
         }
@@ -299,9 +302,6 @@ impl MissionContract {
         }
         if self.budget.max_money_minor != 0 {
             return Err(ContractError::MoneyNotZero);
-        }
-        if self.page_facts.is_some() {
-            crate::page_inputs::validate_page(self)?;
         }
         self.validate_model_notes()?;
         Ok(())
