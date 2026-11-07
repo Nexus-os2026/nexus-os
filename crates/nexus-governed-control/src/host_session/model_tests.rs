@@ -734,13 +734,57 @@ impl EvidenceSink for EndSink {
         }
     }
 }
+// A2 uses the real broker issuance path; setup records are kept separately.
+struct IssuedEvidence(Arc<dyn EvidenceSink>, MemoryEvidence);
+impl EvidenceSink for IssuedEvidence {
+    fn record(&self, r: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
+        self.1.record(r)
+    }
+    fn record_end(&self, r: &EvidenceRecord) -> EndStatus {
+        if r.phase == crate::authority::evidence::EvidencePhase::ModelCall {
+            self.0.record_end(r)
+        } else {
+            self.1.record_end(r)
+        }
+    }
+}
+struct IssueYes;
+impl crate::authority::approval::ControlConfirmer for IssueYes {
+    fn confirm_action(&self, _: &crate::authority::approval::ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &crate::authority::approval::GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &crate::authority::approval::ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
+    fn confirm_agent_door(&self, _: &crate::authority::approval::AgentDoorConfirmation) -> bool {
+        true
+    }
+}
+pub(super) struct IssuedAuthority(Arc<crate::governed::GovernedControl>);
+impl std::ops::Deref for IssuedAuthority {
+    type Target = Authority;
+    fn deref(&self) -> &Authority {
+        self.0.authority()
+    }
+}
 pub(super) struct Accounting {
     pub(super) seed: SessionSeed,
-    pub(super) authority: Authority,
+    pub(super) authority: IssuedAuthority,
     pub(super) run: RunId,
     agent: AgentId,
     group: u64,
-    _life: Arc<dyn std::any::Any + Send + Sync>,
+    door_id: String,
+    _door: crate::governed::AgentDoor,
+    _root: crate::harness_tests::TempRoot,
 }
 impl Accounting {
     pub(super) fn new(sink: Arc<dyn EvidenceSink>) -> Self {
@@ -748,17 +792,42 @@ impl Accounting {
         seed.core.cell.session_compare(0, READY).unwrap();
         let q = seed.ingress().accept(CommandKind::Run, 1).unwrap();
         let cell = seed.core.cell.scoped(q.scope.clone());
-        let authority = Authority::new(
-            sink,
-            Arc::new(crate::authority::clock::SystemClock::default()),
+        let root = crate::harness_tests::temp_root("sb2b-issued");
+        let issued = Arc::new(IssuedEvidence(sink, MemoryEvidence::new(32)));
+        let authority = IssuedAuthority(Arc::new(
+            crate::governed::GovernedControl::with_secrets(
+                root.0.path(),
+                crate::broker::Vault::Disabled.source(),
+                issued.clone(),
+                Arc::new(crate::authority::clock::SystemClock::default()),
+            )
+            .unwrap(),
+        ));
+        let agent = AgentId::new("sb2b-agent").unwrap();
+        let door = authority
+            .0
+            .issue_agent_door_with_halt(agent.clone(), Arc::new(IssueYes), Some(cell.clone()))
+            .unwrap();
+        let group = door.origin();
+        let door_id = issued
+            .1
+            .records()
+            .iter()
+            .find(|r| r.phase == crate::authority::evidence::EvidencePhase::AgentDoorOpened)
+            .unwrap()
+            .detail
+            .iter()
+            .find(|(k, _)| k == "door")
+            .unwrap()
+            .1
+            .clone();
+        assert!(
+            door_id.len() == 32
+                && door_id
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         );
         let runs = authority.runs();
-        let agent = AgentId::new("sb2b-agent").unwrap();
-        let group = runs.next_group();
-        let life: Arc<dyn std::any::Any + Send + Sync> = Arc::new(());
-        runs.reserve_door(group, &agent, Arc::downgrade(&life))
-            .unwrap();
-        runs.activate_door_with_halt(group, Some(&cell)).unwrap();
         let run = runs
             .open_with_cell(
                 agent.clone(),
@@ -773,7 +842,7 @@ impl Accounting {
             .unwrap()
             .fill(
                 &"cd".repeat(32),
-                "mission-consent-string",
+                "msn-000001/1/1",
                 7,
                 ConsentKind::Mission,
                 9,
@@ -785,7 +854,7 @@ impl Accounting {
             &agent,
             group,
             &"cd".repeat(32),
-            "mission-consent-string",
+            "msn-000001/1/1",
             AdmittedWorkspace {
                 id: "workspace".into(),
                 identity: Digest::of("test", &[]),
@@ -797,7 +866,7 @@ impl Accounting {
             &agent,
             group,
             &"cd".repeat(32),
-            "mission-consent-string",
+            "msn-000001/1/1",
             [42; 32],
         )
         .unwrap();
@@ -807,7 +876,9 @@ impl Accounting {
             run,
             agent,
             group,
-            _life: life,
+            door_id,
+            _door: door,
+            _root: root,
         }
     }
     pub(super) fn acquire(&self) -> Result<model::Attempt, SessionError> {
@@ -889,9 +960,9 @@ fn sb2_attempt_record_keeps_original_run_and_consent() {
     assert_eq!(r.run.as_deref(), Some(f.run.to_string().as_str()));
     assert_eq!(r.agent.as_deref(), Some("sb2b-agent"));
     for (k, v) in [
-        ("door", f.group.to_string()),
+        ("door", f.door_id.clone()),
         ("contract_hash", "cd".repeat(32)),
-        ("request", "mission-consent-string".into()),
+        ("request", "msn-000001/1/1".into()),
         ("identity", hex::encode([42; 32])),
         ("call", "1".into()),
         ("outcome", "cancelled".into()),
