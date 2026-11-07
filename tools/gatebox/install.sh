@@ -121,16 +121,35 @@ def preflight_accounts(submitter):
         raise ValueError('unexpected gatesubmit member')
     return submit
 
-def account(name):
-    try: entry = pwd.getpwnam(name)
-    except KeyError:
-        run(['/usr/sbin/useradd','--system','--user-group','--no-create-home','--home-dir','/nonexistent',
-             '--shell','/usr/sbin/nologin',name]); entry = pwd.getpwnam(name)
-    locked = run(['/usr/bin/passwd','--status',name]).split()[1]
-    if (entry.pw_uid == 0 or entry.pw_shell != '/usr/sbin/nologin' or locked != b'L'
-            or os.getgrouplist(name,entry.pw_gid) != [entry.pw_gid]):
-        raise ValueError('unsafe gate identity: '+name)
-    return entry
+def plan_accounts():
+    users,groups = pwd.getpwall(),grp.getgrall(); plan = []
+    used = {u.pw_uid for u in users}|{g.gr_gid for g in groups}
+    for name in ('mothergate','gaterun'):
+        entry = next((u for u in users if u.pw_name==name),None)
+        if entry:
+            locked = run(['/usr/bin/passwd','--status',name]).split()[1]
+            if (entry.pw_uid==0 or entry.pw_shell!='/usr/sbin/nologin' or locked!=b'L'
+                    or os.getgrouplist(name,entry.pw_gid)!=[entry.pw_gid]
+                    or any(u.pw_gid==entry.pw_gid and u.pw_name!=name for u in users)
+                    or len([g for g in groups if g.gr_gid==entry.pw_gid and g.gr_name==name])!=1):
+                raise ValueError('unsafe gate identity: '+name)
+        else:
+            if any(g.gr_name==name for g in groups): raise ValueError('orphan gate group: '+name)
+            number = next(n for n in range(999,99,-1) if n not in used); used.add(number)
+            entry = pwd.struct_passwd((name,'x',number,number,'','/nonexistent','/usr/sbin/nologin'))
+        plan.append((entry,entry not in users))
+    if plan[0][0].pw_gid==plan[1][0].pw_gid: raise ValueError('distinct groups required')
+    return plan
+
+def apply_accounts(plan,submitter):
+    for entry,create in plan:
+        if create:
+            run(['/usr/sbin/groupadd','--system','--gid',str(entry.pw_gid),entry.pw_name])
+            run(['/usr/sbin/useradd','--system','--uid',str(entry.pw_uid),'--gid',str(entry.pw_gid),
+                 '--no-create-home','--home-dir','/nonexistent','--shell','/usr/sbin/nologin',entry.pw_name])
+    try: grp.getgrnam('gatesubmit')
+    except KeyError: run(['/usr/sbin/groupadd','--system','gatesubmit'])
+    run(['/usr/sbin/usermod','--append','--groups','gatesubmit',submitter])
 
 def stage_security(files,uid,gid,stage):
     protected(stage)
@@ -188,7 +207,7 @@ def main():
         ancestor = path.parent
         while not ancestor.exists(): ancestor = ancestor.parent
         protected(ancestor)
-    for executable in ('git','systemctl','systemd-analyze','python3','Xvfb','dbus-run-session','gdbus','awk','passwd','runuser'):
+    for executable in ('git','systemctl','systemd-analyze','python3','Xvfb','dbus-run-session','gdbus','awk','passwd','runuser','visudo','useradd','groupadd','usermod'):
         if not shutil.which(executable,path=ENV['PATH']): raise ValueError('missing offline prerequisite: '+executable)
     if int(run(['/usr/bin/systemctl','--version']).split()[1]) < 259: raise ValueError('systemd 259 required')
     for path,expected in (('/proc/sys/dev/tty/legacy_tiocsti','0'),('/proc/sys/kernel/apparmor_restrict_unprivileged_userns','1')):
@@ -200,14 +219,22 @@ def main():
     for path in ('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu','/home/nexus/.cargo/registry'):
         if not Path(path).is_dir() or not any(Path(path).iterdir()): raise ValueError('missing offline input: '+path)
     protected(Path('/opt/google/chrome/chrome'))
+    for name in ('ld.so.cache','localtime','fonts','alternatives','dbus-1'):
+        host = Path('/etc')/name
+        for path in ([host,*host.rglob('*')] if host.is_dir() else [host]):
+            if path.is_file(): path.read_bytes()
+            elif not path.is_dir() and not path.is_symlink(): raise ValueError('unsupported host input: '+str(path))
+    for name,data in payload_policies(files).items(): json.loads(data)
+    for name in FILES:
+        if name.endswith('.py'): compile(files['tools/gatebox/'+name],name,'exec')
     preflight_accounts(args.submit_user)
-    manager,payload = account('mothergate'),account('gaterun')
-    if manager.pw_uid == payload.pw_uid or manager.pw_gid == payload.pw_gid: raise ValueError('distinct identities required')
+    plan = plan_accounts(); manager,payload = [entry for entry,create in plan]
+    protected(Path('/etc'))
+    for parent in (Path('/etc/systemd/system'),Path('/etc/sudoers.d'),Path('/etc/polkit-1/rules.d')):
+        if parent.stat().st_dev != Path('/etc').stat().st_dev: raise ValueError('cross-filesystem security staging')
     with tempfile.TemporaryDirectory(prefix='.gatebox-',dir='/etc') as temporary:
         staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,Path(temporary))
-        try: grp.getgrnam('gatesubmit')
-        except KeyError: run(['/usr/sbin/groupadd','--system','gatesubmit'])
-        run(['/usr/sbin/usermod','--append','--groups','gatesubmit',args.submit_user])
+        apply_accounts(plan,args.submit_user)
         for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
         for name in FILES:
             target = DEST/name; target.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
@@ -245,7 +272,6 @@ def main():
         record(CONFIG/'registry.json',registration)
         outputs = []
         for staged,target in staged_security:
-            if target.exists() or target.is_symlink(): raise ValueError('output appeared: '+str(target))
             os.rename(staged,target); outputs.append(target)
         for name,data in payload_policies(files).items():
             write(CONFIG/name,data); outputs.append(CONFIG/name)

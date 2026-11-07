@@ -115,3 +115,41 @@ Deferred limitations (not qualified or protected by Slice 1):
 
 Live host canaries cover qualification only. Normal receipts reuse the recorded
 host namespace baseline; they do not claim a new independent host-canary run.
+
+Manual removal after a failed or interrupted install requires Owner review of
+retained receipts and the pre-install accounts/groups. Preflight validates
+inputs, identities, unit syntax and sudoers before persistent account/file
+changes; its only earlier write is a root-only temporary staging directory.
+I/O or command failure can still leave partial outputs; there is no automatic
+rollback. Preserve evidence before running these host commands in a
+`bash -euo pipefail` subshell:
+
+```bash
+bash -euo pipefail <<'REMOVE'
+sudo /usr/bin/systemctl disable --now mothergate.socket
+sudo /usr/bin/systemctl stop mothergate.service
+sudo /usr/bin/systemctl stop 'mothergate-run@*.service'
+sudo /usr/bin/rm -f /etc/systemd/system/mothergate.socket \
+  /etc/systemd/system/mothergate.service /etc/systemd/system/mothergate-run@.service \
+  /etc/sudoers.d/gatebox /etc/polkit-1/rules.d/00-gatebox-deny.rules
+sudo /usr/bin/systemctl daemon-reload
+sudo /usr/bin/systemctl reset-failed
+sudo /usr/bin/gpasswd -d nexus gatesubmit
+# Only delete accounts/groups that this installation created:
+sudo /usr/sbin/userdel mothergate
+sudo /usr/sbin/userdel gaterun
+if getent group mothergate >/dev/null; then sudo /usr/sbin/groupdel mothergate; fi
+if getent group gaterun >/dev/null; then sudo /usr/sbin/groupdel gaterun; fi
+if getent group gatesubmit >/dev/null; then sudo /usr/sbin/groupdel gatesubmit; fi
+# Includes retained receipts: copy reviewed evidence elsewhere first.
+sudo /usr/bin/rm -rf /usr/libexec/gatebox /etc/gatebox /usr/lib/gatebox/root \
+  /var/lib/mothergate /var/lib/gatebox-source /root/gatebox-slice1
+sudo /usr/bin/rm -rf /run/mothergate-control
+sudo /usr/bin/rm -f /run/mothergate-submit.sock
+REMOVE
+```
+
+For a partial installation, omit commands for objects that were never created;
+retain every pre-existing account/group and its original membership. If nexus
+was already a gatesubmit member, retain that membership. `rm -rf` above deletes
+only the listed installation trees, including their evidence after review.
