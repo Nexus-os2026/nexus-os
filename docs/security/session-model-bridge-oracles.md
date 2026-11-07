@@ -1002,3 +1002,62 @@ Trace vocabulary the feat must emit:
 
 The size exception (SB3B-R8) is 1,800 changed lines, with production
 at most 350.
+
+### 13.8 SB3B-R9: oracle-fix, feat, F11 parser limitation, receipts
+Oracle-fix c85a0785 (SB3B-R9 (1)) corrected four defects that failed
+correct code when the oracles were validated against the feat:
+- (a) the F3 hook re-locked the trace on the same thread;
+- (b) F11 wrongly required a production use of
+  `registered_identity_for_test`;
+- (c) F4 put two `every()` hooks on one point, so the skew never applied;
+- (d) the old health fault never made `try_health` unhealthy.
+
+Feat fe8c5b71 was compacted without behaviour change (SB3B-R9 (2)).
+- host_session.rs is +11/−7 (SB3B-R7 (3)).
+- Predicate 4 uses `live_member_with(.., engaged)` with a clock-free
+  judgement (SB3B-R9 (4)). Step 1 checked the original scope on captured
+  clocks, and predicate 4 requires the run's cell to be that original.
+  R3 still reads the clock under its hold, so that LOW stays recorded.
+
+F11 parser limitation: the B1a enclosure parser (`test_only`) stops at
+the first comma of a function signature without tracking nesting depth.
+A `#[cfg(test)]` fn with two or more parameters, called inside a non-test
+impl, is therefore reported as a leak. That is a false positive, on the
+safe side. The B1b test helpers sit in a `#[cfg(test)] impl` block so
+the walk reaches its attribute.
+
+Receipts (local, final code head fe8c5b71 + this record). GREEN: 67/67
+`host_session::model`. Plants, all on the final head, each restored by
+sha256 and killed at its named assertion unless stated:
+- R5 grant guard released before the CAS: 10/10.
+- Clock read under the hold; caller deadline called under the hold.
+- Reusable charge latch; backstop renewed per request.
+- Contention latching; grant-store poison not latching.
+- Unsettled pin reported Recorded (MP-SB-9-record).
+- MP-SB-6-default, -CAS, -once and -retry.
+- MP-SB-A1 observer ignored; charge latch treated as liveness.
+- MP-SB-8 watch ignored. It fired "watch at gate 0: its own step", then
+  the harness aborted: the Peer thread panicked on a connection aborted
+  by Stop, and Peer's Drop panicked during unwinding.
+- MP-SB-8 refreshed Q; rebuilt mission deadline.
+- MP-SB-3-grant at R5; §7.2 observer-before-latch order; F11 B1b seam
+  leak.
+
+Survivor: run-table poison not latching at the gate. Retained SB-2b
+settlement on the poisoned table still latches uncertainty and failure
+later, and the oracle checks only the end state. A proposed strengthening
+(latched at `model.attempt.return`, before settlement) kills it at
+"latched at refusal" and passes correct code. It is not committed and
+awaits a ruling.
+
+Gates, each binary alone:
+- governed-control lib 914/914
+- Mother lib 360/360
+- host --no-fail-fast 166/166
+- m2e_a2_guards 54/54
+- m2e_transport_guards 39/39
+- fmt; clippy (3 crates, all targets, -D warnings); diff --check
+  47fa1f88..HEAD
+
+Repeats: 10 serial and 10 parallel runs of `host_session::model`, 67/67
+each.
