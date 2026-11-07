@@ -1309,10 +1309,19 @@ fn sealed() {
 fn sb3_invocation_observer_is_monotonic_and_original() {
     children(
         "sb3_invocation_observer_is_monotonic_and_original",
-        &["l1/return", "l1/overtake", "l1/transition", "l1/fence"],
+        &[
+            "l1/return",
+            "l1/overtake",
+            "l1/transition",
+            "l1/fence",
+            "l1/excluded",
+        ],
     );
 }
 fn invocation(arg: &str) {
+    if arg == "excluded" {
+        return excluded();
+    }
     let f = Fx::new();
     let m = f.mother(1, |ctx| {
         let _ = ask(ctx);
@@ -1375,4 +1384,67 @@ fn invocation(arg: &str) {
         observers.iter().all(|o| o.is_revoked()),
         "{arg}: failed append or release never un-revokes"
     );
+}
+/// SB3A-R1 (2): L1 excludes settlement, hold and close because none can
+/// hold a live caller. While a model call is pending the verified journal
+/// grammar refuses a hold or a settlement start, and close refuses Busy until
+/// the caller has returned, even once the mission is terminal.
+fn excluded() {
+    use crate::evidence::{HeldReason, SettleCause};
+    use crate::journal::{Entry, ReplayViolation as V};
+    let f = Fx::new();
+    let m = f.mother(1, |ctx| {
+        let _ = ask(ctx);
+        quiet()
+    });
+    let (id, _) = f.building(&m, f.contract());
+    f.hold("/api/chat");
+    let adv = advance_in(&m, id);
+    assert!(f.fake.wait(Seen::Request("/api/chat".into())));
+    let lines = f.journal.lines();
+    let last: Entry = serde_json::from_str(lines.last().unwrap()).unwrap();
+    let forge = |event| {
+        let mut forged = lines.clone();
+        forged.push(Entry::chained(lines.len() as u64, &last.hash, id, event).to_line());
+        inspect_history_lines(&forged)
+    };
+    let held = forge(Event::Held {
+        reason: HeldReason::UncleanShutdown,
+    });
+    assert!(
+        matches!(
+            held,
+            Err(JournalError::Inconsistent {
+                code: V::HoldOutOfPlace,
+                ..
+            })
+        ),
+        "no hold while a model lane is pending: {held:?}"
+    );
+    let started = forge(Event::SettlementStarted {
+        effect: 0,
+        cause: SettleCause::TimeBudget,
+    });
+    assert!(
+        matches!(
+            started,
+            Err(JournalError::Inconsistent {
+                code: V::SettlementOutOfPlace,
+                ..
+            })
+        ),
+        "no settlement start while a model lane is pending: {started:?}"
+    );
+    f.home.gate.arm("model_call", None);
+    assert_eq!(m.stop(id), Ok(MissionState::Stopped));
+    assert!(f.home.gate.wait_held());
+    assert_eq!(
+        m.close(),
+        Err(CoordinatorError::Busy),
+        "close refuses while the caller is live"
+    );
+    assert!(!f.events().iter().any(|e| matches!(e, Event::SessionClosed)));
+    f.home.gate.open();
+    let _ = adv.join().unwrap();
+    assert_eq!(m.close(), Ok(()), "joined and recorded: the clean close");
 }

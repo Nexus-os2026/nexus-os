@@ -712,3 +712,18 @@ forwarded observer live (`[false]`). Commit 2: the same tests GREEN (5/5;
 L1 4/4 children); retained C1 goldens, including `m2e_budget` invalidation
 boundaries, pass unchanged. Plant receipts are reported with the candidate;
 none is committed.
+
+### 12.2 SB3A-R1 oracle-fix (found after implementation)
+Plant MP-SB-O2-run-latch turned the contention test RED one assertion early
+(the latched failure made the next grant-contention call `halted`). The
+approved, strictly stronger line `assert!(!failed(&f), "contention latches
+nothing (run)")` now follows the run-table contention assertion. L1 adds
+`l1/excluded`, asserting the precondition for not claiming settlement, hold
+and close: with a model lane pending and its caller live, the verified
+journal grammar refuses a forged `Held` (`HoldOutOfPlace`) and a forged
+`SettlementStarted` (`SettlementOutOfPlace`), and close is `Busy` (no
+`SessionClosed`) even after Stop until the caller returns. The settlement
+refusal reflects that no File is unresolved in this pending-lane state; it
+is not a general no-pending-lane grammar rule. F12 test-only seams are
+accepted for A; carry to C: R4/R2 composition oracles vary S, Q and
+Continuation with real second doors and the real continuation constructor.

@@ -38,4 +38,4 @@ SB3-G0	sb3_original_file_grant_remains_required	R2 retained grant (R3 and call g
 SB3-R3	sb3_stop_before_binding_installs_nothing	paused before actual binding CAS; fresh and idempotent	ingress wins; binding absent or unchanged	SB-3A
 SB3-O2	sb3_binding_contention_refuses_without_latching	run-table and grant try_lock; poison	contention unavailable without Failed; poison refuses and latches Failed	SB-3A
 SB3-L1	sb3_invocation_observer_is_monotonic_and_original	return,overtake,transition,fence before journal I/O	second-thread revoked observation under the owning lock; forwarded observer never un-revoked	SB-3A Mother
-NA	NA	settlement,hold,close for L1	no live caller can exist at these boundaries; not claimed discriminating	SB-3A N/A
+SB3-L1x	sb3_invocation_observer_is_monotonic_and_original	l1/excluded: hold,settlement,close with a live caller	grammar refuses Held/SettlementStarted while a model lane is pending; close Busy until the caller returns; L1 not claimed there	SB3A-R1 oracle-fix

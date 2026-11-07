@@ -353,6 +353,7 @@ fn sb3_binding_contention_refuses_without_latching() {
     let runs = f.runs();
     let held = runs.model_observer();
     assert_eq!(f.bind(), Err("unavailable"), "run-table contention");
+    assert!(!failed(&f), "contention latches nothing (run)");
     drop(held);
     let control = f.control();
     let held = control.authority().grants().hold_for_test();
