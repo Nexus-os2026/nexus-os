@@ -212,7 +212,8 @@ def main():
                           'group':f'root:x:0:\ngaterun:x:{payload.pw_gid}:\n','nsswitch.conf':'passwd: files\ngroup: files\nhosts: files\n',
                           'hosts':'127.0.0.1 localhost\n::1 localhost\n','resolv.conf':''}.items():
             write(ROOT/'etc'/name,text.encode())
-        for name in ('ld.so.cache','machine-id','localtime','fonts','alternatives','dbus-1'):
+        write(ROOT/'etc/machine-id',b'0123456789abcdef0123456789abcdef\n')
+        for name in ('ld.so.cache','localtime','fonts','alternatives','dbus-1'):
             host = Path('/etc')/name
             if host.is_dir(): shutil.copytree(host,ROOT/'etc'/name,symlinks=True)
             else: shutil.copyfile(host,ROOT/'etc'/name)
