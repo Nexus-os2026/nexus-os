@@ -357,8 +357,19 @@ fn review2_startup_receipts(scenario: &str, test: &str) {
     if scenario == "panic-startup" {
         p.expect("STOP RECORDING FAILED");
     } else if scenario == "recovery" {
-        p.expect("STOP RECORDING COMPLETED count=1");
-        p.expect("STOP RECORDING COMPLETED count=2");
+        // Up to four Stop workers record concurrently, so outcome receipts
+        // follow completion order. Both must arrive while recovery is held.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !["count=1 (", "count=2 ("].iter().all(|event| {
+            p.output
+                .contains(&format!("STOP RECORDING COMPLETED {event}"))
+        }) {
+            assert!(
+                p.read_once(deadline),
+                "both Stop outcome receipts while recovery is held: {}",
+                p.output
+            );
+        }
     }
     held.write_all(b"R").unwrap();
     if scenario != "panic-startup" {
