@@ -1080,6 +1080,9 @@ mod m3a_r13 {
         /// The goal read under way: its id, and whether it is ready.
         active: Option<(u64, bool)>,
         reads: u64,
+        /// A read began: its boundary waits for the reader, even if the
+        /// read has ended since.
+        boundary: bool,
         last_cr: bool,
         line: Option<(Start, Vec<u8>)>,
         commands: Vec<String>,
@@ -1097,6 +1100,7 @@ mod m3a_r13 {
                 Ev::Ready if !self.closed && self.active.is_none() => {
                     self.reads += 1;
                     self.active = Some((self.reads, false));
+                    self.boundary = true;
                 }
                 Ev::Timeout if self.active.is_some() => {
                     self.active = None;
@@ -1110,8 +1114,9 @@ mod m3a_r13 {
                 *start = Start::Stale;
             }
         }
-        /// Between reads: the goal read's worker, then the reader's
-        /// boundary for a read not yet ready (invalidate, acknowledge, ready).
+        /// Between reads: the goal read's worker, then the reader meets a
+        /// pending boundary (invalidate, acknowledge) and a read not yet
+        /// ready becomes ready.
         fn gap(&mut self) {
             if let Some((_, ready)) = self.active {
                 if self.closed {
@@ -1122,9 +1127,11 @@ mod m3a_r13 {
                     self.active = None;
                 }
             }
-            if let Some((r, false)) = self.active {
+            if std::mem::take(&mut self.boundary) {
                 self.stale();
                 self.lines.clear();
+            }
+            if let Some((r, false)) = self.active {
                 self.active = Some((r, true));
             }
         }
@@ -1134,7 +1141,7 @@ mod m3a_r13 {
                 Some((r, true)) => Some(r),
                 _ => None,
             };
-            let discard = matches!(self.active, Some((_, false)));
+            let discard = self.boundary || matches!(self.active, Some((_, false)));
             if discard {
                 self.stale();
             }
@@ -1262,14 +1269,21 @@ mod m3a_r13 {
                 shared.goal_end();
             }
         }
-        let (active, typing, boundary) = {
+        let (active, typing, boundary, acknowledged) = {
             let input = shared.input();
-            (input.active, input.typing, input.boundary)
+            (
+                input.active,
+                input.typing,
+                input.boundary,
+                input.acknowledged,
+            )
         };
-        if active && !typing {
+        if boundary != acknowledged {
             let mode = reader_state(shared, Some(boundary));
             route_read(shared, buffers, &[], mode);
             shared.acknowledge(boundary);
+        }
+        if active && !typing {
             let _ready = shared.goal_ready();
         }
         drain(frames);
