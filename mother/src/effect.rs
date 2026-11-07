@@ -28,7 +28,7 @@ use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::RecordBatch;
 use nexus_governed_control::inference::{
-    CallDeadline, CallMeter, ModelIdentityView, ModelReply, ModelRequest,
+    CallDeadline, CallMeter, InvocationObserver, ModelIdentityView, ModelReply, ModelRequest,
 };
 use nexus_governed_control::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
@@ -73,10 +73,12 @@ pub struct Admission {
 }
 
 /// One broker read: publication proof and the corresponding display state.
+/// M3-Db: the broker's receipt of this exact commitment, if it published.
 pub struct FileSnapshot {
     pub action: PendingAction,
     pub publication: PublicationClass,
     pub state: Option<nexus_governed_control::authority::commitment::CommitmentState>,
+    pub receipt: Option<nexus_governed_control::files::FileReceipt>,
 }
 
 /// What a performed effect came to.
@@ -353,12 +355,14 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
         })
     }
     /// M2e-C1b: one metered call. `Err`: refused before any attempt.
+    /// SB-3 (O1): `invocation` is the sealed caller's own deny-only observer.
     fn model_call(
         &self,
         _: MissionId,
         _: &ModelRequest,
         _: &dyn CallMeter,
         _: &dyn CallDeadline,
+        _invocation: &InvocationObserver,
     ) -> Result<ModelAttempt, EffectRefusal> {
         Err(EffectRefusal {
             class: BrokerClass::NoBrokerRoute,

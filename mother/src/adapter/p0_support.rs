@@ -339,6 +339,7 @@ impl Lane for P0Lane {
             Verdict::Continue
         };
         LaneOutput {
+            verification: None,
             text: format!("{} says {}", self.role.as_str(), self.reason),
             effects,
             verdict,
@@ -377,6 +378,7 @@ pub(crate) fn canary_contract(cs: &Canaries, markers: &str) -> MissionContract {
         model: None,
         notes: vec![],
         deliverable: None,
+        page_facts: None,
         owner_words: format!("Make the site {} and {}", cs.c, cs.cl),
         restatement: format!("Restated {} {} {markers}", cs.c, cs.cl)
             .trim_end()

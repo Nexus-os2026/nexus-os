@@ -29,6 +29,7 @@ use nexus_governed_control::inference::{
     CallDeadline, CallMeter, Charged, MeterRefusal, ModelError, ModelIdentity, ModelRequest,
     ResponseSchema,
 };
+use nexus_governed_control::inference::{InvocationObserver, InvocationOwner};
 use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -36,6 +37,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const CASE: &str = "NEXUS_M2E_C1B1_CASE";
+/// SB-3A: the ordinary port ignores the caller's observer (owner kept live).
+fn live() -> InvocationObserver {
+    static OWNER: std::sync::OnceLock<InvocationOwner> = std::sync::OnceLock::new();
+    OWNER.get_or_init(InvocationOwner::new).observer()
+}
 const REPLY: &str = "C1B_REPLY_CANARY";
 
 /// Each case in its own child (one broker per process).
@@ -48,6 +54,17 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
         println!("case-ok:{case}");
         return;
     }
+    let _ = child_outputs(module, variable, test, cases);
+}
+/// Spawn fresh processes even when the caller is itself an isolated case.
+/// Retain stdout only after the existing exit/sentinel judgment succeeds.
+pub(crate) fn child_outputs(
+    module: &str,
+    variable: &str,
+    test: &str,
+    cases: &[&str],
+) -> Vec<String> {
+    let mut outputs = Vec::new();
     let mut failures = Vec::new();
     for case in cases {
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
@@ -86,9 +103,12 @@ pub(crate) fn children(module: &str, variable: &str, test: &str, cases: &[&str],
         let (out, err) = (out.join().unwrap(), err.join().unwrap());
         if !status.is_some_and(|s| s.success()) || !out.contains(&format!("case-ok:{case}")) {
             failures.push(format!("{case}: {status:?}\n{out}\n{err}"));
+        } else {
+            outputs.push(out);
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n---\n"));
+    outputs
 }
 
 fn run(case: &str) {
@@ -278,7 +298,7 @@ fn session_denies() {
     );
     let meter = Meter::default();
     assert_eq!(
-        port.model_call(MissionId(1), &request(), &meter, &Never)
+        port.model_call(MissionId(1), &request(), &meter, &Never, &live())
             .map(|_| ())
             .map_err(|r| r.class),
         Err(BrokerClass::NoBrokerRoute)
@@ -293,25 +313,106 @@ fn session_denies() {
 /// Static seal: the host session facade names no model or inference route;
 /// SessionPort keeps the three model methods' default denial; the session
 /// door's arms refuse.
+fn sb2_public_model_item(line: &str) -> bool {
+    line.starts_with("pub ")
+        && line != "pub struct ModelObligations {"
+        && !line.starts_with("pub model: ModelObligations,")
+        && {
+            let lower = line.to_ascii_lowercase();
+            lower.contains("model") || lower.contains("inference")
+        }
+}
+fn sb2_facade_line(line: &str) -> bool {
+    (!line.contains("inference")
+        && !line.contains("model_")
+        && !line
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|w| w == "model"))
+        || matches!(
+            line,
+            "mod model;" | "mod model_tests;" | "mod model_death_tests;" | "mod model_call_tests;"
+                // Existing private Core storage and its initialization only.
+                | "model: model::ModelSlot," | "model: model::ModelSlot::default(),"
+                | "if !self.core.model.ready()? {"
+        )
+}
+#[test]
+fn sb2_facade_rejects_multiline_registration() {
+    let plant = "pub fn register_local(\n&self,\nspec: &crate::inference::ModelPinSpec,\n) -> Result<crate::inference::ModelIdentityView, _> { self.register_model_private(..) }";
+    assert!(!plant.lines().map(str::trim).all(sb2_facade_line));
+    assert!([
+        "mod model;",
+        "mod model_tests;",
+        "mod model_death_tests;",
+        "pub fn status(&self) {}"
+    ]
+    .into_iter()
+    .all(sb2_facade_line));
+}
+#[test]
+fn sb2_facade_rejects_model_module_aliases() {
+    for plant in [
+        "use model as hidden;",
+        "use self::model as hidden;",
+        "use super::{model as hidden};",
+    ] {
+        assert!(
+            !sb2_facade_line(plant),
+            "reject model module alias: {plant}"
+        );
+    }
+}
 #[test]
 fn c1_s1_session_sources_have_no_model_route() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut files = vec![root.join("crates/nexus-governed-control/src/host_session.rs")];
-    for entry in
-        std::fs::read_dir(root.join("crates/nexus-governed-control/src/host_session")).unwrap()
-    {
-        let path = entry.unwrap().path();
-        if path.extension().is_some_and(|e| e == "rs") {
-            files.push(path);
+    fn walk(path: &Path, files: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, files);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                files.push(path);
+            }
         }
     }
+    let facade = "crates/nexus-governed-control/src/host_session.rs";
+    let mut files = vec![root.join(facade)];
+    walk(
+        &root.join("crates/nexus-governed-control/src/host_session"),
+        &mut files,
+    );
+    let private = [
+        "crates/nexus-governed-control/src/host_session/model.rs",
+        "crates/nexus-governed-control/src/host_session/close.rs",
+        "crates/nexus-governed-control/src/host_session/model_tests.rs",
+        "crates/nexus-governed-control/src/host_session/model_death_tests.rs",
+        "crates/nexus-governed-control/src/host_session/model_call_tests.rs",
+    ];
     assert!(files.len() > 1);
+    assert!(sb2_public_model_item(
+        "pub fn model_call(&self, id: u64) {}"
+    ));
+    assert!(!sb2_public_model_item(
+        "pub(crate) fn model_call(id: u64) {}"
+    ));
+    assert!(!sb2_public_model_item("pub model: ModelObligations,"));
     for path in files {
         let text = std::fs::read_to_string(&path).unwrap();
+        let permitted = private.iter().any(|p| path == root.join(p));
         for line in text.lines().map(str::trim).filter(|l| !l.starts_with("//")) {
+            if path == root.join(facade) {
+                assert!(sb2_facade_line(line), "facade: {line}");
+            } else if !permitted {
+                assert!(
+                    !line.contains("inference") && !line.contains("model_"),
+                    "{}: {line}",
+                    path.display()
+                );
+            }
+            // C1-S1-SB2: private machinery and content-free close fields only.
             assert!(
-                !line.contains("inference") && !line.contains("model_"),
-                "{}: {line}",
+                !sb2_public_model_item(line),
+                "public model route: {}: {line}",
                 path.display()
             );
         }
@@ -475,7 +576,7 @@ fn attempt(arg: &str) {
     let (id, asked) = f.consented(&m);
     let meter = Meter::default();
     if arg == "pre-attempt" {
-        let refused = f.port.model_call(id, &request(), &meter, &Never);
+        let refused = f.port.model_call(id, &request(), &meter, &Never, &live());
         assert_eq!(
             refused.map(|_| ()).map_err(|r| r.class),
             Err(BrokerClass::NotAdmitted)
@@ -497,7 +598,10 @@ fn attempt(arg: &str) {
         "uncertain" => *f.port.model_record.lock().unwrap() = Some(EndStatus::Uncertain),
         _ => {}
     }
-    let attempt = f.port.model_call(id, &request(), &meter, &Never).unwrap();
+    let attempt = f
+        .port
+        .model_call(id, &request(), &meter, &Never, &live())
+        .unwrap();
     assert_eq!(meter.charged.load(Ordering::SeqCst), 1);
     assert_eq!(*meter.settled.lock().unwrap(), vec![1]);
     assert_eq!(f.fake.count("/api/chat"), 1);
@@ -544,7 +648,10 @@ fn c1_s3_record_seam_is_test_only() {
             let text = std::fs::read_to_string(&path).unwrap();
             let lines: Vec<&str> = text.lines().map(str::trim).collect();
             for (at, line) in lines.iter().enumerate() {
-                if line.contains("model_record") {
+                if line
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|token| token == "model_record")
+                {
                     let above = lines[..at].iter().rev().find(|l| !l.is_empty());
                     assert_eq!(
                         above,
@@ -595,7 +702,7 @@ fn identity(arg: &str) {
         );
         assert_eq!(
             f.port
-                .model_call(id, &request(), &meter, &Never)
+                .model_call(id, &request(), &meter, &Never, &live())
                 .map(|_| ())
                 .map_err(|r| r.class),
             Err(BrokerClass::ModelNotRegistered)
@@ -695,4 +802,13 @@ fn c1_s6_model_codes_are_closed_and_round_trip() {
 /// Reuse the existing cfg(test) seam from the fixture module already scanned.
 pub(crate) fn record_next(port: &GovernedPort, status: EndStatus) {
     *port.model_record.lock().unwrap() = Some(status);
+}
+
+#[test]
+fn sb2_facade_rejects_multiline_model_alias() {
+    let plant = "pub unsafe fn raw(\n&self,\n) -> model::RegistrationReceipt { unreachable!() }";
+    assert!(
+        !plant.lines().map(str::trim).all(sb2_facade_line),
+        "alias facade escape"
+    );
 }

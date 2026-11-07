@@ -36,7 +36,8 @@ use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError, Weak};
+use std::time::{Duration, Instant};
 
 /// A run's cancellation flag, observed by actuators between bounded steps.
 #[derive(Clone, Debug)]
@@ -150,6 +151,8 @@ struct RunEntry {
     inference_admission: Option<InferenceAdmission>,
     /// M2e-B: the model calls this run attempted (never refunded).
     model_attempts: u32,
+    /// Exact outstanding model owners, distinct from File commitment pins.
+    model_pins: BTreeSet<u32>,
 }
 
 /// M2d-B1: which yes of the Owner's a cached consent is.
@@ -386,6 +389,7 @@ impl Table {
             .filter(|(_, e)| {
                 (e.view.cancelled || e.view.finished)
                     && e.retained == 0
+                    && e.model_pins.is_empty()
                     // Keep an admitted session's provenance even before its
                     // first commitment pin. Bounded by RUN_CAPACITY; capacity
                     // pressure refuses new runs, never erases the cell.
@@ -582,6 +586,7 @@ impl RunRegistry {
             files_admission: None,
             inference_admission: None,
             model_attempts: 0,
+            model_pins: BTreeSet::new(),
         };
         let mut runs = self
             .runs
@@ -1855,5 +1860,353 @@ impl RunRegistry {
                 .count(),
             table.runs.values().map(|r| r.model_attempts as usize).sum(),
         ]
+    }
+}
+
+#[cfg(test)]
+impl RunRegistry {
+    pub(crate) fn model_observer(&self) -> impl Drop + '_ {
+        self.runs.lock().unwrap()
+    }
+    pub(crate) fn model_accounting(&self, run: RunId) -> Option<(u32, usize)> {
+        let table = self
+            .runs
+            .try_lock()
+            .expect("no run hold across evidence I/O");
+        table
+            .runs
+            .get(&run)
+            .map(|e| (e.model_attempts, e.model_pins.len()))
+    }
+}
+
+// Opaque, non-Clone ownership of one original-scope result obligation.
+// Completion metadata only; admission and handoff never wait here.
+pub(crate) fn settlement_hold<'a, T>(
+    lock: &'a Mutex<T>,
+    _cell: &HaltCell,
+    deadline: Instant,
+) -> Result<MutexGuard<'a, T>, AuthorityError> {
+    loop {
+        match lock.try_lock() {
+            Ok(state) => return Ok(state),
+            Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                #[cfg(test)]
+                super::file_session::probe(Some(_cell), "model.complete.contended");
+                std::thread::park_timeout(
+                    Duration::from_millis(1)
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+            Err(_) => return Err(AuthorityError::Unavailable("settlement hold unavailable")),
+        }
+    }
+}
+pub(crate) struct SessionAttempt {
+    pub(crate) run: RunId,
+    pub(crate) agent: AgentId,
+    pub(crate) group: GroupId,
+    pub(crate) admission: InferenceAdmission,
+    pub(crate) ordinal: u32,
+    pub(crate) door: String,
+    registry: Weak<RunRegistry>,
+    cell: HaltCell,
+}
+impl RunRegistry {
+    // No producer/model hold is carried here. Ordinary calls are unchanged.
+    pub(crate) fn admit_session_attempt(
+        self: &Arc<Self>,
+        run: RunId,
+        agent: &AgentId,
+        group: GroupId,
+        identity: [u8; 32],
+        original: &HaltCell,
+    ) -> Result<SessionAttempt, AuthorityError> {
+        let mut table = self
+            .runs
+            .try_lock()
+            .map_err(|_| AuthorityError::Unavailable("model run hold unavailable"))?;
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let door = crate::governed::AgentDoor::retained_identity(
+            &live_door(&mut table.doors, group, agent)?.life,
+            group,
+            agent,
+            original,
+        )
+        .ok_or(AuthorityError::NotMember)?;
+        let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+        live_member(&table, entry, agent, group)?;
+        host_prerequisites(&table, entry, self.stop_number.load(Ordering::SeqCst))?;
+        let cell = entry
+            .file_cell
+            .as_ref()
+            .filter(|c| c.host() && c.same(original))
+            .ok_or(AuthorityError::NotMember)?
+            .clone();
+        if entry.opened_by != Some(group) {
+            return Err(AuthorityError::NotMember);
+        }
+        let files = entry
+            .files_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        let admission = entry
+            .inference_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        if admission.identity != identity {
+            return Err(AuthorityError::ModelIdentityMismatch);
+        }
+        if admission.contract_hash != files.contract_hash
+            || admission.request != files.request
+            || admission.evidence_seq != files.evidence_seq
+            || admission.kind != files.kind
+            || admission.consented_wall_ms != files.consented_wall_ms
+        {
+            return Err(AuthorityError::NoConsent);
+        }
+        if entry.model_attempts >= MAX_MODEL_ATTEMPTS {
+            return Err(AuthorityError::ModelCall(ModelError::OverBudget));
+        }
+        let ordinal = entry
+            .model_attempts
+            .checked_add(1)
+            .ok_or(AuthorityError::Capacity)?;
+        let ticket = SessionAttempt {
+            run,
+            agent: agent.clone(),
+            group,
+            admission: admission.clone(),
+            ordinal,
+            door,
+            registry: Arc::downgrade(self),
+            cell: cell.clone(),
+        };
+        let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        #[cfg(test)]
+        super::file_session::probe(Some(&cell), "model.attempt.checked");
+        cell.admit()?; // Original retained Q's real same-word CAS; never refresh.
+        entry.model_attempts = ordinal;
+        entry.model_pins.insert(ordinal);
+        Ok(ticket)
+    }
+    // Settlement only: cancellation/finish/Stop cannot erase established debt.
+    pub(crate) fn settle_session_attempt(
+        &self,
+        ticket: SessionAttempt,
+        deadline: Instant,
+    ) -> Result<(), AuthorityError> {
+        if !std::ptr::eq(self, ticket.registry.as_ptr()) {
+            return Err(AuthorityError::WrongRun);
+        }
+        #[cfg(test)]
+        super::file_session::probe(Some(&ticket.cell), "model.settle.before");
+        let mut table = settlement_hold(&self.runs, &ticket.cell, deadline)?;
+        let entry = table
+            .runs
+            .get_mut(&ticket.run)
+            .ok_or(AuthorityError::UnknownRun)?;
+        if entry.view.agent != ticket.agent
+            || entry.opened_by != Some(ticket.group)
+            || entry.inference_admission.as_ref() != Some(&ticket.admission)
+            || !entry
+                .file_cell
+                .as_ref()
+                .is_some_and(|c| c.same(&ticket.cell))
+            || !entry.model_pins.remove(&ticket.ordinal)
+        {
+            return Err(AuthorityError::WrongRun);
+        }
+        Ok(())
+    }
+}
+/// SB-3A (R2): one original door's inference binding, decided in one
+/// run-table hold; the grant store is observed under it (run -> grant).
+pub(crate) struct SessionBinding<'a> {
+    pub(crate) run: RunId,
+    pub(crate) agent: &'a AgentId,
+    pub(crate) group: GroupId,
+    pub(crate) contract_hash: &'a str,
+    pub(crate) request: &'a str,
+    pub(crate) identity: [u8; 32],
+    /// Q's scoped view of the original session cell: S, and the final CAS.
+    pub(crate) original: &'a HaltCell,
+    /// The run Q's own File admission bound, if any.
+    pub(crate) q_run: Option<RunId>,
+    pub(crate) grants: &'a super::policy::GrantStore,
+    pub(crate) grant: super::ids::GrantId,
+    /// Both clocks, read before any hold.
+    pub(crate) clock: (u64, u64),
+}
+impl RunRegistry {
+    // No producer/model hold is carried here; no filesystem, evidence or
+    // callback work happens under the run-table hold.
+    pub(crate) fn admit_session_inference(
+        &self,
+        b: SessionBinding<'_>,
+    ) -> Result<(), AuthorityError> {
+        let mut table = self.runs.try_lock().map_err(|error| {
+            if matches!(error, TryLockError::Poisoned(_)) {
+                b.original.fail_session();
+            }
+            AuthorityError::Unavailable("model run hold unavailable")
+        })?;
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let now = Life {
+            stop_epoch: self.stop_number.load(Ordering::SeqCst),
+            halted: false,
+            closed: false,
+        };
+        let door = live_door(&mut table.doors, b.group, b.agent)?;
+        let listed = door.members.contains(&b.run);
+        let door_cell = door.file_cell.clone();
+        let mut matching = door.consents.iter().filter(|c| {
+            c.life == now && c.contract_hash == b.contract_hash && c.request == b.request
+        });
+        let consent = matching.next().cloned();
+        let agreed = consent
+            .as_ref()
+            .is_some_and(|first| matching.all(|c| c.page_facts == first.page_facts));
+        let entry = table.runs.get(&b.run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != b.agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged)
+            || table.in_halted_group(entry)
+        {
+            return Err(AuthorityError::Halted);
+        }
+        if entry.view.finished {
+            return Err(AuthorityError::RunNotActive);
+        }
+        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
+            return Err(AuthorityError::RunCancelled);
+        }
+        // One predicate per original association: S, D, R; then Q.
+        let s = entry
+            .file_cell
+            .as_ref()
+            .is_some_and(|c| c.host() && c.same(b.original));
+        let d = listed && entry.groups.contains(&b.group);
+        let r = entry.opened_by == Some(b.group);
+        // As live_member: the run's cell is the door's retained cell.
+        let cell = door_cell
+            .as_ref()
+            .is_none_or(|door| entry.file_cell.as_ref().is_some_and(|c| c.same(door)));
+        // As host_prerequisites: the stored entry is this run.
+        let id = entry.view.id == b.run;
+        if !s || !d || !r || !cell || !id {
+            return Err(AuthorityError::NotMember);
+        }
+        let files = entry
+            .files_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        if b.q_run != Some(b.run) {
+            return Err(AuthorityError::NotMember);
+        }
+        let grant = b
+            .grants
+            .try_live_at(b.grant, b.clock.0, b.clock.1)
+            .map_err(|error| {
+                if error == super::policy::GrantObservation::Poisoned {
+                    b.original.fail_session();
+                }
+                AuthorityError::Unavailable("model grant hold unavailable")
+            })?;
+        if !matches!(grant, Some(super::policy::GrantScope::Files { workspace, identity, .. })
+            if workspace == files.workspace.id && identity == files.workspace.identity)
+        {
+            return Err(AuthorityError::GrantNotLive);
+        }
+        let consent = consent
+            .filter(|_| agreed)
+            .ok_or(AuthorityError::NoConsent)?;
+        let fresh = match &entry.inference_admission {
+            Some(bound)
+                if bound.contract_hash == consent.contract_hash
+                    && bound.request == consent.request
+                    && bound.identity == b.identity =>
+            {
+                false
+            }
+            Some(_) => return Err(AuthorityError::AlreadyAdmitted),
+            None => true,
+        };
+        // Every success, idempotent included, keeps the exact File association.
+        if consent.contract_hash != files.contract_hash
+            || consent.request != files.request
+            || consent.evidence_seq != files.evidence_seq
+            || consent.kind != files.kind
+            || consent.at_wall_ms != files.consented_wall_ms
+            || consent.page_facts != files.page_facts
+        {
+            return Err(AuthorityError::NoConsent);
+        }
+        let admission = InferenceAdmission {
+            contract_hash: consent.contract_hash,
+            request: consent.request,
+            evidence_seq: consent.evidence_seq,
+            kind: consent.kind,
+            consented_wall_ms: consent.at_wall_ms,
+            identity: b.identity,
+        };
+        #[cfg(test)]
+        super::file_session::probe(Some(b.original), "model.bind.checked");
+        b.original.admit()?; // Q's real same-word CAS, idempotent success included.
+        if fresh {
+            let entry = table
+                .runs
+                .get_mut(&b.run)
+                .ok_or(AuthorityError::UnknownRun)?;
+            entry.inference_admission = Some(admission);
+        }
+        Ok(())
+    }
+}
+#[cfg(test)]
+impl RunRegistry {
+    // One-component R2 fixtures; every other prerequisite stays valid.
+    pub(crate) fn tamper_for_test(&self, run: RunId, what: &str) {
+        let mut table = self.runs.lock().unwrap();
+        let group = table.runs[&run].opened_by.unwrap();
+        if what == "door_cell" {
+            table.doors.get_mut(&group).unwrap().file_cell = Some(HaltCell::new_host());
+            return;
+        }
+        if what == "life" {
+            for consent in &mut table.doors.get_mut(&group).unwrap().consents {
+                consent.life.stop_epoch += 1;
+            }
+            return;
+        }
+        let entry = table.runs.get_mut(&run).unwrap();
+        match what {
+            "groups" => entry.groups.clear(),
+            "opened_by" => entry.opened_by = Some(u64::MAX),
+            "view_id" => entry.view.id = RunId::fresh(),
+            _ => {}
+        }
+        let files = entry.files_admission.as_mut().unwrap();
+        match what {
+            "seq" => files.evidence_seq += 1000,
+            "kind" => files.kind = ConsentKind::Resume,
+            "time" => files.consented_wall_ms += 1,
+            "workspace" => files.workspace.id.push('x'),
+            _ => {}
+        }
     }
 }

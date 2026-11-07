@@ -21,6 +21,8 @@ pub(crate) mod m2c_owner;
 mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;
+pub(crate) mod m3d_manifest;
+mod m3d_teaching;
 mod mn01;
 mod review;
 mod state;
@@ -577,6 +579,7 @@ impl Lane for KeyedLane {
             .map(str::to_string)
             .unwrap_or_else(|| format!("{} looked at the goal", self.role.as_str()));
         LaneOutput {
+            verification: None,
             text,
             effects,
             verdict,
@@ -643,6 +646,7 @@ impl Lane for HeldLane {
             gate = self.changed.wait_timeout(gate, left).unwrap().0;
         }
         LaneOutput {
+            verification: None,
             text: "held lane answered".into(),
             effects: self.effects.clone(),
             verdict: Verdict::Continue,
@@ -665,6 +669,7 @@ pub fn contract_with(markers: &str) -> MissionContract {
         model: None,
         notes: vec![],
         deliverable: None,
+        page_facts: None,
         owner_words: "  Make me a small website for my bakery, \"Rosa's\".\n  Keep it simple!  "
             .into(),
         restatement: format!("A one-page site for Rosa's bakery {markers}")

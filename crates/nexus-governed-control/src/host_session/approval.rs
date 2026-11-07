@@ -188,6 +188,7 @@ impl SessionDoor {
             context: continuation.context,
             origin_request: self.origin_request,
             core: self.core.clone(),
+            kind: DoorKind::Continuation,
         })
     }
 

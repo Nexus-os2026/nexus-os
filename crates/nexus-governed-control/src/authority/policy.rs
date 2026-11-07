@@ -17,8 +17,15 @@ use super::ids::{Digest, GrantId};
 use super::{write_end, write_record, AuthorityError};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, TryLockError};
 use std::time::Duration;
+
+/// SB-3 (O2): why a nonblocking grant observation refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GrantObservation {
+    Contended,
+    Poisoned,
+}
 
 /// The policy generation: a counter that only grows.
 #[derive(Default)]
@@ -430,6 +437,28 @@ impl GrantStore {
             .get(&id)
             .filter(|grant| grant.live(monotonic_ms, wall_ms))
             .cloned()
+    }
+
+    /// SB-3 (O2): [`Self::live_at`] without waiting (clocks read by the
+    /// caller before any hold): contention and poison refuse, distinctly.
+    pub(crate) fn try_live_at(
+        &self,
+        id: GrantId,
+        mono_ms: u64,
+        wall_ms: u64,
+    ) -> Result<Option<GrantScope>, GrantObservation> {
+        let grants = self.grants.try_lock().map_err(|error| match error {
+            TryLockError::WouldBlock => GrantObservation::Contended,
+            TryLockError::Poisoned(_) => GrantObservation::Poisoned,
+        })?;
+        let grant = grants.map.get(&id).filter(|g| g.live(mono_ms, wall_ms));
+        Ok(grant.map(|g| g.scope.clone()))
+    }
+    #[cfg(test)]
+    pub(crate) fn hold_for_test(&self) -> impl Drop + '_ {
+        self.grants
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// M2d: whether grant `id` exists, is not revoked and has reached its

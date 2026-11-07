@@ -100,6 +100,7 @@ pub use session_close::PreparedSessionEnd;
 #[cfg(test)]
 mod lite_oracles;
 mod lite_settle;
+mod page_proof;
 pub use lite::FileSession;
 mod session_result;
 pub use session_result::{TerminalFacts, TerminalIntent};
@@ -331,6 +332,8 @@ struct Mission {
     // Exact terminal append result, independent of later store failures and
     // readable-but-unacknowledged bytes. Never inferred from an older prefix.
     terminal_record: Option<(Trigger, Option<u64>)>,
+    /// M3-Db: the retained page and its receipt, by reference only.
+    proof: page_proof::Proof,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -384,6 +387,7 @@ impl Mission {
             acks: Vec::new(),
             terminal_uncertain: false,
             terminal_record: None,
+            proof: page_proof::Proof::default(),
         }
     }
 
@@ -391,7 +395,9 @@ impl Mission {
     /// charged total or declared budgets. Dropping live state revokes its
     /// retained atomic observers before this owning boundary is released.
     fn invalidate_calls(&mut self) {
-        self.lane_calls = None;
+        if let Some(live) = self.lane_calls.take() {
+            live.owner.revoke(); // O1: before journal I/O, still owning the lock.
+        }
         self.call_accounting = None;
     }
 
@@ -1635,7 +1641,14 @@ impl<P: EffectPort> Coordinator<P> {
             if mission.generation != generation {
                 return Err(CoordinatorError::Stopped);
             }
-            let trigger = if phase == MissionState::Verifying {
+            // M3-Dc1: a page passes only on its recorded all-pass checks.
+            let unproven =
+                mission.contract()?.page_facts.is_some() && mission.proof.verified != Some(true);
+            let trigger = if phase == MissionState::Verifying && unproven {
+                Trigger::VerifyFail {
+                    reason: VerifyFailReason::VerifierGaveNoVerdict,
+                }
+            } else if phase == MissionState::Verifying {
                 Trigger::VerifyPass
             } else {
                 Trigger::PhaseDone
@@ -1668,9 +1681,9 @@ impl<P: EffectPort> Coordinator<P> {
         } else {
             false
         };
-        let status = if file_approval {
+        let (status, receipt) = if file_approval {
             match self.file_approval(id, generation)? {
-                lite_settle::FileDecision::Status(status) => status,
+                lite_settle::FileDecision::Status(status, receipt) => (status, receipt),
                 lite_settle::FileDecision::Ended(state) => {
                     report.to = state;
                     report.reason = self.reason(id);
@@ -1679,7 +1692,7 @@ impl<P: EffectPort> Coordinator<P> {
                 }
             }
         } else {
-            self.port.approval(id)
+            (self.port.approval(id), None)
         };
         let step = self.step(|inner| {
             inner.kept(id)?;
@@ -1727,19 +1740,50 @@ impl<P: EffectPort> Coordinator<P> {
         }
 
         self.file_boundary(id)?;
-        // Approved, and it ran at the broker: the phase goes on.
+        // M3-Db: a page File's proof is read first, with no lock held.
+        let page = file_approval && contract.page_facts.is_some();
+        let proof = if page {
+            Some(self.page_receipt(id, waiting.effect, receipt)?)
+        } else {
+            None
+        };
+        // Approved, and it ran at the broker: the phase goes on. A page's
+        // receipt is appended under the same lock, before closure and ack.
         let generation = self.step(|inner| {
             let mono = self.clock.monotonic_ms();
-            report.to = inner.fire(
-                id,
-                Trigger::ActionApproved {
-                    effect: waiting.effect,
-                    phase: waiting.phase,
-                },
-                mono,
-            )?;
-            Ok::<_, CoordinatorError>(inner.mission(id)?.generation)
+            let approved = Trigger::ActionApproved {
+                effect: waiting.effect,
+                phase: waiting.phase,
+            };
+            let recorded = inner.fire(id, approved, mono).and_then(|to| {
+                report.to = to;
+                if let Some(Ok(event)) = &proof {
+                    inner.append(id, event.clone())?;
+                    inner.mission(id)?.proof.receipt = page_proof::recorded(event);
+                }
+                Ok(())
+            });
+            if page && matches!(recorded, Err(CoordinatorError::Journal(_))) {
+                page_proof::unrecorded(inner.mission(id)?, &mut report);
+                return Ok(None);
+            }
+            recorded?;
+            Ok::<_, CoordinatorError>(Some(inner.mission(id)?.generation))
         })?;
+        let Some(generation) = generation else {
+            return Ok(report);
+        };
+        if let Some(Err(end)) = proof {
+            report.to = match end {
+                page_proof::PageEnd::Fail(reason) => self.end_with(id, Trigger::Fail { reason })?,
+                page_proof::PageEnd::Unavailable => {
+                    self.stop_for(id, StopReason::PrivateContentUnavailable)?
+                }
+            };
+            report.reason = self.reason(id);
+            report.explanation = Some(page_proof::WRITTEN.into());
+            return Ok(report);
+        }
         // The approved action is final at the broker: its closure is
         // journaled before anything more is sent.
         if !self.close_action(id)? {
@@ -1798,11 +1842,17 @@ impl<P: EffectPort> Coordinator<P> {
             }
             // Identity observation is outside the coordinator hold; native admission
             // independently rechecks it against the same original run and consent.
+            // M3-Dc1: a File page's Verifier runs only on its durable proof.
+            let verification = match self.page_verification(id, generation, *role, report)? {
+                Ok(verification) => verification,
+                Err(state) => return Ok(Ended::Ended(state)),
+            };
             let cap = lane.max_model_calls();
             let model = (cap > 0).then(|| self.port.model_identity()).flatten();
-            let (step, caller) = self.step(|inner| {
+            let (step, caller, lane_contract) = self.step(|inner| {
+                inner.mission(id)?.proof.input = verification;
                 if identity.role != *role {
-                    return Ok((Then::End(BlockReason::LaneIdentityChanged), None));
+                    return Ok((Then::End(BlockReason::LaneIdentityChanged), None, None));
                 }
                 if cap > 0 {
                     let c = inner.mission(id)?.contract()?;
@@ -1819,7 +1869,7 @@ impl<P: EffectPort> Coordinator<P> {
                         _ => Some(BlockReason::ModelNotPinned),
                     };
                     if let Some(reason) = reason {
-                        return Ok((Then::End(reason), None));
+                        return Ok((Then::End(reason), None, None));
                     }
                 }
                 let step =
@@ -1833,7 +1883,13 @@ impl<P: EffectPort> Coordinator<P> {
                     )?),
                     _ => None,
                 };
-                Ok((step, caller))
+                let lane_contract =
+                    if matches!(&step, Then::Go(_)) && *role == LaneRole::Builder && cap > 0 {
+                        Some(inner.mission(id)?.contract()?.clone())
+                    } else {
+                        None
+                    };
+                Ok((step, caller, lane_contract))
             })?;
             let input = match self.then(id, step)? {
                 Ok(input) => input,
@@ -1870,6 +1926,7 @@ impl<P: EffectPort> Coordinator<P> {
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "lane_invoke");
             let context = crate::lane::LaneContext {
+                contract: lane_contract.as_ref(),
                 model: caller.as_ref().map(|c| c as &dyn crate::lane::ModelCaller),
             };
             let output = lane.invoke_in(&input, &context);
@@ -1942,6 +1999,12 @@ impl<P: EffectPort> Coordinator<P> {
                 input_hash: input_hash(&input),
                 output_hash: hash,
             });
+            let page = contract.page_facts.is_some() && self.file.is_some();
+            if *role == LaneRole::Verifier && page {
+                if let Some(state) = self.page_verdict(id, generation, &input, &output, report)? {
+                    return Ok(Ended::Ended(state));
+                }
+            }
 
             // The verdict: a code; the lane's own reason is the Owner's
             // working detail (memory only).
@@ -1984,12 +2047,24 @@ impl<P: EffectPort> Coordinator<P> {
                 return Ok(Ended::Ended(self.end_with(id, trigger)?));
             }
 
+            // Db-R1 L5: a page Builder's answer shape before any generic check.
+            let page = *role == LaneRole::Builder && contract.page_facts.is_some();
+            if page && page_proof::deliverable(&output.effects).is_err() {
+                let reason = FailReason::DeliverableInvalid;
+                return Ok(Ended::Ended(self.end_with(id, Trigger::Fail { reason })?));
+            }
             // Mother's own checks of every effect, before any is sent.
             if output.effects.len() > MAX_EFFECTS_PER_CALL {
                 return Ok(Ended::Ended(self.end(id, BlockReason::TooManyEffects)?));
             }
             if let Ended::Ended(state) = self.checked(id, &contract, &output.effects, report)? {
                 return Ok(Ended::Ended(state));
+            }
+            if *role == LaneRole::Builder && contract.page_facts.is_some() {
+                let retained = self.retain(id, generation, input.invocation, &output.effects)?;
+                if let Ended::Ended(state) = retained {
+                    return Ok(Ended::Ended(state));
+                }
             }
             if let Ended::Ended(state) =
                 self.dispatch(id, generation, &output.effects, &roles[index + 1..], report)?
@@ -2397,13 +2472,18 @@ impl<P: EffectPort> Coordinator<P> {
     /// Journal the mission's open action closed, once the port confirms
     /// the broker no longer holds it open. `Ok(false)`: not confirmed.
     fn close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
-        let (open, file_action) = self.step(|inner| {
+        let (open, file_action, unrecorded) = self.step(|inner| {
             let m = inner.mission(id)?;
             Ok((
                 m.open_action.clone(),
                 m.file_mode && m.dispatched_kind == Some(EffectKind::File),
+                m.proof.unrecorded,
             ))
         })?;
+        // Db2-R1 L2: an unrecorded proof's action is never journaled closed.
+        if unrecorded {
+            return Ok(false);
+        }
         if file_action {
             return self.file_close_action(id);
         }
@@ -2689,22 +2769,15 @@ impl<P: EffectPort> Coordinator<P> {
         }
     }
 
+    /// M3-Dc2: `holds` only for a criterion with a recorded passing check.
     fn explain(&self, id: MissionId, mission: &Mission) -> Result<String, CoordinatorError> {
-        let contract = mission.contract()?;
-        let mut lines = vec![
-            format!("Mission {id} is done."),
-            format!("You asked: {}", contract.owner_words.trim()),
-            format!("I understood: {}", contract.restatement),
-            "The Verifier checked every pass criterion you set before work began:".into(),
-        ];
-        for criterion in &contract.pass_criteria {
-            lines.push(format!("  - {}: holds", criterion.text));
-        }
-        lines.push(format!(
-            "Lane calls: {} of {}. Effects sent to the broker: {}. Money spent: 0.",
-            mission.model_calls, contract.budget.max_model_calls, mission.next_effect
-        ));
-        Ok(lines.join("\n"))
+        Ok(crate::teaching::explain(
+            id,
+            mission.contract()?,
+            mission.proof.checks.as_deref(),
+            mission.model_calls,
+            mission.next_effect,
+        ))
     }
 
     /// Stop a mission from whatever state it is in; a terminal mission
@@ -2792,11 +2865,10 @@ impl<P: EffectPort> Coordinator<P> {
             if inner.closed {
                 return Err(CoordinatorError::Closed);
             }
-            if inner
-                .missions
-                .values()
-                .any(|m| m.file_mode && (!m.state.is_terminal() || m.terminal_uncertain))
-            {
+            if inner.missions.values().any(|m| {
+                m.file_mode
+                    && (!m.state.is_terminal() || m.terminal_uncertain || m.proof.unrecorded)
+            }) {
                 return Err(CoordinatorError::FileUnfinished);
             }
             if inner.missions.values().any(|m| m.busy) {
@@ -3242,6 +3314,12 @@ fn replay(
                 Trigger::Start if !mission.consented() => {
                     return Err(V::WorkWithoutConsent);
                 }
+                // M3-Dc1: a retained page passes only on its recorded checks.
+                Trigger::VerifyPass
+                    if mission.proof.retained.is_some() && mission.proof.verified != Some(true) =>
+                {
+                    return Err(V::ProofOutOfPlace);
+                }
                 // A wait follows the settlement of the effect it waits on.
                 Trigger::AwaitApproval { effect, .. }
                     if mission.awaiting_settled != Some(*effect) =>
@@ -3292,6 +3370,10 @@ fn replay(
                         }
                         None => return Err(V::SettlementOutOfPlace),
                     };
+                    let published = matches!(outcome, SettlementOutcome::Published { .. });
+                    let expected =
+                        page_proof::settled_end(mission, *effect, published && action.is_some())
+                            .or(expected);
                     if expected != Some(*end) {
                         return Err(V::SettlementConflict);
                     }
@@ -3299,6 +3381,9 @@ fn replay(
                         if open == effect && action.as_ref() != Some(pending) {
                             return Err(V::SettlementConflict);
                         }
+                    }
+                    if page_proof::early_conflict(mission, *effect, action.as_ref()) {
+                        return Err(V::ProofConflict);
                     }
                 }
                 _ => {}
@@ -3327,6 +3412,7 @@ fn replay(
         }
         Event::LaneInvoked {
             invocation,
+            role,
             model_cap,
             model_budget,
             ..
@@ -3350,6 +3436,8 @@ fn replay(
                 mission.declared_model_budgets.push(*model_budget);
             }
             mission.pending_lane = Some(*invocation);
+            mission.proof.returned = None;
+            mission.proof.invoked = Some(*role);
             mission.model_calls = mission
                 .model_calls
                 .checked_add(1)
@@ -3366,6 +3454,7 @@ fn replay(
             mission.pending_lane = None;
             mission.call_accounting = None;
             mission.prior_outputs.push(output_hash.clone());
+            mission.proof.returned = Some(*invocation);
         }
         Event::LaneOvertaken { invocation } => {
             if mission.pending_lane != Some(*invocation) {
@@ -3460,6 +3549,11 @@ fn replay(
             mission.held = None;
             mission.held_journaled = false;
         }
+        Event::DeliverableRetained { .. }
+        | Event::PublicationReceipt { .. }
+        | Event::VerificationRecorded { .. } => {
+            page_proof::replay(mission, entry)?;
+        }
     }
     Ok(())
 }
@@ -3494,6 +3588,9 @@ fn journal_work(event: &Event) -> bool {
         | Event::SessionOpened
         | Event::SessionClosed
         | Event::Held { .. }
-        | Event::SettlementStarted { .. } => false,
+        | Event::SettlementStarted { .. }
+        | Event::DeliverableRetained { .. }
+        | Event::PublicationReceipt { .. }
+        | Event::VerificationRecorded { .. } => false,
     }
 }

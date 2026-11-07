@@ -141,7 +141,7 @@ def read_config(name):
 def shim(verb, run):
     subprocess.run(['/usr/bin/sudo','-n','/usr/libexec/gatebox/lifecycle.py',verb,run],
                    stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-                   env=snapshot.ENV,close_fds=True,timeout=30,check=True)
+                   env=snapshot.ENV,close_fds=True,timeout=90,check=True)
 
 def unit_state(run):
     unit = 'mothergate-run@'+run+'.service'
@@ -259,6 +259,7 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
                    source=registration,cleanup={'complete':False})
     listeners, logs, captured, started = {}, {}, {}, time.monotonic()
     evidence = Evidence()
+    incoming, handed_off = [], False
     try:
         stage.mkdir(mode=0o700)
         (stage/'request.json').write_bytes(receipt.encode(request))
@@ -268,10 +269,12 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
         for kind in ('log','status'):
             sock = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
             listeners[kind] = sock
-            sock.bind(str(CONTROL/(run+'.'+kind+'.sock')))
+            path = CONTROL/'incoming'/(run+'.'+kind+'.sock')
+            sock.bind(str(path))
+            incoming.append(path)  # Only a successful bind owns this incoming leaf.
             sock.listen(1)
-        sibling('lifecycle').check_start(run)
         shim('start',run)
+        handed_off = True
         _, logs = collect(run,listeners,evidence,captured)
         summary['commands'], summary['coverage'] = coverage(evidence,logs)
         summary['environment'] = sibling('init').ENV
@@ -297,7 +300,10 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
             summary['missing_evidence'].append('cleanup: '+str(exc))
         for kind, sock in listeners.items():
             sock.close()
-            (CONTROL/(run+'.'+kind+'.sock')).unlink(missing_ok=True)
+        if not handed_off:
+            for path in incoming:
+                try: os.unlink(path)
+                except FileNotFoundError: pass  # Root may already have relocated it.
         summary['resources']['duration_seconds'] = time.monotonic()-started
         summary['logs'] = [dict(file=name,sha256=hashlib.sha256(data).hexdigest()) for name,data in logs.items()]
         try: receipt.validate_summary(summary)
