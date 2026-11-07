@@ -197,6 +197,15 @@ def syscall_probe():
     inner = observed(); require(set(inner.values())=={'ENOSYS'},'nested syscall precedence')
     return dict(openat2=True,outer=outer,inner=inner,abi=platform.machine())
 
+def process_identity(text):
+    # comm may contain spaces and parentheses; starttime is field 22, after comm.
+    pid,separator,rest = text.partition(' (')
+    fields = rest.rsplit(') ',1)
+    require(separator and pid.isdecimal() and int(pid)>0 and len(fields)==2,'invalid process stat')
+    tail = fields[1].split()
+    require(len(tail)>19 and tail[19].isdecimal(),'missing process start time')
+    return int(pid),int(tail[19])
+
 def processes(context):
     pairs = [pty.openpty(),pty.openpty()]
     try:
@@ -216,7 +225,8 @@ def processes(context):
     require(not any(Path('/dev').glob('tty[0-9]*')),'VT exposed')
     require(Path('/proc/sys/dev/tty/legacy_tiocsti').read_text().strip()=='0','legacy_tiocsti enabled')
     host_proc = Path('/proc',str(context['pid']),'stat')
-    require(not host_proc.exists() or host_proc.read_text()!=context['process_stat'],'host process visible')
+    require(not host_proc.exists() or process_identity(host_proc.read_text())!=process_identity(context['process_stat']),
+            'host process visible')
     # The init is the parent and reaps this child; child establishes its own session.
     child = os.fork()
     if child == 0:

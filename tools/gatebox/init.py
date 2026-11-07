@@ -65,6 +65,7 @@ class Runner:
         proc = subprocess.Popen(argv,**options)
         self.children.add(proc)
         output = bytearray()
+        log_start = self.total
         selector = selectors.DefaultSelector()
         selector.register(proc.stdout,selectors.EVENT_READ)
         if proc.stderr is not None: selector.register(proc.stderr,selectors.EVENT_READ)
@@ -78,6 +79,8 @@ class Runner:
                         self.output(name,block)
                         if key.fileobj is proc.stdout: output.extend(block)
             code = proc.wait(timeout=max(.001,self.deadline-time.monotonic()))
+            if self.total == log_start:
+                packet(self.log,{'id':name,'data':''})
             packet(self.status,dict(event='end',id=name,exit_code=code,signal=-code if code < 0 else None))
             self.results[name] = (gate,argv,code)
             return name, code, output.decode('utf-8',errors='replace')
