@@ -23,6 +23,9 @@ def sibling(name):
     return module
 snapshot, receipt = sibling('snapshot'), sibling('receipt')
 ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'}
+# PR-2b install.sh must create /etc/gatebox/qualification.json with this value
+# before starting the service. It permits qualifying only; normal still fails closed.
+QUALIFICATION_PLACEHOLDER = {'identity':None,'passed':[]}
 
 def framing_budget(sock, deadline):
     remaining = deadline-time.monotonic()
@@ -165,11 +168,18 @@ def collect(run, listeners, evidence, logs):
     selector = selectors.DefaultSelector()
     streams, buffers, ended = {}, {}, set()
     for kind, sock in listeners.items(): selector.register(sock,selectors.EVENT_READ,('listen',kind))
-    deadline = time.monotonic()+14430
+    began = time.monotonic()
+    deadline = began+14430
     try:
         while len(ended) < 2:
-            if time.monotonic() >= deadline: raise TimeoutError('capture deadline')
-            for key, _ in selector.select(.1):
+            now = time.monotonic()
+            if now >= deadline: raise TimeoutError('capture deadline')
+            events = selector.select(.1)
+            if not events:
+                state = unit_state(run)
+                if state.get('ActiveState') == 'failed' or (now-began >= 30 and state.get('ActiveState') == 'inactive'):
+                    raise ValueError('unit exited before capture completion: '+str(state))
+            for key, _ in events:
                 mode, kind = key.data
                 if mode == 'listen':
                     conn, _ = key.fileobj.accept()

@@ -105,7 +105,7 @@ class Runner:
     def gates(self):
         policy = json.loads(Path('/gate/policy/gates.json').read_bytes())
         exclusions = json.loads(Path('/gate/policy/exclusions.json').read_bytes())
-        failures = []
+        failures, excluded = [], []
         for gate in policy['gates']:
             try:
                 kind = gate['id']
@@ -126,14 +126,21 @@ class Runner:
                             if item.get('reason') != 'compiler-artifact' or not item.get('executable'): continue
                             if not item.get('profile',{}).get('test'): continue
                             target = item['target']['name']
-                            if target == exclusions['target']: continue
                             executable = item['executable']
                             if (not executable.startswith('/work/target/') or '..' in executable.split('/')
                                     or Path(executable).resolve() != Path(executable)):
                                 raise ValueError('artifact escaped private target')
                             package = artifact_package(item)
+                            if (package,target) == ('nexus-verifier-sandbox',exclusions['target']):
+                                excluded.append(executable)
+                                continue
                             self.artifacts.append(dict(id='a'+str(len(self.artifacts)),adapter='libtest',
                                                        package=package,target=target,executable=executable))
+                        if len(excluded) != 1: raise ValueError('missing/duplicate excluded artifact')
+                        _, code, listing = self.command('excluded-list',[excluded[0],'--list','--format','terse'])
+                        names = re.findall(r'^(.+): test$',listing,re.M)
+                        if code or len(names) != len(exclusions['cases']) or set(names) != set(exclusions['cases']):
+                            raise ValueError('excluded case names changed')
                 elif kind == 'workspace':
                     if not self.artifacts: raise ValueError('missing compilation inventory')
                     for artifact in self.artifacts:
