@@ -28,6 +28,7 @@ import tempfile
 import termios
 import threading
 import time
+import uuid
 
 HERE = Path(__file__).resolve().parent
 CONFIG = Path('/etc/gatebox')
@@ -345,7 +346,19 @@ def protected(path):
 def config(name):
     path = CONFIG/name; protected(path); return json.loads(path.read_bytes())
 
+def skeleton_check():
+    root = Path('/usr/lib/gatebox/root'); expected = config('skeleton.json'); actual = {}
+    for path in sorted(root.rglob('*')):
+        key = str(path.relative_to(root)); info = path.lstat()
+        require(info.st_uid==0 and (stat.S_ISLNK(info.st_mode) or not info.st_mode & 0o022),'skeleton owner/mode')
+        if stat.S_ISLNK(info.st_mode): actual[key] = {'link':os.readlink(path)}
+        elif stat.S_ISDIR(info.st_mode): protected(path); actual[key] = {'directory':True}
+        elif stat.S_ISREG(info.st_mode): protected(path); actual[key] = {'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+        else: raise ValueError('special skeleton entry')
+    require(actual==expected,'skeleton inventory changed')
+
 def installed_identity():
+    skeleton_check()
     inventory = config('installed-files.json')
     require(isinstance(inventory,dict) and inventory,'installed file inventory missing')
     for name,digest in inventory.items():
@@ -355,7 +368,9 @@ def installed_identity():
         pairs = sorted((n,h) for n,h in inventory.items() if any(n.startswith(p) for p in prefixes))
         require(pairs,'empty identity inventory')
         return hashlib.sha256(json.dumps(pairs,separators=(',',':')).encode()).hexdigest()
-    return dict(bundle_sha256=digest(('/',)),policy_sha256=digest((str(HERE/'policy'),'/etc/systemd/','/etc/sudoers.d/','/etc/polkit-1/')),
+    bundle = config('bundle.json')['sha256']
+    require(re.fullmatch('[0-9a-f]{64}',bundle),'bundle digest')
+    return dict(bundle_sha256=bundle,policy_sha256=digest((str(HERE/'policy'),'/etc/gatebox/gates.json','/etc/gatebox/exclusions.json','/etc/systemd/','/etc/sudoers.d/','/etc/polkit-1/')),
                 gates_sha256=digest((str(HERE/'policy/gates.json'),str(HERE/'policy/exclusions.json'))))
 
 def effective_units():
@@ -378,15 +393,6 @@ def require_installed():
     current = installed_identity(); require(current==config('identity.json'),'stale installed identity')
     require(config('admission.json')==dict(identity=current,stage='qualifying'),'acceptance requires qualifying stage')
     harness_check(HARNESS.read_bytes(),json.loads((HERE/'policy/exclusions.json').read_bytes()))
-    root = Path('/usr/lib/gatebox/root'); expected = config('skeleton.json'); actual = {}
-    for path in sorted(root.rglob('*')):
-        key = str(path.relative_to(root)); info = path.lstat()
-        require(info.st_uid==0 and (stat.S_ISLNK(info.st_mode) or not info.st_mode & 0o022),'skeleton owner/mode')
-        if stat.S_ISLNK(info.st_mode): actual[key] = {'link':os.readlink(path)}
-        elif stat.S_ISDIR(info.st_mode): protected(path); actual[key] = {'directory':True}
-        elif stat.S_ISREG(info.st_mode): protected(path); actual[key] = {'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
-        else: raise ValueError('special skeleton entry')
-    require(actual==expected,'skeleton inventory changed')
     effective_units()
     for name in ('mothergate','gaterun'):
         account = pwd.getpwnam(name)
@@ -449,6 +455,9 @@ def fixture():
     if SESSION is not None: return SESSION
     require_installed(); registration = config('registry.json')['mother']
     context = claude_context()
+    attempt = 'acceptance-'+uuid.uuid4().hex+'.json'
+    provenance = dict(context,uid=registration['uid'],codex='unsupported (runner denies AF_UNIX)')
+    atomic_config(attempt,dict(provenance,state='starting'))
     # Independent host canaries exist throughout the admitted fixture, never in children.
     with tempfile.TemporaryDirectory(prefix='gbx-canary-') as temporary:
         path = str(Path(temporary)/'host.sock'); sockets = []
@@ -465,12 +474,17 @@ def fixture():
             atomic_config('probe-context.json',metadata)
             refused = client_request('0'*40,registration)
             require(refused=={'status':'UNQUALIFIED','reason':'QUALIFICATION_ONLY'},'qualification refusal')
+            provenance['refused'] = refused
+            atomic_config(attempt,dict(provenance,state='refusal-observed'))
             accepted = client_request(FIXTURE,registration)
+            provenance['accepted'] = accepted
+            atomic_config(attempt,dict(provenance,state='submitted'))
             require(accepted.get('status')=='ACCEPTED' and re.fullmatch('[0-9a-f]{32}',accepted.get('run_id','')),'fixture not accepted')
             run = accepted['run_id']; deadline = time.monotonic()+14500
             while not (Path('/var/lib/mothergate/receipts')/run).exists():
                 require(time.monotonic()<deadline,'fixture receipt deadline; attempt retained'); time.sleep(.5)
             result = sibling('verify').authenticate(run); summary = result['summary']
+            atomic_config(attempt,dict(provenance,state='receipt-published',run_id=run,status=summary['status']))
             require(summary['status']=='PASS_SCOPED','fixture failed: '+str(summary['missing_evidence']))
             SESSION = (summary,dict(context,uid=registration['uid'],accepted=accepted,refused=refused,
                                    codex='unsupported (runner denies AF_UNIX)'))

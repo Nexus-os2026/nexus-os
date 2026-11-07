@@ -227,8 +227,10 @@ def main():
             runner.output('versions',json.dumps(versions).encode())
             runner.gates()
         finally:
+            # Stop/join the sampler even if final input inventory or capture fails.
+            accounting = peak.finish()
+            runner.output('resources',json.dumps(accounting).encode())
             runner.output('inputs',json.dumps({'before':before,'after':observations()}).encode())
-            runner.output('resources',json.dumps(peak.finish()).encode())
         packet(status,{'event':'complete'})
     finally:
         for proc in runner.children:

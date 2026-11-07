@@ -70,6 +70,9 @@ def bundle_files(path,digest):
         raise ValueError('pinned harness blob mismatch')
     return result
 
+def payload_policies(files):
+    return {name:files['tools/gatebox/policy/'+name] for name in ('gates.json','exclusions.json')}
+
 def run(argv):
     return subprocess.run(argv,env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,close_fds=True,timeout=30,check=True).stdout
@@ -94,6 +97,14 @@ def acceptance_check(identity,value,state,authenticate):
                 or summary['installed'] != dict(identity,stage='qualifying')
                 or evidence['summary_sha256'] != hashlib.sha256(json.dumps(summary,sort_keys=True).encode()).hexdigest()):
             raise ValueError('acceptance receipt binding: '+row)
+        if row == 'CLIENTS':
+            provenance = evidence.get('client_provenance',{})
+            if (provenance.get('uid',0) <= 0 or provenance.get('uid') != summary.get('peer_uid')
+                    or provenance.get('context') != 'claude' or provenance.get('ancestor_pid',0) <= 1
+                    or provenance.get('accepted') != dict(status='ACCEPTED',run_id=summary.get('run_id'))
+                    or provenance.get('refused') != dict(status='UNQUALIFIED',reason='QUALIFICATION_ONLY')
+                    or provenance.get('codex') != 'unsupported (runner denies AF_UNIX)'):
+                raise ValueError('CLIENTS provenance missing or unbound')
 
 def account(name):
     try: entry = pwd.getpwnam(name)
@@ -203,6 +214,9 @@ def main():
         write(target,render((DEST/'units'/name).read_text(),payload.pw_uid,payload.pw_gid).encode()); outputs.append(target)
     for path,name,mode in (('/etc/sudoers.d/gatebox','policy/sudoers',0o440),('/etc/polkit-1/rules.d/00-gatebox-deny.rules','policy/deny-systemd.rules',0o644)):
         target = Path(path); write(target,(DEST/name).read_bytes(),mode); outputs.append(target)
+    for name,data in payload_policies(files).items():
+        write(CONFIG/name,data); outputs.append(CONFIG/name)
+    record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
     outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json']
     record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
     sys.path.insert(0,str(DEST))
