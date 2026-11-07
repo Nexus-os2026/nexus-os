@@ -30,7 +30,10 @@ class CustodyTests(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
+        # Q11: real protected ancestry, with a private test-owned 0700 base.
+        # Never place custody evidence under world-writable /tmp or model it away.
+        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(
+            prefix='.custody-', dir=HERE/'tests')))
         self.control, self.stage = self.root/'control', self.root/'staging'
         self.control.mkdir(mode=0o755)
         self.stage.mkdir(mode=0o700)
@@ -38,17 +41,6 @@ class CustodyTests(unittest.TestCase):
         self.state = {'Job':'0','ActiveState':'inactive','ControlGroup':''}
         self.calls = []
         self.runner = Mock(side_effect=self.manager)
-        # Model a protected fixture ancestry; production must reject writable /tmp.
-        original = os.fstat
-        tmp_inode = os.stat('/tmp').st_ino
-        def fstat(fd):
-            value = original(fd)
-            if value.st_ino == tmp_inode and stat.S_ISDIR(value.st_mode):
-                fields = list(value)
-                fields[0] = stat.S_IFDIR | 0o755
-                return os.stat_result(fields)
-            return value
-        self.stack.enter_context(patch.object(lifecycle.os,'fstat',side_effect=fstat))
         # No real socket operation is hidden: offline positive cases are FIFOs.
         is_socket = stat.S_ISSOCK
         self.stack.enter_context(patch.object(lifecycle.stat,'S_ISSOCK',side_effect=lambda m:is_socket(m) or stat.S_ISFIFO(m)))
@@ -168,7 +160,9 @@ class CustodyTests(unittest.TestCase):
         self.start()
         cgroups = self.root/'cgroups'
         group = cgroups/'system.slice'/('mothergate-run@'+RUN+'.service')
-        group.mkdir(parents=True)
+        cgroups.mkdir(mode=0o700)
+        (cgroups/'system.slice').mkdir(mode=0o700)
+        group.mkdir(mode=0o700)
         self.state['ControlGroup'] = '/system.slice/mothergate-run@'+RUN+'.service'
         with patch.object(lifecycle,'CGROUP',cgroups):
             for data in ('populated 1\n','invalid\n',None):
@@ -257,7 +251,8 @@ class ListenerRenameTests(unittest.TestCase):
         except PermissionError as exc:
             if exc.errno!=errno.EPERM: raise
             self.skipTest('sandbox_blocked: AF_UNIX EPERM; run unchanged outside runner')
-        with listener, tempfile.TemporaryDirectory() as tmp:
+        with listener, tempfile.TemporaryDirectory(
+                prefix='.listener-', dir=HERE/'tests') as tmp:
             before, after = Path(tmp)/'incoming.sock', Path(tmp)/'sealed.sock'
             try: listener.bind(str(before))
             except PermissionError as exc:

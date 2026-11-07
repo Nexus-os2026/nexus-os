@@ -67,7 +67,7 @@ class OfflineServiceTests(unittest.TestCase):
                 left, right = socket.socketpair()
                 with left, right: right.sendall(b'x')
             else:
-                with tempfile.TemporaryDirectory() as tmp, socket.socket(socket.AF_UNIX) as sock:
+                with tempfile.TemporaryDirectory(prefix='.probe-', dir=HERE/'tests') as tmp, socket.socket(socket.AF_UNIX) as sock:
                     sock.bind(str(Path(tmp)/'probe.sock'))
         except PermissionError as exc:
             if exc.errno != errno.EPERM: raise
@@ -117,7 +117,8 @@ class OfflineServiceTests(unittest.TestCase):
                      ['start','mothergate.service'],['start',RUN.upper()]):
             with self.subTest(args=args), self.assertRaises(ValueError): lifecycle.command(args)
     def test_b2_capture_socket_and_request_types(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        # Q11: custody inputs live under a real private 0700 test-owned base.
+        with tempfile.TemporaryDirectory(prefix='.capture-', dir=HERE/'tests') as tmp:
             root = Path(tmp)
             stage, control = root/'staging',root/'control'
             stage.mkdir(mode=0o700)
@@ -137,7 +138,8 @@ class OfflineServiceTests(unittest.TestCase):
                         if mode == 'regular': path.touch(mode=0o600)
                         if mode == 'socket':
                             sock = socket.socket(socket.AF_UNIX)
-                            sock.bind(str(path))
+                            # Keep the fixture address below AF_UNIX's path limit.
+                            sock.bind(os.path.relpath(path))
                             path.chmod(0o600)
                             sockets.append(sock)
                     if mode == 'socket': lifecycle.check_start(RUN,stage,control,os.getuid())
