@@ -42,17 +42,3 @@ SB3-L1x	sb3_invocation_observer_is_monotonic_and_original	l1/excluded: hold,sett
 SB3-R2c	sb3_inference_binding_is_exact_and_idempotent	R2 isolated door_cell: run cell differs from the door's retained cell	not_member; no binding, attempt or pin	SB3A-R2
 SB3-R2i	sb3_idempotent_rebind_revalidates_file_consent	bind, tamper File evidence_seq, identical rebind	no_consent; binding unchanged	SB3A-R2
 SB3-R2v	sb3_inference_binding_is_exact_and_idempotent	R2 isolated view_id: stored entry's view.id differs from the requested run	not_member; no binding, attempt or pin	SB3A-R3
-SB3-G4	sb3_entered_request_grants_no_successor	no-interference call; held request i entered then emergency	exact paths and reply; one charge/record; entered once; successors 0	SB-3B1
-SB3-G5	sb3_held_request_cancels_and_joins	held request i x emergency,cancel_run,door_halt,Quit	peer closure; joined <1s; no retry or successor; recorded	SB-3B1
-SB3-G1	sb3_call_override_required_at_each_request	four real call gates; run-table contended at gate i; poison	model_cancelled; peer prefix i; gate count i+1; no latch; poison latches	SB-3B1
-SB3-G2	sb3_pre_gate_ingress_sends_no_request	four R6 sinks before gate i	affected and successors 0; prior charge kept, chat 0	SB-3B1
-SB3-G3	sb3_paused_before_cas_ingress_wins	after predicates, before Q CAS, at gate i	ingress wins; prefix i; no refreshed retry	SB-3B1
-SB3-L2	sb3_revocation_between_observer_read_and_cas_is_entered_only	revoke after observer read at gate i; R3	at most the selected request; successors 0; R3 no ticket	SB-3B1
-SB3-C2	sb3_invalidation_after_charge_prevents_chat	revoke inside charge; bad tags; refused charge	charge 1 chat 0; 1/0/0; no chat	SB-3B1
-SB3-A1	sb3_same_run_attempt_ceiling_is_eight	attempts 1..8 incl. failed; ninth	ninth model_over_budget 0/0/0; no refund	SB-3B1
-SB3-A2	sb3_concurrent_operation_refuses_before_ticket	held metadata,chat,record,owner completion; registration	second acquisition 0/0/0; no door before READY	SB-3B1
-SB3-A3	sb3_attempt_record_retains_original_correlation	held chat; cancel,finish,capacity	one record with run,agent,door,hash,label,M,ordinal; pin held until settlement	SB-3B1
-SB3-G0c	sb3_original_file_grant_remains_required_per_request	revoked,expired,scope,substitute at R3 and each gate	grant_not_live at R3; prefix i at gate i	SB-3B1
-SB3-R4c	sb3_private_call_refuses_continuation_and_conversation	Continuation door; conversation request	halted; model_config_mismatch; before ticket	SB-3B1
-SB3-T1	sb3_original_deadlines_and_watch_are_not_renewed	Q,mission,backstop,kernel stop at gate 1; resume	timeout/cancelled/stopped; call two sends nothing	SB-3B1
-SB3-S0	sb3_test_seams_are_test_only	cfg(test) seam declarations	no seam reachable in non-test builds	SB3B-R1

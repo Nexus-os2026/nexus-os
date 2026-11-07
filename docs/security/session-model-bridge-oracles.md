@@ -758,60 +758,14 @@ stored entry's `view.id` to equal the requested run). No check is unmapped.
 | host_prerequisites only if Files admitted (319) | stricter: NotAdmitted 2117 |
 | admissible Stop / closing (shared) | 2059 / 2062 |
 
-## 13. SB-3 review unit B1 frozen oracles (2026-11-07)
-Authority: sheet v2, ARCHITECT FREEZE and ruling SB3B-R1; base c3bffa92.
-B1 owns the private R3-R7 call (`SessionDoor::model_call_private`,
-pub(super), dead-code expect; wired by SB-3C) and its actual per-request
-gates. B2 (close/debt H1/H2/H2-held/H5, P1, X1-B) stacks later. The route
-stays closed. Disclosure (SB3B-R1 6): these oracles were drafted alongside
-a draft implementation, then frozen on deny-only stubs; an independent
-spec-vs-oracle check precedes the feat commit.
-
-Interface: R3 = slot reservation (holds released), then one run-table
-try_lock: existing SB-2b predicates, the retained original File grant
-(`try_live_at`, Files scope = run workspace), the invocation observer last,
-Q's CAS, then count and exact pin. R5 at each of version/status/tags/chat,
-under the run-table try_lock in sheet §7.2 order: (1) attempt backstop, Q
-and mission deadlines (Timeout), session word, slot uncertainty, run
-cancel/door halt (Cancelled); (2) retained registration watch (Stopped);
-(3) `try_health`; (4) run live, membership, host prerequisites, sticky
-admission, this ordinal's pin; (5) original grant; (6) chat only: this
-attempt's charge latch, unspent; (7) observer; (8) Q CAS; then release.
-Contention refuses `Cancelled` without latching; poison latches slot
-uncertainty and session failure. `dispatch: None`; registration watch,
-never a fresh one; one 180 s backstop per attempt. A Recorded attempt
-whose pin cannot settle is reported Uncertain (SB3B-R1 3).
-
-Oracles (`host_session/model_call_tests.rs`; RED = first assertion on the
-stub, which refuses every call `halted`): G4 `sb3_entered_request_grants_no_successor`;
-G5 `sb3_held_request_cancels_and_joins` (4 requests x 4 R6 sinks);
-G1 `sb3_call_override_required_at_each_request` (sheet name
-`session_override_required_at_each_request`, retained by SB-2a for
-registration); G2 `sb3_pre_gate_ingress_sends_no_request`;
-G3 `sb3_paused_before_cas_ingress_wins`;
-L2 `sb3_revocation_between_observer_read_and_cas_is_entered_only` (+R3 row);
-C2 `sb3_invalidation_after_charge_prevents_chat` (+metadata-failure and
-refused-charge rows); A1 `sb3_same_run_attempt_ceiling_is_eight`;
-A2 `sb3_concurrent_operation_refuses_before_ticket` (registration row is
-structurally excluded: asserted no original door exists before READY);
-A3 `sb3_attempt_record_retains_original_correlation`;
-G0 `sb3_original_file_grant_remains_required_per_request` (R3 and each
-gate; revoked, expired, scope, substituted live grant);
-R4 `sb3_private_call_refuses_continuation_and_conversation`;
-T1 `sb3_original_deadlines_and_watch_are_not_renewed`;
-seams `sb3_test_seams_are_test_only`.
-
-Test seams (SB3B-R1 2, all `#[cfg(test)]`, structurally guarded):
-`ModelSlot::backstop_spent` (bypasses waiting 180 s for the backstop);
-probes `model.call.gate`, `model.call.observed`, `model.attempt.reserved`
-(observation/injection points only); SB-3A `door_with` (one-component
-door). Plants (B1): MP-SB-3-grant (R3, gate), MP-SB-4-conversation,
-MP-SB-5-count/-pin/-slot, MP-SB-6-default/-CAS/-once/-retry/-contention,
-MP-SB-A1 (ignore at gate, fresh observer, latch as liveness, R3),
-MP-SB-8 (fresh watch). Receipts follow with the feat commit.
-
-SB3B oracle-amend: the SB-2b Accounting fixture holds a real Files grant
-and a live InvocationOwner (R3 requires both) and its confirmer approves
-grants; `Attempt::acquire` returns AuthorityError and the fixture maps it
-to the SB-2b classes. SB-2b assertion bytes are unchanged except one
-callee expression in `sb2_attempt_binding_refusals_issue_no_ticket`.
+## 13. SB-3 unit B re-split (SB3B-R1/R2/R3, 2026-11-07)
+B is split by implementation seam (SB3B-R3 option c). **B1a** (this branch,
+`mother/sb3b-private-call`): R3 attempt admission. **B1b**
+(`mother/sb3b1b-call-gate`, stacked): the R5 call gate and its oracles,
+with test-only **B1e** only if B1b exceeds 1,500. **B2**: close/death.
+Commit `a15b5ee0` froze B1 oracles on stubs; its call-gate oracles and
+stubs move out of this tree (amend commit) and are carried to B1b
+unchanged, where the SB3B-R2 gap oracles are added. 9c81d0d5: SB-2b
+assertions unchanged except the disclosed fixture-helper substitution in
+`sb2_attempt_binding_refusals_issue_no_ticket` (whitespace-normalised
+full macros 145 = 145; not literal byte identity of every assertion).
