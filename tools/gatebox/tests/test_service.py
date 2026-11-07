@@ -118,7 +118,8 @@ class OfflineServiceTests(unittest.TestCase):
             with self.subTest(args=args), self.assertRaises(ValueError): lifecycle.command(args)
     def test_b2_capture_socket_and_request_types(self):
         # Q11: custody inputs live under a real private 0700 test-owned base.
-        with tempfile.TemporaryDirectory(prefix='.capture-', dir=HERE/'tests') as tmp:
+        # TMPDIR must have protected ancestry (repo checkout and /tmp do not).
+        with tempfile.TemporaryDirectory(prefix='capture-') as tmp:
             root = Path(tmp)
             stage, control = root/'staging',root/'control'
             stage.mkdir(mode=0o700)

@@ -32,8 +32,16 @@ class CustodyTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         # Q11: real protected ancestry, with a private test-owned 0700 base.
         # Never place custody evidence under world-writable /tmp or model it away.
+        # The base comes from TMPDIR, which must have protected ancestry
+        # (no group/world-writable ancestor); the repo checkout and /tmp do not.
+        base = Path(tempfile.gettempdir()).resolve()
+        for part in [base, *base.parents]:
+            info = part.stat()
+            if info.st_mode & 0o022 or info.st_uid not in (0, os.getuid()):
+                self.fail('custody fixture requires TMPDIR with protected ancestry; '
+                          'unsafe ancestor: ' + str(part))
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(
-            prefix='.custody-', dir=HERE/'tests')))
+            prefix='custody-', dir=base)))
         self.control, self.stage = self.root/'control', self.root/'staging'
         self.control.mkdir(mode=0o755)
         self.stage.mkdir(mode=0o700)
