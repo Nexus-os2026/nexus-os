@@ -46,7 +46,9 @@ use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::governed::{
     AgentDoor, AgentOutcome, HaltReason, Intent, Lookup, RecordBatch,
 };
-use nexus_governed_control::inference::{CallDeadline, CallMeter, ModelIdentityView, ModelRequest};
+use nexus_governed_control::inference::{
+    CallDeadline, CallMeter, InvocationObserver, ModelIdentityView, ModelRequest,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -229,6 +231,9 @@ pub struct GovernedPort {
     /// status (the broker's store fault hooks are private to its crate).
     #[cfg(test)]
     pub(crate) model_record: Mutex<Option<EndStatus>>,
+    /// SB-3A L1 (tests): every observer the sealed caller forwarded.
+    #[cfg(test)]
+    pub(crate) model_observer: Mutex<Vec<InvocationObserver>>,
 }
 
 impl GovernedPort {
@@ -284,6 +289,8 @@ impl GovernedPort {
             after_held_answer: Default::default(),
             #[cfg(test)]
             model_record: Default::default(),
+            #[cfg(test)]
+            model_observer: Default::default(),
         }
     }
 
@@ -825,12 +832,15 @@ impl EffectPort for GovernedPort {
         request: &ModelRequest,
         meter: &dyn CallMeter,
         deadline: &dyn CallDeadline,
+        invocation: &InvocationObserver,
     ) -> Result<ModelAttempt, EffectRefusal> {
+        #[cfg(test)]
+        self.model_observer.lock().unwrap().push(invocation.clone());
         let run = self.model_run(mission)?;
         self.admit_host()?;
         let outcome = self
             .door
-            .model_call(run, request, meter, deadline)
+            .model_call(run, request, meter, deadline, invocation)
             .map_err(|e| refused_by(e.class()))?;
         let record = outcome.record();
         #[cfg(test)]

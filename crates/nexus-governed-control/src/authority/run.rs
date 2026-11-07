@@ -2025,3 +2025,58 @@ impl RunRegistry {
         Ok(())
     }
 }
+/// SB-3A (R2): one original door's inference binding, decided in one
+/// run-table hold; the grant store is observed under it (run -> grant).
+pub(crate) struct SessionBinding<'a> {
+    pub(crate) run: RunId,
+    pub(crate) agent: &'a AgentId,
+    pub(crate) group: GroupId,
+    pub(crate) contract_hash: &'a str,
+    pub(crate) request: &'a str,
+    pub(crate) identity: [u8; 32],
+    /// Q's scoped view of the original session cell: S, and the final CAS.
+    pub(crate) original: &'a HaltCell,
+    /// The run Q's own File admission bound, if any.
+    pub(crate) q_run: Option<RunId>,
+    pub(crate) grants: &'a super::policy::GrantStore,
+    pub(crate) grant: super::ids::GrantId,
+    /// Both clocks, read before any hold.
+    pub(crate) clock: (u64, u64),
+}
+impl RunRegistry {
+    pub(crate) fn admit_session_inference(
+        &self,
+        binding: SessionBinding<'_>,
+    ) -> Result<(), AuthorityError> {
+        let _ = binding;
+        Err(AuthorityError::Halted) // SB-3A inert surface: deny-only.
+    }
+}
+#[cfg(test)]
+impl RunRegistry {
+    // One-component R2 fixtures; every other prerequisite stays valid.
+    pub(crate) fn tamper_for_test(&self, run: RunId, what: &str) {
+        let mut table = self.runs.lock().unwrap();
+        let group = table.runs[&run].opened_by.unwrap();
+        if what == "life" {
+            for consent in &mut table.doors.get_mut(&group).unwrap().consents {
+                consent.life.stop_epoch += 1;
+            }
+            return;
+        }
+        let entry = table.runs.get_mut(&run).unwrap();
+        match what {
+            "groups" => entry.groups.clear(),
+            "opened_by" => entry.opened_by = Some(u64::MAX),
+            _ => {}
+        }
+        let files = entry.files_admission.as_mut().unwrap();
+        match what {
+            "seq" => files.evidence_seq += 1000,
+            "kind" => files.kind = ConsentKind::Resume,
+            "time" => files.consented_wall_ms += 1,
+            "workspace" => files.workspace.id.push('x'),
+            _ => {}
+        }
+    }
+}

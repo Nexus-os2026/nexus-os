@@ -6,7 +6,7 @@ use super::*;
 pub(super) mod session_projection_tests;
 use nexus_governed_control::host_session::{SessionContext, SessionDoor};
 use nexus_governed_control::inference::{
-    CallDeadline, CallMeter, ModelCallOutcome, ModelIdentityView, ModelRequest,
+    CallDeadline, CallMeter, InvocationObserver, ModelCallOutcome, ModelIdentityView, ModelRequest,
 };
 
 /// M2d-D R32: the sealed session issues no model capability.
@@ -190,6 +190,7 @@ impl PortDoor {
         request: &ModelRequest,
         meter: &dyn CallMeter,
         deadline: &dyn CallDeadline,
+        _invocation: &InvocationObserver,
     ) -> Result<ModelCallOutcome, AuthorityError> {
         match self {
             Self::Legacy(door) => door.model_call(run, request, meter, deadline),

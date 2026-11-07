@@ -505,3 +505,24 @@ pub(super) fn historical_outcome(end: Option<EndStatus>) -> &'static str {
         None => "unknown",
     }
 }
+
+// SB-3A R2: the private original-door inference binding; no public route.
+impl SessionDoor {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-3A: private binding, wired by SB-3C; session route unavailable"
+        )
+    )]
+    pub(super) fn bind_inference_private(
+        &self,
+        run: RunId,
+        contract_hash: &str,
+        request: &str,
+        expected_identity: [u8; 32],
+    ) -> Result<(), crate::authority::AuthorityError> {
+        let _ = (run, contract_hash, request, expected_identity, self.kind);
+        Err(crate::authority::AuthorityError::Halted) // SB-3A inert surface: deny-only.
+    }
+}

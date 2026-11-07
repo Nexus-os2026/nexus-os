@@ -59,6 +59,7 @@ fn run(case: &str) {
         "first" => first_cause(arg),
         "race" => terminal_race(arg),
         "sealed" => sealed(),
+        "l1" => invocation(arg),
         other => panic!("unknown case {other}"),
     }
 }
@@ -1297,4 +1298,81 @@ fn sealed() {
         ))
     );
     assert_eq!(invoked.load(Ordering::SeqCst), 0);
+}
+
+// ---------------------------------------------------------------- SB-3A L1
+
+/// O1/F5: the sealed caller forwards its own observer. Return, overtake,
+/// transition and fence each revoke it while their boundary still owns the
+/// coordinator lock, before journal I/O; a failed append never restores it.
+#[test]
+fn sb3_invocation_observer_is_monotonic_and_original() {
+    children(
+        "sb3_invocation_observer_is_monotonic_and_original",
+        &["l1/return", "l1/overtake", "l1/transition", "l1/fence"],
+    );
+}
+fn invocation(arg: &str) {
+    let f = Fx::new();
+    let m = f.mother(1, |ctx| {
+        let _ = ask(ctx);
+        quiet()
+    });
+    let (id, _) = f.building(&m, f.contract());
+    let (in_chat_tx, in_chat_rx) = sync_channel(1);
+    let (release_tx, release_rx) = sync_channel::<()>(1);
+    let release_rx = Mutex::new(release_rx);
+    f.fake.route(move |p| {
+        (p == "/api/chat").then(|| {
+            let release = release_rx.lock().unwrap();
+            let _ = in_chat_tx.send(());
+            let _ = release.recv_timeout(PATIENCE);
+            chat("{}")
+        })
+    });
+    let (seen_tx, seen_rx) = channel();
+    let port = f.port.clone();
+    // A second thread reads every forwarded observer while the boundary
+    // still owns the coordinator lock.
+    let observe = move || {
+        let observers = port.model_observer.lock().unwrap().clone();
+        let seen = std::thread::spawn(move || {
+            observers.iter().map(|o| o.is_revoked()).collect::<Vec<_>>()
+        });
+        seen_tx.send(seen.join().unwrap()).unwrap();
+    };
+    let needle = match arg {
+        "return" => "\"lane_returned\"",
+        "overtake" => "\"lane_overtaken\"",
+        "transition" => "\"transition\"",
+        _ => "\"model_call_charged\"",
+    };
+    let adv = if arg == "fence" {
+        let journal = f.journal.clone();
+        f.probe.at(needle, move || journal.fail_after(0));
+        m.hooks_for_test().fence_to_marker.arm(0, observe);
+        advance_in(&m, id)
+    } else {
+        let adv = advance_in(&m, id);
+        within(&in_chat_rx); // armed only once the caller's call is in flight
+        f.probe.at(needle, observe);
+        adv
+    };
+    match arg {
+        "overtake" => m.overtake_model_for_test(id).unwrap(),
+        "transition" => assert_eq!(m.stop(id), Ok(MissionState::Stopped)),
+        _ => {}
+    }
+    let _ = release_tx.send(());
+    let _ = adv.join().unwrap();
+    assert_eq!(
+        within(&seen_rx),
+        [true],
+        "{arg}: revoked inside the boundary"
+    );
+    let observers = f.port.model_observer.lock().unwrap().clone();
+    assert!(
+        observers.iter().all(|o| o.is_revoked()),
+        "{arg}: failed append or release never un-revokes"
+    );
 }

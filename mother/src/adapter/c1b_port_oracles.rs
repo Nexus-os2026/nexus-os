@@ -29,6 +29,7 @@ use nexus_governed_control::inference::{
     CallDeadline, CallMeter, Charged, MeterRefusal, ModelError, ModelIdentity, ModelRequest,
     ResponseSchema,
 };
+use nexus_governed_control::inference::{InvocationObserver, InvocationOwner};
 use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -36,6 +37,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const CASE: &str = "NEXUS_M2E_C1B1_CASE";
+/// SB-3A: the ordinary port ignores the caller's observer (owner kept live).
+fn live() -> InvocationObserver {
+    static OWNER: std::sync::OnceLock<InvocationOwner> = std::sync::OnceLock::new();
+    OWNER.get_or_init(InvocationOwner::new).observer()
+}
 const REPLY: &str = "C1B_REPLY_CANARY";
 
 /// Each case in its own child (one broker per process).
@@ -278,7 +284,7 @@ fn session_denies() {
     );
     let meter = Meter::default();
     assert_eq!(
-        port.model_call(MissionId(1), &request(), &meter, &Never)
+        port.model_call(MissionId(1), &request(), &meter, &Never, &live())
             .map(|_| ())
             .map_err(|r| r.class),
         Err(BrokerClass::NoBrokerRoute)
@@ -310,7 +316,7 @@ fn sb2_facade_line(line: &str) -> bool {
             .any(|w| w == "model"))
         || matches!(
             line,
-            "mod model;" | "mod model_tests;" | "mod model_death_tests;"
+            "mod model;" | "mod model_tests;" | "mod model_death_tests;" | "mod model_call_tests;"
                 // Existing private Core storage and its initialization only.
                 | "model: model::ModelSlot," | "model: model::ModelSlot::default(),"
                 | "if !self.core.model.ready()? {"
@@ -366,6 +372,7 @@ fn c1_s1_session_sources_have_no_model_route() {
         "crates/nexus-governed-control/src/host_session/close.rs",
         "crates/nexus-governed-control/src/host_session/model_tests.rs",
         "crates/nexus-governed-control/src/host_session/model_death_tests.rs",
+        "crates/nexus-governed-control/src/host_session/model_call_tests.rs",
     ];
     assert!(files.len() > 1);
     assert!(sb2_public_model_item(
@@ -555,7 +562,7 @@ fn attempt(arg: &str) {
     let (id, asked) = f.consented(&m);
     let meter = Meter::default();
     if arg == "pre-attempt" {
-        let refused = f.port.model_call(id, &request(), &meter, &Never);
+        let refused = f.port.model_call(id, &request(), &meter, &Never, &live());
         assert_eq!(
             refused.map(|_| ()).map_err(|r| r.class),
             Err(BrokerClass::NotAdmitted)
@@ -577,7 +584,10 @@ fn attempt(arg: &str) {
         "uncertain" => *f.port.model_record.lock().unwrap() = Some(EndStatus::Uncertain),
         _ => {}
     }
-    let attempt = f.port.model_call(id, &request(), &meter, &Never).unwrap();
+    let attempt = f
+        .port
+        .model_call(id, &request(), &meter, &Never, &live())
+        .unwrap();
     assert_eq!(meter.charged.load(Ordering::SeqCst), 1);
     assert_eq!(*meter.settled.lock().unwrap(), vec![1]);
     assert_eq!(f.fake.count("/api/chat"), 1);
@@ -675,7 +685,7 @@ fn identity(arg: &str) {
         );
         assert_eq!(
             f.port
-                .model_call(id, &request(), &meter, &Never)
+                .model_call(id, &request(), &meter, &Never, &live())
                 .map(|_| ())
                 .map_err(|r| r.class),
             Err(BrokerClass::ModelNotRegistered)

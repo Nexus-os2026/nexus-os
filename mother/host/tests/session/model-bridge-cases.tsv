@@ -32,3 +32,10 @@ SB2-C2	sb2_attempt_fallback_keeps_all_debt_statuses	O4 injected accounting snaps
 SB2-A3	sb2_attempt_binding_refusals_issue_no_ticket	wrong Core/run/agent/door/model	zero count and pins; positive acquisition remains reachable	SB-2b
 SB2-C4	sb2_attempt_recorded_end_survives_failed_delivery	real seal/Mother end/primary end/dropped delivery	Mother and primary Recorded survive failed delivery; no affirmative notice	SB-2b
 SB2-X1	sb2_attempt_death_prefixes_are_report_only	ticket,before real result record,recorded,settled	verified durable ends only; missing unknown; two restarts recreate zero authority	SB-2b accounting only
+SB3-O1	sb3_invocation_owner_is_deny_only	owner,observer,Drop,source surface	SeqCst idempotent revoke seen by every clone; Drop revokes; no reset/setter/Default/From/serde	SB-3A
+SB3-R2	sb3_inference_binding_is_exact_and_idempotent	R2 run-table hold; S,Q,D,R,C,M; sticky; F12 literals	one binding; idempotent; already_admitted; each isolated component its literal class; no binding, attempt or pin	SB-3A
+SB3-G0	sb3_original_file_grant_remains_required	R2 retained grant (R3 and call gates: SB-3B)	revoked/expired/scope/substituted live grant grant_not_live; original binds	SB-3A
+SB3-R3	sb3_stop_before_binding_installs_nothing	paused before actual binding CAS; fresh and idempotent	ingress wins; binding absent or unchanged	SB-3A
+SB3-O2	sb3_binding_contention_refuses_without_latching	run-table and grant try_lock; poison	contention unavailable without Failed; poison refuses and latches Failed	SB-3A
+SB3-L1	sb3_invocation_observer_is_monotonic_and_original	return,overtake,transition,fence before journal I/O	second-thread revoked observation under the owning lock; forwarded observer never un-revoked	SB-3A Mother
+NA	NA	settlement,hold,close for L1	no live caller can exist at these boundaries; not claimed discriminating	SB-3A N/A

@@ -435,9 +435,15 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             return Err(ModelCallError::Invalidated);
         }
         let c = self.meter.coordinator;
-        let attempt = c
-            .port
-            .model_call(self.meter.invocation.mission, request, self, self);
+        // SB-3A inert surface: a fresh observer, never this caller's own.
+        let inert = nexus_governed_control::inference::InvocationOwner::new();
+        let attempt = c.port.model_call(
+            self.meter.invocation.mission,
+            request,
+            self,
+            self,
+            &inert.observer(),
+        );
         // Recording is independent of liveness and the first terminal cause.
         if matches!(attempt, Ok(ModelAttempt::Unrecorded(_))) {
             c.file

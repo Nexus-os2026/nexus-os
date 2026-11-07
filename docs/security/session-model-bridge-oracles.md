@@ -619,3 +619,86 @@ session inference, SB-3 capability, phase advancement or acceptance is claimed.
 C1 L1's first matcher also rejected the two pre-existing private Core storage/
 initialization lines. One bounded repair preserves those exact two declarations;
 public alias signatures remain denied. No frozen assertion was changed.
+
+## 12. SB-3 review unit A frozen oracles (2026-11-07)
+Authority: `sb3-mission-draft.md` v2 and its ARCHITECT FREEZE; base d51d61cb
+(final reviewed SB-2b). Unit A owns only the §5 column-A allowlist: deny-only
+invocation owner/observer types, the retained original File grant, the private
+door kind, the private R2 binding, Mother observer plumbing and L1. The route
+stays closed: no public `HostSession`/`SessionDoor` model method, SessionPort
+override, ticket, charge, transport, host wiring, kernel or Cargo change.
+No R32 supplement verifier lands here. Literal rows: `model-bridge-cases.tsv`
+SB-3A entries; oracle bodies: private `host_session/model_call_tests.rs` and
+Mother `c1b_coordinator_oracles.rs` (L1). Commit 1 is inert: owner revocation
+is a no-op, the sealed caller forwards a fresh observer, `try_live_at` and the
+R2 binding deny. Runtime RED is recorded per test; compile failure or an
+earlier refusal is never counted as reaching a later assertion.
+
+O1 surface: `inference::InvocationOwner` (not Clone/Default/serde; `new`,
+`revoke` SeqCst idempotent, `observer`, `is_revoked`; Drop revokes) and
+`InvocationObserver` (Clone; Acquire `is_revoked`). Neither confers authority.
+C1 `InvocationLiveness` wraps the observer; `LaneCalls` owns the owner; every
+`invalidate_calls` revokes explicitly before journal I/O under the coordinator
+lock. `EffectPort::model_call` requires `&InvocationObserver`; the ordinary
+GovernedPort/legacy arm ignores it. The `model_observer` port field and the
+journal probe are `#[cfg(test)]` observation seams only.
+
+O2 surface: private `DoorKind::{Original{file_grant}, Continuation}`, set by
+the constructor. Both original issuance paths thread the GrantId returned by
+`grant_files`; the approval continuation and the test-only `activate_for_test`
+(its grant is discarded by its caller) are Continuation. `GrantStore::try_live_at`
+uses `try_lock` only: Contended refuses without latching; Poisoned refuses and
+fails the session; missing/revoked/expired is `Ok(None)`; clocks are read by
+the caller before any hold. Lock order is run -> grant, try_lock only.
+
+R2 (`SessionDoor::bind_inference_private`, `RunRegistry::admit_session_inference`):
+Continuation and original-Q liveness refuse first (`halted`); the installed
+registration is read under a nonblocking slot hold released before the run
+table (`model_not_registered`; uncertainty/old watch `halted`); full M is
+compared (`model_identity_mismatch`). Under one run-table try_lock: Stop/close;
+live door; run known; agent/class/halt/finish/cancel; then one predicate each:
+S (run cell is the original session cell), D (run member of door and door
+lists run), R (run opened by this door), files admitted (`not_admitted`), Q
+(Q's own File binding names this run); every association miss is `not_member`.
+Then retained grant live with Files scope equal to the run's workspace id and
+identity (`grant_not_live`); cached consent for hash/label with the live H1'
+lifetime (`no_consent`); sticky hash/label/identity (`already_admitted`);
+for a fresh binding the consent's hash/label/sequence/kind/time/page facts
+equal the File association (`no_consent`); probe `model.bind.checked`; Q's
+real same-word CAS, also on idempotent success; then the single insertion.
+No filesystem, evidence or callback work occurs under the hold.
+
+Oracles (RED expectations in commit 1):
+- `sb3_invocation_owner_is_deny_only`: revoke/observer/Drop semantics and a
+  closed source surface. RED: revocation not observed.
+- `sb3_inference_binding_is_exact_and_idempotent`: valid binding, idempotent
+  repeat, changed sticky hash/label, then fifteen isolated F12 fixtures
+  (S foreign cell; Q second live request; D membership; R opener; unknown R;
+  missing File admission; missing consent; sequence; kind; time; lifetime;
+  wrong M; expired Q; Continuation; no registration), each with its literal
+  class, no binding and zero attempts/pins. RED: valid binding refused.
+- `sb3_original_file_grant_remains_required` (G0, R2 boundary only): revoked,
+  expired, scope-mismatched and substituted-live-grant cases refuse
+  `grant_not_live`; the original live grant binds. RED: first refusal class.
+- `sb3_stop_before_binding_installs_nothing` (R3): pause at the actual CAS,
+  ingress wins, nothing installed; repeat after an installed identical binding
+  also refuses unchanged. RED: paused CAS boundary not reached.
+- `sb3_binding_contention_refuses_without_latching`: run/grant contention
+  `unavailable` without Failed; run/grant poison refuses and latches Failed.
+  RED: run-table contention class (`halted` from the inert binding).
+- Mother `sb3_invocation_observer_is_monotonic_and_original` (L1): return,
+  overtake, transition (Owner Stop) and fence (failed charge append) each
+  observed from a second thread inside the owning boundary; the forwarded
+  observer is revoked there and never un-revoked. Settlement, hold and close
+  cannot hold a live caller (close refuses `model_obligations` Busy; holds and
+  settlement occur with no pending model lane), so they are not claimed as
+  discriminating L1 schedules. RED: the forwarded observer is live.
+Existing C1 goldens are retained unchanged except the required observer argument.
+
+Plants (A): MP-SB-3-S/-D/-R/-Q (each association predicate), MP-SB-3-C-hash/
+-request (sticky), -seq/-kind/-time (File association), -lifetime (consent
+life), MP-SB-3-M, MP-SB-3-CAS (fresh and idempotent), MP-SB-3-grant (ignore or
+substitute), MP-SB-4-Q, MP-SB-A1 (fresh never-revoked observer), MP-SB-A1-order
+(revoke after journal I/O), O2 contention latch. Named dead-code expectations
+(non-test builds; wired by SB-3C): `SessionDoor::bind_inference_private`,
+`DoorKind::Original::file_grant`. Receipts follow in §12.1.
