@@ -205,7 +205,8 @@ fn m3d_replay_rejects_relinked_or_out_of_order_proof() {
         .collect();
     let p = records.iter().position(|r| is_receipt(&r.1)).unwrap();
     assert!(inspect_history_lines(&rechain(&records)).is_ok());
-    let relinked: [(&str, fn(&mut PendingAction)); 2] = [
+    type Relink = (&'static str, fn(&mut PendingAction));
+    let relinked: [Relink; 2] = [
         ("early receipt of another commitment", |a| {
             a.commitment = CMT.into()
         }),
@@ -232,11 +233,12 @@ fn m3d_replay_rejects_relinked_or_out_of_order_proof() {
 
 type Records = Vec<(MissionId, Event)>;
 
+type Recovered = Result<
+    crate::coordinator::Coordinator<crate::adapter::GovernedPort>,
+    crate::coordinator::CoordinatorError,
+>;
 type Opened = (
-    Result<
-        crate::coordinator::Coordinator<crate::adapter::GovernedPort>,
-        crate::coordinator::CoordinatorError,
-    >,
+    Recovered,
     crate::journal::MemoryJournal,
     std::sync::Arc<crate::adapter::GovernedPort>,
     crate::adapter::m2c_support::Home,
@@ -296,10 +298,7 @@ fn reopen(lines: Vec<String>) -> Opened {
 }
 
 fn observe(
-    opened: &Result<
-        crate::coordinator::Coordinator<crate::adapter::GovernedPort>,
-        crate::coordinator::CoordinatorError,
-    >,
+    opened: &Recovered,
     journal: &crate::journal::MemoryJournal,
     port: &crate::adapter::GovernedPort,
     n: usize,
