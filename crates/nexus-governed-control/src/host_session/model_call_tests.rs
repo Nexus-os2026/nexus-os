@@ -1110,6 +1110,14 @@ fn mask(source: &str) -> String {
             }
             blank(&mut out, i + 1, j);
             i = j + 1;
+        } else if b[i] == b'\'' && b.get(i + 1) == Some(&b'\\') && i + 3 <= b.len() {
+            // An escaped char literal ('\'', '\"', '\\', '\u{..}'; b'..' alike).
+            let end = b[i + 3..]
+                .iter()
+                .position(|&c| c == b'\'')
+                .map_or(b.len(), |n| i + 3 + n);
+            blank(&mut out, i + 1, end);
+            i = end + 1;
         } else if b[i] == b'\'' && b.get(i + 2) == Some(&b'\'') {
             blank(&mut out, i + 1, i + 2);
             i += 3;

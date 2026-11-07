@@ -1942,12 +1942,17 @@ pub(crate) struct OriginalGrant<'a> {
     pub(crate) grant: super::ids::GrantId,
     pub(crate) clock: (u64, u64),
 }
-impl OriginalGrant<'_> {
+impl<'a> OriginalGrant<'a> {
     /// Live on both clocks with a Files scope equal to the run's workspace;
-    /// contention refuses, poison also fails the session.
-    fn live(&self, files: &FilesAdmission, cell: &HaltCell) -> Result<(), AuthorityError> {
+    /// contention refuses, poison also fails the session. The grant store
+    /// stays held (run -> grant) for as long as the returned guard lives.
+    fn live(
+        &self,
+        files: &FilesAdmission,
+        cell: &HaltCell,
+    ) -> Result<impl Drop + 'a, AuthorityError> {
         use super::policy::{GrantObservation, GrantScope};
-        let grant = self
+        let (grant, held) = self
             .grants
             .try_live_at(self.grant, self.clock.0, self.clock.1)
             .map_err(|error| {
@@ -1961,7 +1966,9 @@ impl OriginalGrant<'_> {
                 workspace,
                 identity,
                 ..
-            }) if workspace == files.workspace.id && identity == files.workspace.identity => Ok(()),
+            }) if workspace == files.workspace.id && identity == files.workspace.identity => {
+                Ok(held)
+            }
             _ => Err(AuthorityError::GrantNotLive),
         }
     }
@@ -2032,7 +2039,9 @@ impl RunRegistry {
             .model_attempts
             .checked_add(1)
             .ok_or(AuthorityError::Capacity)?;
-        grant.live(files, &cell)?;
+        // Held through the observer read, Q's CAS and the count/pin mutation:
+        // a revocation lands before (refused) or after the CAS (entered).
+        let _grant_held = grant.live(files, &cell)?;
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.granted");
         let ticket = SessionAttempt {
@@ -2180,7 +2189,7 @@ impl RunRegistry {
         if b.q_run != Some(b.run) {
             return Err(AuthorityError::NotMember);
         }
-        let grant = b
+        let (grant, _grant_held) = b
             .grants
             .try_live_at(b.grant, b.clock.0, b.clock.1)
             .map_err(|error| {
