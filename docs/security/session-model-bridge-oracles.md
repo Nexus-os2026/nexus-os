@@ -1036,19 +1036,19 @@ sha256 and killed at its named assertion unless stated:
 - Unsettled pin reported Recorded (MP-SB-9-record).
 - MP-SB-6-default, -CAS, -once and -retry.
 - MP-SB-A1 observer ignored; charge latch treated as liveness.
-- MP-SB-8 watch ignored. It fired "watch at gate 0: its own step", then
-  the harness aborted: the Peer thread panicked on a connection aborted
-  by Stop, and Peer's Drop panicked during unwinding.
+- MP-SB-8 watch ignored: "watch at gate 0: its own step". After the
+  72dc8196 Peer change (a Stop-aborted connection is no request; no
+  panic in Drop while unwinding) the harness no longer aborts.
 - MP-SB-8 refreshed Q; rebuilt mission deadline.
 - MP-SB-3-grant at R5; §7.2 observer-before-latch order; F11 B1b seam
   leak.
 
-Survivor: run-table poison not latching at the gate. Retained SB-2b
-settlement on the poisoned table still latches uncertainty and failure
-later, and the oracle checks only the end state. A proposed strengthening
-(latched at `model.attempt.return`, before settlement) kills it at
-"latched at refusal" and passes correct code. It is not committed and
-awaits a ruling.
+Run-table poison not latching at the gate first survived: retained
+SB-2b settlement latches later, and the oracle read only the end state.
+72dc8196 (SB3B-R10) also reads the latch at `model.attempt.return`,
+before settlement. The plant now dies at "latched at refusal", and
+correct code passes. After 72dc8196 both plants were re-run and both
+died cleanly. Final total vs 47fa1f88: 1,849 changed lines.
 
 Gates, each binary alone:
 - governed-control lib 914/914
