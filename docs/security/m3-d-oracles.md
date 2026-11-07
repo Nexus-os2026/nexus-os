@@ -315,3 +315,77 @@ behavioral runtime failures; nothing failed to compile.
 | MP-D-V4 accept arbitrary lane text as a check code | m3d_durable_checks_gate_verify_pass |
 | MP-D-R1 omit verification replay ordering/linkage, or length/order/code | m3d_replay_rejects_relinked_verification_proof |
 | MP-D-R1-2 pass a non-File page with no recorded checks | m3d_durable_checks_gate_verify_pass |
+
+# M3-Dc2 oracle register: teaching, claims guard, explain() gate
+
+Stacked on aaecb642 (Dc1 + Db2 merge). Rulings Dc-R1 (TEACHING TEXTS) and
+Dc2-R1. After Dc2, explain() says `holds` only for a criterion with a
+recorded passing check; otherwise `  - «text»: not independently recorded
+as checked`. No host, broker, model-route or display change (M3-E wires
+T1-T15; T16 is deferred; T6/T8 are the broker's own dialogs).
+
+## Frozen texts (mother/src/teaching.rs; goldens in oracles/m3d_teaching.rs)
+
+T1, T3, T4, T5, T7, T9d, T13, T15: design §7.1 exact (T5 ASCII `15-60 s`;
+T13 with its backticks; «goal», «facts file» substituted verbatim). T2, T10,
+T11, T12 success: sheet §4. T9 expired/stopped/uncertain and T12 failed and
+no-record: Dc-R1, laid out per Dc2-R1 Q3 (failed: status, undo line, three
+OPEN lines, look line; no-record: status, OPEN lines, look line; «code» is
+the bare CheckCode display). T14: design template, facts hash full
+lowercase hex, `, at line L, column C` only with a location (Q5).
+`LABEL_PASSED` equals the kernel's; the OPEN lines are
+`not checked: how the page looks in a browser (375 px and 1366 px are OPEN)`,
+`OPEN: the page's other sentences have not been verified.`,
+`OPEN: no backup yet.`
+
+## explain() (Dc2-R1 Q1, Q2)
+
+Header `The Verifier checked every pass criterion you set before work
+began:` only when every criterion has a recorded pass, else `The pass
+criteria you set before work began:`. A criterion holds only when its
+check (`V<k>` ↔ `v<k>`) is recorded as `pass` on a page mission (facts
+present); a legacy mission's criteria never hold. Page mission with a
+recorded all-pass: criteria, T11, T12's five lines, then the tally line;
+otherwise criteria and the three OPEN lines only. The recorded
+`(id, code)` pairs are kept in memory, live and at replay.
+
+## Claims guard (§7.2, Dc2-R1 Q6)
+
+Pure `teaching::claims_guard`, no runtime call site: removes every exact
+`LABEL_PASSED` and S1a OPEN line, then refuses the sixteen §7.2 phrases,
+ASCII case-insensitive. O36 applies it to controls, every frozen text and
+variant, and to O32's explain() outputs with the exact Owner-approved
+criterion texts removed.
+
+## Oracle-first matrix (Dc2)
+
+| Oracle | Test | Commit 1 (inert stubs) |
+|---|---|---|
+| O32 | m3d_explain_uses_only_journaled_checks | red: no report still `holds` |
+| O36 | m3d_teaching_goldens_and_claims_guard | red: `LABEL_PASSED` is "" |
+
+O32 also runs two real-broker child cases (`m3d_dc2_child`): a clean live
+File page mission's explanation, and a legacy scripted mission's. Every
+Da/Db/Db2/Dc1 oracle stays green on the inert surface.
+
+Not covered here (ruling Dc2-R2(b)): explain() after a reopen, from
+replayed checks, has no oracle in Dc2. Replay restores the recorded
+checks, but the coverage is CARRIED to the held-mission resume slice;
+only the live path is exercised.
+
+Oracle amendment (ruling Dc2-R3, strictly stronger): O36's exclusion
+leaves out only a complete approved criterion line with its permitted
+status (`  - «text»: holds`, `  - «text»: not independently recorded as
+checked`), anchored to the whole line. Controls: criterion text embedded
+in a Mother sentence, or a criterion line extended past its status, is
+still scanned and refused (V3's `no other phone`). Against the previous
+unanchored filter these controls were red; with the anchored one, green.
+
+## Dc2 mutation map
+
+| Plant | Named test |
+|---|---|
+| MP-M3-9 restore unconditional explain() claims | m3d_explain_uses_only_journaled_checks |
+| MP-M3-12 drop an OPEN line | m3d_teaching_goldens_and_claims_guard, m3d_explain_uses_only_journaled_checks |
+| MP-M3-19 ban the mandatory LABEL_PASSED | m3d_teaching_goldens_and_claims_guard |
+| MP-M3-22 restore v1 T12 | m3d_teaching_goldens_and_claims_guard |

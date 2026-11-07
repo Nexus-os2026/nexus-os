@@ -2769,22 +2769,15 @@ impl<P: EffectPort> Coordinator<P> {
         }
     }
 
+    /// M3-Dc2: `holds` only for a criterion with a recorded passing check.
     fn explain(&self, id: MissionId, mission: &Mission) -> Result<String, CoordinatorError> {
-        let contract = mission.contract()?;
-        let mut lines = vec![
-            format!("Mission {id} is done."),
-            format!("You asked: {}", contract.owner_words.trim()),
-            format!("I understood: {}", contract.restatement),
-            "The Verifier checked every pass criterion you set before work began:".into(),
-        ];
-        for criterion in &contract.pass_criteria {
-            lines.push(format!("  - {}: holds", criterion.text));
-        }
-        lines.push(format!(
-            "Lane calls: {} of {}. Effects sent to the broker: {}. Money spent: 0.",
-            mission.model_calls, contract.budget.max_model_calls, mission.next_effect
-        ));
-        Ok(lines.join("\n"))
+        Ok(crate::teaching::explain(
+            id,
+            mission.contract()?,
+            mission.proof.checks.as_deref(),
+            mission.model_calls,
+            mission.next_effect,
+        ))
     }
 
     /// Stop a mission from whatever state it is in; a terminal mission
