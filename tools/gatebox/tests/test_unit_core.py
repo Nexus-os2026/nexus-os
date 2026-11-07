@@ -320,6 +320,23 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaises(ValueError): receipt.validate_summary(summary)
         for key in ('expected','executed','passed'): host['inventory'][key] = ['host_test','second_test']
         receipt.validate_summary(summary)
+    def test_malformed_summary_types(self):
+        cases = [(('commands',0,'log'),[]),(('commands',0,'log_sha256'),[]),
+                 (('commands',3,'inventory'),[]),(('commands',3,'inventory','expected'),[{}]),
+                 (('commands',3,'artifact_id'),[]),(('commands',0,'gate_id'),[]),
+                 (('commands',0,'id'),[]),(('commands',0,'argv'),[{}]),
+                 (('commands',0,'environment'),[]),(('coverage','host_artifacts'),17),
+                 (('coverage','host_artifacts'),[{}]),(('coverage','host_artifacts'),['host-bin','host-bin']),
+                 (('coverage','artifacts',0,'id'),[]),(('coverage','artifacts',0,'package'),[]),
+                 (('coverage','artifacts',0,'target'),{}),(('coverage','artifacts',0,'executable'),[]),
+                 (('snapshot','content_sha256'),[]),(('installed','bundle_sha256'),{}),
+                 (('request','repo_id'),[]),(('logs',0,'file'),[]),(('logs',0,'sha256'),[])]
+        for path, value in cases:
+            summary = self.success()
+            parent = summary
+            for key in path[:-1]: parent = parent[key]
+            parent[path[-1]] = value
+            with self.subTest(path=path,value=value), self.assertRaises(ValueError): receipt.validate_summary(summary)
     def test_publication_destination_race(self):
         # A competing publisher wins after lexists; only NOREPLACE prevents clobbering it.
         destination = self.receipts/self.run_id
