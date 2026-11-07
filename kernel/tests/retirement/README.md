@@ -569,3 +569,12 @@ Limit: the symbol ban scans masked, non-`cfg(test)` code under `kernel/` only.
 Other crates are not scanned (R-6: the compiler resolves cross-crate use), so
 this is not a workspace-wide absence claim. The `replacement_checkpoint.rs`
 plant is an unregistered-path receipt, not symbol-rule coverage.
+
+## Cq-0 registration (CQ-R4, CQ-R5)
+
+`test(registry)` 3fbdb689 registers one new kernel production file, M3-Cq Cq-0's
+`kernel/src/inference/purpose.rs` (purpose types and the empty, source-frozen
+qualification records), in `production-paths.txt`, and adds the `purpose` and
+`purpose_tests` edges to `kernel/src/inference/mod.rs` in `module-edges.json`.
+`test(registry-amend)` changes only the pinned production-path count from 330
+(K02) to 331. No seed, stage, guard rule or other entry changed.

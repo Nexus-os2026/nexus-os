@@ -51,6 +51,8 @@ fn mission(hash: &str, label: &str) -> MissionConfirmation {
 struct SplitClock {
     mono: std::sync::atomic::AtomicU64,
     wall: std::sync::atomic::AtomicU64,
+    /// SB3B-R5 (3): runs inside every reading (a blocking clock).
+    on_read: std::sync::Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 impl SplitClock {
     fn advance(&self, by: Duration) {
@@ -64,11 +66,21 @@ impl SplitClock {
         self.wall.fetch_add(by.as_millis() as u64, Ordering::SeqCst);
     }
 }
+impl SplitClock {
+    fn read(&self) {
+        let hook = self.on_read.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+}
 impl crate::authority::clock::Clock for SplitClock {
     fn monotonic_ms(&self) -> u64 {
+        self.read();
         self.mono.load(Ordering::SeqCst)
     }
     fn wall_ms(&self) -> u64 {
+        self.read();
         1_700_000_000_000 + self.wall.load(Ordering::SeqCst)
     }
 }
@@ -94,6 +106,10 @@ impl Bind {
         Self::with(true, true)
     }
     fn with(register: bool, files: bool) -> Self {
+        Self::make(register.then(|| Peer::chat(None, None)), files)
+    }
+    /// SB-3B1b: registered on `peer` (its chat answered, its requests held).
+    fn make(peer: Option<Peer>, files: bool) -> Self {
         assert!(crate::files::make_non_dumpable());
         let root = crate::harness_tests::temp_root("sb3a-bind");
         let selected = crate::harness_tests::temp_root("sb3a-workspace");
@@ -116,7 +132,6 @@ impl Bind {
             .unwrap(),
         );
         session.bootstrap_workspace(&workspace, &[]).unwrap();
-        let peer = register.then(|| Peer::new(None, None));
         let identity = match &peer {
             Some(p) => {
                 let view = session.register_model_private(&p.endpoint, &pin()).unwrap();
@@ -160,6 +175,9 @@ impl Bind {
     }
     fn bound(&self) -> Option<InferenceAdmission> {
         self.runs().inference_admission(self.run)
+    }
+    fn peer(&self) -> &Peer {
+        self._keep.0.as_ref().expect("this fixture's own peer")
     }
     fn grant(&self) -> GrantId {
         match self.door.kind {
@@ -394,6 +412,9 @@ fn sb3_stop_before_binding_installs_nothing() {
 
 #[test]
 fn sb3_binding_contention_refuses_without_latching() {
+    if watched("sb3_binding_contention_refuses_without_latching") {
+        return;
+    }
     let failed = |f: &Bind| f.session.core.cell.session_word() & FAILED != 0;
     let f = Bind::new();
     let runs = f.runs();
@@ -426,6 +447,7 @@ fn sb3_binding_contention_refuses_without_latching() {
         assert_eq!(f.bind(), Err("unavailable"), "{poisoned} poison refuses");
         assert!(failed(&f), "{poisoned} poison latches session failure");
     }
+    println!("{HELD_DONE} sb3_binding_contention_refuses_without_latching");
 }
 
 // SB-3B1a frozen oracles (SB3B-R3): R3 attempt admission through the
@@ -521,6 +543,9 @@ use crate::authority::evidence::EndStatus;
 /// G0 (R3) and F8: only the original live grant admits an attempt.
 #[test]
 fn sb3_attempt_admission_requires_the_original_grant() {
+    if watched("sb3_attempt_admission_requires_the_original_grant") {
+        return;
+    }
     let f = Admit::bound();
     let attempt = f.admit().expect("the original live grant admits");
     assert_eq!(f.counts(), (1, 1), "ticket, ordinal and pin together");
@@ -571,6 +596,7 @@ fn sb3_attempt_admission_requires_the_original_grant() {
         "R3 run-table poison"
     );
     assert!(f.failed(), "run-table poison latches session failure");
+    println!("{HELD_DONE} sb3_attempt_admission_requires_the_original_grant");
 }
 
 /// R3: the live invocation is required before acquisition and is the last
@@ -809,6 +835,9 @@ fn sb3_attempt_observer_is_read_after_the_grant() {
 /// neither issues an attempt, pin, record or binding change.
 #[test]
 fn sb3_attempt_contention_and_poison_latch_exactly() {
+    if watched("sb3_attempt_contention_and_poison_latch_exactly") {
+        return;
+    }
     let f = Admit::bound();
     assert!(f.admit().is_ok(), "positive control");
     let latched = |f: &Admit| {
@@ -857,6 +886,7 @@ fn sb3_attempt_contention_and_poison_latch_exactly() {
         assert!(f.failed(), "{poisoned}: poison latches session failure");
         f.nothing(poisoned);
     }
+    println!("{HELD_DONE} sb3_attempt_contention_and_poison_latch_exactly");
 }
 
 /// SB3B-R4 (4): each grant clock and the workspace identity independently.
@@ -883,6 +913,9 @@ fn sb3_attempt_grant_clocks_and_identity_are_independent() {
 /// code.
 #[test]
 fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
+    if watched("sb3_attempt_grant_revocation_cannot_precede_the_cas") {
+        return;
+    }
     let f = Admit::bound();
     assert!(f.admit().is_ok(), "positive control");
     let f = Admit::bound();
@@ -925,6 +958,7 @@ fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
     if admitted.is_err() {
         f.nothing("revoked before the CAS");
     }
+    println!("{HELD_DONE} sb3_attempt_grant_revocation_cannot_precede_the_cas");
 }
 
 /// SB3B-R5 (2): the retained SB-2b rollback contract. A pre-ticket refusal
@@ -932,6 +966,9 @@ fn sb3_attempt_grant_revocation_cannot_precede_the_cas() {
 /// no ticket, pin or record exists.
 #[test]
 fn sb3_attempt_rollback_hold_expiry_latches_uncertainty() {
+    if watched("sb3_attempt_rollback_hold_expiry_latches_uncertainty") {
+        return;
+    }
     let f = Admit::bound();
     f.b.control()
         .authority()
@@ -979,6 +1016,7 @@ fn sb3_attempt_rollback_hold_expiry_latches_uncertainty() {
         "no ticket"
     );
     assert_eq!(binding, f.binding, "binding kept");
+    println!("{HELD_DONE} sb3_attempt_rollback_hold_expiry_latches_uncertainty");
 }
 
 /// F11 (SB3B-R1 2, SB3B-R4 1): every B1a seam is reachable only under
@@ -1167,4 +1205,2539 @@ fn test_only(code: &str, at: usize) -> bool {
         }
         end = i;
     }
+}
+
+// SB-3B frozen oracles: the private R3-R7 call, its actual per-request
+// gates (B1 of SB3B-R1). No public route, SessionPort or host wiring.
+use crate::authority::clock::Clock;
+use crate::inference::{
+    CallDeadline, CallMeter, Charged, InvocationObserver, MeterRefusal, ModelCallOutcome,
+};
+use std::sync::atomic::{AtomicU32, AtomicUsize};
+use std::sync::Mutex;
+
+const CALL: [&str; 4] = ["/api/version", "/api/status", "/api/tags", "/api/chat"];
+const REPLY: &str = r#"{"sb3b":"reply"}"#;
+/// The four R6 restriction sinks.
+const RESTRICT: [&str; 4] = [
+    "emergency_restrict",
+    "cancel_run",
+    "door_halt",
+    "close_restrict",
+];
+
+#[derive(Default)]
+pub(super) struct Meter {
+    charges: AtomicU32,
+    settles: AtomicU32,
+    refuse: AtomicBool,
+    at_charge: Mutex<Option<Box<dyn Fn() + Send>>>,
+    /// F10b: runs on entry, before the C1 charge is taken.
+    at_entry: Mutex<Option<Box<dyn Fn() + Send>>>,
+}
+impl CallMeter for Meter {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        if let Some(hook) = &*self.at_entry.lock().unwrap() {
+            hook();
+        }
+        if self.refuse.load(Ordering::SeqCst) {
+            return Err(MeterRefusal::NotRecorded);
+        }
+        let call = self.charges.fetch_add(1, Ordering::SeqCst) + 1;
+        if let Some(hook) = &*self.at_charge.lock().unwrap() {
+            hook();
+        }
+        Ok(Charged { call })
+    }
+    fn settle(&self, _: u32) {
+        self.settles.fetch_add(1, Ordering::SeqCst);
+    }
+}
+struct Open;
+impl CallDeadline for Open {
+    fn expired(&self) -> bool {
+        false
+    }
+}
+fn invoke(
+    door: &SessionDoor,
+    run: RunId,
+    request: &ModelRequest,
+    meter: &Meter,
+    invocation: &InvocationObserver,
+) -> Result<ModelCallOutcome, &'static str> {
+    door.model_call_private(run, request, meter, &Open, invocation)
+        .map_err(|e| e.class())
+}
+fn class(outcome: &ModelCallOutcome) -> &'static str {
+    outcome
+        .result()
+        .as_ref()
+        .map_or_else(|e| e.class(), |_| "ok")
+}
+fn recorded(outcome: &ModelCallOutcome) -> bool {
+    matches!(outcome.record(), EndStatus::Recorded { .. })
+}
+/// Every B1b oracle first shows the no-interference call succeeding.
+fn positive(why: &str) {
+    let ok = Call::new().call().is_ok_and(|o| o.result().is_ok());
+    assert!(ok, "{why}");
+}
+
+/// A bound original door (SB-3A's R2), its live invocation and a C1 meter.
+struct Call {
+    b: Bind,
+    owner: Arc<InvocationOwner>,
+    meter: Meter,
+}
+impl Call {
+    fn new() -> Self {
+        Self::serve(Peer::chat(None, None))
+    }
+    fn serve(peer: Peer) -> Self {
+        Self::bound(Bind::make(Some(peer), true))
+    }
+    fn bound(b: Bind) -> Self {
+        assert_eq!(b.bind(), Ok(()), "R2 binding");
+        Self {
+            b,
+            owner: Arc::new(InvocationOwner::new()),
+            meter: Meter::default(),
+        }
+    }
+    fn call(&self) -> Result<ModelCallOutcome, &'static str> {
+        let observer = self.owner.observer();
+        invoke(&self.b.door, self.b.run, &request(), &self.meter, &observer)
+    }
+    /// The call's own peer requests, after registration's four.
+    fn sent(&self) -> Vec<String> {
+        self.b.peer().paths.lock().unwrap()[4..].to_vec()
+    }
+    fn entered(&self, n: usize) {
+        for _ in 0..4 + n {
+            let (_, closed) = self
+                .b
+                .peer()
+                .events
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap();
+            assert!(!closed, "entered, not closed");
+        }
+    }
+    fn records(&self) -> usize {
+        let rows = self.b.primary.store().rows();
+        rows.iter().filter(|r| r.phase == "model_call").count()
+    }
+    fn counts(&self) -> (u32, usize) {
+        self.b.runs().model_accounting(self.b.run).unwrap()
+    }
+    fn charged(&self) -> (u32, u32) {
+        let m = &self.meter;
+        (
+            m.charges.load(Ordering::SeqCst),
+            m.settles.load(Ordering::SeqCst),
+        )
+    }
+    fn latched(&self) -> (bool, bool) {
+        let core = &self.b.session.core;
+        let failed = core.cell.session_word() & FAILED != 0;
+        (core.model.uncertain.load(Ordering::SeqCst), failed)
+    }
+    fn hook(&self, point: &'static str, n: usize, action: impl Fn() + Send + Sync + 'static) {
+        super::model_tests::nth(&self.b.session, point, n, action);
+    }
+    fn restriction(&self, kind: &'static str) -> impl Fn() + Send + Sync + 'static {
+        let (ingress, door, run) = (
+            self.b.session.ingress(),
+            self.b.door.door.clone(),
+            self.b.run,
+        );
+        move || match kind {
+            "emergency_restrict" => assert!(ingress.emergency().is_ok()),
+            "cancel_run" => assert!(door.cancel_run(run).is_ok()),
+            "door_halt" => drop(door.halt(crate::authority::halt::HaltReason::JournalFailed)),
+            _ => assert!(ingress.accept(CommandKind::Quit, 9).is_ok()),
+        }
+    }
+    fn hold(&self, point: &'static str) -> crate::test_hooks::Gate {
+        let gate = crate::test_hooks::Gate::new();
+        let held = gate.clone();
+        self.b.session.core.cell.1.arm(point, move || held.hold());
+        gate
+    }
+    fn obligations(&self) -> close::ModelObligations {
+        self.b.session.close_obligations().unwrap().model
+    }
+}
+
+/// At call gate `i`, another thread takes the run table until the attempt
+/// returns (benign contention); deny-only polling inputs stay live.
+type Holder = Arc<Mutex<Option<std::thread::JoinHandle<()>>>>;
+fn contend(f: &Call, i: usize) -> (Arc<AtomicUsize>, Holder) {
+    let (gates, holder) = (Arc::new(AtomicUsize::new(0)), Arc::new(Mutex::new(None)));
+    let (runs, core, scope) = (
+        f.b.runs(),
+        Arc::downgrade(&f.b.session.core),
+        f.b.door.context.scope.clone(),
+    );
+    let (release, rx) = std::sync::mpsc::channel::<()>();
+    let rx = Mutex::new(Some(rx));
+    let (count, threads) = (gates.clone(), holder.clone());
+    f.b.session.core.cell.1.every("model.call.gate", move || {
+        if count.fetch_add(1, Ordering::SeqCst) != i {
+            return;
+        }
+        let (runs, rx) = (runs.clone(), rx.lock().unwrap().take().unwrap());
+        let (tx, ready) = std::sync::mpsc::channel();
+        *threads.lock().unwrap() = Some(std::thread::spawn(move || {
+            let _hold = runs.model_observer();
+            tx.send(()).unwrap();
+            let _ = rx.recv_timeout(Duration::from_secs(3));
+        }));
+        ready.recv_timeout(Duration::from_secs(1)).unwrap();
+        let core = core.upgrade().unwrap();
+        assert!(
+            scope.live(core.cell.session_word()) && !core.model.uncertain.load(Ordering::SeqCst)
+        );
+    });
+    f.b.session
+        .core
+        .cell
+        .1
+        .arm("model.attempt.return", move || {
+            let _ = release.send(());
+        });
+    (gates, holder)
+}
+
+/// Request `i` entered and held open at the peer; `act` runs then.
+fn held_request_at(i: usize, act: impl FnOnce(&Call)) -> (Call, ModelCallOutcome, Duration) {
+    let f = Call::serve(Peer::chat(Some(4 + i), None));
+    let (outcome, elapsed) = std::thread::scope(|s| {
+        let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+        let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+        f.entered(i + 1);
+        assert!(f.obligations().active, "held: slot active");
+        let start = Instant::now();
+        act(&f);
+        let closed = f.b.peer().events.recv_timeout(Duration::from_secs(1));
+        assert_eq!(closed, Ok((CALL[i].into(), true)), "peer saw closure {i}");
+        let outcome = call.join().unwrap().expect("ticketed attempt");
+        (outcome, start.elapsed())
+    });
+    (f, outcome, elapsed)
+}
+
+/// G4: the no-interference call succeeds; an entered request has no successor.
+#[test]
+fn sb3_entered_request_grants_no_successor() {
+    if watched("sb3_entered_request_grants_no_successor") {
+        return;
+    }
+    let f = Call::new();
+    let outcome = f.call().expect("admitted private call");
+    let reply = outcome.result().as_ref().expect("transport success");
+    assert_eq!(reply.content(), REPLY, "exact fake reply");
+    assert!(recorded(&outcome), "one recorded result");
+    assert_eq!(f.sent(), CALL, "call paths");
+    assert_eq!((f.counts(), f.charged(), f.records()), ((1, 0), (1, 1), 1));
+    for i in 0..4 {
+        let (f, outcome, _) = held_request_at(i, |f| f.restriction("emergency_restrict")());
+        assert_eq!(f.sent(), CALL[..=i], "entered {i} once; successors 0");
+        assert_eq!(attempts(&f), i + 1, "{i}: exact admission attempts");
+        assert!(outcome.result().is_err() && recorded(&outcome), "{i}");
+        assert_eq!(
+            f.charged().0,
+            u32::from(i == 3),
+            "{i}: charge only before chat"
+        );
+    }
+    println!("{HELD_DONE} sb3_entered_request_grants_no_successor");
+}
+
+/// G5: each held request ends on every restriction sink and is joined.
+#[test]
+fn sb3_held_request_cancels_and_joins() {
+    if watched("sb3_held_request_cancels_and_joins") {
+        return;
+    }
+    let outcome = Call::new().call().expect("admitted private call");
+    assert!(outcome.result().is_ok(), "no-interference call");
+    for i in 0..4 {
+        for kind in RESTRICT {
+            let (f, outcome, elapsed) = held_request_at(i, |f| f.restriction(kind)());
+            assert!(
+                elapsed < Duration::from_secs(1),
+                "{i} {kind}: joined in {elapsed:?}"
+            );
+            assert_eq!(f.sent(), CALL[..=i], "{i} {kind}: no retry or successor");
+            assert!(
+                outcome.result().is_err() && recorded(&outcome),
+                "{i} {kind}"
+            );
+            assert_eq!(f.counts(), (1, 0), "{i} {kind}: settled");
+        }
+    }
+    println!("{HELD_DONE} sb3_held_request_cancels_and_joins");
+}
+
+/// G1: the actual override at each call request, under its owning hold.
+#[test]
+fn sb3_call_override_required_at_each_request() {
+    if watched("sb3_call_override_required_at_each_request") {
+        return;
+    }
+    let f = Call::new();
+    let gates = Arc::new(AtomicUsize::new(0));
+    let seen = gates.clone();
+    f.b.session.core.cell.1.every("model.call.gate", move || {
+        seen.fetch_add(1, Ordering::SeqCst);
+    });
+    assert!(
+        f.call().is_ok_and(|o| o.result().is_ok()),
+        "positive control"
+    );
+    assert_eq!(
+        gates.load(Ordering::SeqCst),
+        4,
+        "real override at all four requests"
+    );
+    for i in 0..4 {
+        let f = Call::new();
+        let (gates, holder) = contend(&f, i);
+        let outcome = f.call().expect("ticketed attempt");
+        let holder = holder.lock().unwrap().take();
+        holder.expect("boundary reached").join().unwrap();
+        assert_eq!(
+            class(&outcome),
+            "model_cancelled",
+            "contended gate {i} refuses"
+        );
+        assert_eq!(
+            f.sent(),
+            CALL[..i],
+            "peer prefix {i}: affected and successors 0"
+        );
+        assert_eq!(gates.load(Ordering::SeqCst), i + 1, "no successor gate {i}");
+        assert_eq!(
+            f.latched(),
+            (false, false),
+            "benign contention latches nothing {i}"
+        );
+        assert!(recorded(&outcome) && f.counts() == (1, 0), "{i}");
+    }
+    println!("{HELD_DONE} sb3_call_override_required_at_each_request");
+}
+
+/// G2: a restriction after construction, before the actual gate.
+#[test]
+fn sb3_pre_gate_ingress_sends_no_request() {
+    positive("positive control");
+    for i in 0..4 {
+        for kind in RESTRICT {
+            let f = Call::new();
+            f.hook("model.call.gate", i, f.restriction(kind));
+            let outcome = f.call().expect("ticketed attempt");
+            assert_eq!(
+                f.sent(),
+                CALL[..i],
+                "{kind} before gate {i}: affected and successors 0"
+            );
+            assert_eq!(attempts(&f), i + 1, "{kind} {i}: exact admission attempts");
+            assert!(
+                outcome.result().is_err() && recorded(&outcome),
+                "{i} {kind}"
+            );
+            assert_eq!(
+                f.charged().0,
+                u32::from(i == 3),
+                "{i} {kind}: prior charge kept, chat 0"
+            );
+        }
+    }
+}
+
+/// G3: predicates pass; ingress wins the actual original-snapshot CAS.
+#[test]
+fn sb3_paused_before_cas_ingress_wins() {
+    positive("positive control");
+    for i in 0..4 {
+        let f = Call::new();
+        let ingress = f.b.session.ingress();
+        f.hook("model.call.observed", i, move || {
+            assert!(ingress.emergency().is_ok())
+        });
+        let outcome = f.call().expect("ticketed attempt");
+        assert_eq!(f.sent(), CALL[..i], "ingress wins the CAS at {i}");
+        assert!(outcome.result().is_err() && recorded(&outcome), "{i}");
+        assert_eq!(
+            (attempts(&f), count(&f, "admitted"), notices(&f)),
+            (i + 1, i, 0),
+            "{i}: one admission per gate, no refreshed retry, no notice"
+        );
+    }
+}
+
+/// L2 with F5 (broker level; composed zeros carried to C/D): revocation
+/// after the observer read, before the CAS: at most the selected request,
+/// a Recorded outcome, no File effect, the revocation visible at return.
+#[test]
+fn sb3_revocation_between_observer_read_and_cas_is_entered_only() {
+    positive("positive control");
+    for i in 0..4 {
+        let f = Call::new();
+        let owner = f.owner.clone();
+        f.hook("model.call.observed", i, move || owner.revoke());
+        let file = crate::files::FileCreate {
+            name: "b1c.txt".into(),
+            content: "pending\n".into(),
+        };
+        let proposed = f.b.door.create_file(f.b.run, &file).unwrap();
+        let crate::governed::AgentOutcome::AwaitingApproval(view) = proposed else {
+            panic!("a populated commitment awaiting approval");
+        };
+        // The actual fields (Debug redacts target and summary to sizes and
+        // truncates id and run to 8 hex digits).
+        let snapshot = || match f.b.door.commitment(view.id) {
+            crate::governed::Lookup::Mine(v) => {
+                let fields = format!("{v:?}");
+                Some((fields, v.id, v.run, v.target, v.summary, v.binding_short))
+            }
+            _ => None,
+        };
+        let content = snapshot().filter(|s| s.0.contains("Prepared"));
+        let populated = content.is_some_and(|s| !s.3.is_empty() && !s.4.is_empty());
+        assert!(populated, "{i}: a populated, prepared commitment");
+        let (before, steps, held) = (broker(&f), file_steps(&f), snapshot());
+        let outcome = f.call().expect("ticketed attempt");
+        let sent = f.sent();
+        assert!(
+            sent.len() <= i + 1 && CALL[..sent.len()] == sent[..],
+            "{i}: at most the selected request; successors 0"
+        );
+        assert!(recorded(&outcome), "{i}: the affected outcome is Recorded");
+        assert!(f.owner.observer().is_revoked(), "{i}: revocation visible");
+        assert_eq!(
+            broker(&f),
+            before,
+            "{i}: inventory and commitments unchanged"
+        );
+        assert_eq!(steps.load(Ordering::SeqCst), 0, "{i}: File dispatch 0");
+        assert_eq!(
+            snapshot(),
+            held,
+            "{i}: the populated commitment is unchanged"
+        );
+    }
+    // R3: revoked after the route's check, before the attempt CAS: no ticket.
+    let f = Call::new();
+    let owner = f.owner.clone();
+    f.hook("model.attempt.reserved", 0, move || owner.revoke());
+    assert_eq!(f.call().map(|_| ()), Err("halted"), "R3 observer last");
+    assert_eq!(
+        (f.counts(), f.sent().len()),
+        ((0, 0), 0),
+        "R3: no ticket or request"
+    );
+}
+
+/// C2: charged, then the actual invocation is revoked: no chat.
+#[test]
+fn sb3_invalidation_after_charge_prevents_chat() {
+    positive("positive control");
+    let f = Call::new();
+    let owner = f.owner.clone();
+    *f.meter.at_charge.lock().unwrap() = Some(Box::new(move || owner.revoke()));
+    let outcome = f.call().expect("ticketed attempt");
+    assert_eq!(f.sent(), CALL[..3], "charged; chat 0");
+    assert_eq!(f.charged(), (1, 1), "one charge, settled, never refunded");
+    assert!(
+        outcome.result().is_err() && recorded(&outcome),
+        "one recorded obligation"
+    );
+    one_correlated_record(&f, &outcome);
+    assert_eq!(f.counts(), (1, 0));
+    // Failed metadata consumes one attempt and no charge; a refused charge sends no chat.
+    for (f, bad) in [
+        (Call::serve(Peer::chat(None, Some(6))), true),
+        (Call::new(), false),
+    ] {
+        f.meter.refuse.store(!bad, Ordering::SeqCst);
+        let outcome = f.call().expect("ticketed attempt");
+        assert_eq!((f.counts().0, f.charged().0), (1, 0), "bad={bad}: 1/0/0");
+        assert_eq!(f.sent(), CALL[..3], "bad={bad}: no chat");
+        assert!(outcome.result().is_err() && recorded(&outcome));
+        one_correlated_record(&f, &outcome);
+    }
+}
+
+/// G0 (every call gate): only the original live grant admits.
+#[test]
+fn sb3_original_file_grant_remains_required_per_request() {
+    positive("original grant reaches chat");
+    for case in ["revoked", "expired", "scope", "substitute"] {
+        for i in 0..4 {
+            let f = Call::new();
+            let (control, grant, clock, runs, run) = (
+                f.b.control(),
+                f.b.grant(),
+                f.b.clock.clone(),
+                f.b.runs(),
+                f.b.run,
+            );
+            if case == "substitute" {
+                let other = f.b.session.grant_for_test(&f.b.q).unwrap();
+                assert!(
+                    control.authority().grants().live(other).is_some(),
+                    "another live grant"
+                );
+            }
+            let vary = move || match case {
+                "expired" => clock.advance(Duration::from_secs(3600)),
+                "scope" => runs.tamper_for_test(run, "workspace"),
+                _ => control.authority().grants().revoke(grant).unwrap(),
+            };
+            f.hook("model.call.gate", i, vary);
+            let outcome = f.call().expect("ticketed attempt");
+            assert_eq!(
+                f.sent(),
+                CALL[..i],
+                "gate {i} {case}: boundary and successors 0"
+            );
+            assert_eq!(class(&outcome), "model_cancelled", "{i} {case}");
+            assert!(recorded(&outcome), "{i} {case}");
+        }
+    }
+}
+
+/// T1: the original Q, mission clocks, backstop and watch are never renewed.
+#[test]
+fn sb3_original_deadlines_and_watch_are_not_renewed() {
+    positive("positive control");
+    for (case, expected) in [
+        ("q", "model_timeout"), // SB3B-R7 (1): any expiry.
+        ("mission", "model_timeout"),
+        ("backstop", "model_timeout"),
+        ("watch", "model_stopped"),
+    ] {
+        let f = Call::new();
+        let clock = f.b.clock.clone();
+        let (mono, wall) = (clock.monotonic_ms(), clock.wall_ms());
+        let limits = f.b.door.context();
+        limits
+            .narrow_mission_deadlines(clock.clone(), mono + 1000, wall + 1000)
+            .unwrap();
+        let (session, q, control) = (f.b.session.clone(), f.b.q.sequence(), f.b.control());
+        f.hook("model.call.gate", 1, move || match case {
+            "q" => session.expire_request_for_test(q),
+            "mission" => clock.advance(Duration::from_secs(2)),
+            "backstop" => {
+                session
+                    .core
+                    .model
+                    .backstop_skew
+                    .fetch_add(181_000, Ordering::SeqCst);
+            }
+            _ => assert!(control.kernel_stop_authority().engage() > 0),
+        });
+        let outcome = f.call().expect("ticketed attempt");
+        assert_eq!(
+            f.sent(),
+            CALL[..1],
+            "{case} before gate 1: later gates refuse"
+        );
+        assert_eq!(class(&outcome), expected, "{case}");
+        if case == "backstop" {
+            continue; // Each attempt captures its own backstop.
+        }
+        if case == "watch" {
+            f.b.control().resume_with_halt(&Owner, None).unwrap();
+            assert!(
+                !f.b.control().stop_snapshot().kernel_stopped,
+                "native resume"
+            );
+        }
+        assert!(f.call().is_err(), "{case}: call two is not renewed");
+        assert_eq!(
+            (f.sent().len(), f.counts().0),
+            (1, 1),
+            "{case}: call two sends nothing"
+        );
+    }
+}
+
+// SB3B-R2 gap oracles for B1b (findings 1-5, 7, 8, 11), from the sheet.
+fn trace(f: &Call) -> Vec<&'static str> {
+    f.b.session.core.model.trace.lock().unwrap().clone()
+}
+fn count(f: &Call, what: &str) -> usize {
+    trace(f).iter().filter(|t| t.starts_with(what)).count()
+}
+/// Dispatch notices in this call's native record (none may exist).
+fn notices(f: &Call) -> usize {
+    let rows = f.b.primary.store().rows();
+    let calls = rows.iter().filter(|r| r.phase == "model_call");
+    calls.filter(|r| r.body.contains("sent_mono_ms")).count()
+}
+/// Every admission attempt (admitted or refused), counted inside admission.
+fn attempts(f: &Call) -> usize {
+    let trace = trace(f);
+    let attempt = |t: &&&str| **t == "admitted" || t.starts_with("refused:");
+    trace.iter().filter(attempt).count()
+}
+/// Direct File-dispatch observation: each File commitment step and each
+/// File staging or execution start (SB3B-R13 (O)), counted.
+fn file_steps(f: &Call) -> Arc<AtomicUsize> {
+    use crate::test_hooks::at::{AUTHORIZE_RECORDED, COMPLETE_BEFORE_CHECK, PREPARE_BEFORE_INSERT};
+    use crate::test_hooks::at::{FILE_EXECUTE_START, FILE_STAGED};
+    let (steps, hooks) = (Arc::new(AtomicUsize::new(0)), f.b.control());
+    for at in [
+        PREPARE_BEFORE_INSERT,
+        AUTHORIZE_RECORDED,
+        COMPLETE_BEFORE_CHECK,
+    ] {
+        let step = steps.clone();
+        let fire = move || {
+            step.fetch_add(1, Ordering::SeqCst);
+        };
+        hooks.authority().commitments().hooks().every(at, fire);
+    }
+    for at in [FILE_STAGED, FILE_EXECUTE_START] {
+        let step = steps.clone();
+        let fire = move || {
+            step.fetch_add(1, Ordering::SeqCst);
+        };
+        hooks.files().hooks().every(at, fire);
+    }
+    steps
+}
+/// The broker-visible File side: inventory, the commitment registry (size
+/// and pending target) and every non-model evidence record in full.
+type Broker = (
+    String,
+    usize,
+    Option<String>,
+    Vec<(String, Option<String>, String)>,
+);
+fn broker(f: &Call) -> Broker {
+    let s = &f.b.session;
+    let rows = f.b.primary.store().rows();
+    let other = rows.iter().filter(|r| !r.phase.starts_with("model_"));
+    let pending = s
+        .pending_for_test()
+        .map(|id| format!("{:?}", f.b.door.commitment(id)));
+    (
+        format!("{:?}", s.inventory().unwrap().entries),
+        f.b.control().authority().commitments().len_for_test(),
+        pending,
+        other
+            .map(|r| (r.phase.clone(), r.commitment.clone(), r.body.clone()))
+            .collect(),
+    )
+}
+fn refusals(f: &Call) -> Vec<&'static str> {
+    let trace = trace(f);
+    trace
+        .into_iter()
+        .filter(|t| t.starts_with("refused"))
+        .collect()
+}
+/// One R5 predicate made false at a gate, with every earlier one still true.
+fn fault(f: &Call, kind: &'static str) -> Box<dyn Fn() + Send + Sync> {
+    let (session, q, control, runs) = (
+        f.b.session.clone(),
+        f.b.q.sequence(),
+        f.b.control(),
+        f.b.runs(),
+    );
+    let (run, grant, owner, primary) = (f.b.run, f.b.grant(), f.owner.clone(), f.b.primary.clone());
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    let held = Mutex::new(Some(held));
+    if kind == "health_none" {
+        let core = &f.b.session.core.cell.1;
+        core.arm("model.attempt.return", move || {
+            let _ = release.send(());
+        });
+    }
+    Box::new(move || match kind {
+        "q" => session.expire_request_for_test(q),
+        "backstop" => {
+            session
+                .core
+                .model
+                .backstop_skew
+                .fetch_add(181_000, Ordering::SeqCst);
+        }
+        "watch" => assert!(control.kernel_stop_authority().engage() > 0),
+        "health" => {
+            primary.store().simulate_crash(); // latched: unhealthy
+            assert!(primary
+                .try_health()
+                .is_some_and(|h| h.owed > 0 || h.latched));
+        }
+        "health_none" => {
+            let (store, held) = (primary.clone(), held.lock().unwrap().take().unwrap());
+            let (ready, wait) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _held = store.store().hold();
+                ready.send(()).unwrap();
+                let _ = held.recv_timeout(Duration::from_secs(3));
+            });
+            wait.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert!(primary.try_health().is_none(), "try_health None");
+        }
+        "qdead" => assert!(session.ingress().emergency().is_ok()),
+        "host" => runs.tamper_for_test(run, "view_id"),
+        "unpin" => runs.tamper_for_test(run, "unpin"),
+        "member" => runs.tamper_for_test(run, "groups"),
+        "sticky" => runs.tamper_for_test(run, "sticky"),
+        "pin" => runs.tamper_for_test(run, "pin"),
+        "grant" => control.authority().grants().revoke(grant).unwrap(),
+        _ => owner.revoke(),
+    })
+}
+/// (fault, class, the step the trace must show refusing).
+const FAULTS: [(&str, &str, &str); 13] = [
+    ("q", "model_timeout", "refused:1"), // SB3B-R7 (1): any expiry.
+    ("qdead", "model_cancelled", "refused:1"),
+    ("backstop", "model_timeout", "refused:1"),
+    ("watch", "model_stopped", "refused:2"),
+    ("health", "model_cancelled", "refused:3"),
+    ("health_none", "model_cancelled", "refused:3"),
+    ("member", "model_cancelled", "refused:4"),
+    ("host", "model_cancelled", "refused:4"),
+    ("unpin", "model_cancelled", "refused:4"),
+    ("sticky", "model_cancelled", "refused:4"),
+    ("pin", "model_cancelled", "refused:4"),
+    ("grant", "model_cancelled", "refused:5"),
+    ("observer", "model_cancelled", "refused:7"),
+];
+
+/// F2 + F8: each R5 predicate, falsified alone after the ticket and before
+/// each gate, refuses with its literal class at its own step.
+#[test]
+fn sb3_r5_each_predicate_refuses_literally() {
+    positive("positive control");
+    for (kind, expected, step) in FAULTS {
+        for i in 0..4 {
+            let f = Call::new();
+            f.hook("model.call.gate", i, fault(&f, kind));
+            let outcome = f.call().expect("ticketed attempt");
+            assert_eq!(class(&outcome), expected, "{kind} at gate {i}");
+            assert_eq!(
+                f.sent(),
+                CALL[..i],
+                "{kind} at gate {i}: boundary and successors 0"
+            );
+            assert_eq!(refusals(&f), [step], "{kind} at gate {i}: its own step");
+            assert_eq!(
+                f.charged().0,
+                u32::from(i == 3),
+                "{kind} {i}: no new charge"
+            );
+        }
+    }
+    // Chat latch: an uncharged chat admission and a second (spent) one.
+    for seam in ["early", "replay"] {
+        let f = Call::new();
+        let core = &f.b.session.core.model;
+        let latch = if seam == "early" {
+            &core.chat_early
+        } else {
+            &core.chat_replay
+        };
+        latch.store(true, Ordering::SeqCst);
+        let outcome = f.call().expect("ticketed attempt");
+        assert!(outcome.result().is_ok(), "{seam}: the real chat proceeds");
+        let trace = trace(&f);
+        let at = trace
+            .iter()
+            .position(|t| *t == seam)
+            .expect("seam exercised");
+        assert_eq!(
+            trace[at + 1..at + 3],
+            ["refused:6", "probe:model_cancelled"],
+            "{seam}: the latch refuses literally"
+        );
+        assert_eq!(f.sent(), CALL, "{seam}: exact peer sequence, one chat");
+        assert_eq!(f.charged(), (1, 1), "{seam}: exactly one charge");
+    }
+}
+
+/// F2 (SB3B-R8 3): contention at each R5 hold (run table, grant store) and
+/// each gate refuses and latches nothing; poison latches both.
+#[test]
+fn sb3_r5_holds_contend_and_poison_exactly() {
+    if watched("sb3_r5_holds_contend_and_poison_exactly") {
+        return;
+    }
+    positive("positive control");
+    for hold in ["runs", "grants"] {
+        for poisoned in [false, true] {
+            for i in 0..4 {
+                let f = Call::new();
+                let (runs, control) = (f.b.runs(), f.b.control());
+                let (release, rx) = std::sync::mpsc::channel::<()>();
+                let rx = Mutex::new(Some(rx));
+                let holder: Holder = Arc::new(Mutex::new(None));
+                let keep = holder.clone();
+                f.hook("model.call.gate", i, move || {
+                    let (runs, control) = (runs.clone(), control.clone());
+                    let rx = rx.lock().unwrap().take().unwrap();
+                    let (ready, wait) = std::sync::mpsc::channel();
+                    *keep.lock().unwrap() = Some(std::thread::spawn(move || {
+                        let grants = control.authority().grants();
+                        let _runs = (hold == "runs").then(|| runs.model_observer());
+                        let _grants = (hold == "grants").then(|| grants.hold_for_test());
+                        ready.send(()).unwrap();
+                        if poisoned {
+                            std::panic::resume_unwind(Box::new("poison (test)"));
+                        }
+                        let _ = rx.recv_timeout(Duration::from_secs(3));
+                    }));
+                    wait.recv_timeout(Duration::from_secs(1)).unwrap();
+                    if poisoned {
+                        let joined = keep_join(&keep);
+                        assert!(joined, "{hold} poisoned");
+                    }
+                });
+                f.b.session
+                    .core
+                    .cell
+                    .1
+                    .arm("model.attempt.return", move || {
+                        let _ = release.send(());
+                    });
+                // Latched at the refusal: read at return, before settlement.
+                let (seen, core) = (
+                    Arc::new(Mutex::new(None)),
+                    Arc::downgrade(&f.b.session.core),
+                );
+                let keep_seen = seen.clone();
+                f.hook("model.attempt.return", 0, move || {
+                    let core = core.upgrade().unwrap();
+                    let failed = core.cell.session_word() & FAILED != 0;
+                    *keep_seen.lock().unwrap() =
+                        Some((core.model.uncertain.load(Ordering::SeqCst), failed));
+                });
+                let outcome = f.call().expect("ticketed attempt");
+                if let Some(h) = holder.lock().unwrap().take() {
+                    let _ = h.join();
+                }
+                let what = format!("{hold} poisoned={poisoned} gate {i}");
+                assert_eq!(class(&outcome), "model_cancelled", "{what}");
+                assert_eq!(f.sent(), CALL[..i], "{what}: boundary and successors 0");
+                assert_eq!(f.latched(), (poisoned, poisoned), "{what}: latches");
+                let refused = *seen.lock().unwrap();
+                assert_eq!(
+                    refused,
+                    Some((poisoned, poisoned)),
+                    "{what}: latched at refusal"
+                );
+            }
+        }
+    }
+    println!("{HELD_DONE} sb3_r5_holds_contend_and_poison_exactly");
+}
+/// Joins a poisoning holder (its panic is the poison) inside the gate.
+fn keep_join(keep: &Holder) -> bool {
+    let handle = keep.lock().unwrap().take();
+    handle.is_some_and(|h| h.join().is_err())
+}
+
+/// F1: for each adjacent pair of R5 predicates both false, the earlier one
+/// refuses (ordered observation trace, codes coincide from step 3).
+#[test]
+fn sb3_r5_predicate_order_is_exact() {
+    positive("positive control");
+    for (first, second, step) in [
+        ("q", "watch", "refused:1"),
+        ("watch", "health", "refused:2"),
+        ("health", "member", "refused:3"),
+        ("member", "grant", "refused:4"),
+    ] {
+        let f = Call::new();
+        let (a, b) = (fault(&f, second), fault(&f, first));
+        f.hook("model.call.gate", 1, move || {
+            a();
+            b();
+        });
+        let _ = f.call().expect("ticketed attempt");
+        assert_eq!(refusals(&f), [step], "{first} before {second}");
+    }
+    // Chat latch pairs, at the spent second admission (replay seam).
+    for (first, step) in [("grant", "refused:5"), ("latch", "refused:6")] {
+        let f = Call::new();
+        f.b.session
+            .core
+            .model
+            .chat_replay
+            .store(true, Ordering::SeqCst);
+        let late = fault(
+            &f,
+            if first == "grant" {
+                "grant"
+            } else {
+                "observer"
+            },
+        );
+        f.b.session.core.cell.1.arm("model.call.replay", late);
+        assert!(
+            f.call().is_ok_and(|o| o.result().is_ok()),
+            "{first}: real chat"
+        );
+        let trace = trace(&f);
+        let at = trace.iter().position(|t| *t == "replay").expect("replayed");
+        assert_eq!(trace[at + 1], step, "{first} precedes the next predicate");
+    }
+}
+
+/// F3: contention refuses at the override while a cancellation poll taken
+/// under that contention returns None; no dispatch notice; one admission
+/// per gate (no local retry); the session transport passes no observer.
+#[test]
+fn sb3_contended_gate_polls_live_and_notifies_nothing() {
+    if watched("sb3_contended_gate_polls_live_and_notifies_nothing") {
+        return;
+    }
+    positive("positive control");
+    let inference = include_str!("../inference.rs");
+    let transport = inference
+        .split("pub(crate) fn session_transport(")
+        .nth(1)
+        .and_then(|body| body.split("\n}\n").next())
+        .expect("the session transport");
+    assert!(
+        transport.contains("observer: None,") && transport.contains("transport.call("),
+        "the session transport's own context has no dispatch observer"
+    );
+    for i in 0..4 {
+        let f = Call::new();
+        let (runs, core) = (f.b.runs(), Arc::downgrade(&f.b.session.core));
+        let (release, rx) = std::sync::mpsc::channel::<()>();
+        let rx = Mutex::new(Some(rx));
+        let holder: Holder = Arc::new(Mutex::new(None));
+        let keep = holder.clone();
+        f.b.session.core.cell.1.every("model.call.polled", move || {
+            let core = core.upgrade().unwrap();
+            let trace = core.model.trace.lock().unwrap().clone();
+            let admitted = trace.iter().filter(|t| **t == "admitted").count();
+            let Some(rx) = (admitted == i).then(|| rx.lock().unwrap().take()).flatten() else {
+                return;
+            };
+            let (runs, (ready, wait)) = (runs.clone(), std::sync::mpsc::channel());
+            *keep.lock().unwrap() = Some(std::thread::spawn(move || {
+                let _hold = runs.model_observer();
+                ready.send(()).unwrap();
+                let _ = rx.recv_timeout(Duration::from_secs(3));
+            }));
+            wait.recv_timeout(Duration::from_secs(1)).unwrap();
+            core.model.trace.lock().unwrap().push("contended");
+        });
+        f.b.session
+            .core
+            .cell
+            .1
+            .arm("model.attempt.return", move || {
+                let _ = release.send(());
+            });
+        let outcome = f.call().expect("ticketed attempt");
+        holder
+            .lock()
+            .unwrap()
+            .take()
+            .expect("contended")
+            .join()
+            .unwrap();
+        let trace = trace(&f);
+        let from = trace.iter().position(|t| *t == "contended").unwrap();
+        let polled = trace[from..].iter().position(|t| *t == "poll:none");
+        let refused = trace[from..].iter().position(|t| *t == "refused:hold");
+        assert!(
+            polled.is_some_and(|p| refused.is_some_and(|r| p < r)),
+            "{i}: a poll under contention returned None before the refusal"
+        );
+        assert!(
+            !trace.contains(&"poll:cancelled"),
+            "{i}: polling stayed None"
+        );
+        assert_eq!(count(&f, "gate:"), i + 1, "{i}: no retry");
+        assert_eq!(notices(&f), 0, "{i}: no dispatch notice");
+        assert_eq!(f.sent(), CALL[..i], "{i}: affected and successors 0");
+        assert_eq!(
+            (class(&outcome), f.latched()),
+            ("model_cancelled", (false, false))
+        );
+    }
+    println!("{HELD_DONE} sb3_contended_gate_polls_live_and_notifies_nothing");
+}
+
+/// F4: each mission clock alone; a fixed backstop; a second attempt that
+/// crosses the original deadline; Stop and resume inside one attempt.
+#[test]
+fn sb3_call_clocks_backstop_and_watch_are_fixed() {
+    positive("positive control");
+    for clock in ["monotonic", "wall"] {
+        let f = Call::new();
+        let c = f.b.clock.clone();
+        let far = 1 << 50;
+        let (mono, wall) = match clock {
+            "monotonic" => (c.monotonic_ms() + 1000, far),
+            _ => (far, c.wall_ms() + 1000),
+        };
+        f.b.door
+            .context()
+            .narrow_mission_deadlines(c.clone(), mono, wall)
+            .unwrap();
+        assert!(
+            f.call().is_ok_and(|o| o.result().is_ok()),
+            "{clock}: attempt one"
+        );
+        let advance = move |c: &SplitClock, ms| match clock {
+            "monotonic" => c.mono_only(Duration::from_millis(ms)),
+            _ => c.wall_only(Duration::from_millis(ms)),
+        };
+        // A deadline renewed at attempt two would end 1,600 ms out; the
+        // original ends at 1,000 ms; gate 1 of attempt two is at 1,200 ms.
+        advance(&c, 600);
+        f.hook("model.call.gate", 1, move || advance(&c, 600));
+        let outcome = f.call().expect("attempt two starts before the deadline");
+        assert_eq!(
+            class(&outcome),
+            "model_timeout",
+            "{clock} crosses at gate 1"
+        );
+        assert_eq!(f.sent()[4..], CALL[..1], "{clock}: attempt two prefix");
+    }
+    // The backstop is captured once per attempt and never extended.
+    let f = Call::new();
+    let skew = f.b.session.core.model.backstop_skew.clone();
+    let gates = AtomicUsize::new(0);
+    f.b.session.core.cell.1.every("model.call.gate", move || {
+        match gates.fetch_add(1, Ordering::SeqCst) {
+            1 => skew.fetch_add(179_000, Ordering::SeqCst),
+            2 => skew.fetch_add(2_000, Ordering::SeqCst),
+            _ => 0,
+        };
+    });
+    let outcome = f.call().expect("ticketed attempt");
+    assert_eq!(
+        class(&outcome),
+        "model_timeout",
+        "the backstop was not extended"
+    );
+    assert_eq!(f.sent(), CALL[..2], "gate 2 refuses after 181 s");
+    assert!(
+        f.call().is_ok_and(|o| o.result().is_ok()),
+        "a new attempt, a new backstop"
+    );
+    // Stop and resume before the next gate of the same attempt.
+    let f = Call::new();
+    let control = f.b.control();
+    f.hook("model.call.gate", 1, move || {
+        assert!(control.kernel_stop_authority().engage() > 0);
+        control.resume_with_halt(&Owner, None).unwrap();
+    });
+    let outcome = f.call().expect("ticketed attempt");
+    assert!(
+        !f.b.control().stop_snapshot().kernel_stopped,
+        "resumed natively"
+    );
+    assert_eq!(class(&outcome), "model_stopped", "the retained watch");
+    let reread = f.b.session.core.model.registered_identity_for_test();
+    let door = &f.b.door;
+    let rebind = door.bind_inference_private(f.b.run, HASH, LABEL, reread.expect("installed M"));
+    assert_eq!(
+        rebind.map_err(|e| e.class()),
+        Err("halted"),
+        "a re-read identity restores nothing"
+    );
+    assert_eq!(f.call().map(|_| ()), Err("halted"), "no renewed authority");
+}
+
+/// F7 (SB3B-R3 2): a successful, durably recorded call whose exact pin
+/// cannot settle is Uncertain, never Recorded; the result stays separate.
+#[test]
+fn sb3_unsettled_recorded_call_is_uncertain() {
+    positive("positive control");
+    let f = Call::new();
+    let (runs, run) = (f.b.runs(), f.b.run);
+    f.b.session
+        .core
+        .cell
+        .1
+        .arm("model.attempt.return", move || {
+            runs.tamper_for_test(run, "pin")
+        });
+    let outcome = f.call().expect("ticketed attempt");
+    assert!(
+        matches!(outcome.record(), EndStatus::Uncertain),
+        "never Recorded"
+    );
+    assert!(outcome.result().is_ok(), "transport result kept separately");
+    assert_eq!(f.records(), 1, "exactly one durable record");
+    let o = f.obligations();
+    assert!(
+        o.active && o.uncertain && f.latched() == (true, true),
+        "slot debt"
+    );
+}
+
+/// F8: pre-ticket refusals through the call charge and meter nothing.
+#[test]
+fn sb3_call_r3_refusals_charge_nothing() {
+    positive("positive control");
+    for (case, class) in [
+        ("grant", "grant_not_live"),
+        ("observer", "halted"),
+        ("ninth", "model_over_budget"),
+        ("q", "halted"),
+        ("member", "not_member"),
+        ("sticky", "no_consent"),
+    ] {
+        let f = Call::new();
+        match case {
+            "grant" | "q" | "member" | "sticky" => fault(&f, case)(),
+            "observer" => f.owner.revoke(),
+            _ => (0..8).for_each(|_| drop(f.call().unwrap())),
+        }
+        let before = (f.sent().len(), f.charged(), f.records());
+        assert_eq!(f.call().map(|_| ()), Err(class), "{case}");
+        assert_eq!(
+            (f.sent().len(), f.charged(), f.records()),
+            before,
+            "{case}: 0/0/0"
+        );
+    }
+}
+
+/// SB3B-R5 (3), SB3B-R8 (9), SB3B-R11 P1: no clock is read under a gate's
+/// hold. That covers the clocks (blocking), the caller's
+/// `CallDeadline::expired()`, `Instant` in scope admission ("scope.clock")
+/// and the grant-poison failure path ("close.failed.published"). While a
+/// clock blocks, both holds are free and the call still completes.
+#[test]
+fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
+    if watched("sb3_call_gate_reads_clocks_and_deadline_before_any_hold") {
+        return;
+    }
+    positive("positive control");
+    for schedule in ["plain", "poison", "exhausted"] {
+        let poison = schedule == "poison";
+        let f = Call::new();
+        let c = f.b.clock.clone();
+        let (mono, wall) = (c.monotonic_ms() + 600_000, c.wall_ms() + 600_000);
+        let context = f.b.door.context();
+        context
+            .narrow_mission_deadlines(c.clone(), mono, wall)
+            .unwrap();
+        let held = Arc::new(Mutex::new(Vec::new()));
+        let late = Arc::new(Mutex::new(Vec::new()));
+        let (runs, run, control) = (f.b.runs(), f.b.run, f.b.control());
+        let (seen, keep, window) = (held.clone(), late.clone(), Arc::new(AtomicBool::new(false)));
+        let open = window.clone();
+        let check: Arc<dyn Fn(&'static str) + Send + Sync> = Arc::new(move |what| {
+            if !open.load(Ordering::SeqCst) {
+                return;
+            }
+            let runs = runs.clone();
+            let table = std::thread::spawn(move || runs.model_accounting(run)).join();
+            let (control, (tx, rx)) = (control.clone(), std::sync::mpsc::channel());
+            let store = std::thread::spawn(move || {
+                drop(control.authority().grants().hold_for_test()); // Released, then free.
+                let _ = tx.send(());
+            });
+            let free = rx.recv_timeout(Duration::from_secs(2)).is_ok();
+            keep.lock().unwrap().push(store);
+            if table.is_err() || !free {
+                seen.lock().unwrap().push((what, table.is_err(), !free));
+            }
+        });
+        let reads = Arc::new(AtomicUsize::new(0));
+        let (count, clock_check) = (reads.clone(), check.clone());
+        *c.on_read.lock().unwrap() = Some(Arc::new(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            clock_check("clock");
+        }));
+        let hooks = &f.b.session.core.cell.1;
+        for (at, what) in [
+            ("scope.clock", "instant"),
+            ("close.failed.published", "fail"),
+        ] {
+            let check = check.clone();
+            hooks.every(at, move || check(what));
+        }
+        let (on, gates, poisoner) = (window.clone(), AtomicUsize::new(0), f.b.control());
+        let scope = f.b.door.context.scope.clone();
+        hooks.every("model.call.gate", move || {
+            on.store(true, Ordering::SeqCst);
+            let gate = gates.fetch_add(1, Ordering::SeqCst);
+            if gate == 1 && schedule == "exhausted" {
+                scope.next_step.store(u64::MAX, Ordering::SeqCst); // SB3B-R13 (P1)
+            }
+            if poison && gate == 1 {
+                let control = poisoner.clone();
+                let _ = std::thread::spawn(move || {
+                    let _held = control.authority().grants().hold_for_test();
+                    std::panic::resume_unwind(Box::new("poison the grant store (test)"));
+                })
+                .join();
+            }
+        });
+        let off = window.clone();
+        hooks.arm("model.attempt.return", move || {
+            off.store(false, Ordering::SeqCst)
+        });
+        let deadline = Probing(check, AtomicUsize::new(0));
+        let observer = f.owner.observer();
+        let door = &f.b.door;
+        let outcome = door.model_call_private(run, &request(), &f.meter, &deadline, &observer);
+        window.store(false, Ordering::SeqCst);
+        for store in std::mem::take(&mut *late.lock().unwrap()) {
+            store.join().unwrap();
+        }
+        assert!(
+            reads.load(Ordering::SeqCst) >= 4,
+            "the gates read the clocks"
+        );
+        assert!(
+            deadline.1.load(Ordering::SeqCst) >= 1,
+            "the deadline is read"
+        );
+        assert_eq!(
+            *held.lock().unwrap(),
+            [],
+            "(what, run table, grant store) held"
+        );
+        let outcome = outcome.expect("ticketed attempt");
+        let expected = if schedule == "plain" {
+            "ok"
+        } else {
+            "model_cancelled"
+        };
+        let failed = f.b.session.core.cell.session_word() & FAILED != 0;
+        assert!(
+            failed || schedule == "plain",
+            "{schedule}: the failure latch holds"
+        );
+        assert_eq!(
+            class(&outcome),
+            expected,
+            "a blocking clock delays, never refuses"
+        );
+    }
+    println!("{HELD_DONE} sb3_call_gate_reads_clocks_and_deadline_before_any_hold");
+}
+/// A caller deadline that checks, at every reading, that no hold is held.
+struct Probing(Arc<dyn Fn(&'static str) + Send + Sync>, AtomicUsize);
+impl CallDeadline for Probing {
+    fn expired(&self) -> bool {
+        self.1.fetch_add(1, Ordering::SeqCst);
+        (self.0)("deadline");
+        false
+    }
+}
+
+/// SB3B-R5 (1) at R5, as corrected by SB3B-R8 (8). A revocation starts at
+/// a gate's observer read, and the revoker is joined before judging. A
+/// test seam observes each successful CAS admission (`model.call.admitted`
+/// fires right after the CAS, under the holds). The invariant is that no
+/// CAS admission follows a completed revocation. A slow revoker only
+/// removes evidence; it can never fail correct code.
+#[test]
+fn sb3_call_grant_revocation_cannot_precede_the_cas() {
+    if watched("sb3_call_grant_revocation_cannot_precede_the_cas") {
+        return;
+    }
+    positive("positive control");
+    for i in 0..4 {
+        let f = Call::new();
+        let (control, grant) = (f.b.control(), f.b.grant());
+        let done = Arc::new(AtomicBool::new(false));
+        let (finished, after) = (done.clone(), done.clone());
+        let holder: Holder = Arc::new(Mutex::new(None));
+        let keep = holder.clone();
+        f.hook("model.call.observed", i, move || {
+            let (control, finished) = (control.clone(), finished.clone());
+            let (tx, rx) = std::sync::mpsc::channel();
+            *keep.lock().unwrap() = Some(std::thread::spawn(move || {
+                let _ = control.authority().grants().revoke(grant);
+                finished.store(true, Ordering::SeqCst);
+                let _ = tx.send(());
+            }));
+            let _ = rx.recv_timeout(Duration::from_secs(2));
+        });
+        let invalid = Arc::new(AtomicUsize::new(0));
+        let flagged = invalid.clone();
+        f.b.session
+            .core
+            .cell
+            .1
+            .every("model.call.admitted", move || {
+                if after.load(Ordering::SeqCst) {
+                    flagged.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+        let outcome = f.call().expect("ticketed attempt");
+        holder
+            .lock()
+            .unwrap()
+            .take()
+            .expect("gate reached")
+            .join()
+            .unwrap();
+        assert_eq!(
+            invalid.load(Ordering::SeqCst),
+            0,
+            "{i}: a CAS admission followed a completed revocation"
+        );
+        assert!(done.load(Ordering::SeqCst), "{i}: the revoker was joined");
+        let grants = f.b.control();
+        assert!(
+            grants.authority().grants().live(f.b.grant()).is_none(),
+            "{i}: revocation landed"
+        );
+        assert!(recorded(&outcome), "{i}: one recorded result");
+    }
+    println!("{HELD_DONE} sb3_call_grant_revocation_cannot_precede_the_cas");
+}
+
+/// SB3B-R13 (P2): mission limits installed after a gate sampled none (so
+/// no reading exists for them) refuse that gate's CAS; never fabricated time.
+#[test]
+fn sb3_limits_without_a_sample_fail_closed() {
+    positive("positive control");
+    for i in 0..4 {
+        let f = Call::new();
+        let (context, clock) = (f.b.door.context(), f.b.clock.clone());
+        f.hook("model.call.observed", i, move || {
+            let installed = context.narrow_mission_deadlines(clock.clone(), 1, 1);
+            assert!(installed.is_ok(), "already-expired, positive limits");
+        });
+        let outcome = f.call().expect("ticketed attempt");
+        assert_eq!(
+            f.sent(),
+            CALL[..i],
+            "{i}: limits without a sample refuse the CAS"
+        );
+        assert!(recorded(&outcome), "{i}: recorded");
+    }
+}
+
+/// SB3B-R11 P2: a slow metadata or chat request crossing the original Q,
+/// either mission clock or the backstop ends `model_timeout`, recorded so.
+#[test]
+fn sb3_slow_request_crossing_a_deadline_times_out() {
+    if watched("sb3_slow_request_crossing_a_deadline_times_out") {
+        return;
+    }
+    positive("positive control");
+    for i in [0, 3] {
+        for kind in ["q", "wall", "monotonic", "backstop"] {
+            let (f, outcome, _) = held_request_at(i, move |f| match kind {
+                "q" => f.b.session.expire_request_for_test(f.b.q.sequence()),
+                "backstop" => drop(
+                    f.b.session
+                        .core
+                        .model
+                        .backstop_skew
+                        .fetch_add(181_000, Ordering::SeqCst),
+                ),
+                _ => {
+                    let c = f.b.clock.clone();
+                    let (m, w) = (c.monotonic_ms() + 1_000, c.wall_ms() + 1_000);
+                    f.b.door
+                        .context()
+                        .narrow_mission_deadlines(c.clone(), m, w)
+                        .unwrap();
+                    let by = Duration::from_secs(2);
+                    if kind == "wall" {
+                        c.wall_only(by)
+                    } else {
+                        c.mono_only(by)
+                    }
+                }
+            });
+            assert_eq!(
+                class(&outcome),
+                "model_timeout",
+                "{kind} during request {i}"
+            );
+            let rows = f.b.primary.store().rows();
+            let call = rows.iter().rfind(|r| r.phase == "model_call").unwrap();
+            let timed_out = recorded(&outcome) && call.body.contains("\"timeout\"");
+            assert!(timed_out, "{kind} {i}: recorded model_timeout");
+        }
+    }
+    println!("{HELD_DONE} sb3_slow_request_crossing_a_deadline_times_out");
+}
+
+/// F11 for B1b (SB3B-R8 10, SB3B-R11 O3): every production module of
+/// host_session (a cfg(test) declaration in host_session.rs skips one),
+/// host_session.rs, run.rs and inference.rs are scanned for every B1b seam
+/// and helper; each is declared and used; removing a field's
+/// `#[cfg(test)]` or adding a production use turns the guard RED.
+#[test]
+fn sb3_b1b_test_seams_are_test_only() {
+    let fields = ["trace", "backstop_skew", "chat_replay", "chat_early"];
+    let helpers = [
+        "SkewClock",
+        "b1b_note",
+        "b1b_latch_probe",
+        "b1b_gate_entry",
+        "b1b_gate_exit",
+    ];
+    let model = include_str!("model.rs");
+    for seam in fields.iter().chain(&helpers) {
+        let sites = seam_sites(model, &[seam]).len();
+        assert!(sites >= 2, "{seam}: declared and used ({sites})");
+    }
+    let mut seams: Vec<&str> = fields.iter().chain(&helpers).copied().collect();
+    seams.push("registered_identity_for_test"); // read by tests only
+    seams.extend(["expired_request", "expire_request_for_test"]); // SB3B-R18 Q seam
+    let parent = include_str!("../host_session.rs");
+    let (code, mut scanned) = (mask(parent), 0);
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host_session");
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let at = code.find(&format!("mod {name};")).expect("declared module");
+        if !test_only(&code, at) {
+            let source = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(
+                leaks(&source, &seams),
+                0,
+                "{name}.rs: a B1b seam outside cfg(test)"
+            );
+            scanned += 1;
+        }
+    }
+    assert_eq!(scanned, 7, "every production host_session module scanned");
+    let run = include_str!("../authority/run.rs");
+    for (name, source) in [("host_session.rs", parent), ("run.rs", run)] {
+        assert_eq!(
+            leaks(source, &seams),
+            0,
+            "{name}: a B1b seam outside cfg(test)"
+        );
+    }
+    let inference = include_str!("../inference.rs");
+    assert_eq!(
+        leaks(inference, &seams),
+        0,
+        "inference.rs: a B1b seam outside cfg(test)"
+    );
+    for seam in fields {
+        let declared = format!("    #[cfg(test)]\n    pub(super) {seam}:");
+        assert_eq!(model.matches(&declared).count(), 1, "{seam} declaration");
+        let uncfg = model.replace(&declared, &format!("    pub(super) {seam}:"));
+        assert!(leaks(&uncfg, &[seam]) >= 1, "{seam}: cfg removal is RED");
+    }
+    let declared = "    #[cfg(test)]\n    expired_request:";
+    assert_eq!(parent.matches(declared).count(), 1, "Q seam declaration");
+    let uncfg = parent.replace(declared, "    expired_request:");
+    assert!(
+        leaks(&uncfg, &["expired_request"]) >= 1,
+        "Q seam: cfg removal is RED"
+    );
+    for seam in &seams {
+        let used = format!("{model}\nfn production() {{\n    {seam}();\n}}\n");
+        assert!(
+            leaks(&used, &[seam]) >= 1,
+            "{seam}: a production use is RED"
+        );
+    }
+}
+
+// SB-3B1e: test-only evidence carries (SB3B-R3, SB3B-R15).
+
+/// F10a: the marker a held schedule's child prints when its body ends.
+const HELD_DONE: &str = "SB3B1E HELD BODY DONE";
+/// F10a: a held schedule runs only in a child process of this test binary,
+/// under one 30 s deadline with kill and wait. The parent requires the
+/// child's success AND the body's marker, so a skipped body cannot pass.
+/// Returns true in the parent (the schedule ran in the child).
+fn watched(name: &str) -> bool {
+    use std::io::Read;
+    const CHILD: &str = "SB3B1E_HELD_CHILD";
+    if std::env::var(CHILD).is_ok_and(|child| child == name) {
+        return false;
+    }
+    struct Owned(std::process::Child);
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let test = format!("host_session::model_call_tests::{name}");
+    let mut child = Owned(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &test, "--nocapture", "--test-threads=1"])
+            .env(CHILD, name)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut stdout = child.0.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = stdout.read_to_string(&mut out);
+        out
+    });
+    let until = Instant::now() + Duration::from_secs(30);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(
+            Instant::now() < until,
+            "{name}: the held child exceeded 30 s"
+        );
+        std::thread::sleep(Duration::from_millis(5)); // Polls completion only.
+    };
+    let out = reader.join().unwrap();
+    let marker = out.contains(&format!("{HELD_DONE} {name}"));
+    assert!(
+        status.success() && marker,
+        "{name}: child success and its marker"
+    );
+    true
+}
+
+/// A2 and F6 (SB3B-R2 6): while one operation holds the slot at
+/// registration, metadata, chat, recording or owner completion, a second
+/// acquisition refuses before its ticket: attempts/records/charges 0/0/0.
+#[test]
+fn sb3_concurrent_operation_refuses_before_ticket() {
+    if watched("sb3_concurrent_operation_refuses_before_ticket") {
+        return;
+    }
+    positive("positive control");
+    // Registration precedes READY: no original door exists to call through.
+    let r = super::model_tests::fixture();
+    let p = Peer::new(None, None);
+    let gate = r.session.core.cell.1.clone();
+    let paused = crate::test_hooks::Gate::new();
+    let pause = paused.clone();
+    gate.arm("model.reserved", move || pause.hold());
+    std::thread::scope(|s| {
+        let registration = s.spawn(|| r.session.register_model_private(&p.endpoint, &pin()));
+        let open = Finally(|| paused.open()); // Released even if an assertion fails.
+        paused.reached();
+        let q = r.session.ingress().accept(CommandKind::Run, 1);
+        let no_door = q.is_err() || r.session.open_file_door(&q.unwrap()).is_err();
+        assert!(no_door, "registration: no door to acquire through");
+        let sent = p.paths.lock().unwrap().len();
+        let second = model::reserve(&r.session.core, &r.session.bootstrap.scope);
+        assert!(second.is_err(), "registration: second acquisition refused");
+        // SB3B-R19 (1): no run exists, so no attempt; no model_call record;
+        // no CallMeter exists before READY, and no chat request was sent.
+        let attempts = r
+            .session
+            .control_for_test()
+            .authority()
+            .runs()
+            .len_for_test();
+        let rows = r.primary.store().rows();
+        let records = rows.iter().filter(|row| row.phase == "model_call").count();
+        let paths = p.paths.lock().unwrap().clone();
+        let charges = paths.iter().filter(|path| *path == "/api/chat").count();
+        assert_eq!(
+            (attempts, records, charges, paths.len()),
+            (0, 0, 0, sent),
+            "registration held: attempts/records/charges 0/0/0, nothing sent"
+        );
+        let slot = r.session.core.model.snapshot().expect("slot observable");
+        let held = (slot.operation, slot.active, slot.record);
+        assert_eq!(
+            held,
+            ("registration", true, "pending"),
+            "registration: slot"
+        );
+        drop(open);
+        assert!(registration.join().unwrap().is_ok());
+    });
+    for what in ["metadata", "chat", "recording", "owner_completion"] {
+        let f = match what {
+            "metadata" => Call::serve(Peer::chat(Some(4), None)),
+            "chat" => Call::serve(Peer::chat(Some(7), None)),
+            _ => Call::new(),
+        };
+        let gate = match what {
+            "recording" => Some(f.hold("model.attempt.record.before")),
+            "owner_completion" => Some(f.hold("model.settle.before")),
+            _ => None,
+        };
+        std::thread::scope(|s| {
+            let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
+            let call = s.spawn(move || invoke(door, run, &request(), meter, &observer));
+            // SB3B-R19 (3): the held worker is released even if an assertion fails.
+            let release = Finally(|| match &gate {
+                Some(gate) => gate.open(),
+                None => f.restriction("emergency_restrict")(),
+            });
+            match &gate {
+                Some(gate) => gate.reached(),
+                None => f.entered(if what == "metadata" { 1 } else { 4 }),
+            }
+            let before = (f.counts(), f.records(), f.charged().0);
+            assert!(f.call().is_err(), "{what}: second acquisition refused");
+            let after = (f.counts(), f.records(), f.charged().0);
+            assert_eq!(after, before, "{what}: 0/0/0");
+            drop(release);
+            assert!(call.join().unwrap().is_ok_and(|o| recorded(&o)), "{what}");
+        });
+    }
+    println!("{HELD_DONE} sb3_concurrent_operation_refuses_before_ticket");
+}
+
+/// Runs its closure when dropped, on unwinding too (SB3B-R19 (3)).
+struct Finally<F: Fn()>(F);
+impl<F: Fn()> Drop for Finally<F> {
+    fn drop(&mut self) {
+        (self.0)();
+    }
+}
+
+/// F9 (SB3B-R2 9): exactly one native result record, carrying the admitted
+/// attempt's correlation and the returned result's own code.
+fn one_correlated_record(f: &Call, outcome: &ModelCallOutcome) {
+    let rows = f.b.primary.store().rows();
+    let json = |phase: &str| -> Vec<serde_json::Value> {
+        let rows = rows.iter().filter(|row| row.phase == phase);
+        rows.map(|row| serde_json::from_str(&row.body).unwrap())
+            .collect()
+    };
+    let (calls, doors) = (json("model_call"), json("agent_door_opened"));
+    assert_eq!(calls.len(), 1, "exactly one native result record");
+    let (run, agent) = (calls[0]["run"].as_str(), calls[0]["agent"].as_str());
+    let own = f.b.run.to_string();
+    assert_eq!(
+        (run, agent),
+        (Some(&*own), Some("mother")),
+        "record run and agent"
+    );
+    let door = doors.last().expect("door record")["detail"]["door"].clone();
+    let code = match outcome.result() {
+        Err(crate::authority::AuthorityError::ModelCall(error)) => error.code(),
+        _ => "ok",
+    };
+    for (key, value) in [
+        ("door", door.as_str().unwrap().to_owned()),
+        ("contract_hash", HASH.into()),
+        ("request", LABEL.into()),
+        ("identity", hex::encode(f.b.identity)),
+        ("call", "1".into()),
+        ("outcome", code.into()),
+    ] {
+        let found = calls[0]["detail"][key].as_str();
+        assert_eq!(found, Some(&*value), "record correlation {key}");
+    }
+}
+
+/// R4 at the call level (moved from B1b): a continuation and a
+/// conversation never call; nothing is ticketed, sent or charged.
+#[test]
+fn sb3_private_call_refuses_continuation_and_conversation() {
+    positive("the original door calls");
+    let f = Call::new();
+    let continuation = f.b.door_with(f.b.door.context(), DoorKind::Continuation);
+    let observer = f.owner.observer();
+    let refused = invoke(&continuation, f.b.run, &request(), &f.meter, &observer);
+    assert_eq!(
+        refused.map(|_| ()),
+        Err("halted"),
+        "a continuation never calls"
+    );
+    let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
+    let opening = nexus_kernel::inference::Conversation::new("s".into(), "u".into()).unwrap();
+    let conversation = ModelRequest::conversation(&opening, schema).unwrap();
+    let refused = invoke(&f.b.door, f.b.run, &conversation, &f.meter, &observer);
+    assert_eq!(
+        refused.map(|_| ()),
+        Err("model_config_mismatch"),
+        "conversation"
+    );
+    let nothing = (f.counts(), f.sent().len(), f.charged().0);
+    assert_eq!(nothing, ((0, 0), 0, 0), "before ticket");
+}
+
+/// G0 at R3 through the call (moved from B1b): without the original live
+/// grant nothing is ticketed, sent or charged; another grant never stands in.
+#[test]
+fn sb3_original_file_grant_required_at_r3_through_the_call() {
+    positive("original grant reaches chat");
+    for case in ["revoked", "expired", "scope", "substitute"] {
+        let f = Call::new();
+        let control = f.b.control();
+        if case == "substitute" {
+            let other = f.b.session.grant_for_test(&f.b.q).unwrap();
+            let live = control.authority().grants().live(other).is_some();
+            assert!(live, "another live grant");
+        }
+        match case {
+            "expired" => f.b.clock.advance(Duration::from_secs(3600)),
+            "scope" => f.b.runs().tamper_for_test(f.b.run, "workspace"),
+            _ => control.authority().grants().revoke(f.b.grant()).unwrap(),
+        }
+        assert_eq!(f.call().map(|_| ()), Err("grant_not_live"), "R3 {case}");
+        let nothing = (f.counts(), f.sent().len(), f.charged().0);
+        assert_eq!(nothing, ((0, 0), 0, 0), "R3 {case}: no ticket");
+    }
+}
+
+/// SB-2a registration-gate contention (moved from B1b): each of the four
+/// registration gates refuses under contention and latches nothing.
+#[test]
+fn sb3_registration_gate_contention_latches_nothing() {
+    for i in 0..4 {
+        let r = super::model_tests::fixture();
+        let p = Peer::new(None, None);
+        let core = Arc::downgrade(&r.session.core);
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let rx = Mutex::new(Some(rx));
+        super::model_tests::nth(&r.session, "model.gate.before", i, move || {
+            let (core, rx) = (core.upgrade().unwrap(), rx.lock().unwrap().take().unwrap());
+            let (ready, wait) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _held = core.model.state.lock().unwrap();
+                ready.send(()).unwrap();
+                let _ = rx.recv_timeout(Duration::from_secs(3));
+            });
+            wait.recv_timeout(Duration::from_secs(1)).unwrap();
+        });
+        // The gate has refused; release before completion's own bounded hold.
+        let release = Mutex::new(Some(tx));
+        r.session
+            .core
+            .cell
+            .1
+            .arm("model.complete.contended", move || {
+                let _ = release.lock().unwrap().take().map(|tx| tx.send(()));
+            });
+        let refused = r.session.register_model_private(&p.endpoint, &pin());
+        assert!(refused.is_err(), "registration gate {i}: contended");
+        let uncertain = r.session.core.model.uncertain.load(Ordering::SeqCst);
+        let failed = r.session.core.cell.session_word() & FAILED != 0;
+        assert_eq!((uncertain, failed), (false, false), "registration gate {i}");
+    }
+}
+
+// SB-3B1e F10b (SB3B-R15, R16, R18): the schedule matrix. Its literal rows
+// are `model-bridge-cases.tsv` stage `SB-3B1e-M`, one per (side, class).
+const CASES: &str = include_str!("../../../../mother/host/tests/session/model-bridge-cases.tsv");
+const SIDES: [&str; 10] = [
+    "r3_reserve:before",
+    "r3_reserve:after",
+    "r3_cas:before",
+    "r3_cas:after",
+    "charge:before",
+    "charge:after",
+    "r5_observer:before",
+    "r5_observer:after", // SB3B-R19 (5): IDENTICAL_POINT to r5_cas:before.
+    "r5_cas:before",
+    "r5_cas:after",
+];
+const CLASSES: [&str; 15] = [
+    "emergency",
+    "cancel_run",
+    "door_halt",
+    "quit",
+    "session_failure",
+    "q_expiry",
+    "mission_wall",
+    "mission_mono",
+    "native_halt",
+    "run_finish",
+    "grant_revocation",
+    "grant_expiry",
+    "evidence_failure",
+    "contention",
+    "poison",
+];
+const STATES: [&str; 8] = [
+    "bootstrap",
+    "emergency_state",
+    "failed",
+    "closing_normal",
+    "closing_restricted",
+    "sealed",
+    "closed_clean",
+    "closed_unclean",
+];
+/// SB3B-R18 (1): the two narrowing cells, beyond the class dimension.
+const NARROWED: [&str; 2] = [
+    "r5_cas:before/mission_wall_narrowed",
+    "r5_cas:before/mission_mono_narrowed",
+];
+/// SB3B-R18, closed by B1f: no cell is open or deferred any more.
+const KNOWN_DEFECT: [&str; 0] = [];
+const DEFERRED: [&str; 0] = [];
+/// SB3B-R19 (6): each N/A reason, the states it may cover, whether it may
+/// cover the first sink, and its one named oracle.
+const NA_TABLE: [(&str, &[&str], bool, &str); 2] = [
+    (
+        "BOOTSTRAP_NO_MISSION",
+        &["bootstrap"],
+        true,
+        "sb3_concurrent_operation_refuses_before_ticket",
+    ),
+    (
+        "LIFECYCLE_DENIES_BEFORE_THIS_SINK",
+        &["sealed", "closed_clean", "closed_unclean"],
+        false,
+        "sb2_unjoined_or_owed_prevents_clean_close",
+    ),
+];
+/// SB3B-R19 (6): identical instants (side, side), same class or state: the
+/// observer read is immediately followed by `model.call.observed`.
+const IDENTICAL: [(&str, &str); 1] = [("r5_observer:after", "r5_cas:before")];
+/// The one test executing a side's cells; a direct citation names it.
+fn matrix_test(side: &str) -> String {
+    format!("sb3_matrix_{}", side.replace(':', "_"))
+}
+type Row = (&'static str, &'static str, &'static str, &'static str);
+/// The matrix rows: (side, class, test or tag, expected).
+fn matrix() -> Vec<Row> {
+    let rows = CASES
+        .lines()
+        .map(|line| line.split('\t').collect::<Vec<_>>());
+    let rows = rows.filter(|r| r.len() == 5 && r[4] == "SB-3B1e-M");
+    rows.map(|r| (r[2], r[0].rsplit('/').next().unwrap(), r[1], r[3]))
+        .collect()
+}
+/// A class (or executed state) made true where `side` puts it.
+/// The contention holder and its release, owned by the schedule.
+type Keep = Arc<
+    Mutex<(
+        Option<std::thread::JoinHandle<()>>,
+        Option<std::sync::mpsc::Sender<()>>,
+    )>,
+>;
+fn release_holder(keep: &Keep) {
+    let (holder, release) = std::mem::take(&mut *keep.lock().unwrap());
+    drop(release);
+    if let Some(holder) = holder {
+        holder.join().unwrap();
+    }
+}
+fn matrix_fault(f: &Call, class: &'static str, keep: &Keep) -> Arc<dyn Fn() + Send + Sync> {
+    let (control, run, clock, session) = (
+        f.b.control(),
+        f.b.run,
+        f.b.clock.clone(),
+        f.b.session.clone(),
+    );
+    let (context, runs, keep) = (f.b.door.context(), f.b.runs(), keep.clone());
+    match class {
+        "emergency" | "emergency_state" => Arc::new(f.restriction("emergency_restrict")),
+        "cancel_run" | "door_halt" => Arc::new(f.restriction(class)),
+        "quit" | "closing_normal" => Arc::new(f.restriction("close_restrict")),
+        "closing_restricted" => {
+            let (emergency, quit) = (f.restriction("emergency_restrict"), f.restriction("quit"));
+            Arc::new(move || {
+                emergency();
+                quit();
+                assert_eq!(session.ingress().state(), SessionState::ClosingRestricted);
+            })
+        }
+        "sealed" | "closed_clean" | "closed_unclean" => Arc::new(move || {
+            // SB3B-R18 (3): set on the session word, in test only.
+            let quit = session.ingress().accept(CommandKind::Quit, 9);
+            assert!(quit.is_ok(), "closing");
+            let word = session.core.cell.session_word();
+            let next = match class {
+                "sealed" => (word | SEALED) & !READY,
+                "closed_clean" => word | SEALED,
+                _ => word | SEALED | FAILED,
+            };
+            assert!(session.core.cell.session_compare(word, next).is_ok());
+            let state = match class {
+                "sealed" => SessionState::SealedFinalizing,
+                "closed_clean" => SessionState::ClosedClean,
+                _ => SessionState::ClosedUnclean,
+            };
+            assert_eq!(session.ingress().state(), state, "{class}");
+        }),
+        "session_failure" | "failed" => Arc::new(move || context.fail()),
+        "mission_wall" => Arc::new(move || clock.wall_only(Duration::from_secs(2))),
+        "mission_mono" => Arc::new(move || clock.mono_only(Duration::from_secs(2))),
+        "mission_wall_narrowed" | "mission_mono_narrowed" => Arc::new(move || {
+            let far = 1 << 50;
+            let (m, w) = match class {
+                "mission_wall_narrowed" => (far, clock.wall_ms()),
+                _ => (clock.monotonic_ms(), far),
+            };
+            context
+                .narrow_mission_deadlines(clock.clone(), m, w)
+                .unwrap();
+        }),
+        "run_finish" => Arc::new(move || control.finish_run(run)),
+        "grant_expiry" => Arc::new(move || clock.advance(Duration::from_secs(3600))),
+        "contention" | "poison" => Arc::new(move || {
+            let (runs, (ready, wait), poison) =
+                (runs.clone(), std::sync::mpsc::channel(), class == "poison");
+            let (release, held) = std::sync::mpsc::channel::<()>();
+            let holder = std::thread::spawn(move || {
+                let _hold = runs.model_observer();
+                ready.send(()).unwrap();
+                if poison {
+                    std::panic::resume_unwind(Box::new("poison the run table (test)"));
+                }
+                let _ = held.recv_timeout(Duration::from_secs(5)); // Until released.
+            });
+            wait.recv_timeout(Duration::from_secs(5)).unwrap();
+            if poison {
+                assert!(holder.join().is_err(), "run table poisoned");
+            } else {
+                *keep.lock().unwrap() = (Some(holder), Some(release));
+            }
+        }),
+        _ => Arc::from(fault(
+            f,
+            match class {
+                "q_expiry" => "q",
+                "native_halt" => "watch",
+                "grant_revocation" => "grant",
+                _ => "health", // evidence_failure
+            },
+        )),
+    }
+}
+
+/// One schedule: `class` lands at `side` (gate `i` of the R5 sides). A
+/// fault that needs a hold the call owns at that point runs on its own
+/// thread and is joined at the next point that holds nothing.
+fn run_schedule(
+    class: &'static str,
+    side: &str,
+    i: usize,
+) -> (Call, Result<ModelCallOutcome, &'static str>) {
+    let f = Call::new();
+    if let Some(kind) = class.strip_prefix("mission_") {
+        let (c, far) = (f.b.clock.clone(), 1 << 50);
+        let (m, w) = match kind {
+            "mono" => (c.monotonic_ms() + 1000, far),
+            "wall" => (far, c.wall_ms() + 1000),
+            _ => (far, far), // Narrowed at the side.
+        };
+        f.b.door
+            .context()
+            .narrow_mission_deadlines(c.clone(), m, w)
+            .unwrap();
+    }
+    let keep: Keep = Arc::default();
+    let (act, landed, pending) = (
+        matrix_fault(&f, class, &keep),
+        Arc::new(AtomicBool::new(false)),
+        Holder::default(),
+    );
+    let (point, held) = match side {
+        "r3_reserve:before" => ("", false),
+        "r3_reserve:after" => ("model.attempt.reserved", false),
+        "r3_cas:before" => ("model.attempt.checked", true),
+        "r3_cas:after" => ("model.call.polled", false), // The first observation.
+        "charge:before" => ("meter.entry", false),
+        "charge:after" => ("meter.charged", false),
+        "r5_observer:before" => ("model.call.gate", false),
+        "r5_sample:after" => ("model.call.sampled", false), // B1f: before the hold
+        "r5_cas:before" => ("model.call.observed", true),
+        _ => ("model.call.admitted", true),
+    };
+    let serial = held
+        && matches!(
+            class,
+            "cancel_run"
+                | "door_halt"
+                | "run_finish"
+                | "grant_revocation"
+                | "contention"
+                | "poison"
+        );
+    let (word, core) = (
+        f.b.session.core.cell.session_word(),
+        f.b.session.core.clone(),
+    );
+    let (done, later) = (landed.clone(), pending.clone());
+    let fire: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let (act, done) = (act.clone(), done.clone());
+        let run = move || {
+            act();
+            done.store(true, Ordering::SeqCst);
+        };
+        if !serial {
+            return run();
+        }
+        *later.lock().unwrap() = Some(std::thread::spawn(run));
+        if class == "door_halt" {
+            // Its cell engagement precedes its run-table part: wait for it.
+            let until = Instant::now() + Duration::from_secs(5);
+            while core.cell.session_word() == word {
+                assert!(Instant::now() < until, "door halt engaged");
+                std::thread::yield_now();
+            }
+        }
+    });
+    let join = move || {
+        if let Some(fault) = pending.lock().unwrap().take() {
+            fault.join().unwrap();
+        }
+    };
+    let hooks = &f.b.session.core.cell.1;
+    for at in ["model.call.gate", "model.call.polled"] {
+        let join = join.clone();
+        hooks.every(at, join);
+    }
+    let (end, kept) = (join.clone(), keep.clone());
+    hooks.every("model.attempt.return", move || {
+        end();
+        release_holder(&kept);
+    });
+    let (meter, at) = (join.clone(), fire.clone());
+    let metered: Box<dyn Fn() + Send> = Box::new(move || {
+        meter();
+        at();
+    });
+    match point {
+        "" => fire(),
+        "meter.entry" => *f.meter.at_entry.lock().unwrap() = Some(metered),
+        "meter.charged" => *f.meter.at_charge.lock().unwrap() = Some(metered),
+        _ => f.hook(point, i, move || fire()),
+    }
+    let outcome = f.call();
+    join();
+    release_holder(&keep);
+    assert!(
+        landed.load(Ordering::SeqCst),
+        "{side}/{class} {i}: the fault landed"
+    );
+    (f, outcome)
+}
+
+/// F10b (SB3B-R16 (c)): each class fault at each probe point. `pre:C`
+/// refuses before the ticket; `at:C:S` is judged at that side's own gate
+/// (step S, or `poll` for the transport's deny-only guard) with no further
+/// admission; `next:C:S` lets at most the selected request overlap and the
+/// next gate (or the guard) refuses. An entered chat has no next gate.
+fn judge(
+    f: &Call,
+    (side, class, i): (&str, &str, usize),
+    expected: &str,
+    outcome: Result<ModelCallOutcome, &str>,
+) {
+    let what = format!("{side}/{class} gate {i}");
+    let mut e = expected.splitn(3, ':');
+    let (when, literal, step) = (e.next().unwrap(), e.next().unwrap(), e.next().unwrap_or(""));
+    if when == "pre" {
+        assert_eq!(
+            outcome.map(|_| ()),
+            Err(literal),
+            "{what}: refused before the ticket"
+        );
+        let nothing = (f.sent().len(), f.charged(), f.records());
+        assert_eq!(
+            nothing,
+            (0, (0, 0), 0),
+            "{what}: no request, charge or record"
+        );
+        if class != "poison" {
+            assert_eq!(f.counts(), (0, 0), "{what}: no attempt or pin");
+        }
+        return;
+    }
+    assert!(matches!(when, "at" | "next"), "{what}: {expected}");
+    let outcome = outcome.unwrap_or_else(|e| panic!("{what}: refused before the ticket ({e})"));
+    let base = match &side[..2] {
+        "r3" => 0,
+        "ch" => 3,
+        _ => i,
+    };
+    let (entered, gated) = (when == "next", step != "poll");
+    let (sent, chat) = (f.sent(), entered && i == 3);
+    let admitted = count(f, "admitted");
+    assert_eq!(
+        admitted,
+        base + usize::from(entered),
+        "{what}: the next gate refuses"
+    );
+    let (low, high) = match (entered, gated) {
+        (false, _) => (base, base),
+        (true, true) => (i + 1, i + 1),
+        _ => (i, i + 1),
+    };
+    let overlap = (low..=high).contains(&sent.len()) && CALL[..sent.len()] == sent[..];
+    assert!(
+        overlap,
+        "{what}: at most one overlapping request ({sent:?})"
+    );
+    let steps: &[&str] = if gated && !chat { &[step] } else { &[] };
+    assert_eq!(refusals(f), steps, "{what}: judged at its step");
+    let got = class_of(&outcome);
+    let literal = match () {
+        () if chat && gated => got == "ok", // The entered chat completes.
+        () if sent.len() == 4 => got == literal || got == "model_late",
+        () => got == literal,
+    };
+    assert!(literal, "{what}: the literal class ({got})");
+    let (charges, settled) = f.charged();
+    let most = u32::from(base == 3 || sent.len() >= 3);
+    let exact = entered || charges == most;
+    assert!(
+        charges == settled && charges <= most && exact,
+        "{what}: no new charge"
+    );
+    if class != "poison" {
+        assert_eq!(f.counts().0, 1, "{what}: one attempt");
+    }
+    if class != "evidence_failure" {
+        assert_eq!(f.records(), 1, "{what}: one native record");
+    }
+    if class == "contention" {
+        assert_eq!(
+            f.latched(),
+            (false, false),
+            "{what}: contention latches nothing"
+        );
+    }
+}
+fn class_of(outcome: &ModelCallOutcome) -> &'static str {
+    class(outcome)
+}
+
+/// Runs `side`'s executed cells (each class fault at its probe point).
+/// One test per side keeps each watched child well inside its deadline.
+fn matrix_side(side: &str) -> usize {
+    positive("positive control");
+    let mut schedules = 0;
+    for (at, class, test, expected) in matrix() {
+        let known = test == "OPEN:SB3B-B1f" && KNOWN_DEFECT.contains(&&*format!("{at}/{class}"));
+        if at != side || test != matrix_test(side) && !known {
+            continue;
+        }
+        for i in 0..if side.starts_with("r5") { 4 } else { 1 } {
+            let (f, outcome) = run_schedule(class, side, i);
+            judge(&f, (side, class, i), expected, outcome);
+            schedules += 1;
+        }
+    }
+    schedules
+}
+#[test]
+fn sb3_matrix_r3_reserve_before() {
+    if watched("sb3_matrix_r3_reserve_before") {
+        return;
+    }
+    assert_eq!(
+        matrix_side("r3_reserve:before"),
+        22,
+        "every executed cell ran"
+    );
+    println!("{HELD_DONE} sb3_matrix_r3_reserve_before");
+}
+#[test]
+fn sb3_matrix_r3_reserve_after() {
+    if watched("sb3_matrix_r3_reserve_after") {
+        return;
+    }
+    assert_eq!(
+        matrix_side("r3_reserve:after"),
+        19,
+        "every executed cell ran"
+    );
+    println!("{HELD_DONE} sb3_matrix_r3_reserve_after");
+}
+#[test]
+fn sb3_matrix_r3_cas_before() {
+    if watched("sb3_matrix_r3_cas_before") {
+        return;
+    }
+    assert_eq!(matrix_side("r3_cas:before"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r3_cas_before");
+}
+#[test]
+fn sb3_matrix_r3_cas_after() {
+    if watched("sb3_matrix_r3_cas_after") {
+        return;
+    }
+    assert_eq!(matrix_side("r3_cas:after"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r3_cas_after");
+}
+#[test]
+fn sb3_matrix_charge_before() {
+    if watched("sb3_matrix_charge_before") {
+        return;
+    }
+    assert_eq!(matrix_side("charge:before"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_charge_before");
+}
+#[test]
+fn sb3_matrix_charge_after() {
+    if watched("sb3_matrix_charge_after") {
+        return;
+    }
+    assert_eq!(matrix_side("charge:after"), 19, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_charge_after");
+}
+#[test]
+fn sb3_matrix_r5_observer_before() {
+    if watched("sb3_matrix_r5_observer_before") {
+        return;
+    }
+    assert_eq!(
+        matrix_side("r5_observer:before"),
+        76,
+        "every executed cell ran"
+    );
+    println!("{HELD_DONE} sb3_matrix_r5_observer_before");
+}
+#[test]
+fn sb3_matrix_r5_cas_before() {
+    if watched("sb3_matrix_r5_cas_before") {
+        return;
+    }
+    assert_eq!(matrix_side("r5_cas:before"), 84, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r5_cas_before");
+}
+#[test]
+fn sb3_matrix_r5_cas_after() {
+    if watched("sb3_matrix_r5_cas_after") {
+        return;
+    }
+    assert_eq!(matrix_side("r5_cas:after"), 76, "every executed cell ran");
+    println!("{HELD_DONE} sb3_matrix_r5_cas_after");
+}
+
+/// F10b validator (SB3B-R15 (2), R16 (a), R18, R19 (6)): every matrix
+/// cell exactly once; each cites its side's matrix test, an N/A from the
+/// closed table (reason, states, oracle), an IDENTICAL_POINT on an
+/// allowlisted side pair with the same class or state whose cell is
+/// executed, or a B1f tag on exactly the listed cells. Anything else fails.
+#[test]
+fn sb3_schedule_matrix_cells_are_complete() {
+    let source = [
+        include_str!("model_call_tests.rs"),
+        include_str!("model_tests.rs"),
+    ]
+    .concat();
+    let exists = |name: &str| source.contains(&format!("#[test]\nfn {name}() {{"));
+    let rows = matrix();
+    let cell = |r: &Row| format!("{}/{}", r.0, r.1);
+    let cites = |at: &str| rows.iter().find(|r| cell(r) == at).map(|r| (r.0, r.2));
+    let direct = |side: &str, test: &str| test == matrix_test(side) && exists(test);
+    let all = CLASSES.iter().chain(&STATES);
+    let mut want: Vec<String> = SIDES
+        .iter()
+        .flat_map(|s| all.clone().map(move |c| format!("{s}/{c}")))
+        .collect();
+    want.extend(NARROWED.map(String::from));
+    let mut got: Vec<String> = rows.iter().map(cell).collect();
+    want.sort();
+    got.sort();
+    assert_eq!(got, want, "exactly the matrix cells, each once");
+    for r in &rows {
+        let (at, (side, class, test)) = (cell(r), (r.0, r.1, r.2));
+        let ok = if let Some(na) = test.strip_prefix("N/A:") {
+            NA_TABLE.iter().any(|(reason, states, first, oracle)| {
+                na == format!("{reason}({oracle})")
+                    && states.contains(&class)
+                    && (*first || side != SIDES[0])
+                    && exists(oracle)
+            })
+        } else if let Some(other) = test.strip_prefix("IDENTICAL_POINT:") {
+            let pair = other
+                .split_once('/')
+                .filter(|(s, c)| *c == class && IDENTICAL.contains(&(side, *s)) && !r.3.is_empty());
+            pair.is_some() && cites(other).is_some_and(|(s, t)| direct(s, t))
+        } else {
+            match test {
+                "OPEN:SB3B-B1f" => KNOWN_DEFECT.contains(&&*at),
+                "DEFERRED:SB3B-B1f" => DEFERRED.contains(&&*at),
+                _ => direct(side, test),
+            }
+        };
+        assert!(ok, "{at}: {test} is no allowed citation for this cell");
+    }
+    for (cells, tag) in [
+        (&KNOWN_DEFECT[..], "OPEN:SB3B-B1f"),
+        (&DEFERRED[..], "DEFERRED:SB3B-B1f"),
+    ] {
+        let tagged = cells
+            .iter()
+            .all(|c| cites(c).is_some_and(|(_, t)| t == tag));
+        assert!(tagged, "{tag}: the listed cells");
+    }
+    let control = direct("r3_cas:after", "sb3_matrix_r3_cas_after");
+    assert!(
+        control && !direct("r3_cas:after", "sb3_matrix_r3_cas_before"),
+        "controls"
+    );
+}
+
+/// SB3B-R19 (2), R21: every model_call test that joins a thread
+/// (`.join()`, directly or through a helper in any scanned test or helper
+/// file) runs behind the exact parent-return wrapper. The guard fails
+/// closed on any form it cannot classify: a `#[test]` not at the top level
+/// or not followed by single-line attributes and its fn, `macro_rules!`, a
+/// join outside a top-level fn, or a join-capable helper used as a value.
+#[test]
+fn sb3_thread_joins_run_in_watched_children() {
+    let call = include_str!("model_call_tests.rs");
+    let others = [
+        include_str!("model_tests.rs"),
+        include_str!("model_death_tests.rs"),
+        include_str!("../test_hooks.rs"),
+        include_str!("../harness_tests.rs"),
+    ];
+    // Every cfg(test) module of host_session is scanned.
+    let parent = mask(include_str!("../host_session.rs"));
+    let mods = parent
+        .match_indices("mod ")
+        .filter(|(at, _)| test_only(&parent, *at));
+    let scanned = ["model_call_tests", "model_tests", "model_death_tests"];
+    for (at, _) in mods {
+        let name = parent[at + 4..].split(';').next().unwrap();
+        assert!(scanned.contains(&name), "{name}: an unscanned test module");
+    }
+    let files = |extra: &str, call: &str| -> Vec<String> {
+        let mut all = vec![call.to_owned(), extra.to_owned()];
+        all.extend(others.iter().map(|o| o.to_string()));
+        join_problems(&all)
+    };
+    assert_eq!(
+        files("", call),
+        Vec::<String>::new(),
+        "a join outside a watched child"
+    );
+    let test = |name: &str, body: &str| format!("\n#[test]\nfn {name}() {{\n{body}\n}}\n");
+    let cases = [
+        ("", test("sb3_leak", "    std::thread::spawn(|| ()).join().unwrap();"), "sb3_leak: unwatched"),
+        ("", test("sb3_via", "    keep_join(&Holder::default());"), "sb3_via: unwatched"),
+        ("", test("sb3_open", "    if watched(\"sb3_open\") {\n    }\n    keep_join(&Holder::default());"), "sb3_open: unwatched"),
+        ("", "\n#[test]\n#[allow(unused)]\nfn sb3_attr() {\n    keep_join(&Holder::default());\n}\n".into(), "sb3_attr: unwatched"),
+        // SB3B-R21 (i)-(iv).
+        ("", "\nmod nested {\n    #[test]\n    fn sb3_nested() {}\n}\n".into(), "an unclassified #[test]"),
+        ("", "\nmacro_rules! sb3_mac {\n    () => {};\n}\n".into(), "macro_rules!"),
+        ("", "\n#[test]\n#[allow(\n    unused\n)]\nfn sb3_multi() {}\n".into(), "an unclassified #[test]"),
+        ("\nfn sb3_other_join() {\n    std::thread::spawn(|| ()).join().unwrap();\n}\n", test("sb3_cross", "    sb3_other_join();"), "sb3_cross: unwatched"),
+        ("", test("sb3_alias", "    let j = keep_join;\n    let f = || j(&Holder::default());\n    f();"), "keep_join used as a value"),
+        ("", "\nimpl Holder3 {\n    fn j(&self) {\n        keep_join(&Holder::default());\n    }\n}\n".into(), "keep_join called outside a top-level fn"),
+        ("", "\nimpl Holder2 {\n    fn j(&self) {\n        std::thread::spawn(|| ()).join().unwrap();\n    }\n}\n".into(), "a join outside a top-level fn"),
+    ];
+    for (extra, case, expected) in cases {
+        let found = files(extra, &format!("{call}{case}"));
+        assert!(
+            found.iter().any(|p| p.contains(expected)),
+            "control {expected}: {found:?}"
+        );
+    }
+}
+/// Every problem the guard finds in `files` (the first is the subject).
+fn join_problems(files: &[String]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut fns = Vec::new(); // (file, name, test, open, close)
+    let codes: Vec<String> = files.iter().map(|f| mask(f)).collect();
+    for (k, code) in codes.iter().enumerate() {
+        let lines: Vec<&str> = code.split('\n').collect();
+        let mut at = 0;
+        for (i, line) in lines.iter().enumerate() {
+            if line.contains("macro_rules!") {
+                problems.push(format!("{k}:{i}: macro_rules!"));
+            }
+            if line.trim() == "#[test]" {
+                let next = lines[i + 1..].iter().find(|l| {
+                    let l = l.trim();
+                    !(l.is_empty()
+                        || l.starts_with("#[")
+                            && l.ends_with(']')
+                            && l.matches('[').count() == l.matches(']').count())
+                });
+                if !line.starts_with('#') || !next.is_some_and(|l| l.starts_with("fn ")) {
+                    problems.push(format!("{k}:{i}: an unclassified #[test]"));
+                }
+            }
+            let decl = ["fn ", "pub(super) fn ", "pub(crate) fn "]
+                .iter()
+                .find_map(|p| line.strip_prefix(p));
+            if let Some(head) = decl {
+                let name: String = head
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                let above = lines[..i]
+                    .iter()
+                    .rev()
+                    .take_while(|l| l.trim().is_empty() || l.starts_with("#["));
+                let test = above.into_iter().any(|l| l.trim() == "#[test]");
+                let open = at + code[at..].find('{').unwrap();
+                let close = open + matching(&code[open..]);
+                fns.push((k, name, test, open, close));
+            }
+            at += line.len() + 1;
+        }
+        for (j, _) in code.match_indices(".join()") {
+            if !fns
+                .iter()
+                .any(|(f, _, _, o, c)| *f == k && *o < j && j < *c)
+            {
+                problems.push(format!("{k}: a join outside a top-level fn"));
+            }
+        }
+    }
+    let body = |f: usize, o: usize, c: usize| &codes[f][o..c];
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let calls = |text: &str, name: &str| {
+        text.match_indices(&format!("{name}("))
+            .any(|(i, _)| !text[..i].ends_with(|c: char| ident(c) || c == '.'))
+    };
+    let mut joiners: Vec<String> = Vec::new();
+    loop {
+        let more: Vec<String> = fns
+            .iter()
+            .filter(|(_, n, test, ..)| !test && n != "watched" && !joiners.contains(n))
+            .filter(|(f, _, _, o, c)| {
+                body(*f, *o, *c).contains(".join()")
+                    || joiners.iter().any(|j| calls(body(*f, *o, *c), j))
+            })
+            .map(|(_, n, ..)| n.clone())
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        joiners.extend(more);
+    }
+    for j in &joiners {
+        for code in &codes {
+            for (i, _) in code.match_indices(j.as_str()) {
+                let (before, after) = (&code[..i], &code[i + j.len()..]);
+                let word = !before.ends_with(ident) && !after.starts_with(ident);
+                let used = !after.trim_start().starts_with('(') && !before.ends_with("fn ");
+                if word && used {
+                    problems.push(format!("{j} used as a value"));
+                }
+            }
+        }
+    }
+    // A joiner called outside every top-level fn (an impl method, say)
+    // cannot be attributed to a test: fail closed.
+    for j in &joiners {
+        for (k, code) in codes.iter().enumerate() {
+            for (i, _) in code.match_indices(&format!("{j}(")) {
+                let call = !code[..i].ends_with(|c: char| ident(c) || c == '.');
+                let inside = fns
+                    .iter()
+                    .any(|(f, _, _, o, c)| *f == k && *o < i && i < *c);
+                if call && !inside && !code[..i].ends_with("fn ") {
+                    problems.push(format!("{j} called outside a top-level fn"));
+                }
+            }
+        }
+    }
+    let joins = |f: usize, o: usize, c: usize| {
+        body(f, o, c).contains(".join()") || joiners.iter().any(|j| calls(body(f, o, c), j))
+    };
+    for (f, n, test, o, c) in &fns {
+        let wrapper = format!("if watched(\"{n}\") {{ return; }}");
+        let tokens = files[*f][o + 1..]
+            .split_whitespace()
+            .take(5)
+            .collect::<Vec<_>>()
+            .join(" ");
+        if *f == 0 && *test && joins(*f, *o, *c) && tokens != wrapper {
+            problems.push(format!("{n}: unwatched"));
+        }
+    }
+    problems
+}
+/// The offset of the brace closing the one that opens `code` (masked).
+fn matching(code: &str) -> usize {
+    let mut depth = 0usize;
+    for (i, b) in code.bytes().enumerate() {
+        match b {
+            b'{' => depth += 1,
+            b'}' if depth == 1 => return i,
+            b'}' => depth -= 1,
+            _ => {}
+        }
+    }
+    code.len()
+}
+
+/// SB3B-R18 (B1f): a Q or mission deadline found lapsed under the hold is
+/// an expiry, `model_timeout`, at step 1 (after the pre-hold check, before
+/// the hold) and at the CAS (step 8). A narrowed mission deadline is judged
+/// there from the pre-hold sample; a Q deadline passing after the sample is
+/// invisible to it (the seam is sample-faithful) and ends at the next poll.
+#[test]
+fn sb3_deadline_lapsed_under_the_hold_times_out() {
+    if watched("sb3_deadline_lapsed_under_the_hold_times_out") {
+        return;
+    }
+    positive("positive control");
+    for (side, step) in [
+        ("r5_cas:before", "refused:8"),
+        ("r5_sample:after", "refused:1"),
+    ] {
+        for class in ["mission_wall_narrowed", "mission_mono_narrowed", "q_expiry"] {
+            let expected = match class {
+                "q_expiry" => "next:model_timeout:poll".to_owned(),
+                _ => format!("at:model_timeout:{step}"),
+            };
+            for i in 0..4 {
+                let (f, outcome) = run_schedule(class, side, i);
+                judge(&f, (side, class, i), &expected, outcome);
+            }
+        }
+    }
+    println!("{HELD_DONE} sb3_deadline_lapsed_under_the_hold_times_out");
+}
+
+/// SB3B-R20 (c): a mission deadline narrowed past the sample after the
+/// pre-hold check, at step 1's eligibility read (`scope.limits`, inside the
+/// one evaluation under the hold), ends `model_timeout` at step 1. Two
+/// readings of the limits would let the narrowing fall between them.
+#[test]
+fn sb3_narrowing_at_the_eligibility_read_times_out() {
+    if watched("sb3_narrowing_at_the_eligibility_read_times_out") {
+        return;
+    }
+    positive("positive control");
+    for class in ["mission_wall_narrowed", "mission_mono_narrowed"] {
+        for i in 0..4 {
+            let f = Call::new();
+            let (c, far) = (f.b.clock.clone(), 1 << 50);
+            f.b.door
+                .context()
+                .narrow_mission_deadlines(c, far, far)
+                .unwrap();
+            let (narrow, armed) = (
+                matrix_fault(&f, class, &Keep::default()),
+                Arc::new(AtomicBool::new(false)),
+            );
+            let (arm, landed) = (armed.clone(), Arc::new(AtomicBool::new(false)));
+            f.hook("model.call.sampled", i, move || {
+                arm.store(true, Ordering::SeqCst)
+            });
+            let done = landed.clone();
+            f.b.session.core.cell.1.every("scope.limits", move || {
+                if armed.swap(false, Ordering::SeqCst) {
+                    narrow();
+                    done.store(true, Ordering::SeqCst);
+                }
+            });
+            let outcome = f.call();
+            assert!(
+                landed.load(Ordering::SeqCst),
+                "{class} {i}: narrowed at the read"
+            );
+            judge(
+                &f,
+                ("r5_sample:after", class, i),
+                "at:model_timeout:refused:1",
+                outcome,
+            );
+        }
+    }
+    println!("{HELD_DONE} sb3_narrowing_at_the_eligibility_read_times_out");
 }

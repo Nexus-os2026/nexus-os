@@ -908,3 +908,362 @@ Gates, each binary alone:
 - fmt; clippy (3 crates, all targets, -D warnings); diff --check
 Repeats: 10 serial and 10 parallel runs of `host_session::model`, 48/48
 each.
+
+### 13.6 B1b mapping and oracles (SB3B-R3; base B1a final 47fa1f88)
+The oracles were written on deny-only stubs, alongside a saved draft
+(disclosed per SB3B-R1 ruling 6). The mapping is the `SB3-*b` rows of
+the cases TSV:
+- G0 (R5), G1–G5, L2 (with F5; composed zeros carried to C/D), T1.
+- C2, with metadata failure and refused charge.
+- F1, F2/F8 (literal R5 classes, no new charge), F3, F4.
+- F7 (Mother-side withholding carried to D).
+- F8 (pre-ticket refusals through the call), F11.
+- The SB3B-R5 (3) carry (blocking clock and blocking CallDeadline).
+- SB3B-R5 (1) applied at R5. A `model.call.admitted` probe fires right
+  after the CAS, under the holds; the revoker is joined before judging;
+  no admission may follow a completed revocation. A slow revoker can
+  only let a mutant survive. B1a's oracle does not share finding 8.
+
+Seams, all `#[cfg(test)]` and F11-guarded:
+- ModelSlot `trace`, `backstop_skew`/`SkewClock`, `chat_replay`,
+  `chat_early`, `registered_identity_for_test`.
+- Helpers `b1b_note`, `b1b_latch_probe`, `b1b_gate_entry`,
+  `b1b_gate_exit`.
+- Probes `model.call.{gate,polled,observed,admitted,replay}` and
+  `scope.clock`.
+- Fixtures SplitClock `on_read`, the run `sticky`/`unpin` tampers.
+
+Trace vocabulary: `gate:*`, `refused:N|hold`, `admitted`, `poll:*`,
+`early`/`replay`, `probe:<class>`.
+
+B1e (test-only, SB3B-R3) receives A2/F6, F9, F10, the call-level R4 row,
+G0's R3 case and SB-2a registration contention.
+
+### 13.7 Spec checks and rulings SB3B-R7–R10
+- R7: any expiry is `model_timeout`; dead Q and ownership or authority
+  denial are `model_cancelled`.
+- R8 (10 MED) added:
+  - `try_health` None, host prerequisite, removed pin, dead Q.
+  - Contention and poison at both holds and every gate.
+  - A None poll under contention.
+  - Renewal crossing and the slot identity re-read.
+  - L2 unchanged-state.
+  - The literal chat latch.
+  - The F11 scan.
+- R9 oracle-fix c85a0785, four defects that failed correct code:
+  - (a) the F3 hook re-locked the trace on the same thread;
+  - (b) F11 required a production use of the identity seam;
+  - (c) F4 put two `every()` hooks on one point;
+  - (d) the old health fault never made `try_health` unhealthy.
+- R9 feat fe8c5b71, compacted. host_session.rs captured-clock admission
+  was accepted. `live_member_with(.., engaged)` is clock-free at R5:
+  step 1 judged the original scope, and the run's cell must be that
+  original. The R3 clock read under its hold stays a recorded LOW.
+- R10 72dc8196: poison must be latched at `model.attempt.return`,
+  before settlement. The test Peer tolerates Stop-aborted connections.
+
+F11 parser limitation: `test_only` stops at the first comma of a
+function signature, so a `#[cfg(test)]` fn with two or more parameters
+inside a non-test impl reads as a leak. That is a false positive, on the
+safe side, so the B1b helpers sit in a `#[cfg(test)] impl`.
+
+### 13.8 SB3B-R11 (Codex review-1, both passes)
+Oracle-add f8492285 was RED on 39c1f0d4. It adds:
+- P1: no `Instant` read (`scope.clock`), clock read or `fail()` under a
+  hold, including grant poison.
+- P2: a slow request crossing Q, either mission clock or the backstop
+  ends `model_timeout`, recorded as `timeout`.
+- O1: L2 compares commitment contents and full non-model evidence, and
+  counts commitment prepare/authorize/complete steps (zero).
+- O2: exact admission attempts, refused included.
+- O3: F11 scans every production host_session module.
+
+The fix:
+- `RequestScope::eligible`/`admit_at` take a pre-hold `Sample`.
+- Grant poison returns `GRANT_POISONED`; R2, R3 and R5 fail the session
+  after releasing the run table.
+- `CallGate` splits expiry (its deadline: Q, missions, backstop) from
+  non-time cancellation.
+
+Receipts, on the final code head; plants restored by sha256:
+- 68/68 `host_session::model`. All 25 B1b plants killed at their named
+  assertions; R5 grant guard released 10/10; MP-SB-6-retry at G2's
+  "exact admission attempts".
+- Gates, each binary alone: governed-control lib 915, Mother lib 360,
+  host 166, m2e_a2 54, m2e_transport 39; fmt, clippy, diff --check.
+- Repeats 17/20 on c7001a57: the P1 control's grant checker signalled
+  "free" while still holding the store, an oracle race. The SB3B-R12
+  oracle-fix releases first. Afterwards: 30/30 alone, and 10 serial +
+  10 parallel 20/20 on the final head.
+
+### 13.9 B1c follow-up (SB3B-R13; branch mother/sb3b1c-followup on 98132daf)
+B1b is frozen at 98132daf. B1c addresses Codex review-2: oracle 1 MED,
+production 2 LOW, both crafted-only. B1b and B1c merge together.
+
+Oracle-add 590645c8, RED on 98132daf for P1 and P2:
+- (O) L2 first proposes a real file on the run, so a commitment is
+  prepared. It asserts the populated commitment view is equal after the
+  call, and counts `FILE_STAGED` and `FILE_EXECUTE_START` (zero). This
+  passes on 98132daf: coverage only, no File leak.
+- (P1) An "exhausted" admission-counter schedule in the P1 control: no
+  failure under a hold, and Failed still latched.
+- (P2) `sb3_limits_without_a_sample_fail_closed`: limits installed after
+  a gate sampled none must refuse that CAS.
+
+Fix b44a765a:
+- `admit_at` with a sample returns Capacity, and R5 fails the session
+  after releasing both holds.
+- `Sample` carries `Option` mission clocks. Limits without a reading are
+  ineligible, so the CAS fails closed; no more (0, 0) reading.
+
+Receipts on the B1c head:
+- 69/69 `host_session::model`.
+- All 29 plants killed at their named assertions, each restored by
+  sha256: the 25 B1b plants re-run on this head (R5 grant guard 10/10)
+  and 4 B1c plants (exhaustion fail under hold; exhaustion unlatched;
+  fabricated time; a model call touching the File commitment).
+- Gates, each binary alone: governed-control lib 916, Mother lib 360,
+  host 166, m2e_a2 54, m2e_transport 39; fmt, clippy (3 crates),
+  diff --check.
+- Repeats: 10 serial + 10 parallel, 69/69 each.
+- SB3B-R14 oracle-amend: L2 now compares the actual CommitmentView
+  fields. Its Debug output redacts target and summary to sizes, so the
+  comparison takes `target`, `summary` and `binding_short` directly, with
+  Debug for the rest. A model call that rewrites the target to a
+  same-length value and each summary line to a same-length line is
+  killed at "the populated commitment is unchanged". Governed-control
+  lib 916; fmt, clippy, diff --check.
+- SB3B-R17 oracle-amend: Debug truncates `id` and `run` to eight hex
+  digits, so L2 also compares the typed `id` and `run`. A model call that
+  substitutes a commitment id, or its run, differing only beyond the
+  Debug prefix is killed at "the populated commitment is unchanged"; the
+  same plants pass against the R14 oracle.
+
+### 13.10 B1e evidence carries (SB3B-R3/R15; base e81b2883)
+Test-only; no production change. Oracle-add ab6fe45b:
+- A2/F6: second acquisition 0/0/0 at each held stage, including
+  registration.
+- F9: exactly one native record with the attempt's correlation.
+- F10a: held schedules (G4, G5, P2, A2) run in a child process with a
+  30 s deadline, kill+wait, success plus marker.
+- R4-call, G0-R3 and SB-2a registration contention restored. The
+  contention holder is released at `model.complete.contended`.
+
+Plants, each killed at its named assertion and restored by sha256:
+- slot released early; duplicate record; wrong ordinal;
+- conversation accepted; grant ignored at R3;
+- registration contention latching;
+- a never-closing held child (parent fails at 30.01 s);
+- a child skipping its body (fails in 0.01 s).
+
+Gates, each binary alone:
+- governed-control lib 920, Mother lib 360, m2e_a2 54, m2e_transport 39;
+  fmt, clippy, diff --check.
+- Host 165/166 on the first run and 166/166 on a full re-run. The
+  failure was `session_recovery_fix1::fix1_d_canonical_recovery_rejects_invalid_history_before_workspace`
+  ("close is uncertain", 4.49 s against about 0.3 s), with 0/5 isolated
+  re-runs failing. No host or production code changed.
+
+Repeats: 10 serial + 10 parallel, 73/73 each.
+
+F10b (schedule matrix and validator) stopped at the gap count, per
+SB3B-R15; it landed under SB3B-R16 and R18 (section 13.11), amended by SB3B-R19 (13.12).
+
+### 13.11 B1e F10b schedule matrix (SB3B-R16, R18)
+Test-only. Literal rows: `model-bridge-cases.tsv` stage `SB-3B1e-M`, one
+per cell: 9 sides x (15 classes + 8 lifecycle states) plus 2 KNOWN_DEFECT
+cells, 209 rows. Sides and probe points:
+- R3 reservation before (fault before the call) and after
+  (`model.attempt.reserved`);
+- R3 CAS before (`model.attempt.checked`) and after (the first
+  `model.call.polled`; the transport's guard sits between the CAS and
+  gate 0, so no IDENTICAL_POINT is claimed, SB3B-R18 (0));
+- charge before (test meter entry) and after (after the C1 charge);
+- R5 gate entry, observer read to CAS (`model.call.observed`) and after
+  the CAS (`model.call.admitted`), each at all four gates.
+
+A fault needing a hold the call owns there (run table or grant store)
+runs on its own thread and is joined at the next point holding nothing;
+door halt's cell engagement is awaited first. The table-driven oracle
+`sb3_schedule_matrix_is_judged_exactly` runs every cited row (295
+schedules) and asserts, in order: refusal before the ticket (`pre`), or
+no admission after the fault (the next gate refuses), at most one
+overlapping request and the exact prefix, the refusal step (or none when
+the transport's deny-only guard ends it), the literal class (an entered
+chat that was replied to may end `model_late`; with a gate-only class it
+completes), no new charge, one attempt and one native record.
+
+Lifecycle: Bootstrap is `BOOTSTRAP_NO_MISSION`. Emergency, Failed and
+Closing (normal) are IDENTICAL_POINT to their class cells. Closing
+(restricted) is executed at every side. Sealed, Closed clean and Closed
+unclean are set on the session word in test only and executed before
+the call; later sides cite `sb2_unjoined_or_owed_prevents_clean_close`
+(seal needs a quiescent slot).
+
+Open (SB3B-R18): a mission deadline narrowed past the sample between the
+observer read and the CAS is refused `refused:8` / `model_cancelled`,
+asserted as it is now (`OPEN:SB3B-B1f`, both clocks, four gates); the Q
+expiry at that side is `DEFERRED:SB3B-B1f` (the seam ignores the sample).
+The validator `sb3_schedule_matrix_cells_are_complete` requires each cell
+exactly once and each to cite an existing test fn, a closed-list N/A
+(LIFECYCLE names its oracle), an IDENTICAL_POINT whose cell cites one, or
+a B1f tag on exactly the listed cells.
+
+Plants, each killed at its named assertion and restored by sha256:
+- (i) R3 CAS dropped: "refused before the ticket";
+- (ii) the kernel sends a refused request anyway: "at most one
+  overlapping request";
+- (iii) the chat gate admits once charged: "the next gate refuses";
+- validator: unknown test, missing cell, OPEN on an unlisted cell,
+  IDENTICAL_POINT to a tagged cell, LIFECYCLE without its oracle.
+
+### 13.12 B1e oracle review-1 corrections (SB3B-R19)
+Test-only. Codex review-1 (oracle): 3 MED, 3 LOW, all addressed:
+- (1) A2 registration stage: a second reservation is refused. Attempts
+  (no run exists), model_call records and chat requests (no CallMeter
+  exists before READY) are 0/0/0, nothing new is sent, and the slot
+  shows registration, active, pending.
+- (2) Every test that joins a thread, directly or through a helper, runs
+  in a watched child. Ten tests are newly wrapped, and the matrix is
+  split into one watched test per executed side.
+  `sb3_thread_joins_run_in_watched_children` scans for `.join()` outside
+  watched children, with a direct and a through-helper leak control.
+- (3) A2 releases its held worker in a drop guard. MP-B1e-A2 is now a
+  clean named kill: the child fails at "second acquisition refused" and
+  the parent fails in 5.6 s, with no 30 s timeout.
+- (4) F9 also compares the record's run and agent.
+- (5) The side `r5_observer:after` is explicit. Its cells are
+  IDENTICAL_POINT to `r5_cas:before`, since the observer read is followed
+  immediately by `model.call.observed`; the Q-expiry cell is deferred to
+  B1f.
+- (6) The validator uses closed tables:
+  - each N/A reason with its states, first-sink rule and one oracle;
+  - IDENTICAL_POINT only on allowlisted side pairs, with the same class
+    or state and an executed target;
+  - a direct citation must be that side's matrix test.
+  The Emergency, Failed and Closing (normal) state cells are now
+  executed. The matrix has 232 rows and 349 schedules.
+
+Plants, each killed at its named assertion and restored by sha256:
+- A2 slot released;
+- matrix (i), (ii) and (iii);
+- validator: both crafted escapes (unrelated N/A oracle and unrelated
+  direct citation for `r3_reserve:after/sealed`; `emergency_state`
+  aliasing `r5_cas:after/grant_expiry`), unknown test, missing cell,
+  OPEN on an unlisted cell, IDENTICAL_POINT to a tagged cell, LIFECYCLE
+  at the first sink;
+- join guard: an unwrapped held-join test.
+
+### 13.13 B1f expiry classification under the hold (SB3B-R18)
+Production LOW, found by F10b: a Q or mission deadline lapsed at R5's held
+step 1 or at the CAS (step 8), narrowing included, was refused as
+`model_cancelled`. SB3B-R7 (1) requires `model_timeout`.
+- `RequestScope::expired_at(sample)` judges Q and the mission limits as
+  they now stand against the pre-hold sample, with no clock read. A
+  missing reading is not an expiry; it still fails closed as Cancelled
+  (SB3B-R13 P2).
+- Step 1 refuses Timeout if the pre-hold check or `expired_at` holds.
+  Step 8 refuses Timeout when the CAS refusal coincides with
+  `expired_at`. Counter exhaustion and every non-time refusal are
+  unchanged. `lapsed()` is the backstop plus `expired_at`.
+- The Q seam is sample-faithful: `expire_request_for_test` records the
+  instant, and a sample taken earlier stays live. It sits in its own
+  cfg(test) impl and is covered by the seam guard with a declaration and
+  a cfg-removal control. New cfg(test) probe: `model.call.sampled`
+  (after the pre-hold check, before the hold).
+
+Commits:
+- oracle-add 9719b561 (RED at "the literal class (model_cancelled)");
+- merge of B1e SB3B-R19 a0aadd84;
+- oracle-amend ebc6738c, which flips the 8 OPEN schedules and the
+  DEFERRED rows, leaving KNOWN_DEFECT and DEFERRED empty;
+- fix(session).
+
+Plants, each killed at its named assertion and restored by sha256:
+- expiry mapped back to Cancelled at the CAS ("the literal class");
+- the seam ignoring the sample ("the next gate refuses");
+- step 1 left unclassified ("the literal class");
+- the constants or the rows not flipped, and DEFERRED not emptied (the
+  validator).
+
+### 13.14 B1f baseline replay (SB3B-R20 (b), evidence only)
+Codex B1f review-1 (oracle), MED: the probe `model.call.sampled` first
+appeared in the fix commit, so on the base the step-1 cases failed at
+"the fault landed" and never reached the class. No history is changed.
+
+Replay: a disposable copy of the B1e head a0aadd84, plus the oracle-add
+9719b561, plus only the guarded probe (two lines in `host_session/model.rs`).
+Each (side, class) ran on its own at all four gates. All six are RED at
+gate 0:
+- step 1 (`r5_sample:after`), wall and monotonic narrowing: "the literal
+  class (model_cancelled)";
+- step 1, Q expiry: "the next gate refuses" (the old seam ignores the
+  sample, so step 1 refuses);
+- CAS (`r5_cas:before`), wall and monotonic narrowing: "the literal
+  class (model_cancelled)";
+- CAS, Q expiry: "the next gate refuses".
+The frozen oracle-add test, run unmodified on that copy, is RED at
+"r5_cas:before/mission_wall_narrowed gate 0: the literal class
+(model_cancelled)".
+
+### 13.15 B1f single-reading eligibility (SB3B-R20 (c))
+Codex B1f review-1 (production), LOW: step 1 read the mission limits
+twice, first in `expired_at` and then in `eligible`. A narrowing between
+the two reads was refused as Cancelled.
+- `RequestScope::judge(sample)` reads Q and the limits once. It returns
+  Ok, `Lapse::Expired` (Q or a mission deadline past, narrowing included)
+  or `Lapse::Denied` (anything else, including limits without a sampled
+  reading). `eligible` is `judge().is_ok()`.
+- Step 1 still checks the pre-hold result first. It then makes one
+  `judge` under the hold: `Expired` is Timeout, any other refusal stays
+  Cancelled.
+- Step 8 uses `admit_judged`, which returns the CAS eligibility reason
+  from its own single evaluation. `Expired` is Timeout. Counter
+  exhaustion, CAS word failures and every other refusal stay Cancelled.
+- New cfg(test) probe: `scope.limits`, immediately before the one
+  reading, when a sample is supplied.
+
+Oracle: `sb3_narrowing_at_the_eligibility_read_times_out`, which arms at
+`model.call.sampled` and narrows at the next `scope.limits` (wall and
+monotonic, each gate), expects `at:model_timeout:refused:1`.
+- RED on the previous head: "narrowed at the read" (no probe).
+- With only the probe added to the two-read form: "the literal class
+  (model_cancelled)".
+- Plant: the two-read step 1 restored, RED at "the literal class".
+### 13.16 B1e oracle re-check (SB3B-R20 (a); 13.14 on the B1e branch)
+Codex review-2 found one LOW in the join guard. The guard now requires
+the complete parent-return wrapper `if watched("name") { return; }`,
+compared whitespace-insensitively. It also binds `#[test]` to its fn
+across intervening attributes and blank or comment lines, and scans
+`pub(super)` and `pub(crate)` fns too. Two in-guard controls cover the
+review's escapes: a wrapper without its return, and an intervening
+attribute. Plants, all killed at "a join outside a watched child":
+- the return removed from the grant-revocation wrapper;
+- an attribute between `#[test]` and the fn, with the wrapper removed;
+- the wrapper removed.
+
+### 13.17 B1e join guard fails closed (SB3B-R21; 13.15 on the B1e branch)
+Codex review-3, 1 LOW: the guard missed nested-module and macro tests,
+multiline attributes, helpers defined in other files, and aliased
+helpers. It now fails on any form it cannot positively classify:
+- a `#[test]` that is not at the top level, or is not followed only by
+  single-line attributes and then its fn;
+- any `macro_rules!`;
+- any `.join()`, or any call of a join-capable helper, outside a
+  top-level fn (an impl method, say);
+- any use of a join-capable helper as a value.
+
+Join-capable helpers are found across every scanned file. Those files are
+the three host_session test modules (completeness is checked against
+host_session.rs's cfg(test) modules), `test_hooks.rs` and
+`harness_tests.rs`. Three helpers were renamed to unique names so a local
+binding cannot shadow them: `held` to `held_request_at`, `release` to
+`release_holder`, `schedule` to `run_schedule`.
+
+Twelve in-guard controls cover the earlier escapes and all four new ones.
+Plants, all killed at "a join outside a watched child":
+- R20: wrapper without return, intervening attribute, wrapper removed;
+- R21: a nested-module test ("an unclassified #[test]"), a multiline
+  attribute, a join helper in model_tests.rs reached through `nth` ("nth
+  called outside a top-level fn", and the calling test unwatched), and
+  an aliased `keep_join` ("used as a value").
