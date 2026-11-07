@@ -1241,3 +1241,29 @@ attribute. Plants, all killed at "a join outside a watched child":
 - the return removed from the grant-revocation wrapper;
 - an attribute between `#[test]` and the fn, with the wrapper removed;
 - the wrapper removed.
+
+### 13.15 B1e join guard fails closed (SB3B-R21)
+Codex review-3, 1 LOW: the guard missed nested-module and macro tests,
+multiline attributes, helpers defined in other files, and aliased
+helpers. It now fails on any form it cannot positively classify:
+- a `#[test]` that is not at the top level, or is not followed only by
+  single-line attributes and then its fn;
+- any `macro_rules!`;
+- any `.join()`, or any call of a join-capable helper, outside a
+  top-level fn (an impl method, say);
+- any use of a join-capable helper as a value.
+
+Join-capable helpers are found across every scanned file. Those files are
+the three host_session test modules (completeness is checked against
+host_session.rs's cfg(test) modules), `test_hooks.rs` and
+`harness_tests.rs`. Three helpers were renamed to unique names so a local
+binding cannot shadow them: `held` to `held_request_at`, `release` to
+`release_holder`, `schedule` to `run_schedule`.
+
+Twelve in-guard controls cover the earlier escapes and all four new ones.
+Plants, all killed at "a join outside a watched child":
+- R20: wrapper without return, intervening attribute, wrapper removed;
+- R21: a nested-module test ("an unclassified #[test]"), a multiline
+  attribute, a join helper in model_tests.rs reached through `nth` ("nth
+  called outside a top-level fn", and the calling test unwatched), and
+  an aliased `keep_join` ("used as a value").
