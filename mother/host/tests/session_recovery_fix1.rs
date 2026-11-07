@@ -92,6 +92,9 @@ fn fix1_d_canonical_recovery_rejects_invalid_history_before_workspace() {
         let raw = format!("{}\n", lines.join("\n"));
         std::fs::write(f.home.join("mother-journal.jsonl"), &raw).unwrap();
         let mut p = Pty::start(f.command("must not start"));
+        // Quit only after the disclosure: an earlier Quit starts the 3 s
+        // shutdown deadline, which may legitimately end startup unreported.
+        p.expect("RECOVERY FAILED mother_history");
         p.line("quit");
         if p.finish().success() {
             failures.push(format!("{name}: invalid source cleanly opened"));
@@ -272,6 +275,7 @@ fn fix1_d_changed_history_snapshot_never_installs_readiness() {
     )
     .unwrap();
     receipt.release();
+    p.expect("RECOVERY FAILED mother_history");
     p.line("quit");
     assert!(!p.finish().success());
     assert!(
