@@ -404,8 +404,7 @@ fn sb3c_public_binding_is_exact_and_idempotent() {
         ("unregistered", "model_not_registered"),
     ] {
         let f = Pub::with(case != "unregistered", case != "files");
-        // SB3C-R4 (2): observed before the operation, compared after; the
-        // second session (S) is the receiving fixture.
+        // SB3C-R4 (2): observed before, compared after; S's receiver too.
         let other = (case == "s").then(Pub::new);
         let seen = |p: &Pub| (p.paths().len(), p.records("model_call"), p.accounting());
         let (before, other_before) = (f.paths().len(), other.as_ref().map(seen));
