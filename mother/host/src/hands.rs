@@ -28,6 +28,8 @@ use std::time::{Duration, Instant};
 
 #[cfg(test)]
 use crate::hands_tests;
+#[cfg(test)]
+mod sb2_close_tests;
 
 fn mother_code(error: &CoordinatorError) -> &'static str {
     match error {
@@ -700,6 +702,9 @@ impl Runtime {
             }
             Err(_) => report.push_str(CLOSE_UNKNOWN),
         }
+        report.push_str(&model_report(
+            self.home.session.close_obligations().ok().map(|o| o.model),
+        ));
         match self.home.session.close_obligations() {
             Ok(o) => report.push_str(&format!("CLOSE AUTHORITY closed={} actions_unacknowledged={} producers_live={} producers_lost={} halt_pending={} halt_owed={} halt_uncertain={} halt_lost={}\n", o.authority_closed, o.actions_unacknowledged, o.producers_live, o.producers_lost, o.halt.pending, o.halt.owed, o.halt.uncertain, o.halt.lost)),
             Err(_) => report.push_str("CLOSE AUTHORITY unknown\n"),
@@ -822,8 +827,25 @@ fn owner_result(
     }
 }
 
+const MODEL_UNKNOWN: &str = "CLOSE MODEL operation=unknown active=unknown owner=unknown child=unknown record=unknown uncertain=true\n";
+fn model_report(
+    _: Option<nexus_governed_control::host_session::close::ModelObligations>,
+) -> String {
+    let _ = MODEL_UNKNOWN;
+    String::new()
+}
 const CLOSE_UNKNOWN: &str =
     "CLOSE OBLIGATIONS resource_snapshot=unknown in_flight_or_unknown=true\n";
+
+fn close_fallback_report() -> String {
+    CLOSE_UNKNOWN.to_owned()
+}
+fn failed_startup_report() -> String {
+    format!(
+        "RESULT: close is uncertain; the full clean-close protocol did not complete.\n{}\n",
+        crate::terminal::UNCLEAN_NOTICE
+    )
+}
 
 struct OwnerScreen(Arc<Shared>);
 impl nexus_mother::evidence::OwnerView for OwnerScreen {
@@ -1195,7 +1217,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let stops_done = screen.stop.join_until(producers_until);
     let producers_done = terminal.quiesce(producers_until);
     let mut seal = None;
-    let mut close_report = CLOSE_UNKNOWN.to_owned();
+    let mut close_report = close_fallback_report();
     if reader_done
         && work_done
         && stops_done
@@ -1291,13 +1313,7 @@ fn failed_startup(
     let _input = terminal.stop_reader(producers_until);
     let _stops = screen.stop.join_until(producers_until);
     let _modes = terminal.restore_modes(deadline);
-    let _delivered = screen.delivered(
-        &format!(
-            "RESULT: close is uncertain; the full clean-close protocol did not complete.\n{}\n",
-            crate::terminal::UNCLEAN_NOTICE
-        ),
-        deadline,
-    );
+    let _delivered = screen.delivered(&failed_startup_report(), deadline);
     let _terminal = terminal.finish(deadline);
     std::mem::forget(startup);
     std::mem::forget(screen);

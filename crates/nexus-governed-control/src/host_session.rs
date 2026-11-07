@@ -10,6 +10,11 @@ use std::time::{Duration, Instant};
 
 pub mod approval;
 pub mod close;
+mod model;
+#[cfg(test)]
+mod model_death_tests;
+#[cfg(test)]
+mod model_tests;
 pub mod outcome;
 mod receipt;
 pub mod recovery;
@@ -335,6 +340,7 @@ struct CloseIdentity {
 struct Core {
     #[cfg(test)]
     expired_request: AtomicU64,
+    model: model::ModelSlot,
     identity: SessionIdentity,
     stops: stop::Stops,
     cell: HaltCell,
@@ -734,6 +740,9 @@ impl HostSession {
             || !self.recovery_report()?.is_empty()
             || self.control.workspace().is_none()
         {
+            return Err(SessionError::Restricted);
+        }
+        if !self.core.model.ready() {
             return Err(SessionError::Restricted);
         }
         self.core
@@ -1382,6 +1391,7 @@ impl SessionSeed {
             core: Arc::new(Core {
                 #[cfg(test)]
                 expired_request: AtomicU64::new(u64::MAX),
+                model: model::ModelSlot::default(),
                 identity: SessionIdentity(identity),
                 stops: stop::Stops::default(),
                 cell: HaltCell::new_host(),
