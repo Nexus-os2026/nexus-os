@@ -187,7 +187,8 @@ class Q8F1Oracles(unittest.TestCase):
 class Q8F2Oracles(unittest.TestCase):
     def test_api_mount_skeleton_inventory(self):
         tree = ast.parse((HERE/'install.sh').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
-        loops = [n for n in ast.walk(tree) if isinstance(n,ast.For) and isinstance(n.iter,ast.Tuple)]
+        loops = [n for n in ast.walk(tree) if isinstance(n,ast.For) and isinstance(n.iter,ast.Tuple)
+                 and all(isinstance(e,ast.Constant) and isinstance(e.value,str) for e in n.iter.elts)]
         directories = next(ast.literal_eval(n.iter) for n in loops if 'dev/shm' in ast.literal_eval(n.iter))
         self.assertTrue({'proc','sys'} <= set(directories))
         text = (HERE/'install.sh').read_text()
@@ -298,9 +299,9 @@ class Q8F12Oracles(unittest.TestCase):
 class Q8F13Oracles(unittest.TestCase):
     def test_documented_host_effects_and_prerequisites(self):
         doc = (HERE/'README.md').read_text()
-        for fragment in eval("""('bash -euo pipefail <<'OWNER'','persists at boot','Host changes',
+        for fragment in ("bash -euo pipefail <<'OWNER'",'persists at boot','Host changes',
                          '/etc/systemd/system/mothergate-run@.service','/run/mothergate-control',
-                         '/var/lib/mothergate','groupdel gatesubmit')"""):
+                         '/var/lib/mothergate','groupdel gatesubmit'):
             self.assertIn(fragment,doc)
         text = (HERE/'install.sh').read_text()
         tree = ast.parse(text.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
