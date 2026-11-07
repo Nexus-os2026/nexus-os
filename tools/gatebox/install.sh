@@ -1,11 +1,219 @@
 #!/bin/bash
+# Offline bootstrap. Never run from a builder-owned checkout.
 set -euo pipefail
+umask 022
 exec /usr/bin/python3 -I -B - "$@" <<'PY'
-FILES = ['install.sh','probe.py']
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import pwd
+import grp
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+
+DEST = Path('/usr/libexec/gatebox')
+CONFIG = Path('/etc/gatebox')
+ROOT = Path('/usr/lib/gatebox/root')
+STATE = Path('/var/lib/mothergate')
+BOOT = Path('/root/gatebox-slice1')
+FIXTURE = '899e3872c5b61223c87b905f63c66947a816259b'
+HARNESS = 'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
+FILES = ['MISSION.md','snapshot.py','receipt.py','supervisor.py','init.py','client.py',
+         'lifecycle.py','verify.py','probe.py','install.sh','README.md','tests/test_service.py',
+         'tests/test_unit_core.py','tests/test_unit_contract.py','tests/test_installed.py',
+         'policy/gates.json','policy/exclusions.json','policy/registry.json','policy/sudoers',
+         'policy/deny-systemd.rules','units/mothergate.socket','units/mothergate.service',
+         'units/mothergate-run@.service']
 PLACEHOLDER = {'identity':None,'passed':[]}
-def render(text,uid,gid): raise NotImplementedError('render')
-def bundle_files(path,digest): raise NotImplementedError('verified bundle')
-def acceptance_check(identity,value,state,authenticate): raise NotImplementedError('acceptance binding')
-def main(): raise NotImplementedError('install')
+ENV = {'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','HOME':'/root'}
+
+def protected(path):
+    for item in [*reversed(path.parents),path]:
+        info = item.lstat()
+        if (info.st_uid or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode)
+                or any(n.startswith('system.posix_acl_') for n in os.listxattr(item))):
+            raise ValueError('unprotected installation path: '+str(item))
+
+def render(text,uid,gid):
+    if any(type(n) is not int or not 0 < n < 2**31 for n in (uid,gid)):
+        raise ValueError('invalid installed account IDs')
+    result = text.replace('@GATERUN_UID@',str(uid)).replace('@GATERUN_GID@',str(gid))
+    if re.search(r'@[A-Z_]+@',result): raise ValueError('unknown unit substitution')
+    return result
+
+def bundle_files(path,digest):
+    if path.stat().st_size > 32*1024**2: raise ValueError('bundle size bound')
+    data = path.read_bytes()
+    if not re.fullmatch('[0-9a-f]{64}',digest) or hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError('bundle SHA-256 mismatch')
+    expected = {'tools/gatebox/'+n for n in FILES}|{HARNESS}
+    result = {}
+    with tarfile.open(path,'r:') as archive:
+        for item in archive:
+            name = item.name
+            parts = Path(name).parts
+            if item.isdir() and name in {str(p) for n in expected for p in Path(n).parents if str(p) != '.'}:
+                continue
+            if (name not in expected or name in result or not item.isfile()
+                    or '..' in parts or item.size > 2*1024**2):
+                raise ValueError('unsafe/extra/duplicate bundle member: '+name)
+            result[name] = archive.extractfile(item).read()
+    if set(result) != expected: raise ValueError('incomplete bundle')
+    raw = result[HARNESS]
+    if hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest() != '6cf914ba5ae1eeffc1b61376ba6b768be8a0ffdb':
+        raise ValueError('pinned harness blob mismatch')
+    return result
+
+def run(argv):
+    return subprocess.run(argv,env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,close_fds=True,timeout=30,check=True).stdout
+
+def write(path,data,mode=0o644):
+    protected(path.parent)
+    fd = os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,mode)
+    with os.fdopen(fd,'wb') as stream:
+        stream.write(data); stream.flush(); os.fchmod(stream.fileno(),mode); os.fsync(stream.fileno())
+
+def record(path,value): write(path,(json.dumps(value,sort_keys=True)+'\n').encode())
+
+def acceptance_check(identity,value,state,authenticate):
+    rows = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'}
+    if (value.get('identity') != identity or set(value.get('passed',[])) != rows
+            or state != {'identity':identity,'stage':'qualifying'}
+            or set(value.get('evidence',{})) != rows):
+        raise ValueError('qualification incomplete/stale or provenance missing')
+    for row, evidence in value['evidence'].items():
+        summary = authenticate(evidence['run_id'])['summary']
+        if (summary['status'] != 'PASS_SCOPED' or summary['request'] != dict(repo_id='mother',full_sha=FIXTURE,gate_set_id='full')
+                or summary['installed'] != dict(identity,stage='qualifying')
+                or evidence['summary_sha256'] != hashlib.sha256(json.dumps(summary,sort_keys=True).encode()).hexdigest()):
+            raise ValueError('acceptance receipt binding: '+row)
+
+def account(name):
+    try: entry = pwd.getpwnam(name)
+    except KeyError:
+        run(['/usr/sbin/useradd','--system','--user-group','--no-create-home','--home-dir','/nonexistent',
+             '--shell','/usr/sbin/nologin',name]); entry = pwd.getpwnam(name)
+    locked = run(['/usr/bin/passwd','--status',name]).split()[1]
+    if (entry.pw_uid == 0 or entry.pw_shell != '/usr/sbin/nologin' or locked != b'L'
+            or os.getgrouplist(name,entry.pw_gid) != [entry.pw_gid]):
+        raise ValueError('unsafe gate identity: '+name)
+    return entry
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action',choices=['install','enable-qualified'])
+    for name in ('bundle-sha256','repo-id','source-git','submit-user','fixture-sha'):
+        parser.add_argument('--'+name)
+    args = parser.parse_args()
+    if os.geteuid() or Path('/proc/self/uid_map').read_text().split() != ['0','0','4294967295']:
+        raise ValueError('host root namespace required')
+    if args.action == 'enable-qualified':
+        protected(DEST); protected(CONFIG)
+        sys.path.insert(0,str(DEST))
+        import probe
+        import supervisor
+        import verify
+        current = probe.installed_identity()
+        state = supervisor.read_config('admission.json')
+        acceptance_check(current,supervisor.read_config('qualification.json'),state,verify.authenticate)
+        record(CONFIG/'admission.next',{'stage':'normal','identity':current})
+        os.replace(CONFIG/'admission.next',CONFIG/'admission.json')
+        fd = os.open(CONFIG,os.O_RDONLY|os.O_DIRECTORY)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        return
+    if (args.repo_id,args.source_git,args.submit_user,args.fixture_sha) != (
+            'mother','/home/nexus/NEXUS/nexus-os/.git','nexus',FIXTURE):
+        raise ValueError('only frozen registration supported')
+    protected(BOOT); protected(BOOT/'bundle.tar')
+    files = bundle_files(BOOT/'bundle.tar',args.bundle_sha256 or '')
+    for name in FILES:
+        source = BOOT/'tools/gatebox'/name
+        protected(source)
+        if source.read_bytes() != files['tools/gatebox/'+name]: raise ValueError('bootstrap bytes differ')
+    targets = [DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source'),
+               Path('/etc/sudoers.d/gatebox'),Path('/etc/polkit-1/rules.d/00-gatebox-deny.rules')]
+    targets += [Path('/etc/systemd/system')/n for n in ('mothergate.socket','mothergate.service','mothergate-run@.service')]
+    for path in targets:
+        if path.exists() or path.is_symlink(): raise ValueError('existing output needs review: '+str(path))
+        ancestor = path.parent
+        while not ancestor.exists(): ancestor = ancestor.parent
+        protected(ancestor)
+    for executable in ('git','systemctl','systemd-analyze','python3','Xvfb','dbus-run-session','gdbus','awk','passwd','runuser'):
+        if not shutil.which(executable,path=ENV['PATH']): raise ValueError('missing offline prerequisite: '+executable)
+    if int(run(['/usr/bin/systemctl','--version']).split()[1]) < 259: raise ValueError('systemd 259 required')
+    for path,expected in (('/proc/sys/dev/tty/legacy_tiocsti','0'),('/proc/sys/kernel/apparmor_restrict_unprivileged_userns','1')):
+        if Path(path).read_text().strip() != expected: raise ValueError('unexpected host policy: '+path)
+    source = Path(args.source_git)
+    if source.resolve() != source or not source.is_dir(): raise ValueError('canonical Git common directory required')
+    info = source.stat(); submit = pwd.getpwnam(args.submit_user)
+    if submit.pw_uid == 0: raise ValueError('non-root submitter required')
+    for path in ('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu','/home/nexus/.cargo/registry'):
+        if not Path(path).is_dir() or not any(Path(path).iterdir()): raise ValueError('missing offline input: '+path)
+    protected(Path('/opt/google/chrome/chrome'))
+    manager,payload = account('mothergate'),account('gaterun')
+    if manager.pw_uid == payload.pw_uid or manager.pw_gid == payload.pw_gid: raise ValueError('distinct identities required')
+    try: grp.getgrnam('gatesubmit')
+    except KeyError: run(['/usr/sbin/groupadd','--system','gatesubmit'])
+    run(['/usr/sbin/usermod','--append','--groups','gatesubmit',args.submit_user])
+    for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
+    for name in FILES:
+        target = DEST/name; target.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
+        write(target,files['tools/gatebox/'+name],0o755 if name in ('install.sh','lifecycle.py') else 0o644)
+    write(DEST/'policy/phase2_live_sandbox.rs',files[HARNESS])
+    for name in ('staging','pending','receipts'):
+        path = STATE/name; path.mkdir(mode=0o755 if name == 'receipts' else 0o700)
+        os.chown(path,manager.pw_uid,manager.pw_gid)
+    for name in ('usr/bin','usr/sbin','usr/lib','usr/lib64','opt/google/chrome','opt/rust','inputs/registry',
+                 'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm'):
+        (ROOT/name).mkdir(parents=True,exist_ok=True,mode=0o755)
+    write(ROOT/'gate/request.json',b'',0o444)
+    for name,target in {'bin':'usr/bin','sbin':'usr/sbin','lib':'usr/lib','lib64':'usr/lib64','var/run':'/run','var/tmp':'/tmp'}.items():
+        (ROOT/name).symlink_to(target)
+    for name,text in {'passwd':f'root:x:0:0::/nonexistent:/usr/sbin/nologin\ngaterun:x:{payload.pw_uid}:{payload.pw_gid}::/work/home:/usr/sbin/nologin\n',
+                      'group':f'root:x:0:\ngaterun:x:{payload.pw_gid}:\n','nsswitch.conf':'passwd: files\ngroup: files\nhosts: files\n',
+                      'hosts':'127.0.0.1 localhost\n::1 localhost\n','resolv.conf':''}.items():
+        write(ROOT/'etc'/name,text.encode())
+    for name in ('ld.so.cache','machine-id','localtime','fonts','alternatives','dbus-1'):
+        host = Path('/etc')/name
+        if host.is_dir(): shutil.copytree(host,ROOT/'etc'/name,symlinks=True)
+        else: shutil.copyfile(host,ROOT/'etc'/name)
+    # Enumerate every skeleton byte/link. The manifest is checked before qualification.
+    inventory = {}
+    for path in sorted(ROOT.rglob('*')):
+        key = str(path.relative_to(ROOT)); mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode): inventory[key] = {'link':os.readlink(path)}
+        elif stat.S_ISREG(mode): inventory[key] = {'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+        elif stat.S_ISDIR(mode): inventory[key] = {'directory':True}
+        else: raise ValueError('special skeleton entry: '+key)
+    record(CONFIG/'skeleton.json',inventory)
+    registration = {'mother':dict(uid=submit.pw_uid,user=args.submit_user,object_format='sha1',common_directory=str(source),
+                                  device=info.st_dev,inode=info.st_ino,fixture_sha=FIXTURE,qualification_gate_set='full')}
+    record(CONFIG/'registry.json',registration)
+    outputs = []
+    for name in ('mothergate.socket','mothergate.service','mothergate-run@.service'):
+        target = Path('/etc/systemd/system')/name
+        write(target,render((DEST/'units'/name).read_text(),payload.pw_uid,payload.pw_gid).encode()); outputs.append(target)
+    for path,name,mode in (('/etc/sudoers.d/gatebox','policy/sudoers',0o440),('/etc/polkit-1/rules.d/00-gatebox-deny.rules','policy/deny-systemd.rules',0o644)):
+        target = Path(path); write(target,(DEST/name).read_bytes(),mode); outputs.append(target)
+    outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json']
+    record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
+    sys.path.insert(0,str(DEST))
+    import probe
+    current = probe.installed_identity()
+    record(CONFIG/'identity.json',current)
+    record(CONFIG/'qualification.json',PLACEHOLDER)
+    record(CONFIG/'admission.json',{'stage':'qualifying','identity':current})
+    run(['/usr/sbin/visudo','-cf','/etc/sudoers.d/gatebox'])
+    run(['/usr/bin/systemd-analyze','verify',*[str(p) for p in outputs[:3]]])
+    print('Installed in qualifying stage; start socket, qualify, then enable-qualified.')
+
 if __name__ == '__main__': main()
 PY

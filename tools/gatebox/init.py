@@ -179,9 +179,17 @@ def observations():
         result[name] = module.manifest(path,time.monotonic()+300)[0]
     return result
 
+def probe_module():
+    spec = importlib.util.spec_from_file_location('gbx_probe',os.path.join(os.path.dirname(__file__),'probe.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+def probe_payload(private_fds): return probe_module().payload(private_fds)
+
 def resources():
     result = {}
-    for name in ('/work','/run/gate'):
+    for name in ('/work','/run/gate','/tmp','/dev/shm'):
         data = os.statvfs(name)
         result[name] = {'bytes_used':(data.f_blocks-data.f_bfree)*data.f_frsize,
                         'bytes_total':data.f_blocks*data.f_frsize,
@@ -211,10 +219,16 @@ def main():
                 path = Path(base)/name
                 if not path.is_symlink(): path.chmod(0o700 if path.stat().st_mode & 0o111 else 0o600)
         before = observations()
-        try: runner.gates()
+        peak = probe_module().Peak(resources)
+        peak.start()
+        try:
+            isolation, versions = probe_payload((log,status))
+            runner.output('isolation',json.dumps(isolation).encode())
+            runner.output('versions',json.dumps(versions).encode())
+            runner.gates()
         finally:
             runner.output('inputs',json.dumps({'before':before,'after':observations()}).encode())
-            runner.output('resources',json.dumps(resources()).encode())
+            runner.output('resources',json.dumps(peak.finish()).encode())
         packet(status,{'event':'complete'})
     finally:
         for proc in runner.children:
