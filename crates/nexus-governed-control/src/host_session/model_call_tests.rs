@@ -1545,7 +1545,18 @@ fn sb3_revocation_between_observer_read_and_cas_is_entered_only() {
         let f = Call::new();
         let owner = f.owner.clone();
         f.hook("model.call.observed", i, move || owner.revoke());
-        let (before, steps) = (broker(&f), file_steps(&f));
+        let file = crate::files::FileCreate {
+            name: "b1c.txt".into(),
+            content: "pending\n".into(),
+        };
+        let proposed = f.b.door.create_file(f.b.run, &file).unwrap();
+        let crate::governed::AgentOutcome::AwaitingApproval(view) = proposed else {
+            panic!("a populated commitment awaiting approval");
+        };
+        let snapshot = || format!("{:?}", f.b.door.commitment(view.id));
+        let populated = snapshot().starts_with("Mine(") && snapshot().contains("Prepared");
+        assert!(populated, "{i}: a populated, prepared commitment");
+        let (before, steps, held) = (broker(&f), file_steps(&f), snapshot());
         let outcome = f.call().expect("ticketed attempt");
         let sent = f.sent();
         assert!(
@@ -1560,6 +1571,11 @@ fn sb3_revocation_between_observer_read_and_cas_is_entered_only() {
             "{i}: inventory and commitments unchanged"
         );
         assert_eq!(steps.load(Ordering::SeqCst), 0, "{i}: File dispatch 0");
+        assert_eq!(
+            snapshot(),
+            held,
+            "{i}: the populated commitment is unchanged"
+        );
     }
     // R3: revoked after the route's check, before the attempt CAS: no ticket.
     let f = Call::new();
@@ -1715,9 +1731,11 @@ fn attempts(f: &Call) -> usize {
     let attempt = |t: &&&str| **t == "admitted" || t.starts_with("refused:");
     trace.iter().filter(attempt).count()
 }
-/// Direct File-dispatch observation: each File commitment step, counted.
+/// Direct File-dispatch observation: each File commitment step and each
+/// File staging or execution start (SB3B-R13 (O)), counted.
 fn file_steps(f: &Call) -> Arc<AtomicUsize> {
     use crate::test_hooks::at::{AUTHORIZE_RECORDED, COMPLETE_BEFORE_CHECK, PREPARE_BEFORE_INSERT};
+    use crate::test_hooks::at::{FILE_EXECUTE_START, FILE_STAGED};
     let (steps, hooks) = (Arc::new(AtomicUsize::new(0)), f.b.control());
     for at in [
         PREPARE_BEFORE_INSERT,
@@ -1729,6 +1747,13 @@ fn file_steps(f: &Call) -> Arc<AtomicUsize> {
             step.fetch_add(1, Ordering::SeqCst);
         };
         hooks.authority().commitments().hooks().every(at, fire);
+    }
+    for at in [FILE_STAGED, FILE_EXECUTE_START] {
+        let step = steps.clone();
+        let fire = move || {
+            step.fetch_add(1, Ordering::SeqCst);
+        };
+        hooks.files().hooks().every(at, fire);
     }
     steps
 }
@@ -2232,7 +2257,8 @@ fn sb3_call_r3_refusals_charge_nothing() {
 #[test]
 fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
     positive("positive control");
-    for poison in [false, true] {
+    for schedule in ["plain", "poison", "exhausted"] {
+        let poison = schedule == "poison";
         let f = Call::new();
         let c = f.b.clock.clone();
         let (mono, wall) = (c.monotonic_ms() + 600_000, c.wall_ms() + 600_000);
@@ -2277,9 +2303,14 @@ fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
             hooks.every(at, move || check(what));
         }
         let (on, gates, poisoner) = (window.clone(), AtomicUsize::new(0), f.b.control());
+        let scope = f.b.door.context.scope.clone();
         hooks.every("model.call.gate", move || {
             on.store(true, Ordering::SeqCst);
-            if poison && gates.fetch_add(1, Ordering::SeqCst) == 1 {
+            let gate = gates.fetch_add(1, Ordering::SeqCst);
+            if gate == 1 && schedule == "exhausted" {
+                scope.next_step.store(u64::MAX, Ordering::SeqCst); // SB3B-R13 (P1)
+            }
+            if poison && gate == 1 {
                 let control = poisoner.clone();
                 let _ = std::thread::spawn(move || {
                     let _held = control.authority().grants().hold_for_test();
@@ -2314,7 +2345,16 @@ fn sb3_call_gate_reads_clocks_and_deadline_before_any_hold() {
             "(what, run table, grant store) held"
         );
         let outcome = outcome.expect("ticketed attempt");
-        let expected = if poison { "model_cancelled" } else { "ok" };
+        let expected = if schedule == "plain" {
+            "ok"
+        } else {
+            "model_cancelled"
+        };
+        let failed = f.b.session.core.cell.session_word() & FAILED != 0;
+        assert!(
+            failed || schedule == "plain",
+            "{schedule}: the failure latch holds"
+        );
         assert_eq!(
             class(&outcome),
             expected,
@@ -2389,6 +2429,28 @@ fn sb3_call_grant_revocation_cannot_precede_the_cas() {
             "{i}: revocation landed"
         );
         assert!(recorded(&outcome), "{i}: one recorded result");
+    }
+}
+
+/// SB3B-R13 (P2): mission limits installed after a gate sampled none (so
+/// no reading exists for them) refuse that gate's CAS; never fabricated time.
+#[test]
+fn sb3_limits_without_a_sample_fail_closed() {
+    positive("positive control");
+    for i in 0..4 {
+        let f = Call::new();
+        let (context, clock) = (f.b.door.context(), f.b.clock.clone());
+        f.hook("model.call.observed", i, move || {
+            let installed = context.narrow_mission_deadlines(clock.clone(), 1, 1);
+            assert!(installed.is_ok(), "already-expired, positive limits");
+        });
+        let outcome = f.call().expect("ticketed attempt");
+        assert_eq!(
+            f.sent(),
+            CALL[..i],
+            "{i}: limits without a sample refuse the CAS"
+        );
+        assert!(recorded(&outcome), "{i}: recorded");
     }
 }
 
