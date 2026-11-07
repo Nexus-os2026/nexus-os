@@ -224,3 +224,25 @@ caller restoration (MP-Cb2-8 note).
 
 Repeats: the 10 lifecycle-module oracles (every child case) 10x with
 `--test-threads=1` and 10x default parallel: 20/20 runs, 10 passed each.
+
+## Cb2-R1 — authorized oracle amendment (Codex review-1, 1 LOW)
+
+`test(oracle-amend)`, strictly stronger: plain/one, two, bad, transport
+assert exact caller results (`[ok]`, `[ok,ok]`, `[ok,ok]`,
+`[failed:model_unavailable]`), calls/chats/charges/attempts 1/2/2/1 each
+(n,n,n,n), and outcome (staged File + AwaitingApproval; `model_draft_email`
+or `model_unavailable` with fail:lane_fail:builder). Records cases require
+the staged File iff success and, after dropping the scenario, read-only
+SQLite finds the `mission_consented` row, one `model_call` row per native
+attempt (rows with `detail.call` equal ModelCallCharged) and
+`coding_run_ledger` rows iff success.
+MP-Cb2-13 (caller refuses at entry, mc): pre-amend oracle (31648a1f) passes
+all four plain records cases; amended oracle RED on all four at the exact
+caller-results assertion (`["invalidated"]`). MP-Cb2-7r against the
+retained direct meter tests: KILLED by all three m2e_budget tests
+(`e_o30d_liveness_revoked_before_boundary_release`:383,
+`c1_s4_append_failures_and_live_replay`:933,
+`c1_s4_uncertain_append_never_grants_a_charge`:999; `Ok(Charged{call:1})`
+vs `Err(NotRecorded)`), so 7r is caught at the meter; Cb2's composition
+oracle alone is masked by the append fence. Both restored by sha256.
+Size after Cb2-R1 vs 622c6bdb: 1,039 changed lines (cap 1,500).
