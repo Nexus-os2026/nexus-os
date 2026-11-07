@@ -1033,3 +1033,33 @@ Receipts on the B1c head:
   same-length value and each summary line to a same-length line is
   killed at "the populated commitment is unchanged". Governed-control
   lib 916; fmt, clippy, diff --check.
+
+### 13.10 B1e evidence carries (SB3B-R3/R15; base e81b2883)
+Test-only; no production change. Oracle-add ab6fe45b:
+- A2/F6: second acquisition 0/0/0 at each held stage, including
+  registration.
+- F9: exactly one native record with the attempt's correlation.
+- F10a: held schedules (G4, G5, P2, A2) run in a child process with a
+  30 s deadline, kill+wait, success plus marker.
+- R4-call, G0-R3 and SB-2a registration contention restored. The
+  contention holder is released at `model.complete.contended`.
+
+Plants, each killed at its named assertion and restored by sha256:
+- slot released early; duplicate record; wrong ordinal;
+- conversation accepted; grant ignored at R3;
+- registration contention latching;
+- a never-closing held child (parent fails at 30.01 s);
+- a child skipping its body (fails in 0.01 s).
+
+Gates, each binary alone:
+- governed-control lib 920, Mother lib 360, m2e_a2 54, m2e_transport 39;
+  fmt, clippy, diff --check.
+- Host 165/166 on the first run and 166/166 on a full re-run. The
+  failure was `session_recovery_fix1::fix1_d_canonical_recovery_rejects_invalid_history_before_workspace`
+  ("close is uncertain", 4.49 s against about 0.3 s), with 0/5 isolated
+  re-runs failing. No host or production code changed.
+
+Repeats: 10 serial + 10 parallel, 73/73 each.
+
+F10b (schedule matrix and validator) is stopped at the gap count, per
+SB3B-R15; the draft is not committed.
