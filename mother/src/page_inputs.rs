@@ -55,6 +55,26 @@ impl PageBuildInput {
     pub(crate) fn borrowed(&self) -> (&Note, &PageFacts) {
         (&self.note, &self.facts)
     }
+    #[cfg(test)]
+    pub(crate) fn unvalidated_for_test(c: &MissionContract, invocation: InvocationId) -> Self {
+        let note = c.notes[0].clone();
+        let facts = c.page_facts.clone().unwrap();
+        Self {
+            contract_hash: c.hash(),
+            invocation,
+            content_sha256: content_digest(&note, &facts),
+            note,
+            facts,
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn alter_skipped_for_test(&mut self, facts: bool) {
+        if facts {
+            self.facts.name.push('z');
+        } else {
+            self.note.text.push('z');
+        }
+    }
     pub(crate) fn validate(
         &self,
         c: &MissionContract,
