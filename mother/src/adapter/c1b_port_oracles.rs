@@ -339,6 +339,28 @@ const SB3C_FACADE_LINES: [&str; 15] = [
     "pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {",
     "pub fn model_call(",
 ];
+/// SB3C-R4 (6): the four route methods, bound to their receivers (rustfmt).
+const SB3C_ROUTE: [(&str, &str); 4] = [
+    ("HostSession", "    pub fn register_local_model(\n        &self,\n        endpoint: &str,\n        spec: crate::inference::ModelPinSpec,\n    ) -> Result<crate::inference::ModelIdentityView, SessionError> {"),
+    ("SessionDoor", "    pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {"),
+    ("SessionDoor", "    pub fn admit_inference(\n        &self,\n        run: crate::authority::ids::RunId,\n        contract_hash: &str,\n        request: &str,\n        expected_identity: [u8; 32],\n    ) -> Result<(), SessionFailure> {"),
+    ("SessionDoor", "    pub fn model_call(\n        &self,\n        run: crate::authority::ids::RunId,\n        request: &crate::inference::ModelRequest,\n        meter: &dyn crate::inference::CallMeter,\n        deadline: &dyn crate::inference::CallDeadline,\n        invocation: &crate::inference::InvocationObserver,\n    ) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {"),
+];
+/// One definition each, in its receiver's impl, with exactly that signature.
+fn sb3c_route_bound(facade: &str) -> Result<(), String> {
+    for (receiver, sig) in SB3C_ROUTE {
+        let name = sig.trim_start().split('(').next().unwrap();
+        let at: Vec<_> = facade.match_indices(&format!("{name}(")).collect();
+        let [(i, _)] = at[..] else {
+            return Err(format!("{name}: {} definitions", at.len()));
+        };
+        let owner = facade[..i].rsplit("\nimpl ").next().unwrap();
+        if owner.split(" {").next() != Some(receiver) || facade.find(sig) != Some(i - 4) {
+            return Err(format!("{name}: not the bound signature"));
+        }
+    }
+    Ok(())
+}
 fn sb2_public_model_item(line: &str) -> bool {
     line.starts_with("pub ")
         && line != "pub struct ModelObligations {"
@@ -425,6 +447,25 @@ fn c1_s1_session_sources_have_no_model_route() {
         "pub(crate) fn model_call(id: u64) {}"
     ));
     assert!(!sb2_public_model_item("pub model: ModelObligations,"));
+    let facade_text = std::fs::read_to_string(root.join(facade)).unwrap();
+    assert_eq!(
+        sb3c_route_bound(&facade_text),
+        Ok(()),
+        "SB3C-R4 bound route"
+    );
+    let extra =
+        "\nimpl HostSession {\n    pub fn admit_inference(\n        &self,\n    ) -> bool {\n";
+    let one_line = SB3C_ROUTE[2]
+        .1
+        .replace("\n        ", " ")
+        .replace(",\n    )", ")");
+    for escape in [
+        format!("{facade_text}{extra}"),
+        facade_text.replace(SB3C_ROUTE[2].1, &one_line),
+        facade_text.replacen("impl SessionDoor {", "impl HostSession {", 1),
+    ] {
+        assert!(sb3c_route_bound(&escape).is_err(), "SB3C-R4 escape refused");
+    }
     for path in files {
         let text = std::fs::read_to_string(&path).unwrap();
         let permitted = private.iter().any(|p| path == root.join(p));
