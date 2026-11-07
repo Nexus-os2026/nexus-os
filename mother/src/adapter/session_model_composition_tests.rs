@@ -6,6 +6,7 @@ use crate::adapter::c1b_coordinator_oracles::{ask, draft, outcome, request, REPL
 use crate::adapter::c1b_fake_ollama::{chat, Answer};
 use crate::adapter::c1b_port_oracles::children as run_children;
 use crate::adapter::session_model_bridge_support::{advance_in, count, signal, within, SFx};
+use crate::effect::EffectPort;
 use crate::lane::{LaneOutput, Verdict};
 use crate::state::MissionState;
 use nexus_governed_control::inference::ModelReply;
@@ -85,6 +86,8 @@ fn c1(arg: &str) {
                 "charge journaled before chat"
             );
             assert_eq!(*seen.lock().unwrap(), ["ok"]);
+            let inner = f.home.port.inner_for_test().model_identity();
+            assert_eq!(inner, f.home.port.model_identity(), "the inner-port seam");
         }
         "metadata" => {
             assert_eq!(f.charges(), 0, "metadata failure: no charge");
@@ -261,4 +264,91 @@ fn l2(arg: &str) {
         !f.home.lines().concat().contains(REPLY),
         "no accepted output"
     );
+}
+
+// ------------------------------------------------------- SB3D-R1 seam
+
+/// Each line naming `seam` in `files` is the one `#[cfg(test)]` definition
+/// in session_port.rs or a use inside a `#[cfg(test)]` adapter module.
+fn seam_leaks(seam: &str, mods: &str, files: &[(String, String)]) -> Vec<String> {
+    let lines: Vec<&str> = mods.lines().map(str::trim).collect();
+    let test_mod = |name: &str| {
+        let decl = format!("mod {name};");
+        let at = lines.iter().position(|l| *l == decl);
+        at.is_some_and(|at| {
+            lines[..at]
+                .iter()
+                .rev()
+                .take(2)
+                .any(|l| *l == "#[cfg(test)]")
+        })
+    };
+    let (mut leaks, mut defined) = (Vec::new(), 0);
+    for (name, text) in files {
+        let rows: Vec<&str> = text.lines().map(str::trim).collect();
+        for (at, row) in rows.iter().enumerate() {
+            let named = row
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
+                .any(|t| t == seam);
+            if !named {
+                continue;
+            }
+            let above = rows[..at].iter().rev().find(|l| !l.is_empty());
+            if row.contains(&format!("fn {seam}(")) {
+                defined += 1;
+                if name != "session_port" || above != Some(&"#[cfg(test)]") {
+                    leaks.push(format!("{name}:{}: definition", at + 1));
+                }
+            } else if !test_mod(name) {
+                leaks.push(format!("{name}:{}: use", at + 1));
+            }
+        }
+    }
+    if defined != 1 {
+        leaks.push(format!("{defined} definitions"));
+    }
+    leaks
+}
+/// SB3D-R1 Q2: the SessionPort inner-port accessor is test-only (leak control).
+#[test]
+fn sb3_session_port_inner_seam_is_test_only() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/adapter");
+    let mods = std::fs::read_to_string(dir.join("mod.rs")).unwrap();
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        files.push((name, std::fs::read_to_string(&path).unwrap()));
+    }
+    assert_eq!(
+        seam_leaks("inner_for_test", &mods, &files),
+        Vec::<String>::new()
+    );
+    let port = files
+        .iter()
+        .find(|(n, _)| n == "session_port")
+        .unwrap()
+        .1
+        .clone();
+    let leaked = port.replacen(
+        "    #[cfg(test)]\n    pub(crate) fn inner_for_test",
+        "    pub(crate) fn inner_for_test",
+        1,
+    );
+    let used = format!("{mods}\nmod lanes;\n");
+    for (escape, mods) in [
+        (vec![("session_port".into(), leaked)], mods.as_str()),
+        (
+            vec![
+                ("session_port".into(), port.clone()),
+                ("lanes".into(), "port.inner_for_test()".into()),
+            ],
+            used.as_str(),
+        ),
+    ] {
+        assert!(
+            !seam_leaks("inner_for_test", mods, &escape).is_empty(),
+            "a leak is refused"
+        );
+    }
 }

@@ -216,6 +216,10 @@ pub struct SessionPort {
     inner: GovernedPort,
 }
 impl SessionPort {
+    #[cfg(test)]
+    pub(crate) fn inner_for_test(&self) -> &GovernedPort {
+        &self.inner // SB3D-R1 Q2: the D oracles' inner-port seam.
+    }
     pub fn new(door: SessionDoor, workspace: String) -> Self {
         Self {
             inner: GovernedPort::from_door(PortDoor::Session(door)).with_workspace(workspace),
