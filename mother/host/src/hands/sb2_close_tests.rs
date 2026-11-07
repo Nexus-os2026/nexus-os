@@ -37,24 +37,61 @@ fn sb2_completed_registration_report_preserves_record_fact() {
 fn sb2_failed_startup_reports_model_unknown() {
     assert!(failed_startup_report().contains(MODEL_UNKNOWN));
 }
+// Crate-local O4 error snapshots; real close_report still performs its reads.
+thread_local! { static SNAPSHOT_FAILURES: std::cell::Cell<u8> = const { std::cell::Cell::new(0) }; }
+pub(super) fn observed<T, E>(index: u8, result: Result<T, E>) -> Result<T, ()> {
+    if SNAPSHOT_FAILURES.with(|f| f.get() & (1 << index) != 0) {
+        Err(())
+    } else {
+        result.map_err(|_| ())
+    }
+}
+
 #[test]
 fn sb2_close_report_has_one_model_line() {
-    let none = nexus_governed_control::host_session::close::ModelObligations {
-        operation: "none",
-        active: false,
-        owner_complete: true,
-        child_complete: true,
-        record: "not_required",
-        uncertain: false,
+    use std::sync::{
+        atomic::{AtomicBool, AtomicU64},
+        mpsc, Condvar,
     };
-    for snapshot in [None, Some(none)] {
+    let fixture = crate::stop_tests::support::Fixture::new();
+    let seed = SessionSeed::new().unwrap();
+    let (output, _frames) = mpsc::sync_channel(64);
+    let screen = Arc::new(Shared {
+        stop: crate::stop::StopRoute::new(seed.ingress()),
+        input: Mutex::default(),
+        sequence: AtomicU64::new(0),
+        changed: Condvar::new(),
+        output,
+        end: AtomicBool::new(false),
+        input_end: AtomicBool::new(false),
+        dialogue: Mutex::new(()),
+        queued_output: AtomicU64::new(0),
+        delivered_output: AtomicU64::new(0),
+        output_failed: AtomicBool::new(false),
+    });
+    let confirmer = Arc::new(crate::terminal::TerminalConfirmer::new(screen.clone()));
+    let home = Arc::new(SessionServices::open(seed, &fixture.home, confirmer.clone()).unwrap());
+    let runtime = Runtime {
+        home,
+        screen,
+        confirmer,
+        used: false,
+        mission: None,
+        config: Config {
+            home: fixture.home.clone(),
+            workspace: fixture.workspace.clone(),
+            name: "report.txt".into(),
+            text: String::new(),
+            hold: Duration::ZERO,
+        },
+    };
+    for unknown in [false, true] {
         for failures in 0..=2 {
-            let report = format!(
-                "{}{}",
-                CLOSE_UNKNOWN.repeat(failures),
-                model_report(snapshot)
-            );
+            SNAPSHOT_FAILURES.with(|f| f.set(((1 << failures) - 1) | if unknown { 4 } else { 0 }));
+            let report = runtime.close_report("test");
+            SNAPSHOT_FAILURES.with(|f| f.set(0));
             assert_eq!(report.matches("CLOSE MODEL ").count(), 1, "{report}");
+            assert_eq!(report.contains(MODEL_UNKNOWN), unknown);
         }
     }
 }

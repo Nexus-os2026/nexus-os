@@ -575,3 +575,47 @@ X1/C4 require RuntimeRoot and are sandbox_blocked without execution here.
 Named temporary dead-code expectations (non-test builds only): `Attempt`,
 `Attempt::acquire`, `Attempt::record_return`, `Attempt::complete`, and
 `historical_outcome`; remove at SB-3 wiring. No module-wide suppression.
+
+
+### 11.2 SB-2b-A2 amendment and SB-2a review-2 carry (2026-11-07)
+The approved base is now eb45f54b, including SB-2a-E65. Snapshot numbering
+supersedes §11's original two-folder plan: 01 oracle-add (inert), 02 oracle-fix
+(A2 fixture only, defect found before implementation), 03 private accounting,
+04 review-2 carry. No recorded historical receipt above is a current-tree claim.
+A2's shared fixture now actually issues a door through
+`issue_agent_door_with_halt`, retaining that door and the original opaque id
+from its broker-issued record. Consent is `msn-000001/1/1`, valid in the existing
+Restricted registry. The assertion still compares original correlation verbatim.
+No numeric group, substituted digest or new persistent grammar is accepted.
+This corrected fixture requires RuntimeRoot; accounting runtime GREEN must be
+established outside the sandbox, not inferred from compilation.
+L1 adds qualified public-function signature collection (const/async/unsafe/
+extern ABI, without a new dependency), facade signature model denial and
+`model::` facade-line denial. Both the modifier and multiline alias controls
+were observed RED before the matcher changes; alias plants target the real
+facade through both structural guards.
+L2 `sb2_owner_completion_retries_benign_observer_contention` forces an observed
+failed try-lock while a close observer holds state, then releases it before
+completion: RED before repair, GREEN afterward. Completion metadata retries for
+at most 100ms, bounded also by the original close deadline. Admission/handoff
+stays nonblocking. `sb2_owner_completion_is_bounded_and_poison_fails_closed`
+requires timeout/poison to retain denial and uncertainty. Drop still only fails.
+I1 uses one close-obligation snapshot. I2
+`sb2_bootstrap_model_contention_is_unavailable` requires Unavailable on contention
+rather than Restricted (RuntimeRoot-blocked locally). I3 strengthens F4 by
+calling real `Runtime::close_report`; cfg(test) thread-local error snapshots
+exercise zero/one/two resource failures and present/unavailable obligations.
+Its six one-model-line assertions remain; RuntimeRoot blocks local execution.
+I4 corrects the append comment: recording is outside the model hold, not globally
+lock-free. Only `RegistrationReceipt::sequence` retains its SB-2a dead-code
+expectation. SB-2b's named expectations are `Attempt::acquire`,
+`Attempt::record_return`, `Attempt::complete`, and `historical_outcome`.
+Final receipts, exact commands, hashes, all blocked schedules, snapshot
+composition and measured size are in `sb2b2-out/report.md`. The hash-pinned
+outside runner includes all 26 SB-2a plants, six FREEZE plants, five review-2
+controls, corrected inert RED replay, and ten serial/ten parallel repetitions.
+Outside results and exact-SHA CI remain unobserved; no composed model-worker,
+session inference, SB-3 capability, phase advancement or acceptance is claimed.
+C1 L1's first matcher also rejected the two pre-existing private Core storage/
+initialization lines. One bounded repair preserves those exact two declarations;
+public alias signatures remain denied. No frozen assertion was changed.

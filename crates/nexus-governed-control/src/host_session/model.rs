@@ -41,12 +41,16 @@ impl ModelSlot {
     pub(super) fn installed(&self) -> bool {
         self.state.lock().unwrap().registration.is_some()
     }
-    pub(super) fn ready(&self) -> bool {
-        self.state.try_lock().is_ok_and(|s| {
-            !self.uncertain.load(Ordering::SeqCst)
-                && !s.active
-                && (!s.attempted || s.registration.is_some())
-        })
+    pub(super) fn ready(&self) -> Result<bool, SessionError> {
+        let s = self.state.try_lock().map_err(|e| {
+            if matches!(e, TryLockError::Poisoned(_)) {
+                self.uncertain.store(true, Ordering::SeqCst);
+            }
+            SessionError::Unavailable
+        })?;
+        Ok(!self.uncertain.load(Ordering::SeqCst)
+            && !s.active
+            && (!s.attempted || s.registration.is_some()))
     }
     pub(super) fn quiescent(&self) -> bool {
         self.snapshot().is_some_and(|o| {
@@ -130,7 +134,33 @@ pub(super) fn reserve(core: &Arc<Core>, scope: &Arc<RequestScope>) -> Result<Own
 impl Owner {
     pub(super) fn complete(mut self, record: &'static str) -> Result<(), SessionError> {
         let core = self.core.clone();
-        let mut s = hold(&core)?;
+        // Retry only completion metadata, bounded by the original close limit.
+        // Admission/handoff holds remain nonblocking and never use this loop.
+        let deadline = SessionIngress { core: core.clone() }
+            .close_deadline()
+            .map_or(Instant::now() + Duration::from_millis(100), |d| {
+                d.min(Instant::now() + Duration::from_millis(100))
+            });
+        let mut s = loop {
+            match core.model.state.try_lock() {
+                Ok(state) => break state,
+                Err(TryLockError::Poisoned(_)) => return Err(SessionError::Unavailable),
+                Err(TryLockError::WouldBlock) => {
+                    #[cfg(test)]
+                    crate::authority::file_session::probe(
+                        Some(&core.cell),
+                        "model.complete.contended",
+                    );
+                    if Instant::now() >= deadline {
+                        return Err(SessionError::Unavailable);
+                    }
+                    std::thread::park_timeout(
+                        Duration::from_millis(1)
+                            .min(deadline.saturating_duration_since(Instant::now())),
+                    );
+                }
+            }
+        };
         self.complete_held(record, &mut s)
     }
     fn complete_held(&mut self, record: &'static str, s: &mut State) -> Result<(), SessionError> {
@@ -256,7 +286,7 @@ impl HostSession {
             let model = crate::inference::RegisteredModel::verified(transport);
             let (identity, view) = (model.identity, model.view.clone());
             hold(&self.core)?.child_complete = true;
-            // The active owner prevents seal while the lock-free append runs.
+            // The active owner prevents seal while append runs outside the model hold.
             record = "unknown";
             #[cfg(test)]
             crate::authority::file_session::probe(Some(&self.core.cell), "model.record.before");

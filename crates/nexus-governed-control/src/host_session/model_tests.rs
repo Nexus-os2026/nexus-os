@@ -46,11 +46,11 @@ fn sb2_one_session_operation_active() {
     assert!(model::reserve(&seed.core, &q).is_err());
     let o = seed.core.model.snapshot().unwrap();
     assert!(o.active && !o.owner_complete && !o.child_complete);
-    assert!(!seed.core.model.ready() && !seed.core.model.quiescent());
+    assert!(!seed.core.model.ready().unwrap() && !seed.core.model.quiescent());
     owner.complete("not_required").unwrap();
     assert!(seed.core.model.quiescent());
     assert!(
-        !seed.core.model.ready(),
+        !seed.core.model.ready().unwrap(),
         "failed configured startup cannot become no-model"
     );
     assert!(
@@ -341,7 +341,7 @@ fn sb2_registration_records_before_install_once() {
             .count(),
         1
     );
-    assert!(f.session.core.model.ready());
+    assert!(f.session.core.model.ready().unwrap());
     assert!(f
         .session
         .register_model_private(&p.endpoint, &pin())
@@ -377,7 +377,7 @@ fn sb2_unrecorded_failed_or_late_registration_is_absent() {
         };
         assert!(f.session.register_model_private(endpoint, &pin()).is_err());
         assert!(
-            !f.session.core.model.ready(),
+            !f.session.core.model.ready().unwrap(),
             "unrecorded_model_is_absent fault={fault}"
         );
         assert!(
@@ -546,7 +546,7 @@ fn sb2_failed_verification_is_not_retried() {
             .scope
             .live(f.session.core.cell.session_word()));
         assert!(!f.session.core.model.installed());
-        assert!(!f.session.core.model.ready());
+        assert!(!f.session.core.model.ready().unwrap());
         assert!(f.session.finish_bootstrap().is_err());
         // A caller retry is also forbidden and must not reach another gate or peer.
         assert!(f
@@ -1176,4 +1176,69 @@ fn sb2_attempt_recorded_end_survives_failed_delivery() {
     );
     assert_eq!(after.mother, close::FinalStatus::Recorded);
     assert_ne!(after.delivery, close::FinalStatus::Recorded);
+}
+
+#[test]
+fn sb2_owner_completion_retries_benign_observer_contention() {
+    let seed = SessionSeed::new().unwrap();
+    let owner = model::reserve(&seed.core, &bootstrap(&seed.core)).unwrap();
+    let (seen_tx, seen_rx) = std::sync::mpsc::sync_channel(1);
+    let (resume_tx, resume_rx) = std::sync::mpsc::sync_channel(1);
+    seed.core.cell.1.arm("model.complete.contended", move || {
+        seen_tx.send(()).unwrap();
+        resume_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    });
+    let observer = seed.core.model.state.lock().unwrap();
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || done_tx.send(owner.complete("not_required")).unwrap());
+    seen_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(matches!(
+        done_rx.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
+    drop(observer);
+    resume_tx.send(()).unwrap();
+    let result = done_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    worker.join().unwrap();
+    assert!(
+        result.is_ok(),
+        "benign observer contention must complete: {result:?}"
+    );
+    assert!(seed.core.model.quiescent());
+    assert!(!seed.failed());
+}
+#[test]
+fn sb2_owner_completion_is_bounded_and_poison_fails_closed() {
+    for poison in [false, true] {
+        let seed = SessionSeed::new().unwrap();
+        let owner = model::reserve(&seed.core, &bootstrap(&seed.core)).unwrap();
+        if poison {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _hold = seed.core.model.state.lock().unwrap();
+                panic!("poison completion state");
+            }));
+        }
+        let observer = seed
+            .core
+            .model
+            .state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let worker = std::thread::spawn(move || tx.send(owner.complete("not_required")).unwrap());
+        assert!(rx.recv_timeout(Duration::from_secs(1)).unwrap().is_err());
+        drop(observer);
+        worker.join().unwrap();
+        assert!(seed.failed());
+        assert!(!seed.core.model.quiescent());
+    }
+}
+#[test]
+fn sb2_bootstrap_model_contention_is_unavailable() {
+    let f = fixture();
+    let _observer = f.session.core.model.state.lock().unwrap();
+    assert!(matches!(
+        f.session.finish_bootstrap(),
+        Err(SessionError::Unavailable)
+    ));
 }

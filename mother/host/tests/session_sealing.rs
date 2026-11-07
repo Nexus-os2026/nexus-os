@@ -14,12 +14,42 @@ fn code(path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+// Dependency-free matcher for pub(\s+(const|async|unsafe|extern "[^"]*"))*\s+fn.
+fn public_function(mut line: &str) -> bool {
+    fn word<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+        line.strip_prefix(prefix)
+            .filter(|r| r.starts_with(char::is_whitespace))
+            .map(str::trim_start)
+    }
+    let Some(rest) = word(line, "pub") else {
+        return false;
+    };
+    line = rest.trim_start();
+    loop {
+        if let Some(rest) = ["const", "async", "unsafe"]
+            .iter()
+            .find_map(|p| word(line, p))
+        {
+            line = rest.trim_start();
+        } else if let Some(rest) = word(line, "extern") {
+            let Some(rest) = rest.trim_start().strip_prefix('"') else {
+                return false;
+            };
+            let Some(end) = rest.find('"') else {
+                return false;
+            };
+            line = rest[end + 1..].trim_start();
+        } else {
+            return word(line, "fn").is_some();
+        }
+    }
+}
 fn signatures(source: &str) -> Vec<String> {
     let mut result = Vec::new();
     let mut current = None;
     for line in source.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("pub fn ") || trimmed.starts_with("pub async fn ") {
+        if public_function(trimmed) {
             assert!(current.is_none(), "unterminated public signature");
             current = Some(String::new());
         }
@@ -89,6 +119,7 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
             "FnMut",
             "Fn(",
             "Option<HaltCell>",
+            "model",
         ] {
             assert!(!sig.contains(forbidden), "public session escape: {sig}");
         }
@@ -352,5 +383,28 @@ fn sb2_private_model_submodules_expose_no_callable_route() {
         "pub fn model_identity(&self) -> String { unreachable!() }",
     ] {
         assert!(sb2_public_escape(plant));
+    }
+}
+
+#[test]
+fn sb2_signature_collection_catches_qualified_model_aliases() {
+    for qualifiers in [
+        "",
+        "const ",
+        "async ",
+        "unsafe ",
+        "extern \"C\" ",
+        "const unsafe ",
+        "unsafe extern \"C\" ",
+    ] {
+        let plant = format!(
+            "pub {qualifiers}fn raw(\n&self,\n) -> model::RegistrationReceipt {{ unreachable!() }}"
+        );
+        assert_eq!(
+            signatures(&plant).len(),
+            1,
+            "collect qualified facade: {plant}"
+        );
+        assert!(sb2_public_escape(&plant), "reject aliased model signature");
     }
 }
