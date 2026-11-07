@@ -1,14 +1,15 @@
 //! M3-E M-1: the Owner's page inputs (facts, notes, optional goal file) as
 //! immutable, bounded snapshots (ruling M3E-R1/R2).
 //!
-//! Each input is opened once, read-only, `O_NOFOLLOW | O_NONBLOCK`, checked
-//! to be a regular file on that same descriptor, and read from it to at
-//! most its cap plus one byte (never trusting metadata length). The digest
-//! and the parse both come from that one retained buffer; nothing is ever
-//! reread by path. This is host-owned input I/O for data the Owner chose,
-//! not a Files capability, and it mints no authority: the parsed values are
-//! the existing `nexus_mother` contract types and still pass contract
-//! validation and the broker's own facts construction later.
+//! The bounded no-follow read lives in Mother's adapter
+//! (`nexus_mother::adapter::input_files`, M3E-R3): each input is opened
+//! once, checked regular on that descriptor and read to at most its cap
+//! plus one byte. This module holds only the kinds, caps, codes and parsing;
+//! the digest and the parse both come from the one retained buffer, never a
+//! reread. It reads data the Owner chose, is not a Files capability and
+//! mints no authority: the parsed values are the existing `nexus_mother`
+//! contract types and still pass contract validation and the broker's own
+//! facts construction later. Any CR in any input is refused (M3E-R3).
 //!
 //! Errors are fixed codes (plus a 1-based line for the facts grammar and
 //! word cap); no input text and no OS error text is ever carried.
@@ -18,15 +19,10 @@
 
 use nexus_governed_control::authority::evidence::shown;
 use nexus_governed_control::inert_page::{ApprovedFacts, FactCode, POLICY_V1};
+use nexus_mother::adapter::input_files::{self, InputBytes, OpenedFile, ReadRefusal};
 use nexus_mother::contract::Note;
 use nexus_mother::page_inputs::PageFacts;
-use nix::errno::Errno;
-use nix::fcntl::OFlag;
-use sha2::{Digest, Sha256};
 use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::Read;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 /// The largest facts file, in bytes.
@@ -89,6 +85,8 @@ pub enum InputError {
     FactsWordTooLong {
         line: usize,
     },
+    /// A CR anywhere in the notes file.
+    NotesCarriageReturn,
     /// `ApprovedFacts::new` refused the values (no location).
     Fact(FactCode),
     GoalEmpty,
@@ -107,6 +105,7 @@ impl InputError {
             InputError::NotUtf8 => "input_not_utf8",
             InputError::FactsFileInvalid { .. } => "facts_file_invalid",
             InputError::FactsWordTooLong { .. } => "facts_word_too_long",
+            InputError::NotesCarriageReturn => "notes_carriage_return",
             InputError::Fact(code) => code.as_str(),
             InputError::GoalEmpty => "goal_empty",
             InputError::GoalNotPlain => "goal_not_plain",
@@ -128,7 +127,7 @@ impl InputError {
 /// An input opened and checked regular, not yet read.
 pub struct OpenedInput {
     kind: InputKind,
-    file: File,
+    file: OpenedFile,
 }
 
 impl fmt::Debug for OpenedInput {
@@ -139,46 +138,31 @@ impl fmt::Debug for OpenedInput {
     }
 }
 
-impl OpenedInput {
-    /// Open `path` read-only without following a final symbolic link and
-    /// without blocking (a FIFO is refused, not waited on), then check the
-    /// descriptor is a regular file.
-    pub fn open(kind: InputKind, path: &Path) -> Result<Self, InputError> {
-        let flags = OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC;
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(flags.bits())
-            .open(path)
-            .map_err(|e| {
-                if e.raw_os_error() == Some(Errno::ELOOP as i32) {
-                    InputError::Link
-                } else {
-                    InputError::Unavailable
-                }
-            })?;
-        let meta = file.metadata().map_err(|_| InputError::Unavailable)?;
-        if !meta.file_type().is_file() {
-            return Err(InputError::NotRegular);
+impl From<ReadRefusal> for InputError {
+    fn from(refusal: ReadRefusal) -> Self {
+        match refusal {
+            ReadRefusal::Unavailable => InputError::Unavailable,
+            ReadRefusal::Link => InputError::Link,
+            ReadRefusal::NotRegular => InputError::NotRegular,
+            ReadRefusal::TooLarge => InputError::TooLarge,
+            ReadRefusal::Unreadable => InputError::Unreadable,
         }
+    }
+}
+
+impl OpenedInput {
+    /// Open `path` through the adapter: no final link, no blocking, regular.
+    pub fn open(kind: InputKind, path: &Path) -> Result<Self, InputError> {
+        let file = input_files::open(path, kind.cap())?;
         Ok(Self { kind, file })
     }
 
     /// Read the snapshot from this descriptor: at most cap + 1 bytes.
     pub fn read(self) -> Result<InputSnapshot, InputError> {
-        let cap = self.kind.cap();
-        let mut bytes = Vec::with_capacity(cap + 1);
-        (&self.file)
-            .take(cap as u64 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| InputError::Unreadable)?;
-        if bytes.len() > cap {
-            return Err(InputError::TooLarge);
-        }
-        let sha256 = Sha256::digest(&bytes).into();
+        let bytes = self.file.read()?;
         Ok(InputSnapshot {
             kind: self.kind,
             bytes,
-            sha256,
         })
     }
 }
@@ -192,27 +176,40 @@ pub fn read_input(kind: InputKind, path: &Path) -> Result<InputSnapshot, InputEr
 /// over the raw file bytes; [`InputSnapshot::parse`] reads the same buffer.
 pub struct InputSnapshot {
     kind: InputKind,
-    bytes: Vec<u8>,
-    sha256: [u8; 32],
+    bytes: InputBytes,
 }
 
 impl fmt::Debug for InputSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InputSnapshot")
             .field("kind", &self.kind)
-            .field("bytes", &self.bytes.len())
+            .field("bytes", &self.len())
             .field("sha256", &self.sha256_hex())
             .finish()
     }
 }
 
-/// A parsed input, in the existing contract types.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A parsed input, in the existing contract types. `Debug` never shows
+/// the goal's text (and `PageFacts`/`Note` redact their own).
+#[derive(Clone, PartialEq, Eq)]
 pub enum InputValue {
     Facts(PageFacts),
     Notes(Note),
     /// The goal, verbatim but for one dropped final LF.
     Goal(String),
+}
+
+impl fmt::Debug for InputValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InputValue::Facts(facts) => f.debug_tuple("Facts").field(facts).finish(),
+            InputValue::Notes(note) => f.debug_tuple("Notes").field(note).finish(),
+            InputValue::Goal(goal) => f
+                .debug_struct("Goal")
+                .field("chars", &goal.chars().count())
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 impl InputSnapshot {
@@ -221,19 +218,19 @@ impl InputSnapshot {
     }
 
     pub fn len(&self) -> usize {
-        self.bytes.len()
+        self.bytes.bytes().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
+        self.bytes.bytes().is_empty()
     }
 
     pub fn sha256(&self) -> [u8; 32] {
-        self.sha256
+        self.bytes.sha256()
     }
 
     pub fn sha256_hex(&self) -> String {
-        sha256_hex(&self.sha256)
+        sha256_hex(&self.sha256())
     }
 
     /// Parse the retained bytes by kind; no normalization.
@@ -241,23 +238,26 @@ impl InputSnapshot {
         let body = self.body()?;
         match self.kind {
             InputKind::Facts => parse_facts(body).map(InputValue::Facts),
-            InputKind::Notes => Ok(InputValue::Notes(note(body))),
+            InputKind::Notes => note(body).map(InputValue::Notes),
             InputKind::Goal => parse_goal(body).map(InputValue::Goal),
         }
     }
 
     // UTF-8, less one optional final LF (the digest keeps it).
     fn body(&self) -> Result<&str, InputError> {
-        let text = std::str::from_utf8(&self.bytes).map_err(|_| InputError::NotUtf8)?;
+        let text = std::str::from_utf8(self.bytes.bytes()).map_err(|_| InputError::NotUtf8)?;
         Ok(text.strip_suffix('\n').unwrap_or(text))
     }
 }
 
-fn note(body: &str) -> Note {
-    Note {
+fn note(body: &str) -> Result<Note, InputError> {
+    if body.contains('\r') {
+        return Err(InputError::NotesCarriageReturn);
+    }
+    Ok(Note {
         label: NOTES_LABEL.into(),
         text: body.into(),
-    }
+    })
 }
 
 /// Lowercase hex of a digest.
@@ -316,8 +316,11 @@ fn parse_facts(body: &str) -> Result<PageFacts, InputError> {
     })
 }
 
-// M3E-R2 3: LF separates lines; every other scalar must be shown.
+// M3E-R2 3 + R3: no CR; LF separates lines; every other scalar shown.
 fn parse_goal(body: &str) -> Result<String, InputError> {
+    if body.contains('\r') {
+        return Err(InputError::GoalNotPlain);
+    }
     if body.trim().is_empty() {
         return Err(InputError::GoalEmpty);
     }
@@ -408,7 +411,7 @@ pub fn read_page_inputs(args: &PageArgs) -> Result<PageInputs, (InputKind, Input
     Ok(PageInputs {
         facts: parse_facts(facts.body().map_err(at(InputKind::Facts))?)
             .map_err(at(InputKind::Facts))?,
-        note: note(notes.body().map_err(at(InputKind::Notes))?),
+        note: notes.body().and_then(note).map_err(at(InputKind::Notes))?,
         goal: match &goal {
             None => None,
             Some(g) => Some(g.body().and_then(parse_goal).map_err(at(InputKind::Goal))?),

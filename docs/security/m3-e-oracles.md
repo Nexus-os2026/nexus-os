@@ -11,9 +11,10 @@ rulings M3E-R1 and M3E-R2), `/home/nexus/NEXUS/m3-design-approved.md`
 
 ## M-1 — input snapshots and running-image identity
 
-Code: `mother/host/src/inputs.rs`, `mother/host/src/binary_identity.rs`.
-Tests: `mother/host/tests/page_inputs.rs` (and the in-module unit test in
-`binary_identity.rs`). Linux only.
+Code: `mother/host/src/inputs.rs`, `mother/host/src/binary_identity.rs`,
+`mother/src/adapter/input_files.rs` (M-1b). Tests:
+`mother/host/tests/page_inputs.rs`, plus the in-module unit test in
+`input_files.rs` (M-1b; it was in `binary_identity.rs` in M-1). Linux only.
 
 ### Frozen behaviour
 
