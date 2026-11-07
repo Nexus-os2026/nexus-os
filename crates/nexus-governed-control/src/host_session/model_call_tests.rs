@@ -1411,7 +1411,7 @@ fn contend(f: &Call, i: usize) -> (Arc<AtomicUsize>, Holder) {
 }
 
 /// Request `i` entered and held open at the peer; `act` runs then.
-fn held(i: usize, act: impl FnOnce(&Call)) -> (Call, ModelCallOutcome, Duration) {
+fn held_request_at(i: usize, act: impl FnOnce(&Call)) -> (Call, ModelCallOutcome, Duration) {
     let f = Call::serve(Peer::chat(Some(4 + i), None));
     let (outcome, elapsed) = std::thread::scope(|s| {
         let (door, run, meter, observer) = (&f.b.door, f.b.run, &f.meter, f.owner.observer());
@@ -1442,7 +1442,7 @@ fn sb3_entered_request_grants_no_successor() {
     assert_eq!(f.sent(), CALL, "call paths");
     assert_eq!((f.counts(), f.charged(), f.records()), ((1, 0), (1, 1), 1));
     for i in 0..4 {
-        let (f, outcome, _) = held(i, |f| f.restriction("emergency_restrict")());
+        let (f, outcome, _) = held_request_at(i, |f| f.restriction("emergency_restrict")());
         assert_eq!(f.sent(), CALL[..=i], "entered {i} once; successors 0");
         assert_eq!(attempts(&f), i + 1, "{i}: exact admission attempts");
         assert!(outcome.result().is_err() && recorded(&outcome), "{i}");
@@ -1465,7 +1465,7 @@ fn sb3_held_request_cancels_and_joins() {
     assert!(outcome.result().is_ok(), "no-interference call");
     for i in 0..4 {
         for kind in RESTRICT {
-            let (f, outcome, elapsed) = held(i, |f| f.restriction(kind)());
+            let (f, outcome, elapsed) = held_request_at(i, |f| f.restriction(kind)());
             assert!(
                 elapsed < Duration::from_secs(1),
                 "{i} {kind}: joined in {elapsed:?}"
@@ -2534,7 +2534,7 @@ fn sb3_slow_request_crossing_a_deadline_times_out() {
     positive("positive control");
     for i in [0, 3] {
         for kind in ["q", "wall", "monotonic", "backstop"] {
-            let (f, outcome, _) = held(i, move |f| match kind {
+            let (f, outcome, _) = held_request_at(i, move |f| match kind {
                 "q" => f.b.session.expire_request_for_test(f.b.q.sequence()),
                 "backstop" => drop(
                     f.b.session
@@ -3008,7 +3008,7 @@ type Keep = Arc<
         Option<std::sync::mpsc::Sender<()>>,
     )>,
 >;
-fn release(keep: &Keep) {
+fn release_holder(keep: &Keep) {
     let (holder, release) = std::mem::take(&mut *keep.lock().unwrap());
     drop(release);
     if let Some(holder) = holder {
@@ -3102,7 +3102,7 @@ fn matrix_fault(f: &Call, class: &'static str, keep: &Keep) -> Arc<dyn Fn() + Se
 /// One schedule: `class` lands at `side` (gate `i` of the R5 sides). A
 /// fault that needs a hold the call owns at that point runs on its own
 /// thread and is joined at the next point that holds nothing.
-fn schedule(
+fn run_schedule(
     class: &'static str,
     side: &str,
     i: usize,
@@ -3184,7 +3184,7 @@ fn schedule(
     let (end, kept) = (join.clone(), keep.clone());
     hooks.every("model.attempt.return", move || {
         end();
-        release(&kept);
+        release_holder(&kept);
     });
     let (meter, at) = (join.clone(), fire.clone());
     let metered: Box<dyn Fn() + Send> = Box::new(move || {
@@ -3199,7 +3199,7 @@ fn schedule(
     }
     let outcome = f.call();
     join();
-    release(&keep);
+    release_holder(&keep);
     assert!(
         landed.load(Ordering::SeqCst),
         "{side}/{class} {i}: the fault landed"
@@ -3308,7 +3308,7 @@ fn matrix_side(side: &str) -> usize {
             continue;
         }
         for i in 0..if side.starts_with("r5") { 4 } else { 1 } {
-            let (f, outcome) = schedule(class, side, i);
+            let (f, outcome) = run_schedule(class, side, i);
             judge(&f, (side, class, i), expected, outcome);
             schedules += 1;
         }
@@ -3466,90 +3466,191 @@ fn sb3_schedule_matrix_cells_are_complete() {
     );
 }
 
-/// SB3B-R19 (2): every test that joins a thread (`.join()`, directly or
-/// through a helper that does) runs in a watched child under the 30 s
-/// deadline. `watched` itself, the parent side, is the only exception.
+/// SB3B-R19 (2), R21: every model_call test that joins a thread
+/// (`.join()`, directly or through a helper in any scanned test or helper
+/// file) runs behind the exact parent-return wrapper. The guard fails
+/// closed on any form it cannot classify: a `#[test]` not at the top level
+/// or not followed by single-line attributes and its fn, `macro_rules!`, a
+/// join outside a top-level fn, or a join-capable helper used as a value.
 #[test]
 fn sb3_thread_joins_run_in_watched_children() {
-    let source = include_str!("model_call_tests.rs");
+    let call = include_str!("model_call_tests.rs");
+    let others = [
+        include_str!("model_tests.rs"),
+        include_str!("model_death_tests.rs"),
+        include_str!("../test_hooks.rs"),
+        include_str!("../harness_tests.rs"),
+    ];
+    // Every cfg(test) module of host_session is scanned.
+    let parent = mask(include_str!("../host_session.rs"));
+    let mods = parent
+        .match_indices("mod ")
+        .filter(|(at, _)| test_only(&parent, *at));
+    let scanned = ["model_call_tests", "model_tests", "model_death_tests"];
+    for (at, _) in mods {
+        let name = parent[at + 4..].split(';').next().unwrap();
+        assert!(scanned.contains(&name), "{name}: an unscanned test module");
+    }
+    let files = |extra: &str, call: &str| -> Vec<String> {
+        let mut all = vec![call.to_owned(), extra.to_owned()];
+        all.extend(others.iter().map(|o| o.to_string()));
+        join_problems(&all)
+    };
     assert_eq!(
-        unwatched(source),
+        files("", call),
         Vec::<String>::new(),
         "a join outside a watched child"
     );
-    let leak = format!(
-        "{source}\n#[test]\nfn sb3_leak() {{\n    std::thread::spawn(|| ()).join().unwrap();\n}}\n"
-    );
-    assert_eq!(unwatched(&leak), ["sb3_leak"], "leak control");
-    let via =
-        format!("{source}\n#[test]\nfn sb3_via() {{\n    keep_join(&Holder::default());\n}}\n");
-    assert_eq!(unwatched(&via), ["sb3_via"], "a join through a helper");
-    // SB3B-R20 (a): a wrapper without the parent's return, and a test whose
-    // `#[test]` is separated from its fn by another attribute.
-    let open = format!("{source}\n#[test]\nfn sb3_open() {{\n    if watched(\"sb3_open\") {{\n    }}\n    keep_join(&Holder::default());\n}}\n");
-    assert_eq!(
-        unwatched(&open),
-        ["sb3_open"],
-        "a wrapper without its return"
-    );
-    let attr = format!("{source}\n#[test]\n#[allow(unused)]\nfn sb3_attr() {{\n    keep_join(&Holder::default());\n}}\n");
-    assert_eq!(unwatched(&attr), ["sb3_attr"], "an intervening attribute");
-}
-/// Top-level fns: (name, is a test, body); bodies from the masked source.
-/// A fn is a test when `#[test]` is among the attributes directly above it.
-fn unwatched(source: &str) -> Vec<String> {
-    let code = mask(source);
-    let mut fns = Vec::new();
-    for (at, _) in code.match_indices('\n') {
-        let line = &code[at + 1..];
-        let Some(head) = ["fn ", "pub(super) fn ", "pub(crate) fn "]
-            .iter()
-            .find_map(|p| line.strip_prefix(p))
-        else {
-            continue;
-        };
-        let name: String = head
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
-        let above = code[..at].lines().rev();
-        let attrs = above.take_while(|l| l.trim().is_empty() || l.trim_start().starts_with("#["));
-        let test = attrs.into_iter().any(|l| l.trim() == "#[test]");
-        let open = at + code[at..].find('{').unwrap();
-        let close = open + code[open..].find("\n}").unwrap();
-        fns.push((name, test, open, close));
+    let test = |name: &str, body: &str| format!("\n#[test]\nfn {name}() {{\n{body}\n}}\n");
+    let cases = [
+        ("", test("sb3_leak", "    std::thread::spawn(|| ()).join().unwrap();"), "sb3_leak: unwatched"),
+        ("", test("sb3_via", "    keep_join(&Holder::default());"), "sb3_via: unwatched"),
+        ("", test("sb3_open", "    if watched(\"sb3_open\") {\n    }\n    keep_join(&Holder::default());"), "sb3_open: unwatched"),
+        ("", "\n#[test]\n#[allow(unused)]\nfn sb3_attr() {\n    keep_join(&Holder::default());\n}\n".into(), "sb3_attr: unwatched"),
+        // SB3B-R21 (i)-(iv).
+        ("", "\nmod nested {\n    #[test]\n    fn sb3_nested() {}\n}\n".into(), "an unclassified #[test]"),
+        ("", "\nmacro_rules! sb3_mac {\n    () => {};\n}\n".into(), "macro_rules!"),
+        ("", "\n#[test]\n#[allow(\n    unused\n)]\nfn sb3_multi() {}\n".into(), "an unclassified #[test]"),
+        ("\nfn sb3_other_join() {\n    std::thread::spawn(|| ()).join().unwrap();\n}\n", test("sb3_cross", "    sb3_other_join();"), "sb3_cross: unwatched"),
+        ("", test("sb3_alias", "    let j = keep_join;\n    let f = || j(&Holder::default());\n    f();"), "keep_join used as a value"),
+        ("", "\nimpl Holder3 {\n    fn j(&self) {\n        keep_join(&Holder::default());\n    }\n}\n".into(), "keep_join called outside a top-level fn"),
+        ("", "\nimpl Holder2 {\n    fn j(&self) {\n        std::thread::spawn(|| ()).join().unwrap();\n    }\n}\n".into(), "a join outside a top-level fn"),
+    ];
+    for (extra, case, expected) in cases {
+        let found = files(extra, &format!("{call}{case}"));
+        assert!(
+            found.iter().any(|p| p.contains(expected)),
+            "control {expected}: {found:?}"
+        );
     }
-    let calls = |body: &str, name: &str| {
-        body.match_indices(&format!("{name}(")).any(|(i, _)| {
-            !body[..i].ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.')
-        })
+}
+/// Every problem the guard finds in `files` (the first is the subject).
+fn join_problems(files: &[String]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut fns = Vec::new(); // (file, name, test, open, close)
+    let codes: Vec<String> = files.iter().map(|f| mask(f)).collect();
+    for (k, code) in codes.iter().enumerate() {
+        let lines: Vec<&str> = code.split('\n').collect();
+        let mut at = 0;
+        for (i, line) in lines.iter().enumerate() {
+            if line.contains("macro_rules!") {
+                problems.push(format!("{k}:{i}: macro_rules!"));
+            }
+            if line.trim() == "#[test]" {
+                let next = lines[i + 1..].iter().find(|l| {
+                    let l = l.trim();
+                    !(l.is_empty()
+                        || l.starts_with("#[")
+                            && l.ends_with(']')
+                            && l.matches('[').count() == l.matches(']').count())
+                });
+                if !line.starts_with('#') || !next.is_some_and(|l| l.starts_with("fn ")) {
+                    problems.push(format!("{k}:{i}: an unclassified #[test]"));
+                }
+            }
+            let decl = ["fn ", "pub(super) fn ", "pub(crate) fn "]
+                .iter()
+                .find_map(|p| line.strip_prefix(p));
+            if let Some(head) = decl {
+                let name: String = head
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                let above = lines[..i]
+                    .iter()
+                    .rev()
+                    .take_while(|l| l.trim().is_empty() || l.starts_with("#["));
+                let test = above.into_iter().any(|l| l.trim() == "#[test]");
+                let open = at + code[at..].find('{').unwrap();
+                let close = open + matching(&code[open..]);
+                fns.push((k, name, test, open, close));
+            }
+            at += line.len() + 1;
+        }
+        for (j, _) in code.match_indices(".join()") {
+            if !fns
+                .iter()
+                .any(|(f, _, _, o, c)| *f == k && *o < j && j < *c)
+            {
+                problems.push(format!("{k}: a join outside a top-level fn"));
+            }
+        }
+    }
+    let body = |f: usize, o: usize, c: usize| &codes[f][o..c];
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let calls = |text: &str, name: &str| {
+        text.match_indices(&format!("{name}("))
+            .any(|(i, _)| !text[..i].ends_with(|c: char| ident(c) || c == '.'))
     };
-    let mut joiners: Vec<&str> = Vec::new();
+    let mut joiners: Vec<String> = Vec::new();
     loop {
-        let more: Vec<&str> = fns
+        let more: Vec<String> = fns
             .iter()
-            .filter(|(n, test, ..)| !test && n != "watched" && !joiners.contains(&&**n))
-            .filter(|(_, _, o, c)| {
-                code[*o..*c].contains(".join()") || joiners.iter().any(|j| calls(&code[*o..*c], j))
+            .filter(|(_, n, test, ..)| !test && n != "watched" && !joiners.contains(n))
+            .filter(|(f, _, _, o, c)| {
+                body(*f, *o, *c).contains(".join()")
+                    || joiners.iter().any(|j| calls(body(*f, *o, *c), j))
             })
-            .map(|(n, ..)| &**n)
+            .map(|(_, n, ..)| n.clone())
             .collect();
         if more.is_empty() {
             break;
         }
         joiners.extend(more);
     }
-    let joins = |o: usize, c: usize| {
-        code[o..c].contains(".join()") || joiners.iter().any(|j| calls(&code[o..c], j))
+    for j in &joiners {
+        for code in &codes {
+            for (i, _) in code.match_indices(j.as_str()) {
+                let (before, after) = (&code[..i], &code[i + j.len()..]);
+                let word = !before.ends_with(ident) && !after.starts_with(ident);
+                let used = !after.trim_start().starts_with('(') && !before.ends_with("fn ");
+                if word && used {
+                    problems.push(format!("{j} used as a value"));
+                }
+            }
+        }
+    }
+    // A joiner called outside every top-level fn (an impl method, say)
+    // cannot be attributed to a test: fail closed.
+    for j in &joiners {
+        for (k, code) in codes.iter().enumerate() {
+            for (i, _) in code.match_indices(&format!("{j}(")) {
+                let call = !code[..i].ends_with(|c: char| ident(c) || c == '.');
+                let inside = fns
+                    .iter()
+                    .any(|(f, _, _, o, c)| *f == k && *o < i && i < *c);
+                if call && !inside && !code[..i].ends_with("fn ") {
+                    problems.push(format!("{j} called outside a top-level fn"));
+                }
+            }
+        }
+    }
+    let joins = |f: usize, o: usize, c: usize| {
+        body(f, o, c).contains(".join()") || joiners.iter().any(|j| calls(body(f, o, c), j))
     };
-    // The complete parent-return wrapper, whitespace-insensitive.
-    let watched = |n: &str, o: usize| {
+    for (f, n, test, o, c) in &fns {
         let wrapper = format!("if watched(\"{n}\") {{ return; }}");
-        let tokens = source[o + 1..].split_whitespace().take(5);
-        tokens.collect::<Vec<_>>().join(" ") == wrapper
-    };
-    fns.iter()
-        .filter(|(n, test, o, c)| *test && joins(*o, *c) && !watched(n, *o))
-        .map(|(n, ..)| n.clone())
-        .collect()
+        let tokens = files[*f][o + 1..]
+            .split_whitespace()
+            .take(5)
+            .collect::<Vec<_>>()
+            .join(" ");
+        if *f == 0 && *test && joins(*f, *o, *c) && tokens != wrapper {
+            problems.push(format!("{n}: unwatched"));
+        }
+    }
+    problems
+}
+/// The offset of the brace closing the one that opens `code` (masked).
+fn matching(code: &str) -> usize {
+    let mut depth = 0usize;
+    for (i, b) in code.bytes().enumerate() {
+        match b {
+            b'{' => depth += 1,
+            b'}' if depth == 1 => return i,
+            b'}' => depth -= 1,
+            _ => {}
+        }
+    }
+    code.len()
 }
