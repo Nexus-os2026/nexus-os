@@ -38,8 +38,29 @@ pub fn running_binary_sha256() -> Result<[u8; 32], SelfIdentityUnavailable> {
 }
 
 fn hash_image(path: &Path) -> Result<[u8; 32], SelfIdentityUnavailable> {
-    let _ = path;
-    Err(SelfIdentityUnavailable) // M-1 oracle stub
+    let file = File::open(path).map_err(|_| SelfIdentityUnavailable)?;
+    let meta = file.metadata().map_err(|_| SelfIdentityUnavailable)?;
+    if !meta.file_type().is_file() || meta.len() > SELF_IDENTITY_MAX_BYTES {
+        return Err(SelfIdentityUnavailable);
+    }
+    let mut hasher = Sha256::new();
+    let mut reader = (&file).take(SELF_IDENTITY_MAX_BYTES + 1);
+    let mut buffer = vec![0u8; 64 * 1024];
+    let mut total = 0u64;
+    loop {
+        let n = match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(_) => return Err(SelfIdentityUnavailable),
+        };
+        total += n as u64;
+        hasher.update(&buffer[..n]);
+    }
+    if total != meta.len() || total > SELF_IDENTITY_MAX_BYTES {
+        return Err(SelfIdentityUnavailable);
+    }
+    Ok(hasher.finalize().into())
 }
 
 #[cfg(test)]

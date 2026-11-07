@@ -144,13 +144,42 @@ impl OpenedInput {
     /// without blocking (a FIFO is refused, not waited on), then check the
     /// descriptor is a regular file.
     pub fn open(kind: InputKind, path: &Path) -> Result<Self, InputError> {
-        let _ = (kind, path);
-        Err(InputError::Unavailable) // M-1 oracle stub
+        let flags = OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC;
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(flags.bits())
+            .open(path)
+            .map_err(|e| {
+                if e.raw_os_error() == Some(Errno::ELOOP as i32) {
+                    InputError::Link
+                } else {
+                    InputError::Unavailable
+                }
+            })?;
+        let meta = file.metadata().map_err(|_| InputError::Unavailable)?;
+        if !meta.file_type().is_file() {
+            return Err(InputError::NotRegular);
+        }
+        Ok(Self { kind, file })
     }
 
     /// Read the snapshot from this descriptor: at most cap + 1 bytes.
     pub fn read(self) -> Result<InputSnapshot, InputError> {
-        Err(InputError::Unreadable) // M-1 oracle stub
+        let cap = self.kind.cap();
+        let mut bytes = Vec::with_capacity(cap + 1);
+        (&self.file)
+            .take(cap as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| InputError::Unreadable)?;
+        if bytes.len() > cap {
+            return Err(InputError::TooLarge);
+        }
+        let sha256 = Sha256::digest(&bytes).into();
+        Ok(InputSnapshot {
+            kind: self.kind,
+            bytes,
+            sha256,
+        })
     }
 }
 
@@ -209,12 +238,18 @@ impl InputSnapshot {
 
     /// Parse the retained bytes by kind; no normalization.
     pub fn parse(&self) -> Result<InputValue, InputError> {
-        Err(InputError::NotUtf8) // M-1 oracle stub
+        let body = self.body()?;
+        match self.kind {
+            InputKind::Facts => parse_facts(body).map(InputValue::Facts),
+            InputKind::Notes => Ok(InputValue::Notes(note(body))),
+            InputKind::Goal => parse_goal(body).map(InputValue::Goal),
+        }
     }
 
     // UTF-8, less one optional final LF (the digest keeps it).
     fn body(&self) -> Result<&str, InputError> {
-        Err(InputError::NotUtf8) // M-1 oracle stub
+        let text = std::str::from_utf8(&self.bytes).map_err(|_| InputError::NotUtf8)?;
+        Ok(text.strip_suffix('\n').unwrap_or(text))
     }
 }
 
@@ -234,14 +269,65 @@ pub fn sha256_hex(digest: &[u8; 32]) -> String {
 // the first ": ", no CR, no blank or unknown line) → word cap → facts
 // construction.
 fn parse_facts(body: &str) -> Result<PageFacts, InputError> {
-    let _ = body;
-    Err(InputError::FactsFileInvalid { line: 0 }) // M-1 oracle stub
+    let mut name = None;
+    let mut hours = Vec::new();
+    let mut phone = None;
+    let mut values = Vec::new();
+    let mut lines = 0;
+    for (index, line) in body.split('\n').enumerate() {
+        lines = index + 1;
+        let invalid = InputError::FactsFileInvalid { line: lines };
+        if line.contains('\r') {
+            return Err(invalid);
+        }
+        let Some((key, value)) = line.split_once(": ") else {
+            return Err(invalid);
+        };
+        match key {
+            "name" if name.is_none() => name = Some(value),
+            "hours"
+                if name.is_some()
+                    && phone.is_none()
+                    && hours.len() < POLICY_V1.facts_hours_max_lines =>
+            {
+                hours.push(value)
+            }
+            "phone" if !hours.is_empty() && phone.is_none() => phone = Some(value),
+            _ => return Err(invalid),
+        }
+        values.push((lines, value));
+    }
+    let (Some(name), Some(phone)) = (name, phone) else {
+        return Err(InputError::FactsFileInvalid { line: lines + 1 });
+    };
+    for (line, value) in values {
+        if value
+            .split(' ')
+            .any(|word| word.chars().count() > POLICY_V1.max_word_chars)
+        {
+            return Err(InputError::FactsWordTooLong { line });
+        }
+    }
+    let approved = ApprovedFacts::new(name, &hours, phone).map_err(InputError::Fact)?;
+    Ok(PageFacts {
+        name: approved.name().into(),
+        hours: approved.hours().to_vec(),
+        phone: approved.phone().into(),
+    })
 }
 
 // M3E-R2 3: LF separates lines; every other scalar must be shown.
 fn parse_goal(body: &str) -> Result<String, InputError> {
-    let _ = body;
-    Err(InputError::GoalEmpty) // M-1 oracle stub
+    if body.trim().is_empty() {
+        return Err(InputError::GoalEmpty);
+    }
+    if !body.chars().all(|c| c == '\n' || shown(c)) {
+        return Err(InputError::GoalNotPlain);
+    }
+    if body.chars().count() > GOAL_MAX_SCALARS {
+        return Err(InputError::GoalTooLong);
+    }
+    Ok(body.into())
 }
 
 /// The page flags: `--mission one-page-site --notes <abs> --facts <abs>
@@ -258,8 +344,33 @@ pub struct PageArgs {
 /// a missing or other mission, missing notes/facts and relative paths are
 /// refused with a fixed code. No default location is ever supplied.
 pub fn parse_page_args(args: impl IntoIterator<Item = String>) -> Result<PageArgs, &'static str> {
-    let _ = args.into_iter();
-    Err("invalid_arguments") // M-1 oracle stub
+    let mut values = std::collections::BTreeMap::new();
+    let mut args = args.into_iter();
+    while let Some(key) = args.next() {
+        if !matches!(key.as_str(), "--mission" | "--notes" | "--facts" | "--goal")
+            || values.contains_key(&key)
+        {
+            return Err("invalid_arguments");
+        }
+        values.insert(key, args.next().ok_or("missing_value")?);
+    }
+    match values.remove("--mission").as_deref() {
+        None => return Err("mission_required"),
+        Some(PAGE_MISSION) => {}
+        Some(_) => return Err("mission_unknown"),
+    }
+    let absolute = |value: String| {
+        let path = PathBuf::from(value);
+        if path.is_absolute() {
+            Ok(path)
+        } else {
+            Err("absolute_path_required")
+        }
+    };
+    let notes = absolute(values.remove("--notes").ok_or("notes_required")?)?;
+    let facts = absolute(values.remove("--facts").ok_or("facts_required")?)?;
+    let goal = values.remove("--goal").map(absolute).transpose()?;
+    Ok(PageArgs { notes, facts, goal })
 }
 
 /// Every page input, parsed, with the digests of the exact bytes parsed.
@@ -285,6 +396,25 @@ impl fmt::Debug for PageInputs {
 
 /// Read and parse the inputs `args` names, each exactly once.
 pub fn read_page_inputs(args: &PageArgs) -> Result<PageInputs, (InputKind, InputError)> {
-    let _ = args;
-    Err((InputKind::Facts, InputError::Unavailable)) // M-1 oracle stub
+    let load = |kind, path: &Path| read_input(kind, path).map_err(|e| (kind, e));
+    let at = |kind| move |e| (kind, e);
+    let facts = load(InputKind::Facts, &args.facts)?;
+    let notes = load(InputKind::Notes, &args.notes)?;
+    let goal = args
+        .goal
+        .as_deref()
+        .map(|path| load(InputKind::Goal, path))
+        .transpose()?;
+    Ok(PageInputs {
+        facts: parse_facts(facts.body().map_err(at(InputKind::Facts))?)
+            .map_err(at(InputKind::Facts))?,
+        note: note(notes.body().map_err(at(InputKind::Notes))?),
+        goal: match &goal {
+            None => None,
+            Some(g) => Some(g.body().and_then(parse_goal).map_err(at(InputKind::Goal))?),
+        },
+        facts_sha256: facts.sha256(),
+        notes_sha256: notes.sha256(),
+        goal_sha256: goal.as_ref().map(InputSnapshot::sha256),
+    })
 }
