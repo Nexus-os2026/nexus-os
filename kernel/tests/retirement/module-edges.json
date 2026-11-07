@@ -59,7 +59,7 @@
   "kernel/src/identity_home.rs": ["tests"],
   "kernel/src/inert_page/mod.rs": ["facts", "parse", "policy", "scan", "tests", "tree", "verdict", "work"],
   "kernel/src/inference/exchange.rs": ["seams"],
-  "kernel/src/inference/mod.rs": ["endpoint", "exchange", "grammar", "identity", "ollama", "qualification_seam", "request", "tests"],
+  "kernel/src/inference/mod.rs": ["endpoint", "exchange", "grammar", "identity", "ollama", "purpose", "purpose_tests", "qualification_seam", "request", "tests"],
   "kernel/src/kill_gates.rs": ["tests"],
   "kernel/src/lib.rs": ["actuators", "adaptive_policy", "audit", "autonomy", "backup", "behavioral_profile", "capabilities", "checkpoint", "coding_run", "cognitive", "computer_control", "config", "consent", "consent_display", "crypto", "drift_detector", "emergency_stop", "errors", "firewall", "fuel_hardening", "governed_http", "governed_path", "hm", "identity_home", "inert_page", "inference", "kill_gates", "lifecycle", "manifest", "permissions", "persistence", "policy_engine", "privacy", "rate_limit", "redaction", "resource_limiter", "safety_supervisor", "scheduler", "secrets", "speculative", "startup", "supervisor", "test_support", "time_machine", "typed_tools", "web_conduct", "workspace", "workspace_authority"],
   "kernel/src/lifecycle.rs": ["tests"],

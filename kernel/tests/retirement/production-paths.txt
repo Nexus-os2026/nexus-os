@@ -185,6 +185,7 @@ kernel/src/inference/grammar.rs
 kernel/src/inference/identity.rs
 kernel/src/inference/mod.rs
 kernel/src/inference/ollama.rs
+kernel/src/inference/purpose.rs
 kernel/src/inference/request.rs
 kernel/src/kill_gates.rs
 kernel/src/lib.rs
