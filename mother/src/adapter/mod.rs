@@ -1368,4 +1368,10 @@ mod c1b_coordinator_oracles;
 mod m3cb_lane_oracles;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
+mod m3cb_lifecycle_oracles;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod m3cb_privacy_oracles;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod m3cb_support;
