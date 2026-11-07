@@ -400,3 +400,40 @@ class OfflineServiceTests(unittest.TestCase):
             manifest.write_text('[package]\nname = "nexus-verifier-sandbox"\nversion = "0.1.0"\n')
             self.assertEqual(init.artifact_package({'manifest_path':str(manifest),
                               'package_id':'path+file:///work/src/cj#0.1.0'}),'nexus-verifier-sandbox')
+
+    def test_review2_exact_excluded_artifact_and_listing(self):
+        policy, exclusions = supervisor.receipt.policy()
+        policy['gates'] = [g for g in policy['gates'] if g['id'] in ('compile-tests','workspace')]
+        def artifact(package, executable):
+            return dict(reason='compiler-artifact',profile={'test':True},package=package,
+                        target={'name':exclusions['target']},executable='/work/target/'+executable)
+        excluded = artifact('nexus-verifier-sandbox','excluded')
+        other = artifact('other-crate','included')
+        for variant in ('valid','missing','duplicate','names-changed'):
+            items = [other]+([] if variant=='missing' else [excluded]*(2 if variant=='duplicate' else 1))
+            names = exclusions['cases'][:-1] if variant=='names-changed' else exclusions['cases']
+            command = Mock(side_effect=lambda gate,argv: ('c1',0,
+                           '\n'.join(json.dumps(a) for a in items) if gate=='compile-tests'
+                           else ''.join(n+': test\n' for n in names)))
+            runner = init.Runner(-1,-1)
+            with patch.object(init.Path,'read_bytes',side_effect=[json.dumps(policy).encode(),json.dumps(exclusions).encode()]), \
+                    patch.object(init,'artifact_package',side_effect=lambda a:a['package']), \
+                    patch.object(runner,'command',command), patch.object(runner,'output'), patch.object(runner,'libtest') as execute:
+                if variant=='valid':
+                    runner.gates()
+                    self.assertEqual([a.args[1]['package'] for a in execute.call_args_list],['other-crate'])
+                    self.assertIn(['/work/target/excluded','--list','--format','terse'],[a.args[1] for a in command.call_args_list])
+                else:
+                    with self.subTest(variant=variant), self.assertRaises(ValueError): runner.gates()
+
+    def test_review4_collect_detects_failed_start(self):
+        selector = Mock()
+        selector.select.return_value = []
+        with patch.object(supervisor.selectors,'DefaultSelector',return_value=selector), \
+                patch.object(supervisor.time,'monotonic',side_effect=[0,0,14431]), \
+                patch.object(supervisor,'unit_state',return_value={'ActiveState':'failed','Result':'resources'}):
+            with self.assertRaisesRegex(ValueError,'unit exited'): supervisor.collect(RUN,{},supervisor.Evidence(),{})
+
+    def test_review5_installer_placeholder_contract(self):
+        self.assertEqual(supervisor.QUALIFICATION_PLACEHOLDER,{'identity':None,'passed':[]})
+        self.assertFalse(supervisor.qualified({'bundle':'installed'},supervisor.QUALIFICATION_PLACEHOLDER))
