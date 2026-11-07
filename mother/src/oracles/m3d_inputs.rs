@@ -8,6 +8,7 @@ use crate::journal::{Event, MissionId};
 use crate::lane::{input_hash, InvocationId, Lane, LaneIdentity, LaneInput, LaneOutput, Verdict};
 use crate::oracles::*;
 use crate::state::MissionState;
+use nexus_governed_control::authority::approval::FactsView;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +19,14 @@ const LEGACY_INPUT_HASH: &str = "406b2c4bacbb706031f7766951ebeb011439bd27e79a9d8
 const PAYLOAD_BYTES: &str =
     r#"{"note":{"label":"notes","text":"a"},"facts":{"name":"a","hours":["a"],"phone":"1234567"}}"#;
 const PAYLOAD_HASH: &str = "928644071ff49ea8fda56421100856f11cdd1fde5c598fdcab34036c51aee18f";
+
+// Review-1 goldens: handwritten JSON and independent Python hashlib, not
+// production serialization. Lane hash frames the JSON with a u64 BE length;
+// facts hash frames domain/name/each hours line/phone with u64 BE lengths
+// and the ordered hours count with u32 BE.
+const BUILDER_INPUT: &str = r#"{"invocation":{"mission":7,"seq":11},"role":"builder","contract_hash":"64a2488a57d70e044d8796f6c172bf2f7611eac057d211ae452e5bb7f7aa87d1","owner_words":"Make a page.","restatement":"A small page.","pass_criteria":[{"id":"V0","text":"index.html was created once, with your approval, and its receipt is recorded."},{"id":"V1","text":"The written file is exactly the file you approved (same SHA-256 and size)."},{"id":"V2","text":"The page passes the fixed inert-format check, under the same policy that was approved."},{"id":"V3","text":"Your name, every hours line and the phone appear exactly as you typed them, and no other phone-like number appears."},{"id":"V4","text":"A second, separate reader finds your name, every hours line and the phone in the page's text."},{"id":"V5","text":"The page contains no email-shaped text."}],"prior_outputs":[],"builder_input":{"contract_hash":"64a2488a57d70e044d8796f6c172bf2f7611eac057d211ae452e5bb7f7aa87d1","invocation":{"mission":7,"seq":11},"content_sha256":"928644071ff49ea8fda56421100856f11cdd1fde5c598fdcab34036c51aee18f"}}"#;
+const BUILDER_INPUT_HASH: &str = "94de2f8d0f11afb9148a9c8ab72b9628e7d0a2b1f8692dff836ced0d8a30effb";
+const FACTS_HASH: &str = "488987d0ff395f0e0aa00cb1619008c40fd6d101d2b99e2af30ebf467abfedcb";
 
 fn expected_criteria() -> Vec<PassCriterion> {
     [
@@ -118,6 +127,13 @@ fn m3d_present_facts_bind_every_value() {
 fn m3d_summary_and_confirmation_share_contract_facts() {
     let mut c = page();
     c.page_facts.as_mut().unwrap().name = "Rosa's & \"Bakery\"".into();
+    c.page_facts.as_mut().unwrap().hours = vec!["Open weekdays".into(), "Closed weekends".into()];
+    let expected = FactsView {
+        name: "Rosa's & \"Bakery\"".into(),
+        hours: vec!["Open weekdays".into(), "Closed weekends".into()],
+        phone: "1234567".into(),
+    };
+    assert_eq!(c.page_facts.as_ref().unwrap().view(), expected);
     let w = world();
     let id = w.submitted(c.clone());
     let owner = Recording::default();
@@ -126,9 +142,9 @@ fn m3d_summary_and_confirmation_share_contract_facts() {
     assert_eq!(summary.page_facts, c.page_facts);
     let asked = owner.0.lock().unwrap()[0].clone();
     let view = asked.page_facts.as_ref().expect("facts reach broker");
-    assert_eq!(view, &c.page_facts.as_ref().unwrap().view());
-    let facts_hash = hex::encode(view.approved().unwrap().hash());
-    assert!(asked.message().contains(&facts_hash));
+    assert_eq!(view, &expected);
+    assert_eq!(hex::encode(view.approved().unwrap().hash()), FACTS_HASH);
+    assert!(asked.message().contains(FACTS_HASH));
     assert!(asked.message().contains("Rosa's & \"Bakery\""));
     assert_eq!(asked.contract_hash, c.hash().to_hex());
     c.page_facts
@@ -174,15 +190,25 @@ fn m3d_facts_not_page_ready_precedes_consent_and_calls() {
             Err(ContractError::FactsNotPageReady)
         );
         let w = world();
-        let owner = Recording::default();
-        if let Ok(id) = w.mother.draft(valid.clone()) {
-            if w.mother.submit(id).is_ok() {
-                let _ = consent(&w.mother, id, &owner);
-            }
-        }
-        assert!(owner.0.lock().unwrap().is_empty(), "no dialog");
+        assert_eq!(
+            w.mother.draft(valid.clone()),
+            Err(CoordinatorError::Contract(ContractError::FactsNotPageReady))
+        );
         no_work(&w); // Also zero correction requests: no lane or model dispatch.
     }
+}
+
+#[test]
+fn m3d_builder_input_bytes_and_hash_are_frozen() {
+    let c = page();
+    let mut with = input(&c);
+    with.builder_input = prepare(&c, c.hash(), invocation(), LaneRole::Builder).unwrap();
+    assert!(with.builder_input.is_some());
+    assert_eq!(serde_json::to_string(&with).unwrap(), BUILDER_INPUT);
+    assert_eq!(input_hash(&with), BUILDER_INPUT_HASH);
+    let mut without = with.clone();
+    without.builder_input = None;
+    assert_ne!(input_hash(&with), input_hash(&without));
 }
 
 #[test]
