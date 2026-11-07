@@ -24,9 +24,15 @@ def sibling(name):
 snapshot, receipt = sibling('snapshot'), sibling('receipt')
 ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'}
 
-def exact(sock, length):
+def framing_budget(sock, deadline):
+    remaining = deadline-time.monotonic()
+    if remaining <= 0: raise TimeoutError('framing deadline')
+    sock.settimeout(remaining)
+
+def exact(sock, length, deadline):
     chunks = bytearray()
     while len(chunks) < length:
+        framing_budget(sock,deadline)
         block = sock.recv(length-len(chunks))
         if not block: raise ValueError('truncated frame')
         chunks.extend(block)
@@ -34,13 +40,15 @@ def exact(sock, length):
 
 def receive_request(sock, registry):
     try:
-        if sock.gettimeout() is None: sock.settimeout(2)
+        timeout = sock.gettimeout()
+        deadline = time.monotonic()+min(2,timeout if timeout is not None else 2)
         uid = struct.unpack('3i',sock.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))[1]
-        header = exact(sock,4)
+        header = exact(sock,4,deadline)
         length = int.from_bytes(header,'big')
         if not 1 <= length <= 1024: raise ValueError('request length')
-        frame = header+exact(sock,length)
+        frame = header+exact(sock,length,deadline)
         # Client closes its write half; the framing deadline covers trailing bytes.
+        framing_budget(sock,deadline)
         if sock.recv(1): raise ValueError('trailing request data')
         return snapshot.parse_request(frame,registry,uid)
     except OSError as exc: raise ValueError('framing/reply deadline') from exc
@@ -325,12 +333,14 @@ def main():
                 threading.Thread(target=work,daemon=False).start()
                 worker = True
             data = json.dumps(reply).encode()
+            sock.settimeout(2)
             sock.sendall(struct.pack('!I',len(data))+data)
         except (ValueError,OSError) as exc:
             try:
                 reply = {'status':'UNQUALIFIED' if str(exc).startswith('QUALIFICATION_') else 'REJECTED',
                          'reason':str(exc)}
                 data = json.dumps(reply).encode()[:4000]
+                sock.settimeout(2)
                 sock.sendall(struct.pack('!I',len(data))+data)
             except OSError: pass  # admitted work and its marker are independent of reply delivery
         finally:
