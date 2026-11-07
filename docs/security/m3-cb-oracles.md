@@ -246,3 +246,14 @@ retained direct meter tests: KILLED by all three m2e_budget tests
 vs `Err(NotRecorded)`), so 7r is caught at the meter; Cb2's composition
 oracle alone is masked by the append fence. Both restored by sha256.
 Size after Cb2-R1 vs 622c6bdb: 1,039 changed lines (cap 1,500).
+
+## Cb2-R2 — bounded native-check child (Codex review-2, 1 LOW)
+
+`test(oracle-fix)`, harness-only: the read-only SQLite check is spawned and
+polled against a 10 s deadline; on expiry python3 is killed and reaped and
+the case fails. MP-Cb2-14 (script sleeps 60 s, records:plain/one): case
+failed with "exceeded its 10 s bound: python3 killed and reaped" (12.2 s
+including setup); `pgrep -af MP-Cb2-14` afterwards found nothing; file
+restored by sha256. Cb1's `transport/pre` python check in
+`m3cb_lane_oracles.rs` is outside the Cb2 allowlist: unchanged, carried to
+Dd. Size after Cb2-R2 vs 622c6bdb: 1,093 changed lines (cap 1,500).
