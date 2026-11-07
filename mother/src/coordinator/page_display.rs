@@ -22,7 +22,8 @@
 //!   asked for, uncertain;
 //! - T13 follows only a recorded all-pass; T5, T7 and T15 are phase lines for
 //!   M-5 to call;
-//! - M3E-R19: a receipt joins only the File's effect with a 64 lower-case hex
+//! - M3E-R19/R21: a receipt joins only the journaled File dispatch's effect
+//!   (never a pending approval's) with a 64 lower-case hex
 //!   digest, else it is [`Publication::Unconfirmed`] (T9 uncertain); checks
 //!   count only as a valid record (V0..V5 at most once, closed codes) of the
 //!   receipt's effect.
@@ -169,10 +170,9 @@ pub fn page_view(entries: &[Entry], id: MissionId) -> PageView {
                     file_effect = Some(*effect);
                 }
             }
-            Event::ApprovalPending { effect, .. } => {
-                view.file_asked = true;
-                file_effect = file_effect.or(Some(*effect));
-            }
+            // M3E-R21: only a journaled File dispatch names the File's
+            // effect; a pending approval never stands in for it.
+            Event::ApprovalPending { .. } => view.file_asked = true,
             Event::PublicationReceipt {
                 effect,
                 sha256,

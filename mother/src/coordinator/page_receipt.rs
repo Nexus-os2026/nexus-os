@@ -14,6 +14,8 @@
 //! expired, settled `NotPublished`, stopped before the ask) with no receipt
 //! is `missing:publication_receipt`; a receipt needs its approved action's
 //! identity (an `ApprovalPending` or a settlement identity for its effect).
+//! Every such identity must name the receipt's action (M3E-R21): one that
+//! conflicts is `mismatched:action` even when another matches.
 //!
 //! The consent's broker `evidence_seq` is not journaled (R18 (4)): the
 //! receipt carries the consent's Mother journal seq and entry hash instead.
@@ -197,7 +199,8 @@ pub fn mission_receipt(
         let of_effect: Vec<_> = identities.iter().filter(|(e, _)| e == effect).collect();
         if of_effect.is_empty() {
             missing.push("action-link");
-        } else if !of_effect.iter().any(|(_, a)| a == action) {
+        } else if of_effect.iter().any(|(_, a)| a != action) {
+            // M3E-R21: any conflicting identity, even beside a matching one.
             mismatched.push("action");
         }
     }
