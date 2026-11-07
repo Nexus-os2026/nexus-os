@@ -269,4 +269,6 @@ splitting; the native check sums rows over every non-`sqlite_*` table in
 m3cb 32/32 (success records cases green); MP-Cb2-13 still RED on all four
 amended plain records cases (`["invalidated"]`), restored by sha256.
 Lesson recorded: test-only slices also run the kernel guard binaries.
-Size after Cb2-R3 vs 622c6bdb: 11342 changed lines (cap 1,500).
+Size after Cb2-R3: Cb2-own net 1,118 changed lines vs 622c6bdb (the five Cb2
+paths total 1,122, of which 4 mod.rs lines come from the main merge c94ace67;
+the merge's other files are not Cb2 changes); cap 1,500.
