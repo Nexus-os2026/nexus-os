@@ -206,6 +206,13 @@ def process_identity(text):
     require(len(tail)>19 and tail[19].isdecimal(),'missing process start time')
     return int(pid),int(tail[19])
 
+def host_pty_denied(path):
+    try: fd = os.open(path,os.O_RDWR|os.O_NOCTTY)
+    except OSError as exc:
+        require(exc.errno in (errno.EACCES,errno.EPERM,errno.ENOENT),'host PTY probe error')
+    else:
+        os.close(fd); raise ValueError('host PTY accessible')
+
 def processes(context):
     pairs = [pty.openpty(),pty.openpty()]
     try:
@@ -217,8 +224,7 @@ def processes(context):
             try: fcntl.ioctl(slave,termios.TIOCSTI,b'x')
             except OSError as exc: require(exc.errno in (errno.EPERM,errno.EIO),'unexpected TIOCSTI error')
             else: raise ValueError('TIOCSTI injection allowed')
-        host = Path(context['pty']['path'])
-        require(not host.exists() or (host.stat().st_dev,host.stat().st_ino) != tuple(context['pty']['identity']),'host PTY exposed')
+        host_pty_denied(context['pty']['path'])
     finally:
         for pair in pairs:
             for fd in pair: os.close(fd)
@@ -479,7 +485,7 @@ def fixture():
             metadata = dict(payload_uid=pwd.getpwnam('gaterun').pw_uid,pid=os.getpid(),
                             process_stat=Path('/proc/self/stat').read_text(),port=sockets[0].getsockname()[1],
                             socket=path,abstract='gatebox-'+str(os.getpid()),
-                            pty=dict(path=os.ttyname(slave),identity=[os.fstat(slave).st_dev,os.fstat(slave).st_ino]),
+                            pty=dict(path=os.ttyname(slave)),
                             namespaces={n:os.readlink('/proc/self/ns/'+n) for n in ('pid','mnt','ipc','uts','net')})
             atomic_config('probe-context.json',metadata)
             refused = client_request('0'*40,registration)
