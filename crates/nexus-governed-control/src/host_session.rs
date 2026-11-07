@@ -63,11 +63,12 @@ impl fmt::Debug for MissionDeadlines {
     }
 }
 impl MissionDeadlines {
-    fn live(&self) -> bool {
-        self.clock.monotonic_ms() < self.mono.load(Ordering::SeqCst)
-            && self.clock.wall_ms() < self.wall.load(Ordering::SeqCst)
+    fn live(&self, at: Option<(u64, u64)>) -> bool {
+        let (m, w) = at.unwrap_or_else(|| (self.clock.monotonic_ms(), self.clock.wall_ms()));
+        m < self.mono.load(Ordering::SeqCst) && w < self.wall.load(Ordering::SeqCst)
     }
 }
+type Admitted = Result<(), crate::authority::AuthorityError>;
 impl RequestScope {
     pub(crate) fn fail(&self) {
         if let Some(core) = self.core.upgrade() {
@@ -86,9 +87,9 @@ impl RequestScope {
         } else {
             word == self.snapshot
         };
-        same && self.eligible()
+        same && self.eligible(None)
     }
-    fn eligible(&self) -> bool {
+    fn eligible(&self, at: Option<(u64, u64)>) -> bool {
         #[cfg(test)]
         if self
             .core
@@ -102,7 +103,7 @@ impl RequestScope {
             || self
                 .mission_deadlines
                 .get()
-                .is_some_and(|limits| !limits.live())
+                .is_some_and(|limits| !limits.live(at))
             || self.snapshot & (FAILED | SEALED | EMERGENCY) != 0
             || match self.kind {
                 ScopeKind::Bootstrap => self.snapshot & (READY | CLOSING | 7) != 0,
@@ -113,8 +114,11 @@ impl RequestScope {
         !invalid
     }
     pub(crate) fn admit(&self, cell: &HaltCell) -> Result<(), crate::authority::AuthorityError> {
+        self.admit_at(cell, None)
+    }
+    pub(crate) fn admit_at(&self, cell: &HaltCell, at: Option<(u64, u64)>) -> Admitted {
         use crate::authority::AuthorityError;
-        if !self.eligible() {
+        if !self.eligible(at) {
             return Err(AuthorityError::Halted);
         }
         self.next_step

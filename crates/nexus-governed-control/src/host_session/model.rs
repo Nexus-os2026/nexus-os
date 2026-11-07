@@ -45,6 +45,7 @@ struct RegistrationReceipt {
     digest: [u8; 32],
     model: Arc<crate::inference::RegisteredModel>,
     watch: StopWatch,
+    primary: Arc<crate::evidence_store::PrimaryEvidence>,
 }
 impl ModelSlot {
     #[cfg(test)]
@@ -313,6 +314,7 @@ impl HostSession {
                 digest: identity,
                 model: Arc::new(model),
                 watch: watch.clone(),
+                primary: self.evidence.clone(),
             });
             #[cfg(test)]
             crate::authority::file_session::probe(Some(&self.core.cell), "model.install.after");
@@ -344,7 +346,7 @@ use crate::authority::evidence::EndStatus;
 use crate::authority::ids::{AgentId, RunId};
 use crate::authority::run::{GroupId, OriginalGrant, RunRegistry, SessionAttempt};
 use crate::authority::{Authority, AuthorityError};
-use crate::inference::{CallMeter, InvocationObserver, ModelRequest};
+use crate::inference::{CallMeter, Charged, InvocationObserver, MeterRefusal, ModelRequest};
 pub(super) struct Attempt {
     owner: Owner,
     runs: Arc<RunRegistry>,
@@ -424,13 +426,6 @@ impl Attempt {
             model_digest,
         })
     }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
-        )
-    )]
     pub(super) fn record_return(
         &mut self,
         authority: &Authority,
@@ -479,13 +474,6 @@ impl Attempt {
         s.record = Some(record.as_str());
         Ok(record)
     }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
-        )
-    )]
     pub(super) fn complete(mut self) -> Result<(), SessionError> {
         if !matches!(self.record, Some(EndStatus::Recorded { .. })) {
             return Err(SessionError::Unavailable);
@@ -582,13 +570,6 @@ impl SessionDoor {
 
 // SB-3B1a R3: the private original-door attempt admission; no public route.
 impl SessionDoor {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-3B1a: private attempt, wired by SB-3B1b; session route unavailable"
-        )
-    )]
     pub(super) fn admit_attempt_private(
         &self,
         run: RunId,
@@ -642,6 +623,196 @@ impl SessionDoor {
 }
 
 // SB-3B1b R5: the private original-door call; no public route.
+/// Test seam: the backstop's clocks, skewed by `backstop_skew` ms.
+#[cfg(test)]
+struct SkewClock(Arc<std::sync::atomic::AtomicU64>);
+#[cfg(test)]
+impl crate::inference::DeadlineClock for SkewClock {
+    fn wall_ms(&self) -> u64 {
+        SystemClocks.wall_ms() + self.0.load(Ordering::SeqCst)
+    }
+    fn monotonic_ms(&self) -> u64 {
+        SystemClocks.monotonic_ms() + self.0.load(Ordering::SeqCst)
+    }
+}
+type Refusal = (&'static str, ModelError);
+/// The session override at each call request (R5, sheet §7.2 order); also
+/// the C1 meter noting this attempt's charge, and the earlier deadline.
+struct CallGate<'a> {
+    door: &'a SessionDoor,
+    authority: &'a Authority,
+    ticket: &'a SessionAttempt,
+    grant: crate::authority::ids::GrantId,
+    watch: &'a StopWatch,
+    primary: &'a crate::evidence_store::PrimaryEvidence,
+    backstop: &'a dyn CallDeadline,
+    deadline: &'a dyn CallDeadline,
+    meter: &'a dyn CallMeter,
+    charged: AtomicBool,
+    spent: AtomicBool,
+    invocation: &'a InvocationObserver,
+}
+impl CallMeter for CallGate<'_> {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        let charged = self.meter.charge()?;
+        self.charged.store(true, Ordering::SeqCst);
+        Ok(charged)
+    }
+    fn settle(&self, call: u32) {
+        self.meter.settle(call);
+    }
+}
+impl CallDeadline for CallGate<'_> {
+    fn expired(&self) -> bool {
+        self.deadline.expired() || self.backstop.expired()
+    }
+}
+impl CallGate<'_> {
+    fn admission(&self, kind: RequestKind) -> Result<(), ModelError> {
+        let result = self.predicates(kind);
+        #[cfg(test)]
+        self.note(
+            result
+                .as_ref()
+                .err()
+                .map_or("admitted", |refusal| refusal.0),
+        );
+        result.map_err(|refusal| refusal.1)
+    }
+    fn predicates(&self, kind: RequestKind) -> Result<(), Refusal> {
+        use ModelError::{Cancelled, Stopped, Timeout};
+        let (core, scope) = (&self.door.core, &self.door.context.scope);
+        // Every clock this gate uses is read before any hold (SB3B-R5 (3)).
+        let clock = self.authority.clock();
+        let grant = OriginalGrant {
+            grants: self.authority.grants(),
+            grant: self.grant,
+            clock: (clock.monotonic_ms(), clock.wall_ms()),
+        };
+        let limits = scope.mission_deadlines.get();
+        let at = limits.map(|l| (l.clock.monotonic_ms(), l.clock.wall_ms()));
+        let expired = self.backstop.expired()
+            || Instant::now() >= scope.deadline
+            || limits.is_some_and(|l| !l.live(at));
+        #[cfg(test)]
+        let expired = expired || core.expired_request.load(Ordering::SeqCst) == scope.request;
+        let runs = self.authority.runs();
+        let hold = runs.try_request_hold().map_err(|poisoned| {
+            if poisoned {
+                core.model.uncertain.store(true, Ordering::SeqCst);
+                self.door.context.fail();
+            }
+            ("refused:hold", Cancelled) // Benign contention latches nothing.
+        })?;
+        if expired {
+            return Err(("refused:1", Timeout));
+        }
+        // The original Work scope: its exact word and live Q.
+        let word = core.cell.session_word();
+        if core.model.uncertain.load(Ordering::SeqCst)
+            || word != scope.snapshot
+            || !scope.eligible(at)
+        {
+            return Err(("refused:1", Cancelled));
+        }
+        self.watch.check_now().map_err(|_| ("refused:2", Stopped))?;
+        if !self
+            .primary
+            .try_health()
+            .is_some_and(|h| !h.latched && h.owed == 0 && !h.recovery_required && h.unsettled == 0)
+        {
+            return Err(("refused:3", Cancelled));
+        }
+        if self.ticket.ended() {
+            return Err(("refused:4", Cancelled));
+        }
+        let held = hold.live(self.ticket, &grant).map_err(|error| {
+            use crate::authority::run::GRANT_POISONED;
+            let poisoned = matches!(error, AuthorityError::Unavailable(w) if w == GRANT_POISONED);
+            core.model.uncertain.fetch_or(poisoned, Ordering::SeqCst);
+            let grant = matches!(
+                error,
+                AuthorityError::GrantNotLive | AuthorityError::Unavailable(_)
+            );
+            (if grant { "refused:5" } else { "refused:4" }, Cancelled)
+        })?;
+        let unspent = self.charged.load(Ordering::SeqCst) && !self.spent.load(Ordering::SeqCst);
+        if kind == RequestKind::Chat && !unspent {
+            return Err(("refused:6", Cancelled));
+        }
+        if self.invocation.is_revoked() {
+            return Err(("refused:7", Cancelled));
+        }
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "model.call.observed");
+        let cas = scope.admit_at(&self.door.context.cell, at);
+        cas.map_err(|_| ("refused:8", Cancelled))?;
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "model.call.admitted");
+        if kind == RequestKind::Chat {
+            self.spent.store(true, Ordering::SeqCst);
+        }
+        drop((held, hold)); // grant, then run table; nothing else was held.
+        Ok(())
+    }
+}
+impl CallCancel for CallGate<'_> {
+    fn cancelled(&self) -> Option<CancelCause> {
+        // Deny-only polling; deliberately does not acquire the owning hold.
+        let core = &self.door.core;
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "model.call.polled");
+        let cancelled = (core.model.uncertain.load(Ordering::SeqCst)
+            || !self.door.context.scope.live(core.cell.session_word())
+            || self.ticket.ended())
+        .then_some(CancelCause::Cancelled);
+        #[cfg(test)]
+        self.note(["poll:none", "poll:cancelled"][usize::from(cancelled.is_some())]);
+        cancelled
+    }
+    fn admit_request(&self, kind: RequestKind) -> Result<(), ModelError> {
+        #[cfg(test)]
+        self.before(kind);
+        let admitted = self.admission(kind);
+        #[cfg(test)]
+        self.after(kind, admitted.is_ok());
+        admitted
+    }
+}
+/// Test seams around each call gate: the gate trace and the chat-latch probes.
+#[cfg(test)]
+impl CallGate<'_> {
+    fn note(&self, at: &'static str) {
+        self.door.core.model.trace.lock().unwrap().push(at);
+    }
+    /// Test seam: an admission whose chat latch is uncharged or spent.
+    fn latch_probe(&self, seam: &'static str) {
+        self.note(seam);
+        let class = match self.admission(RequestKind::Chat) {
+            Ok(()) => "probe:admitted",
+            Err(ModelError::Cancelled) => "probe:model_cancelled",
+            Err(_) => "probe:other",
+        };
+        self.note(class);
+    }
+    fn before(&self, kind: RequestKind) {
+        let core = &self.door.core;
+        crate::authority::file_session::probe(Some(&core.cell), "model.call.gate");
+        let chat = kind == RequestKind::Chat;
+        self.note(if chat { "gate:chat" } else { "gate:metadata" });
+        if !chat && core.model.chat_early.swap(false, Ordering::SeqCst) {
+            self.latch_probe("early");
+        }
+    }
+    fn after(&self, kind: RequestKind, admitted: bool) {
+        let core = &self.door.core;
+        let chat = admitted && kind == RequestKind::Chat;
+        if chat && core.model.chat_replay.swap(false, Ordering::SeqCst) {
+            crate::authority::file_session::probe(Some(&core.cell), "model.call.replay");
+            self.latch_probe("replay");
+        }
+    }
+}
 impl SessionDoor {
     #[cfg_attr(
         not(test),
@@ -658,7 +829,59 @@ impl SessionDoor {
         deadline: &dyn CallDeadline,
         invocation: &InvocationObserver,
     ) -> Result<crate::inference::ModelCallOutcome, AuthorityError> {
-        let _ = (run, request, meter, deadline, invocation);
-        Err(AuthorityError::Halted) // Deny-only stub until the feat commit.
+        let DoorKind::Original { file_grant } = self.kind else {
+            return Err(AuthorityError::Halted); // A continuation never calls.
+        };
+        // Installed M, watch, store and control, observed before the ticket.
+        let installed = {
+            let s = hold(&self.core).map_err(|_| AuthorityError::Unavailable("model slot"))?;
+            let r = s.registration.as_ref();
+            r.map(|r| (r.model.clone(), r.watch.clone(), r.primary.clone()))
+        };
+        let control = self.door.session_backend().upgrade();
+        let mut attempt = self.admit_attempt_private(run, request, invocation)?;
+        let (Some((model, watch, primary)), Some(control)) = (installed, control) else {
+            return Err(AuthorityError::Halted); // Dropped ticket: debt latches.
+        };
+        let authority = control.authority();
+        #[cfg(test)]
+        let clock = SkewClock(self.core.model.backstop_skew.clone());
+        #[cfg(not(test))]
+        let clock = SystemClocks;
+        // One 180 s backstop per attempt, fixed once; it only shortens.
+        let backstop = AbsoluteDeadline::within(clock, nexus_kernel::inference::CALL_HARD_TIMEOUT);
+        let result = attempt
+            .ticket
+            .as_ref()
+            .map_or(Err(ModelError::Cancelled), |ticket| {
+                let gate = CallGate {
+                    door: self,
+                    authority,
+                    ticket,
+                    grant: file_grant,
+                    watch: &watch,
+                    primary: &primary,
+                    backstop: &backstop,
+                    deadline,
+                    meter,
+                    charged: AtomicBool::new(false),
+                    spent: AtomicBool::new(false),
+                    invocation,
+                };
+                crate::inference::session_transport(&model, request, (&gate, &gate, &gate), &watch)
+            });
+        // One native writer; no hold crosses it. Debt is never upgraded.
+        let returned = result.as_ref().map(|_| ()).map_err(|e| *e);
+        let record = match attempt.record_return(authority, returned) {
+            // A Recorded attempt whose exact pin cannot settle is never usable.
+            Ok(EndStatus::Recorded { seq }) => match attempt.complete() {
+                Ok(()) => EndStatus::Recorded { seq },
+                Err(_) => EndStatus::Uncertain,
+            },
+            Ok(owed) => owed,
+            Err(_) => EndStatus::Uncertain,
+        };
+        let result = result.map_err(AuthorityError::ModelCall);
+        Ok(crate::inference::session_outcome(result, record))
     }
 }

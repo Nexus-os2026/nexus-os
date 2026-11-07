@@ -319,6 +319,33 @@ pub struct ModelCallOutcome {
     record: EndStatus,
 }
 
+/// SB-3B (O5): a session attempt's outcome; there is no public constructor.
+pub(crate) fn session_outcome(
+    result: Result<ModelReply, AuthorityError>,
+    record: EndStatus,
+) -> ModelCallOutcome {
+    ModelCallOutcome { result, record }
+}
+
+/// SB-3B (O5): one session attempt's transport call under its owner's
+/// retained watch and per-request gates, with no dispatch observer. Only
+/// this file names the kernel transport trait (E-O65).
+pub(crate) fn session_transport(
+    model: &RegisteredModel,
+    request: &ModelRequest,
+    (meter, cancel, deadline): (&dyn CallMeter, &dyn CallCancel, &dyn CallDeadline),
+    stop: &nexus_kernel::emergency_stop::StopWatch,
+) -> Result<ModelReply, ModelError> {
+    let ctx = CallContext {
+        meter,
+        cancel,
+        deadline,
+        stop,
+        observer: None,
+    };
+    model.transport.call(request, &ctx)
+}
+
 impl ModelCallOutcome {
     /// What became of the attempt's record: recorded, owed or uncertain.
     pub fn record(&self) -> EndStatus {
