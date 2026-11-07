@@ -305,3 +305,92 @@ SB3B1e-M/r5_cas:after/closing_restricted	sb3_matrix_r5_cas_after	r5_cas:after	ne
 SB3B1e-M/r5_cas:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
 SB3B1e-M/r5_cas:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
 SB3B1e-M/r5_cas:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B2-M/reply:after/emergency	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/cancel_run	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/door_halt	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/quit	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/session_failure	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/q_expiry	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/mission_wall	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/mission_mono	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/native_halt	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/run_finish	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/grant_revocation	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/grant_expiry	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/evidence_failure	sb3_matrix_reply_after	reply:after	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/reply:after/contention	sb3_matrix_reply_after	reply:after	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/reply:after/poison	sb3_matrix_reply_after	reply:after	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/reply:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	reply:after	no Q, run or original door before finish_bootstrap	SB-3B2-M
+SB3B2-M/reply:after/emergency_state	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/failed	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/closing_normal	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/closing_restricted	sb3_matrix_reply_after	reply:after	settled:ok:recorded	SB-3B2-M
+SB3B2-M/reply:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	reply:after	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/reply:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	reply:after	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/reply:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	reply:after	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/record:before/emergency	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/cancel_run	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/door_halt	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/quit	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/session_failure	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/q_expiry	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/mission_wall	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/mission_mono	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/native_halt	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/run_finish	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/grant_revocation	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/grant_expiry	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/evidence_failure	sb3_matrix_record_before	record:before	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/record:before/contention	sb3_matrix_record_before	record:before	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/record:before/poison	sb3_matrix_record_before	record:before	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/record:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	record:before	no Q, run or original door before finish_bootstrap	SB-3B2-M
+SB3B2-M/record:before/emergency_state	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/failed	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/closing_normal	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/closing_restricted	sb3_matrix_record_before	record:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/record:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	record:before	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/record:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	record:before	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/record:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	record:before	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/settle:before/emergency	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/cancel_run	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/door_halt	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/quit	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/session_failure	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/q_expiry	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/mission_wall	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/mission_mono	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/native_halt	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/run_finish	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/grant_revocation	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/grant_expiry	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/evidence_failure	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/contention	sb3_matrix_settle_before	settle:before	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/settle:before/poison	sb3_matrix_settle_before	settle:before	settled:ok:uncertain	SB-3B2-M
+SB3B2-M/settle:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	settle:before	no Q, run or original door before finish_bootstrap	SB-3B2-M
+SB3B2-M/settle:before/emergency_state	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/failed	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/closing_normal	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/closing_restricted	sb3_matrix_settle_before	settle:before	settled:ok:recorded	SB-3B2-M
+SB3B2-M/settle:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	settle:before	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/settle:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	settle:before	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-M/settle:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	settle:before	seal needs a quiescent model slot; an active call blocks it	SB-3B2-M
+SB3B2-C/seal/no_model	sb3_completed_call_allows_existing_clean_close	close	no-model session seals	SB-3B2-C
+SB3B2-C/seal/registered	sb3_completed_call_allows_existing_clean_close	close	registered session seals	SB-3B2-C
+SB3B2-C/seal/completed	sb3_completed_call_allows_existing_clean_close	close	completed recorded call seals; producers joined	SB-3B2-C
+SB3B2-C/seal/charge_held	sb3_unjoined_or_owed_prevents_clean_close	close	held charge refuses the seal; released, joined, sealed	SB-3B2-C
+SB3B2-C/seal/record_held	sb3_unjoined_or_owed_prevents_clean_close	close	held record refuses the seal; released, joined, sealed	SB-3B2-C
+SB3B2-C/seal/owner_return_held	sb3_unjoined_or_owed_prevents_clean_close	close	held owner return refuses the seal; released, joined, sealed	SB-3B2-C
+SB3B2-C/seal/owed	sb3_unjoined_or_owed_prevents_clean_close	close	owed record: meter settled, seal refused	SB-3B2-C
+SB3B2-C/seal/dropped	sb3_unjoined_or_owed_prevents_clean_close	close	dropped ticketed attempt fails the session; seal refused	SB-3B2-C
+SB3B2-C/seal/panicked	sb3_unjoined_or_owed_prevents_clean_close	close	meter panic unwinds; session failed; seal refused	SB-3B2-C
+SB3B2-C/seal/poisoned	sb3_unjoined_or_owed_prevents_clean_close	close	poisoned slot: obligations unknown; seal refused	SB-3B2-C
+SB3B2-C/seal/spawn_failure	DEFERRED:SB3B-KSPAWN	close	no kernel test injects exchange-thread spawn failure; separate kernel-seam unit	SB-3B2-C
+SB3B2-C/seal/metadata_held	sb3_open_model_request_at_deadline_blocks_seal	close	open metadata request: one connection, seal refused, first deadline kept	SB-3B2-C
+SB3B2-C/seal/chat_held	sb3_open_model_request_at_deadline_blocks_seal	close	open chat request: one connection, seal refused, first deadline kept	SB-3B2-C
+SB3B2-C/seal/late_completion	sb3_post_seal_model_events_are_absent	close	seal raced with a late completion refuses until completed	SB-3B2-C
+SB3B2-C/post_seal/call	sb3_post_seal_model_events_are_absent	close	after the seal: requests/records/attempts 0, finals distinct	SB-3B2-C
+SB3B2-C/death/ticket	sb3_private_call_death_restarts_report_only	close	died after the ticket: prefix 0, end unknown, restart report-only	SB-3B2-C
+SB3B2-C/death/dispatch	sb3_private_call_death_restarts_report_only	close	killed with the chat open: prefix 4, end unknown, restart report-only	SB-3B2-C
+SB3B2-C/death/reply	sb3_private_call_death_restarts_report_only	close	died after the reply: prefix 4, end unknown, restart report-only	SB-3B2-C
+SB3B2-C/death/record	sb3_private_call_death_restarts_report_only	close	died after the record: end recorded, restart report-only	SB-3B2-C
+SB3B2-C/death/completed	sb3_private_call_death_restarts_report_only	close	died after completion: end recorded, restart report-only	SB-3B2-C
