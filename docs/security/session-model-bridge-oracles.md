@@ -390,6 +390,49 @@ Final review-1 fixture SHA-256 (supersedes the stale Q2 hashes; same bytes in bo
 - `mother/host/src/hands/sb2_close_tests.rs`: `738a254b1195aadb71b3f2e3e0b364057c2d25ab011939f4621c063e285736f9`
 - `mother/host/tests/session/model-bridge-cases.tsv`: `05e50d6b70daf66cb6a9d157209cdfa583e5720fab3358f94e25c01d2c085652`
 
+### 10.2 SB-2a actual implementation receipts — SANDBOX-BLOCKED
+
+Base/HEAD remains 899e3872c5b61223c87b905f63c66947a816259b. Snapshots are
+`01-oracles-inert`, `02-private-registration`, not commits. No Git write,
+remote operation, public model route, host activation, production flag,
+dependency/lockfile/workflow or persistent-format change was made.
+
+Sheet §8 commands (passed/failed/ignored): governed-control lib 441/418/39;
+Mother 235/61/0; host 24/14/0; kernel inference 13/54/0; combined kernel
+guards 0/1/0 (stops at F5; later binaries not reached). Format, diff check,
+and warning-denied all-target Clippy pass. Full core completed (226.07s),
+without the previous outer timeout. The 408 retained core failure names match
+the supplied baseline; ten new failures are RuntimeRoot ancestry or loopback
+EPERM. Other retained failures are preserved with exact errors; not all are
+proven sandbox-only. Full logs and classifications accompany report.md.
+
+Real private focused suite: 4/10/0; host formatters 2/0/0; C1 structural 1/0/0;
+recursive sealing 8/0/0. Three meaningful core inert reds and both host reds
+now pass. No runtime registration, cancellation, death or seal success is
+claimed from fixture refusals. O4's composed worker schedule remains pending.
+
+Compiled and killed: MP-SB-5-slot, MP-SB-11-drop, MP-SB-12-fallback,
+MP-SB-12-clock, Q2-c-sealing-old-bug, Q2-c-C1-old-bug. Compiled but NOT
+EXERCISED: MP-SB-2-record, MP-SB-6-default, MP-SB-6-CAS, MP-SB-11-seal
+(fixture refusal). All ten files restored byte-for-byte with verified SHA-256.
+Other plants and ten-run gate schedules are not claimed as exercised here.
+`plants-outside.sh` contains exact registration mutations (including default
+substitution independently at four metadata boundaries), commands, restoration
+hash checks, and ten serial plus ten parallel private-suite repetitions.
+It records KILLED only for a compiled named-test runtime failure without a
+sandbox refusal; SURVIVED is never a kill. No outside results are invented.
+
+Separate AGENTS §18 self-review: original Bootstrap/same-word CAS and fixed
+30-second deadline; retained original watch and actual record sequence/digest;
+current nonblocking health/watch observation; no authority hold across evidence
+or transport; atomic-only Drop denial; producer-ordered reservation/readiness
+and seal; unknown observations remain debt. Ordinary inference is unchanged.
+This self-review is not independent acceptance. Outside runtime proof,
+fresh-context review, exact-SHA CI and Owner acceptance remain unverified;
+network and Git writes are prohibited. SB-2b/SB-3 and phase advancement remain
+unauthorized. Final verdict is BLOCKED, not a green registration claim.
+
+
 ### 10.3 Surviving outside plants — oracle-fix (2026-11-07)
 
 The supplied `outside-run.log` and the five per-plant logs show compilation
@@ -429,6 +472,18 @@ absence of installation/readiness, and denial of a later caller retry. A
 second verify can now reach the live peer and is observable. The retry plan's
 mutation is unchanged; its named oracle is R2-live.
 
+No production defect was found in this diagnosis; no production repair was
+made. The revised final suite compiled locally: 4 passed, 11 failed, 0 ignored
+(`oracle-fix-model-final.log`). Ten failures are RuntimeRoot writable-ancestor
+refusals; the death fixture is blocked by socket PermissionDenied. All five
+revised plants compiled locally but stopped at RuntimeRoot before their target
+assertions, and restoration hashes matched. These results prove neither RED
+nor GREEN for registration. The Architect must rerun `plants-outside.sh` on
+the final tree with an accepted RuntimeRoot and loopback-test permission. All
+five plants require that fixture. Outside mutation kills and final positive
+controls remain unconfirmed. The private route and phase boundaries are
+unchanged.
+
 ### 10.4 Review-1 oracle amendment (before repairs)
 F1: `sb2_facade_rejects_multiline_registration` rejects the reviewer's literal
 multiline wrapper; exact three module declarations and a plain status method pass.
@@ -441,3 +496,27 @@ with unknown/none model snapshots: exactly one model line in every report.
 F5: final candidate fixture hashes supersede stale hashes; all plants must rerun
 outside. The schedule's RuntimeRoot refusal is neither a behavioral red nor green.
 
+### 10.5 Review-1 final candidate (Q5; uncommitted bytes)
+F1/F2/F4 had intended assertion RED then GREEN (`review1-f1-{red,green}.log`,
+`review1-host-{red,green}.log`). F3's original-gap schedule compiled but was
+RuntimeRoot-blocked before its target (`review1-f3-red.log`); no runtime kill
+or green is inferred. Installation now completes the owner under its state hold.
+No evidence/transport I/O was moved into that hold; Drop remains latch/fail-only.
+The outside runner plants the literal F1 wrapper in a cfg-disabled impl so the
+source oracle, not a compiler error, must reject it. F2 removes startup unknown;
+F3 restores the install/completion gap; F4 restores the duplicate model line.
+The runner pins the entire final candidate, requires positive controls first,
+then runs ALL plants and 10 serial/10 parallel G1/G3/CAS repeats. Final-tree
+outside results remain PENDING; earlier kills are historical only. Fixture
+hashes above identify final candidate bytes, not a new commit. Git writes and
+network remain prohibited; route UNAVAILABLE. Exact results, RuntimeRoot-blocked
+tests, snapshot reproduction and measured Q5 size are in `sb2a-out/report.md`.
+
+Final local targeted results: broker 4/12/0 (11 RuntimeRoot refusals, one
+loopback EPERM); host formatters 4/0/0; facade control 1/0/0; sealing 8/0/0.
+C1 source guard passes; two retained C1 behavioral fixtures refuse with
+Backend("unavailable"). Final fmt and warning-denied all-target Clippy pass.
+Local F1/F2/F4 plants and the adapted fallback plant are killed and restored;
+F3 mutation compiles but stops at RuntimeRoot. Stale fixture metadata refuses;
+final metadata verifies. The runner has 26 unique in-scope plant plans; its
+outside all-plant run and repetitions remain unobserved on these bytes.

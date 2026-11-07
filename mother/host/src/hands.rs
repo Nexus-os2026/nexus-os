@@ -829,22 +829,27 @@ fn owner_result(
 
 const MODEL_UNKNOWN: &str = "CLOSE MODEL operation=unknown active=unknown owner=unknown child=unknown record=unknown uncertain=true\n";
 fn model_report(
-    _: Option<nexus_governed_control::host_session::close::ModelObligations>,
+    snapshot: Option<nexus_governed_control::host_session::close::ModelObligations>,
 ) -> String {
-    let _ = MODEL_UNKNOWN;
-    String::new()
+    match snapshot {
+        Some(o) => format!(
+            "CLOSE MODEL operation={} active={} owner={} child={} record={} uncertain={}\n",
+            o.operation, o.active, o.owner_complete, o.child_complete, o.record, o.uncertain
+        ),
+        None => MODEL_UNKNOWN.into(),
+    }
 }
 const CLOSE_UNKNOWN: &str =
     "CLOSE OBLIGATIONS resource_snapshot=unknown in_flight_or_unknown=true\n";
 
 fn close_fallback_report() -> String {
-    CLOSE_UNKNOWN.to_owned()
+    format!("{CLOSE_UNKNOWN}{MODEL_UNKNOWN}")
 }
 fn failed_startup_report() -> String {
     format!(
         "RESULT: close is uncertain; the full clean-close protocol did not complete.\n{}\n",
         crate::terminal::UNCLEAN_NOTICE
-    )
+    ) + MODEL_UNKNOWN
 }
 
 struct OwnerScreen(Arc<Shared>);
