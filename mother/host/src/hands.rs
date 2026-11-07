@@ -1022,6 +1022,8 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             return false;
         }
     };
+    #[cfg(test)]
+    hands_tests::ptyr1_after_terminal_open(&terminal.shared);
     if !nexus_governed_control::files::make_non_dumpable() {
         terminal.shared.fail(crate::terminal::Failure::Input);
         return false;
