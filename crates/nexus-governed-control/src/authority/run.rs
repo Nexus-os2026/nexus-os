@@ -1878,6 +1878,29 @@ impl RunRegistry {
             .get(&run)
             .map(|e| (e.model_attempts, e.model_pins.len()))
     }
+    /// SB-3B1a: attempts, exact pins and binding of `run`, poison included.
+    pub(crate) fn model_ledger_for_test(
+        &self,
+        run: RunId,
+    ) -> (u32, Vec<u32>, Option<InferenceAdmission>) {
+        let table = match self.runs.try_lock() {
+            Ok(table) => table,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => panic!("no run hold"),
+        };
+        let entry = &table.runs[&run];
+        let pins = entry.model_pins.iter().copied().collect();
+        (
+            entry.model_attempts,
+            pins,
+            entry.inference_admission.clone(),
+        )
+    }
+    /// SB-3B1a: the exact outstanding model ordinals of `run`.
+    pub(crate) fn model_pins_for_test(&self, run: RunId) -> Vec<u32> {
+        let table = self.runs.try_lock().expect("no run hold");
+        table.runs[&run].model_pins.iter().copied().collect()
+    }
 }
 
 // Opaque, non-Clone ownership of one original-scope result obligation.
@@ -1912,20 +1935,59 @@ pub(crate) struct SessionAttempt {
     registry: Weak<RunRegistry>,
     cell: HaltCell,
 }
+/// SB-3B: the original door's retained File grant, with both clocks read
+/// before any hold; observed under the run table (run -> grant, try_lock).
+pub(crate) struct OriginalGrant<'a> {
+    pub(crate) grants: &'a super::policy::GrantStore,
+    pub(crate) grant: super::ids::GrantId,
+    pub(crate) clock: (u64, u64),
+}
+impl<'a> OriginalGrant<'a> {
+    /// Live on both clocks with a Files scope equal to the run's workspace;
+    /// contention refuses, poison also fails the session. The grant store
+    /// stays held (run -> grant) for as long as the returned guard lives.
+    fn live(
+        &self,
+        files: &FilesAdmission,
+        cell: &HaltCell,
+    ) -> Result<impl Drop + 'a, AuthorityError> {
+        use super::policy::{GrantObservation, GrantScope};
+        let (grant, held) = self
+            .grants
+            .try_live_at(self.grant, self.clock.0, self.clock.1)
+            .map_err(|error| {
+                if error == GrantObservation::Poisoned {
+                    cell.fail_session();
+                }
+                AuthorityError::Unavailable("model grant hold unavailable")
+            })?;
+        match grant {
+            Some(GrantScope::Files {
+                workspace,
+                identity,
+                ..
+            }) if workspace == files.workspace.id && identity == files.workspace.identity => {
+                Ok(held)
+            }
+            _ => Err(AuthorityError::GrantNotLive),
+        }
+    }
+}
 impl RunRegistry {
     // No producer/model hold is carried here. Ordinary calls are unchanged.
     pub(crate) fn admit_session_attempt(
         self: &Arc<Self>,
-        run: RunId,
-        agent: &AgentId,
-        group: GroupId,
-        identity: [u8; 32],
+        (run, agent, group, identity): (RunId, &AgentId, GroupId, [u8; 32]),
         original: &HaltCell,
+        grant: &OriginalGrant<'_>,
+        invocation: &crate::inference::InvocationObserver,
     ) -> Result<SessionAttempt, AuthorityError> {
-        let mut table = self
-            .runs
-            .try_lock()
-            .map_err(|_| AuthorityError::Unavailable("model run hold unavailable"))?;
+        let mut table = self.runs.try_lock().map_err(|error| {
+            if matches!(error, TryLockError::Poisoned(_)) {
+                original.fail_session();
+            }
+            AuthorityError::Unavailable("model run hold unavailable")
+        })?;
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -1977,6 +2039,11 @@ impl RunRegistry {
             .model_attempts
             .checked_add(1)
             .ok_or(AuthorityError::Capacity)?;
+        // Held through the observer read, Q's CAS and the count/pin mutation:
+        // a revocation lands before (refused) or after the CAS (entered).
+        let _grant_held = grant.live(files, &cell)?;
+        #[cfg(test)]
+        super::file_session::probe(Some(&cell), "model.attempt.granted");
         let ticket = SessionAttempt {
             run,
             agent: agent.clone(),
@@ -1988,6 +2055,10 @@ impl RunRegistry {
             cell: cell.clone(),
         };
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+        // The live invocation, last among predicates, before the CAS.
+        if invocation.is_revoked() {
+            return Err(AuthorityError::Halted);
+        }
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.checked");
         cell.admit()?; // Original retained Q's real same-word CAS; never refresh.
@@ -2118,7 +2189,7 @@ impl RunRegistry {
         if b.q_run != Some(b.run) {
             return Err(AuthorityError::NotMember);
         }
-        let grant = b
+        let (grant, _grant_held) = b
             .grants
             .try_live_at(b.grant, b.clock.0, b.clock.1)
             .map_err(|error| {
@@ -2198,6 +2269,7 @@ impl RunRegistry {
             "groups" => entry.groups.clear(),
             "opened_by" => entry.opened_by = Some(u64::MAX),
             "view_id" => entry.view.id = RunId::fresh(),
+            "pin" => entry.model_pins = entry.model_pins.iter().map(|p| p + 100).collect(),
             _ => {}
         }
         let files = entry.files_admission.as_mut().unwrap();
@@ -2206,6 +2278,7 @@ impl RunRegistry {
             "kind" => files.kind = ConsentKind::Resume,
             "time" => files.consented_wall_ms += 1,
             "workspace" => files.workspace.id.push('x'),
+            "identity" => files.workspace.identity = Digest::of("sb3b-other", &[]),
             _ => {}
         }
     }
