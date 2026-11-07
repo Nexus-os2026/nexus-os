@@ -285,3 +285,154 @@ class Q13Oracles(unittest.TestCase):
             source = (HERE/name).read_text()
             self.assertNotIn('including conflicting earlier policy',source)
             self.assertIn('B2 proves denial',source)
+
+# Q15 pre-registered decision fixtures: no host manager or ownership modelling.
+BOOT_BEFORE = '11111111-1111-4111-8111-111111111111'
+BOOT_AFTER = '22222222-2222-4222-8222-222222222222'
+def q15_proof(row):
+    observations = dict(run_id='b'*32,boot_id=BOOT_BEFORE,row=row)
+    if row=='C1-SEALED': observations['denied'] = [[k,a,13] for k in ('log','status') for a in ('unlink','rename','symlink')]
+    elif row=='C2-CANARY': observations.update(rejected=True,no_invocation=True,canary_unchanged=True,
+        dangling_absent=True,custody_held=True)
+    else: observations.update(retained=True,supervisor_before={'MainPID':'12'},supervisor_after={'MainPID':'13'})
+    return dict(row=row,passed=True,observations=observations)
+
+class Q15Oracles(unittest.TestCase):
+    def test_bind_absolute_short_from_root_and_deep_cwd(self):
+        # Exercise the actual B2 suite and production temporary pin. Redirect
+        # only /var/tmp into our authorized out TMPDIR; preserve its path length.
+        probe = load('probe')
+        real = tempfile.TemporaryDirectory
+        bind = __import__('socket').socket.bind
+        def bounded(sock,address):
+            self.assertTrue(os.path.isabs(address),'cwd-relative bind')
+            self.assertLessEqual(len(os.fsencode(address)),107)
+            return bind(sock,address)
+        with real() as temporary:
+            deep = Path(temporary)/('d'*210); deep.mkdir()
+            previous = Path.cwd()
+            try:
+                for cwd in (Path('/'),deep):
+                    os.chdir(cwd)
+                    def pinned(*args,**kwargs):
+                        self.assertEqual(kwargs.pop('dir'),'/var/tmp')
+                        return real(*args,dir=temporary,**kwargs)
+                    with patch.object(probe.tempfile,'TemporaryDirectory',side_effect=pinned):
+                        # Nested TemporaryDirectory calls have no dir argument.
+                        def pin(*args,**kwargs):
+                            if kwargs.get('dir')=='/var/tmp': return pinned(*args,**kwargs)
+                            return real(*args,**kwargs)
+                        with patch.object(probe.tempfile,'TemporaryDirectory',side_effect=pin):
+                            with patch.object(__import__('socket').socket,'bind',bounded):
+                                probe.offline_oracles('B2')
+            finally: os.chdir(previous)
+
+    def evidence(self):
+        identity,summary,value = Q13Oracles().evidence()
+        for row in Q13Oracles.custody: value['evidence'][row]['custody'] = q15_proof(row)
+        return identity,summary,value
+
+    def accept(self,value,boot=BOOT_AFTER,clean=True):
+        probe = load('probe'); identity,summary,_ = self.evidence()
+        scope = installer()
+        with patch.object(probe,'boot_id',return_value=boot), \
+                patch.object(probe,'clean_custody',return_value=clean):
+            scope['acceptance_check'](identity,value,dict(identity=identity,stage='qualifying'),
+                                     lambda r:{'summary':summary},sensors=probe)
+
+    def test_acceptance_requires_changed_boot_and_clean_custody(self):
+        _,_,value = self.evidence()
+        self.accept(value)
+        for boot,clean in ((BOOT_BEFORE,True),(BOOT_AFTER,False),('',True)):
+            with self.subTest(boot=boot,clean=clean), self.assertRaises(ValueError): self.accept(value,boot,clean)
+
+    def test_custody_evidence_content_run_boot_and_row(self):
+        probe = load('probe')
+        for row in Q13Oracles.custody:
+            proof = q15_proof(row); probe.validate_custody(row,proof)
+            for key in ('run_id','boot_id','row'):
+                bad = copy.deepcopy(proof); bad['observations'].pop(key)
+                with self.subTest(row=row,key=key), self.assertRaises(ValueError): probe.validate_custody(row,bad)
+                _,_,value = self.evidence(); value['evidence'][row]['custody'] = bad
+                with self.assertRaises(ValueError): self.accept(value)
+            bad = copy.deepcopy(proof)
+            key = {'C1-SEALED':'denied','C2-CANARY':'rejected','C3-RESTART':'retained'}[row]
+            bad['observations'][key] = False
+            with self.assertRaises(ValueError): probe.validate_custody(row,bad)
+
+    def qualify(self,row,*,clean=True,proof=None,prior=None):
+        probe = load('probe'); identity,summary,value = self.evidence()
+        value['passed'].remove('C2-CANARY'); del value['evidence']['C2-CANARY']
+        if prior is not None: value = prior
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            for name, replacement in dict(CONFIG=Path(tmp),require_installed=Mock(),
+                    fixture=Mock(return_value=(summary,{})),installed_identity=Mock(return_value=identity),
+                    protected=Mock(),boot_id=Mock(return_value=BOOT_BEFORE),
+                    clean_custody=Mock(return_value=clean),custody_oracle=Mock(return_value=proof or q15_proof(row)),
+                    config=Mock(side_effect=lambda n: identity if n=='identity.json' else value)).items():
+                stack.enter_context(patch.object(probe,name,replacement))
+            write = stack.enter_context(patch.object(probe,'atomic_config'))
+            probe.qualify(row)
+            return write.call_args.args[1]
+
+    def test_qualification_preboot_binding_last_and_leftovers(self):
+        value = self.qualify('C2-CANARY')
+        self.assertEqual(value['evidence']['C2-CANARY']['custody']['observations']['boot_id'],BOOT_BEFORE)
+        for variant in ('leftover','stale-boot','not-last','repeat'):
+            with self.subTest(variant=variant), self.assertRaises(ValueError):
+                if variant=='leftover': self.qualify('C1-SEALED',clean=False)
+                elif variant=='stale-boot':
+                    proof=q15_proof('C2-CANARY'); proof['observations']['boot_id']=BOOT_AFTER
+                    self.qualify('C2-CANARY',proof=proof)
+                elif variant=='not-last': self.qualify('C2-CANARY',prior=dict(identity=value['identity'],passed=[],evidence={}))
+                else: self.qualify('C1-SEALED',prior=value)
+
+    def test_setup_failure_cleanup_continues_after_failed_stop(self):
+        from test_custody import InstalledCustodyTests
+        case = InstalledCustodyTests('test_mothergate_cannot_unlink_rename_or_symlink_after_relocation')
+        with tempfile.TemporaryDirectory() as tmp:
+            case.run='a'*32; case.unit='mothergate-run@'+case.run+'.service'; case.blocker='gatebox-custody-'+case.run+'.service'
+            case.root=Path(tmp)/'root'; case.root.mkdir(); case.fifo=case.root/'release'; case.fifo.touch()
+            case.control=Path(tmp)/'control'; (case.control/'incoming').mkdir(parents=True)
+            (case.control/'sealed').mkdir(); case.sealed=case.control/'sealed'/case.run
+            case.stage=Path(tmp)/'stage'; case.marker=Path(tmp)/'marker'
+            case.files={}; case.launch=case.collector=None; case.hold_custody=False
+            case.bridge=Mock(); case.bridge.run.return_value={'Job':''}
+            case.owner=SimpleNamespace(pw_uid=os.getuid(),pw_gid=os.getgid())
+            case.observations={}; case.probe=SimpleNamespace(protected=Mock())
+            case._outcome=SimpleNamespace(result=SimpleNamespace(failures=[],errors=[]))
+            calls=[]
+            def manager(*args):
+                calls.append(args)
+                if args[0]=='stop': raise subprocess.CalledProcessError(5,args)
+            case.manager=manager
+            # No subprocess may execute. This is the persistent exact-name remover.
+            case.remove_persistent=Mock()
+            with patch.object(subprocess,'run',side_effect=AssertionError('unexpected subprocess')):
+                with self.assertRaises(AssertionError): case.cleanup()
+            case.bridge.run.assert_called_once_with('stop',case.run)
+            case.remove_persistent.assert_called_once()
+            self.assertFalse(case.fifo.exists(),'cleanup aborted before exact runtime leaves')
+
+    def test_setup_registers_cleanup_before_first_fixture_write(self):
+        from test_custody import InstalledCustodyTests
+        source=inspect.getsource(InstalledCustodyTests.setUp)
+        self.assertLess(source.index('self.addCleanup(self.cleanup)'),source.index('self.root.mkdir'))
+
+    def test_removal_absent_identities_are_skipped(self):
+        # Execute the reviewed README account-removal block twice, no host ops.
+        source=(HERE/'README.md').read_text()
+        start=source.index("for name in created['users']:")
+        end=source.index('\nPY',start)
+        code=compile(source[start:end],'README removal','exec')
+        users={'mothergate'}; groups={'gatesubmit'}; calls=[]
+        def lookup(names,name):
+            if name not in names: raise KeyError(name)
+            return SimpleNamespace(gr_mem=[])
+        def remove(argv,**kwargs):
+            calls.append(argv); (users if argv[0].endswith('userdel') else groups).remove(argv[-1])
+        scope=dict(created=dict(users=['mothergate','gaterun'],groups=['gatesubmit']),
+            pwd=SimpleNamespace(getpwnam=lambda n:lookup(users,n)),
+            grp=SimpleNamespace(getgrnam=lambda n:lookup(groups,n)),subprocess=SimpleNamespace(run=remove))
+        exec(code,scope); exec(code,scope)
+        self.assertEqual(calls,[['/usr/sbin/userdel','mothergate'],['/usr/sbin/groupdel','gatesubmit']])
