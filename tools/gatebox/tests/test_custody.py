@@ -19,7 +19,7 @@ import pwd
 import unittest
 from contextlib import ExitStack, nullcontext
 from unittest.mock import Mock, patch
-from test_service import HERE, RUN, REQUEST, lifecycle, supervisor
+from test_service import HERE, RUN, REQUEST, lifecycle, supervisor, socket_path
 
 OTHER = 'b'*32
 LAYOUT = 'd /run/mothergate-control 0755 root root -\nd /run/mothergate-control/incoming 0700 mothergate mothergate -\nd /run/mothergate-control/sealed 0700 root root -\n'
@@ -438,7 +438,8 @@ class ListenerRenameTests(unittest.TestCase):
         with listener, tempfile.TemporaryDirectory(
                 prefix='.listener-') as tmp:
             before, after = Path(tmp)/'incoming.sock', Path(tmp)/'sealed.sock'
-            try: listener.bind(str(before))
+            try:
+                with socket_path(before) as address: listener.bind(address)
             except PermissionError as exc:
                 if exc.errno!=errno.EPERM: raise
                 self.skipTest('sandbox_blocked: AF_UNIX bind EPERM; run unchanged outside runner')
@@ -447,7 +448,7 @@ class ListenerRenameTests(unittest.TestCase):
             before.rename(after)
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
                 client.settimeout(1)
-                client.connect(str(after))
+                with socket_path(after) as address: client.connect(address)
                 connection, _ = listener.accept()
                 with connection:
                     client.sendall(b'renamed')
@@ -480,7 +481,7 @@ class InstalledCustodyTests(unittest.TestCase):
         self.fail('deadline: '+label)
 
     def state(self, unit):
-        result = self.manager('show',unit,'--property=Job,ActiveState,MainPID,ControlGroup')
+        result = self.manager('show',unit,'--property=Job,ActiveState,MainPID,ControlGroup,InvocationID,ActiveEnterTimestampMonotonic')
         return dict(line.split('=',1) for line in result.stdout.splitlines())
 
     def line(self):
@@ -502,11 +503,20 @@ class InstalledCustodyTests(unittest.TestCase):
         self.unit = 'mothergate-run@'+self.run+'.service'
         self.blocker = 'gatebox-custody-'+self.run+'.service'
         self.root = Path('/run')/('gatebox-custody-'+self.run)
-        self.root.mkdir(mode=0o700)
-        self.probe.protected(self.root)
-        self.fifo = self.root/'release'; os.mkfifo(self.fifo,0o600)
+        self.fifo = self.root/'release'
         self.stage = Path('/var/lib/mothergate/staging')/self.run
         self.marker = self.pending/('.'+self.run)
+        self.sealed = self.control/'sealed'/self.run
+        self.bridge = lifecycle.Custody(owner=self.owner.pw_uid,owner_gid=self.owner.pw_gid)
+        self.files = {}; self.collector = self.launch = None
+        self.hold_custody = False
+        self.observations = dict(run_id=self.run,boot_id=self.probe.boot_id())
+        # Register before the first write: unittest tearDown does not run when
+        # setUp raises. Every field used by cleanup is already initialized.
+        self.addCleanup(self.cleanup)
+        self.root.mkdir(mode=0o700)
+        self.probe.protected(self.root)
+        os.mkfifo(self.fifo,0o600)
         # Never perform root writes/chown beneath supervisor-owned parents.
         script = r"""
 import json,sys
@@ -522,13 +532,8 @@ with (Path('/var/lib/mothergate/pending')/('.'+run)).open('xb') as f:
             user=self.owner.pw_uid,group=self.owner.pw_gid,extra_groups=[],umask=0o077,
             env=lifecycle.ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,close_fds=True,timeout=5,check=True)
-        self.sealed = self.control/'sealed'/self.run
-        self.bridge = lifecycle.Custody(owner=self.owner.pw_uid,owner_gid=self.owner.pw_gid)
-        self.files = {}
-        self.collector = self.launch = None
-        # Cleanup is bounded, exact-name only, and requires the production stop
-        # oracle. Unsettled or damaged custody is retained for Owner review.
-        self.addCleanup(self.cleanup)
+        if self._testMethodName=='test_systemd_output_never_writes_disposable_root_canary':
+            return  # C2 substitutes BEFORE lifecycle starts; no barrier/collector.
         self.probe.protected(Path('/run/systemd/system'))
         directory = Path('/run/systemd/system')/(self.unit+'.d')
         directory.mkdir(mode=0o755); self.dropin = directory
@@ -576,13 +581,14 @@ s.collect(sys.argv[1],listeners,s.Evidence(),{})
         self.assertIsNone(self.collector.poll())
         self.identities = {k:((p:=self.sealed/(k+'.sock')).stat().st_dev,p.stat().st_ino)
                            for k in ('log','status')}
-        self.observations = dict(run_id=self.run,pending_job=self.queued,barrier=self.job)
+        self.observations.update(pending_job=self.queued,barrier=self.job)
 
     def install_fixture(self, path, text):
         data = text.encode()
         fd = os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
-        with os.fdopen(fd,'wb') as stream: stream.write(data)
+        # Track an exclusively created file even if its write fails partway.
         self.files[path] = hashlib.sha256(data).hexdigest()
+        with os.fdopen(fd,'wb') as stream: stream.write(data)
 
     def release(self):
         def writer():
@@ -635,21 +641,31 @@ print(json.dumps(results))
         with canary.open('xb') as stream: stream.write(os.urandom(64))
         canary.chmod(0o600)
         before = canary.read_bytes(); info = canary.stat()
-        self.observations['denied'] = self.denied_operations(canary)
-        # Replace BOTH original incoming names with canary symlinks as mothergate.
-        # The systemd executor must connect to sealed inodes, not attacker names.
-        script = 'import os,sys; [os.symlink(sys.argv[2],sys.argv[1]+"."+k+".sock") for k in ("log","status")]'
+        missing = self.root/'missing'
+        # The two attacker-owned incoming entries are quarantined by the REAL
+        # bridge before its endpoint check. No call to the system manager may
+        # start this instance. Removing that check must defeat this oracle.
+        script = 'import os,sys; [os.symlink(t,sys.argv[1]+"."+k+".sock") for k,t in zip(("log","status"),sys.argv[2:])]'
         self.command(['/usr/sbin/runuser','-u','mothergate','--','/usr/bin/python3','-I','-c',script,
-                      str(self.control/'incoming'/self.run),str(canary)])
-        self.release()
-        observations = [self.line(),self.line()]
-        self.assertEqual({v['accepted'] for v in observations},{'log','status'})
-        self.assertTrue(all(v['pid']>0 and v['uid']==0 for v in observations),'actual systemd executor required')
+                      str(self.control/'incoming'/self.run),str(canary),str(missing)])
+        self.hold_custody = True
+        result = self.command(['/usr/bin/python3','-I','-B',str(HERE/'lifecycle.py'),'start',self.run],check=False)
+        self.assertNotEqual(result.returncode,0)
+        state = self.state(self.unit)
+        self.assertEqual(state['Job'],'')
+        self.assertEqual(state['InvocationID'],'')
+        self.assertEqual(state['ActiveEnterTimestampMonotonic'],'0')
+        self.assertEqual(state['MainPID'],'0')
+        self.assertTrue((self.control/'sealed'/('.pending-'+self.run)).is_file())
+        self.assertEqual(os.readlink(self.sealed/'log.sock'),str(canary))
+        self.assertEqual(os.readlink(self.sealed/'status.sock'),str(missing))
+        self.assertFalse(missing.exists())
         self.assertEqual(canary.read_bytes(),before)
         after = canary.stat()
         self.assertEqual((after.st_dev,after.st_ino,after.st_mtime_ns,after.st_ctime_ns),
                          (info.st_dev,info.st_ino,info.st_mtime_ns,info.st_ctime_ns))
-        self.observations.update(executor=observations,canary_sha256=hashlib.sha256(before).hexdigest())
+        self.observations.update(rejected=True,no_invocation=True,canary_unchanged=True,
+            dangling_absent=True,custody_held=True,manager=state,canary_sha256=hashlib.sha256(before).hexdigest())
 
     def test_pending_manager_job_survives_collector_death_and_supervisor_restart(self):
         before = self.state('mothergate.service')
@@ -670,49 +686,112 @@ print(json.dumps(results))
                                  supervisor_before=before,supervisor_after=after,retained=True)
 
     def cleanup(self):
-        # Stop exact units first; never recursively delete or repair root custody.
-        self.manager('stop',self.unit,self.blocker)
-        if self.launch is not None: self.launch.wait(timeout=10)
-        state = self.bridge.run('stop',self.run)
-        self.assertEqual(state['Job'],'')
-        self.assertFalse(self.sealed.exists())
-        self.assertFalse((self.control/'sealed'/('.pending-'+self.run)).exists())
+        # Collect failures and continue. A not-loaded unit must not prevent the
+        # fixed stop/settle proof or cleanup of this run's persistent blocker.
+        errors = []
+        def attempt(action):
+            try: return action()
+            except Exception as exc: errors.append(repr(exc))
+        if self.launch is not None: attempt(lambda:self.manager('stop',self.unit))
+        if Path('/run/systemd/system',self.blocker) in self.files:
+            attempt(lambda:self.manager('stop',self.blocker))
+        launch_done = True
+        if self.launch is not None:
+            try: self.launch.wait(timeout=10)
+            except Exception as exc:
+                errors.append(repr(exc)); launch_done = False
+        settled = False
+        try:
+            if self.hold_custody:
+                # C2 proves no start was submitted. No installed instance or
+                # barrier to stop; verify settlement and retain quarantine.
+                self.bridge.settled(self.run)
+                self.assertTrue(self.sealed.is_dir())
+            else:
+                state = self.bridge.run('stop',self.run)
+                self.assertEqual(state['Job'],'')
+                self.assertFalse(self.sealed.exists())
+            settled = True
+        except Exception as exc:
+            errors.append(repr(exc))
+            # Early setUp may have installed no unit; stop can report not loaded.
+            # Only a separate real settled/cgroup proof allows persistent cleanup.
+            if self.launch is None and isinstance(exc,subprocess.CalledProcessError):
+                try: self.bridge.settled(self.run); settled = True
+                except Exception as error: errors.append(repr(error))
+        settled = settled and launch_done
         if self.collector is not None:
-            if self.collector.poll() is None: self.collector.kill()
-            self.collector.wait(timeout=5); self.collector.stdout.close()
+            if self.collector.poll() is None: attempt(self.collector.kill)
+            attempt(lambda:self.collector.wait(timeout=5)); self.collector.stdout.close()
+        if settled:
+            attempt(self.remove_persistent)
+            for kind in ('log','status'):
+                path = self.control/'incoming'/(self.run+'.'+kind+'.sock')
+                def remove(path=path):
+                    try: info = path.lstat()
+                    except FileNotFoundError: return
+                    self.assertEqual(info.st_uid,self.owner.pw_uid)
+                    self.assertTrue(stat.S_ISSOCK(info.st_mode) or stat.S_ISLNK(info.st_mode))
+                    path.unlink()
+                attempt(remove)
+        for path,digest in self.files.items():
+            def remove(path=path,digest=digest):
+                self.probe.protected(path)
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),digest)
+                path.unlink()
+            attempt(remove)
+        if hasattr(self,'dropin'): attempt(self.dropin.rmdir)
+        if self.files: attempt(lambda:self.manager('daemon-reload'))
+        # Preserve root canaries and the hash manifest on failure for recovery.
         result = self._outcome.result
-        if any(test is self for test,_ in result.failures+result.errors):
-            self.fail('proof failed; disposable evidence retained at '+str(self.root))
-        for kind in ('log','status'):
-            path = self.control/'incoming'/(self.run+'.'+kind+'.sock')
-            try: info = path.lstat()
-            except FileNotFoundError: continue
-            self.assertEqual(info.st_uid,self.owner.pw_uid)
-            self.assertTrue(stat.S_ISSOCK(info.st_mode) or stat.S_ISLNK(info.st_mode))
-            path.unlink()
+        failed = any(test is self for test,_ in result.failures+result.errors)
+        if settled and self.fifo.exists(): attempt(self.fifo.unlink)
+        if not errors and not failed:
+            if (self.root/'canary').exists(): attempt((self.root/'canary').unlink)
+            attempt(self.root.rmdir)
+        used = self.control/'sealed'/('.used-'+self.run)
+        retained = [p for p in (self.stage,self.stage/'request.json',self.stage/'snapshot',self.marker,self.root,self.fifo,self.root/'canary',
+            self.root/'missing',self.sealed,self.sealed/'log.sock',self.sealed/'status.sock',
+            self.control/'sealed'/('.pending-'+self.run),used,
+            *(self.control/'incoming'/(self.run+'.'+k+'.sock') for k in ('log','status')),
+            *self.files,*([self.dropin] if hasattr(self,'dropin') else [])) if os.path.lexists(p)]
+        expected = {used}
+        if self.hold_custody: expected |= {self.sealed,self.sealed/'log.sock',self.sealed/'status.sock',
+                                         self.control/'sealed'/('.pending-'+self.run)}
+        unexpected = [p for p in retained if p not in expected]
+        self.observations['cleanup'] = dict(errors=errors,retained=list(map(str,retained)))
+        if errors or failed or unexpected or self.hold_custody:
+            print('custody run_id='+self.run+' retained='+json.dumps(list(map(str,retained)))+
+                  ' fixture_sha256='+json.dumps({str(p):h for p,h in self.files.items()}),flush=True)
+        self.assertFalse(errors or unexpected,'custody cleanup failed: '+repr(errors)+' retained='+repr(unexpected))
+
+    def remove_persistent(self):
+        # Run as mothergate, no root writes below supervisor-owned parents.
+        # Missing leaves are idempotent; unexpected contents fail and remain.
         script = r"""
 import os,sys
 from pathlib import Path
 run=sys.argv[1]; stage=Path('/var/lib/mothergate/staging')/run
-fd=os.open(stage,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+def absent_ok(action):
+    try: action()
+    except FileNotFoundError: pass
+parent=os.open(stage.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
 try:
-    os.unlink('request.json',dir_fd=fd); os.rmdir('snapshot',dir_fd=fd)
+    try: fd=os.open(run,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+    except FileNotFoundError: fd=None
+    if fd is not None:
+        try:
+            if not set(os.listdir(fd)) <= {'request.json','snapshot'}: raise ValueError('unexpected staging leaves')
+            absent_ok(lambda:os.unlink('request.json',dir_fd=fd))
+            absent_ok(lambda:os.rmdir('snapshot',dir_fd=fd))
+        finally: os.close(fd)
+        os.rmdir(run,dir_fd=parent)
+finally: os.close(parent)
+fd=os.open('/var/lib/mothergate/pending',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+try: absent_ok(lambda:os.unlink('.'+run,dir_fd=fd))
 finally: os.close(fd)
-stage.rmdir(); (Path('/var/lib/mothergate/pending')/('.'+run)).unlink()
 """
         subprocess.run(['/usr/bin/python3','-I','-B','-c',script,self.run],
             user=self.owner.pw_uid,group=self.owner.pw_gid,extra_groups=[],
             env=lifecycle.ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,close_fds=True,timeout=5,check=True)
-        for path,digest in self.files.items():
-            self.probe.protected(path)
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),digest)
-            path.unlink()
-        if hasattr(self,'dropin'): self.dropin.rmdir()
-        self.manager('daemon-reload')
-        # Keep root canaries/observations on failure for review. Only known leaves
-        # are removed, never globbed or recursively deleted.
-        self.fifo.unlink()
-        canary = self.root/'canary'
-        if canary.exists(): canary.unlink()
-        self.root.rmdir()

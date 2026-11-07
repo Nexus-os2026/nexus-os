@@ -156,13 +156,14 @@ class Q13Oracles(unittest.TestCase):
             accepted=dict(status='ACCEPTED',run_id='a'*32),refused=dict(status='UNQUALIFIED',reason='QUALIFICATION_ONLY'),
             codex='unsupported (runner denies AF_UNIX)')
         for row in self.custody:
-            value['evidence'][row]['custody'] = dict(row=row,passed=True,observations={'real':'offline decision fixture'})
+            value['evidence'][row]['custody'] = q15_proof(row)
         return identity,summary,value
 
     def test_acceptance_requires_each_custody_row_and_passing_evidence(self):
         identity,summary,value = self.evidence()
-        check = installer()['acceptance_check']
-        def accept(v): check(identity,v,dict(identity=identity,stage='qualifying'),lambda r: {'summary':summary})
+        check = installer()['acceptance_check']; sensors=load('probe')
+        sensors.boot_id=Mock(return_value=BOOT_AFTER); sensors.clean_custody=Mock(return_value=True)
+        def accept(v): check(identity,v,dict(identity=identity,stage='qualifying'),lambda r: {'summary':summary},sensors=sensors)
         accept(value)
         for row in self.custody:
             for variant in ('missing','no-proof','failed','empty','wrong-row'):
@@ -191,11 +192,13 @@ class Q13Oracles(unittest.TestCase):
             stack.enter_context(patch.object(probe,'fixture',return_value=(summary,{})))
             stack.enter_context(patch.object(probe,'installed_identity',return_value=identity))
             stack.enter_context(patch.object(probe,'protected'))
+            stack.enter_context(patch.object(probe,'boot_id',return_value=BOOT_BEFORE))
+            stack.enter_context(patch.object(probe,'clean_custody',return_value=True))
             stack.enter_context(patch.object(probe,'config',side_effect=lambda n: identity if n=='identity.json' else
-                dict(identity=identity,passed=[],evidence={})))
+                dict(identity=identity,passed=sorted(self.rows-{'C2-CANARY'}),evidence={})))
             write = stack.enter_context(patch.object(probe,'atomic_config'))
             for row in self.custody:
-                result = dict(row=row,passed=True,observations={'real':'offline decision fixture'})
+                result = q15_proof(row)
                 with patch.object(probe,'custody_oracle',return_value=result) as run:
                     probe.qualify(row)
                     run.assert_called_once_with(row)
@@ -313,19 +316,18 @@ class Q15Oracles(unittest.TestCase):
             previous = Path.cwd()
             try:
                 for cwd in (Path('/'),deep):
-                    os.chdir(cwd)
-                    def pinned(*args,**kwargs):
-                        self.assertEqual(kwargs.pop('dir'),'/var/tmp')
-                        return real(*args,dir=temporary,**kwargs)
-                    with patch.object(probe.tempfile,'TemporaryDirectory',side_effect=pinned):
-                        # Nested TemporaryDirectory calls have no dir argument.
-                        def pin(*args,**kwargs):
-                            if kwargs.get('dir')=='/var/tmp': return pinned(*args,**kwargs)
-                            return real(*args,**kwargs)
-                        with patch.object(probe.tempfile,'TemporaryDirectory',side_effect=pin):
-                            with patch.object(__import__('socket').socket,'bind',bounded):
-                                probe.offline_oracles('B2')
+                    with self.subTest(cwd=str(cwd)):
+                        self.b2_at_cwd(probe,cwd,temporary,real,bounded)
             finally: os.chdir(previous)
+
+    def b2_at_cwd(self,probe,cwd,temporary,real,bounded):
+        os.chdir(cwd)
+        def pin(*args,**kwargs):
+            if kwargs.get('dir')=='/var/tmp': kwargs['dir']=temporary
+            return real(*args,**kwargs)
+        with patch.object(probe.tempfile,'TemporaryDirectory',side_effect=pin), \
+                patch.object(__import__('socket').socket,'bind',bounded):
+            probe.offline_oracles('B2')
 
     def evidence(self):
         identity,summary,value = Q13Oracles().evidence()
@@ -396,7 +398,7 @@ class Q15Oracles(unittest.TestCase):
             case.control=Path(tmp)/'control'; (case.control/'incoming').mkdir(parents=True)
             (case.control/'sealed').mkdir(); case.sealed=case.control/'sealed'/case.run
             case.stage=Path(tmp)/'stage'; case.marker=Path(tmp)/'marker'
-            case.files={}; case.launch=case.collector=None; case.hold_custody=False
+            case.files={}; case.launch=Mock(); case.collector=None; case.hold_custody=False
             case.bridge=Mock(); case.bridge.run.return_value={'Job':''}
             case.owner=SimpleNamespace(pw_uid=os.getuid(),pw_gid=os.getgid())
             case.observations={}; case.probe=SimpleNamespace(protected=Mock())

@@ -143,8 +143,13 @@ class InstallReviewOracles(unittest.TestCase):
                      summary_sha256=hashlib.sha256(json.dumps(summary,sort_keys=True).encode()).hexdigest()) for r in rows})
         value['evidence']['CLIENTS']['client_provenance'] = provenance
         for row in ('C1-SEALED','C2-CANARY','C3-RESTART'):
-            value['evidence'][row]['custody'] = dict(row=row,passed=True,observations={'real':'decision fixture'})
-        check = installer()['acceptance_check']; state = dict(identity=identity,stage='qualifying')
+            from test_install_composition import q15_proof
+            value['evidence'][row]['custody'] = q15_proof(row)
+        sensors=load('probe')
+        from test_install_composition import BOOT_AFTER
+        sensors.boot_id=lambda:BOOT_AFTER; sensors.clean_custody=lambda:True
+        raw = installer()['acceptance_check']; state = dict(identity=identity,stage='qualifying')
+        def check(*args): return raw(*args,sensors=sensors)
         check(identity,value,state,lambda run: {'summary':summary})
         for bad in ({},dict(provenance,context='host'),dict(provenance,uid=0),dict(provenance,ancestor_pid=0)):
             broken = copy.deepcopy(value); broken['evidence']['CLIENTS']['client_provenance'] = bad
@@ -170,7 +175,7 @@ class InstalledAcceptance(unittest.TestCase):
     def test_b4(self): self.check('B4','complete-evidence-or-failure')
     def test_clients(self): self.check('CLIENTS','claude-qualification')
     def test_c1(self): self.check('C1-SEALED','sealed-DAC')
-    def test_c2(self): self.check('C2-CANARY','executor-canary')
+    def test_zz_c2(self): self.check('C2-CANARY','pre-handoff-canary-reboot-required')
     def test_c3(self): self.check('C3-RESTART','pending-restart')
     def test_e2e(self): self.check('E2E','899e3872c5b61223c87b905f63c66947a816259b full PASS_SCOPED')
 
@@ -226,7 +231,8 @@ class Q8F4Oracles(unittest.TestCase):
         self.assertLess(text.index('stage_security(files,' ,text.index('def main():')),text.index('apply_accounts(',text.index('def main():')))
         doc = (HERE/'README.md').read_text()
         for fragment in ('Manual removal','systemctl disable --now mothergate.socket',
-                         'systemctl stop mothergate.service','gpasswd -d nexus gatesubmit',
+                         'systemctl stop mothergate.service',"if group is not None and 'nexus' in group.gr_mem:",
+                         "subprocess.run(['/usr/bin/gpasswd','-d','nexus','gatesubmit'],check=True)",
                          '/etc/gatebox/created-accounts.json',"subprocess.run(['/usr/sbin/userdel',name],check=True)",'/var/lib/gatebox-source',
                          '/usr/lib/gatebox/root','/etc/polkit-1/rules.d/00-gatebox-deny.rules'):
             self.assertIn(fragment,doc)

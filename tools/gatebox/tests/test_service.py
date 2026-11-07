@@ -24,7 +24,7 @@ import unittest
 import subprocess
 import sys
 import re
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch, Mock
 
 HERE = Path(__file__).resolve().parents[1]
@@ -47,6 +47,17 @@ ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src
        'RUST_TEST_THREADS':'4','CARGO_TERM_COLOR':'never','CARGO_NET_OFFLINE':'true',
        'RUST_BACKTRACE':'1','TMPDIR':'/run/gate/tmp','XDG_RUNTIME_DIR':'/run/gate/xdg',
        'XDG_CACHE_HOME':'/work/cache','LANG':'C.UTF-8','LC_ALL':'C.UTF-8','TZ':'UTC','CI':'true'}
+
+@contextmanager
+def socket_path(path):
+    # Linux-only oracle: keep even a long TMPDIR independent of cwd. The open
+    # private parent stays alive through bind/connect; no process-wide chdir.
+    fd = os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        address = '/proc/self/fd/'+str(fd)+'/'+path.name
+        assert len(os.fsencode(address)) <= 107
+        yield address
+    finally: os.close(fd)
 
 def frame(value):
     data = json.dumps(value).encode()
@@ -71,7 +82,7 @@ class OfflineServiceTests(unittest.TestCase):
                 with left, right: right.sendall(b'x')
             else:
                 with tempfile.TemporaryDirectory(prefix='.probe-') as tmp, socket.socket(socket.AF_UNIX) as sock:
-                    sock.bind(str(Path(tmp)/'probe.sock'))
+                    with socket_path(Path(tmp)/'probe.sock') as address: sock.bind(address)
         except PermissionError as exc:
             if exc.errno != errno.EPERM: raise
             self.skipTest('sandbox_blocked: AF_UNIX operation denied with EPERM; Architect must run outside runner')
@@ -142,8 +153,7 @@ class OfflineServiceTests(unittest.TestCase):
                         if mode == 'regular': path.touch(mode=0o600)
                         if mode == 'socket':
                             sock = socket.socket(socket.AF_UNIX)
-                            # Keep the fixture address below AF_UNIX's path limit.
-                            sock.bind(os.path.relpath(path))
+                            with socket_path(path) as address: sock.bind(address)
                             path.chmod(0o600)
                             sockets.append(sock)
                     if mode == 'socket': lifecycle.check_start(RUN,stage,control,os.getuid())
