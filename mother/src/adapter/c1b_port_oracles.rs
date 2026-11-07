@@ -303,12 +303,17 @@ fn sb2_public_model_item(line: &str) -> bool {
         }
 }
 fn sb2_facade_line(line: &str) -> bool {
-    (!line.contains("inference") && !line.contains("model_") && !line.contains("model::"))
+    (!line.contains("inference")
+        && !line.contains("model_")
+        && !line
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|w| w == "model"))
         || matches!(
             line,
             "mod model;" | "mod model_tests;" | "mod model_death_tests;"
                 // Existing private Core storage and its initialization only.
                 | "model: model::ModelSlot," | "model: model::ModelSlot::default(),"
+                | "if !self.core.model.ready()? {"
         )
 }
 #[test]

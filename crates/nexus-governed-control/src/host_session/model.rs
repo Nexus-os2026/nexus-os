@@ -131,36 +131,25 @@ pub(super) fn reserve(core: &Arc<Core>, scope: &Arc<RequestScope>) -> Result<Own
         done: false,
     })
 }
+fn completion_deadline(core: &Arc<Core>) -> Instant {
+    SessionIngress { core: core.clone() }
+        .close_deadline()
+        .map_or(Instant::now() + Duration::from_millis(100), |d| {
+            d.min(Instant::now() + Duration::from_millis(100))
+        })
+}
+fn completion_hold(core: &Arc<Core>) -> Result<MutexGuard<'_, State>, SessionError> {
+    crate::authority::run::settlement_hold(&core.model.state, &core.cell, completion_deadline(core))
+        .map_err(|_| {
+            core.model.uncertain.store(true, Ordering::SeqCst);
+            SessionIngress { core: core.clone() }.fail();
+            SessionError::Unavailable
+        })
+}
 impl Owner {
     pub(super) fn complete(mut self, record: &'static str) -> Result<(), SessionError> {
         let core = self.core.clone();
-        // Retry only completion metadata, bounded by the original close limit.
-        // Admission/handoff holds remain nonblocking and never use this loop.
-        let deadline = SessionIngress { core: core.clone() }
-            .close_deadline()
-            .map_or(Instant::now() + Duration::from_millis(100), |d| {
-                d.min(Instant::now() + Duration::from_millis(100))
-            });
-        let mut s = loop {
-            match core.model.state.try_lock() {
-                Ok(state) => break state,
-                Err(TryLockError::Poisoned(_)) => return Err(SessionError::Unavailable),
-                Err(TryLockError::WouldBlock) => {
-                    #[cfg(test)]
-                    crate::authority::file_session::probe(
-                        Some(&core.cell),
-                        "model.complete.contended",
-                    );
-                    if Instant::now() >= deadline {
-                        return Err(SessionError::Unavailable);
-                    }
-                    std::thread::park_timeout(
-                        Duration::from_millis(1)
-                            .min(deadline.saturating_duration_since(Instant::now())),
-                    );
-                }
-            }
-        };
+        let mut s = completion_hold(&core)?;
         self.complete_held(record, &mut s)
     }
     fn complete_held(&mut self, record: &'static str, s: &mut State) -> Result<(), SessionError> {
@@ -406,7 +395,7 @@ impl Attempt {
             Err(error) => {
                 #[cfg(test)]
                 crate::authority::file_session::probe(Some(&core.cell), "model.attempt.refused");
-                let mut s = hold(core)?;
+                let mut s = completion_hold(core)?;
                 (s.attempt, s.owner_complete, s.child_complete, s.record) = previous;
                 s.active = false; // Conclusive pre-ticket refusal: no result owed.
                 owner.done = true;
@@ -446,7 +435,6 @@ impl Attempt {
         let ticket = self.ticket.as_ref().ok_or(SessionError::Restricted)?;
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&self.owner.core.cell), "model.attempt.return");
-        hold(&self.owner.core)?.child_complete = true;
         let mut detail = vec![
             ("op".into(), "model_call".into()),
             ("call".into(), ticket.ordinal.to_string()),
@@ -477,7 +465,9 @@ impl Attempt {
         // No producer, model or run-table hold crosses the existing end writer.
         let record = authority.record_model_call(ticket.run, &ticket.agent, detail);
         self.record = Some(record);
-        hold(&self.owner.core)?.record = Some(record.as_str());
+        let mut s = completion_hold(&self.owner.core)?;
+        s.child_complete = true;
+        s.record = Some(record.as_str());
         Ok(record)
     }
     #[cfg_attr(
@@ -493,7 +483,10 @@ impl Attempt {
         }
         // Keep the slot active across exact pin return. Seal/reuse still refuse.
         self.runs
-            .settle_session_attempt(self.ticket.take().ok_or(SessionError::Restricted)?)
+            .settle_session_attempt(
+                self.ticket.take().ok_or(SessionError::Restricted)?,
+                completion_deadline(&self.owner.core),
+            )
             .map_err(|_| SessionError::Unavailable)?;
         self.owner.complete("recorded")
     }

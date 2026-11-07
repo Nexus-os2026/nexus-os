@@ -36,7 +36,8 @@ use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError, Weak};
+use std::time::{Duration, Instant};
 
 /// A run's cancellation flag, observed by actuators between bounded steps.
 #[derive(Clone, Debug)]
@@ -1880,6 +1881,27 @@ impl RunRegistry {
 }
 
 // Opaque, non-Clone ownership of one original-scope result obligation.
+// Completion metadata only; admission and handoff never wait here.
+pub(crate) fn settlement_hold<'a, T>(
+    lock: &'a Mutex<T>,
+    _cell: &HaltCell,
+    deadline: Instant,
+) -> Result<MutexGuard<'a, T>, AuthorityError> {
+    loop {
+        match lock.try_lock() {
+            Ok(state) => return Ok(state),
+            Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                #[cfg(test)]
+                super::file_session::probe(Some(_cell), "model.complete.contended");
+                std::thread::park_timeout(
+                    Duration::from_millis(1)
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+            Err(_) => return Err(AuthorityError::Unavailable("settlement hold unavailable")),
+        }
+    }
+}
 pub(crate) struct SessionAttempt {
     pub(crate) run: RunId,
     pub(crate) agent: AgentId,
@@ -1977,16 +1999,14 @@ impl RunRegistry {
     pub(crate) fn settle_session_attempt(
         &self,
         ticket: SessionAttempt,
+        deadline: Instant,
     ) -> Result<(), AuthorityError> {
         if !std::ptr::eq(self, ticket.registry.as_ptr()) {
             return Err(AuthorityError::WrongRun);
         }
         #[cfg(test)]
         super::file_session::probe(Some(&ticket.cell), "model.settle.before");
-        let mut table = self
-            .runs
-            .try_lock()
-            .map_err(|_| AuthorityError::Unavailable("model settlement hold unavailable"))?;
+        let mut table = settlement_hold(&self.runs, &ticket.cell, deadline)?;
         let entry = table
             .runs
             .get_mut(&ticket.run)

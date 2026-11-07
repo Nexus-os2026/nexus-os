@@ -14,7 +14,7 @@ fn code(path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
-// Dependency-free matcher for pub(\s+(const|async|unsafe|extern "[^"]*"))*\s+fn.
+// Dependency-free matcher for pub(\s+(const|async|unsafe|extern(\s+"[^"]*")?))*\s+fn.
 fn public_function(mut line: &str) -> bool {
     fn word<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
         line.strip_prefix(prefix)
@@ -32,13 +32,14 @@ fn public_function(mut line: &str) -> bool {
         {
             line = rest.trim_start();
         } else if let Some(rest) = word(line, "extern") {
-            let Some(rest) = rest.trim_start().strip_prefix('"') else {
-                return false;
+            line = if let Some(abi) = rest.strip_prefix('"') {
+                let Some(end) = abi.find('"') else {
+                    return false;
+                };
+                abi[end + 1..].trim_start()
+            } else {
+                rest
             };
-            let Some(end) = rest.find('"') else {
-                return false;
-            };
-            line = rest[end + 1..].trim_start();
         } else {
             return word(line, "fn").is_some();
         }
