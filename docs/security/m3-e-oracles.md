@@ -496,3 +496,10 @@ effect. The host names each gap by kind (`unavailable:`, `missing:`,
 | P-R19c | a receipt accepted with no action identity for its effect | action link: `missing == ["action-link"]` |
 | P-R19d | T16 success from checks not joined to the receipt | joined evidence: T16 unchecked, none recorded |
 | P-R19e | the receipt digest copied without validation | value domains: `invalid == ["receipt_sha256"]` |
+
+## M-6b — R21 (review-1 LOW findings)
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_u10_r21_t16_join_needs_a_file_dispatch` | Consent, pending, receipt and all-pass checks of effect 1 with no File dispatch: T16 unconfirmed, none recorded, never the success phrase; the receipt lists `receipt_effect` mismatched. Control: with the dispatch, the all-pass T16. |
+| `m3e_u10_r21_any_conflicting_action_is_reported` | Pending A, receipt A, settlement B for the same effect: `mismatched == ["action"]`, nothing missing. Pending A, receipt A, settlement A: nothing reported. (Settlement-only linkage stays valid: `m3e_u10_r19_every_receipt_needs_its_action_link`.) |

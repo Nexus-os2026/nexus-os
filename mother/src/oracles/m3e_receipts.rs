@@ -603,6 +603,58 @@ fn m3e_u10_r19_values_are_validated_before_projection() {
     );
 }
 
+// M3E-R21 (1): T16's three-way join needs a journaled File dispatch; an
+// ApprovalPending never stands in for it.
+#[test]
+fn m3e_u10_r21_t16_join_needs_a_file_dispatch() {
+    let c = page_contract();
+    let dispatched = |e: &Entry| matches!(e.event, Event::EffectDispatched { .. });
+    let mut j = asked(&c);
+    j.retain(|e| !dispatched(e));
+    j.extend([receipt(1, false), recorded(1, PASS)]);
+    let unconfirmed = "I could not confirm what became of the request";
+    assert_eq!(
+        summary(&j, &c),
+        Ok(Some(t16(unconfirmed, T16_NONE_RECORDED)))
+    );
+    assert!(r(&j, &c).mismatched.contains(&"receipt_effect"));
+    // Control: the same journal with its File dispatch passes.
+    let j = [asked(&c), vec![receipt(1, false), recorded(1, PASS)]].concat();
+    assert_eq!(summary(&j, &c), Ok(Some(t16(T16_PASSED, ALL_PASS))));
+}
+
+// M3E-R21 (2): any conflicting action identity for the receipt's effect is
+// reported, even when another identity matches.
+#[test]
+fn m3e_u10_r21_any_conflicting_action_is_reported() {
+    let c = page_contract();
+    let other = PendingAction {
+        run: "run".into(),
+        commitment: "another".into(),
+        deadline_mono_ms: 1,
+    };
+    let published = || SettlementOutcome::Published {
+        recovery_required: false,
+        interrupted: vec![],
+    };
+    // Pending A, receipt A, settlement B: mismatched.
+    let j = [
+        asked(&c),
+        vec![receipt(1, false), settled(published(), Some(other))],
+    ]
+    .concat();
+    let got = r(&j, &c);
+    assert_eq!((got.missing, got.mismatched), (vec![], vec!["action"]));
+    // Pending A, receipt A, settlement A: linked, nothing reported.
+    let j = [
+        asked(&c),
+        vec![receipt(1, false), settled(published(), Some(action()))],
+    ]
+    .concat();
+    let got = r(&j, &c);
+    assert_eq!((got.missing, got.mismatched), (vec![], vec![]));
+}
+
 /// A real broker page mission, run to Done (one broker per process).
 const CHILD: &str = "oracles::m3e_receipts::m3e_u10_child";
 
