@@ -32,6 +32,9 @@ def encode(value):
 def policy():
     return json.loads((HERE/'policy/gates.json').read_text()), json.loads((HERE/'policy/exclusions.json').read_text())
 
+def string_list(value):
+    return isinstance(value,list) and all(isinstance(item,str) for item in value)
+
 def validate_summary(summary):
     if not isinstance(summary,dict) or set(summary) != REQUIRED: raise ValueError('receipt fields')
     if (type(summary['schema_version']) is not int or summary['schema_version'] != 1
@@ -47,7 +50,10 @@ def validate_summary(summary):
         if (not isinstance(command,dict) or not isinstance(command.get('id'),str)
                 or not isinstance(command.get('argv'),list) or not command['argv']
                 or not all(type(arg) is str for arg in command['argv'])
-                or command.get('cwd') != '/work/src' or not isinstance(command.get('environment'),dict)):
+                or command.get('cwd') != '/work/src' or not isinstance(command.get('environment'),dict)
+                or any(key in command and not isinstance(command[key],str) for key in ('gate_id','artifact_id'))
+                or ('artifact_ids' in command and not string_list(command['artifact_ids']))
+                or ('inventory' in command and not isinstance(command['inventory'],dict))):
             raise ValueError('command invocation evidence')
     for log in summary['logs']:
         if (not isinstance(log,dict) or not isinstance(log.get('file'),str) or not NAME.fullmatch(log['file'])
@@ -66,12 +72,12 @@ def validate_summary(summary):
         raise ValueError('incomplete success evidence')
     request = summary['request']
     if (set(request) != {'repo_id','full_sha','gate_set_id'} or request['gate_set_id'] != 'full'
-            or not isinstance(request['full_sha'],str) or not re.fullmatch('[0-9a-f]{40}',request['full_sha'])
+            or any(not isinstance(value,str) for value in request.values()) or not re.fullmatch('[0-9a-f]{40}',request['full_sha'])
             or summary['snapshot'].get('commit') != request['full_sha']): raise ValueError('success snapshot/request')
     for key in ('content_sha256','lockfile_sha256'):
-        if not HEX.fullmatch(str(summary['snapshot'].get(key,''))): raise ValueError('snapshot identity')
+        if not isinstance(summary['snapshot'].get(key),str) or not HEX.fullmatch(summary['snapshot'][key]): raise ValueError('snapshot identity')
     for key in ('bundle_sha256','policy_sha256','gates_sha256'):
-        if not HEX.fullmatch(str(summary['installed'].get(key,''))): raise ValueError('installed identity')
+        if not isinstance(summary['installed'].get(key),str) or not HEX.fullmatch(summary['installed'][key]): raise ValueError('installed identity')
     if (any(coverage.get(k) != expected for k in ('expected','executed','passed'))
             or any(coverage.get(k) != [] for k in ('failed','ignored','filtered'))
             or coverage.get('excluded') != [{'name':n,'status':'excluded','reason':exclusions['reason']} for n in exclusions['cases']]):
@@ -89,14 +95,16 @@ def validate_summary(summary):
                 or not isinstance(artifact.get('executable'),str)
                 or not artifact['executable'].startswith('/work/target/')
                 or '..' in artifact['executable'].split('/')
-                or not artifact.get('package') or not artifact.get('target')
+                or any(not isinstance(artifact.get(k),str) or not artifact[k] for k in ('package','target'))
                 or artifact['target'] == exclusions['target']): raise ValueError('unsupported/invalid artifact')
         eligible[artifact['id']] = artifact
     workspace = [c for c in summary['commands'] if c.get('gate_id',c['id']) == 'workspace']
     executed = [c.get('artifact_id') for c in workspace]
     if set(executed) != set(eligible) or len(executed) != len(eligible): raise ValueError('missing artifact execution')
     host = {a['id'] for a in artifacts if a['package'] == 'nexus-mother-host'}
-    if not host or set(coverage.get('host_artifacts',[])) != host: raise ValueError('host artifacts missing')
+    host_artifacts = coverage.get('host_artifacts')
+    if (not host or not string_list(host_artifacts) or len(host_artifacts) != len(host)
+            or set(host_artifacts) != host): raise ValueError('host artifacts missing')
     logs = {log['file']:log['sha256'] for log in summary['logs']}
     for command in summary['commands']:
         gate = next(g for g in gates['gates'] if g['id'] == command.get('gate_id',command['id']))
@@ -120,7 +128,7 @@ def validate_summary(summary):
         if gate.get('adapter') in ('libtest','libtest-repeat','reconcile-all-artifacts'):
             inventory = command.get('inventory',{})
             names = inventory.get('expected')
-            if (not isinstance(names,list) or len(set(names)) != len(names)
+            if (not string_list(names) or len(set(names)) != len(names)
                     or inventory.get('passed') != names or inventory.get('executed') != names
                     or any(inventory.get(k) != [] for k in ('failed','ignored','filtered'))):
                 raise ValueError('test reconciliation')
