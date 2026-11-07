@@ -90,6 +90,10 @@ impl RequestScope {
         same && self.eligible(None)
     }
     fn eligible(&self, at: Option<(u64, u64)>) -> bool {
+        #[cfg(test)] // SB-3B1b seam: scope admission reads Instant.
+        if let Some(core) = self.core.upgrade() {
+            crate::authority::file_session::probe(Some(&core.cell), "scope.clock");
+        }
         #[cfg(test)]
         if self
             .core
