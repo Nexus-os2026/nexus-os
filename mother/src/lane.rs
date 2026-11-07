@@ -85,6 +85,8 @@ pub struct LaneInput {
     pub pass_criteria: Vec<PassCriterion>,
     /// The output hashes of the lanes called before, in order.
     pub prior_outputs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_input: Option<crate::page_inputs::PageBuildInput>,
 }
 
 /// A lane's judgement.

@@ -111,6 +111,8 @@ pub struct MissionContract {
     pub notes: Vec<Note>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deliverable: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_facts: Option<crate::page_inputs::PageFacts>,
 }
 
 /// Consented data, never registration or authority.
@@ -199,6 +201,11 @@ impl<'de> Deserialize<'de> for ContractHash {
 /// Why a contract cannot be drafted or submitted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContractError {
+    FactsNotPageReady,
+    NotesAndFactsTooLarge,
+    CriterionNotCheckable,
+    PageNoteInvalid,
+    PageInputIdentity,
     ModelChoiceInvalid,
     DeliverableInvalid,
     TooManyNotes,
@@ -292,6 +299,9 @@ impl MissionContract {
         }
         if self.budget.max_money_minor != 0 {
             return Err(ContractError::MoneyNotZero);
+        }
+        if self.page_facts.is_some() {
+            crate::page_inputs::validate_page(self)?;
         }
         self.validate_model_notes()?;
         Ok(())

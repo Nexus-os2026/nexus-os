@@ -153,6 +153,7 @@ pub(super) fn reserve_lane(
         restatement: c.restatement.clone(),
         pass_criteria: c.pass_criteria.clone(),
         prior_outputs: m.prior_outputs.clone(),
+        builder_input: None,
     };
     inner.append(
         id,
