@@ -1699,6 +1699,17 @@ fn live_member(
     agent: &AgentId,
     group: GroupId,
 ) -> Result<(), AuthorityError> {
+    live_member_with(table, entry, agent, group, &HaltCell::is_engaged)
+}
+/// `engaged` judges the run's cell; SB-3B1b R5 passes its own clock-free
+/// judgement (the original scope was checked on captured clocks).
+fn live_member_with(
+    table: &Table,
+    entry: &RunEntry,
+    agent: &AgentId,
+    group: GroupId,
+    engaged: &dyn Fn(&HaltCell) -> bool,
+) -> Result<(), AuthorityError> {
     if &entry.view.agent != agent {
         return Err(AuthorityError::WrongAgent);
     }
@@ -1717,7 +1728,7 @@ fn live_member(
             return Err(AuthorityError::NotMember);
         }
     }
-    if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged) || table.in_halted_group(entry) {
+    if entry.file_cell.as_ref().is_some_and(engaged) || table.in_halted_group(entry) {
         return Err(AuthorityError::Halted);
     }
     if entry.view.finished {
@@ -1934,6 +1945,14 @@ pub(crate) struct SessionAttempt {
     pub(crate) door: String,
     registry: Weak<RunRegistry>,
     cell: HaltCell,
+    cancelled: Arc<AtomicBool>,
+    door_halted: Arc<AtomicBool>,
+}
+impl SessionAttempt {
+    /// Deny-only and lock-free: the run was cancelled or its door halted.
+    pub(crate) fn ended(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst) || self.door_halted.load(Ordering::SeqCst)
+    }
 }
 /// SB-3B: the original door's retained File grant, with both clocks read
 /// before any hold; observed under the run table (run -> grant, try_lock).
@@ -1944,20 +1963,16 @@ pub(crate) struct OriginalGrant<'a> {
 }
 impl<'a> OriginalGrant<'a> {
     /// Live on both clocks with a Files scope equal to the run's workspace;
-    /// contention refuses, poison also fails the session. The grant store
-    /// stays held (run -> grant) for as long as the returned guard lives.
-    fn live(
-        &self,
-        files: &FilesAdmission,
-        cell: &HaltCell,
-    ) -> Result<impl Drop + 'a, AuthorityError> {
+    /// contention refuses; poison is GRANT_POISONED. The grant store stays
+    /// held (run -> grant) for as long as the returned guard lives.
+    fn live(&self, files: &FilesAdmission) -> Result<impl Drop + 'a, AuthorityError> {
         use super::policy::{GrantObservation, GrantScope};
         let (grant, held) = self
             .grants
             .try_live_at(self.grant, self.clock.0, self.clock.1)
             .map_err(|error| {
                 if error == GrantObservation::Poisoned {
-                    cell.fail_session();
+                    return AuthorityError::Unavailable(GRANT_POISONED); // Caller fails.
                 }
                 AuthorityError::Unavailable("model grant hold unavailable")
             })?;
@@ -1973,7 +1988,50 @@ impl<'a> OriginalGrant<'a> {
         }
     }
 }
+/// The grant store was poisoned; the caller fails the session once the
+/// run table is released (no clock is read under the hold).
+pub(crate) const GRANT_POISONED: &str = "model grant hold poisoned";
+/// SB-3B1b R5: the run table, taken with `try_lock` at one call gate.
+pub(crate) struct RequestHold<'a>(MutexGuard<'a, Table>, &'a RunRegistry);
+impl RequestHold<'_> {
+    /// R5 predicate 4 (run, membership, host prerequisites, exact sticky
+    /// admission, this pin); then 5, the grant, held while the guard lives.
+    pub(crate) fn live<'g>(
+        &self,
+        t: &SessionAttempt,
+        grant: &OriginalGrant<'g>,
+    ) -> Result<impl Drop + 'g, AuthorityError> {
+        let (table, registry) = (&*self.0, self.1);
+        if registry.closed.load(Ordering::SeqCst) || !std::ptr::eq(registry, t.registry.as_ptr()) {
+            return Err(AuthorityError::Halted);
+        }
+        let entry = table.runs.get(&t.run).ok_or(AuthorityError::UnknownRun)?;
+        // Step 1 judged the original scope; the cell must be it (below).
+        live_member_with(table, entry, &t.agent, t.group, &|_| false)?;
+        let original = |c: &HaltCell| c.host() && c.same(&t.cell);
+        host_prerequisites(table, entry, registry.stop_number.load(Ordering::SeqCst))?;
+        if entry.view.id != t.run
+            || entry.opened_by != Some(t.group)
+            || !entry.file_cell.as_ref().is_some_and(original)
+            || entry.inference_admission.as_ref() != Some(&t.admission)
+            || !entry.model_pins.contains(&t.ordinal)
+        {
+            return Err(AuthorityError::NotMember);
+        }
+        let files = entry
+            .files_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        grant.live(files)
+    }
+}
 impl RunRegistry {
+    pub(crate) fn try_request_hold(&self) -> Result<RequestHold<'_>, bool> {
+        match self.runs.try_lock() {
+            Ok(table) => Ok(RequestHold(table, self)),
+            Err(error) => Err(matches!(error, TryLockError::Poisoned(_))),
+        }
+    }
     // No producer/model hold is carried here. Ordinary calls are unchanged.
     pub(crate) fn admit_session_attempt(
         self: &Arc<Self>,
@@ -2001,6 +2059,7 @@ impl RunRegistry {
             original,
         )
         .ok_or(AuthorityError::NotMember)?;
+        let door_halted = live_door(&mut table.doors, group, agent)?.halt_flag.clone();
         let entry = table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         live_member(&table, entry, agent, group)?;
         host_prerequisites(&table, entry, self.stop_number.load(Ordering::SeqCst))?;
@@ -2041,7 +2100,7 @@ impl RunRegistry {
             .ok_or(AuthorityError::Capacity)?;
         // Held through the observer read, Q's CAS and the count/pin mutation:
         // a revocation lands before (refused) or after the CAS (entered).
-        let _grant_held = grant.live(files, &cell)?;
+        let _grant_held = grant.live(files)?;
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.granted");
         let ticket = SessionAttempt {
@@ -2053,6 +2112,8 @@ impl RunRegistry {
             door,
             registry: Arc::downgrade(self),
             cell: cell.clone(),
+            cancelled: entry.cancelled.clone(),
+            door_halted,
         };
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         // The live invocation, last among predicates, before the CAS.
@@ -2194,7 +2255,7 @@ impl RunRegistry {
             .try_live_at(b.grant, b.clock.0, b.clock.1)
             .map_err(|error| {
                 if error == super::policy::GrantObservation::Poisoned {
-                    b.original.fail_session();
+                    return AuthorityError::Unavailable(GRANT_POISONED); // Caller fails.
                 }
                 AuthorityError::Unavailable("model grant hold unavailable")
             })?;
@@ -2270,6 +2331,13 @@ impl RunRegistry {
             "opened_by" => entry.opened_by = Some(u64::MAX),
             "view_id" => entry.view.id = RunId::fresh(),
             "pin" => entry.model_pins = entry.model_pins.iter().map(|p| p + 100).collect(),
+            "unpin" => entry.model_pins.clear(),
+            "sticky" => entry
+                .inference_admission
+                .as_mut()
+                .unwrap()
+                .request
+                .push('x'),
             _ => {}
         }
         let files = entry.files_admission.as_mut().unwrap();

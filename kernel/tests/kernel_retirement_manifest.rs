@@ -228,7 +228,8 @@ fn retained_production_seeds_and_dependency_manifests_are_present() {
     // K02 registration: 327 K01 seeds plus the three one-line desktop-tripwire
     // fixture crate sources the production scanner has always loaded (see
     // README, "K02 registration"). No seed was removed or replaced.
-    assert_eq!(paths.len(), 330);
+    // K02 330 + Cq-0 inference/purpose.rs (CQ-R5)
+    assert_eq!(paths.len(), 331);
     for path in paths_at(LIVE_STAGE) {
         assert!(root().join(&path).is_file(), "missing stage seed: {path}");
     }

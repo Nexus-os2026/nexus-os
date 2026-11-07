@@ -63,11 +63,22 @@ impl fmt::Debug for MissionDeadlines {
     }
 }
 impl MissionDeadlines {
-    fn live(&self) -> bool {
-        self.clock.monotonic_ms() < self.mono.load(Ordering::SeqCst)
-            && self.clock.wall_ms() < self.wall.load(Ordering::SeqCst)
+    fn live(&self, at: Option<(u64, u64)>) -> bool {
+        let (m, w) = at.unwrap_or_else(|| (self.clock.monotonic_ms(), self.clock.wall_ms()));
+        m < self.mono.load(Ordering::SeqCst) && w < self.wall.load(Ordering::SeqCst)
     }
 }
+type Admitted = Result<(), crate::authority::AuthorityError>;
+/// SB3B-R20: why a scope does not admit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Lapse {
+    /// Q or a mission deadline is past, narrowing included: an expiry.
+    Expired,
+    /// Any other refusal, including limits without a sampled reading.
+    Denied,
+}
+/// SB-3B1b: `Instant` and mission clocks read before any hold.
+pub(crate) type Sample = (Instant, Option<(u64, u64)>); // None: no limits were read.
 impl RequestScope {
     pub(crate) fn fail(&self) {
         if let Some(core) = self.core.upgrade() {
@@ -86,23 +97,34 @@ impl RequestScope {
         } else {
             word == self.snapshot
         };
-        same && self.eligible()
+        same && self.eligible(None)
     }
-    fn eligible(&self) -> bool {
-        #[cfg(test)]
-        if self
-            .core
-            .upgrade()
-            .is_some_and(|core| core.expired_request.load(Ordering::SeqCst) == self.request)
-        {
-            return false;
+    fn eligible(&self, at: Option<Sample>) -> bool {
+        self.judge(at).is_ok()
+    }
+    /// Eligibility and, if refused, its reason, from one reading of Q and
+    /// the mission limits (SB3B-R20): an expiry is told apart from any
+    /// other refusal by the same reading that refuses.
+    pub(crate) fn judge(&self, at: Option<Sample>) -> Result<(), Lapse> {
+        #[cfg(test)] // SB-3B1b seam: scope admission reads Instant.
+        if let Some(core) = self.core.upgrade().filter(|_| at.is_none()) {
+            crate::authority::file_session::probe(Some(&core.cell), "scope.clock");
+        }
+        #[cfg(test)] // SB3B-R20 seam: the one reading of the limits is next.
+        if let Some(core) = self.core.upgrade().filter(|_| at.is_some()) {
+            crate::authority::file_session::probe(Some(&core.cell), "scope.limits");
+        }
+        let (now, at) = at.map_or_else(|| (Instant::now(), None), |(n, c)| (n, Some(c)));
+        // None: no limits; Some(None): limits but no sampled reading (closed).
+        let mission = self.mission_deadlines.get().map(|limits| match at {
+            Some(sampled) => sampled.map(|c| !limits.live(Some(c))),
+            None => Some(!limits.live(None)),
+        });
+        if self.past(now) || mission == Some(Some(true)) {
+            return Err(Lapse::Expired);
         }
         let invalid = self.core.strong_count() == 0
-            || Instant::now() >= self.deadline
-            || self
-                .mission_deadlines
-                .get()
-                .is_some_and(|limits| !limits.live())
+            || mission == Some(None)
             || self.snapshot & (FAILED | SEALED | EMERGENCY) != 0
             || match self.kind {
                 ScopeKind::Bootstrap => self.snapshot & (READY | CLOSING | 7) != 0,
@@ -110,17 +132,54 @@ impl RequestScope {
                 ScopeKind::Restoration => self.snapshot & (READY | CLOSING) != READY,
                 ScopeKind::CloseCleanup => self.snapshot & (READY | CLOSING) != (READY | CLOSING),
             };
-        !invalid
+        if invalid {
+            return Err(Lapse::Denied);
+        }
+        Ok(())
+    }
+    /// Whether `now` is at or past Q's deadline. No clock is read.
+    fn past(&self, now: Instant) -> bool {
+        #[cfg(test)] // SB3B-R18 seam: Q expired at a recorded instant (sample-faithful).
+        if let Some(core) = self.core.upgrade() {
+            let seam = core.expired_request.lock().map(|q| *q);
+            if seam.is_ok_and(|q| q.is_some_and(|(q, at)| q == self.request && now >= at)) {
+                return true;
+            }
+        }
+        now >= self.deadline
+    }
+    /// SB3B-R18: whether a sample is past Q or a mission deadline as they
+    /// stand now (narrowing included). No clock is read, so it may be
+    /// judged under a hold; a missing reading is not an expiry.
+    pub(crate) fn expired_at(&self, (now, clocks): Sample) -> bool {
+        let limits = self.mission_deadlines.get();
+        self.past(now) || limits.zip(clocks).is_some_and(|(l, c)| !l.live(Some(c)))
     }
     pub(crate) fn admit(&self, cell: &HaltCell) -> Result<(), crate::authority::AuthorityError> {
-        use crate::authority::AuthorityError;
-        if !self.eligible() {
-            return Err(AuthorityError::Halted);
+        self.admit_at(cell, None)
+    }
+    pub(crate) fn admit_at(&self, cell: &HaltCell, at: Option<Sample>) -> Admitted {
+        self.admit_judged(cell, at).map_err(|(error, _)| error)
+    }
+    /// The admission, with an eligibility refusal's reason from its own
+    /// single evaluation (SB3B-R20); `None` for every later refusal.
+    pub(crate) fn admit_judged(
+        &self,
+        cell: &HaltCell,
+        at: Option<Sample>,
+    ) -> Result<(), (crate::authority::AuthorityError, Option<Lapse>)> {
+        if let Err(lapse) = self.judge(at) {
+            return Err((crate::authority::AuthorityError::Halted, Some(lapse)));
         }
+        self.admit_eligible(cell, at).map_err(|error| (error, None))
+    }
+    fn admit_eligible(&self, cell: &HaltCell, at: Option<Sample>) -> Admitted {
+        use crate::authority::AuthorityError;
         self.next_step
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| old.checked_add(1))
             .map_err(|_| {
-                if let Some(core) = self.core.upgrade() {
+                // A caller holding authority locks (a sample) fails after release.
+                if let Some(core) = self.core.upgrade().filter(|_| at.is_none()) {
                     SessionIngress { core }.fail();
                 }
                 AuthorityError::Capacity
@@ -341,7 +400,7 @@ struct CloseIdentity {
 /// single atomic word. The other atomics publish non-authoritative indices.
 struct Core {
     #[cfg(test)]
-    expired_request: AtomicU64,
+    expired_request: std::sync::Mutex<Option<(u64, Instant)>>,
     model: model::ModelSlot,
     identity: SessionIdentity,
     stops: stop::Stops,
@@ -575,11 +634,15 @@ enum DoorKind {
     Continuation,
 }
 
+#[cfg(test)]
 impl HostSession {
-    #[cfg(test)]
+    /// Test seam: Q `request` reaches its deadline now; a sample taken
+    /// earlier is still live (SB3B-R18).
     pub(crate) fn expire_request_for_test(&self, request: u64) {
-        self.core.expired_request.store(request, Ordering::SeqCst);
+        *self.core.expired_request.lock().unwrap() = Some((request, Instant::now()));
     }
+}
+impl HostSession {
     pub fn open(
         seed: SessionSeed,
         root: &std::path::Path,
@@ -1415,7 +1478,7 @@ impl SessionSeed {
         Ok(Self {
             core: Arc::new(Core {
                 #[cfg(test)]
-                expired_request: AtomicU64::new(u64::MAX),
+                expired_request: std::sync::Mutex::new(None),
                 model: model::ModelSlot::default(),
                 identity: SessionIdentity(identity),
                 stops: stop::Stops::default(),

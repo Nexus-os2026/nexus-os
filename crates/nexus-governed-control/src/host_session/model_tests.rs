@@ -11,6 +11,7 @@ use std::sync::{
 };
 const PATHS: [&str; 4] = ["/api/version", "/api/status", "/api/tags", "/api/show"];
 const CANARY: &str = "SB2_METADATA_PRIVATE_CANARY";
+pub(super) const CHAT: &str = r#"{"model":"qwen3:8b","message":{"role":"assistant","content":"{\"sb3b\":\"reply\"}"},"done":true,"done_reason":"stop","prompt_eval_count":587,"eval_count":378}"#;
 pub(super) fn pin() -> ModelPinSpec {
     ModelPinSpec {
         name: "qwen3:8b".into(),
@@ -197,13 +198,20 @@ pub(super) fn fixture() -> Fixture {
 }
 pub(super) struct Peer {
     pub(super) endpoint: String,
-    paths: Arc<Mutex<Vec<String>>>,
-    events: Receiver<(String, bool)>,
+    pub(super) paths: Arc<Mutex<Vec<String>>>,
+    pub(super) events: Receiver<(String, bool)>,
     done: Arc<std::sync::atomic::AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 impl Peer {
     pub(super) fn new(held: Option<usize>, bad: Option<usize>) -> Self {
+        Self::serve(held, bad, false)
+    }
+    /// SB-3B: also answers the call's chat request (never registration's).
+    pub(super) fn chat(held: Option<usize>, bad: Option<usize>) -> Self {
+        Self::serve(held, bad, true)
+    }
+    fn serve(held: Option<usize>, bad: Option<usize>, chat: bool) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -234,8 +242,11 @@ impl Peer {
                     }
                     head.push(b[0]);
                 }
-                let head = String::from_utf8(head).unwrap();
-                let path = head.split_whitespace().nth(1).unwrap().to_owned();
+                let head = String::from_utf8_lossy(&head).into_owned();
+                // A connection aborted before its request line (Stop) is no request.
+                let Some(path) = head.split_whitespace().nth(1).map(str::to_owned) else {
+                    continue;
+                };
                 let length = head
                     .lines()
                     .find_map(|l| {
@@ -283,6 +294,7 @@ impl Peer {
                             "/api/show" => {
                                 format!(r#"{{"capabilities":["thinking"],"private":"{CANARY}"}}"#)
                             }
+                            "/api/chat" if chat => CHAT.into(),
                             _ => panic!("forbidden {path}"),
                         }
                     };
@@ -312,10 +324,14 @@ fn reply(s: &mut TcpStream, body: &str) {
 impl Drop for Peer {
     fn drop(&mut self) {
         self.done.store(true, Ordering::SeqCst);
-        self.thread.take().unwrap().join().unwrap();
+        let joined = self.thread.take().map(std::thread::JoinHandle::join);
+        // Never a second panic while a failing test unwinds.
+        if !std::thread::panicking() {
+            joined.unwrap().unwrap();
+        }
     }
 }
-fn nth(
+pub(super) fn nth(
     session: &HostSession,
     point: &'static str,
     n: usize,
