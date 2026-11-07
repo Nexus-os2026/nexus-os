@@ -3,13 +3,13 @@
 //! `coordinator::page_display` selects from the verified journal, or her
 //! explanation. Both can hold the Owner's words, a folder name or lane text.
 //! Data-only (R12 (2)): nothing in the scripted `run` flow calls it; M-5 does.
+use nexus_governed_control::authority::evidence::escaped;
 
 /// `text` for the terminal: every line through `evidence::escaped`, its line
 /// breaks kept.
 #[allow(dead_code)] // Consumed by M-5's page-mode wiring.
 pub(crate) fn page_text(text: &str) -> String {
-    let _ = text;
-    String::new()
+    text.split('\n').map(escaped).collect::<Vec<_>>().join("\n")
 }
 
 // R14 (Q2): the emit function is crate-private, so its oracle is here.
@@ -35,7 +35,14 @@ mod oracles {
         assert!(out.chars().all(|c| c == '\n' || shown(c)), "{out:?}");
         // The text stays readable; each control is visibly escaped.
         assert_eq!(out.matches(CANARY).count(), 2);
-        for mark in ["\\u{1b}", "\\u{7}", "\\r", "\\u{202e}", "\\u{200b}", "\\\\done"] {
+        for mark in [
+            "\\u{1b}",
+            "\\u{7}",
+            "\\r",
+            "\\u{202e}",
+            "\\u{200b}",
+            "\\\\done",
+        ] {
             assert_eq!(out.matches(mark).count(), 2, "{mark}");
         }
         // Frozen text passes through unchanged.

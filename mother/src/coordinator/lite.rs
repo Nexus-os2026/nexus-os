@@ -377,7 +377,7 @@ impl<P: EffectPort> FileSession<P> {
     /// action or authority. Display reads only this; the next real
     /// interaction still enforces a lapse.
     pub fn journal_view(&self) -> Result<Vec<Entry>, CoordinatorError> {
-        Err(CoordinatorError::Stopped)
+        self.coordinator.journal()
     }
     pub fn reason(&self, id: MissionId) -> Result<Option<String>, CoordinatorError> {
         self.observe(id)?;

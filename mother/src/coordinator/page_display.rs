@@ -17,13 +17,21 @@
 //!   recorded failure is `t12_failed(code)`; written with nothing recorded is
 //!   `t12_unchecked`; a scripted verdict is never a recorded check;
 //! - T9 by the recorded end: declined (consent or action denied), expired
-//!   (the approval expired), stopped (a Stop with nothing published), and
-//!   otherwise, once a File was asked for, uncertain;
+//!   (the approval expired), stopped (a Stop before any File was asked for,
+//!   or a settlement confirmed not published), and otherwise, once a File was
+//!   asked for, uncertain;
 //! - T13 follows only a recorded all-pass; T5, T7 and T15 are phase lines for
 //!   M-5 to call.
 
 use crate::contract::MissionContract;
-use crate::journal::{Entry, MissionId};
+use crate::evidence::{LapseReason, SettlementOutcome};
+use crate::journal::{Entry, Event, MissionId};
+use crate::state::Trigger;
+use crate::teaching::{
+    t10, t12_failed, t12_passed, t12_unchecked, t13, T11_CHECKED, T15_UNDO_REFUSED, T5_DRAFTING,
+    T7_BEFORE_FILE, T9_DECLINED, T9_EXPIRED, T9_STOPPED, T9_UNCERTAIN,
+};
+use crate::verifier::CheckId;
 
 /// The publication the broker recorded for the mission, if any.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,19 +82,77 @@ pub enum PagePhase {
 }
 
 /// The frozen line of `phase`.
-pub fn phase_line(_phase: PagePhase) -> &'static str {
-    ""
+pub fn phase_line(phase: PagePhase) -> &'static str {
+    match phase {
+        PagePhase::Drafting => T5_DRAFTING,
+        PagePhase::BeforeFileDialog => T7_BEFORE_FILE,
+        PagePhase::UndoRefusedAfterEdit => T15_UNDO_REFUSED,
+    }
 }
 
 /// Project mission `id` from `entries` (a verified journal).
-pub fn page_view(_entries: &[Entry], _id: MissionId) -> PageView {
-    PageView {
+pub fn page_view(entries: &[Entry], id: MissionId) -> PageView {
+    let mut view = PageView {
         consented: None,
         file_asked: false,
         publication: Publication::None,
         checks: None,
         end: PageEnd::Open,
+    };
+    for entry in entries.iter().filter(|e| e.mission == id) {
+        match &entry.event {
+            Event::Transition { trigger } => match trigger {
+                Trigger::Consent { hash, .. } => view.consented = Some(hash.to_hex()),
+                Trigger::Deny { .. } | Trigger::ActionDenied { .. } => view.end = PageEnd::Declined,
+                Trigger::AwaitApproval { .. } => view.file_asked = true,
+                Trigger::ApprovalLapsed { reason, .. } => {
+                    view.end = if *reason == LapseReason::ApprovalExpired {
+                        PageEnd::Expired
+                    } else {
+                        PageEnd::Uncertain
+                    }
+                }
+                // A Stop once a File was asked for, with no settlement
+                // recorded, says nothing of what became of it.
+                Trigger::Stop { .. } if view.file_asked => view.end = PageEnd::Uncertain,
+                Trigger::Stop { .. } => view.end = PageEnd::Stopped,
+                Trigger::Settled { outcome, .. } => {
+                    view.file_asked = true;
+                    view.end = match outcome {
+                        SettlementOutcome::NotPublished => PageEnd::Stopped,
+                        SettlementOutcome::Uncertain => PageEnd::Uncertain,
+                        SettlementOutcome::Published { .. } => PageEnd::Other,
+                    }
+                }
+                Trigger::VerifyPass => view.end = PageEnd::Done,
+                Trigger::Block { .. } | Trigger::Fail { .. } | Trigger::VerifyFail { .. } => {
+                    view.end = PageEnd::Other
+                }
+                _ => {}
+            },
+            Event::ApprovalPending { .. } | Event::EffectDispatched { .. } => {
+                view.file_asked = true
+            }
+            Event::PublicationReceipt {
+                sha256,
+                bytes,
+                overtaken,
+                ..
+            } => {
+                view.publication = if *overtaken {
+                    Publication::Overtaken
+                } else {
+                    Publication::Written {
+                        sha256: sha256.clone(),
+                        bytes: *bytes,
+                    }
+                }
+            }
+            Event::VerificationRecorded { checks, .. } => view.checks = Some(checks.clone()),
+            _ => {}
+        }
     }
+    view
 }
 
 impl PageView {
@@ -108,10 +174,59 @@ impl PageView {
     /// no lines. Text is raw: the caller escapes it for display.
     pub fn lines(
         &self,
-        _contract: &MissionContract,
-        _facts_file: &str,
+        contract: &MissionContract,
+        facts_file: &str,
     ) -> Result<Vec<String>, ViewError> {
-        let _ = (&self.consented, self.file_asked);
-        Ok(Vec::new())
+        if contract.page_facts.is_none() {
+            return Ok(Vec::new());
+        }
+        if self.consented.as_deref() != Some(contract.hash().to_hex().as_str()) {
+            return Err(ViewError::NotConsented);
+        }
+        let mut lines = Vec::new();
+        match &self.publication {
+            Publication::Written { sha256, bytes } => {
+                let folder = contract.requested_folder.as_deref().unwrap_or_default();
+                lines.push(t10(folder, *bytes, sha256));
+                match self.recorded() {
+                    Some(Ok(())) => {
+                        lines.push(T11_CHECKED.into());
+                        lines.push(t12_passed());
+                        lines.push(t13(facts_file));
+                    }
+                    Some(Err(code)) => lines.push(t12_failed(&code)),
+                    None => lines.push(t12_unchecked()),
+                }
+            }
+            Publication::Overtaken => lines.push(t12_unchecked()),
+            Publication::None => match self.end {
+                PageEnd::Declined => lines.push(T9_DECLINED.into()),
+                PageEnd::Expired => lines.push(T9_EXPIRED.into()),
+                PageEnd::Stopped => lines.push(T9_STOPPED.into()),
+                PageEnd::Uncertain => lines.push(T9_UNCERTAIN.into()),
+                PageEnd::Done | PageEnd::Other if self.file_asked => {
+                    lines.push(T9_UNCERTAIN.into())
+                }
+                PageEnd::Open | PageEnd::Done | PageEnd::Other => {}
+            },
+        }
+        Ok(lines)
+    }
+
+    /// `Ok` when V0..V5 are all recorded `pass`; the first recorded failure's
+    /// bare code otherwise; `None` with no record.
+    fn recorded(&self) -> Option<Result<(), String>> {
+        let checks = self.checks.as_ref()?;
+        for id in CheckId::ALL.map(CheckId::as_str) {
+            match checks.iter().find(|(of, _)| of == id) {
+                Some((_, code)) if code == "pass" => {}
+                Some((_, code)) => {
+                    let bare = code.strip_prefix("fail:").unwrap_or(code);
+                    return Some(Err(bare.to_string()));
+                }
+                None => return Some(Err("not_recorded".into())),
+            }
+        }
+        Some(Ok(()))
     }
 }
