@@ -1,5 +1,6 @@
 """Frozen PR-1 behavioral oracles. No installed-qualification PASS lines."""
 import hashlib
+import copy
 import importlib.util
 import json
 import os
@@ -154,6 +155,53 @@ class ReceiptTests(unittest.TestCase):
                             status='FAILED', commands=[], logs=[], cleanup={'complete':True},
                             missing_evidence=['fixture failure'], limitations=[
                             'Host toolchain and registry are mutable trusted inputs; inventories do not defeat change-and-restore attacks.'])
+    def success(self):
+        gates, exclusions = receipt.policy()
+        summary = copy.deepcopy(self.summary)
+        for key in receipt.GROUPS: summary[key] = {'fixture':'observed'}
+        summary.update(status='PASS_SCOPED', missing_evidence=[], cleanup={'complete':True})
+        summary['request'] = {'repo_id':'mother','full_sha':'1'*40,'gate_set_id':'full'}
+        summary['snapshot'] = dict(commit='1'*40, content_sha256='2'*64, lockfile_sha256='3'*64)
+        summary['installed'] = {key:'4'*64 for key in ('bundle_sha256','policy_sha256','gates_sha256')}
+        summary['input_observations'] = {'before':{'rust':'5'*64},'after':{'rust':'5'*64}}
+        summary['environment'] = {'PATH':'/opt/rust/bin:/usr/bin:/bin','LANG':'C.UTF-8',
+                                  'HOME':'/work/home','CARGO_HOME':'/work/cargo',
+                                  'CARGO_NET_OFFLINE':'true','CARGO_TARGET_DIR':'/work/target'}
+        artifacts = [dict(id='host-bin',adapter='libtest',executable='/work/target/host-bin',
+                          package='nexus-mother-host',target='host'),
+                     dict(id='desktop-bin',adapter='libtest',executable='/work/target/desktop-bin',
+                          package='nexus-mother-desktop',target='live')]
+        coverage = {key:[g['id'] for g in gates['gates']] for key in ('expected','executed','passed')}
+        coverage.update(failed=[],ignored=[],filtered=[],artifacts=artifacts,host_artifacts=['host-bin'],
+                        excluded=[dict(name=n,status='excluded',reason=exclusions['reason']) for n in exclusions['cases']])
+        summary['coverage'] = coverage
+        summary['logs'] = [dict(file='run.log',sha256=hashlib.sha256(b'failure\n').hexdigest())]
+        desktop = gates['gates'][6]['expected_names']
+        for gate in gates['gates']:
+            for artifact in (artifacts if gate['id'] == 'workspace' else [artifacts[1] if gate['id'] == 'desktop-live' else None]):
+                command = dict(id=gate['id']+('-'+artifact['id'] if artifact else ''),gate_id=gate['id'],
+                               argv=gate.get('argv',[artifact['executable']] if artifact else
+                                             ['/usr/bin/python3','-I','-B','/gate/bin/init.py','--gate',gate['id']]),
+                               cwd='/work/src',environment=dict(summary['environment']),exit_code=0,signal=None,
+                               timed_out=False,oom=False,status_complete=True,collector_complete=True,
+                               log='run.log',log_sha256=summary['logs'][0]['sha256'])
+                if artifact: command['artifact_id'] = artifact['id']
+                if gate['id'] == 'host': command['artifact_ids'] = ['host-bin']
+                if 'adapter' in gate and gate['id'] != 'whitespace':
+                    names = list(desktop) if artifact == artifacts[1] else ['host_test']
+                    command['inventory'] = {key:list(names) for key in ('expected','executed','passed')}
+                    command['inventory'].update(failed=[],ignored=[],filtered=[])
+                summary['commands'].append(command)
+        return summary
+    def test_valid_scoped_success(self):
+        self.summary = self.success()
+        receipt.validate_summary(self.summary)
+        self.assertEqual(receipt.verify_integrity(self.publish(),os.getuid())['summary']['status'],'PASS_SCOPED')
+    def test_unknown_log_without_digest(self):
+        summary = self.success()
+        summary['commands'][0]['log'] = 'never-published.log'
+        del summary['commands'][0]['log_sha256']
+        with self.assertRaisesRegex(ValueError,'command'): receipt.validate_summary(summary)
     def publish(self):
         return receipt.publish(self.pending, self.receipts, self.run_id, self.summary, {'run.log':b'failure\n'})
     def test_publish_and_inventory(self):
