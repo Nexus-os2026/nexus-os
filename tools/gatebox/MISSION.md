@@ -108,3 +108,23 @@ missing prerequisites, surviving required PR-1 plant or two failed repairs on
 one signature. Do not change these tests after seeing results. Report actual
 red/green/plant evidence externally; independent review and Owner acceptance
 remain outstanding. No CI, installation or whole-Slice-1 success is claimed.
+
+## Review-1 repair contract (Owner mission, 2026-11-07)
+
+The review-1 mission authorizes bounded PR-1 repairs and numbered checkpoint
+folders only. The original installed acceptance and PR-2 boundaries remain.
+PASS_SCOPED now binds both receipt and command environments to gates.json.
+Host and whitespace adapters record fixed isolated Python init.py --gate argv;
+PR-2 must implement these registered adapter entry points and reconstruct the
+exact environment. No adapter has been installed or executed by PR-1 tests.
+Host reconciliation requires a nonempty union of every host artifact's
+workspace test names, with the same union in the host command inventory.
+
+Additional oracles cover valid scoped publication and single-change negatives,
+unknown logs without hashes, composed-link escape/deadline, a competing receipt
+publisher after lexists, Git administration redirects and malformed evidence.
+The content-manifest digest is frozen from explicit fixture records, independent
+of manifest(). Review-specific mutations and all PR-1 plants are recorded in
+the external repair report; each mutated source is restored byte-for-byte.
+Missing-status and desktop-no-op mutations exercise schema primitives only;
+installed private-status authority and actual desktop execution remain PR-2.
