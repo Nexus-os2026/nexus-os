@@ -1066,5 +1066,53 @@ Gates, each binary alone:
 
 Repeats: 10 serial + 10 parallel, 73/73 each.
 
-F10b (schedule matrix and validator) is stopped at the gap count, per
-SB3B-R15; the draft is not committed.
+F10b (schedule matrix and validator) stopped at the gap count, per
+SB3B-R15; it landed under SB3B-R16 and R18 (section 13.11).
+
+### 13.11 B1e F10b schedule matrix (SB3B-R16, R18)
+Test-only. Literal rows: `model-bridge-cases.tsv` stage `SB-3B1e-M`, one
+per cell: 9 sides x (15 classes + 8 lifecycle states) plus 2 KNOWN_DEFECT
+cells, 209 rows. Sides and probe points:
+- R3 reservation before (fault before the call) and after
+  (`model.attempt.reserved`);
+- R3 CAS before (`model.attempt.checked`) and after (the first
+  `model.call.polled`; the transport's guard sits between the CAS and
+  gate 0, so no IDENTICAL_POINT is claimed, SB3B-R18 (0));
+- charge before (test meter entry) and after (after the C1 charge);
+- R5 gate entry, observer read to CAS (`model.call.observed`) and after
+  the CAS (`model.call.admitted`), each at all four gates.
+
+A fault needing a hold the call owns there (run table or grant store)
+runs on its own thread and is joined at the next point holding nothing;
+door halt's cell engagement is awaited first. The table-driven oracle
+`sb3_schedule_matrix_is_judged_exactly` runs every cited row (295
+schedules) and asserts, in order: refusal before the ticket (`pre`), or
+no admission after the fault (the next gate refuses), at most one
+overlapping request and the exact prefix, the refusal step (or none when
+the transport's deny-only guard ends it), the literal class (an entered
+chat that was replied to may end `model_late`; with a gate-only class it
+completes), no new charge, one attempt and one native record.
+
+Lifecycle: Bootstrap is `BOOTSTRAP_NO_MISSION`. Emergency, Failed and
+Closing (normal) are IDENTICAL_POINT to their class cells. Closing
+(restricted) is executed at every side. Sealed, Closed clean and Closed
+unclean are set on the session word in test only and executed before
+the call; later sides cite `sb2_unjoined_or_owed_prevents_clean_close`
+(seal needs a quiescent slot).
+
+Open (SB3B-R18): a mission deadline narrowed past the sample between the
+observer read and the CAS is refused `refused:8` / `model_cancelled`,
+asserted as it is now (`OPEN:SB3B-B1f`, both clocks, four gates); the Q
+expiry at that side is `DEFERRED:SB3B-B1f` (the seam ignores the sample).
+The validator `sb3_schedule_matrix_cells_are_complete` requires each cell
+exactly once and each to cite an existing test fn, a closed-list N/A
+(LIFECYCLE names its oracle), an IDENTICAL_POINT whose cell cites one, or
+a B1f tag on exactly the listed cells.
+
+Plants, each killed at its named assertion and restored by sha256:
+- (i) R3 CAS dropped: "refused before the ticket";
+- (ii) the kernel sends a refused request anyway: "at most one
+  overlapping request";
+- (iii) the chat gate admits once charged: "the next gate refuses";
+- validator: unknown test, missing cell, OPEN on an unlisted cell,
+  IDENTICAL_POINT to a tagged cell, LIFECYCLE without its oracle.

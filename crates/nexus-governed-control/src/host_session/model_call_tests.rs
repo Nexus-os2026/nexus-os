@@ -1212,9 +1212,14 @@ pub(super) struct Meter {
     settles: AtomicU32,
     refuse: AtomicBool,
     at_charge: Mutex<Option<Box<dyn Fn() + Send>>>,
+    /// F10b: runs on entry, before the C1 charge is taken.
+    at_entry: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 impl CallMeter for Meter {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
+        if let Some(hook) = &*self.at_entry.lock().unwrap() {
+            hook();
+        }
         if self.refuse.load(Ordering::SeqCst) {
             return Err(MeterRefusal::NotRecorded);
         }
@@ -2833,4 +2838,451 @@ fn sb3_registration_gate_contention_latches_nothing() {
         let failed = r.session.core.cell.session_word() & FAILED != 0;
         assert_eq!((uncertain, failed), (false, false), "registration gate {i}");
     }
+}
+
+// SB-3B1e F10b (SB3B-R15, R16, R18): the schedule matrix. Its literal rows
+// are `model-bridge-cases.tsv` stage `SB-3B1e-M`, one per (side, class).
+const CASES: &str = include_str!("../../../../mother/host/tests/session/model-bridge-cases.tsv");
+const SIDES: [&str; 9] = [
+    "r3_reserve:before",
+    "r3_reserve:after",
+    "r3_cas:before",
+    "r3_cas:after",
+    "charge:before",
+    "charge:after",
+    "r5_observer:before",
+    "r5_cas:before",
+    "r5_cas:after",
+];
+const CLASSES: [&str; 15] = [
+    "emergency",
+    "cancel_run",
+    "door_halt",
+    "quit",
+    "session_failure",
+    "q_expiry",
+    "mission_wall",
+    "mission_mono",
+    "native_halt",
+    "run_finish",
+    "grant_revocation",
+    "grant_expiry",
+    "evidence_failure",
+    "contention",
+    "poison",
+];
+const STATES: [&str; 8] = [
+    "bootstrap",
+    "emergency_state",
+    "failed",
+    "closing_normal",
+    "closing_restricted",
+    "sealed",
+    "closed_clean",
+    "closed_unclean",
+];
+/// SB3B-R18 (1): a mission deadline lapsed at the CAS by narrowing is
+/// refused `model_cancelled`; asserted as it is now, until SB3B-B1f.
+const KNOWN_DEFECT: [&str; 2] = [
+    "r5_cas:before/mission_wall_narrowed",
+    "r5_cas:before/mission_mono_narrowed",
+];
+/// SB3B-R18 (2): the Q seam ignores the sample; no evidence until B1f.
+const DEFERRED: [&str; 1] = ["r5_cas:before/q_expiry"];
+const MATRIX: &str = "sb3_schedule_matrix_is_judged_exactly";
+type Row = (&'static str, &'static str, &'static str, &'static str);
+/// The matrix rows: (side, class, test or tag, expected).
+fn matrix() -> Vec<Row> {
+    let rows = CASES
+        .lines()
+        .map(|line| line.split('\t').collect::<Vec<_>>());
+    let rows = rows.filter(|r| r.len() == 5 && r[4] == "SB-3B1e-M");
+    rows.map(|r| (r[2], r[0].rsplit('/').next().unwrap(), r[1], r[3]))
+        .collect()
+}
+/// A class (or executed state) made true where `side` puts it.
+/// The contention holder and its release, owned by the schedule.
+type Keep = Arc<
+    Mutex<(
+        Option<std::thread::JoinHandle<()>>,
+        Option<std::sync::mpsc::Sender<()>>,
+    )>,
+>;
+fn release(keep: &Keep) {
+    let (holder, release) = std::mem::take(&mut *keep.lock().unwrap());
+    drop(release);
+    if let Some(holder) = holder {
+        holder.join().unwrap();
+    }
+}
+fn matrix_fault(f: &Call, class: &'static str, keep: &Keep) -> Arc<dyn Fn() + Send + Sync> {
+    let (control, run, clock, session) = (
+        f.b.control(),
+        f.b.run,
+        f.b.clock.clone(),
+        f.b.session.clone(),
+    );
+    let (context, runs, keep) = (f.b.door.context(), f.b.runs(), keep.clone());
+    match class {
+        "emergency" => Arc::new(f.restriction("emergency_restrict")),
+        "cancel_run" | "door_halt" => Arc::new(f.restriction(class)),
+        "quit" => Arc::new(f.restriction("close_restrict")),
+        "closing_restricted" => {
+            let (emergency, quit) = (f.restriction("emergency_restrict"), f.restriction("quit"));
+            Arc::new(move || {
+                emergency();
+                quit();
+                assert_eq!(session.ingress().state(), SessionState::ClosingRestricted);
+            })
+        }
+        "sealed" | "closed_clean" | "closed_unclean" => Arc::new(move || {
+            // SB3B-R18 (3): set on the session word, in test only.
+            let quit = session.ingress().accept(CommandKind::Quit, 9);
+            assert!(quit.is_ok(), "closing");
+            let word = session.core.cell.session_word();
+            let next = match class {
+                "sealed" => (word | SEALED) & !READY,
+                "closed_clean" => word | SEALED,
+                _ => word | SEALED | FAILED,
+            };
+            assert!(session.core.cell.session_compare(word, next).is_ok());
+            let state = match class {
+                "sealed" => SessionState::SealedFinalizing,
+                "closed_clean" => SessionState::ClosedClean,
+                _ => SessionState::ClosedUnclean,
+            };
+            assert_eq!(session.ingress().state(), state, "{class}");
+        }),
+        "session_failure" => Arc::new(move || context.fail()),
+        "mission_wall" => Arc::new(move || clock.wall_only(Duration::from_secs(2))),
+        "mission_mono" => Arc::new(move || clock.mono_only(Duration::from_secs(2))),
+        "mission_wall_narrowed" | "mission_mono_narrowed" => Arc::new(move || {
+            let far = 1 << 50;
+            let (m, w) = match class {
+                "mission_wall_narrowed" => (far, clock.wall_ms()),
+                _ => (clock.monotonic_ms(), far),
+            };
+            context
+                .narrow_mission_deadlines(clock.clone(), m, w)
+                .unwrap();
+        }),
+        "run_finish" => Arc::new(move || control.finish_run(run)),
+        "grant_expiry" => Arc::new(move || clock.advance(Duration::from_secs(3600))),
+        "contention" | "poison" => Arc::new(move || {
+            let (runs, (ready, wait), poison) =
+                (runs.clone(), std::sync::mpsc::channel(), class == "poison");
+            let (release, held) = std::sync::mpsc::channel::<()>();
+            let holder = std::thread::spawn(move || {
+                let _hold = runs.model_observer();
+                ready.send(()).unwrap();
+                if poison {
+                    std::panic::resume_unwind(Box::new("poison the run table (test)"));
+                }
+                let _ = held.recv_timeout(Duration::from_secs(5)); // Until released.
+            });
+            wait.recv_timeout(Duration::from_secs(5)).unwrap();
+            if poison {
+                assert!(holder.join().is_err(), "run table poisoned");
+            } else {
+                *keep.lock().unwrap() = (Some(holder), Some(release));
+            }
+        }),
+        _ => Arc::from(fault(
+            f,
+            match class {
+                "q_expiry" => "q",
+                "native_halt" => "watch",
+                "grant_revocation" => "grant",
+                _ => "health", // evidence_failure
+            },
+        )),
+    }
+}
+
+/// One schedule: `class` lands at `side` (gate `i` of the R5 sides). A
+/// fault that needs a hold the call owns at that point runs on its own
+/// thread and is joined at the next point that holds nothing.
+fn schedule(
+    class: &'static str,
+    side: &str,
+    i: usize,
+) -> (Call, Result<ModelCallOutcome, &'static str>) {
+    let f = Call::new();
+    if let Some(kind) = class.strip_prefix("mission_") {
+        let (c, far) = (f.b.clock.clone(), 1 << 50);
+        let (m, w) = match kind {
+            "mono" => (c.monotonic_ms() + 1000, far),
+            "wall" => (far, c.wall_ms() + 1000),
+            _ => (far, far), // Narrowed at the side.
+        };
+        f.b.door
+            .context()
+            .narrow_mission_deadlines(c.clone(), m, w)
+            .unwrap();
+    }
+    let keep: Keep = Arc::default();
+    let (act, landed, pending) = (
+        matrix_fault(&f, class, &keep),
+        Arc::new(AtomicBool::new(false)),
+        Holder::default(),
+    );
+    let (point, held) = match side {
+        "r3_reserve:before" => ("", false),
+        "r3_reserve:after" => ("model.attempt.reserved", false),
+        "r3_cas:before" => ("model.attempt.checked", true),
+        "r3_cas:after" => ("model.call.polled", false), // The first observation.
+        "charge:before" => ("meter.entry", false),
+        "charge:after" => ("meter.charged", false),
+        "r5_observer:before" => ("model.call.gate", false),
+        "r5_cas:before" => ("model.call.observed", true),
+        _ => ("model.call.admitted", true),
+    };
+    let serial = held
+        && matches!(
+            class,
+            "cancel_run"
+                | "door_halt"
+                | "run_finish"
+                | "grant_revocation"
+                | "contention"
+                | "poison"
+        );
+    let (word, core) = (
+        f.b.session.core.cell.session_word(),
+        f.b.session.core.clone(),
+    );
+    let (done, later) = (landed.clone(), pending.clone());
+    let fire: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let (act, done) = (act.clone(), done.clone());
+        let run = move || {
+            act();
+            done.store(true, Ordering::SeqCst);
+        };
+        if !serial {
+            return run();
+        }
+        *later.lock().unwrap() = Some(std::thread::spawn(run));
+        if class == "door_halt" {
+            // Its cell engagement precedes its run-table part: wait for it.
+            let until = Instant::now() + Duration::from_secs(5);
+            while core.cell.session_word() == word {
+                assert!(Instant::now() < until, "door halt engaged");
+                std::thread::yield_now();
+            }
+        }
+    });
+    let join = move || {
+        if let Some(fault) = pending.lock().unwrap().take() {
+            fault.join().unwrap();
+        }
+    };
+    let hooks = &f.b.session.core.cell.1;
+    for at in ["model.call.gate", "model.call.polled"] {
+        let join = join.clone();
+        hooks.every(at, join);
+    }
+    let (end, kept) = (join.clone(), keep.clone());
+    hooks.every("model.attempt.return", move || {
+        end();
+        release(&kept);
+    });
+    let (meter, at) = (join.clone(), fire.clone());
+    let metered: Box<dyn Fn() + Send> = Box::new(move || {
+        meter();
+        at();
+    });
+    match point {
+        "" => fire(),
+        "meter.entry" => *f.meter.at_entry.lock().unwrap() = Some(metered),
+        "meter.charged" => *f.meter.at_charge.lock().unwrap() = Some(metered),
+        _ => f.hook(point, i, move || fire()),
+    }
+    let outcome = f.call();
+    join();
+    release(&keep);
+    assert!(
+        landed.load(Ordering::SeqCst),
+        "{side}/{class} {i}: the fault landed"
+    );
+    (f, outcome)
+}
+
+/// F10b (SB3B-R16 (c)): each class fault at each probe point. `pre:C`
+/// refuses before the ticket; `at:C:S` is judged at that side's own gate
+/// (step S, or `poll` for the transport's deny-only guard) with no further
+/// admission; `next:C:S` lets at most the selected request overlap and the
+/// next gate (or the guard) refuses. An entered chat has no next gate.
+fn judge(
+    f: &Call,
+    (side, class, i): (&str, &str, usize),
+    expected: &str,
+    outcome: Result<ModelCallOutcome, &str>,
+) {
+    let what = format!("{side}/{class} gate {i}");
+    let mut e = expected.splitn(3, ':');
+    let (when, literal, step) = (e.next().unwrap(), e.next().unwrap(), e.next().unwrap_or(""));
+    if when == "pre" {
+        assert_eq!(
+            outcome.map(|_| ()),
+            Err(literal),
+            "{what}: refused before the ticket"
+        );
+        let nothing = (f.sent().len(), f.charged(), f.records());
+        assert_eq!(
+            nothing,
+            (0, (0, 0), 0),
+            "{what}: no request, charge or record"
+        );
+        if class != "poison" {
+            assert_eq!(f.counts(), (0, 0), "{what}: no attempt or pin");
+        }
+        return;
+    }
+    assert!(matches!(when, "at" | "next"), "{what}: {expected}");
+    let outcome = outcome.unwrap_or_else(|e| panic!("{what}: refused before the ticket ({e})"));
+    let base = match &side[..2] {
+        "r3" => 0,
+        "ch" => 3,
+        _ => i,
+    };
+    let (entered, gated) = (when == "next", step != "poll");
+    let (sent, chat) = (f.sent(), entered && i == 3);
+    let admitted = count(f, "admitted");
+    assert_eq!(
+        admitted,
+        base + usize::from(entered),
+        "{what}: the next gate refuses"
+    );
+    let (low, high) = match (entered, gated) {
+        (false, _) => (base, base),
+        (true, true) => (i + 1, i + 1),
+        _ => (i, i + 1),
+    };
+    let overlap = (low..=high).contains(&sent.len()) && CALL[..sent.len()] == sent[..];
+    assert!(
+        overlap,
+        "{what}: at most one overlapping request ({sent:?})"
+    );
+    let steps: &[&str] = if gated && !chat { &[step] } else { &[] };
+    assert_eq!(refusals(f), steps, "{what}: judged at its step");
+    let got = class_of(&outcome);
+    let literal = match () {
+        () if chat && gated => got == "ok", // The entered chat completes.
+        () if sent.len() == 4 => got == literal || got == "model_late",
+        () => got == literal,
+    };
+    assert!(literal, "{what}: the literal class ({got})");
+    let (charges, settled) = f.charged();
+    let most = u32::from(base == 3 || sent.len() >= 3);
+    let exact = entered || charges == most;
+    assert!(
+        charges == settled && charges <= most && exact,
+        "{what}: no new charge"
+    );
+    if class != "poison" {
+        assert_eq!(f.counts().0, 1, "{what}: one attempt");
+    }
+    if class != "evidence_failure" {
+        assert_eq!(f.records(), 1, "{what}: one native record");
+    }
+    if class == "contention" {
+        assert_eq!(
+            f.latched(),
+            (false, false),
+            "{what}: contention latches nothing"
+        );
+    }
+}
+fn class_of(outcome: &ModelCallOutcome) -> &'static str {
+    class(outcome)
+}
+
+#[test]
+fn sb3_schedule_matrix_is_judged_exactly() {
+    positive("positive control");
+    let mut schedules = 0;
+    for (side, class, test, expected) in matrix() {
+        let known = test == "OPEN:SB3B-B1f" && KNOWN_DEFECT.contains(&&*format!("{side}/{class}"));
+        if test != MATRIX && !known {
+            continue;
+        }
+        for i in 0..if side.starts_with("r5") { 4 } else { 1 } {
+            let (f, outcome) = schedule(class, side, i);
+            judge(&f, (side, class, i), expected, outcome);
+            schedules += 1;
+        }
+    }
+    assert_eq!(schedules, 295, "every executed cell ran");
+}
+
+/// F10b validator (SB3B-R15 (2), R16 (a), R18): every matrix cell exactly
+/// once; each cites an existing test fn, a closed-list N/A (LIFECYCLE names
+/// its earlier denial oracle), an IDENTICAL_POINT whose cell cites one, or
+/// a B1f tag on exactly the listed cells. Anything else fails.
+#[test]
+fn sb3_schedule_matrix_cells_are_complete() {
+    const NA: [&str; 7] = [
+        "BOOTSTRAP_NO_MISSION",
+        "PREBIND_NO_RUN_OR_CONSENT",
+        "NO_INVOCATION_AT_REGISTRATION",
+        "METADATA_HAS_NO_CHARGE",
+        "SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION",
+        "LIFECYCLE_DENIES_BEFORE_THIS_SINK",
+        "LEGACY_FINALIZATION_ONLY",
+    ];
+    let source = [
+        include_str!("model_call_tests.rs"),
+        include_str!("model_tests.rs"),
+    ]
+    .concat();
+    let exists = |name: &str| {
+        let word = !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        word && source.contains(&format!("#[test]\nfn {name}()"))
+    };
+    let rows = matrix();
+    let cell = |r: &Row| format!("{}/{}", r.0, r.1);
+    let cites = |at: &str| rows.iter().find(|r| cell(r) == at).map(|r| r.2);
+    let all = CLASSES.iter().chain(&STATES);
+    let mut want: Vec<String> = SIDES
+        .iter()
+        .flat_map(|s| all.clone().map(move |c| format!("{s}/{c}")))
+        .collect();
+    want.extend(KNOWN_DEFECT.map(String::from));
+    let mut got: Vec<String> = rows.iter().map(cell).collect();
+    want.sort();
+    got.sort();
+    assert_eq!(got, want, "exactly the matrix cells, each once");
+    for r in &rows {
+        let (at, test) = (cell(r), r.2);
+        let ok = if let Some(na) = test.strip_prefix("N/A:") {
+            let (reason, oracle) = na
+                .strip_suffix(')')
+                .and_then(|n| n.split_once('('))
+                .unwrap_or((na, ""));
+            let named = oracle.is_empty() && reason != NA[5] || exists(oracle);
+            NA.contains(&reason) && named
+        } else if let Some(other) = test.strip_prefix("IDENTICAL_POINT:") {
+            other != at && !r.3.is_empty() && cites(other).is_some_and(exists)
+        } else {
+            match test {
+                "OPEN:SB3B-B1f" => KNOWN_DEFECT.contains(&&*at),
+                "DEFERRED:SB3B-B1f" => DEFERRED.contains(&&*at),
+                _ => exists(test),
+            }
+        };
+        assert!(ok, "{at}: {test} is no existing oracle or allowed tag");
+    }
+    for (cells, tag) in [
+        (&KNOWN_DEFECT[..], "OPEN:SB3B-B1f"),
+        (&DEFERRED[..], "DEFERRED:SB3B-B1f"),
+    ] {
+        assert!(
+            cells.iter().all(|c| cites(c) == Some(tag)),
+            "{tag}: the listed cells"
+        );
+    }
+    assert!(exists(MATRIX) && !exists("sb3_no_such_oracle"), "controls");
 }

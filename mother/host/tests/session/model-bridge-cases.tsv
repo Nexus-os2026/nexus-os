@@ -73,3 +73,212 @@ SB3-F8b	sb3_call_r3_refusals_charge_nothing	grant, observer, ninth, q, member, s
 SB3-S1b	sb3_b1b_test_seams_are_test_only	masked scan of the B1b seams	all under cfg(test)	SB3B-R2 F11
 SB3-K1b	sb3_call_gate_reads_clocks_and_deadline_before_any_hold	blocking clock and blocking CallDeadline inside the gates	no run or grant hold at any reading; call completes	SB3B-R8
 SB3-H1b	sb3_call_grant_revocation_cannot_precede_the_cas	revoker started at each gate observer read, joined	no CAS admission after a completed revocation	SB3B-R8
+SB3B1e-M/r3_reserve:before/emergency	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/cancel_run	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:run_cancelled	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/door_halt	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/quit	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/session_failure	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/q_expiry	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/mission_wall	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/mission_mono	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/native_halt	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/run_finish	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:run_not_active	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:grant_not_live	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:grant_not_live	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/contention	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/poison	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r3_reserve:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/emergency_state	IDENTICAL_POINT:r3_reserve:before/emergency	r3_reserve:before	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/failed	IDENTICAL_POINT:r3_reserve:before/session_failure	r3_reserve:before	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closing_normal	IDENTICAL_POINT:r3_reserve:before/quit	r3_reserve:before	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/sealed	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closed_clean	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closed_unclean	sb3_schedule_matrix_is_judged_exactly	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/emergency	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/cancel_run	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:run_cancelled	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/door_halt	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/quit	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/session_failure	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/q_expiry	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/mission_wall	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/mission_mono	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/native_halt	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/run_finish	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:run_not_active	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:grant_not_live	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/contention	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/poison	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r3_reserve:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/emergency_state	IDENTICAL_POINT:r3_reserve:after/emergency	r3_reserve:after	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/failed	IDENTICAL_POINT:r3_reserve:after/session_failure	r3_reserve:after	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closing_normal	IDENTICAL_POINT:r3_reserve:after/quit	r3_reserve:after	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_reserve:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_reserve:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_reserve:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:before/emergency	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/cancel_run	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:before/door_halt	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/quit	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/session_failure	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/q_expiry	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/mission_wall	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/mission_mono	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/native_halt	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:before/run_finish	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:before/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:before/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:before/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_cas:before/contention	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:before/poison	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r3_cas:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_cas:before/emergency_state	IDENTICAL_POINT:r3_cas:before/emergency	r3_cas:before	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_cas:before/failed	IDENTICAL_POINT:r3_cas:before/session_failure	r3_cas:before	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closing_normal	IDENTICAL_POINT:r3_cas:before/quit	r3_cas:before	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:after/emergency	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/cancel_run	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/door_halt	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/quit	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/session_failure	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/q_expiry	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/mission_wall	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/mission_mono	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/native_halt	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/run_finish	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:after/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:after/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_cas:after/contention	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:after/poison	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r3_cas:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_cas:after/emergency_state	IDENTICAL_POINT:r3_cas:after/emergency	r3_cas:after	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_cas:after/failed	IDENTICAL_POINT:r3_cas:after/session_failure	r3_cas:after	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closing_normal	IDENTICAL_POINT:r3_cas:after/quit	r3_cas:after	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:before/emergency	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/cancel_run	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/door_halt	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/quit	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/session_failure	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/q_expiry	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:before/mission_wall	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:before/mission_mono	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:before/native_halt	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/charge:before/run_finish	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/grant_revocation	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:before/grant_expiry	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:before/evidence_failure	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/charge:before/contention	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:before/poison	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION	charge:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/charge:before/emergency_state	IDENTICAL_POINT:charge:before/emergency	charge:before	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/charge:before/failed	IDENTICAL_POINT:charge:before/session_failure	charge:before	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/charge:before/closing_normal	IDENTICAL_POINT:charge:before/quit	charge:before	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/charge:before/closing_restricted	sb3_schedule_matrix_is_judged_exactly	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:after/emergency	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/cancel_run	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/door_halt	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/quit	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/session_failure	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/q_expiry	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:after/mission_wall	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:after/mission_mono	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:after/native_halt	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/charge:after/run_finish	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/grant_revocation	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:after/grant_expiry	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:after/evidence_failure	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/charge:after/contention	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:after/poison	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION	charge:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/charge:after/emergency_state	IDENTICAL_POINT:charge:after/emergency	charge:after	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/charge:after/failed	IDENTICAL_POINT:charge:after/session_failure	charge:after	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/charge:after/closing_normal	IDENTICAL_POINT:charge:after/quit	charge:after	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/charge:after/closing_restricted	sb3_schedule_matrix_is_judged_exactly	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:before/emergency	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/cancel_run	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:4	SB-3B1e-M
+SB3B1e-M/r5_observer:before/door_halt	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/quit	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/session_failure	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/q_expiry	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_timeout:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/mission_wall	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_timeout:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/mission_mono	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_timeout:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/native_halt	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_stopped:refused:2	SB-3B1e-M
+SB3B1e-M/r5_observer:before/run_finish	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:4	SB-3B1e-M
+SB3B1e-M/r5_observer:before/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_observer:before/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_observer:before/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r5_observer:before/contention	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_observer:before/poison	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_observer:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r5_observer:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_observer:before/emergency_state	IDENTICAL_POINT:r5_observer:before/emergency	r5_observer:before	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_observer:before/failed	IDENTICAL_POINT:r5_observer:before/session_failure	r5_observer:before	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closing_normal	IDENTICAL_POINT:r5_observer:before/quit	r5_observer:before	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/emergency	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/cancel_run	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/door_halt	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/quit	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/session_failure	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/q_expiry	DEFERRED:SB3B-B1f	r5_cas:before	no sample-faithful Q seam (SB3B-R18 2)	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_wall	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_mono	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/native_halt	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/run_finish	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:before/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:before/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r5_cas:before/contention	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:before/poison	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_wall_narrowed	OPEN:SB3B-B1f	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_mono_narrowed	OPEN:SB3B-B1f	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r5_cas:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_cas:before/emergency_state	IDENTICAL_POINT:r5_cas:before/emergency	r5_cas:before	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_cas:before/failed	IDENTICAL_POINT:r5_cas:before/session_failure	r5_cas:before	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closing_normal	IDENTICAL_POINT:r5_cas:before/quit	r5_cas:before	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:after/emergency	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/cancel_run	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/door_halt	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/quit	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/session_failure	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/q_expiry	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/mission_wall	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/mission_mono	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/native_halt	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/run_finish	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/grant_revocation	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:after/grant_expiry	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:after/evidence_failure	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r5_cas:after/contention	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:after/poison	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION	r5_cas:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_cas:after/emergency_state	IDENTICAL_POINT:r5_cas:after/emergency	r5_cas:after	the state is the emergency session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_cas:after/failed	IDENTICAL_POINT:r5_cas:after/session_failure	r5_cas:after	the state is the session_failure session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closing_normal	IDENTICAL_POINT:r5_cas:after/quit	r5_cas:after	the state is the quit session word at the same instant	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closing_restricted	sb3_schedule_matrix_is_judged_exactly	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
