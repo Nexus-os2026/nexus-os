@@ -28,9 +28,9 @@ impl Purpose {
     /// The stable code of this purpose.
     pub const fn code(self) -> &'static str {
         match self {
-            Purpose::PageBuilder => "",
-            Purpose::N1Worker => "",
-            Purpose::Judge => "",
+            Purpose::PageBuilder => "page_builder",
+            Purpose::N1Worker => "n1_worker",
+            Purpose::Judge => "judge",
         }
     }
 }
@@ -49,8 +49,13 @@ impl Floor {
 /// `min_prompt_eval_count − 32`, `None` unless that is positive (then the
 /// qualification is BLOCKED; there is no fallback).
 pub const fn freeze_floor(min_prompt_eval_count: u32) -> Option<Floor> {
-    let _ = min_prompt_eval_count;
-    None
+    match min_prompt_eval_count.checked_sub(32) {
+        Some(floor) => match NonZeroU32::new(floor) {
+            Some(floor) => Some(Floor(floor)),
+            None => None,
+        },
+        None => None,
+    }
 }
 
 /// One qualification: `purpose` for exactly the model identity whose v2
@@ -84,12 +89,37 @@ pub(super) fn find(
     purpose: Purpose,
     identity_sha256: &[u8; 32],
 ) -> Option<Floor> {
-    let _ = (table, purpose, identity_sha256);
-    None
+    table
+        .iter()
+        .find(|r| r.purpose == purpose && r.identity_sha256 == *identity_sha256)
+        .map(|r| r.floor)
 }
 
 /// Whether no two records of `table` name the same purpose and identity.
 pub(super) const fn no_duplicate(table: &[QualificationRecord]) -> bool {
-    let _ = table;
+    let mut i = 0;
+    while i < table.len() {
+        let mut j = i + 1;
+        while j < table.len() {
+            if table[i].purpose as u8 == table[j].purpose as u8
+                && same_digest(&table[i].identity_sha256, &table[j].identity_sha256)
+            {
+                return false;
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    true
+}
+
+const fn same_digest(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    let mut k = 0;
+    while k < 32 {
+        if a[k] != b[k] {
+            return false;
+        }
+        k += 1;
+    }
     true
 }
