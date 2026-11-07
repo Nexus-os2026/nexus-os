@@ -230,6 +230,21 @@ fn m3cb_marker_failure_fails_closed() {
 #[test]
 fn m3cb_marker_source_is_broker_only() {
     fn pinned(s: &str) -> bool {
+        use sha2::{Digest, Sha256};
+        let norm = |s: &str| s.split_whitespace().collect::<String>();
+        let Some((_, invoke)) = s.split_once("    fn invoke_in(") else {
+            return false;
+        };
+        let Some((invoke, _)) = invoke.split_once("\n    }\n}") else {
+            return false;
+        };
+        let invoke = norm(invoke);
+        if invoke.matches("matchmarker()").count() != 1
+            || hex::encode(Sha256::digest(invoke.as_bytes()))
+                != "19bab345de1243d60e485ce075c30a77bda0352db54da36f6baf70b3f3f6df63"
+        {
+            return false;
+        }
         let Some((_, body)) = s.split_once("fn marker() -> Result<String, MarkerUnavailable> {")
         else {
             return false;
@@ -237,7 +252,6 @@ fn m3cb_marker_source_is_broker_only() {
         let Some((body, _)) = body.split_once("\n}\n") else {
             return false;
         };
-        let norm = |s: &str| s.split_whitespace().collect::<String>();
         norm(body)
             == norm(
                 r#"
@@ -248,6 +262,7 @@ fn m3cb_marker_source_is_broker_only() {
             )
     }
     assert!(pinned(include_str!("lane.rs")));
+    assert!(!pinned(&include_str!("lane.rs").replace("match marker()", r#"match { static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0); Ok::<_, MarkerUnavailable>(format!("00000000000040008000{:012x}", N.fetch_add(1, std::sync::atomic::Ordering::SeqCst))) }"#)));
     for body in [
         "Ok(\"00000000000040008000000000000001\".into())",
         "counter_v4()",
@@ -255,8 +270,9 @@ fn m3cb_marker_source_is_broker_only() {
         "timestamp_v4()",
         "cached_marker()",
     ] {
-        assert!(!pinned(&format!(
-            "fn marker() -> Result<String, MarkerUnavailable> {{\n{body}\n}}\n"
+        assert!(!pinned(&include_str!("lane.rs").replace(
+            "nexus_governed_control::authority::ids::fresh_page_marker()",
+            body
         )));
     }
     // These deterministic substitutes pass shape and distinctness, but not source control.
