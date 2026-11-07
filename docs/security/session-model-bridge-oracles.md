@@ -909,155 +909,89 @@ Gates, each binary alone:
 Repeats: 10 serial and 10 parallel runs of `host_session::model`, 48/48
 each.
 
-### 13.6 B1b mapping and frozen oracles (SB3B-R3, on B1a final 47fa1f88)
-The oracles are in `host_session/model_call_tests.rs`, on deny-only stubs:
-`SessionDoor::model_call_private` refuses `halted`, and the ModelSlot
-seams are declared but unused. They were written alongside a saved draft
-and are disclosed as such (SB3B-R1 ruling 6).
+### 13.6 B1b mapping and oracles (SB3B-R3; base B1a final 47fa1f88)
+The oracles were written on deny-only stubs, alongside a saved draft
+(disclosed per SB3B-R1 ruling 6). The mapping is the `SB3-*b` rows of
+the cases TSV:
+- G0 (R5), G1–G5, L2 (with F5; composed zeros carried to C/D), T1.
+- C2, with metadata failure and refused charge.
+- F1, F2/F8 (literal R5 classes, no new charge), F3, F4.
+- F7 (Mother-side withholding carried to D).
+- F8 (pre-ticket refusals through the call), F11.
+- The SB3B-R5 (3) carry (blocking clock and blocking CallDeadline).
+- SB3B-R5 (1) applied at R5. A `model.call.admitted` probe fires right
+  after the CAS, under the holds; the revoker is joined before judging;
+  no admission may follow a completed revocation. A slow revoker can
+  only let a mutant survive. B1a's oracle does not share finding 8.
 
-The mapping is the `SB3-*b` rows of the cases TSV: G0 (R5), G1-G5, L2,
-C2 (with metadata failure and refused charge), T1, F1, F2 with F8 (R5
-classes, no new charge), F3, F4, F5 (composed zeros carried to C/D), F7
-(Mother-side withholding carried to D), F8 (pre-ticket refusals through
-the call: zero charges, meter entries and records), F11, the SB3B-R5 (3)
-carry (`sb3_call_gate_reads_clocks_before_any_hold`), and SB3B-R5 (1)
-applied at R5, which is builder-proposed
-(`sb3_call_grant_revocation_cannot_precede_the_cas`).
+Seams, all `#[cfg(test)]` and F11-guarded:
+- ModelSlot `trace`, `backstop_skew`/`SkewClock`, `chat_replay`,
+  `chat_early`, `registered_identity_for_test`.
+- Helpers `b1b_note`, `b1b_latch_probe`, `b1b_gate_entry`,
+  `b1b_gate_exit`.
+- Probes `model.call.{gate,polled,observed,admitted,replay}` and
+  `scope.clock`.
+- Fixtures SplitClock `on_read`, the run `sticky`/`unpin` tampers.
 
-Notes on the last two:
-- The SB3B-R5 (3) oracle uses a blocking clock. While a clock reading
-  inside a call gate is blocked, it asserts that neither the run table
-  nor the grant store is held, and that the call still completes.
-- The builder-proposed oracle applies SB3B-R5 (1) at R5: a revocation
-  started after a gate's observer read cannot complete before that gate's
-  CAS. Its bounded wait is 2 s, and a slow revoker can only let a mutant
-  survive, never fail correct code.
+Trace vocabulary: `gate:*`, `refused:N|hold`, `admitted`, `poll:*`,
+`early`/`replay`, `probe:<class>`.
 
-B1b seams, all `#[cfg(test)]` and guarded by F11 in this unit:
-- ModelSlot `trace`: the ordered per-predicate refusal and poll trace.
-- `backstop_skew` / `SkewClock`: the clock-controlled backstop, which
-  replaces `backstop_spent`.
-- `chat_replay` / `chat_early`: the spent and uncharged chat latch.
-- SplitClock `on_read`: the blocking clock, test fixture only.
+B1e (test-only, SB3B-R3) receives A2/F6, F9, F10, the call-level R4 row,
+G0's R3 case and SB-2a registration contention.
 
-Moved to the test-only B1e (pure evidence, SB3B-R3):
-- A2/F6, F9 and F10 (manifest and watchdog).
-- The call-level R4 row and G0's R3 case; B1a already covers both.
-- SB-2a registration-gate contention.
+### 13.7 Spec checks and rulings SB3B-R7–R10
+- R7: any expiry is `model_timeout`; dead Q and ownership or authority
+  denial are `model_cancelled`.
+- R8 (10 MED) added:
+  - `try_health` None, host prerequisite, removed pin, dead Q.
+  - Contention and poison at both holds and every gate.
+  - A None poll under contention.
+  - Renewal crossing and the slot identity re-read.
+  - L2 unchanged-state.
+  - The literal chat latch.
+  - The F11 scan.
+- R9 oracle-fix c85a0785, four defects that failed correct code:
+  - (a) the F3 hook re-locked the trace on the same thread;
+  - (b) F11 required a production use of the identity seam;
+  - (c) F4 put two `every()` hooks on one point;
+  - (d) the old health fault never made `try_health` unhealthy.
+- R9 feat fe8c5b71, compacted. host_session.rs captured-clock admission
+  was accepted. `live_member_with(.., engaged)` is clock-free at R5:
+  step 1 judged the original scope, and the run's cell must be that
+  original. The R3 clock read under its hold stays a recorded LOW.
+- R10 72dc8196: poison must be latched at `model.attempt.return`,
+  before settlement. The test Peer tolerates Stop-aborted connections.
 
-Forecast against 47fa1f88:
-- This oracle-add: 1,202 changed lines (code 1,139, this record and
-  the TSV 63).
-- Feat, estimated from the saved draft: about 260 lines. That assumes
-  `model_call_private` reuses `admit_attempt_private` rather than
-  rewriting it. Parts: model.rs about 175, run.rs about 45, inference.rs
-  27, host_session.rs about 12 for admission with captured clocks.
-- Receipts: about 10 lines.
-- Total: about 1,470 of 1,500. If the feat runs over, the next
-  pure-evidence candidates for B1e are F5 and the call-level F8 rows;
-  moving them needs a ruling.
+F11 parser limitation: `test_only` stops at the first comma of a
+function signature, so a `#[cfg(test)]` fn with two or more parameters
+inside a non-test impl reads as a leak. That is a false positive, on the
+safe side, so the B1b helpers sit in a `#[cfg(test)] impl`.
 
-### 13.7 SB3B-R8 (B1b spec check, 10 MED) oracle-add
-Finding 1 was fixed in ec34e80b. Findings 2–10 and the dead/halted-Q row
-are new oracles on the stubs:
-- F2: added `try_health` None (store held), an independent
-  host-prerequisite failure (`view_id`), a removed pin (`unpin`) and a
-  dead/halted Q (`emergency`, model_cancelled). The four G0 per-gate
-  grant cases are now literal `model_cancelled`.
-- `sb3_r5_holds_contend_and_poison_exactly`: the run table and the grant
-  store, each contended and each poisoned, at every gate. Contention
-  latches nothing; poison latches both.
-- F3: a poll taken under contention returns None before the refusal.
-  `observer: None` is checked within `session_transport`. G3 counts gates,
-  admissions and notices, and G4 counts gates.
-- F4: time is advanced before attempt two, so only the original deadline
-  is crossed. The identity re-read goes through the slot
-  (`registered_identity_for_test`), not the cached value.
-- L2 absorbs F5: at most the selected request, a Recorded outcome, and
-  inventory, commitments, pending target and non-model evidence all
-  unchanged. The vacuous acceptability check is dropped.
-- Chat latch: literal `probe:model_cancelled`, the exact peer sequence,
-  and exactly one charge.
-- Blocking CallDeadline: added to the blocking-clock control.
-- F11: scans model.rs, host_session.rs, close.rs, inference.rs, run.rs
-  and file_session.rs. Every seam must be declared and used. Removing
-  each seam's `#[cfg(test)]` or adding a production use is RED.
-- The R5 revocation oracle is rebuilt per finding 8. A
-  `model.call.admitted` probe fires right after a successful CAS, under
-  the holds. The revoker is joined before judging. The invariant is that
-  no admission follows a completed revocation.
+### 13.8 SB3B-R11 (Codex review-1, both passes)
+Oracle-add f8492285 was RED on 39c1f0d4. It adds:
+- P1: no `Instant` read (`scope.clock`), clock read or `fail()` under a
+  hold, including grant poison.
+- P2: a slow request crossing Q, either mission clock or the backstop
+  ends `model_timeout`, recorded as `timeout`.
+- O1: L2 compares commitment contents and full non-model evidence, and
+  counts commitment prepare/authorize/complete steps (zero).
+- O2: exact admission attempts, refused included.
+- O3: F11 scans every production host_session module.
 
-B1a's `sb3_attempt_grant_revocation_cannot_precede_the_cas` does not
-share the finding-8 flaw. It joins the revoker before judging. It judges
-the attempt's admission result, which is Ok only after the CAS. And it
-asserts nothing about successors.
+The fix:
+- `RequestScope::eligible`/`admit_at` take a pre-hold `Sample`.
+- Grant poison returns `GRANT_POISONED`; R2, R3 and R5 fail the session
+  after releasing the run table.
+- `CallGate` splits expiry (its deadline: Q, missions, backstop) from
+  non-time cancellation.
 
-Trace vocabulary the feat must emit:
-- `gate:N`
-- `refused:N`, `refused:hold`
-- `admitted`
-- `poll:none`, `poll:cancelled`
-- `early`, `replay`
-- `probe:<class>`
-
-The size exception (SB3B-R8) is 1,800 changed lines, with production
-at most 350.
-
-### 13.8 SB3B-R9: oracle-fix, feat, F11 parser limitation, receipts
-Oracle-fix c85a0785 (SB3B-R9 (1)) corrected four defects that failed
-correct code when the oracles were validated against the feat:
-- (a) the F3 hook re-locked the trace on the same thread;
-- (b) F11 wrongly required a production use of
-  `registered_identity_for_test`;
-- (c) F4 put two `every()` hooks on one point, so the skew never applied;
-- (d) the old health fault never made `try_health` unhealthy.
-
-Feat fe8c5b71 was compacted without behaviour change (SB3B-R9 (2)).
-- host_session.rs is +11/−7 (SB3B-R7 (3)).
-- Predicate 4 uses `live_member_with(.., engaged)` with a clock-free
-  judgement (SB3B-R9 (4)). Step 1 checked the original scope on captured
-  clocks, and predicate 4 requires the run's cell to be that original.
-  R3 still reads the clock under its hold, so that LOW stays recorded.
-
-F11 parser limitation: the B1a enclosure parser (`test_only`) stops at
-the first comma of a function signature without tracking nesting depth.
-A `#[cfg(test)]` fn with two or more parameters, called inside a non-test
-impl, is therefore reported as a leak. That is a false positive, on the
-safe side. The B1b test helpers sit in a `#[cfg(test)] impl` block so
-the walk reaches its attribute.
-
-Receipts (local, final code head fe8c5b71 + this record). GREEN: 67/67
-`host_session::model`. Plants, all on the final head, each restored by
-sha256 and killed at its named assertion unless stated:
-- R5 grant guard released before the CAS: 10/10.
-- Clock read under the hold; caller deadline called under the hold.
-- Reusable charge latch; backstop renewed per request.
-- Contention latching; grant-store poison not latching.
-- Unsettled pin reported Recorded (MP-SB-9-record).
-- MP-SB-6-default, -CAS, -once and -retry.
-- MP-SB-A1 observer ignored; charge latch treated as liveness.
-- MP-SB-8 watch ignored: "watch at gate 0: its own step". After the
-  72dc8196 Peer change (a Stop-aborted connection is no request; no
-  panic in Drop while unwinding) the harness no longer aborts.
-- MP-SB-8 refreshed Q; rebuilt mission deadline.
-- MP-SB-3-grant at R5; §7.2 observer-before-latch order; F11 B1b seam
-  leak.
-
-Run-table poison not latching at the gate first survived: retained
-SB-2b settlement latches later, and the oracle read only the end state.
-72dc8196 (SB3B-R10) also reads the latch at `model.attempt.return`,
-before settlement. The plant now dies at "latched at refusal", and
-correct code passes. After 72dc8196 both plants were re-run and both
-died cleanly. Final total vs 47fa1f88: 1,849 changed lines.
-
-Gates, each binary alone:
-- governed-control lib 914/914
-- Mother lib 360/360
-- host --no-fail-fast 166/166
-- m2e_a2_guards 54/54
-- m2e_transport_guards 39/39
-- fmt; clippy (3 crates, all targets, -D warnings); diff --check
-  47fa1f88..HEAD
-
-Repeats: 10 serial and 10 parallel runs of `host_session::model`, 67/67
-each.
+Receipts, on the final code head; plants restored by sha256:
+- 68/68 `host_session::model`. All 25 B1b plants killed at their named
+  assertions; R5 grant guard released 10/10; MP-SB-6-retry at G2's
+  "exact admission attempts".
+- Gates, each binary alone: governed-control lib 915, Mother lib 360,
+  host 166, m2e_a2 54, m2e_transport 39; fmt, clippy, diff --check.
+- Repeats: 17/20. Three non-poison failures of the P1 control came from
+  a harness race in the oracle: the grant checker signalled "free"
+  while still holding the store. The fix (release, then signal) is
+  pending a ruling; with it, 30/30 runs alone and 20/20 repeats pass.
