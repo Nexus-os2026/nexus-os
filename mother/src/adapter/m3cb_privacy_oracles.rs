@@ -106,6 +106,49 @@ fn records(owned: Scenario, diag: &str, case: &str) {
     drop(owned);
     native(&home, attempts, charges, success);
 }
+/// Run `cmd` with a bounded lifetime: on expiry the child is killed and
+/// reaped, and the test fails. Its small output is read after exit (Cb2-R2).
+fn bounded(cmd: &mut std::process::Command) -> std::process::Output {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            child.kill().expect("kill the owned python3 child");
+            child.wait().expect("reap the owned python3 child");
+            panic!("native SQLite check exceeded its 10 s bound: python3 killed and reaped");
+        }
+        // A short poll of the owned child, not a synchronization assumption.
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_end(&mut stdout)
+        .unwrap();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_end(&mut stderr)
+        .unwrap();
+    std::process::Output {
+        status,
+        stdout,
+        stderr,
+    }
+}
 /// Positively identify the native rows: read-only SQLite (existing Linux
 /// test convention: `python3`), once the scenario released its stores.
 fn native(home: &Path, attempts: usize, charges: usize, success: bool) {
@@ -119,12 +162,12 @@ consent = q('/broker/p3-evidence/evidence.sqlite3', "SELECT count(*) FROM record
 ledger = q('/broker/files/ledger.db', "SELECT count(*) FROM coding_run_ledger")[0][0] if sys.argv[2] == '1' else 0
 print(json.dumps({'calls': len(calls), 'charged': sum('call' in d for d in calls), 'ops': sorted({d['op'] for d in calls}), 'consent': consent, 'ledger': ledger}))
 "#;
-    let out = std::process::Command::new("python3")
-        .args(["-I", "-c", script])
-        .arg(home)
-        .arg(if success { "1" } else { "0" })
-        .output()
-        .unwrap();
+    let out = bounded(
+        std::process::Command::new("python3")
+            .args(["-I", "-c", script])
+            .arg(home)
+            .arg(if success { "1" } else { "0" }),
+    );
     assert!(
         out.status.success(),
         "{}",
