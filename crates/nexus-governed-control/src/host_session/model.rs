@@ -680,16 +680,8 @@ impl CallGate<'_> {
         let clocks = limits.map(|l| (l.clock.monotonic_ms(), l.clock.wall_ms()));
         (Instant::now(), clocks)
     }
-    fn lapsed(&self, (now, clocks): crate::host_session::Sample) -> bool {
-        let scope = &self.door.context.scope;
-        let limits = scope.mission_deadlines.get();
-        let lapsed = self.backstop.expired()
-            || now >= scope.deadline
-            || limits.zip(clocks).is_some_and(|(l, c)| !l.live(Some(c)));
-        #[cfg(test)]
-        let lapsed =
-            lapsed || self.door.core.expired_request.load(Ordering::SeqCst) == scope.request;
-        lapsed
+    fn lapsed(&self, at: crate::host_session::Sample) -> bool {
+        self.backstop.expired() || self.door.context.scope.expired_at(at)
     }
     fn admission(&self, kind: RequestKind) -> Result<(), ModelError> {
         let result = self.predicates(kind);
@@ -717,6 +709,8 @@ impl CallGate<'_> {
         };
         let at = self.sample();
         let expired = self.lapsed(at);
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "model.call.sampled");
         let runs = self.authority.runs();
         let hold = runs.try_request_hold().map_err(|poisoned| {
             if poisoned {
@@ -725,7 +719,9 @@ impl CallGate<'_> {
             }
             ("refused:hold", Cancelled) // Benign contention latches nothing.
         })?;
-        if expired {
+        // SB3B-R18: a Q or mission deadline lapsed by now (narrowing
+        // included) is an expiry, judged from the pre-hold sample.
+        if expired || scope.expired_at(at) {
             return Err(("refused:1", Timeout));
         }
         let word = core.cell.session_word();
@@ -772,8 +768,11 @@ impl CallGate<'_> {
             drop((_held, hold)); // An exhausted counter fails the session after release.
             if matches!(error, E::Capacity) {
                 self.door.context.fail();
+                return Err(("refused:8", Cancelled));
             }
-            return Err(("refused:8", Cancelled));
+            // SB3B-R18: a CAS refused for a lapsed deadline is an expiry.
+            let expired = scope.expired_at(at);
+            return Err(("refused:8", if expired { Timeout } else { Cancelled }));
         }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.admitted");

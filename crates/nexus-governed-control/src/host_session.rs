@@ -97,16 +97,8 @@ impl RequestScope {
             crate::authority::file_session::probe(Some(&core.cell), "scope.clock");
         }
         let (now, at) = at.map_or_else(|| (Instant::now(), None), |(n, c)| (n, Some(c)));
-        #[cfg(test)]
-        if self
-            .core
-            .upgrade()
-            .is_some_and(|core| core.expired_request.load(Ordering::SeqCst) == self.request)
-        {
-            return false;
-        }
         let invalid = self.core.strong_count() == 0
-            || now >= self.deadline
+            || self.past(now)
             || self.mission_deadlines.get().is_some_and(|limits| match at {
                 Some(sampled) => sampled.is_none_or(|c| !limits.live(Some(c))), // No reading: closed.
                 None => !limits.live(None),
@@ -119,6 +111,24 @@ impl RequestScope {
                 ScopeKind::CloseCleanup => self.snapshot & (READY | CLOSING) != (READY | CLOSING),
             };
         !invalid
+    }
+    /// Whether `now` is at or past Q's deadline. No clock is read.
+    fn past(&self, now: Instant) -> bool {
+        #[cfg(test)] // SB3B-R18 seam: Q expired at a recorded instant (sample-faithful).
+        if let Some(core) = self.core.upgrade() {
+            let seam = core.expired_request.lock().map(|q| *q);
+            if seam.is_ok_and(|q| q.is_some_and(|(q, at)| q == self.request && now >= at)) {
+                return true;
+            }
+        }
+        now >= self.deadline
+    }
+    /// SB3B-R18: whether a sample is past Q or a mission deadline as they
+    /// stand now (narrowing included). No clock is read, so it may be
+    /// judged under a hold; a missing reading is not an expiry.
+    pub(crate) fn expired_at(&self, (now, clocks): Sample) -> bool {
+        let limits = self.mission_deadlines.get();
+        self.past(now) || limits.zip(clocks).is_some_and(|(l, c)| !l.live(Some(c)))
     }
     pub(crate) fn admit(&self, cell: &HaltCell) -> Result<(), crate::authority::AuthorityError> {
         self.admit_at(cell, None)
@@ -353,7 +363,7 @@ struct CloseIdentity {
 /// single atomic word. The other atomics publish non-authoritative indices.
 struct Core {
     #[cfg(test)]
-    expired_request: AtomicU64,
+    expired_request: std::sync::Mutex<Option<(u64, Instant)>>,
     model: model::ModelSlot,
     identity: SessionIdentity,
     stops: stop::Stops,
@@ -587,11 +597,15 @@ enum DoorKind {
     Continuation,
 }
 
+#[cfg(test)]
 impl HostSession {
-    #[cfg(test)]
+    /// Test seam: Q `request` reaches its deadline now; a sample taken
+    /// earlier is still live (SB3B-R18).
     pub(crate) fn expire_request_for_test(&self, request: u64) {
-        self.core.expired_request.store(request, Ordering::SeqCst);
+        *self.core.expired_request.lock().unwrap() = Some((request, Instant::now()));
     }
+}
+impl HostSession {
     pub fn open(
         seed: SessionSeed,
         root: &std::path::Path,
@@ -1427,7 +1441,7 @@ impl SessionSeed {
         Ok(Self {
             core: Arc::new(Core {
                 #[cfg(test)]
-                expired_request: AtomicU64::new(u64::MAX),
+                expired_request: std::sync::Mutex::new(None),
                 model: model::ModelSlot::default(),
                 identity: SessionIdentity(identity),
                 stops: stop::Stops::default(),

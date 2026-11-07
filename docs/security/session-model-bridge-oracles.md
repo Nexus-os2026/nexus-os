@@ -1153,3 +1153,35 @@ Plants, each killed at its named assertion and restored by sha256:
   OPEN on an unlisted cell, IDENTICAL_POINT to a tagged cell, LIFECYCLE
   at the first sink;
 - join guard: an unwrapped held-join test.
+
+### 13.13 B1f expiry classification under the hold (SB3B-R18)
+Production LOW, found by F10b: a Q or mission deadline lapsed at R5's held
+step 1 or at the CAS (step 8), narrowing included, was refused as
+`model_cancelled`. SB3B-R7 (1) requires `model_timeout`.
+- `RequestScope::expired_at(sample)` judges Q and the mission limits as
+  they now stand against the pre-hold sample, with no clock read. A
+  missing reading is not an expiry; it still fails closed as Cancelled
+  (SB3B-R13 P2).
+- Step 1 refuses Timeout if the pre-hold check or `expired_at` holds.
+  Step 8 refuses Timeout when the CAS refusal coincides with
+  `expired_at`. Counter exhaustion and every non-time refusal are
+  unchanged. `lapsed()` is the backstop plus `expired_at`.
+- The Q seam is sample-faithful: `expire_request_for_test` records the
+  instant, and a sample taken earlier stays live. It sits in its own
+  cfg(test) impl and is covered by the seam guard with a declaration and
+  a cfg-removal control. New cfg(test) probe: `model.call.sampled`
+  (after the pre-hold check, before the hold).
+
+Commits:
+- oracle-add 9719b561 (RED at "the literal class (model_cancelled)");
+- merge of B1e SB3B-R19 a0aadd84;
+- oracle-amend ebc6738c, which flips the 8 OPEN schedules and the
+  DEFERRED rows, leaving KNOWN_DEFECT and DEFERRED empty;
+- fix(session).
+
+Plants, each killed at its named assertion and restored by sha256:
+- expiry mapped back to Cancelled at the CAS ("the literal class");
+- the seam ignoring the sample ("the next gate refuses");
+- step 1 left unclassified ("the literal class");
+- the constants or the rows not flipped, and DEFERRED not emptied (the
+  validator).
