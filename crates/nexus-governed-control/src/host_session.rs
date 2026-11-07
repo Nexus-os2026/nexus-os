@@ -70,7 +70,7 @@ impl MissionDeadlines {
 }
 type Admitted = Result<(), crate::authority::AuthorityError>;
 /// SB-3B1b: `Instant` and mission clocks read before any hold.
-pub(crate) type Sample = (Instant, (u64, u64));
+pub(crate) type Sample = (Instant, Option<(u64, u64)>); // None: no limits were read.
 impl RequestScope {
     pub(crate) fn fail(&self) {
         if let Some(core) = self.core.upgrade() {
@@ -107,10 +107,10 @@ impl RequestScope {
         }
         let invalid = self.core.strong_count() == 0
             || now >= self.deadline
-            || self
-                .mission_deadlines
-                .get()
-                .is_some_and(|limits| !limits.live(at))
+            || self.mission_deadlines.get().is_some_and(|limits| match at {
+                Some(sampled) => sampled.is_none_or(|c| !limits.live(Some(c))), // No reading: closed.
+                None => !limits.live(None),
+            })
             || self.snapshot & (FAILED | SEALED | EMERGENCY) != 0
             || match self.kind {
                 ScopeKind::Bootstrap => self.snapshot & (READY | CLOSING | 7) != 0,
@@ -131,7 +131,8 @@ impl RequestScope {
         self.next_step
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| old.checked_add(1))
             .map_err(|_| {
-                if let Some(core) = self.core.upgrade() {
+                // A caller holding authority locks (a sample) fails after release.
+                if let Some(core) = self.core.upgrade().filter(|_| at.is_none()) {
                     SessionIngress { core }.fail();
                 }
                 AuthorityError::Capacity

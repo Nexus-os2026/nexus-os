@@ -677,7 +677,7 @@ impl CallDeadline for CallGate<'_> {
 impl CallGate<'_> {
     fn sample(&self) -> crate::host_session::Sample {
         let limits = self.door.context.scope.mission_deadlines.get();
-        let clocks = limits.map_or((0, 0), |l| (l.clock.monotonic_ms(), l.clock.wall_ms()));
+        let clocks = limits.map(|l| (l.clock.monotonic_ms(), l.clock.wall_ms()));
         (Instant::now(), clocks)
     }
     fn lapsed(&self, (now, clocks): crate::host_session::Sample) -> bool {
@@ -685,7 +685,7 @@ impl CallGate<'_> {
         let limits = scope.mission_deadlines.get();
         let lapsed = self.backstop.expired()
             || now >= scope.deadline
-            || limits.is_some_and(|l| !l.live(Some(clocks)));
+            || limits.zip(clocks).is_some_and(|(l, c)| !l.live(Some(c)));
         #[cfg(test)]
         let lapsed =
             lapsed || self.door.core.expired_request.load(Ordering::SeqCst) == scope.request;
@@ -768,8 +768,13 @@ impl CallGate<'_> {
         }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.observed");
-        let cas = scope.admit_at(&self.door.context.cell, Some(at));
-        cas.map_err(|_| ("refused:8", Cancelled))?;
+        if let Err(error) = scope.admit_at(&self.door.context.cell, Some(at)) {
+            drop((_held, hold)); // An exhausted counter fails the session after release.
+            if matches!(error, E::Capacity) {
+                self.door.context.fail();
+            }
+            return Err(("refused:8", Cancelled));
+        }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.admitted");
         if kind == RequestKind::Chat {
