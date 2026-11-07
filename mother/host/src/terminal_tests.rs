@@ -845,10 +845,10 @@ mod m3a {
         let boundary = input.boundary;
         drop(input);
         let mut buffers = Buffers::default();
-        // Typed during the display gap: stale, never a goal.
+        // A whole line typed during the display gap: stale, never a goal.
         let (discard, goal) = reader_mode(&shared, Some(boundary));
         assert_eq!((discard, goal), (true, false));
-        route(&shared, &mut buffers, b"approve", discard, goal);
+        route(&shared, &mut buffers, b"approve\r", discard, goal);
         let mut input = shared.input();
         input.acknowledged = boundary;
         drop(input);
