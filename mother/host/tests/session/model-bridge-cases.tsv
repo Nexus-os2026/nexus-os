@@ -22,3 +22,13 @@ SB2-F1	sb2_facade_rejects_multiline_registration	exact module declarations; revi
 SB2-F2	sb2_failed_startup_reports_model_unknown	actual startup fallback formatter	explicit model uncertainty	review-1
 SB2-F3	sb2_install_completion_is_atomic_to_close_observers	installed receipt before owner completion; concurrent close observation	same hold; no spurious uncertainty; old-gap mutation red	review-1
 SB2-F4	sb2_close_report_has_one_model_line	zero/one/two resource failures; unknown/none model snapshot	exactly one model line	review-1
+SB2-A1	sb2_attempt_count_and_retention_are_one_admission	run-table original CAS,1..8,9	1..8 counted/pinned together; 9 OverBudget; failed CAS changes neither; no refund	SB-2b
+SB2-A2	sb2_attempt_record_keeps_original_run_and_consent	cancel,finish,capacity,record,owner return	one record; original run/agent/door/hash/consent string/identity/ordinal; exact model pin	SB-2b
+SB2-D1	sb2_record_debt_blocks_seal_and_reuse	Recorded/Owed/Uncertain,owner completion	separate statuses; cancel/meter settlement never discharges debt; only Recorded releases pin	SB-2b
+SB2-D2	sb2_attempt_drop_panic_and_poison_retain_ownership	Drop with lock held; panic; poison	uncertainty,denial,pin retained; no Drop I/O or join	SB-2b
+SB2-L1	sb2_attempt_recording_does_not_block_ingress	evidence callback on real record path	no model/producer/run hold; ingress succeeds; settlement uses no new Work admission	SB-2b
+SB2-X2	sb2_missing_outcome_is_unknown_not_success	missing/owed/uncertain/recorded end	exact established fact only; missing is unknown	SB-2b
+SB2-C2	sb2_attempt_fallback_keeps_all_debt_statuses	O4 injected accounting snapshot	all debt statuses preserved; unavailable is unknown; no affirmative notice	SB-2b; composed schedule SB-3 pending
+SB2-A3	sb2_attempt_binding_refusals_issue_no_ticket	wrong Core/run/agent/door/model	zero count and pins; positive acquisition remains reachable	SB-2b
+SB2-C4	sb2_attempt_recorded_end_survives_failed_delivery	real seal/Mother end/primary end/dropped delivery	Mother and primary Recorded survive failed delivery; no affirmative notice	SB-2b
+SB2-X1	sb2_attempt_death_prefixes_are_report_only	ticket,before real result record,recorded,settled	verified durable ends only; missing unknown; two restarts recreate zero authority	SB-2b accounting only

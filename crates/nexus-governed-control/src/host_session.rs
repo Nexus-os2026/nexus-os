@@ -747,7 +747,7 @@ impl HostSession {
             .producers
             .try_lock()
             .map_err(|_| SessionError::Unavailable)?;
-        if !self.core.model.ready() {
+        if !self.core.model.ready()? {
             return Err(SessionError::Restricted);
         }
         self.core
