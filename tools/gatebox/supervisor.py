@@ -172,9 +172,9 @@ def collect(run, listeners, evidence, logs):
     deadline, next_poll = began+14430, began
     try:
         while len(ended) < 2:
+            events = selector.select(.1)
             now = time.monotonic()
             if now >= deadline: raise TimeoutError('capture deadline')
-            events = selector.select(.1)
             if not events and now >= next_poll:
                 next_poll = now+1
                 state = unit_state(run)
