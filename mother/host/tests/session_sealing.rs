@@ -203,7 +203,7 @@ fn sb3_only_registered_session_surfaces_are_exposed() {
         "pub fn model_call(&self,\nrun: crate::authority::ids::RunId,\n) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {",
         "pub fn view_raw(\n    &self,\n) -> Option<\n    crate::inference::ModelIdentityView,\n> {",
     ] {
-        let parsed = signatures(&plant);
+        let parsed = signatures(plant);
         assert_eq!(parsed.len(), 1, "collect {plant}");
         assert!(!sb3c_exposed_signature(&parsed[0]), "not exempt: {plant}");
         let lower = parsed[0].to_lowercase();

@@ -3627,6 +3627,7 @@ fn sb3_thread_joins_run_in_watched_children() {
     let others = [
         include_str!("model_tests.rs"),
         include_str!("model_death_tests.rs"),
+        include_str!("model_exposure_tests.rs"),
         include_str!("../test_hooks.rs"),
         include_str!("../harness_tests.rs"),
     ];
@@ -3635,7 +3636,12 @@ fn sb3_thread_joins_run_in_watched_children() {
     let mods = parent
         .match_indices("mod ")
         .filter(|(at, _)| test_only(&parent, *at));
-    let scanned = ["model_call_tests", "model_tests", "model_death_tests"];
+    let scanned = [
+        "model_call_tests",
+        "model_tests",
+        "model_death_tests",
+        "model_exposure_tests",
+    ];
     for (at, _) in mods {
         let name = parent[at + 4..].split(';').next().unwrap();
         assert!(scanned.contains(&name), "{name}: an unscanned test module");
