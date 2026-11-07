@@ -148,3 +148,127 @@ three cfg(test) sites retained. R1.2: stacked Linux/test cfg; R1.3: capture alia
 Scope ledger: `c1b_port_oracles.rs` authorized by R1.1/R2; no production changes.
 R3: additive call-site source control; local v4-counter plant must fail it.
 L2 same-process cross-invocation freshness and L3 cap-positive Verifier stay Cb2.
+
+## Cb2 — lifecycle and privacy composition (base 622c6bdb)
+
+Authority: v2 §5.6–§5.8, §6, Cb2 column; Cb1-R3 L2/L3. Composition evidence
+only: inherited production behavior, so tests were GREEN on 622c6bdb (no
+red claimed); discrimination is by plants. No production change. Lane stays
+private/unselected; a returned/staged File is request data, never
+publication proof (Db). Linux-gated child per case (one broker per
+process); observers pause on bounded channels and record C1 results only.
+Deadlines use the manual clock; the between-attempt deadline is latched by
+`FileSession::state` before call 2 is released. No fixed sleeps.
+
+| Oracle (m3cb_ prefix) | Proves | Does not claim |
+|---|---|---|
+| invalidated_reply_cannot_publish | overtake while chat held; recorded Replied (hook) then `Invalidated`, `model_invalidated`, 1/1/1/1, 0 returned/dispatched/File, `fail:lane_fail:builder` | correction-loop schedules |
+| stop_between_attempts_sends_no_correction | pause at caller entry 2; Stop / overtake / latched deadline; call 2 exactly `invalidated`; 2/1/1/1; ends stop:owner, fail:lane_fail:builder, block:budget_time | native transport fault |
+| stop_during_correction_discards_reply | held 2nd chat: `failed:model_cancelled`; late: 2nd reply recorded, Stop before C1's release check, `invalidated`; 2/2/2/2, no 3rd call, stop:owner | content arriving after a closed transport |
+| stop_cancel_halt_and_deadline_are_terminal | 5 interrupts x tags/chat: exact `model_cancelled`/`model_stopped`/`model_timeout`, charges 0/1, frozen ends; cancel is fail:lane_fail:builder, not Stop | attempt-record count (not frozen) |
+| invalidation_after_answer_discards_output | pause after the actual answer (candidate File exists); overtake or Stop; 0 returned/dispatched/staged | zero assembly |
+| record_debt_retains_charge_and_first_cause | adapter Owed/Uncertain: `record_unavailable`, 1/1/1/1, advance and close `Recording`, block:broker_refused:evidence_unavailable; Stop first keeps stop:owner + debt | native-store write failure |
+| unrecorded_charge_sends_nothing | journal fails at charge: 0 chats/charges, no ok result, advance/close Err | a durable terminal record |
+| replay_does_not_restore_caller | two reopens refused `Reopened`; cap-positive LaneInvoked/charge/dispatch counts equal; still unresolved; one chat/attempt | Mother replay internals (see MP-Cb2-8) |
+| markers_fresh_across_invocations (L2) | three direct actual-lane invocations in one process, default path; markers from the raw wire are v4, 4 framings each, pairwise distinct | unpredictability |
+| context_not_lent_to_cap_positive_verifier (L3) | actual Builder cap 2 gets the exact contract; after Owner authorize/execute the observed Verifier (declared cap 1) runs with `None` | other roles at cap>0 |
+| canaries_absent_from_records_and_diagnostics | 10 schedules, canary note/facts: plain/hex/HEX absent from returned errors, caller results, lane verdict/text/effects, reason, close, Mother journal, all broker files | Owner working detail (Owner-only by design) |
+| rejected_and_late_drafts_are_not_deliverables | rejected/late canaries absent from returned File, private store, whole test home; correction success staged File equals returned bytes | Db retention |
+
+Inspected evidence paths (per case home under `$TMPDIR`): in-memory Mother
+journal (`model_invocations()==1`); `broker/p3-evidence/evidence.sqlite3`
+(+wal, required present); `broker/files/ledger.db` (+wal/shm; required
+present iff a File was staged); `broker/files/coding-runs/<run>/index.html`
+(staged deliverable: facts and accepted prose allowed, compared to the
+returned bytes, other canaries scanned); `private/` (consented contract,
+required nonempty; notes/facts legitimate there); the whole home for
+rejected/late canaries; `workspace/index.html` stays absent (no Owner
+publication). Observation surfaces: raw fake-peer bodies (test memory only).
+
+Fixture findings (pre-commit, not production): the File effect is staged
+under `broker/files/coding-runs/` until the Owner authorizes it, so
+`Fx::index_exists()` (workspace) alone is too weak; Cb2 also checks staged
+copies. Recorded deviations: L2/L3 live in the Linux adapter module (only
+Cb2-allowlisted files); L2 forwards to the ordinary broker port because
+`ModelRequest` exposes no content; `mod.rs` 6 lines (stacked cfg, R1.2) vs
+3 estimated; per-file sizes vs 622c6bdb (added+deleted): lifecycle 584
+(est 450), privacy 174 (240), support 106 (100), mod.rs 6 (3), this
+register 76 (60); total 946 (est 853), under the 1,500 cap.
+
+Plants (each applied alone, never committed, restored with equal sha256;
+receipts `cb2-plants/receipts.json`, logs `cb2-plants/MP-Cb2-*.log` under
+the scratchpad above). Site: mc = coordinator/model_calls.rs, co =
+coordinator.rs, la = page_builder/lane.rs.
+
+| Plant | Mutation (site) | Killed by (assertion) |
+|---|---|---|
+| MP-Cb2-1 | live() ignores invocation revocation (mc) | invalidated_reply: results `["ok"]` vs `["invalidated"]` |
+| MP-Cb2-2 | no caller-entry liveness check (mc) | between: all 3 cases, call 2 `refused:halted`/`failed:model_over_budget` vs `invalidated` |
+| MP-Cb2-3 | Replied released without live() (mc) | during/late: `["ok","ok"]` |
+| MP-Cb2-4 | ModelCallCharged not appended (mc) | terminal: 5 chat cases, charges 0 vs 1 |
+| MP-Cb2-5 | kept-step generation/pending check off (co) | post/invalidate: Builder LaneReturned 1 vs 0 |
+| MP-Cb2-6 | model_debt never set (mc) | debt: 3 cases, advance `None` vs `Some(Recording)` |
+| MP-Cb2-7 | ignore the charge append error (mc) | NOT A KILL: lane thread panics on `checked accounting`; no chat |
+| MP-Cb2-7r | meter grants on NotRecorded (mc) | SURVIVED/MASKED: append failure fences the run (co write_record) → `failed:model_cancelled`, 0 chats |
+| MP-Cb2-7b | 7r + skip that fence (mc+co, two-site) | unrecorded_charge: chats 1 vs 0 |
+| MP-Cb2-8 | open swallows File `Reopened` (co) | replay: "reopen refused". Re-placed: a caller-restoring change inside replay is unreachable (attach precedes replay) — NOT EXERCISED |
+| MP-Cb2-9a/9b | success text = note / hex(note) (la) | records: plain/one, plain/two "leaked (hex) into lane verdict/text" |
+| MP-Cb2-10 | rejected reply appended to the File (la) | drafts:plain/two "leaked into returned File content" |
+| MP-Cb2-11 | process-static first marker (la) | L2 pairwise-distinct assertion |
+| MP-Cb2-12 | contract lent to any cap>0 role (co) | L3 "contract leaked to Verifier/1" |
+
+Not exercised: a durable-record (journal/broker) canary plant (no Mother
+write path carries lane text; 9a/9b judge returned diagnostics); MP-Cb2-7
+single-site (masked by the fence, registered above); Mother replay
+caller restoration (MP-Cb2-8 note).
+
+Repeats: the 10 lifecycle-module oracles (every child case) 10x with
+`--test-threads=1` and 10x default parallel: 20/20 runs, 10 passed each.
+
+## Cb2-R1 — authorized oracle amendment (Codex review-1, 1 LOW)
+
+`test(oracle-amend)`, strictly stronger: plain/one, two, bad, transport
+assert exact caller results (`[ok]`, `[ok,ok]`, `[ok,ok]`,
+`[failed:model_unavailable]`), calls/chats/charges/attempts 1/2/2/1 each
+(n,n,n,n), and outcome (staged File + AwaitingApproval; `model_draft_email`
+or `model_unavailable` with fail:lane_fail:builder). Records cases require
+the staged File iff success and, after dropping the scenario, read-only
+SQLite finds the `mission_consented` row, one `model_call` row per native
+attempt (rows with `detail.call` equal ModelCallCharged) and
+file-ledger rows iff success (Cb2-R3: summed over every non-`sqlite_*`
+table listed in `ledger.db`'s `sqlite_master`; no table is named).
+MP-Cb2-13 (caller refuses at entry, mc): pre-amend oracle (31648a1f) passes
+all four plain records cases; amended oracle RED on all four at the exact
+caller-results assertion (`["invalidated"]`). MP-Cb2-7r against the
+retained direct meter tests: KILLED by all three m2e_budget tests
+(`e_o30d_liveness_revoked_before_boundary_release`:383,
+`c1_s4_append_failures_and_live_replay`:933,
+`c1_s4_uncertain_append_never_grants_a_charge`:999; `Ok(Charged{call:1})`
+vs `Err(NotRecorded)`), so 7r is caught at the meter; Cb2's composition
+oracle alone is masked by the append fence. Both restored by sha256.
+Size after Cb2-R1 vs 622c6bdb: 1,039 changed lines (cap 1,500).
+
+## Cb2-R2 — bounded native-check child (Codex review-2, 1 LOW)
+
+`test(oracle-fix)`, harness-only: the read-only SQLite check is spawned and
+polled against a 10 s deadline; on expiry python3 is killed and reaped and
+the case fails. MP-Cb2-14 (script sleeps 60 s, records:plain/one): case
+failed with "exceeded its 10 s bound: python3 killed and reaped" (12.2 s
+including setup); `pgrep -af MP-Cb2-14` afterwards found nothing; file
+restored by sha256. Cb1's `transport/pre` python check in
+`m3cb_lane_oracles.rs` is outside the Cb2 allowlist: unchanged, carried to
+Dd. Size after Cb2-R2 vs 622c6bdb: 1,093 changed lines (cap 1,500).
+
+## Cb2-R3 — composed kernel guard p1a_nc_30
+
+The merged main (c94ace67) guard rejects Mother sources naming the
+primitive's ledger table. `test(oracle-fix)`: no exemption, no name
+splitting; the native check sums rows over every non-`sqlite_*` table in
+`ledger.db` and requires tables and rows iff success. After the fix: guard
+`coding_run::tests` 264 passed (1 pre-existing ignored helper child);
+m3cb 32/32 (success records cases green); MP-Cb2-13 still RED on all four
+amended plain records cases (`["invalidated"]`), restored by sha256.
+Lesson recorded: test-only slices also run the kernel guard binaries.
+Size after Cb2-R3: Cb2-own net 1,118 changed lines vs 622c6bdb (the five Cb2
+paths total 1,122, of which 4 mod.rs lines come from the main merge c94ace67;
+the merge's other files are not Cb2 changes); cap 1,500.

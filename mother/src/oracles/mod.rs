@@ -22,6 +22,7 @@ mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;
 pub(crate) mod m3d_manifest;
+mod m3d_teaching;
 mod mn01;
 mod review;
 mod state;
