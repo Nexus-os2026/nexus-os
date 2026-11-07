@@ -35,5 +35,14 @@ alone; their outputs passed the behavioral format/distinctness oracle, showing
 the control discriminates v4-shaped deterministic sources. Each plant was
 restored byte-for-byte (file and diff hashes equal) and never committed.
 
+Review fix (Codex, LOW x2): the body calls `::getrandom::getrandom` and
+`::hex::encode`, pinned in the approved tokens, so no module-local item can
+capture them; the control also rejects `extern crate`, `mod getrandom`,
+`mod hex`, `as getrandom` and `as hex` in production, `extern crate` in
+`lib.rs`, and a renamed manifest dependency. Extraction and comparison skip
+comments and string/char literals, so a `// }` or `/* } */` comment cannot end
+the body early. Controls: unpinned body and both shadows fail; both harmless
+comments pass. All five were RED on the prior checker and production.
+
 Structural equality pins source text; it is not a statistical proof of
 unpredictability. MP-Cb-9 (fallback after typed failure) is owned by Cb1.

@@ -69,13 +69,13 @@ pub struct MarkerUnavailable;
 /// Generator failure is an error, never a panic or a substitute value.
 pub fn fresh_page_marker() -> Result<String, MarkerUnavailable> {
     let mut bytes = [0u8; 16];
-    let filled = getrandom::getrandom(&mut bytes);
+    let filled = ::getrandom::getrandom(&mut bytes);
     #[cfg(test)]
     let filled = marker_fault::inject(filled);
     filled.map_err(|_| MarkerUnavailable)?;
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    Ok(hex::encode(bytes))
+    Ok(::hex::encode(bytes))
 }
 
 /// Test-only, one-shot generator fault for this module's marker oracles.
@@ -258,48 +258,109 @@ mod marker_tests {
     /// The approved non-test generation path, compared token for token.
     const APPROVED: &str = "{
         let mut bytes = [0u8; 16];
-        let filled = getrandom::getrandom(&mut bytes);
+        let filled = ::getrandom::getrandom(&mut bytes);
         #[cfg(test)]
         let filled = marker_fault::inject(filled);
         filled.map_err(|_| MarkerUnavailable)?;
         bytes[6] = (bytes[6] & 0x0f) | 0x40;
         bytes[8] = (bytes[8] & 0x3f) | 0x80;
-        Ok(hex::encode(bytes))
+        Ok(::hex::encode(bytes))
     }";
     const SIGNATURE: &str = "pub fn fresh_page_marker() -> Result<String, MarkerUnavailable> {";
 
     fn approved(body: &str) -> bool {
-        let tokens = |code: &str| -> String {
-            let code: String = code
-                .lines()
-                .map(|l| l.split("//").next().unwrap_or(""))
-                .collect();
-            code.split_whitespace().collect()
-        };
+        let tokens = |code: &str| -> String { code_only(code).split_whitespace().collect() };
         tokens(body) == tokens(APPROVED)
     }
 
-    /// The unique, ungated production definition's body.
-    fn production_body(source: &str) -> Option<&str> {
-        let production = &source[..source.find("\n#[cfg(test)]\nmod marker_tests {")?];
-        let gated_seam = "\n#[cfg(test)]\nmod marker_fault {";
-        let ok = production.matches("fn fresh_page_marker").count() == 1
+    /// The length of the string or char literal starting `code`, if any.
+    fn literal_len(code: &[u8]) -> Option<usize> {
+        match code {
+            [b'\'', c, b'\'', ..] if *c != b'\\' => Some(3),
+            [b'"', rest @ ..] => {
+                let mut i = 0;
+                while i < rest.len() && rest[i] != b'"' {
+                    i += if rest[i] == b'\\' { 2 } else { 1 };
+                }
+                Some((i + 2).min(code.len()))
+            }
+            _ => None,
+        }
+    }
+
+    /// `code` with every comment replaced by one space; literals kept.
+    fn code_only(code: &str) -> String {
+        let b = code.as_bytes();
+        let (mut out, mut i) = (Vec::with_capacity(b.len()), 0);
+        while i < b.len() {
+            if b[i..].starts_with(b"//") {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+                out.push(b' ');
+            } else if b[i..].starts_with(b"/*") {
+                let mut depth = 0usize;
+                while i < b.len() {
+                    if b[i..].starts_with(b"/*") {
+                        (depth, i) = (depth + 1, i + 2);
+                    } else if b[i..].starts_with(b"*/") {
+                        (depth, i) = (depth - 1, i + 2);
+                        if depth == 0 {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                out.push(b' ');
+            } else {
+                let n = literal_len(&b[i..]).unwrap_or(1);
+                out.extend_from_slice(&b[i..i + n]);
+                i += n;
+            }
+        }
+        String::from_utf8(out).unwrap_or_default()
+    }
+
+    /// Declarations that could rebind `::getrandom`/`::hex` or shadow them.
+    const REBINDINGS: &[&str] = &[
+        "extern crate",
+        "mod getrandom",
+        "mod hex",
+        " as getrandom",
+        " as hex",
+    ];
+
+    /// The unique, ungated production definition's body, comments removed.
+    fn production_body(source: &str) -> Option<String> {
+        let source = source.replace("\r\n", "\n");
+        let raw = &source[..source.find("\n#[cfg(test)]\nmod marker_tests {")?];
+        let production = code_only(raw);
+        let ok = production.matches("fresh_page_marker").count() == 1
             && production.matches("mod marker_fault").count() == 1
-            && production.matches(gated_seam).count() == 1;
+            && production
+                .matches("\n#[cfg(test)]\nmod marker_fault {")
+                .count()
+                == 1
+            && !REBINDINGS.iter().any(|r| production.contains(r));
         let at = production.find(SIGNATURE).filter(|_| ok)?;
-        let line_before = production[..at].trim_end().rsplit('\n').next()?;
-        if !line_before.trim_start().starts_with("///") {
+        if production[..at].trim_end().ends_with(']') {
             return None;
         }
-        let start = at + SIGNATURE.len() - 1;
-        let mut depth = 0usize;
-        for (i, c) in production[start..].char_indices() {
-            match c {
-                '{' => depth += 1,
-                '}' if depth == 1 => return Some(&production[start..=start + i]),
-                '}' => depth -= 1,
+        let (b, open) = (production.as_bytes(), at + SIGNATURE.len() - 1);
+        let (mut i, mut depth) = (open, 0usize);
+        while i < b.len() {
+            if let Some(n) = literal_len(&b[i..]) {
+                i += n;
+                continue;
+            }
+            match b[i] {
+                b'{' => depth += 1,
+                b'}' if depth == 1 => return production.get(open..=i).map(str::to_string),
+                b'}' => depth -= 1,
                 _ => {}
             }
+            i += 1;
         }
         None
     }
@@ -336,7 +397,7 @@ mod marker_tests {
     }
 
     fn approved_source(source: &str) -> bool {
-        production_body(source).is_some_and(approved)
+        production_body(source).is_some_and(|body| approved(&body))
     }
 
     // Deterministic substitutes whose outputs look like fresh v4 markers.
@@ -416,6 +477,11 @@ mod marker_tests {
             );
         }
         let source = include_str!("ids.rs");
+        let body = production_body(source);
+        assert!(
+            body.as_deref().is_some_and(approved),
+            "non-test fresh_page_marker is not the approved fallible getrandom path: {body:?}"
+        );
         let mut failures = Vec::new();
         if approved(UNPINNED) {
             failures.push("relative getrandom/hex paths accepted".to_string());
@@ -432,10 +498,14 @@ mod marker_tests {
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");
-        let body = production_body(source);
+        let crate_root = code_only(include_str!("../lib.rs"));
         assert!(
-            body.is_some_and(approved),
-            "non-test fresh_page_marker is not the approved fallible getrandom path: {body:?}"
+            !crate_root.contains("extern crate"),
+            "no crate-root rebinding"
         );
+        let manifest = include_str!("../../Cargo.toml").replace("\r\n", "\n");
+        for dependency in ["\ngetrandom = \"0.2\"\n", "\nhex = \"0.4\"\n"] {
+            assert!(manifest.contains(dependency), "unrenamed {dependency:?}");
+        }
     }
 }
