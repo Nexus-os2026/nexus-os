@@ -4,9 +4,11 @@ use super::*;
 use crate::effect::FileSnapshot;
 use nexus_governed_control::authority::commitment::{CommitmentState, PublicationClass};
 use nexus_governed_control::authority::file_session::{HaltCause, HaltTag};
+use nexus_governed_control::files::FileReceipt;
 
+/// A File's ordinary status, with the broker's receipt of its commitment.
 pub(super) enum FileDecision {
-    Status(ApprovalStatus),
+    Status(ApprovalStatus, Option<FileReceipt>),
     Ended(MissionState),
 }
 
@@ -283,12 +285,14 @@ impl<P: EffectPort> Coordinator<P> {
                 let snapshot = self.port.file_publication_for(id, effect);
                 let (action, read) = match snapshot {
                     Ok(Some(s)) if pending.as_ref().is_none_or(|p| p == &s.action) => {
-                        (Some(s.action), outcome(s.publication))
+                        (Some(s.action), (outcome(s.publication), s.receipt))
                     }
                     // The engaged cell prevents this not-yet-proposed effect
                     // from entering the broker when its dispatch resumes.
-                    Ok(None) if pending.is_none() => (None, SettlementOutcome::NotPublished),
-                    _ => (pending, SettlementOutcome::Uncertain),
+                    Ok(None) if pending.is_none() => {
+                        (None, (SettlementOutcome::NotPublished, None))
+                    }
+                    _ => (pending, (SettlementOutcome::Uncertain, None)),
                 };
                 let ended = self.file_terminal(id, effect, action, read, None);
                 started?;
@@ -312,7 +316,7 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         observed_effect: u64,
         action: Option<PendingAction>,
-        read: SettlementOutcome,
+        read: (SettlementOutcome, Option<FileReceipt>),
         reserved: Option<u64>,
     ) -> Result<MissionState, CoordinatorError> {
         if let Some(generation) = reserved.filter(|_| self.file.is_some()) {
@@ -320,8 +324,9 @@ impl<P: EffectPort> Coordinator<P> {
                 id,
                 effect: observed_effect,
                 action,
-                read,
+                read: read.0,
                 generation,
+                receipt: read.1,
             })?;
             #[cfg(test)]
             self.hooks.file_engagement.fire("publication");
@@ -337,7 +342,7 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
         observed_effect: u64,
         action: Option<PendingAction>,
-        read: SettlementOutcome,
+        (read, receipt): (SettlementOutcome, Option<FileReceipt>),
         reserved: Option<u64>,
     ) -> Result<MissionState, CoordinatorError> {
         let result = self.try_with_lock(|inner| {
@@ -380,6 +385,20 @@ impl<P: EffectPort> Coordinator<P> {
                 Some(_) => return Err(CoordinatorError::Stopped),
                 None => action,
             };
+            // M3-Db: a published page's receipt, marked overtaken, is kept as
+            // settlement evidence immediately before the terminal line.
+            let page = m.contract.as_ref().is_some_and(|c| c.page_facts.is_some());
+            let proof = match (&action, &read) {
+                (Some(pending), SettlementOutcome::Published { .. }) if page => {
+                    let retained = m.proof.retained.as_ref();
+                    page_proof::receipt_event(retained, effect, pending, receipt, true).ok()
+                }
+                _ => None,
+            };
+            if let Some(event) = proof {
+                inner.append(id, event)?;
+                inner.mission(id)?.proof.receipt = Some(effect);
+            }
             let trigger = Trigger::Settled {
                 effect,
                 action,
@@ -552,7 +571,7 @@ impl<P: EffectPort> Coordinator<P> {
             action,
             publication,
             state,
-            ..
+            receipt,
         } = snapshot.unwrap_or(FileSnapshot {
             action: pending,
             publication: PublicationClass::Uncertain,
@@ -576,11 +595,11 @@ impl<P: EffectPort> Coordinator<P> {
             _ => None,
         };
         if let Some(status) = status {
-            return Ok(FileDecision::Status(status));
+            return Ok(FileDecision::Status(status, receipt));
         }
         let action = (!action.commitment.is_empty()).then_some(action);
-        let state =
-            self.file_terminal(id, effect, action, outcome(publication), Some(generation))?;
+        let read = (outcome(publication), receipt);
+        let state = self.file_terminal(id, effect, action, read, Some(generation))?;
         Ok(FileDecision::Ended(state))
     }
 
@@ -626,7 +645,8 @@ impl<P: EffectPort> Coordinator<P> {
                         .unresolved_file
                         .ok_or(CoordinatorError::Stopped)
                 })?;
-                self.file_terminal(id, effect, None, SettlementOutcome::Uncertain, None)?;
+                let read = (SettlementOutcome::Uncertain, None);
+                self.file_terminal(id, effect, None, read, None)?;
             } else {
                 self.file_close_action(id)?;
                 self.file_ack_all(id)?;

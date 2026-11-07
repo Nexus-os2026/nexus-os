@@ -31,6 +31,7 @@ pub(super) enum FileTerminal {
         action: Option<PendingAction>,
         read: SettlementOutcome,
         generation: u64,
+        receipt: Option<nexus_governed_control::files::FileReceipt>,
     },
     Deadline {
         id: MissionId,
@@ -88,11 +89,12 @@ impl<P: EffectPort> Coordinator<P> {
                 action,
                 read,
                 generation,
+                receipt,
             } if *owner == id => self.file_record_terminal(
                 id,
                 *effect,
                 action.clone(),
-                read.clone(),
+                (read.clone(), *receipt),
                 Some(*generation),
             ),
             FileTerminal::Deadline {
@@ -158,7 +160,10 @@ impl<P: EffectPort> Coordinator<P> {
                 id,
                 effect,
                 action,
-                lite_settle::outcome(snapshot.publication.clone()),
+                (
+                    lite_settle::outcome(snapshot.publication.clone()),
+                    snapshot.receipt,
+                ),
                 Some(generation),
             )
         }?;

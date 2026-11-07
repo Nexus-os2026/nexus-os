@@ -1098,8 +1098,20 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
         | Event::Resumed
         | Event::SettlementStarted { .. }
         | Event::FileModeSelected => true,
-        // M3-Db oracle stub: refused until the proof records are implemented.
-        Event::DeliverableRetained { .. } | Event::PublicationReceipt { .. } => false,
+        Event::DeliverableRetained { sha256, bytes, .. } => is_digest(sha256) && is_size(*bytes),
+        Event::PublicationReceipt {
+            action,
+            sha256,
+            bytes,
+            policy_hash,
+            ..
+        } => {
+            is_digest(sha256)
+                && is_digest(policy_hash)
+                && is_size(*bytes)
+                && RunId::parse(&action.run).is_some()
+                && CommitmentId::parse(&action.commitment).is_some()
+        }
     };
     if ok {
         Ok(())

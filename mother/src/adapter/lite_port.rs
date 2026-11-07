@@ -131,21 +131,26 @@ impl GovernedPort {
         };
         let id = CommitmentId::parse(&pending.commitment)
             .ok_or_else(|| refused(BrokerClass::ActionNotHeld))?;
-        let (publication, state) = match self
+        let (publication, state, receipt) = match self
             .door
             .file_observation(id)
             .map_err(|e| refused_by(e.class()))?
         {
+            // M3-Db: the receipt of this exact commitment only.
             Lookup::Mine((view, read)) if view.run.to_string() == pending.run => {
-                (read, Some(view.state))
+                (read, Some(view.state), self.door.file_receipt(id))
             }
-            _ => (PublicationClass::Uncertain, None),
+            _ => (PublicationClass::Uncertain, None, None),
         };
+        #[cfg(test)]
+        let receipt = RECEIPT_SEAM
+            .with(|s| s.get())
+            .map_or(receipt, |seam| seam(receipt));
         Ok(Some(FileSnapshot {
             action: pending,
             publication,
             state,
-            receipt: None,
+            receipt,
         }))
     }
 
