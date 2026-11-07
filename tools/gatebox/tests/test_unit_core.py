@@ -337,6 +337,18 @@ class ReceiptTests(unittest.TestCase):
             for key in path[:-1]: parent = parent[key]
             parent[path[-1]] = value
             with self.subTest(path=path,value=value), self.assertRaises(ValueError): receipt.validate_summary(summary)
+    def test_success_missing_evidence(self):
+        for change in ('artifact','command-log','desktop-names','status_complete','collector_complete',
+                       'exit_code','signal','timed_out','oom'):
+            summary = self.success()
+            command = summary['commands'][0]
+            if change == 'artifact': summary['coverage']['artifacts'].pop(0)
+            elif change == 'command-log': del command['log']
+            elif change == 'desktop-names':
+                desktop = next(c for c in summary['commands'] if c['gate_id'] == 'desktop-live')
+                for key in ('expected','executed','passed'): desktop['inventory'][key] = []
+            else: command[change] = {'exit_code':1,'signal':9,'timed_out':True,'oom':True}.get(change,False)
+            with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
     def test_publication_destination_race(self):
         # A competing publisher wins after lexists; only NOREPLACE prevents clobbering it.
         destination = self.receipts/self.run_id
