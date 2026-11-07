@@ -19,7 +19,7 @@ use crate::binary_identity::{running_binary_sha256, SelfIdentityUnavailable};
 use crate::inputs::{read_input, sha256_hex, InputError, InputKind, InputValue};
 use nexus_governed_control::authority::evidence::escaped;
 use nexus_governed_control::inert_page::{
-    check, facts_report, policy_hash, ApprovedFacts, FactCode, PageVerdict, MOTHER_CSS,
+    check, facts_report, policy_hash, ApprovedFacts, FactCode, Page, PageVerdict, MOTHER_CSS,
 };
 use nexus_mother::adapter::input_files::{self, ReadRefusal};
 use nexus_mother::teaching::{t14_passed, t14_refused, LABEL_PASSED, OPEN_LINES};
@@ -137,8 +137,25 @@ fn report(
             sha256_hex(&Sha256::digest(MOTHER_CSS.as_bytes()).into())
         ),
     ];
+    let page = page.as_ref().map(|b| (b.bytes(), b.sha256()));
+    let code = assess(&mut lines, page, facts.as_ref(), args.facts.as_deref(), v3);
+    (lines, code)
+}
+
+/// The V3 check: the policy's facts line, or the first missing fact.
+type V3 = fn(&[u8], &Page, &ApprovedFacts) -> Result<String, String>;
+
+/// Every check on inputs already read (`page` is `None` over the cap),
+/// appended to `lines`; the exit code.
+fn assess(
+    lines: &mut Vec<String>,
+    page: Option<(&[u8], [u8; 32])>,
+    facts: Option<&Facts>,
+    facts_path: Option<&Path>,
+    v3: V3,
+) -> u8 {
     let mut failures: Vec<Failure> = Vec::new();
-    let checked = match &page {
+    let checked = match page {
         None => {
             lines.push(format!(
                 "file bytes unavailable (over {PAGE_MAX_BYTES}) sha256 unavailable"
@@ -150,16 +167,16 @@ fn report(
             });
             None
         }
-        Some(bytes) => {
+        Some((bytes, sha256)) => {
             lines.push(format!(
                 "file bytes {} sha256 {}",
-                bytes.bytes().len(),
-                sha256_hex(&bytes.sha256())
+                bytes.len(),
+                sha256_hex(&sha256)
             ));
-            match check(bytes.bytes()) {
+            match check(bytes) {
                 Ok(tree) => {
                     lines.push(LABEL_PASSED.into());
-                    Some((bytes.bytes(), tree))
+                    Some((bytes, tree))
                 }
                 Err(r) => {
                     lines.push(format!(
@@ -179,7 +196,7 @@ fn report(
     };
     lines.push(OPEN_LINES[0].into());
     let mut facts_hash = None;
-    match &facts {
+    match facts {
         None => lines.push(FACTS_NOT_CHECKED.into()),
         Some(Facts { sha256, parsed }) => {
             let approved = parsed.as_ref().ok();
@@ -189,10 +206,11 @@ fn report(
                 sha256_hex(sha256),
                 facts_hash.as_deref().unwrap_or("unavailable")
             ));
-            let (v3, v4) = match (parsed, &checked) {
-                (Err(e), _) => (Some(Err(facts_code(e))), None),
-                (Ok(_), None) => (None, None),
-                (Ok(a), Some((bytes, tree))) => (Some(v3(bytes, tree, a)), Some(v4(bytes, a))),
+            // A refused page runs neither key, whatever the facts file holds.
+            let (v3, v4) = match (&checked, parsed) {
+                (None, _) => (None, None),
+                (Some(_), Err(e)) => (Some(Err(facts_code(e))), None),
+                (Some((bytes, tree)), Ok(a)) => (Some(v3(bytes, tree, a)), Some(v4(bytes, a))),
             };
             lines.push(match &v3 {
                 None => "facts present as given: not run".into(),
@@ -223,15 +241,15 @@ fn report(
     match failures.first() {
         None => {
             lines.push("result: PASS".into());
-            if let (Some(path), Some(hash)) = (&args.facts, &facts_hash) {
+            if let (Some(path), Some(hash)) = (facts_path, &facts_hash) {
                 lines.push(t14_passed(&shown_path(path), hash));
             }
-            (lines, 0)
+            0
         }
         Some(first) => {
             lines.push(format!("result: REFUSED {}", first.code));
             lines.push(t14_refused(&first.code, first.at));
-            (lines, 1)
+            1
         }
     }
 }
@@ -274,11 +292,7 @@ fn fact_code(code: FactCode) -> String {
 }
 
 // V3: the policy's facts line on a pass, else the first missing fact.
-fn v3(
-    bytes: &[u8],
-    tree: &nexus_governed_control::inert_page::Page,
-    facts: &ApprovedFacts,
-) -> Result<String, String> {
+fn v3(bytes: &[u8], tree: &Page, facts: &ApprovedFacts) -> Result<String, String> {
     facts_report(tree, facts).first_error().map_err(fact_code)?;
     PageVerdict::evaluate(bytes, Some(facts))
         .facts_line()
