@@ -67,6 +67,13 @@ fn asked(c: &MissionContract) -> Vec<Entry> {
             hash: c.hash(),
             at_wall_ms: 1,
         }),
+        // As the real coordinator journals it (M3E-R21): the File is
+        // dispatched before its approval is pending.
+        entry(Event::EffectDispatched {
+            effect: 1,
+            kind: crate::contract::EffectKind::File,
+            request_hash: String::new(),
+        }),
         entry(Event::ApprovalPending {
             effect: 1,
             pending: pending(),
