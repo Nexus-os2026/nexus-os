@@ -108,6 +108,21 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'composed link escape'):
             snapshot.export(source,sha,self.root/'out')
         self.assertFalse((self.root/'out').exists())
+    def test_composed_link_deadline(self):
+        source = Objects()
+        sha = source.commit([('100644','Cargo.lock',source.put('blob',b'lock')),
+                             ('120000','l',source.put('blob',b'./'*50+b'Cargo.lock'))])
+        clock = {'resolving':False,'calls':0}
+        original = snapshot.validate_link
+        def validate(*args):
+            original(*args)
+            clock['resolving'] = True
+        def now():
+            if clock['resolving']: clock['calls'] += 1
+            return 301 if clock['calls'] > 1 else 0
+        with patch.object(snapshot,'validate_link',side_effect=validate), patch.object(snapshot.time,'monotonic',side_effect=now):
+            with self.assertRaisesRegex(ValueError,'deadline'): snapshot.export(source,sha,self.root/'out')
+        self.assertFalse((self.root/'out').exists(),'deadline must stop resolution before staging')
     def test_bounds_before_export(self):
         for field, value in [('blob',3),('tree',3),('commit',3),('entries',1),
                              ('objects',1),('bytes',3),('export',3),('path',3),('component',3),('seconds',0)]:
