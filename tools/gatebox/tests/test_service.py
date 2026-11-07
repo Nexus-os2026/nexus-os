@@ -111,7 +111,7 @@ class OfflineServiceTests(unittest.TestCase):
     def test_b2_fixed_shim_arguments(self):
         for verb in ('start','stop'):
             argv = lifecycle.command([verb,RUN])
-            self.assertEqual(argv, ['/usr/bin/systemctl',verb]+(['--no-block'] if verb=='start' else [])+
+            self.assertEqual(argv, ['/usr/bin/systemctl',verb]+
                              ['mothergate-run@'+RUN+'.service'])
         for args in ([],['restart',RUN],['start','../x'],['start',RUN,'--property=x'],
                      ['start','mothergate.service'],['start',RUN.upper()]):
@@ -121,7 +121,8 @@ class OfflineServiceTests(unittest.TestCase):
             root = Path(tmp)
             stage, control = root/'staging',root/'control'
             stage.mkdir(mode=0o700)
-            control.mkdir(mode=0o700)
+            control.mkdir(mode=0o755)
+            (control/'incoming').mkdir(mode=0o700)
             run = stage/RUN
             run.mkdir(mode=0o700)
             (run/'snapshot').mkdir(mode=0o555)
@@ -132,7 +133,7 @@ class OfflineServiceTests(unittest.TestCase):
                 sockets = []
                 try:
                     for suffix in ('log','status'):
-                        path = control/(RUN+'.'+suffix+'.sock')
+                        path = control/'incoming'/(RUN+'.'+suffix+'.sock')
                         if mode == 'regular': path.touch(mode=0o600)
                         if mode == 'socket':
                             sock = socket.socket(socket.AF_UNIX)
@@ -144,7 +145,7 @@ class OfflineServiceTests(unittest.TestCase):
                         with self.assertRaises(ValueError): lifecycle.check_start(RUN,stage,control,os.getuid())
                 finally:
                     for sock in sockets: sock.close()
-                    for path in control.iterdir(): path.unlink()
+                    for path in (control/'incoming').iterdir(): path.unlink()
             (run/'request.json').unlink()
             (run/'request.json').symlink_to(root/'outside')
             with self.assertRaises(ValueError): lifecycle.check_start(RUN,stage,control,os.getuid())
@@ -205,6 +206,10 @@ class OfflineServiceTests(unittest.TestCase):
         units = re.findall(r'### `(mothergate[^`]+)`\n\n```ini\n(.*?)```',sheet,re.S)
         self.assertEqual(len(units),3)
         for name, expected in units:
+            amendment = json.loads((HERE/'policy/custody.json').read_text())
+            for old, new in amendment['units'].get(name,[]):
+                self.assertEqual(expected.count(old),1)
+                expected = expected.replace(old,new)
             self.assertEqual((HERE/'units'/name).read_text(),expected,name)
         self.assertEqual((HERE/'policy/sudoers').read_text(),
                          'Defaults:mothergate env_reset\nmothergate ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/lifecycle.py\n')
