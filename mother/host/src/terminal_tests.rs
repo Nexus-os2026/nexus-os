@@ -826,12 +826,21 @@ mod m3a {
 
     /// A goal read on a worker; the test plays the reader through `route`.
     fn session() -> (Arc<Shared>, Receiver<Frame>, Buffers, Worker) {
+        session_with(b"approve\r", Duration::from_secs(10))
+    }
+    /// The same, with `gap` typed in the prompt gap and the goal read's
+    /// `lifetime`.
+    fn session_with(
+        gap: &[u8],
+        lifetime: Duration,
+    ) -> (Arc<Shared>, Receiver<Frame>, Buffers, Worker) {
         let (c, frames) = scripted();
         let shared = c.shared.clone();
         let worker_shared = shared.clone();
+        let deadline = Instant::now() + lifetime;
         let worker = std::thread::spawn(move || {
             worker_shared
-                .read_goal(Instant::now() + Duration::from_secs(10))
+                .read_goal(deadline)
                 .map(|g| g.text().to_string())
         });
         let prompt = frames.recv_timeout(WAIT).expect("prompt");
@@ -848,7 +857,7 @@ mod m3a {
         // A whole line typed during the display gap: stale, never a goal.
         let (discard, goal) = reader_mode(&shared, Some(boundary));
         assert_eq!((discard, goal), (true, false));
-        route(&shared, &mut buffers, b"approve\r", discard, goal);
+        route(&shared, &mut buffers, gap, discard, goal);
         let mut input = shared.input();
         input.acknowledged = boundary;
         drop(input);
@@ -954,5 +963,56 @@ mod m3a {
         }
         let typed = crate::goal_input::TypedGoal::new(CANARY.into());
         assert!(!format!("{typed:?}").contains(CANARY));
+    }
+
+    // M3E-R11: a line always finishes in the mode it started in; stop,
+    // quit and EOF always act. Through the single reader's routing.
+    #[test]
+    fn m3e_m3a_r11_goal_timeout_mid_line_never_becomes_a_command() {
+        let (shared, _frames, mut buffers, worker) =
+            session_with(b"approve\r", Duration::from_millis(1500));
+        type_in(&shared, &mut buffers, b"Please ");
+        assert_eq!(worker.join().unwrap(), Err("goal_timed_out"));
+        type_in(&shared, &mut buffers, b"run\r");
+        let input = shared.input();
+        assert!(
+            input.commands.is_empty(),
+            "the goal line's rest is no command"
+        );
+        assert!(input.goal_line.is_none() && !input.goal);
+        drop(input);
+        // Then command mode resumes.
+        type_in(&shared, &mut buffers, b"status\r");
+        assert_eq!(shared.input().commands.len(), 1);
+    }
+
+    // `st` | ready | `op\r`: Stop acts, no goal.
+    #[test]
+    fn m3e_m3a_r11_stop_split_across_the_handoff_stops() {
+        let (shared, _frames, mut buffers, worker) = session_with(b"st", Duration::from_secs(10));
+        type_in(&shared, &mut buffers, b"op\r");
+        assert_eq!(worker.join().unwrap(), Err("goal_interrupted"));
+        assert!(shared.stop.ingress.emergency_seen(), "stop");
+    }
+
+    // `qu` | ready | `it\r`: Quit acts, no goal.
+    #[test]
+    fn m3e_m3a_r11_quit_split_across_the_handoff_quits() {
+        let (shared, _frames, mut buffers, worker) = session_with(b"qu", Duration::from_secs(10));
+        type_in(&shared, &mut buffers, b"it\r");
+        assert_eq!(worker.join().unwrap(), Err("goal_interrupted"));
+        assert!(shared.input().quit.is_some(), "quit");
+    }
+
+    // `ab` | ready | `cd\r` then `goal\r`: the stale command line is dropped;
+    // the next line is the goal; no command.
+    #[test]
+    fn m3e_m3a_r11_a_partial_command_line_finishes_before_the_goal() {
+        let (shared, _frames, mut buffers, worker) = session_with(b"ab", Duration::from_secs(10));
+        type_in(&shared, &mut buffers, b"cd\r");
+        type_in(&shared, &mut buffers, b"goal\r");
+        assert_eq!(worker.join().unwrap(), Ok("goal".into()));
+        let input = shared.input();
+        assert!(input.commands.is_empty() && input.lines.is_empty());
     }
 }

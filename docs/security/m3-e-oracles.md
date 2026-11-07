@@ -228,6 +228,13 @@ is a separate unit).
   wins (`goal_interrupted`). Every other text, `approve` and codes included,
   is data and never reaches the command queue or a confirmation; the rest of
   the read after a goal line is discarded command input.
+- **Line continuity (M3E-R11).** A line always finishes in the mode it
+  started in. A goal line left unfinished when goal mode ends (timeout,
+  interruption) is read on to its terminator as discarded goal input, never
+  as a command. A command line left unfinished when goal mode starts is read
+  on to its terminator in the command buffer (stale; only an exact `stop` or
+  `quit` acts); the goal starts after it. A LF after a CR belongs to the
+  buffer that took the CR. Stop, Quit and EOF always act.
 - **Echo and editing.** Only `shown` characters are echoed; Backspace removes
   one scalar, Ctrl-U the line. The 64-byte command/code mode is unchanged.
 - **Display.** `teaching::t1` with the goal through `evidence::escaped`, then
@@ -245,6 +252,10 @@ is a separate unit).
 | `m3e_m3a_stop_quit_eof_and_stale_input_never_yield_a_goal` | `stop`, `quit`, Ctrl-D; stale input before a boundary never completes a goal, and a stale `stop` still stops. |
 | `m3e_m3a_echo_and_editing_show_only_shown_characters` | No control, bidi or bell byte echoed; Backspace one scalar; Ctrl-U the line. |
 | `m3e_m3a_goal_read_through_the_single_reader` | Prompt, boundary, `INPUT READY`; input typed in the gap is dropped; the goal is returned verbatim and displayed exactly; no command or line queued; a refusal shows its code only; Stop, Quit and EOF interrupt; Stop in the same read wins; command mode is unchanged afterwards. |
+| `m3e_m3a_r11_goal_timeout_mid_line_never_becomes_a_command` | `Please ` in goal mode, timeout, then `run\r`: no Run, no goal; command mode resumes. |
+| `m3e_m3a_r11_stop_split_across_the_handoff_stops` | `st` in the gap, `op\r` after ready: Stop acts, no goal. |
+| `m3e_m3a_r11_quit_split_across_the_handoff_quits` | `qu` in the gap, `it\r` after ready: Quit acts, no goal. |
+| `m3e_m3a_r11_a_partial_command_line_finishes_before_the_goal` | `ab` in the gap, `cd\r`, then `goal\r`: the goal is `goal`; no command or line queued. |
 | `m3e_m3a_goal_file_given_refuses_typed_mode_and_debug_is_content_free` | `goal_already_given`, no prompt, goal mode never entered; canaries absent from `Debug`. |
 | `m3e_m3a_typed_and_file_goals_share_one_grammar` (host) | For each text, `validate_goal` equals the goal file's parse, with and without one final LF. |
 
@@ -258,3 +269,5 @@ is a separate unit).
 | P-M3a-3 | ignore stale input | stale: never completes a goal |
 | P-M3a-4 | echo every byte | echo: no control byte echoed |
 | P-M3a-5 | `stop` stored as a goal | stop/quit: `stop` is Stop |
+| P-R11-1 | clear the goal buffer without draining when goal mode ends | timeout mid-line |
+| P-R11-2 | no command-line continuation across the handoff | stop / quit / partial command handoff |
