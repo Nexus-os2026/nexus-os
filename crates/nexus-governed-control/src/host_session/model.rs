@@ -308,3 +308,71 @@ impl HostSession {
 fn model_error(error: ModelError) -> SessionError {
     SessionError::Backend(crate::inference::model_class(error))
 }
+
+// SB-2b inert accounting surface. No dispatch or public route.
+use crate::authority::evidence::EndStatus;
+use crate::authority::ids::{AgentId, RunId};
+use crate::authority::run::GroupId;
+use crate::authority::Authority;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
+    )
+)]
+pub(super) struct Attempt;
+impl Attempt {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
+        )
+    )]
+    pub(super) fn acquire(
+        _core: &Arc<Core>,
+        _authority: &Authority,
+        _run: RunId,
+        _agent: &AgentId,
+        _group: GroupId,
+        _identity: [u8; 32],
+    ) -> Result<Self, SessionError> {
+        Err(SessionError::Unavailable)
+    }
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
+        )
+    )]
+    pub(super) fn record_return(
+        &mut self,
+        _authority: &Authority,
+        _result: Result<(), ModelError>,
+    ) -> Result<EndStatus, SessionError> {
+        Err(SessionError::Unavailable)
+    }
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
+        )
+    )]
+    pub(super) fn complete(self) -> Result<(), SessionError> {
+        Err(SessionError::Unavailable)
+    }
+}
+// A missing verified outcome must never become successful completion.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
+    )
+)]
+pub(super) fn historical_outcome(_end: Option<EndStatus>) -> &'static str {
+    "unknown"
+}

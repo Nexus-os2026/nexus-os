@@ -1,6 +1,6 @@
 //! Frozen SB-2a oracles. Q/R/C/L are N/A for Bootstrap registration.
 use super::*;
-use crate::inference::{ModelPinSpec, RuntimeConfig, Think};
+use crate::inference::{ModelError, ModelPinSpec, RuntimeConfig, Think};
 use crate::test_hooks::Gate;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -706,4 +706,403 @@ fn sb2_install_completion_is_atomic_to_close_observers() {
     assert!(!o.active && o.owner_complete && o.child_complete && !o.uncertain);
     assert_eq!(o.record, "recorded");
     assert!(f.session.core.model.quiescent());
+}
+
+// SB-2b frozen accounting oracles: no model dispatch, charge or chat claimed.
+use crate::authority::evidence::{
+    EndStatus, EvidenceRecord, EvidenceSink, EvidenceUnavailable, MemoryEvidence,
+};
+use crate::authority::ids::{AgentId, Digest, RunId};
+use crate::authority::run::{AdmittedWorkspace, ConsentKind, RunClass, RunOrigin};
+use crate::authority::Authority;
+pub(super) struct EndSink {
+    pub(super) memory: MemoryEvidence,
+    pub(super) mode: AtomicUsize,
+    pub(super) hooks: crate::test_hooks::Hooks,
+}
+impl EvidenceSink for EndSink {
+    fn record(&self, r: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
+        self.memory.record(r)
+    }
+    fn record_end(&self, r: &EvidenceRecord) -> EndStatus {
+        self.hooks.fire("attempt.record");
+        match self.mode.load(Ordering::SeqCst) {
+            1 => EndStatus::Owed,
+            2 => EndStatus::Uncertain,
+            3 => panic!("recording panic"),
+            _ => self.memory.record_end(r),
+        }
+    }
+}
+pub(super) struct Accounting {
+    pub(super) seed: SessionSeed,
+    pub(super) authority: Authority,
+    pub(super) run: RunId,
+    agent: AgentId,
+    group: u64,
+    _life: Arc<dyn std::any::Any + Send + Sync>,
+}
+impl Accounting {
+    pub(super) fn new(sink: Arc<dyn EvidenceSink>) -> Self {
+        let seed = SessionSeed::new().unwrap();
+        seed.core.cell.session_compare(0, READY).unwrap();
+        let q = seed.ingress().accept(CommandKind::Run, 1).unwrap();
+        let cell = seed.core.cell.scoped(q.scope.clone());
+        let authority = Authority::new(
+            sink,
+            Arc::new(crate::authority::clock::SystemClock::default()),
+        );
+        let runs = authority.runs();
+        let agent = AgentId::new("sb2b-agent").unwrap();
+        let group = runs.next_group();
+        let life: Arc<dyn std::any::Any + Send + Sync> = Arc::new(());
+        runs.reserve_door(group, &agent, Arc::downgrade(&life))
+            .unwrap();
+        runs.activate_door_with_halt(group, Some(&cell)).unwrap();
+        let run = runs
+            .open_with_cell(
+                agent.clone(),
+                RunOrigin::AgentGoal,
+                RunClass::Agent,
+                1,
+                Some(group),
+                Some(cell),
+            )
+            .unwrap();
+        runs.consent_slot(group, &agent)
+            .unwrap()
+            .fill(
+                &"cd".repeat(32),
+                "mission-consent-string",
+                7,
+                ConsentKind::Mission,
+                9,
+                None,
+            )
+            .unwrap();
+        runs.admit_files(
+            run,
+            &agent,
+            group,
+            &"cd".repeat(32),
+            "mission-consent-string",
+            AdmittedWorkspace {
+                id: "workspace".into(),
+                identity: Digest::of("test", &[]),
+            },
+        )
+        .unwrap();
+        runs.admit_inference(
+            run,
+            &agent,
+            group,
+            &"cd".repeat(32),
+            "mission-consent-string",
+            [42; 32],
+        )
+        .unwrap();
+        Self {
+            seed,
+            authority,
+            run,
+            agent,
+            group,
+            _life: life,
+        }
+    }
+    pub(super) fn acquire(&self) -> Result<model::Attempt, SessionError> {
+        model::Attempt::acquire(
+            &self.seed.core,
+            &self.authority,
+            self.run,
+            &self.agent,
+            self.group,
+            [42; 32],
+        )
+    }
+    fn counts(&self) -> (u32, usize) {
+        self.authority.runs().model_accounting(self.run).unwrap()
+    }
+}
+fn end_sink() -> Arc<EndSink> {
+    Arc::new(EndSink {
+        memory: MemoryEvidence::new(256),
+        mode: AtomicUsize::new(0),
+        hooks: Default::default(),
+    })
+}
+#[test]
+fn sb2_attempt_count_and_retention_are_one_admission() {
+    let sink = end_sink();
+    let f = Accounting::new(sink.clone());
+    for n in 1..=8 {
+        let mut attempt = f.acquire().expect("issued attempt 1..8");
+        assert_eq!(f.counts(), (n, 1), "attempt_record_original_run");
+        assert!(f.acquire().is_err(), "one active operation");
+        assert!(matches!(
+            attempt
+                .record_return(&f.authority, Err(ModelError::Cancelled))
+                .unwrap(),
+            EndStatus::Recorded { .. }
+        ));
+        assert_eq!(f.counts(), (n, 1), "owner return still owed");
+        attempt.complete().unwrap();
+        assert_eq!(f.counts(), (n, 0));
+    }
+    assert!(
+        matches!(f.acquire(), Err(SessionError::Backend("model_over_budget"))),
+        "ninth attempt is OverBudget"
+    );
+    assert_eq!(f.counts(), (8, 0), "no refund of issued attempts");
+    assert_eq!(sink.memory.records().len(), 8);
+    let f = Accounting::new(end_sink());
+    let ingress = f.seed.ingress();
+    f.seed.core.cell.1.arm("session.before_compare", move || {
+        ingress.emergency().unwrap();
+    });
+    assert!(f.acquire().is_err(), "original-scope CAS must refuse");
+    assert_eq!(f.counts(), (0, 0), "refused CAS changes neither counter");
+}
+#[test]
+fn sb2_attempt_record_keeps_original_run_and_consent() {
+    let sink = end_sink();
+    let f = Accounting::new(sink.clone());
+    let mut attempt = f.acquire().expect("retained attempt");
+    assert_eq!(f.counts(), (1, 1), "attempt_record_original_run");
+    f.authority.runs().cancel(f.run);
+    f.authority.runs().finish(f.run);
+    f.authority.runs().set_capacity_for_test(1);
+    assert!(f
+        .authority
+        .runs()
+        .open(f.agent.clone(), RunOrigin::AgentGoal, RunClass::Agent, 2)
+        .is_err());
+    assert!(matches!(
+        attempt
+            .record_return(&f.authority, Err(ModelError::Cancelled))
+            .unwrap(),
+        EndStatus::Recorded { .. }
+    ));
+    let rows = sink.memory.records();
+    assert_eq!(rows.len(), 1);
+    let r = &rows[0];
+    assert_eq!(r.run.as_deref(), Some(f.run.to_string().as_str()));
+    assert_eq!(r.agent.as_deref(), Some("sb2b-agent"));
+    for (k, v) in [
+        ("door", f.group.to_string()),
+        ("contract_hash", "cd".repeat(32)),
+        ("request", "mission-consent-string".into()),
+        ("identity", hex::encode([42; 32])),
+        ("call", "1".into()),
+        ("outcome", "cancelled".into()),
+    ] {
+        assert!(
+            r.detail.contains(&(k.into(), v)),
+            "retained correlation {k}"
+        );
+    }
+    attempt.complete().unwrap();
+    assert_eq!(
+        f.counts(),
+        (1, 0),
+        "only model pin released, File preservation retained"
+    );
+}
+#[test]
+fn sb2_record_debt_blocks_seal_and_reuse() {
+    for mode in [0, 1, 2] {
+        let sink = end_sink();
+        sink.mode.store(mode, Ordering::SeqCst);
+        let f = Accounting::new(sink.clone());
+        let mut attempt = f.acquire().expect("issued debt owner");
+        let record = attempt
+            .record_return(&f.authority, Err(ModelError::Cancelled))
+            .unwrap();
+        let expected = match mode {
+            0 => "recorded",
+            1 => "owed",
+            _ => "uncertain",
+        };
+        assert_eq!(record.as_str(), expected);
+        let o = f.seed.core.model.snapshot().unwrap();
+        assert_eq!(o.operation, "attempt");
+        assert!(o.active && o.child_complete && !o.owner_complete);
+        assert_eq!(o.record, expected, "record status is never upgraded");
+        // Cancellation and simulated meter settlement do not own this obligation.
+        f.authority.runs().cancel(f.run);
+        assert!(!f.seed.core.model.quiescent());
+        assert!(f.acquire().is_err());
+        assert!(
+            attempt.record_return(&f.authority, Ok(())).is_err(),
+            "exactly one result record"
+        );
+        assert_eq!(attempt.complete().is_ok(), mode == 0);
+        assert_eq!(
+            f.counts(),
+            (1, usize::from(mode != 0)),
+            "attempt_record_original_run"
+        );
+        assert_eq!(f.seed.core.model.quiescent(), mode == 0);
+    }
+}
+#[test]
+fn sb2_attempt_drop_panic_and_poison_retain_ownership() {
+    for fault in 0..3 {
+        let sink = end_sink();
+        let f = Accounting::new(sink.clone());
+        let mut attempt = f.acquire().expect("issued debt owner");
+        if fault == 1 {
+            sink.mode.store(3, Ordering::SeqCst);
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || attempt.record_return(&f.authority, Ok(()))
+            ))
+            .is_err());
+        }
+        if fault == 2 {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _hold = f.seed.core.model.state.lock().unwrap();
+                panic!("poison owning state");
+            }));
+        }
+        // Drop with the real lock held must neither lock nor record nor unpin.
+        let hold = f
+            .seed
+            .core
+            .model
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        drop(attempt);
+        drop(hold);
+        assert_eq!(f.counts(), (1, 1), "drop retains model pin");
+        assert!(f.seed.failed());
+        assert!(sink.memory.records().is_empty());
+        assert!(!f.seed.core.model.quiescent());
+        assert!(f.acquire().is_err());
+    }
+}
+#[test]
+fn sb2_attempt_recording_does_not_block_ingress() {
+    let sink = end_sink();
+    let f = Accounting::new(sink.clone());
+    let mut attempt = f.acquire().expect("issued debt owner");
+    let core = Arc::downgrade(&f.seed.core);
+    let runs = f.authority.runs().clone();
+    let run = f.run;
+    sink.hooks.arm("attempt.record", move || {
+        let core = core.upgrade().unwrap();
+        assert!(core.producers.try_lock().is_ok());
+        assert!(core.model.state.try_lock().is_ok());
+        assert_eq!(runs.model_accounting(run), Some((1, 1)));
+        SessionIngress { core }.emergency().unwrap();
+    });
+    assert!(matches!(
+        attempt
+            .record_return(&f.authority, Err(ModelError::Cancelled))
+            .unwrap(),
+        EndStatus::Recorded { .. }
+    ));
+    attempt.complete().unwrap(); // Settlement needs no refreshed Work admission.
+    assert!(f.seed.core.model.quiescent());
+    assert_eq!(f.counts(), (1, 0));
+}
+#[test]
+fn sb2_missing_outcome_is_unknown_not_success() {
+    assert_eq!(
+        model::historical_outcome(None),
+        "unknown",
+        "missing outcome is unknown"
+    );
+    assert_eq!(model::historical_outcome(Some(EndStatus::Owed)), "owed");
+    assert_eq!(
+        model::historical_outcome(Some(EndStatus::Uncertain)),
+        "uncertain"
+    );
+    assert_eq!(
+        model::historical_outcome(Some(EndStatus::Recorded { seq: 7 })),
+        "recorded"
+    );
+}
+#[test]
+fn sb2_attempt_binding_refusals_issue_no_ticket() {
+    let f = Accounting::new(end_sink());
+    let other = SessionSeed::new().unwrap();
+    for (core, run, agent, group, identity) in [
+        (&other.core, f.run, f.agent.clone(), f.group, [42; 32]),
+        (
+            &f.seed.core,
+            RunId::fresh(),
+            f.agent.clone(),
+            f.group,
+            [42; 32],
+        ),
+        (
+            &f.seed.core,
+            f.run,
+            AgentId::new("wrong").unwrap(),
+            f.group,
+            [42; 32],
+        ),
+        (&f.seed.core, f.run, f.agent.clone(), f.group + 1, [42; 32]),
+        (&f.seed.core, f.run, f.agent.clone(), f.group, [43; 32]),
+    ] {
+        assert!(model::Attempt::acquire(core, &f.authority, run, &agent, group, identity).is_err());
+        assert_eq!(f.counts(), (0, 0));
+        assert!(f.seed.core.model.quiescent());
+    }
+    f.acquire()
+        .expect("denials did not consume slot")
+        .record_return(&f.authority, Ok(()))
+        .unwrap();
+}
+#[test]
+fn sb2_attempt_recorded_end_survives_failed_delivery() {
+    // Real seal/end path; deliberately leave delivery unacknowledged.
+    use sha2::{Digest as _, Sha256};
+    fn line(seq: u64, previous: &str, event: &str) -> (String, String) {
+        let event = format!("{{\"event\":\"{event}\"}}");
+        let mut h = Sha256::new();
+        h.update(b"nexus-mother-journal-v2\n");
+        for p in [
+            previous.as_bytes(),
+            &[2],
+            &seq.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            event.as_bytes(),
+        ] {
+            h.update((p.len() as u64).to_be_bytes());
+            h.update(p);
+        }
+        let hash = hex::encode(h.finalize());
+        (format!("{{\"format\":2,\"seq\":{seq},\"prev\":\"{previous}\",\"mission\":0,\"event\":{event},\"hash\":\"{hash}\"}}\n"), hash)
+    }
+    let f = fixture();
+    let (opened, hash) = line(0, &"0".repeat(64), "session_opened");
+    let journal = f.root.0.path().join("mother-journal.jsonl");
+    std::fs::write(&journal, &opened).unwrap();
+    let q = f.session.ingress().accept(CommandKind::Quit, 1).unwrap();
+    f.session.settle_close_resources(&q).unwrap();
+    f.session.settle_close_authority(&q).unwrap();
+    let seal = f.session.seal_close(&q).unwrap();
+    seal.begin_mother_end(f.session.identity()).unwrap();
+    let (closed, _) = line(1, &hash, "session_closed");
+    std::fs::write(journal, format!("{opened}{closed}")).unwrap();
+    f.session.observe_mother_end(&seal).unwrap();
+    f.session.close_primary(&seal).unwrap();
+    let before = f.session.close_records();
+    assert_eq!(
+        before.primary,
+        close::FinalStatus::Recorded,
+        "recorded end preserved"
+    );
+    assert_eq!(before.mother, close::FinalStatus::Recorded);
+    drop(seal);
+    let after = f.session.close_records();
+    assert_eq!(
+        after.primary,
+        close::FinalStatus::Recorded,
+        "recorded end preserved"
+    );
+    assert_eq!(after.mother, close::FinalStatus::Recorded);
+    assert_ne!(after.delivery, close::FinalStatus::Recorded);
 }

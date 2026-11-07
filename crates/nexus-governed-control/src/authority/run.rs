@@ -1857,3 +1857,14 @@ impl RunRegistry {
         ]
     }
 }
+
+#[cfg(test)]
+impl RunRegistry {
+    pub(crate) fn model_accounting(&self, run: RunId) -> Option<(u32, usize)> {
+        let table = self
+            .runs
+            .try_lock()
+            .expect("no run hold across evidence I/O");
+        table.runs.get(&run).map(|e| (e.model_attempts, 0))
+    }
+}

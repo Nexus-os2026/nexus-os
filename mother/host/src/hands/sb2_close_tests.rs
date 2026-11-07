@@ -58,3 +58,23 @@ fn sb2_close_report_has_one_model_line() {
         }
     }
 }
+
+#[test]
+fn sb2_attempt_fallback_keeps_all_debt_statuses() {
+    for record in ["pending", "recorded", "owed", "uncertain", "unknown"] {
+        let report = model_report(Some(
+            nexus_governed_control::host_session::close::ModelObligations {
+                operation: "attempt",
+                active: true,
+                owner_complete: false,
+                child_complete: true,
+                record,
+                uncertain: record != "recorded",
+            },
+        ));
+        assert!(report.contains(&format!("record={record}")));
+        assert!(report.contains("operation=attempt active=true owner=false child=true"));
+        assert!(!report.contains("SESSION CLOSED recorded"));
+    }
+    assert!(close_fallback_report().contains("record=unknown"));
+}

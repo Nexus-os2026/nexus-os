@@ -520,3 +520,58 @@ Local F1/F2/F4 plants and the adapted fallback plant are killed and restored;
 F3 mutation compiles but stops at RuntimeRoot. Stale fixture metadata refuses;
 final metadata verifies. The runner has 26 unique in-scope plant plans; its
 outside all-plant run and repetitions remain unobserved on these bytes.
+
+## 11. SB-2b frozen accounting oracles (2026-11-07)
+Authority: mission sheet ending ARCHITECT RULING SB-2b FREEZE; base fd7fa61d.
+Snapshot 01 contains default-denying `Attempt` accounting and these additive
+oracles; snapshot 02 implements it. No retained SB-2a expectation is changed.
+Literal rows: `mother/host/tests/session/model-bridge-cases.tsv` SB-2b entries.
+A1: `sb2_attempt_count_and_retention_are_one_admission`: attempts 1..8 acquire
+one exact pin, ninth OverBudget; refused original CAS changes neither counter.
+A2: `sb2_attempt_record_keeps_original_run_and_consent`: exact run/agent/door/
+contract/consent string/model/ordinal survives cancellation, finish and capacity;
+one restricted end record, model pin released only by recorded-owner return.
+D1: `sb2_record_debt_blocks_seal_and_reuse`: Recorded/Owed/Uncertain remain
+separate, including after cancel/meter settlement; recording is single-use;
+child completion and method-owner completion remain separate; no early reuse.
+D2: `sb2_attempt_drop_panic_and_poison_retain_ownership`: Drop under owning lock,
+record panic and poison retain pin, latch uncertainty/denial, never record/join.
+L1: `sb2_attempt_recording_does_not_block_ingress`: evidence callback verifies
+no producer/model/run hold, accepts emergency, then original owner settles
+without refreshed Work authority. A3: `sb2_attempt_binding_refusals_issue_no_ticket`
+checks wrong Core/run/agent/door/identity, then a reachable positive acquisition.
+X2: `sb2_missing_outcome_is_unknown_not_success`: missing=unknown, owed=owed,
+uncertain=uncertain, verified Recorded=recorded; no inferred attempt count.
+X1: `sb2_attempt_death_prefixes_are_report_only`: abort after ticket, before
+real end record, after record and after slot settlement; two qualified reopens
+retain durable prefixes only, recreate no model/run/admission/attempt authority.
+C4: `sb2_attempt_recorded_end_survives_failed_delivery`: real seal and end writes;
+failed delivery preserves separately established Mother and primary end facts.
+C2: `sb2_attempt_fallback_keeps_all_debt_statuses`: O4 injected snapshots only;
+all record statuses survive formatting. Complete worker composition stays
+PENDING SB-3/M2e-D. Accounting proves no C1 charge, dispatch or reply acceptance.
+Owning holds: reserve attempt under producers then slot; release both before
+run-table admission; final original-cell CAS immediately precedes count+pin;
+no authority hold crosses result recording; exact ticket consumed on settlement;
+seal observes existing model quiescence, unavailable/poisoned snapshots refuse.
+Plants: MP-SB-5-count (increment), MP-SB-5-pin (exact model pin, never File
+preservation), MP-SB-9-record (status), MP-SB-9-meter (early slot discharge),
+MP-SB-12-end (primary end fact), MP-SB-14-missing (missing outcome classification).
+All 26 SB-2a plans rerun on final bytes; outside runner checks reachability,
+compile/runtime assertion failure, restoration hashes, 10 serial/10 parallel
+contention/CAS repeats. No setup refusal or compile error counts as a kill.
+History classification takes only established end facts from existing verified
+stores in death tests. No new persistent format, historical reader API, precise
+missing count or cross-store association is introduced; unavailable facts stay
+unknown in the existing fallback. No recovery action or replay is implemented.
+
+11.1 Inert checkpoint receipts: `oracle-red-accounting.log` compiled and ran
+five accounting tests, all runtime RED at the expected acquisition refusal;
+`oracle-red-debt.log` ran D1 RED at acquisition; `oracle-red-missing.log` ran
+X2 RED at the owed-status assertion. The missing=None denial control is already
+green; no acquisition RED is credited as reaching later pin/record assertions.
+Host formatter controls are default-preserving positive controls, not runtime RED.
+X1/C4 require RuntimeRoot and are sandbox_blocked without execution here.
+Named temporary dead-code expectations (non-test builds only): `Attempt`,
+`Attempt::acquire`, `Attempt::record_return`, `Attempt::complete`, and
+`historical_outcome`; remove at SB-3 wiring. No module-wide suppression.
