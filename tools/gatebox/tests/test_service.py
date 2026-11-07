@@ -122,15 +122,18 @@ class OfflineServiceTests(unittest.TestCase):
             run.mkdir(mode=0o700)
             (run/'snapshot').mkdir(mode=0o555)
             (run/'request.json').write_text('{}')
+            # Explicit modes: the fixture must not depend on the caller's umask.
+            (run/'request.json').chmod(0o600)
             for mode in ('absent','regular','socket'):
                 sockets = []
                 try:
                     for suffix in ('log','status'):
                         path = control/(RUN+'.'+suffix+'.sock')
-                        if mode == 'regular': path.touch()
+                        if mode == 'regular': path.touch(mode=0o600)
                         if mode == 'socket':
                             sock = socket.socket(socket.AF_UNIX)
                             sock.bind(str(path))
+                            path.chmod(0o600)
                             sockets.append(sock)
                     if mode == 'socket': lifecycle.check_start(RUN,stage,control,os.getuid())
                     else:
