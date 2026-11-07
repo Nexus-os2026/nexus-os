@@ -53,3 +53,255 @@ SB3-R4c	sb3_attempt_contention_and_poison_latch_exactly	R3 grant/run contention 
 SB3-R4g	sb3_attempt_grant_clocks_and_identity_are_independent	monotonic-only, wall-only, identity	grant_not_live; nothing	SB3B-R4
 SB3-R6t	sb3_attempt_grant_revocation_cannot_precede_the_cas	revoker thread started at model.attempt.granted, bounded 2 s wait	never completed-before-CAS and admitted; revocation lands; refusal leaves nothing; guard-release plant RED 10/10	SB3B-R6
 SB3-R5r	sb3_attempt_rollback_hold_expiry_latches_uncertainty	pre-ticket refusal whose rollback completion hold expires	unavailable; uncertainty and failure latched; no ticket	SB3B-R5
+SB3-G0r5	sb3_original_file_grant_remains_required_per_request	revoked,expired,scope,substitute before each of the four gates	boundary and successors 0; recorded	SB-3B1b
+SB3-G1b	sb3_call_override_required_at_each_request	run-table contention at each gate; poison	model_cancelled; prefix; no latch / latched	SB-3B1b
+SB3-G2b	sb3_pre_gate_ingress_sends_no_request	four restriction sinks before each gate	affected and successors 0; prior charge kept	SB-3B1b
+SB3-G3b	sb3_paused_before_cas_ingress_wins	ingress after the observer read, before the CAS	ingress wins; no refreshed retry	SB-3B1b
+SB3-G4b	sb3_entered_request_grants_no_successor	entered and held request, then restrict	selected once; successors 0	SB-3B1b
+SB3-G5b	sb3_held_request_cancels_and_joins	held request x four sinks	closure seen; joined under 1 s; no retry	SB-3B1b
+SB3-L2b	sb3_revocation_between_observer_read_and_cas_is_entered_only	revoke after the observer read	at most the selected request; successors 0	SB3B-R8
+SB3-C2b	sb3_invalidation_after_charge_prevents_chat	revoke at charge; metadata failure; refused charge	charge 1 chat 0; 1/0/0; recorded	SB-3B1b
+SB3-T1b	sb3_original_deadlines_and_watch_are_not_renewed	q, mission, backstop, watch before gate 1	later gates refuse; call two not renewed	SB-3B1b
+SB3-F1b	sb3_r5_predicate_order_is_exact	adjacent predicate pairs; chat-latch pairs	earlier step refuses (trace)	SB3B-R2
+SB3-F2b	sb3_r5_each_predicate_refuses_literally	each predicate alone at each gate; latch; grant contention/poison	literal class at its own step; no new charge	SB3B-R2
+SB3-F2h	sb3_r5_holds_contend_and_poison_exactly	run table and grant store x contention/poison x four gates	model_cancelled; prefix; latched (poison, poison)	SB3B-R8
+SB3-F3b	sb3_contended_gate_polls_live_and_notifies_nothing	contention at each gate	polling None; no notice; one admission per gate	SB3B-R2
+SB3-F4b	sb3_call_clocks_backstop_and_watch_are_fixed	each mission clock; fixed backstop; Stop and resume	model_timeout / model_stopped; nothing renewed	SB3B-R2
+SB3-F5b	sb3_revocation_between_observer_read_and_cas_is_entered_only	revoke after the observer read (L2 with F5)	at most selected; Recorded; inventory, commitments, File evidence unchanged	SB3B-R8
+SB3-F7b	sb3_unsettled_recorded_call_is_uncertain	recorded success, pin cannot settle	Uncertain; result kept; one record; slot debt	SB3B-R3
+SB3-F8b	sb3_call_r3_refusals_charge_nothing	grant, observer, ninth, q, member, sticky	literal class; 0/0/0	SB3B-R2
+SB3-S1b	sb3_b1b_test_seams_are_test_only	masked scan of the B1b seams	all under cfg(test)	SB3B-R2 F11
+SB3-K1b	sb3_call_gate_reads_clocks_and_deadline_before_any_hold	blocking clock and blocking CallDeadline inside the gates	no run or grant hold at any reading; call completes	SB3B-R8
+SB3-H1b	sb3_call_grant_revocation_cannot_precede_the_cas	revoker started at each gate observer read, joined	no CAS admission after a completed revocation	SB3B-R8
+SB3B1e-M/r3_reserve:before/emergency	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/cancel_run	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:run_cancelled	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/door_halt	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/quit	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/session_failure	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/q_expiry	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/mission_wall	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/mission_mono	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/native_halt	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/run_finish	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:run_not_active	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/grant_revocation	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:grant_not_live	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/grant_expiry	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:grant_not_live	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/evidence_failure	sb3_matrix_r3_reserve_before	r3_reserve:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/contention	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/poison	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r3_reserve:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/emergency_state	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/failed	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closing_normal	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closing_restricted	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/sealed	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closed_clean	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:before/closed_unclean	sb3_matrix_r3_reserve_before	r3_reserve:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/emergency	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/cancel_run	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:run_cancelled	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/door_halt	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/quit	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/session_failure	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/q_expiry	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/mission_wall	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/mission_mono	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/native_halt	sb3_matrix_r3_reserve_after	r3_reserve:after	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/run_finish	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:run_not_active	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/grant_revocation	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:grant_not_live	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/grant_expiry	sb3_matrix_r3_reserve_after	r3_reserve:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/evidence_failure	sb3_matrix_r3_reserve_after	r3_reserve:after	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/contention	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/poison	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:unavailable	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r3_reserve:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/emergency_state	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/failed	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closing_normal	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closing_restricted	sb3_matrix_r3_reserve_after	r3_reserve:after	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_reserve:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_reserve:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_reserve:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_reserve:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:before/emergency	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/cancel_run	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:before/door_halt	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/quit	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/session_failure	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/q_expiry	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/mission_wall	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/mission_mono	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/native_halt	sb3_matrix_r3_cas_before	r3_cas:before	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:before/run_finish	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:before/grant_revocation	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:before/grant_expiry	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:before/evidence_failure	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_cas:before/contention	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:before/poison	sb3_matrix_r3_cas_before	r3_cas:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r3_cas:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_cas:before/emergency_state	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/failed	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closing_normal	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closing_restricted	sb3_matrix_r3_cas_before	r3_cas:before	pre:halted	SB-3B1e-M
+SB3B1e-M/r3_cas:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:after/emergency	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/cancel_run	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/door_halt	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/quit	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/session_failure	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/q_expiry	sb3_matrix_r3_cas_after	r3_cas:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/mission_wall	sb3_matrix_r3_cas_after	r3_cas:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/mission_mono	sb3_matrix_r3_cas_after	r3_cas:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/native_halt	sb3_matrix_r3_cas_after	r3_cas:after	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/run_finish	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/grant_revocation	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:after/grant_expiry	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r3_cas:after/evidence_failure	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r3_cas:after/contention	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:after/poison	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r3_cas:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r3_cas:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r3_cas:after/emergency_state	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/failed	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closing_normal	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closing_restricted	sb3_matrix_r3_cas_after	r3_cas:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r3_cas:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r3_cas:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r3_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:before/emergency	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/cancel_run	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/door_halt	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/quit	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/session_failure	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/q_expiry	sb3_matrix_charge_before	charge:before	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:before/mission_wall	sb3_matrix_charge_before	charge:before	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:before/mission_mono	sb3_matrix_charge_before	charge:before	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:before/native_halt	sb3_matrix_charge_before	charge:before	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/charge:before/run_finish	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/grant_revocation	sb3_matrix_charge_before	charge:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:before/grant_expiry	sb3_matrix_charge_before	charge:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:before/evidence_failure	sb3_matrix_charge_before	charge:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/charge:before/contention	sb3_matrix_charge_before	charge:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:before/poison	sb3_matrix_charge_before	charge:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	charge:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/charge:before/emergency_state	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/failed	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/closing_normal	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/closing_restricted	sb3_matrix_charge_before	charge:before	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:after/emergency	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/cancel_run	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/door_halt	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/quit	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/session_failure	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/q_expiry	sb3_matrix_charge_after	charge:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:after/mission_wall	sb3_matrix_charge_after	charge:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:after/mission_mono	sb3_matrix_charge_after	charge:after	at:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/charge:after/native_halt	sb3_matrix_charge_after	charge:after	at:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/charge:after/run_finish	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/grant_revocation	sb3_matrix_charge_after	charge:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:after/grant_expiry	sb3_matrix_charge_after	charge:after	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/charge:after/evidence_failure	sb3_matrix_charge_after	charge:after	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/charge:after/contention	sb3_matrix_charge_after	charge:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:after/poison	sb3_matrix_charge_after	charge:after	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/charge:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	charge:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/charge:after/emergency_state	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/failed	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/closing_normal	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/closing_restricted	sb3_matrix_charge_after	charge:after	at:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/charge:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/charge:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	charge:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:before/emergency	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/cancel_run	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:4	SB-3B1e-M
+SB3B1e-M/r5_observer:before/door_halt	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/quit	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/session_failure	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/q_expiry	sb3_matrix_r5_observer_before	r5_observer:before	at:model_timeout:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/mission_wall	sb3_matrix_r5_observer_before	r5_observer:before	at:model_timeout:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/mission_mono	sb3_matrix_r5_observer_before	r5_observer:before	at:model_timeout:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/native_halt	sb3_matrix_r5_observer_before	r5_observer:before	at:model_stopped:refused:2	SB-3B1e-M
+SB3B1e-M/r5_observer:before/run_finish	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:4	SB-3B1e-M
+SB3B1e-M/r5_observer:before/grant_revocation	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_observer:before/grant_expiry	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_observer:before/evidence_failure	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r5_observer:before/contention	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_observer:before/poison	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_observer:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r5_observer:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_observer:before/emergency_state	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/failed	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closing_normal	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closing_restricted	sb3_matrix_r5_observer_before	r5_observer:before	at:model_cancelled:refused:1	SB-3B1e-M
+SB3B1e-M/r5_observer:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:after/emergency	IDENTICAL_POINT:r5_cas:before/emergency	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/cancel_run	IDENTICAL_POINT:r5_cas:before/cancel_run	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/door_halt	IDENTICAL_POINT:r5_cas:before/door_halt	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/quit	IDENTICAL_POINT:r5_cas:before/quit	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/session_failure	IDENTICAL_POINT:r5_cas:before/session_failure	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/q_expiry	IDENTICAL_POINT:r5_cas:before/q_expiry	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/mission_wall	IDENTICAL_POINT:r5_cas:before/mission_wall	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/mission_mono	IDENTICAL_POINT:r5_cas:before/mission_mono	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/native_halt	IDENTICAL_POINT:r5_cas:before/native_halt	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/run_finish	IDENTICAL_POINT:r5_cas:before/run_finish	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/grant_revocation	IDENTICAL_POINT:r5_cas:before/grant_revocation	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/grant_expiry	IDENTICAL_POINT:r5_cas:before/grant_expiry	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/evidence_failure	IDENTICAL_POINT:r5_cas:before/evidence_failure	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/contention	IDENTICAL_POINT:r5_cas:before/contention	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/poison	IDENTICAL_POINT:r5_cas:before/poison	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r5_observer:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_observer:after/emergency_state	IDENTICAL_POINT:r5_cas:before/emergency_state	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/failed	IDENTICAL_POINT:r5_cas:before/failed	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/closing_normal	IDENTICAL_POINT:r5_cas:before/closing_normal	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/closing_restricted	IDENTICAL_POINT:r5_cas:before/closing_restricted	r5_observer:after	the observer read is immediately followed by model.call.observed; nothing is judged between	SB-3B1e-M
+SB3B1e-M/r5_observer:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_observer:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_observer:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/emergency	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/cancel_run	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/door_halt	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/quit	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/session_failure	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/q_expiry	sb3_matrix_r5_cas_before	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_wall	sb3_matrix_r5_cas_before	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_mono	sb3_matrix_r5_cas_before	r5_cas:before	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/native_halt	sb3_matrix_r5_cas_before	r5_cas:before	next:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/run_finish	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:before/grant_revocation	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:before/grant_expiry	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:before/evidence_failure	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r5_cas:before/contention	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:before/poison	sb3_matrix_r5_cas_before	r5_cas:before	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:before/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r5_cas:before	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_cas:before/emergency_state	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/failed	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closing_normal	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closing_restricted	sb3_matrix_r5_cas_before	r5_cas:before	at:model_cancelled:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:before	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_wall_narrowed	sb3_matrix_r5_cas_before	r5_cas:before	at:model_timeout:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:before/mission_mono_narrowed	sb3_matrix_r5_cas_before	r5_cas:before	at:model_timeout:refused:8	SB-3B1e-M
+SB3B1e-M/r5_cas:after/emergency	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/cancel_run	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/door_halt	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/quit	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/session_failure	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/q_expiry	sb3_matrix_r5_cas_after	r5_cas:after	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/mission_wall	sb3_matrix_r5_cas_after	r5_cas:after	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/mission_mono	sb3_matrix_r5_cas_after	r5_cas:after	next:model_timeout:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/native_halt	sb3_matrix_r5_cas_after	r5_cas:after	next:model_stopped:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/run_finish	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/grant_revocation	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:after/grant_expiry	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:refused:5	SB-3B1e-M
+SB3B1e-M/r5_cas:after/evidence_failure	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:refused:3	SB-3B1e-M
+SB3B1e-M/r5_cas:after/contention	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:after/poison	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:refused:hold	SB-3B1e-M
+SB3B1e-M/r5_cas:after/bootstrap	N/A:BOOTSTRAP_NO_MISSION(sb3_concurrent_operation_refuses_before_ticket)	r5_cas:after	no Q, run or original door before finish_bootstrap	SB-3B1e-M
+SB3B1e-M/r5_cas:after/emergency_state	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/failed	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closing_normal	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closing_restricted	sb3_matrix_r5_cas_after	r5_cas:after	next:model_cancelled:poll	SB-3B1e-M
+SB3B1e-M/r5_cas:after/sealed	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closed_clean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
+SB3B1e-M/r5_cas:after/closed_unclean	N/A:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)	r5_cas:after	seal needs a quiescent model slot; an active call blocks it	SB-3B1e-M
