@@ -109,6 +109,29 @@ pub(super) fn run(case: &str, p: bool) -> (Scenario, String) {
             let s = scenario(replies, p);
             let diag = format!("{:?}", within(&s.advance_bg()));
             assert_eq!(s.fx.model_invocations(), 1);
+            // Each schedule's exact response path (Cb2-R1).
+            let (want, n): (&[&str], usize) = match arg {
+                "one" => (&["ok"], 1),
+                "two" | "bad" => (&["ok", "ok"], 2),
+                _ => (&["failed:model_unavailable"], 1),
+            };
+            assert_eq!(results(&s), want);
+            assert_eq!(tally(&s), (n, n, n, n));
+            if arg == "one" || arg == "two" {
+                let o = s.output();
+                assert_eq!((o.verdict, o.effects.len()), (Verdict::Continue, 1));
+                assert_eq!((s.fx.dispatched(), staged(&s).len()), (1, 1), "staged File");
+                assert_eq!(s.m.state(s.id), Ok(Some(MissionState::AwaitingApproval)));
+            } else {
+                let code = if arg == "bad" {
+                    "model_draft_email"
+                } else {
+                    "model_unavailable"
+                };
+                failed(&s, code);
+                nothing_accepted(&s);
+                assert_eq!(s.fx.end(s.id), "fail:lane_fail:builder");
+            }
             (s, diag)
         }
         "invalidated" => invalidated(p),

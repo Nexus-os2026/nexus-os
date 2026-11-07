@@ -48,12 +48,13 @@ fn check(case: &str) {
     assert!(s.c.notes[0].text.starts_with("CB_NOTE_CANARY"));
     assert_eq!(s.c.page_facts.as_ref().unwrap().hours, [FACT]);
     if kind == "records" {
-        records(&s, &diag);
+        records(s, &diag, rest);
     } else {
         drafts(&s, rest);
     }
 }
-fn records(s: &Scenario, diag: &str) {
+fn records(owned: Scenario, diag: &str, case: &str) {
+    let s = &owned;
     let all = ["CB_NOTE_CANARY", "面包", FACT, REJECT, LATE, TRANSPORT];
     let o = s.output();
     let observed = s.seen.lock().unwrap().results.join(" ");
@@ -81,12 +82,14 @@ fn records(s: &Scenario, diag: &str) {
         broker.join("p3-evidence/evidence.sqlite3").is_file(),
         "evidence store"
     );
-    let ledger = broker.join("files/ledger.db").is_file();
+    let success = case == "plain/one" || case == "plain/two";
     assert_eq!(
-        ledger,
-        !staged(s).is_empty(),
-        "the file ledger exists with a File"
+        staged(s).len(),
+        usize::from(success),
+        "a success stages its File"
     );
+    let ledger = broker.join("files/ledger.db").is_file();
+    assert_eq!(ledger, success, "the file ledger exists with a File");
     let (n, mut stores) = tree(&broker);
     assert!(n > 1, "broker ledger/evidence files: {n}");
     // The staged File (facts + accepted prose) is the deliverable, not a record.
@@ -98,6 +101,51 @@ fn records(s: &Scenario, diag: &str) {
         stores = stores.replacen(&page, "", 1);
     }
     absent("broker ledger/evidence", &stores, &all);
+    let (attempts, charges, home) = (s.fx.attempts(), s.fx.charges(), s.fx.home.dir.clone());
+    // Release the native stores' locks after all live judgments.
+    drop(owned);
+    native(&home, attempts, charges, success);
+}
+/// Positively identify the native rows: read-only SQLite (existing Linux
+/// test convention: `python3`), once the scenario released its stores.
+fn native(home: &Path, attempts: usize, charges: usize, success: bool) {
+    let script = r#"
+import json, sqlite3, sys
+def q(db, sql):
+    with sqlite3.connect('file:' + sys.argv[1] + db + '?mode=ro', uri=True, timeout=1) as c:
+        return c.execute(sql).fetchall()
+calls = [json.loads(b)['detail'] for (b,) in q('/broker/p3-evidence/evidence.sqlite3', "SELECT body FROM record WHERE phase='model_call'")]
+consent = q('/broker/p3-evidence/evidence.sqlite3', "SELECT count(*) FROM record WHERE phase='mission_consented'")[0][0]
+ledger = q('/broker/files/ledger.db', "SELECT count(*) FROM coding_run_ledger")[0][0] if sys.argv[2] == '1' else 0
+print(json.dumps({'calls': len(calls), 'charged': sum('call' in d for d in calls), 'ops': sorted({d['op'] for d in calls}), 'consent': consent, 'ledger': ledger}))
+"#;
+    let out = std::process::Command::new("python3")
+        .args(["-I", "-c", script])
+        .arg(home)
+        .arg(if success { "1" } else { "0" })
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["consent"], 1, "the consent record");
+    assert_eq!(
+        v["calls"], attempts,
+        "one model_call record per native attempt"
+    );
+    assert_eq!(
+        v["charged"], charges,
+        "charged records match ModelCallCharged"
+    );
+    assert!(attempts == 0 || v["ops"] == serde_json::json!(["model_call"]));
+    assert_eq!(
+        v["ledger"].as_u64().unwrap() > 0,
+        success,
+        "File ledger rows"
+    );
 }
 fn drafts(s: &Scenario, case: &str) {
     let o = s.output();
