@@ -1827,4 +1827,28 @@ mod m3a_r13 {
             paused_handoff(HookPoint::Start, b"x\r", b_ready);
         }
     }
+
+    // M3E-R17: a snapshot the test path saved while read A was ready never
+    // publishes to read B, which began and became ready afterwards.
+    #[test]
+    fn m3e_m3a_r17_a_saved_snapshot_never_publishes_to_a_newer_read() {
+        let (c, frames) = scripted();
+        let shared = c.shared.clone();
+        let mut buffers = Buffers::default();
+        let (a, boundary) = begin_read(&shared, &frames, Duration::from_millis(1500));
+        route(&shared, &mut buffers, &[], true, false);
+        shared.acknowledge(boundary);
+        until_frame(&frames, "INPUT READY\n");
+        let saved = crate::terminal::reader_mode(&shared, None);
+        assert_eq!(a.join().unwrap(), Err("goal_timed_out"), "A ends");
+        let (b, boundary) = begin_read(&shared, &frames, Duration::from_secs(10));
+        route(&shared, &mut buffers, &[], true, false);
+        shared.acknowledge(boundary);
+        until_frame(&frames, "INPUT READY\n");
+        // The reader routes bytes it read under A's snapshot.
+        route(&shared, &mut buffers, b"x\r", saved.0, saved.1);
+        assert!(shared.input().goal_line.is_none(), "A's line is not B's");
+        type_in(&shared, &mut buffers, b"new goal\r");
+        assert_eq!(b.join().unwrap(), Ok("new goal".into()), "B's own line");
+    }
 }
