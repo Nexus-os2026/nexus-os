@@ -339,13 +339,6 @@ pub(super) struct Attempt {
     model_digest: Option<String>,
 }
 impl Attempt {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
-        )
-    )]
     pub(super) fn acquire(
         core: &Arc<Core>,
         authority: &Authority,
