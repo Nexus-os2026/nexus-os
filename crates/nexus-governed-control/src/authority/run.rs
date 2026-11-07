@@ -1912,16 +1912,24 @@ pub(crate) struct SessionAttempt {
     registry: Weak<RunRegistry>,
     cell: HaltCell,
 }
+/// SB-3B: the original door's retained File grant, with both clocks read
+/// before any hold; observed under the run table (run -> grant, try_lock).
+pub(crate) struct OriginalGrant<'a> {
+    pub(crate) grants: &'a super::policy::GrantStore,
+    pub(crate) grant: super::ids::GrantId,
+    pub(crate) clock: (u64, u64),
+}
 impl RunRegistry {
     // No producer/model hold is carried here. Ordinary calls are unchanged.
     pub(crate) fn admit_session_attempt(
         self: &Arc<Self>,
-        run: RunId,
-        agent: &AgentId,
-        group: GroupId,
-        identity: [u8; 32],
+        (run, agent, group, identity): (RunId, &AgentId, GroupId, [u8; 32]),
         original: &HaltCell,
+        grant: &OriginalGrant<'_>,
+        invocation: &crate::inference::InvocationObserver,
     ) -> Result<SessionAttempt, AuthorityError> {
+        // SB-3B interface only: enforced by the feat commit, not here.
+        let _ = (grant.grants, grant.grant, grant.clock, invocation);
         let mut table = self
             .runs
             .try_lock()

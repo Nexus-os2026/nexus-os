@@ -319,15 +319,16 @@ impl HostSession {
         }
     }
 }
-fn model_error(error: ModelError) -> SessionError {
+pub(super) fn model_error(error: ModelError) -> SessionError {
     SessionError::Backend(crate::inference::model_class(error))
 }
 
 // SB-2b accounting only: no transport, C1 meter or session dispatch route.
 use crate::authority::evidence::EndStatus;
 use crate::authority::ids::{AgentId, RunId};
-use crate::authority::run::{GroupId, RunRegistry, SessionAttempt};
-use crate::authority::Authority;
+use crate::authority::run::{GroupId, OriginalGrant, RunRegistry, SessionAttempt};
+use crate::authority::{Authority, AuthorityError};
+use crate::inference::InvocationObserver;
 pub(super) struct Attempt {
     owner: Owner,
     runs: Arc<RunRegistry>,
@@ -348,17 +349,15 @@ impl Attempt {
     pub(super) fn acquire(
         core: &Arc<Core>,
         authority: &Authority,
-        run: RunId,
-        agent: &AgentId,
-        group: GroupId,
-        identity: [u8; 32],
-    ) -> Result<Self, SessionError> {
+        (run, agent, group, identity): (RunId, &AgentId, GroupId, [u8; 32]),
+        original: &HaltCell,
+        grant: &OriginalGrant<'_>,
+        invocation: &InvocationObserver,
+    ) -> Result<Self, AuthorityError> {
+        let busy = |_| AuthorityError::Unavailable("model slot unavailable");
         let (mut owner, previous, model_digest) = {
-            let _producers = core
-                .producers
-                .try_lock()
-                .map_err(|_| SessionError::Unavailable)?;
-            let mut s = hold(core)?;
+            let _producers = core.producers.try_lock().map_err(|_| busy(()))?;
+            let mut s = hold(core).map_err(|_| busy(()))?;
             if core.cell.session_word() & (SEALED | FAILED) != 0
                 || s.active
                 || core.model.uncertain.load(Ordering::SeqCst)
@@ -369,7 +368,7 @@ impl Attempt {
                     .as_ref()
                     .is_some_and(|r| r.digest != identity || r.watch.check_now().is_err())
             {
-                return Err(SessionError::Restricted);
+                return Err(AuthorityError::Halted);
             }
             let previous = (s.attempt, s.owner_complete, s.child_complete, s.record);
             let digest = s.registration.as_ref().map(|r| r.model.view.digest.clone());
@@ -387,22 +386,21 @@ impl Attempt {
                 digest,
             )
         }; // Release producer and slot holds BEFORE the run table.
-        let ticket = match authority
-            .runs()
-            .admit_session_attempt(run, agent, group, identity, &core.cell)
-        {
+        let ticket = match authority.runs().admit_session_attempt(
+            (run, agent, group, identity),
+            original,
+            grant,
+            invocation,
+        ) {
             Ok(ticket) => ticket,
             Err(error) => {
                 #[cfg(test)]
                 crate::authority::file_session::probe(Some(&core.cell), "model.attempt.refused");
-                let mut s = completion_hold(core)?;
+                let mut s = completion_hold(core).map_err(|_| busy(()))?;
                 (s.attempt, s.owner_complete, s.child_complete, s.record) = previous;
                 s.active = false; // Conclusive pre-ticket refusal: no result owed.
                 owner.done = true;
-                return Err(match error {
-                    crate::authority::AuthorityError::ModelCall(e) => model_error(e),
-                    _ => SessionError::Restricted,
-                });
+                return Err(error);
             }
         };
         Ok(Self {
