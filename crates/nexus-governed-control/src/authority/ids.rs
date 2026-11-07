@@ -385,6 +385,27 @@ mod marker_tests {
     ];
     /// Harmless comments inside the production body.
     const COMMENTS: &[&str] = &["\n    // } temporary buffer", "\n    /* } */"];
+    /// Rebinding declarations whose tokens are split by whitespace or comments.
+    const REBINDS: &[&str] = &[
+        "extern\ncrate self as getrandom;\n\n",
+        "extern\ncrate self as\ngetrandom;\n\n",
+        "extern /* */ crate self as /* */ hex;\n\n",
+        "use ::std as\ngetrandom;\n\n",
+        "pub mod\thex {}\n\n",
+        "mod /**/ getrandom {}\n\n",
+        "mod r#hex {}\n\n",
+    ];
+    /// Literals a comment stripper can mis-lex, hiding later declarations.
+    const MISLEXED: &[&str] = &[
+        "const _: &str = r#\"/*\"#;\n\n",
+        "const _: &str = r\"\\\";\nconst _: &str = \"/*\";\nextern crate self as getrandom;\n// */\n\n",
+        "const _: &[u8] = br#\"x\"#;\n\n",
+        "const _: char = '\\\"';\nconst _: &str = \"/*\";\nextern crate self as hex;\n// */\n\n",
+        "const _: (char, char) = ('é','\"');\nconst _: &str = \"/*\";\nextern crate self as hex;\n// */\n\n",
+    ];
+    /// A second test-module header in production, truncating the checked section.
+    const FAKE_CUT: &str =
+        "\nconst _: &str = \"\n#[cfg(test)]\nmod marker_tests {\";\nextern crate self as hex;\n";
 
     /// The source with `insert` placed after the first `at` (the production one).
     fn edited(source: &str, at: &str, insert: &str, before: bool) -> String {
@@ -486,11 +507,25 @@ mod marker_tests {
         if approved(UNPINNED) {
             failures.push("relative getrandom/hex paths accepted".to_string());
         }
+        let doc = "/// A fresh page-framing marker";
         for shadow in SHADOWS {
-            let doc = "/// A fresh page-framing marker";
             if approved_source(&edited(source, doc, shadow, true)) {
                 failures.push(format!("shadow accepted: {shadow:?}"));
             }
+        }
+        for plant in REBINDS {
+            if approved_source(&edited(source, doc, plant, true)) {
+                failures.push(format!("split rebinding accepted: {plant:?}"));
+            }
+        }
+        for plant in MISLEXED {
+            if approved_source(&edited(source, doc, plant, true)) {
+                failures.push(format!("mis-lexable literal accepted: {plant:?}"));
+            }
+        }
+        let cut = "\n#[cfg(test)]\nmod marker_tests {";
+        if approved_source(&edited(source, cut, FAKE_CUT, true)) {
+            failures.push("second test-module header accepted".to_string());
         }
         for comment in COMMENTS {
             if !approved_source(&edited(source, SIGNATURE, comment, false)) {
