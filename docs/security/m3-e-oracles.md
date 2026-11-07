@@ -233,8 +233,16 @@ is a separate unit).
   interruption) is read on to its terminator as discarded goal input, never
   as a command. A command line left unfinished when goal mode starts is read
   on to its terminator in the command buffer (stale; only an exact `stop` or
-  `quit` acts); the goal starts after it. A LF after a CR belongs to the
-  buffer that took the CR. Stop, Quit and EOF always act.
+  `quit` acts); the goal starts after it. Stop, Quit and EOF always act.
+- **Line ownership (M3E-R13, supersedes R11's CR rule).** The reader keeps
+  one stream-level owner of the line under way: `None`, `Command`,
+  `Goal(read)`, `DiscardGoal` or `DiscardCommand`. The first byte of a line
+  sets it (any byte but a terminator, editing keys included); only CR, LF or
+  EOF clears it; it is never derived from buffer contents, so erasing a line
+  keeps its owner. A boundary or the end of its goal read makes a live owner
+  a discard owner. One stream-level `last_was_cr`: a LF directly after a CR
+  on the stream is that CR's partner; any other byte clears the flag. The
+  buffers are storage only. EOF acts at once and clears the line.
 - **Echo and editing.** Only `shown` characters are echoed; Backspace removes
   one scalar, Ctrl-U the line. The 64-byte command/code mode is unchanged.
 - **Display.** `teaching::t1` with the goal through `evidence::escaped`, then
@@ -256,6 +264,9 @@ is a separate unit).
 | `m3e_m3a_r11_stop_split_across_the_handoff_stops` | `st` in the gap, `op\r` after ready: Stop acts, no goal. |
 | `m3e_m3a_r11_quit_split_across_the_handoff_quits` | `qu` in the gap, `it\r` after ready: Quit acts, no goal. |
 | `m3e_m3a_r11_a_partial_command_line_finishes_before_the_goal` | `ab` in the gap, `cd\r`, then `goal\r`: the goal is `goal`; no command or line queued. |
+| `m3e_m3a_r13_generative_routing_keeps_i1_to_i5` | Through `route`, against the ruled stream semantics: every sequence of up to 4 over {s,t,o,p,q,u,i,r,n,a,' ',BS,^U,CR,LF,^D} × {ready, timeout} in both read groupings; every sequence of up to 6 over one byte of each class and both events; 200,000 seeded sequences of up to 7 tokens (a token may be `stop`, `quit`, `run` or half of one) with random grouping. I1 returned goals only from lines started in their ready read; I2 commands only from lines started in command mode; I3 exact `stop`/`quit` acts; I4 LF pairs only with the stream's preceding CR; I5 EOF acts. |
+| `m3e_m3a_r13_erasing_a_timed_out_goal_line_never_makes_a_command` | Review 2 MED, both timings: `Please `, timeout, `^U run\r`; `Please ^U`, timeout, `run\r`: no command or line; command mode resumes. |
+| `m3e_m3a_r13_an_old_cr_never_pairs_with_a_later_lf` | Review 2 LOW: `goal\r` returns `goal`; `status\n` is a command; in the next goal read a lone `\n` is `goal_empty`. |
 | `m3e_m3a_goal_file_given_refuses_typed_mode_and_debug_is_content_free` | `goal_already_given`, no prompt, goal mode never entered; canaries absent from `Debug`. |
 | `m3e_m3a_typed_and_file_goals_share_one_grammar` (host) | For each text, `validate_goal` equals the goal file's parse, with and without one final LF. |
 
