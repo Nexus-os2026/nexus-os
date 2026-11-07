@@ -14,6 +14,15 @@ fn main() -> std::process::ExitCode {
         };
         return std::process::ExitCode::from(code);
     }
+    // `check-page` anywhere else (after `--` too) is a malformed check, never
+    // a desktop start (M3E-R9).
+    if args.any(|arg| arg == "check-page") {
+        #[cfg(target_os = "linux")]
+        println!("{}", nexus_mother_host::check_page::USAGE);
+        #[cfg(not(target_os = "linux"))]
+        println!("ERROR unsupported_platform");
+        return std::process::ExitCode::from(2);
+    }
     let code = nexus_mother_desktop::app::main_entry();
     std::process::ExitCode::from(u8::try_from(code).unwrap_or(1))
 }
