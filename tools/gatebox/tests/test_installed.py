@@ -111,7 +111,10 @@ class InstallReviewOracles(unittest.TestCase):
     def test_empty_command_has_an_authenticated_empty_capture(self):
         init = load('init'); events = []
         runner = init.Runner(111,222)
-        with patch.object(init,'packet',side_effect=lambda fd,value: events.append((fd,value))):
+        options = init.child_options
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(init,'child_options',side_effect=lambda fd: dict(options(fd),cwd=directory)), \
+                patch.object(init,'packet',side_effect=lambda fd,value: events.append((fd,value))):
             name,code,output = runner.command('format',[os.sys.executable,'-I','-c','pass'])
         self.assertEqual((code,output),(0,''))
         self.assertIn((111,{'id':name,'data':''}),events)
