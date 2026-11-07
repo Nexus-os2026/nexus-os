@@ -105,6 +105,16 @@ impl PortDoor {
             },
         }
     }
+    /// M3-Db: the door's existing receipt lookup, forwarded unchanged.
+    pub(super) fn file_receipt(
+        &self,
+        id: CommitmentId,
+    ) -> Option<nexus_governed_control::files::FileReceipt> {
+        match self {
+            Self::Legacy(door) => door.file_receipt(id),
+            Self::Session(door) => door.file_receipt(id),
+        }
+    }
     pub(super) fn cancel_run(&self, run: RunId) -> Result<RecordBatch, AuthorityError> {
         match self {
             Self::Legacy(door) => door.cancel_run(run),

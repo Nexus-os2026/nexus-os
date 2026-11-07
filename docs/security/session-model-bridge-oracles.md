@@ -846,3 +846,65 @@ all targets, -D warnings, after 9d8d73ba removed the now-fulfilled
 `Attempt::acquire` dead-code expectation); diff --check. Repeats: 10 serial
 and 10 parallel runs of `host_session::model`, 46/46 each. Size: B1a vs
 c3bffa92 recorded in the report.
+
+### 13.4 SB3B-R5 (B1a review-1) corrections and carry
+Claims corrected (ruling 2): lock contention at the admission predicates
+(R3 grant store and run table) never latches; a pre-ticket refusal leaves
+the slot untouched UNLESS its rollback completion hold expires, which
+latches uncertainty and session failure per the retained SB-2b contract
+(oracle `sb3_attempt_rollback_hold_expiry_latches_uncertainty`). §13.1's
+"no active slot" holds only for refusals whose rollback completes.
+Carry (ruling 3, LOW, inherited): R3 still reaches clock callbacks under
+the run-table hold (`cell.admit()` -> `RequestScope::eligible()` mission
+clocks; earlier `is_engaged()` checks). B1b's call gate must capture every
+clock value before taking a hold, and its oracles must include a
+blocking-clock control.
+Ruling 1 (grant TOCTOU) and ruling 4 (escaped char literals in the F11
+masker): oracles in 206cf993; the fix is pending an Architect question
+(the grant-store guard lives in policy.rs, outside the B allowlist).
+
+### 13.5 SB3B-R6: oracle-fix, grant hold and F11 masker
+Oracle-fix (found after implementation, approved in SB3B-R6 (2); commit
+3dff6ce7): the SB3B-R5 (1) oracle revoked on the admitting thread inside
+the `model.attempt.granted` probe, so under the ruled fix it waited for
+the grant-store mutex its own thread held. Evidence: the test was still
+running past 60 s and the run ended with timeout exit 124. Replacement
+`sb3_attempt_grant_revocation_cannot_precede_the_cas` starts the revoker
+on another thread at that probe and waits for it at most 2 s. If the
+revocation completed before the CAS, admission must have been refused.
+The revocation must land either way, and a refusal leaves nothing behind.
+The 2 s wait only bounds the test. A slow revoker can only let a mutant
+survive; it can never fail correct code, because under the hold the
+revoker cannot complete before the CAS whatever its speed.
+Fix (8eed8f2d; policy.rs allowlist per SB3B-R6 (1), guard return only):
+- `GrantStore::try_live_at` returns the held store guard.
+- R3 keeps it (run -> grant, try_lock only) through the observer read,
+  Q's CAS and the count/pin mutation. A revocation lands before the
+  observation (refused) or after the CAS (the entered interval).
+- R2 keeps the same guard through its CAS.
+- The F11 masker blanks escaped and byte char literals
+  (`'\''`, `'\"'`, `'\\'`, `b'..'`).
+Carry unchanged: the §13.4 clock-callback LOW goes to B1b.
+Receipts (local, final code head 8eed8f2d + this record). RED: 3dff6ce7
+failed at "a grant revoked before the CAS admitted", and the 206cf993
+escaped-literal controls failed at "escaped literal '\"'". GREEN: 48/48
+`host_session::model`. Plants, all on the final head, each restored by
+sha256 and each killed at its named assertion:
+- the 15 plants of §13.3;
+- guard released before the CAS (`let _ = grant.live(..)?`), "a grant
+  revoked before the CAS admitted", 10/10 runs;
+- F11 escaped-quote leak (`'\"'` before an ungated probe), "model.rs: a
+  seam reachable outside cfg(test)";
+- rollback hold failure that marks the owner done without latching,
+  "uncertainty and failure latched". A first mutant returned early with
+  `?`; `Owner`'s Drop latched anyway, so that mutant was ill-formed and
+  was replaced.
+Gates, each binary alone:
+- governed-control lib 893/893
+- Mother lib 316/316
+- host --no-fail-fast 166/166
+- m2e_a2_guards 54/54
+- m2e_transport_guards 39/39
+- fmt; clippy (3 crates, all targets, -D warnings); diff --check
+Repeats: 10 serial and 10 parallel runs of `host_session::model`, 48/48
+each.
