@@ -108,6 +108,19 @@ def acceptance_check(identity,value,state,authenticate):
                     or provenance.get('codex') != 'unsupported (runner denies AF_UNIX)'):
                 raise ValueError('CLIENTS provenance missing or unbound')
 
+def preflight_accounts(submitter):
+    users,groups = pwd.getpwall(),grp.getgrall()
+    submit = next(u for u in users if u.pw_name==submitter)
+    if submit.pw_uid==0: raise ValueError('non-root submitter required')
+    for user in users:
+        if user.pw_name in (submitter,'mothergate','gaterun'):
+            if sum(u.pw_uid==user.pw_uid for u in users)!=1: raise ValueError('shared gate/submitter UID')
+    group = next((g for g in groups if g.gr_name=='gatesubmit'),None)
+    if group and (any(u.pw_gid==group.gr_gid and u.pw_name!=submitter for u in users)
+                  or any(n!=submitter for g in groups if g.gr_gid==group.gr_gid for n in g.gr_mem)):
+        raise ValueError('unexpected gatesubmit member')
+    return submit
+
 def account(name):
     try: entry = pwd.getpwnam(name)
     except KeyError:
@@ -187,6 +200,7 @@ def main():
     for path in ('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu','/home/nexus/.cargo/registry'):
         if not Path(path).is_dir() or not any(Path(path).iterdir()): raise ValueError('missing offline input: '+path)
     protected(Path('/opt/google/chrome/chrome'))
+    preflight_accounts(args.submit_user)
     manager,payload = account('mothergate'),account('gaterun')
     if manager.pw_uid == payload.pw_uid or manager.pw_gid == payload.pw_gid: raise ValueError('distinct identities required')
     with tempfile.TemporaryDirectory(prefix='.gatebox-',dir='/etc') as temporary:
