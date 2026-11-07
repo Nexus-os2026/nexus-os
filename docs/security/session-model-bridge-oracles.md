@@ -757,3 +757,154 @@ stored entry's `view.id` to equal the requested run). No check is unmapped.
 | host_prerequisites consent life epoch/!halted/!closed (325-327) | `c.life == now` 2074 |
 | host_prerequisites only if Files admitted (319) | stricter: NotAdmitted 2117 |
 | admissible Stop / closing (shared) | 2059 / 2062 |
+
+## 13. SB-3 unit B re-split (SB3B-R1/R2/R3, 2026-11-07)
+B is split by implementation seam (SB3B-R3 option c). **B1a** (this branch,
+`mother/sb3b-private-call`): R3 attempt admission. **B1b**
+(`mother/sb3b1b-call-gate`, stacked): the R5 call gate and its oracles,
+with test-only **B1e** only if B1b exceeds 1,500. **B2**: close/death.
+Commit `a15b5ee0` froze B1 oracles on stubs; its call-gate oracles and
+stubs move out of this tree (amend commit) and are carried to B1b
+unchanged, where the SB3B-R2 gap oracles are added. 9c81d0d5: SB-2b
+assertions unchanged except the disclosed fixture-helper substitution in
+`sb2_attempt_binding_refusals_issue_no_ticket` (whitespace-normalised
+full macros 145 = 145; not literal byte identity of every assertion).
+
+### 13.1 B1a mapping and frozen oracles (SB3B-R3)
+Production (feat, after the spec re-check): `admit_session_attempt` gains
+the retained-grant predicate (`OriginalGrant::live`, `try_live_at`, Files
+scope = run workspace), the invocation observer last before Q's CAS, and
+run-table poison failing the session; `SessionDoor::admit_attempt_private`
+(pub(super), dead-code expect; wired by B1b) refuses a Continuation
+(`halted`), a conversation (`model_config_mismatch`), a dead Q or revoked
+invocation (`halted`), no registration (`model_not_registered`) and a run
+other than Q's File run (`not_member`) before acquisition. No transport,
+meter, gate, charge latch or backstop lands here (B1b).
+Oracles (`model_call_tests.rs`, RED on the deny-only stub = first assertion,
+`halted`): G0-R3/F2-R3/F8 `sb3_attempt_admission_requires_the_original_grant`
+(revoked, expired, scope, substituted live grant: `grant_not_live`; grant
+contention `unavailable` without latch; grant and run-table poison latch
+failure; no attempt, pin, record or active slot); L2-R3/F1-R3
+`sb3_attempt_admission_observes_invocation_last` (before acquisition, at
+the reserved boundary, dual fault grant-before-observer, ingress wins the
+CAS, revocation after the read is the entered interval); R4/F12
+`sb3_private_attempt_refuses_before_ticket`; A1
+`sb3_attempt_ceiling_is_eight_on_the_original_run`; A3/F7
+`sb3_attempt_record_and_pin_are_exact` (exact ordinal, one correlated
+record across cancel/finish/capacity; substituted ordinal never settles,
+debt latched); F11 `sb3_b1a_test_seams_are_test_only` (comment- and
+string-masked scan: every `probe`, `tamper_for_test`, `model_pins_for_test`
+and the `model_call_tests` module is under `#[cfg(test)]`; GREEN on the stub
+because the seams are already gated; leak plants are its RED evidence).
+F8 at R3: no meter is reachable before a ticket in B1a; zero charges are
+re-asserted where the meter first exists (B1b). Seams (B1a): probe
+`model.attempt.reserved`, `tamper_for_test("pin")`, `model_pins_for_test`,
+SB-3A `door_with`. Carried: F5 composed zeros and F7 Mother withholding to
+C/D (SB3B-R3 1, 2). Figures (additions + deletions vs c3bffa92): this
+oracle tree 687; forecast feat +86 (run.rs 41, model.rs 45); B1a about 783
+with receipts, under the 1,500 cap. B1b is forecast separately on its branch.
+
+### 13.2 SB3B-R4 B1a gap oracles (re-check of e137e136, 5 MED)
+(1) F11 rewritten: nested block comments masked; a statement start is
+found at its own nesting, so an enclosing parenthesis never borrows a
+sibling statement's attribute; regression controls are the two crafted
+leaks (sibling attribute, nested comment) and a gated control; both crafted
+cases pass the e137e136 scanner (RED shown on it). New seams
+`model.attempt.granted`, `tamper_for_test("identity")`,
+`model_ledger_for_test` are scanned. (2) `sb3_attempt_observer_is_read_after_the_grant`:
+a revocation at `model.attempt.granted` (after the grant, before the read)
+refuses; an early cached read admits. (3)
+`sb3_attempt_contention_and_poison_latch_exactly`: R3 grant and run-table
+contention `unavailable` with uncertain and Failed both false; grant and
+run-table poison latch Failed; each with no attempt, pin, record, active
+slot or binding change. (4) `sb3_attempt_grant_clocks_and_identity_are_independent`:
+monotonic-only and wall-only expiry (SplitClock) and same-id different
+workspace identity each `grant_not_live`. (5) every pre-ticket refusal
+(`nothing`) compares the retained binding before/after (Debug bytes and
+equality; poison-tolerant ledger).
+
+### 13.3 SB-3B1a receipts (local, final head 9d8d73ba + this record)
+RED: e137e136 stub 38 passed / 5 failed, f572d111 stub 38 / 8, each new
+oracle at its first assertion; F11 controls fail on the e137e136 scanner.
+GREEN: 46/46 `host_session::model`. Plants (15, each killed at the named
+assertion, files restored by sha256): MP-SB-3-grant-ignore "R3 revoked";
+-grant-substitute "R3 substitute"; MP-SB-4-conversation "conversation";
+MP-SB-5-count "attempt 1 never refunded"; -pin "the exact ordinal"; -slot
+"slot debt latched"; MP-SB-A1-R3-ignore "R3 observes the invocation";
+early cached observer read "read after the grant"; contention setting
+uncertainty "grants: contention latches nothing"; wall clock dropped "R3
+wall"; monotonic clock dropped "R3 monotonic"; identity comparison removed
+"R3 identity"; binding cleared on refusal "revoked: binding"; F11 sibling
+leak and nested-comment leak "model.rs: a seam reachable outside
+cfg(test)". Gates, each binary alone: governed-control lib 891/891; Mother
+lib 316/316; host --no-fail-fast 166/166 (on c0b82242 and on a rerun at
+9d8d73ba; one run at 9d8d73ba failed `hands_tests::review2_receipts_while_recovery_reporting_is_held`
+at a PTY transcript wait, not reproduced in 10 isolated runs or the full
+rerun; no host or Mother code changed; recorded, not classified);
+m2e_a2_guards 54/54; m2e_transport_guards 39/39; fmt; clippy (3 crates,
+all targets, -D warnings, after 9d8d73ba removed the now-fulfilled
+`Attempt::acquire` dead-code expectation); diff --check. Repeats: 10 serial
+and 10 parallel runs of `host_session::model`, 46/46 each. Size: B1a vs
+c3bffa92 recorded in the report.
+
+### 13.4 SB3B-R5 (B1a review-1) corrections and carry
+Claims corrected (ruling 2): lock contention at the admission predicates
+(R3 grant store and run table) never latches; a pre-ticket refusal leaves
+the slot untouched UNLESS its rollback completion hold expires, which
+latches uncertainty and session failure per the retained SB-2b contract
+(oracle `sb3_attempt_rollback_hold_expiry_latches_uncertainty`). §13.1's
+"no active slot" holds only for refusals whose rollback completes.
+Carry (ruling 3, LOW, inherited): R3 still reaches clock callbacks under
+the run-table hold (`cell.admit()` -> `RequestScope::eligible()` mission
+clocks; earlier `is_engaged()` checks). B1b's call gate must capture every
+clock value before taking a hold, and its oracles must include a
+blocking-clock control.
+Ruling 1 (grant TOCTOU) and ruling 4 (escaped char literals in the F11
+masker): oracles in 206cf993; the fix is pending an Architect question
+(the grant-store guard lives in policy.rs, outside the B allowlist).
+
+### 13.5 SB3B-R6: oracle-fix, grant hold and F11 masker
+Oracle-fix (found after implementation, approved in SB3B-R6 (2); commit
+3dff6ce7): the SB3B-R5 (1) oracle revoked on the admitting thread inside
+the `model.attempt.granted` probe, so under the ruled fix it waited for
+the grant-store mutex its own thread held. Evidence: the test was still
+running past 60 s and the run ended with timeout exit 124. Replacement
+`sb3_attempt_grant_revocation_cannot_precede_the_cas` starts the revoker
+on another thread at that probe and waits for it at most 2 s. If the
+revocation completed before the CAS, admission must have been refused.
+The revocation must land either way, and a refusal leaves nothing behind.
+The 2 s wait only bounds the test. A slow revoker can only let a mutant
+survive; it can never fail correct code, because under the hold the
+revoker cannot complete before the CAS whatever its speed.
+Fix (8eed8f2d; policy.rs allowlist per SB3B-R6 (1), guard return only):
+- `GrantStore::try_live_at` returns the held store guard.
+- R3 keeps it (run -> grant, try_lock only) through the observer read,
+  Q's CAS and the count/pin mutation. A revocation lands before the
+  observation (refused) or after the CAS (the entered interval).
+- R2 keeps the same guard through its CAS.
+- The F11 masker blanks escaped and byte char literals
+  (`'\''`, `'\"'`, `'\\'`, `b'..'`).
+Carry unchanged: the §13.4 clock-callback LOW goes to B1b.
+Receipts (local, final code head 8eed8f2d + this record). RED: 3dff6ce7
+failed at "a grant revoked before the CAS admitted", and the 206cf993
+escaped-literal controls failed at "escaped literal '\"'". GREEN: 48/48
+`host_session::model`. Plants, all on the final head, each restored by
+sha256 and each killed at its named assertion:
+- the 15 plants of §13.3;
+- guard released before the CAS (`let _ = grant.live(..)?`), "a grant
+  revoked before the CAS admitted", 10/10 runs;
+- F11 escaped-quote leak (`'\"'` before an ungated probe), "model.rs: a
+  seam reachable outside cfg(test)";
+- rollback hold failure that marks the owner done without latching,
+  "uncertainty and failure latched". A first mutant returned early with
+  `?`; `Owner`'s Drop latched anyway, so that mutant was ill-formed and
+  was replaced.
+Gates, each binary alone:
+- governed-control lib 893/893
+- Mother lib 316/316
+- host --no-fail-fast 166/166
+- m2e_a2_guards 54/54
+- m2e_transport_guards 39/39
+- fmt; clippy (3 crates, all targets, -D warnings); diff --check
+Repeats: 10 serial and 10 parallel runs of `host_session::model`, 48/48
+each.

@@ -319,15 +319,16 @@ impl HostSession {
         }
     }
 }
-fn model_error(error: ModelError) -> SessionError {
+pub(super) fn model_error(error: ModelError) -> SessionError {
     SessionError::Backend(crate::inference::model_class(error))
 }
 
 // SB-2b accounting only: no transport, C1 meter or session dispatch route.
 use crate::authority::evidence::EndStatus;
 use crate::authority::ids::{AgentId, RunId};
-use crate::authority::run::{GroupId, RunRegistry, SessionAttempt};
-use crate::authority::Authority;
+use crate::authority::run::{GroupId, OriginalGrant, RunRegistry, SessionAttempt};
+use crate::authority::{Authority, AuthorityError};
+use crate::inference::{InvocationObserver, ModelRequest};
 pub(super) struct Attempt {
     owner: Owner,
     runs: Arc<RunRegistry>,
@@ -338,27 +339,18 @@ pub(super) struct Attempt {
     model_digest: Option<String>,
 }
 impl Attempt {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-2b: private accounting, wired by SB-3; session route unavailable"
-        )
-    )]
     pub(super) fn acquire(
         core: &Arc<Core>,
         authority: &Authority,
-        run: RunId,
-        agent: &AgentId,
-        group: GroupId,
-        identity: [u8; 32],
-    ) -> Result<Self, SessionError> {
+        (run, agent, group, identity): (RunId, &AgentId, GroupId, [u8; 32]),
+        original: &HaltCell,
+        grant: &OriginalGrant<'_>,
+        invocation: &InvocationObserver,
+    ) -> Result<Self, AuthorityError> {
+        let busy = |_| AuthorityError::Unavailable("model slot unavailable");
         let (mut owner, previous, model_digest) = {
-            let _producers = core
-                .producers
-                .try_lock()
-                .map_err(|_| SessionError::Unavailable)?;
-            let mut s = hold(core)?;
+            let _producers = core.producers.try_lock().map_err(|_| busy(()))?;
+            let mut s = hold(core).map_err(|_| busy(()))?;
             if core.cell.session_word() & (SEALED | FAILED) != 0
                 || s.active
                 || core.model.uncertain.load(Ordering::SeqCst)
@@ -369,7 +361,7 @@ impl Attempt {
                     .as_ref()
                     .is_some_and(|r| r.digest != identity || r.watch.check_now().is_err())
             {
-                return Err(SessionError::Restricted);
+                return Err(AuthorityError::Halted);
             }
             let previous = (s.attempt, s.owner_complete, s.child_complete, s.record);
             let digest = s.registration.as_ref().map(|r| r.model.view.digest.clone());
@@ -387,22 +379,23 @@ impl Attempt {
                 digest,
             )
         }; // Release producer and slot holds BEFORE the run table.
-        let ticket = match authority
-            .runs()
-            .admit_session_attempt(run, agent, group, identity, &core.cell)
-        {
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "model.attempt.reserved");
+        let ticket = match authority.runs().admit_session_attempt(
+            (run, agent, group, identity),
+            original,
+            grant,
+            invocation,
+        ) {
             Ok(ticket) => ticket,
             Err(error) => {
                 #[cfg(test)]
                 crate::authority::file_session::probe(Some(&core.cell), "model.attempt.refused");
-                let mut s = completion_hold(core)?;
+                let mut s = completion_hold(core).map_err(|_| busy(()))?;
                 (s.attempt, s.owner_complete, s.child_complete, s.record) = previous;
                 s.active = false; // Conclusive pre-ticket refusal: no result owed.
                 owner.done = true;
-                return Err(match error {
-                    crate::authority::AuthorityError::ModelCall(e) => model_error(e),
-                    _ => SessionError::Restricted,
-                });
+                return Err(error);
             }
         };
         Ok(Self {
@@ -568,5 +561,66 @@ impl SessionDoor {
                 grant: file_grant,
                 clock,
             })
+    }
+}
+
+// SB-3B1a R3: the private original-door attempt admission; no public route.
+impl SessionDoor {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-3B1a: private attempt, wired by SB-3B1b; session route unavailable"
+        )
+    )]
+    pub(super) fn admit_attempt_private(
+        &self,
+        run: RunId,
+        request: &ModelRequest,
+        invocation: &InvocationObserver,
+    ) -> Result<Attempt, AuthorityError> {
+        let DoorKind::Original { file_grant } = self.kind else {
+            return Err(AuthorityError::Halted); // A continuation never calls.
+        };
+        if request.is_conversation() {
+            return Err(AuthorityError::ModelCall(ModelError::ConfigMismatch));
+        }
+        if !self.context.scope.live(self.core.cell.session_word()) || invocation.is_revoked() {
+            return Err(AuthorityError::Halted);
+        }
+        // Installed M, observed without waiting; released before the run table.
+        let identity = {
+            let s = hold(&self.core).map_err(|_| AuthorityError::Unavailable("model slot"))?;
+            let r = s
+                .registration
+                .as_ref()
+                .ok_or(AuthorityError::ModelNotRegistered)?;
+            if self.core.model.uncertain.load(Ordering::SeqCst) || r.watch.check_now().is_err() {
+                return Err(AuthorityError::Halted);
+            }
+            r.digest
+        };
+        let backend = self.door.session_backend();
+        let q = self.context.scope.mother_run.get();
+        if !q.is_some_and(|(control, known)| control.ptr_eq(&backend) && *known == run) {
+            return Err(AuthorityError::NotMember); // Q's own File run only.
+        }
+        let control = backend.upgrade().ok_or(AuthorityError::Halted)?;
+        let authority = control.authority();
+        let clock = authority.clock();
+        let grant = OriginalGrant {
+            grants: authority.grants(),
+            grant: file_grant,
+            clock: (clock.monotonic_ms(), clock.wall_ms()),
+        };
+        let key = (run, self.door.agent(), self.door.origin(), identity);
+        Attempt::acquire(
+            &self.core,
+            authority,
+            key,
+            &self.context.cell,
+            &grant,
+            invocation,
+        )
     }
 }
