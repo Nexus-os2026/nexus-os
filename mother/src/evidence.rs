@@ -591,9 +591,12 @@ pub enum BlockReason {
     ModelNotPinned,
     ModelIdentityChanged,
     ModelAdmissionRefused,
+    /// M3-Db (Db-R1 M3): a page's observed publication settled without the
+    /// broker's receipt.
+    ReceiptMissing,
 }
 
-const BLOCK_CODES: [(BlockReason, &str); 21] = [
+const BLOCK_CODES: [(BlockReason, &str); 22] = [
     (BlockReason::WaitUnknown, "wait_unknown"),
     (BlockReason::ApprovalNotClosed, "approval_not_closed"),
     (BlockReason::WaitedRestUnreadable, "waited_rest_unreadable"),
@@ -642,6 +645,7 @@ const BLOCK_CODES: [(BlockReason, &str); 21] = [
         BlockReason::ModelAdmissionRefused,
         "model_admission_refused",
     ),
+    (BlockReason::ReceiptMissing, "receipt_missing"),
 ];
 
 /// M2d-C round 4 (addendum 5): what the Owner is told of a mission ended
@@ -856,28 +860,47 @@ impl BlockReason {
 
 by_code!(BlockReason);
 
-/// Why a lane failed a mission (its reason is working detail).
+/// Why a lane failed a mission (its reason is working detail), or why an
+/// M3 page's publication proof could not be recorded (M3-Db, terminal).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FailReason {
     LaneFail(LaneRole),
+    ReceiptMissing,
+    ReceiptPolicyMissing,
+    DeliverableInvalid,
 }
+
+const PROOF_FAILS: [(FailReason, &str); 3] = [
+    (FailReason::ReceiptMissing, "receipt_missing"),
+    (FailReason::ReceiptPolicyMissing, "receipt_policy_missing"),
+    (FailReason::DeliverableInvalid, "deliverable_invalid"),
+];
 
 impl FailReason {
     pub fn as_str(&self) -> String {
         match self {
             FailReason::LaneFail(role) => format!("lane_fail:{}", role.as_str()),
+            proof => PROOF_FAILS
+                .iter()
+                .find(|(reason, _)| reason == proof)
+                .map_or_else(String::new, |(_, code)| (*code).to_string()),
         }
     }
 
     pub fn parse(text: &str) -> Option<Self> {
+        if let Some((reason, _)) = PROOF_FAILS.iter().find(|(_, code)| *code == text) {
+            return Some(*reason);
+        }
         role(text.strip_prefix("lane_fail:")?).map(FailReason::LaneFail)
     }
 
     pub fn every() -> Vec<Self> {
-        LaneRole::ALL
+        let mut every: Vec<Self> = LaneRole::ALL
             .iter()
             .map(|r| FailReason::LaneFail(*r))
-            .collect()
+            .collect();
+        every.extend(PROOF_FAILS.iter().map(|(reason, _)| *reason));
+        every
     }
 }
 
@@ -1079,6 +1102,20 @@ pub fn check(event: &Event) -> Result<(), ReplayViolation> {
         | Event::Resumed
         | Event::SettlementStarted { .. }
         | Event::FileModeSelected => true,
+        Event::DeliverableRetained { sha256, bytes, .. } => is_digest(sha256) && is_size(*bytes),
+        Event::PublicationReceipt {
+            action,
+            sha256,
+            bytes,
+            policy_hash,
+            ..
+        } => {
+            is_digest(sha256)
+                && policy_hash.as_deref().is_none_or(is_digest)
+                && is_size(*bytes)
+                && RunId::parse(&action.run).is_some()
+                && CommitmentId::parse(&action.commitment).is_some()
+        }
     };
     if ok {
         Ok(())

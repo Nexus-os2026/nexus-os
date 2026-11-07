@@ -1,9 +1,14 @@
 //! M3-Ca: private, pure request data. No production caller or route.
 #![allow(dead_code)] // Private until the separately approved Cb binding.
 mod assemble;
+#[cfg(test)]
+pub(crate) mod cb_fixtures;
+#[cfg(test)]
+mod cb_oracles;
 mod draft;
 #[cfg(test)]
 mod fixtures;
+pub(crate) mod lane;
 #[cfg(test)]
 mod oracles;
 mod prompt;
@@ -124,4 +129,14 @@ impl Builder {
             }
         }
     }
+}
+
+/// Readiness only: no caller, model route, correction or effect construction.
+pub(crate) fn facts_page_ready(facts: &ApprovedFacts) -> bool {
+    assemble::facts_ready(facts).is_ok()
+}
+
+#[cfg(test)]
+pub(crate) fn take_file_constructions_for_test() -> usize {
+    assemble::constructions()
 }
