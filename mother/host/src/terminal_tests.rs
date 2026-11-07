@@ -1024,8 +1024,9 @@ mod m3a_r13 {
     use super::scripted;
     use crate::goal_input::GOAL_PROMPT;
     use crate::inputs::{validate_goal, InputError};
-    use crate::terminal::{route, Buffers, Frame, Shared};
+    use crate::terminal::{reader_state, route, route_read, Buffers, Frame, HookPoint, Shared};
     use std::sync::mpsc::Receiver;
+    use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
     const WAIT: Duration = Duration::from_secs(5);
@@ -1048,14 +1049,42 @@ mod m3a_r13 {
         Goal(u64),
         Stale,
     }
+    /// A goal read event: one begins (not yet ready), or the current one
+    /// times out.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum Ev {
+        Ready,
+        Timeout,
+    }
+    /// M3E-R15: one read with its events inside it (`(i, ev)`: before byte
+    /// `i`; `i == len`: before publication), or an event between reads.
+    #[derive(Clone, Debug)]
+    enum Step {
+        Read(Vec<u8>, Vec<(usize, Ev)>),
+        Gap(Ev),
+    }
+    /// Commands the queue takes even while a goal read is active.
+    const KINDS: [&str; 8] = [
+        "run",
+        "approve",
+        "undo",
+        "cleanup",
+        "detail",
+        "status",
+        "evidence",
+        "lift-for-undo",
+    ];
     /// The ruled semantics, stated over the stream (never over a buffer).
     #[derive(Default)]
     struct Model {
-        reading: Option<u64>,
+        /// The goal read under way: its id, and whether it is ready.
+        active: Option<(u64, bool)>,
         reads: u64,
         last_cr: bool,
         line: Option<(Start, Vec<u8>)>,
         commands: Vec<String>,
+        lines: Vec<String>,
+        published: Option<(u64, Goal)>,
         goals: Vec<(u64, Goal)>,
         stopped: bool,
         quit_first: bool,
@@ -1063,28 +1092,58 @@ mod m3a_r13 {
         eof: bool,
     }
     impl Model {
-        fn ready(&mut self) -> bool {
-            if self.closed || self.reading.is_some() {
-                return false;
-            }
-            self.reads += 1;
-            self.reading = Some(self.reads);
-            if let Some((start @ Start::Command, _)) = &mut self.line {
-                *start = Start::Stale;
-            }
-            true
-        }
-        fn end_read(&mut self) {
-            self.reading = None;
-            if let Some((start @ Start::Goal(_), _)) = &mut self.line {
-                *start = Start::Stale;
+        fn event(&mut self, ev: Ev) {
+            match ev {
+                Ev::Ready if !self.closed && self.active.is_none() => {
+                    self.reads += 1;
+                    self.active = Some((self.reads, false));
+                }
+                Ev::Timeout if self.active.is_some() => {
+                    self.active = None;
+                    self.published = None;
+                }
+                _ => {}
             }
         }
-        /// One read (one `route` call).
-        fn read(&mut self, bytes: &[u8]) {
-            let mut stale_rest = false;
+        fn stale(&mut self) {
+            if let Some((start, _)) = &mut self.line {
+                *start = Start::Stale;
+            }
+        }
+        /// Between reads: the goal read's worker, then the reader's
+        /// boundary for a read not yet ready (invalidate, acknowledge, ready).
+        fn gap(&mut self) {
+            if let Some((_, ready)) = self.active {
+                if self.closed {
+                    self.active = None;
+                    self.published = None;
+                } else if let (true, Some(goal)) = (ready, self.published.take()) {
+                    self.goals.push(goal);
+                    self.active = None;
+                }
+            }
+            if let Some((r, false)) = self.active {
+                self.stale();
+                self.lines.clear();
+                self.active = Some((r, true));
+            }
+        }
+        /// One read: its mode is the snapshot at its start.
+        fn read(&mut self, bytes: &[u8], events: &[(usize, Ev)]) {
+            let snap = match self.active {
+                Some((r, true)) => Some(r),
+                _ => None,
+            };
+            let discard = matches!(self.active, Some((_, false)));
+            if discard {
+                self.stale();
+            }
+            let mut stale_rest = discard;
             let mut pending = None;
-            for &b in bytes {
+            for (i, &b) in bytes.iter().enumerate() {
+                for (_, ev) in events.iter().filter(|(at, _)| *at == i) {
+                    self.event(*ev);
+                }
                 let partner = b == b'\n' && self.last_cr;
                 self.last_cr = b == b'\r';
                 if partner {
@@ -1097,12 +1156,17 @@ mod m3a_r13 {
                     self.closed = true;
                     continue;
                 }
-                let mode = match self.reading {
+                let mode = match snap {
                     _ if stale_rest => Start::Stale,
                     Some(r) => Start::Goal(r),
                     None => Start::Command,
                 };
-                let (start, mut text) = self.line.take().unwrap_or((mode, Vec::new()));
+                let (mut start, mut text) = self.line.take().unwrap_or((mode, Vec::new()));
+                if matches!(start, Start::Goal(r) if snap != Some(r))
+                    || (start == Start::Command && snap.is_some())
+                {
+                    start = Start::Stale;
+                }
                 match b {
                     b'\r' | b'\n' => {}
                     0x7f => {
@@ -1127,7 +1191,12 @@ mod m3a_r13 {
                     self.quit_first |= !self.closed;
                     self.closed = true;
                 } else if start == Start::Command && !text.is_empty() {
-                    self.commands.push(String::from_utf8(text.clone()).unwrap());
+                    let name = String::from_utf8(text.clone()).unwrap();
+                    if self.active.is_some() && !KINDS.contains(&name.as_str()) {
+                        self.lines.push(name);
+                    } else {
+                        self.commands.push(name);
+                    }
                 }
                 if let Start::Goal(r) = start {
                     stale_rest = true;
@@ -1136,12 +1205,13 @@ mod m3a_r13 {
                     }
                 }
             }
-            if self.reading.is_some() {
-                if self.closed {
-                    self.end_read();
-                } else if let Some(goal) = pending {
-                    self.goals.push(goal);
-                    self.end_read();
+            for (_, ev) in events.iter().filter(|(at, _)| *at >= bytes.len()) {
+                self.event(*ev);
+            }
+            // Published only to the read it belongs to, if it is ready.
+            if let Some((r, goal)) = pending {
+                if self.active == Some((r, true)) {
+                    self.published.get_or_insert((r, goal));
                 }
             }
         }
@@ -1156,93 +1226,133 @@ mod m3a_r13 {
         let input = shared.input();
         shared.stop.ingress.emergency_seen() || input.quit.is_some() || input.eof
     }
-
-    /// Plays `tokens` through `route` as the single reader does (bytes
-    /// between events in one read, or one read per byte), with the goal
-    /// read's state set as `read_goal` sets it. `Err`: the invariant broken.
-    fn run_case(tokens: &[Tok], per_byte: bool) -> Result<(), String> {
-        let (c, frames) = scripted();
-        let shared = &c.shared;
-        let mut buffers = Buffers::default();
-        let mut model = Model::default();
-        let mut goals: Vec<(u64, Goal)> = Vec::new();
-        let mut reading: Option<u64> = None;
-        let mut i = 0;
-        while i < tokens.len() && !shared.ended() {
-            match tokens[i] {
-                Tok::Ready => {
-                    if model.ready() {
-                        // The boundary: earlier input is invalidated, then ready.
-                        route(shared, &mut buffers, &[], true, false);
-                        let mut input = shared.input();
-                        input.goal = true;
-                        input.active = true;
-                        input.goal_line = None;
-                        reading = model.reading;
-                    }
-                    i += 1;
-                    continue;
-                }
-                Tok::Timeout => {
-                    if model.reading.is_some() {
-                        model.end_read();
-                        let mut input = shared.input();
-                        input.goal = false;
-                        input.active = false;
-                        input.goal_line = None;
-                        reading = None;
-                    }
-                    i += 1;
-                    continue;
-                }
-                Tok::B(_) => {}
+    /// An event, as `read_goal` makes it (through its own transitions).
+    fn apply(shared: &Shared, ev: Ev) {
+        let active = shared.input().active;
+        match ev {
+            Ev::Ready if !active && !closed(shared) => {
+                shared.goal_begin();
+                shared.input().boundary += 1;
             }
-            let mut bytes = Vec::new();
-            while let Some(Tok::B(b)) = tokens.get(i) {
-                bytes.push(*b);
-                i += 1;
-                if per_byte {
-                    break;
-                }
-            }
-            model.read(&bytes);
-            route(shared, &mut buffers, &bytes, false, reading.is_some());
-            drain(&frames);
-            if let Some(r) = reading {
-                let line = shared.input().goal_line.take();
-                if closed(shared) || line.is_some() {
-                    if let (Some(goal), false) = (line, closed(shared)) {
-                        goals.push((r, goal));
-                    }
-                    let mut input = shared.input();
-                    input.goal = false;
-                    input.active = false;
-                    reading = None;
-                }
-            }
-            if reading != model.reading {
-                return Err(format!("I1: read state {reading:?} != {:?}", model.reading));
+            Ev::Timeout if active => shared.goal_end(),
+            _ => {}
+        }
+    }
+    type Schedule = Arc<Mutex<Vec<(HookPoint, Ev)>>>;
+    /// Between reads: the worker takes its goal or ends; then the reader
+    /// meets a pending boundary (invalidates, acknowledges) and the read is
+    /// ready. Returned goals are recorded with the production read id.
+    fn gap(
+        shared: &Arc<Shared>,
+        buffers: &mut Buffers,
+        frames: &Receiver<Frame>,
+        goals: &mut Vec<(u64, Goal)>,
+    ) {
+        let (active, typing) = {
+            let input = shared.input();
+            (input.active, input.typing)
+        };
+        if active && closed(shared) {
+            shared.goal_end();
+        } else if active && typing {
+            let mut input = shared.input();
+            if let Some(goal) = input.goal_line.take() {
+                goals.push((input.goal_read, goal));
+                drop(input);
+                shared.goal_end();
             }
         }
+        let (active, typing, boundary) = {
+            let input = shared.input();
+            (input.active, input.typing, input.boundary)
+        };
+        if active && !typing {
+            let mode = reader_state(shared, Some(boundary));
+            route_read(shared, buffers, &[], mode);
+            shared.acknowledge(boundary);
+            let _ready = shared.goal_ready();
+        }
+        drain(frames);
+    }
+
+    /// Plays `steps` through the reader's production path (`reader_state`,
+    /// `route_read`) and the goal read's own transitions (`goal_begin`,
+    /// `goal_ready`, `goal_end`, `acknowledge`), with in-read events at the
+    /// reader's hook points. `Ok(reads)`, or the invariant broken.
+    fn run_case(steps: &[Step]) -> Result<u64, String> {
+        let (c, frames) = scripted();
+        let shared = c.shared.clone();
+        let schedule: Schedule = Arc::default();
+        let mut buffers = Buffers::default();
+        let (hook_shared, hook_schedule) = (shared.clone(), schedule.clone());
+        buffers.hook = Some(Box::new(move |point| {
+            let due: Vec<Ev> = {
+                let mut s = hook_schedule.lock().unwrap();
+                let due = s
+                    .iter()
+                    .filter(|(p, _)| *p == point)
+                    .map(|(_, e)| *e)
+                    .collect();
+                s.retain(|(p, _)| *p != point);
+                due
+            };
+            for ev in due {
+                apply(&hook_shared, ev);
+            }
+        }));
+        let mut model = Model::default();
+        let mut goals: Vec<(u64, Goal)> = Vec::new();
+        for step in steps {
+            if shared.ended() {
+                break;
+            }
+            match step {
+                Step::Gap(ev) => {
+                    model.event(*ev);
+                    apply(&shared, *ev);
+                }
+                Step::Read(bytes, events) => {
+                    model.read(bytes, events);
+                    *schedule.lock().unwrap() = events
+                        .iter()
+                        .map(|&(at, ev)| {
+                            let point = if at < bytes.len() {
+                                HookPoint::Byte(at)
+                            } else {
+                                HookPoint::Publish
+                            };
+                            (point, ev)
+                        })
+                        .collect();
+                    let mode = reader_state(&shared, None);
+                    route_read(&shared, &mut buffers, bytes, mode);
+                    drain(&frames);
+                }
+            }
+            model.gap();
+            gap(&shared, &mut buffers, &frames, &mut goals);
+        }
         let input = shared.input();
+        // The control: readiness went through the production read ids.
+        if input.goal_read != model.reads {
+            return Err(format!(
+                "control: goal_read {} != {}",
+                input.goal_read, model.reads
+            ));
+        }
         if goals != model.goals {
             return Err(format!("I1/I4: goals {goals:?} != {:?}", model.goals));
         }
-        let queued: Vec<String> = input
-            .commands
+        let commands: Vec<String> = input.commands.iter().map(|c| c.name.clone()).collect();
+        let lines: Vec<String> = input
+            .lines
             .iter()
-            .map(|c| c.name.clone())
-            .chain(
-                input
-                    .lines
-                    .iter()
-                    .map(|(_, l)| l.clone().unwrap_or_default()),
-            )
+            .map(|(_, l)| l.clone().unwrap_or_default())
             .collect();
-        if queued != model.commands {
+        if (&commands, &lines) != (&model.commands, &model.lines) {
             return Err(format!(
-                "I2/I4: commands {queued:?} != {:?}",
-                model.commands
+                "I2/I4: commands {commands:?} lines {lines:?} != {:?} {:?}",
+                model.commands, model.lines
             ));
         }
         if model.stopped != shared.stop.ingress.emergency_seen() {
@@ -1254,7 +1364,37 @@ mod m3a_r13 {
         if model.eof != input.eof {
             return Err(format!("I5: eof {}", model.eof));
         }
-        Ok(())
+        Ok(model.reads)
+    }
+
+    /// `tokens` cut into reads where `cut[i]` (between tokens i and i+1);
+    /// a group without bytes is events between reads.
+    fn steps(tokens: &[Tok], cut: impl Fn(usize) -> bool) -> Vec<Step> {
+        let mut out = Vec::new();
+        let mut group: Vec<Tok> = Vec::new();
+        let flush = |group: &mut Vec<Tok>, out: &mut Vec<Step>| {
+            let mut bytes = Vec::new();
+            let mut events = Vec::new();
+            for t in group.drain(..) {
+                match t {
+                    Tok::B(b) => bytes.push(b),
+                    Tok::Ready => events.push((bytes.len(), Ev::Ready)),
+                    Tok::Timeout => events.push((bytes.len(), Ev::Timeout)),
+                }
+            }
+            if bytes.is_empty() {
+                out.extend(events.into_iter().map(|(_, e)| Step::Gap(e)));
+            } else {
+                out.push(Step::Read(bytes, events));
+            }
+        };
+        for (i, t) in tokens.iter().enumerate() {
+            group.push(*t);
+            if i + 1 == tokens.len() || cut(i) {
+                flush(&mut group, &mut out);
+            }
+        }
+        out
     }
 
     fn all_tokens() -> Vec<Tok> {
@@ -1280,32 +1420,82 @@ mod m3a_r13 {
         }
         go(alphabet, max, &mut seq, &mut f);
     }
+    /// Every way to cut `n` tokens into reads.
+    fn partitions(n: usize) -> impl Iterator<Item = u32> {
+        0..(1u32 << n.saturating_sub(1))
+    }
+
+    /// The explicit split-position cases: `stop`, `quit` and `run` split at
+    /// every index, across reads and across a goal read's start or timeout,
+    /// in command and in goal mode.
+    fn split_cases() -> Vec<Vec<Step>> {
+        let mut cases = Vec::new();
+        for word in [&b"stop"[..], b"quit", b"run"] {
+            for k in 0..=word.len() {
+                for goal_mode in [false, true] {
+                    for mid in [None, Some(Ev::Ready), Some(Ev::Timeout)] {
+                        for in_read in [false, true] {
+                            let mut s = Vec::new();
+                            if goal_mode {
+                                s.push(Step::Gap(Ev::Ready));
+                            }
+                            let (head, tail) = word.split_at(k);
+                            let tail = [tail, b"\r"].concat();
+                            if in_read {
+                                let events = mid.map(|e| (k, e)).into_iter().collect();
+                                s.push(Step::Read([head, &tail].concat(), events));
+                            } else {
+                                if !head.is_empty() {
+                                    s.push(Step::Read(head.to_vec(), vec![]));
+                                }
+                                s.extend(mid.map(Step::Gap));
+                                s.push(Step::Read(tail, vec![]));
+                            }
+                            cases.push(s);
+                        }
+                    }
+                }
+            }
+        }
+        cases
+    }
 
     #[test]
     fn m3e_m3a_r13_generative_routing_keeps_i1_to_i5() {
-        let (mut cases, mut failed) = (0usize, 0usize);
+        let (mut cases, mut failed, mut most_reads) = (0usize, 0usize, 0u64);
         // The first failure of each invariant, with and without EOF.
         let mut failures = std::collections::BTreeMap::new();
-        let mut check = |tokens: &[Tok], per_byte: bool| {
+        let mut check = |steps: Vec<Step>, has_eof: bool| {
             cases += 1;
-            if let Err(e) = run_case(tokens, per_byte) {
-                failed += 1;
-                let label = e.split(':').next().unwrap_or("").to_string();
-                let key = (label, tokens.contains(&Tok::B(4)));
-                failures
-                    .entry(key)
-                    .or_insert(format!("{e} on {tokens:?} per_byte={per_byte}"));
+            match run_case(&steps) {
+                Ok(reads) => most_reads = most_reads.max(reads),
+                Err(e) => {
+                    failed += 1;
+                    let label = e.split(':').next().unwrap_or("").to_string();
+                    failures
+                        .entry((label, has_eof))
+                        .or_insert(format!("{e} on {steps:?}"));
+                }
             }
         };
-        // (a) Every sequence of up to 4 over the whole ruled alphabet, in
-        // both read groupings.
+        let eof = |s: &[Tok]| s.contains(&Tok::B(4));
         let all = all_tokens();
-        every(&all, 4, |s| {
-            check(s, false);
-            check(s, true);
+        // (a) Every sequence of up to 3 over the whole ruled alphabet, in
+        // every partition into reads (events inside reads included); every
+        // sequence of 4 in the two extreme partitions.
+        every(&all, 3, |s| {
+            for p in partitions(s.len()) {
+                check(steps(s, |i| p >> i & 1 == 1), eof(s));
+            }
         });
-        // (b) Every sequence of up to 6 over one representative of each
-        // byte class (letters behave alike outside stop/quit) and events.
+        every(&all, 4, |s| {
+            if s.len() == 4 {
+                check(steps(s, |_| false), eof(s));
+                check(steps(s, |_| true), eof(s));
+            }
+        });
+        // (b) Every sequence of up to 5 over one byte of each class and both
+        // events, in every partition.
         let classes = [
             Tok::B(b'a'),
             Tok::B(0x7f),
@@ -1316,10 +1506,14 @@ mod m3a_r13 {
             Tok::Ready,
             Tok::Timeout,
         ];
-        every(&classes, 6, |s| check(s, false));
+        every(&classes, 5, |s| {
+            for p in partitions(s.len()) {
+                check(steps(s, |i| p >> i & 1 == 1), eof(s));
+            }
+        });
         // (c) 200,000 seeded sequences of up to 7 tokens over the whole
-        // alphabet, where a token may also be the word stop, quit or run
-        // (or half of one), with random read grouping.
+        // alphabet (a token may be `stop`, `quit`, `run` or half of one),
+        // cut into reads at random.
         let words: [&[u8]; 7] = [b"stop", b"quit", b"run", b"st", b"op", b"qu", b"it"];
         let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
         let mut next = move || {
@@ -1340,11 +1534,95 @@ mod m3a_r13 {
                     s.push(all[(r / 4 % all.len() as u64) as usize]);
                 }
             }
-            let per_byte = next() % 2 == 0;
-            check(&s, per_byte);
+            let cuts = next();
+            check(steps(&s, |i| cuts >> (i % 64) & 1 == 1), eof(&s));
+        }
+        // (d) Split positions, and (e) publication interrupted.
+        for s in split_cases() {
+            check(s, false);
+        }
+        for s in interrupted_cases().into_iter().map(|(s, _)| s) {
+            check(s, false);
         }
         assert!(cases >= 200_000, "{cases}");
+        assert!(
+            most_reads >= 2,
+            "the production read id never advanced past one read"
+        );
         assert!(failed == 0, "{failed} of {cases} cases; {failures:#?}");
+    }
+
+    /// Publication interrupted: the line completes, then (before it is
+    /// published) its read times out and another begins; the goal each read
+    /// returns.
+    fn interrupted_cases() -> Vec<(Vec<Step>, Vec<(u64, &'static str)>)> {
+        use Ev::{Ready, Timeout};
+        let read = |b: &[u8], e: Vec<(usize, Ev)>| Step::Read(b.to_vec(), e);
+        vec![
+            (
+                vec![
+                    Step::Gap(Ready),
+                    read(b"ab\r", vec![(3, Timeout)]),
+                    Step::Gap(Ready),
+                    read(b"cd\r", vec![]),
+                ],
+                vec![(2, "cd")],
+            ),
+            (
+                vec![
+                    Step::Gap(Ready),
+                    read(b"ab\r", vec![(3, Timeout), (3, Ready)]),
+                    read(b"cd\r", vec![]),
+                ],
+                vec![(2, "cd")],
+            ),
+            (
+                vec![
+                    Step::Gap(Ready),
+                    read(b"ab\rcd", vec![(3, Timeout), (3, Ready)]),
+                    read(b"\r", vec![]),
+                    read(b"ef\r", vec![]),
+                ],
+                vec![(2, "ef")],
+            ),
+            (
+                vec![
+                    Step::Gap(Ready),
+                    read(b"a", vec![]),
+                    read(b"b\r", vec![(0, Timeout), (1, Ready)]),
+                    read(b"cd\r", vec![]),
+                ],
+                vec![(2, "cd")],
+            ),
+            (
+                vec![Step::Gap(Ready), read(b"ab\r", vec![])],
+                vec![(1, "ab")],
+            ),
+        ]
+    }
+
+    #[test]
+    fn m3e_m3a_r15_interrupted_publication_never_reaches_another_read() {
+        for (steps, expected) in interrupted_cases() {
+            assert_eq!(
+                run_case(&steps),
+                Ok(expected.iter().map(|(r, _)| *r).max().unwrap_or(0)),
+                "{steps:?}"
+            );
+            let mut model = Model::default();
+            for step in &steps {
+                match step {
+                    Step::Gap(ev) => model.event(*ev),
+                    Step::Read(b, e) => model.read(b, e),
+                }
+                model.gap();
+            }
+            let want: Vec<(u64, Goal)> = expected
+                .iter()
+                .map(|(r, g)| (*r, Ok(g.to_string())))
+                .collect();
+            assert_eq!(model.goals, want, "the model itself: {steps:?}");
+        }
     }
 
     /// A fresh goal read on `shared`, ready for typing, played through the
@@ -1434,5 +1712,104 @@ mod m3a_r13 {
         let worker = ready_read(&shared, &frames, &mut buffers, Duration::from_secs(10));
         type_in(&shared, &mut buffers, b"\n");
         assert_eq!(worker.join().unwrap(), Err("goal_empty"));
+    }
+
+    /// A goal read on a worker, its prompt acknowledged; it waits at its
+    /// boundary (not yet ready). The boundary is returned.
+    fn begin_read(
+        shared: &Arc<Shared>,
+        frames: &Receiver<Frame>,
+        lifetime: Duration,
+    ) -> (std::thread::JoinHandle<Result<String, &'static str>>, u64) {
+        let worker_shared = shared.clone();
+        let deadline = Instant::now() + lifetime;
+        let worker = std::thread::spawn(move || {
+            worker_shared
+                .read_goal(deadline)
+                .map(|g| g.text().to_string())
+        });
+        until_frame(frames, GOAL_PROMPT);
+        let (input, timeout) = shared
+            .changed
+            .wait_timeout_while(shared.input(), WAIT, |i| i.boundary == i.acknowledged)
+            .unwrap();
+        assert!(!timeout.timed_out());
+        (worker, input.boundary)
+    }
+    fn until_frame(frames: &Receiver<Frame>, text: &str) {
+        loop {
+            let frame = frames.recv_timeout(WAIT).expect(text);
+            let _ = frame.ack.send(Ok(()));
+            if frame.text == text {
+                break;
+            }
+        }
+    }
+
+    /// M3E-R15 (3): read A's line is under way at the reader's `point`
+    /// (after its mode snapshot, or completed and not yet published); the
+    /// reader pauses; A times out; B begins, ready or not yet ready; the
+    /// reader resumes. B never receives A's goal; B's own line is accepted.
+    fn paused_handoff(point: HookPoint, bytes: &'static [u8], b_ready: bool) {
+        let (c, frames) = scripted();
+        let shared = c.shared.clone();
+        let mut buffers = Buffers::default();
+        let (a, boundary) = begin_read(&shared, &frames, Duration::from_millis(1500));
+        route(&shared, &mut buffers, &[], true, false);
+        shared.acknowledge(boundary);
+        until_frame(&frames, "INPUT READY\n");
+        let (paused_tx, paused) = std::sync::mpsc::channel();
+        let (resume, resume_rx) = std::sync::mpsc::channel::<()>();
+        let mut once = Some((paused_tx, resume_rx));
+        buffers.hook = Some(Box::new(move |at| {
+            if at == point {
+                if let Some((paused_tx, resume_rx)) = once.take() {
+                    paused_tx.send(()).unwrap();
+                    resume_rx.recv().unwrap();
+                }
+            }
+        }));
+        let reader_shared = shared.clone();
+        let reader = std::thread::spawn(move || {
+            let mode = reader_state(&reader_shared, None);
+            assert!(mode.read.is_some(), "A is ready at the snapshot");
+            route_read(&reader_shared, &mut buffers, bytes, mode);
+            buffers
+        });
+        paused.recv_timeout(WAIT).expect("the reader paused");
+        assert_eq!(a.join().unwrap(), Err("goal_timed_out"), "A times out");
+        let (b, boundary) = begin_read(&shared, &frames, Duration::from_secs(10));
+        if b_ready {
+            // Stands in for the reader's acknowledgement.
+            shared.acknowledge(boundary);
+            until_frame(&frames, "INPUT READY\n");
+        }
+        resume.send(()).unwrap();
+        let mut buffers = reader.join().unwrap();
+        buffers.hook = None;
+        assert!(shared.input().goal_line.is_none(), "A's goal is not B's");
+        if !b_ready {
+            let mode = reader_state(&shared, Some(boundary));
+            route_read(&shared, &mut buffers, &[], mode);
+            shared.acknowledge(boundary);
+            until_frame(&frames, "INPUT READY\n");
+        }
+        type_in(&shared, &mut buffers, b"new goal\r");
+        assert_eq!(b.join().unwrap(), Ok("new goal".into()), "B's own line");
+        assert_eq!(shared.input().goal_read, 2, "two production read ids");
+    }
+
+    #[test]
+    fn m3e_m3a_r15_a_goal_paused_before_publication_never_reaches_the_next_read() {
+        for b_ready in [false, true] {
+            paused_handoff(HookPoint::Publish, b"old goal\r", b_ready);
+        }
+    }
+
+    #[test]
+    fn m3e_m3a_r15_a_stale_mode_snapshot_never_takes_the_next_read_id() {
+        for b_ready in [false, true] {
+            paused_handoff(HookPoint::Start, b"x\r", b_ready);
+        }
     }
 }
