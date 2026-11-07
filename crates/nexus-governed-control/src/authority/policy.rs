@@ -441,18 +441,19 @@ impl GrantStore {
 
     /// SB-3 (O2): [`Self::live_at`] without waiting (clocks read by the
     /// caller before any hold): contention and poison refuse, distinctly.
+    /// The store stays held while the caller keeps the returned guard.
     pub(crate) fn try_live_at(
         &self,
         id: GrantId,
         mono_ms: u64,
         wall_ms: u64,
-    ) -> Result<Option<GrantScope>, GrantObservation> {
+    ) -> Result<(Option<GrantScope>, impl Drop + '_), GrantObservation> {
         let grants = self.grants.try_lock().map_err(|error| match error {
             TryLockError::WouldBlock => GrantObservation::Contended,
             TryLockError::Poisoned(_) => GrantObservation::Poisoned,
         })?;
         let grant = grants.map.get(&id).filter(|g| g.live(mono_ms, wall_ms));
-        Ok(grant.map(|g| g.scope.clone()))
+        Ok((grant.map(|g| g.scope.clone()), grants))
     }
     #[cfg(test)]
     pub(crate) fn hold_for_test(&self) -> impl Drop + '_ {
