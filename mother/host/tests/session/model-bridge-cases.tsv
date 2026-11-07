@@ -42,3 +42,9 @@ SB3-L1x	sb3_invocation_observer_is_monotonic_and_original	l1/excluded: hold,sett
 SB3-R2c	sb3_inference_binding_is_exact_and_idempotent	R2 isolated door_cell: run cell differs from the door's retained cell	not_member; no binding, attempt or pin	SB3A-R2
 SB3-R2i	sb3_idempotent_rebind_revalidates_file_consent	bind, tamper File evidence_seq, identical rebind	no_consent; binding unchanged	SB3A-R2
 SB3-R2v	sb3_inference_binding_is_exact_and_idempotent	R2 isolated view_id: stored entry's view.id differs from the requested run	not_member; no binding, attempt or pin	SB3A-R3
+SB3-G0r3	sb3_attempt_admission_requires_the_original_grant	R3 retained grant revoked,expired,scope,substitute; grant contention/poison; run poison	grant_not_live; unavailable no latch; poison latches; no attempt/pin/record/slot	SB-3B1a
+SB3-L2r3	sb3_attempt_admission_observes_invocation_last	revoked before acquisition; at reserved; dual grant+observer; CAS ingress; revoke after read	halted; grant_not_live first; ingress wins; entered interval admitted	SB-3B1a
+SB3-R4a	sb3_private_attempt_refuses_before_ticket	Continuation,conversation,Q,expired Q,no registration	halted,model_config_mismatch,not_member,halted,model_not_registered; nothing	SB-3B1a
+SB3-A1a	sb3_attempt_ceiling_is_eight_on_the_original_run	attempts 1..8 incl. failed; ninth	(n,1) then (n,0); ninth model_over_budget; no record	SB-3B1a
+SB3-A3a	sb3_attempt_record_and_pin_are_exact	cancel,finish,capacity; substituted ordinal	pin [1] until settlement; one correlated record; [101] never settles, debt latched	SB-3B1a
+SB3-S1a	sb3_b1a_test_seams_are_test_only	masked scan of probe,tamper_for_test,model_pins_for_test,model_call_tests	all under cfg(test); leak plants RED	SB3B-R2 F11

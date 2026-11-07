@@ -1878,6 +1878,11 @@ impl RunRegistry {
             .get(&run)
             .map(|e| (e.model_attempts, e.model_pins.len()))
     }
+    /// SB-3B1a: the exact outstanding model ordinals of `run`.
+    pub(crate) fn model_pins_for_test(&self, run: RunId) -> Vec<u32> {
+        let table = self.runs.try_lock().expect("no run hold");
+        table.runs[&run].model_pins.iter().copied().collect()
+    }
 }
 
 // Opaque, non-Clone ownership of one original-scope result obligation.
@@ -2206,6 +2211,7 @@ impl RunRegistry {
             "groups" => entry.groups.clear(),
             "opened_by" => entry.opened_by = Some(u64::MAX),
             "view_id" => entry.view.id = RunId::fresh(),
+            "pin" => entry.model_pins = entry.model_pins.iter().map(|p| p + 100).collect(),
             _ => {}
         }
         let files = entry.files_admission.as_mut().unwrap();

@@ -769,3 +769,37 @@ unchanged, where the SB3B-R2 gap oracles are added. 9c81d0d5: SB-2b
 assertions unchanged except the disclosed fixture-helper substitution in
 `sb2_attempt_binding_refusals_issue_no_ticket` (whitespace-normalised
 full macros 145 = 145; not literal byte identity of every assertion).
+
+### 13.1 B1a mapping and frozen oracles (SB3B-R3)
+Production (feat, after the spec re-check): `admit_session_attempt` gains
+the retained-grant predicate (`OriginalGrant::live`, `try_live_at`, Files
+scope = run workspace), the invocation observer last before Q's CAS, and
+run-table poison failing the session; `SessionDoor::admit_attempt_private`
+(pub(super), dead-code expect; wired by B1b) refuses a Continuation
+(`halted`), a conversation (`model_config_mismatch`), a dead Q or revoked
+invocation (`halted`), no registration (`model_not_registered`) and a run
+other than Q's File run (`not_member`) before acquisition. No transport,
+meter, gate, charge latch or backstop lands here (B1b).
+Oracles (`model_call_tests.rs`, RED on the deny-only stub = first assertion,
+`halted`): G0-R3/F2-R3/F8 `sb3_attempt_admission_requires_the_original_grant`
+(revoked, expired, scope, substituted live grant: `grant_not_live`; grant
+contention `unavailable` without latch; grant and run-table poison latch
+failure; no attempt, pin, record or active slot); L2-R3/F1-R3
+`sb3_attempt_admission_observes_invocation_last` (before acquisition, at
+the reserved boundary, dual fault grant-before-observer, ingress wins the
+CAS, revocation after the read is the entered interval); R4/F12
+`sb3_private_attempt_refuses_before_ticket`; A1
+`sb3_attempt_ceiling_is_eight_on_the_original_run`; A3/F7
+`sb3_attempt_record_and_pin_are_exact` (exact ordinal, one correlated
+record across cancel/finish/capacity; substituted ordinal never settles,
+debt latched); F11 `sb3_b1a_test_seams_are_test_only` (comment- and
+string-masked scan: every `probe`, `tamper_for_test`, `model_pins_for_test`
+and the `model_call_tests` module is under `#[cfg(test)]`; GREEN on the stub
+because the seams are already gated; leak plants are its RED evidence).
+F8 at R3: no meter is reachable before a ticket in B1a; zero charges are
+re-asserted where the meter first exists (B1b). Seams (B1a): probe
+`model.attempt.reserved`, `tamper_for_test("pin")`, `model_pins_for_test`,
+SB-3A `door_with`. Carried: F5 composed zeros and F7 Mother withholding to
+C/D (SB3B-R3 1, 2). Figures (additions + deletions vs c3bffa92): this
+oracle tree 687; forecast feat +86 (run.rs 41, model.rs 45); B1a about 783
+with receipts, under the 1,500 cap. B1b is forecast separately on its branch.

@@ -328,7 +328,7 @@ use crate::authority::evidence::EndStatus;
 use crate::authority::ids::{AgentId, RunId};
 use crate::authority::run::{GroupId, OriginalGrant, RunRegistry, SessionAttempt};
 use crate::authority::{Authority, AuthorityError};
-use crate::inference::InvocationObserver;
+use crate::inference::{InvocationObserver, ModelRequest};
 pub(super) struct Attempt {
     owner: Owner,
     runs: Arc<RunRegistry>,
@@ -386,6 +386,8 @@ impl Attempt {
                 digest,
             )
         }; // Release producer and slot holds BEFORE the run table.
+        #[cfg(test)]
+        crate::authority::file_session::probe(Some(&core.cell), "model.attempt.reserved");
         let ticket = match authority.runs().admit_session_attempt(
             (run, agent, group, identity),
             original,
@@ -566,5 +568,25 @@ impl SessionDoor {
                 grant: file_grant,
                 clock,
             })
+    }
+}
+
+// SB-3B1a R3: the private original-door attempt admission; no public route.
+impl SessionDoor {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-3B1a: private attempt, wired by SB-3B1b; session route unavailable"
+        )
+    )]
+    pub(super) fn admit_attempt_private(
+        &self,
+        run: RunId,
+        request: &ModelRequest,
+        invocation: &InvocationObserver,
+    ) -> Result<Attempt, AuthorityError> {
+        let _ = (run, request, invocation);
+        Err(AuthorityError::Halted) // Deny-only stub until the feat commit.
     }
 }
