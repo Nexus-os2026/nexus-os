@@ -82,6 +82,10 @@ impl LineBuffer {
             self.stale = true;
         }
     }
+    /// M3E-R11: a line has begun and its terminator has not arrived.
+    pub(crate) fn pending(&self) -> bool {
+        !self.bytes.is_empty() || self.overflow || self.stale
+    }
     pub(crate) fn push(&mut self, byte: u8) -> Option<Line> {
         if byte == 4 {
             return Some(Line::Eof);
@@ -1190,6 +1194,13 @@ impl Drop for Terminal {
 pub(crate) struct Buffers {
     pub(crate) line: LineBuffer,
     pub(crate) goal: GoalBuffer,
+    /// The buffer that took the last byte, if it was a CR: its LF follows it.
+    cr: Option<Target>,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Target {
+    Line,
+    Goal,
 }
 impl Buffers {
     pub(crate) fn invalidate(&mut self) {
@@ -1226,24 +1237,49 @@ pub(crate) fn route(
     let mut echo = String::new();
     let mut pending = None;
     for b in bytes {
-        if goal {
-            buffers.goal.echo(*b, &mut echo);
-            if let Some(line) = buffers.goal.push(*b) {
+        // M3E-R11: a line finishes in the buffer it started in. A line
+        // already under way keeps its buffer; only a new line follows the mode.
+        let target = match buffers.cr.take() {
+            Some(target) if *b == b'\n' => target,
+            _ if buffers.line.pending() => Target::Line,
+            _ if buffers.goal.pending() => Target::Goal,
+            _ if goal => Target::Goal,
+            _ => Target::Line,
+        };
+        if *b == b'\r' {
+            buffers.cr = Some(target);
+        }
+        if target == Target::Goal {
+            // Outside a ready goal read, a goal line is read on to its end as
+            // discarded input; exact stop/quit and EOF still act.
+            if goal {
+                buffers.goal.echo(*b, &mut echo);
+            }
+            let line = buffers.goal.push(*b);
+            if !goal {
+                buffers.goal.invalidate();
+            }
+            if let Some(line) = line {
                 match line {
                     // Delivered after the rest of this read, so a Stop, Quit
                     // or EOF typed with it is seen first.
-                    GoalLine::Goal(result) => pending = Some(result),
+                    GoalLine::Goal(result) => {
+                        if goal {
+                            pending = Some(result);
+                        }
+                    }
                     other => shared.goal_line(other),
                 }
-                goal = false;
-                discard = true;
-                // The goal line ended whatever was pending before it; a
-                // `stop` typed after it is read whole.
-                buffers.line = LineBuffer::default();
+                if goal {
+                    goal = false;
+                    discard = true;
+                }
             }
             continue;
         }
-        if !discard {
+        // A command line finished inside goal mode began before it: stale.
+        let line_discard = discard || goal;
+        if !line_discard {
             buffers.line.echo(*b, &mut echo);
         }
         if let Some(line) = buffers.line.push(*b) {
@@ -1252,9 +1288,9 @@ pub(crate) fn route(
             if matches!(line, Line::Answer(_)) && !echo.is_empty() {
                 let _queued = shared.queue_frame(std::mem::take(&mut echo));
             }
-            shared.receive(line, discard);
+            shared.receive(line, line_discard);
         }
-        if discard {
+        if line_discard {
             buffers.line.invalidate();
         }
     }
