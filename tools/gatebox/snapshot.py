@@ -231,6 +231,7 @@ def export(source, sha, dest):
     for name in links:
         todo, stack, hops = name.split('/'), [], 0
         while todo:
+            tick()
             part = todo.pop(0)
             if part in ('','.'): continue
             if part == '..':
