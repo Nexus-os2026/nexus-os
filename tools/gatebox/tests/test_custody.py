@@ -292,6 +292,15 @@ class CustodyTests(unittest.TestCase):
         with self.directory_metadata(self.control/'incoming',4,0):
             with self.assertRaisesRegex(ValueError,'unsafe custody directory'):
                 with self.bridge.directory(self.control/'incoming',self.bridge.owner,0o700): pass
+    def test_directory_leaf_mothergate_cannot_replace_root(self):
+        # Reverse of the incoming/root swap: isolate the UID check, retaining
+        # the valid root GID/mode so a swapped UID rule cannot hide behind GID.
+        bridge = lifecycle.Custody(self.stage,self.control,owner=os.getuid()+1,
+                                   root_owner=os.getuid(),runner=self.runner)
+        with self.directory_metadata(self.control/'sealed',4,bridge.owner):
+            with self.assertRaises(ValueError):
+                with bridge.directory(self.control/'sealed',mode=0o700): pass
+        self.assertEqual(self.calls,[])
     def test_directory_gid_fail_closed(self):
         with self.directory_metadata(self.control/'incoming',5,self.bridge.owner_gid+1):
             with self.assertRaisesRegex(ValueError,'unsafe custody directory'):
