@@ -1658,7 +1658,7 @@ fn sb3_original_file_grant_remains_required_per_request() {
 fn sb3_original_deadlines_and_watch_are_not_renewed() {
     positive("positive control");
     for (case, expected) in [
-        ("q", "model_cancelled"),
+        ("q", "model_timeout"), // SB3B-R7 (1): any expiry.
         ("mission", "model_timeout"),
         ("backstop", "model_timeout"),
         ("watch", "model_stopped"),
@@ -1755,7 +1755,7 @@ fn fault(f: &Call, kind: &'static str) -> Box<dyn Fn() + Send + Sync> {
 }
 /// (fault, class, the step the trace must show refusing).
 const FAULTS: [(&str, &str, &str); 9] = [
-    ("q", "model_cancelled", "refused:1"),
+    ("q", "model_timeout", "refused:1"), // SB3B-R7 (1): any expiry.
     ("backstop", "model_timeout", "refused:1"),
     ("watch", "model_stopped", "refused:2"),
     ("health", "model_cancelled", "refused:3"),
