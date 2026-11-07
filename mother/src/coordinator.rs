@@ -1870,6 +1870,7 @@ impl<P: EffectPort> Coordinator<P> {
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "lane_invoke");
             let context = crate::lane::LaneContext {
+                contract: None,
                 model: caller.as_ref().map(|c| c as &dyn crate::lane::ModelCaller),
             };
             let output = lane.invoke_in(&input, &context);

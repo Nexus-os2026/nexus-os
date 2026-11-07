@@ -116,6 +116,7 @@ pub struct LaneOutput {
 
 /// A borrowed, invocation-bound model route. Scripted lanes receive none.
 pub struct LaneContext<'a> {
+    pub(crate) contract: Option<&'a crate::contract::MissionContract>,
     pub model: Option<&'a dyn ModelCaller>,
 }
 pub trait ModelCaller: Send + Sync {

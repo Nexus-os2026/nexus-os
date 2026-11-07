@@ -50,6 +50,7 @@ pub(crate) struct FakeOllama {
     events: Mutex<Receiver<Seen>>,
     log: Arc<Mutex<Vec<String>>>,
     route: Arc<Mutex<Route>>,
+    bodies: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
 }
 
 /// A successful chat envelope whose content is `content`.
@@ -89,22 +90,35 @@ impl FakeOllama {
         let (tx, events) = channel();
         let log: Arc<Mutex<Vec<String>>> = Arc::default();
         let route: Arc<Mutex<Route>> = Arc::new(Mutex::new(Arc::new(|_: &str| None)));
+        let bodies = Arc::new(Mutex::new(Vec::new()));
+        let captured = bodies.clone();
         let (l, r) = (log.clone(), route.clone());
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(stream) = stream else { return };
                 let (tx, l, r) = (tx.clone(), l.clone(), r.clone());
-                std::thread::spawn(move || serve(stream, &tx, &l, &r));
+                let bodies = captured.clone();
+                std::thread::spawn(move || serve(stream, &tx, &l, &r, &bodies));
             }
         });
         Self {
             addr,
             events: Mutex::new(events),
+            bodies,
             log,
             route,
         }
     }
 
+    pub(crate) fn bodies(&self, path: &str) -> Vec<Vec<u8>> {
+        self.bodies
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(p, _)| p == path)
+            .map(|(_, b)| b.clone())
+            .collect()
+    }
     pub(crate) fn endpoint(&self) -> String {
         format!("http://{}", self.addr)
     }
@@ -142,7 +156,13 @@ impl FakeOllama {
     }
 }
 
-fn serve(mut stream: TcpStream, tx: &Sender<Seen>, log: &Mutex<Vec<String>>, route: &Mutex<Route>) {
+fn serve(
+    mut stream: TcpStream,
+    tx: &Sender<Seen>,
+    log: &Mutex<Vec<String>>,
+    route: &Mutex<Route>,
+    bodies: &Mutex<Vec<(String, Vec<u8>)>>,
+) {
     let mut head = Vec::new();
     let mut byte = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
@@ -170,6 +190,7 @@ fn serve(mut stream: TcpStream, tx: &Sender<Seen>, log: &Mutex<Vec<String>>, rou
     if stream.read_exact(&mut body).is_err() {
         return;
     }
+    bodies.lock().unwrap().push((path.clone(), body));
     log.lock().unwrap().push(path.clone());
     let over = route.lock().unwrap().clone();
     let answer = over(&path).unwrap_or_else(|| healthy(&path));
