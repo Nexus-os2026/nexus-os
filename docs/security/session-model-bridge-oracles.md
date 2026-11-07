@@ -995,3 +995,34 @@ Receipts, on the final code head; plants restored by sha256:
   "free" while still holding the store, an oracle race. The SB3B-R12
   oracle-fix releases first. Afterwards: 30/30 alone, and 10 serial +
   10 parallel 20/20 on the final head.
+
+### 13.9 B1c follow-up (SB3B-R13; branch mother/sb3b1c-followup on 98132daf)
+B1b is frozen at 98132daf. B1c addresses Codex review-2: oracle 1 MED,
+production 2 LOW, both crafted-only. B1b and B1c merge together.
+
+Oracle-add 590645c8, RED on 98132daf for P1 and P2:
+- (O) L2 first proposes a real file on the run, so a commitment is
+  prepared. It asserts the populated commitment view is equal after the
+  call, and counts `FILE_STAGED` and `FILE_EXECUTE_START` (zero). This
+  passes on 98132daf: coverage only, no File leak.
+- (P1) An "exhausted" admission-counter schedule in the P1 control: no
+  failure under a hold, and Failed still latched.
+- (P2) `sb3_limits_without_a_sample_fail_closed`: limits installed after
+  a gate sampled none must refuse that CAS.
+
+Fix b44a765a:
+- `admit_at` with a sample returns Capacity, and R5 fails the session
+  after releasing both holds.
+- `Sample` carries `Option` mission clocks. Limits without a reading are
+  ineligible, so the CAS fails closed; no more (0, 0) reading.
+
+Receipts on the B1c head:
+- 69/69 `host_session::model`.
+- All 29 plants killed at their named assertions, each restored by
+  sha256: the 25 B1b plants re-run on this head (R5 grant guard 10/10)
+  and 4 B1c plants (exhaustion fail under hold; exhaustion unlatched;
+  fabricated time; a model call touching the File commitment).
+- Gates, each binary alone: governed-control lib 916, Mother lib 360,
+  host 166, m2e_a2 54, m2e_transport 39; fmt, clippy (3 crates),
+  diff --check.
+- Repeats: 10 serial + 10 parallel, 69/69 each.
