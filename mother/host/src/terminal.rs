@@ -324,8 +324,34 @@ impl Shared {
     /// M-5.
     #[allow(dead_code)]
     pub(crate) fn read_goal(&self, deadline: Instant) -> Result<TypedGoal, &'static str> {
-        let _ = deadline;
-        Err("not_implemented") // M-3a oracle stub
+        let epoch = self.stop.ingress.generation();
+        if !self.goal_valid(deadline, epoch) {
+            return Err("goal_unavailable");
+        }
+        let _dialogue = match self.dialogue.try_lock() {
+            Ok(lock) => lock,
+            Err(std::sync::TryLockError::WouldBlock) => return Err("goal_unavailable"),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                self.fail(Failure::Input);
+                return Err("goal_unavailable");
+            }
+        };
+        {
+            let mut input = self.input();
+            input.active = true;
+            input.typing = false;
+            input.goal = true;
+            input.goal_line = None;
+        }
+        let result = self.read_goal_inner(deadline, epoch);
+        let mut input = self.input();
+        input.active = false;
+        input.typing = false;
+        input.goal = false;
+        input.goal_line = None;
+        drop(input);
+        self.changed.notify_all();
+        result
     }
     fn goal_valid(&self, deadline: Instant, epoch: u64) -> bool {
         let ingress = &self.stop.ingress;
@@ -1175,8 +1201,14 @@ impl Buffers {
 /// Whether the reader's next bytes are discarded, and whether they are goal
 /// input: only once a goal read has displayed `INPUT READY`.
 pub(crate) fn reader_mode(shared: &Shared, boundary: Option<u64>) -> (bool, bool) {
-    let _ = (shared, boundary);
-    (true, false) // M-3a oracle stub
+    let input = shared.input();
+    let discard = boundary.is_some()
+        || input.boundary != input.acknowledged
+        || (input.active && !input.typing);
+    (
+        discard,
+        !discard && input.goal && input.active && input.typing,
+    )
 }
 
 /// One read's bytes through the buffers. After a goal line the rest of the
@@ -1188,19 +1220,62 @@ pub(crate) fn route(
     mut discard: bool,
     mut goal: bool,
 ) {
-    let _ = (shared, buffers, bytes, discard, goal); // M-3a oracle stub
+    if discard {
+        buffers.invalidate();
+    }
+    let mut echo = String::new();
+    let mut pending = None;
+    for b in bytes {
+        if goal {
+            buffers.goal.echo(*b, &mut echo);
+            if let Some(line) = buffers.goal.push(*b) {
+                match line {
+                    // Delivered after the rest of this read, so a Stop, Quit
+                    // or EOF typed with it is seen first.
+                    GoalLine::Goal(result) => pending = Some(result),
+                    other => shared.goal_line(other),
+                }
+                goal = false;
+                discard = true;
+                // The goal line ended whatever was pending before it; a
+                // `stop` typed after it is read whole.
+                buffers.line = LineBuffer::default();
+            }
+            continue;
+        }
+        if !discard {
+            buffers.line.echo(*b, &mut echo);
+        }
+        if let Some(line) = buffers.line.push(*b) {
+            // Emergency/close ingress always precedes echo queueing.
+            // Ordinary lines are echoed before waking their consumer.
+            if matches!(line, Line::Answer(_)) && !echo.is_empty() {
+                let _queued = shared.queue_frame(std::mem::take(&mut echo));
+            }
+            shared.receive(line, discard);
+        }
+        if discard {
+            buffers.line.invalidate();
+        }
+    }
+    if !echo.is_empty() {
+        let _queued = shared.queue_frame(echo);
+    }
+    if let Some(result) = pending {
+        shared.goal_line(GoalLine::Goal(result));
+    }
 }
 
 fn read_input(shared: Arc<Shared>) {
     let stdin = std::io::stdin();
-    let mut buffer = LineBuffer::default();
+    let mut buffers = Buffers::default();
     while !shared.input_end.load(Ordering::SeqCst) {
         let boundary = {
             let input = shared.input();
             (input.boundary != input.acknowledged).then_some(input.boundary)
         };
         if boundary.is_some() {
-            buffer.invalidate();
+            buffers.invalidate();
         }
         let mut fds = [PollFd::new(stdin.as_fd(), PollFlags::POLLIN)];
         let ready = match poll(&mut fds, if boundary.is_some() { 0u16 } else { 10u16 }) {
@@ -1228,35 +1303,8 @@ fn read_input(shared: Arc<Shared>) {
                 break;
             }
             Ok(n) => {
-                let discard = {
-                    let input = shared.input();
-                    boundary.is_some()
-                        || input.boundary != input.acknowledged
-                        || (input.active && !input.typing)
-                };
-                if discard {
-                    buffer.invalidate();
-                }
-                let mut echo = String::new();
-                for b in &bytes[..n] {
-                    if !discard {
-                        buffer.echo(*b, &mut echo);
-                    }
-                    if let Some(line) = buffer.push(*b) {
-                        // Emergency/close ingress always precedes echo queueing.
-                        // Ordinary lines are echoed before waking their consumer.
-                        if matches!(line, Line::Answer(_)) && !echo.is_empty() {
-                            let _queued = shared.queue_frame(std::mem::take(&mut echo));
-                        }
-                        shared.receive(line, discard);
-                    }
-                    if discard {
-                        buffer.invalidate();
-                    }
-                }
-                if !echo.is_empty() {
-                    let _queued = shared.queue_frame(echo);
-                }
+                let (discard, goal) = reader_mode(&shared, boundary);
+                route(&shared, &mut buffers, &bytes[..n], discard, goal);
                 if shared.ended() {
                     break;
                 }

@@ -70,8 +70,52 @@ impl GoalBuffer {
     }
 
     pub(crate) fn push(&mut self, byte: u8) -> Option<GoalLine> {
-        let _ = byte;
-        None // M-3a oracle stub
+        if byte == 4 {
+            return Some(GoalLine::Eof);
+        }
+        let after_cr = std::mem::replace(&mut self.after_cr, byte == b'\r');
+        if byte == b'\n' && after_cr {
+            return None;
+        }
+        if byte == b'\r' || byte == b'\n' {
+            let line = if self.bytes == b"stop" {
+                Some(GoalLine::Stop)
+            } else if self.bytes == b"quit" {
+                Some(GoalLine::Quit)
+            } else if self.stale {
+                None
+            } else if self.overflow {
+                Some(GoalLine::Goal(Err(InputError::GoalTooLong)))
+            } else {
+                Some(GoalLine::Goal(validate_goal(&self.bytes)))
+            };
+            self.bytes.clear();
+            self.overflow = false;
+            self.stale = false;
+            return line;
+        }
+        match byte {
+            0x7f | 0x08 => {
+                self.pop_scalar();
+                return None;
+            }
+            0x15 => {
+                // Editing cannot make stale or overflowed input fresh.
+                self.bytes.clear();
+                return None;
+            }
+            _ => {}
+        }
+        if self.overflow {
+            return None;
+        }
+        if self.bytes.len() < GOAL_MAX_BYTES {
+            self.bytes.push(byte);
+        } else {
+            self.overflow = true;
+            self.bytes.clear();
+        }
+        None
     }
 
     fn pop_scalar(&mut self) {
@@ -113,7 +157,31 @@ impl GoalBuffer {
 
     /// Echo before `push`: shown characters, and erasure of shown ones.
     pub(crate) fn echo(&self, byte: u8, out: &mut String) {
-        let _ = (byte, out); // M-3a oracle stub
+        if self.stale || self.overflow {
+            return;
+        }
+        match byte {
+            b'\n' if self.after_cr => {}
+            b'\r' | b'\n' => out.push('\n'),
+            0x7f | 0x08 => {
+                if self.last_scalar().is_some_and(shown) {
+                    out.push_str("\x08 \x08");
+                }
+            }
+            0x15 => {
+                for chunk in self.bytes.utf8_chunks() {
+                    for _ in chunk.valid().chars().filter(|c| shown(*c)) {
+                        out.push_str("\x08 \x08");
+                    }
+                }
+            }
+            _ if self.bytes.len() < GOAL_MAX_BYTES => {
+                if let Some(c) = self.completed(byte).filter(|c| shown(*c)) {
+                    out.push(c);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -144,6 +212,7 @@ impl TypedGoal {
     }
 
     /// The goal, verbatim.
+    #[allow(dead_code)] // Consumed by M-5's page-mode wiring.
     pub(crate) fn text(&self) -> &str {
         &self.0
     }
@@ -151,19 +220,27 @@ impl TypedGoal {
 
 /// The goal's display: T1 with the goal escaped, then its size and digest.
 pub(crate) fn goal_display(goal: &str) -> String {
-    let _ = goal;
-    String::new() // M-3a oracle stub
+    format!(
+        "{}\ngoal: {} bytes, sha256 {}\n",
+        t1(&escaped(goal)),
+        goal.len(),
+        sha256_hex(&Sha256::digest(goal.as_bytes()).into())
+    )
 }
 
 /// The prompt shown before goal input is accepted.
 pub(crate) const GOAL_PROMPT: &str = "Type your goal on one line, then press Return. It is kept exactly as typed. It is data only: it never answers a dialog or runs a command. Type stop to stop.\n";
 
-/// D3 + R8 (h): typed mode only when no goal file was given.
+/// D3 + R8 (h): typed mode only when no goal file was given. Data-only:
+/// wired in M-5.
+#[allow(dead_code)]
 pub(crate) fn read_typed_goal(
     shared: &crate::terminal::Shared,
     goal_file_given: bool,
     deadline: Instant,
 ) -> Result<TypedGoal, &'static str> {
-    let _ = (shared, goal_file_given, deadline);
-    Err("not_implemented") // M-3a oracle stub
+    if goal_file_given {
+        return Err("goal_already_given");
+    }
+    shared.read_goal(deadline)
 }

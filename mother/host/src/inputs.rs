@@ -319,8 +319,8 @@ fn parse_facts(body: &str) -> Result<PageFacts, InputError> {
 /// M-3a (R8 4): a typed goal's bytes through the goal-file grammar (one
 /// grammar for both): UTF-8, then the same checks as a goal file's body.
 pub fn validate_goal(bytes: &[u8]) -> Result<String, InputError> {
-    let _ = bytes;
-    Err(InputError::GoalEmpty) // M-3a oracle stub
+    let text = std::str::from_utf8(bytes).map_err(|_| InputError::NotUtf8)?;
+    parse_goal(text)
 }
 
 // M3E-R2 3 + R3: no CR; LF separates lines; every other scalar shown.
