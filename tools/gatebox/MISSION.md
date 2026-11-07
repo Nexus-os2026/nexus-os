@@ -169,7 +169,7 @@ pinned independently in tests/test_custody.py.
   30-second unit start bound. Lock acquisition is bounded to five seconds.
   Stop is bounded to 25 seconds; manager show to five seconds. The outer shim
   caller allows 90 seconds. Timeout never proves cancellation. Before cleanup,
-  stop the exact instance, prove Job=0, inactive/failed state and no populated
+  stop the exact instance, prove exactly empty Job=, inactive/failed state and no populated
   exact cgroup. Missing or ambiguous evidence retains custody and blocks.
   Normal cleanup validates both leaves and removes only those fixed names,
   the empty root run directory and its pending marker. Never recursively
@@ -190,3 +190,18 @@ quarantine canary survives; supervisor closes descriptors without unlinking.
 Installed-only cases explicitly skip with their root/manager prerequisite;
 AF_UNIX EPERM is sandbox_blocked, never an installed PASS. Deferred staging,
 receipt and bind-input compromise risks under sheet §12 remain disclosed.
+
+## Q12 / #116 review-1 amendment (Owner mission, 2026-11-07)
+
+Q12 supersedes the Q9 no-job sentinel: only an empty Job value proves no job;
+any nonempty value, including "0", retains custody. The fixed bounded stop is
+issued before layout/lock validation; settle and cleanup still require both.
+A failed start cleans only incoming leaves successfully bound by this supervisor,
+including partial bind failure. Relocated sealed leaves remain exclusively root
+custody. The optional endpoint preflight is legacy offline coverage, never the
+production custody check. F-3 negatives isolate directory ownership/GID, endpoint
+GID/link count, unsafe/symlinked lock files and disappeared pending custody.
+Oracles precede fixes in numbered checkpoint folders. Real custody and its plants
+require an outside run with protected TMPDIR (Q11); no ownership-remap modelling.
+Q12 F-6 remains #115 installer scope. No installation, host action, Git write,
+network, phase advancement or installed acceptance is performed by this mission.

@@ -29,7 +29,11 @@ def no_acl(path):
 
 def check_start(run_id, staging=Path('/var/lib/mothergate/staging'),
                 control=Path('/run/mothergate-control'), owner=None, endpoints=True):
-    """Bind inputs retain Slice 1's disclosed staging races; never confer custody."""
+    """Bind inputs retain Slice 1's disclosed staging races; never confer custody.
+
+    endpoints=True is a legacy preflight exercised by offline B2 only.
+    Production passes False; only post-relocation validation confers custody.
+    """
     if not RUN.fullmatch(run_id): raise ValueError('invalid run ID')
     if owner is None: owner = pwd.getpwnam('mothergate').pw_uid
     expected = [(staging,stat.S_ISDIR),(staging/run_id,stat.S_ISDIR),
@@ -145,7 +149,7 @@ class Custody:
             key, sep, value = line.partition('=')
             if not sep or key in state: raise ValueError('ambiguous manager state')
             state[key] = value
-        if (set(state) != {'Job','ActiveState','ControlGroup'} or state['Job'] != '0'
+        if (set(state) != {'Job','ActiveState','ControlGroup'} or state['Job'] != ''
                 or state['ActiveState'] not in ('inactive','failed')):
             raise ValueError('manager not settled')
         expected = '/system.slice/'+unit
@@ -175,12 +179,14 @@ class Custody:
 
     def run(self, verb, run):
         argv = command([verb,run])
+        # Q12: Stop must still reach the manager when custody validation fails.
+        # Only settle/cleanup require protected layout and the lifecycle lock.
+        if verb == 'stop': self.manager(argv,25)
         with ExitStack() as stack:
             control = stack.enter_context(self.directory(self.control,mode=0o755))
             stack.enter_context(self.locked(control))
             sealed = stack.enter_context(self.directory(self.control/'sealed',mode=0o700))
             if verb == 'stop':
-                self.manager(argv,25)
                 state = self.settled(run)
                 self.cleanup(sealed,run)
                 return state

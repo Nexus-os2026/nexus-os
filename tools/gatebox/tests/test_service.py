@@ -117,8 +117,8 @@ class OfflineServiceTests(unittest.TestCase):
                      ['start','mothergate.service'],['start',RUN.upper()]):
             with self.subTest(args=args), self.assertRaises(ValueError): lifecycle.command(args)
     def test_b2_capture_socket_and_request_types(self):
-        # Q11: custody inputs live under a real private 0700 test-owned base.
-        # TMPDIR must have protected ancestry (repo checkout and /tmp do not).
+        # Legacy B2 preflight only: staging/request and endpoint types.
+        # Custody authority is tested separately after relocation, with protected TMPDIR.
         with tempfile.TemporaryDirectory(prefix='capture-') as tmp:
             root = Path(tmp)
             stage, control = root/'staging',root/'control'

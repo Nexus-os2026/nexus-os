@@ -259,6 +259,7 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
                    source=registration,cleanup={'complete':False})
     listeners, logs, captured, started = {}, {}, {}, time.monotonic()
     evidence = Evidence()
+    incoming, handed_off = [], False
     try:
         stage.mkdir(mode=0o700)
         (stage/'request.json').write_bytes(receipt.encode(request))
@@ -268,9 +269,12 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
         for kind in ('log','status'):
             sock = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
             listeners[kind] = sock
-            sock.bind(str(CONTROL/'incoming'/(run+'.'+kind+'.sock')))
+            path = CONTROL/'incoming'/(run+'.'+kind+'.sock')
+            sock.bind(str(path))
+            incoming.append(path)  # Only a successful bind owns this incoming leaf.
             sock.listen(1)
         shim('start',run)
+        handed_off = True
         _, logs = collect(run,listeners,evidence,captured)
         summary['commands'], summary['coverage'] = coverage(evidence,logs)
         summary['environment'] = sibling('init').ENV
@@ -296,6 +300,10 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
             summary['missing_evidence'].append('cleanup: '+str(exc))
         for kind, sock in listeners.items():
             sock.close()
+        if not handed_off:
+            for path in incoming:
+                try: os.unlink(path)
+                except FileNotFoundError: pass  # Root may already have relocated it.
         summary['resources']['duration_seconds'] = time.monotonic()-started
         summary['logs'] = [dict(file=name,sha256=hashlib.sha256(data).hexdigest()) for name,data in logs.items()]
         try: receipt.validate_summary(summary)
