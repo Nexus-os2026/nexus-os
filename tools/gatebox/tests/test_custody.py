@@ -11,6 +11,11 @@ import stat
 import subprocess
 import tempfile
 import threading
+import hashlib
+import select
+import time
+import uuid
+import pwd
 import unittest
 from contextlib import ExitStack, nullcontext
 from unittest.mock import Mock, patch
@@ -431,7 +436,7 @@ class ListenerRenameTests(unittest.TestCase):
             if exc.errno!=errno.EPERM: raise
             self.skipTest('sandbox_blocked: AF_UNIX EPERM; run unchanged outside runner')
         with listener, tempfile.TemporaryDirectory(
-                prefix='.listener-', dir=HERE/'tests') as tmp:
+                prefix='.listener-') as tmp:
             before, after = Path(tmp)/'incoming.sock', Path(tmp)/'sealed.sock'
             try: listener.bind(str(before))
             except PermissionError as exc:
@@ -448,13 +453,266 @@ class ListenerRenameTests(unittest.TestCase):
                     client.sendall(b'renamed')
                     self.assertEqual(connection.recv(7),b'renamed')
 
+@unittest.skipUnless(HERE == Path('/usr/libexec/gatebox') and os.geteuid() == 0,
+                     'installed_only: host root at /usr/libexec/gatebox required')
 class InstalledCustodyTests(unittest.TestCase):
-    @unittest.skip('installed_only: root/mothergate identities and real OS DAC required; no host changes authorized')
+    """Real DAC, systemd executor, queued job and restart proofs. No mocks.
+
+    An exact-instance runtime drop-in ADDS a dependency on a bounded FIFO
+    barrier. It changes no payload restriction or output path. An empty snapshot
+    prevents candidate execution; init can run installed sensors before failing.
+    The disposable collector runs the installed supervisor.collect function.
+    """
+    def command(self, argv, check=True):
+        return subprocess.run(argv,env=lifecycle.ENV,stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE,encoding='utf-8',
+            close_fds=True,timeout=35,check=check)
+
+    def manager(self, *args):
+        return self.command(['/usr/bin/systemctl',*args])
+
+    def wait_for(self, predicate, label, seconds=10):
+        deadline = time.monotonic()+seconds
+        while time.monotonic()<deadline:
+            value = predicate()
+            if value: return value
+            time.sleep(.05)
+        self.fail('deadline: '+label)
+
+    def state(self, unit):
+        result = self.manager('show',unit,'--property=Job,ActiveState,MainPID,ControlGroup')
+        return dict(line.split('=',1) for line in result.stdout.splitlines())
+
+    def line(self):
+        ready,_,_ = select.select([self.collector.stdout],[],[],10)
+        self.assertTrue(ready,'collector observation deadline')
+        line = self.collector.stdout.readline()
+        self.assertTrue(line,'collector exited before observation')
+        return json.loads(line)
+
+    def setUp(self):
+        from test_installed import load
+        self.probe = load('probe'); self.probe.require_installed()
+        self.control = Path('/run/mothergate-control')
+        self.pending = Path('/var/lib/mothergate/pending')
+        self.assertFalse(list(self.pending.iterdir()),'other pending work; refuse destructive proof')
+        self.assertFalse(any(p.name.startswith('.pending-') for p in (self.control/'sealed').iterdir()))
+        self.owner = pwd.getpwnam('mothergate')
+        self.run = uuid.uuid4().hex
+        self.unit = 'mothergate-run@'+self.run+'.service'
+        self.blocker = 'gatebox-custody-'+self.run+'.service'
+        self.root = Path('/run')/('gatebox-custody-'+self.run)
+        self.root.mkdir(mode=0o700)
+        self.probe.protected(self.root)
+        self.fifo = self.root/'release'; os.mkfifo(self.fifo,0o600)
+        self.stage = Path('/var/lib/mothergate/staging')/self.run
+        self.marker = self.pending/('.'+self.run)
+        # Never perform root writes/chown beneath supervisor-owned parents.
+        script = r"""
+import json,sys
+from pathlib import Path
+run=sys.argv[1]; stage=Path('/var/lib/mothergate/staging')/run
+stage.mkdir(mode=0o700); (stage/'snapshot').mkdir(mode=0o555)
+with (stage/'request.json').open('xb') as f: f.write(b'{}')
+(stage/'request.json').chmod(0o444)
+with (Path('/var/lib/mothergate/pending')/('.'+run)).open('xb') as f:
+    f.write(json.dumps(dict(run_id=run,request=json.loads(sys.argv[2]))).encode())
+"""
+        subprocess.run(['/usr/bin/python3','-I','-B','-c',script,self.run,json.dumps(REQUEST)],
+            user=self.owner.pw_uid,group=self.owner.pw_gid,extra_groups=[],umask=0o077,
+            env=lifecycle.ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,close_fds=True,timeout=5,check=True)
+        self.sealed = self.control/'sealed'/self.run
+        self.bridge = lifecycle.Custody(owner=self.owner.pw_uid,owner_gid=self.owner.pw_gid)
+        self.files = {}
+        self.collector = self.launch = None
+        # Cleanup is bounded, exact-name only, and requires the production stop
+        # oracle. Unsettled or damaged custody is retained for Owner review.
+        self.addCleanup(self.cleanup)
+        self.probe.protected(Path('/run/systemd/system'))
+        directory = Path('/run/systemd/system')/(self.unit+'.d')
+        directory.mkdir(mode=0o755); self.dropin = directory
+        self.install_fixture(directory/'custody.conf',
+            '[Unit]\nRequires='+self.blocker+'\nAfter='+self.blocker+'\n')
+        self.install_fixture(Path('/run/systemd/system')/self.blocker,
+            '[Service]\nType=oneshot\nExecStart=/usr/bin/cat '+str(self.fifo)+
+            '\nTimeoutStartSec=25s\nTimeoutStopSec=5s\nKillMode=control-group\nStandardOutput=null\nStandardError=null\n')
+        self.manager('daemon-reload')
+        # Instrument accept to report actual root executor credentials. All socket
+        # operations and the installed production collector remain real.
+        script = r"""
+import importlib.util,json,os,socket,struct,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('custody_supervisor','/usr/libexec/gatebox/supervisor.py')
+s=importlib.util.module_from_spec(spec); spec.loader.exec_module(s)
+class Observed(socket.socket):
+    def accept(self):
+        conn,address=super().accept()
+        pid,uid,gid=struct.unpack('3i',conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+        print(json.dumps(dict(accepted=self.kind,pid=pid,uid=uid)),flush=True)
+        return conn,address
+listeners={}
+for kind in ('log','status'):
+    sock=Observed(socket.AF_UNIX,socket.SOCK_STREAM); sock.kind=kind
+    path=Path('/run/mothergate-control/incoming')/(sys.argv[1]+'.'+kind+'.sock')
+    sock.bind(str(path)); path.chmod(0o700); sock.listen(1); listeners[kind]=sock
+print(json.dumps({'ready':True}),flush=True)
+s.collect(sys.argv[1],listeners,s.Evidence(),{})
+"""
+        self.collector = subprocess.Popen(['/usr/bin/python3','-I','-B','-c',script,self.run],
+            user=self.owner.pw_uid,group=self.owner.pw_gid,extra_groups=[],umask=0o077,
+            env=lifecycle.ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,close_fds=True,bufsize=0)
+        self.assertEqual(self.line(),{'ready':True})
+        self.launch = subprocess.Popen(['/usr/bin/python3','-I','-B',str(HERE/'lifecycle.py'),'start',self.run],
+            env=lifecycle.ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,close_fds=True)
+        self.wait_for(lambda:self.sealed.exists() and all((self.sealed/(k+'.sock')).exists()
+            for k in ('log','status')),'sealed endpoints')
+        self.job = self.wait_for(lambda:(v if v['Job'] and v['ActiveState']=='activating' else None)
+            if (v:=self.state(self.blocker)) else None,'barrier activating')
+        self.queued = self.wait_for(lambda:(v if v['Job'] else None)
+            if (v:=self.state(self.unit)) else None,'real pending payload job')
+        self.assertIsNone(self.collector.poll())
+        self.identities = {k:((p:=self.sealed/(k+'.sock')).stat().st_dev,p.stat().st_ino)
+                           for k in ('log','status')}
+        self.observations = dict(run_id=self.run,pending_job=self.queued,barrier=self.job)
+
+    def install_fixture(self, path, text):
+        data = text.encode()
+        fd = os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
+        with os.fdopen(fd,'wb') as stream: stream.write(data)
+        self.files[path] = hashlib.sha256(data).hexdigest()
+
+    def release(self):
+        def writer():
+            try: return os.open(self.fifo,os.O_WRONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
+            except OSError as exc:
+                if exc.errno!=errno.ENXIO: raise
+                return None
+        # fd may be zero; encode readiness separately from the descriptor.
+        def ready():
+            fd = writer()
+            return (fd,) if fd is not None else None
+        fd, = self.wait_for(ready,'FIFO reader ready')
+        os.close(fd)  # EOF releases cat; no arbitrary fixed sleep.
+
+    def intact(self):
+        self.assertTrue((self.control/'sealed'/('.pending-'+self.run)).is_file())
+        self.assertTrue(self.marker.is_file())
+        for kind,identity in self.identities.items():
+            info = (self.sealed/(kind+'.sock')).lstat()
+            self.assertTrue(stat.S_ISSOCK(info.st_mode))
+            self.assertEqual((info.st_dev,info.st_ino),identity)
+
+    def denied_operations(self, canary):
+        script = r"""
+import errno,json,os,sys
+base,target=sys.argv[1:]; results=[]
+for kind in ('log','status'):
+    path=base+'/'+kind+'.sock'
+    for action in ('unlink','rename','symlink'):
+        try:
+            if action=='unlink': os.unlink(path)
+            elif action=='rename': os.rename(path,path+'.moved')
+            else: os.symlink(target,path)
+        except OSError as e:
+            if e.errno not in (errno.EACCES,errno.EPERM): raise
+            results.append([kind,action,e.errno])
+        else: raise RuntimeError('sealed namespace changed')
+print(json.dumps(results))
+"""
+        result = self.command(['/usr/sbin/runuser','-u','mothergate','--','/usr/bin/python3',
+                               '-I','-c',script,str(self.sealed),str(canary)])
+        denied = json.loads(result.stdout); self.assertEqual(len(denied),6)
+        self.intact(); return denied
+
     def test_mothergate_cannot_unlink_rename_or_symlink_after_relocation(self):
-        """Owner: as mothergate try all three operations on both sealed endpoints; expect EACCES."""
-    @unittest.skip('installed_only: disposable root-owned canary and systemd executor required; installation HOLD Q8')
+        self.observations['denied'] = self.denied_operations(self.root/'unused-target')
+
     def test_systemd_output_never_writes_disposable_root_canary(self):
-        """Owner: pre-handoff replacement rejected; no start and canary bytes unchanged."""
-    @unittest.skip('installed_only: actual manager jobs/cgroups, service death/restart and A8 descriptor accounting required')
+        canary = self.root/'canary'
+        with canary.open('xb') as stream: stream.write(os.urandom(64))
+        canary.chmod(0o600)
+        before = canary.read_bytes(); info = canary.stat()
+        self.observations['denied'] = self.denied_operations(canary)
+        # Replace BOTH original incoming names with canary symlinks as mothergate.
+        # The systemd executor must connect to sealed inodes, not attacker names.
+        script = 'import os,sys; [os.symlink(sys.argv[2],sys.argv[1]+"."+k+".sock") for k in ("log","status")]'
+        self.command(['/usr/sbin/runuser','-u','mothergate','--','/usr/bin/python3','-I','-c',script,
+                      str(self.control/'incoming'/self.run),str(canary)])
+        self.release()
+        observations = [self.line(),self.line()]
+        self.assertEqual({v['accepted'] for v in observations},{'log','status'})
+        self.assertTrue(all(v['pid']>0 and v['uid']==0 for v in observations),'actual systemd executor required')
+        self.assertEqual(canary.read_bytes(),before)
+        after = canary.stat()
+        self.assertEqual((after.st_dev,after.st_ino,after.st_mtime_ns,after.st_ctime_ns),
+                         (info.st_dev,info.st_ino,info.st_mtime_ns,info.st_ctime_ns))
+        self.observations.update(executor=observations,canary_sha256=hashlib.sha256(before).hexdigest())
+
     def test_pending_manager_job_survives_collector_death_and_supervisor_restart(self):
-        """Owner: race start/stop, kill collector, restart; retain custody until exact unit settled."""
+        before = self.state('mothergate.service')
+        self.assertGreater(int(before['MainPID']),1)
+        self.collector.kill(); self.collector.wait(timeout=5)
+        self.assertTrue(self.state(self.unit)['Job'],'job must be pending when collector dies')
+        self.intact()
+        self.manager('restart','mothergate.service')
+        after = self.state('mothergate.service')
+        self.assertEqual(after['ActiveState'],'active')
+        self.assertGreater(int(after['MainPID']),1); self.assertNotEqual(after['MainPID'],before['MainPID'])
+        # BindsTo may cancel the job on restart. That is NOT permission to
+        # discard custody: only the explicit settled stop below can do so.
+        self.intact()
+        registration = self.probe.config('registry.json')['mother']
+        self.assertEqual(self.probe.client_request(self.probe.FIXTURE,registration),{'status':'BUSY'})
+        self.observations.update(collector_returncode=self.collector.returncode,
+                                 supervisor_before=before,supervisor_after=after,retained=True)
+
+    def cleanup(self):
+        # Stop exact units first; never recursively delete or repair root custody.
+        self.manager('stop',self.unit,self.blocker)
+        if self.launch is not None: self.launch.wait(timeout=10)
+        state = self.bridge.run('stop',self.run)
+        self.assertEqual(state['Job'],'')
+        self.assertFalse(self.sealed.exists())
+        self.assertFalse((self.control/'sealed'/('.pending-'+self.run)).exists())
+        if self.collector is not None:
+            if self.collector.poll() is None: self.collector.kill()
+            self.collector.wait(timeout=5); self.collector.stdout.close()
+        result = self._outcome.result
+        if any(test is self for test,_ in result.failures+result.errors):
+            self.fail('proof failed; disposable evidence retained at '+str(self.root))
+        for kind in ('log','status'):
+            path = self.control/'incoming'/(self.run+'.'+kind+'.sock')
+            try: info = path.lstat()
+            except FileNotFoundError: continue
+            self.assertEqual(info.st_uid,self.owner.pw_uid)
+            self.assertTrue(stat.S_ISSOCK(info.st_mode) or stat.S_ISLNK(info.st_mode))
+            path.unlink()
+        script = r"""
+import os,sys
+from pathlib import Path
+run=sys.argv[1]; stage=Path('/var/lib/mothergate/staging')/run
+fd=os.open(stage,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+try:
+    os.unlink('request.json',dir_fd=fd); os.rmdir('snapshot',dir_fd=fd)
+finally: os.close(fd)
+stage.rmdir(); (Path('/var/lib/mothergate/pending')/('.'+run)).unlink()
+"""
+        subprocess.run(['/usr/bin/python3','-I','-B','-c',script,self.run],
+            user=self.owner.pw_uid,group=self.owner.pw_gid,extra_groups=[],
+            env=lifecycle.ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,close_fds=True,timeout=5,check=True)
+        for path,digest in self.files.items():
+            self.probe.protected(path)
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),digest)
+            path.unlink()
+        if hasattr(self,'dropin'): self.dropin.rmdir()
+        self.manager('daemon-reload')
+        # Keep root canaries/observations on failure for review. Only known leaves
+        # are removed, never globbed or recursively deleted.
+        self.fifo.unlink()
+        canary = self.root/'canary'
+        if canary.exists(): canary.unlink()
+        self.root.rmdir()

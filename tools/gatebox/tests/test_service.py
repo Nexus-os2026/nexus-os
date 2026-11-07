@@ -70,7 +70,7 @@ class OfflineServiceTests(unittest.TestCase):
                 left, right = socket.socketpair()
                 with left, right: right.sendall(b'x')
             else:
-                with tempfile.TemporaryDirectory(prefix='.probe-', dir=HERE/'tests') as tmp, socket.socket(socket.AF_UNIX) as sock:
+                with tempfile.TemporaryDirectory(prefix='.probe-') as tmp, socket.socket(socket.AF_UNIX) as sock:
                     sock.bind(str(Path(tmp)/'probe.sock'))
         except PermissionError as exc:
             if exc.errno != errno.EPERM: raise
@@ -235,11 +235,11 @@ class OfflineServiceTests(unittest.TestCase):
             with self.assertRaises(ValueError): decide(REQUEST,1234,registration,identity,bad,{})
         normal = dict(state,stage='normal')
         with self.assertRaises(ValueError): decide(REQUEST,1234,registration,identity,normal,{})
-        evidence = {'identity':identity,'passed':['B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS']}
+        evidence = {'identity':identity,'passed':['B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS','C1-SEALED','C2-CANARY','C3-RESTART']}
         self.assertEqual(decide(REQUEST,1234,registration,identity,normal,evidence),'normal')
     def test_installer_admission_binding(self):
         identity = {'bundle':'a'*64,'policy':'b'*64,'gates':'c'*64}
-        evidence = {'identity':identity,'passed':['B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS']}
+        evidence = {'identity':identity,'passed':['B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS','C1-SEALED','C2-CANARY','C3-RESTART']}
         self.assertTrue(supervisor.qualified(identity,evidence))
         for bad in ({},dict(evidence,identity={}),dict(evidence,passed=['E2E'])):
             self.assertFalse(supervisor.qualified(identity,bad))

@@ -100,6 +100,15 @@ def prepare_control():
     run(['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
     require_control_absent()
 
+def publish_units(pairs):
+    # Read-only precheck: an old runtime entry must leave no published units.
+    require_control_absent()
+    outputs = []
+    for staged,target in pairs:
+        os.rename(staged,target); outputs.append(target)
+    run(['/usr/bin/systemctl','daemon-reload'])
+    return outputs
+
 def create_control():
     # Recheck immediately before creation in case state appeared during install.
     require_control_absent()
@@ -114,12 +123,18 @@ def write(path,data,mode=0o644):
 def record(path,value): write(path,(json.dumps(value,sort_keys=True)+'\n').encode())
 
 def acceptance_check(identity,value,state,authenticate):
-    rows = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'}
+    custody = {'C1-SEALED','C2-CANARY','C3-RESTART'}
+    rows = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'} | custody
     if (value.get('identity') != identity or set(value.get('passed',[])) != rows
             or state != {'identity':identity,'stage':'qualifying'}
             or set(value.get('evidence',{})) != rows):
         raise ValueError('qualification incomplete/stale or provenance missing')
     for row, evidence in value['evidence'].items():
+        if row in custody:
+            proof = evidence.get('custody')
+            if (not isinstance(proof,dict) or proof.get('row') != row or proof.get('passed') is not True
+                    or not isinstance(proof.get('observations'),dict) or not proof['observations']):
+                raise ValueError('installed custody proof missing/failed: '+row)
         summary = authenticate(evidence['run_id'])['summary']
         if (summary['status'] != 'PASS_SCOPED' or summary['request'] != dict(repo_id='mother',full_sha=FIXTURE,gate_set_id='full')
                 or summary['installed'] != dict(identity,stage='qualifying')
@@ -168,14 +183,20 @@ def plan_accounts():
     return plan
 
 def apply_accounts(plan,submitter):
+    created = dict(users=[],groups=[])
     for entry,create in plan:
         if create:
             run(['/usr/sbin/groupadd','--system','--gid',str(entry.pw_gid),entry.pw_name])
+            created['groups'].append(entry.pw_name)
             run(['/usr/sbin/useradd','--system','--uid',str(entry.pw_uid),'--gid',str(entry.pw_gid),
                  '--no-create-home','--home-dir','/nonexistent','--shell','/usr/sbin/nologin',entry.pw_name])
+            created['users'].append(entry.pw_name)
     try: grp.getgrnam('gatesubmit')
-    except KeyError: run(['/usr/sbin/groupadd','--system','gatesubmit'])
+    except KeyError:
+        run(['/usr/sbin/groupadd','--system','gatesubmit'])
+        created['groups'].append('gatesubmit')
     run(['/usr/sbin/usermod','--append','--groups','gatesubmit',submitter])
+    return created
 
 def stage_security(files,uid,gid,stage):
     protected(stage)
@@ -258,17 +279,16 @@ def main():
     protected(Path('/etc'))
     for parent in (Path('/etc/systemd/system'),Path('/etc/sudoers.d'),Path('/etc/polkit-1/rules.d')):
         if parent.stat().st_dev != Path('/etc').stat().st_dev: raise ValueError('cross-filesystem security staging')
+    require_control_absent()
     with tempfile.TemporaryDirectory(prefix='.gatebox-',dir='/etc') as temporary:
         staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,Path(temporary))
         # Publish validated units and load them before the fixed stop. On a
         # fresh host, stopping unknown units would fail and prevent bootstrap.
-        outputs = []
-        for staged,target in staged_security[:3]:
-            os.rename(staged,target); outputs.append(target)
-        run(['/usr/bin/systemctl','daemon-reload'])
+        outputs = publish_units(staged_security[:3])
         prepare_control()
-        apply_accounts(plan,args.submit_user)
+        created = apply_accounts(plan,args.submit_user)
         for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
+        record(CONFIG/'created-accounts.json',created)
         for name in FILES:
             target = DEST/name; target.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
             write(target,files['tools/gatebox/'+name],0o755 if name in ('install.sh','lifecycle.py') else 0o644)
@@ -311,7 +331,7 @@ def main():
         for name,data in payload_policies(files).items():
             write(CONFIG/name,data); outputs.append(CONFIG/name)
         record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
-        outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json']
+        outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json',CONFIG/'created-accounts.json']
         record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
         sys.path.insert(0,str(DEST))
         import probe

@@ -205,3 +205,15 @@ Oracles precede fixes in numbered checkpoint folders. Real custody and its plant
 require an outside run with protected TMPDIR (Q11); no ownership-remap modelling.
 Q12 F-6 remains #115 installer scope. No installation, host action, Git write,
 network, phase advancement or installed acceptance is performed by this mission.
+
+## Q13 installer qualification amendment
+
+C1-SEALED, C2-CANARY and C3-RESTART are mandatory installed custody rows in
+qualification and admission. Without installed host root, direct custody tests
+skip; qualification rejects a skipped, failed or unavailable proof. Installed
+results remain UNVERIFIED until the Owner runs the separately reviewed procedure.
+B2 proves denial of tested manager calls and verifies the installed polkit rule
+against installed-files.json. Attribution of denial to that rule and precedence
+over earlier conflicting policy remain UNVERIFIED. The Owner must close agents,
+remove nexus from docker and reboot before install (README H1). This amendment
+claims no host action, installed PASS, phase advancement or CI parity.

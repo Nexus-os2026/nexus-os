@@ -36,6 +36,12 @@ CONFIG = Path('/etc/gatebox')
 FIXTURE = '899e3872c5b61223c87b905f63c66947a816259b'
 HARNESS = Path('/usr/libexec/gatebox/policy/phase2_live_sandbox.rs')
 SESSION = None
+CUSTODY_TESTS = {
+    'C1-SEALED':'test_mothergate_cannot_unlink_rename_or_symlink_after_relocation',
+    'C2-CANARY':'test_systemd_output_never_writes_disposable_root_canary',
+    'C3-RESTART':'test_pending_manager_job_survives_collector_death_and_supervisor_restart'}
+REQUIRED_ROWS = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'} | set(CUSTODY_TESTS)
+POLKIT_RULE = Path('/etc/polkit-1/rules.d/00-gatebox-deny.rules')
 
 def sibling(name):
     spec = importlib.util.spec_from_file_location('probe_'+name,HERE/(name+'.py'))
@@ -539,10 +545,18 @@ def offline_oracles(row):
         spec = importlib.util.spec_from_file_location('installed_core_oracles',HERE/'tests/test_unit_core.py')
         core = importlib.util.module_from_spec(spec); spec.loader.exec_module(core)
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(core.SnapshotTests if row=='B1' else core.ReceiptTests))
-    result = unittest.TestResult(); suite.run(result)
+    # Pin all nested oracle temporaries outside the immutable installed tree,
+    # independent of a caller's TMPDIR or tempfile's cached default.
+    with tempfile.TemporaryDirectory(prefix='gbx-offline-',dir='/var/tmp') as temporary:
+        previous = tempfile.tempdir
+        try:
+            tempfile.tempdir = temporary
+            result = unittest.TestResult(); suite.run(result)
+        finally: tempfile.tempdir = previous
     require(result.wasSuccessful() and not result.skipped,'installed negative controls failed/skipped: '+str(result.errors+result.failures+result.skipped))
 
 def authority(summary):
+    polkit_check()
     for user in ('mothergate','gaterun'):
         # No shell and no broad sudo rule; direct and transient manager calls must deny.
         for argv in (['/usr/bin/systemctl','--no-ask-password','start','mothergate-forbidden.service'],
@@ -554,6 +568,36 @@ def authority(summary):
         path = str(Path('/var/lib/mothergate/receipts')/summary['run_id']/'summary.json')
         script = 'import errno,os,sys\ntry: os.open(sys.argv[1],os.O_WRONLY)\nexcept OSError as e: sys.exit(0 if e.errno in (errno.EACCES,errno.EPERM) else 2)\nsys.exit(3)'
         capture(['/usr/sbin/runuser','-u',user,'--','/usr/bin/python3','-I','-c',script,path])
+
+def polkit_check():
+    protected(POLKIT_RULE)
+    digest = config('installed-files.json').get(str(POLKIT_RULE))
+    require(digest and hashlib.sha256(POLKIT_RULE.read_bytes()).hexdigest()==digest,'installed polkit rule missing/changed')
+
+def custody_oracle(row):
+    import unittest
+    require(row in CUSTODY_TESTS,'unknown custody row')
+    # Installed discovery needs test_service on its import path, just as unittest
+    # discover does. All files have already passed installed_identity().
+    directory = str(HERE/'tests')
+    sys.path.insert(0,directory)
+    try:
+        spec = importlib.util.spec_from_file_location('installed_custody',HERE/'tests/test_custody.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        suite = unittest.defaultTestLoader.loadTestsFromName('InstalledCustodyTests.'+CUSTODY_TESTS[row],module)
+        tests = list(suite); result = unittest.TestResult(); suite.run(result)
+        require(result.testsRun==1 and result.wasSuccessful() and not result.skipped,
+                'installed custody failed/skipped: '+str(result.errors+result.failures+result.skipped))
+        observations = getattr(tests[0],'observations',None)
+        proof = dict(row=row,passed=True,observations=observations)
+        validate_custody(row,proof)
+        return proof
+    finally: sys.path.remove(directory)
+
+def validate_custody(row,proof):
+    require(isinstance(proof,dict) and proof.get('row')==row and proof.get('passed') is True
+            and isinstance(proof.get('observations'),dict) and bool(proof['observations']),
+            'installed custody proof missing/failed: '+row)
 
 def e2e(summary):
     sibling('receipt').validate_summary(summary)
@@ -569,9 +613,13 @@ def e2e(summary):
                 and data['inodes_used']<=data['inodes_total']*.8,'scratch headroom exceeded')
 
 def qualify(row):
+    require(row in REQUIRED_ROWS,'unknown oracle')
     require_installed(); summary,clients = fixture()
     require(summary['installed']==dict(config('identity.json'),stage='qualifying'),'receipt installed binding')
-    if row.startswith('A'): validate_sensor(row,summary['isolation'][row])
+    custody = None
+    if row in CUSTODY_TESTS:
+        custody = custody_oracle(row); validate_custody(row,custody)
+    elif row.startswith('A'): validate_sensor(row,summary['isolation'][row])
     elif row in ('B1','B2','B3','B4'):
         offline_oracles(row)
         if row in ('B2','B3'): authority(summary)
@@ -590,6 +638,7 @@ def qualify(row):
         value['evidence'][row] = dict(run_id=summary['run_id'],
             summary_sha256=hashlib.sha256(json.dumps(summary,sort_keys=True).encode()).hexdigest(),
             client_provenance=clients if row=='CLIENTS' else None)
+        if custody is not None: value['evidence'][row]['custody'] = custody
         value['passed'] = sorted(set(value['passed'])|{row}); atomic_config('qualification.json',value)
     finally: os.close(fd)
 

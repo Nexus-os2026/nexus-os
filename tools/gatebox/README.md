@@ -38,8 +38,24 @@ Independently review the bundle and record its SHA-256. The sheet §10 installer
 command needs `--bundle-sha256 "$GBX_BUNDLE_SHA"`, as included below; the sheet
 itself is outside this PR's allowed files.
 
-Owner commands, from the host after independent bundle review (never run the
-checkout installer as root):
+Owner H1 steps, **before installation**, in a host terminal. Close every agent,
+background task and sub-agent, including this session. This check must print
+nothing; do not proceed while any matching process remains:
+
+```bash
+pgrep -u nexus -af 'claude|codex'
+# Empty result required. Then, with all agents closed:
+sudo gpasswd -d nexus docker
+sudo reboot
+```
+
+After reboot, confirm both `id -nG` and `id -nG nexus` omit `docker`. Docker is
+subsequently available only through `sudo docker`. Do not restart agents during
+the Owner sudo session. In a second host terminal keep `sudo -i` open as lockout
+insurance until the post-install checks pass.
+
+Owner bundle/install commands, after H1 and independent bundle review (never run
+the checkout installer as root; never use sudo -E or preserve the environment):
 
 ```bash
 bash -euo pipefail <<'OWNER'
@@ -81,6 +97,20 @@ sudo /usr/bin/systemctl enable --now mothergate.socket
 OWNER
 ```
 
+Then verify the whole sudoers configuration and custody ownership:
+
+```bash
+sudo -k; sudo visudo -c
+stat -c '%a %U:%G %n' /run/mothergate-control \
+  /run/mothergate-control/incoming /run/mothergate-control/sealed
+# Expected: 755 root:root, 700 mothergate:mothergate, 700 root:root
+```
+
+Close the insurance root shell after these checks. **STOP after installation.**
+Qualification and enable-qualified are a separate procedure, requiring this
+round's independent review and completed H1 remediation. A failed/refused install
+also means STOP and preserve evidence for Architect review.
+
 `enable --now` starts the socket immediately and persists at boot through
 `sockets.target`; it is not limited to the current session.
 
@@ -114,8 +144,9 @@ not an attestation of agent identity; it can be spoofed by the registered user.
 Run sudo commands via Claude Code's `!` shell prefix to retain that ancestry:
 `!sudo /usr/bin/python3 -I -B -m unittest discover -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v`.
 
-Run qualification from the actual Claude Code process context, with Owner
-approval for host/root testing. The suite records the Claude ancestor, invokes
+Separate qualification procedure (only after the installation STOP is lifted):
+run from the actual Claude Code process context, with Owner approval for host/root
+testing and no background agents. The suite records the Claude ancestor, invokes
 `runuser -u nexus -- /usr/bin/python3 -I -B client.py ...`, retains the accepted
 run receipt and the refused non-qualification reply, and authenticates on host:
 
@@ -123,12 +154,28 @@ run receipt and the refused non-qualification reply, and authenticates on host:
 bash -euo pipefail <<'QUALIFY'
 sudo /usr/bin/python3 -I -B -m unittest discover \
   -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v
+sudo -k
 sudo /usr/bin/python3 -I -B /usr/libexec/gatebox/verify.py --latest \
   --repo mother --sha 899e3872c5b61223c87b905f63c66947a816259b \
   --gateset full --require-status PASS_SCOPED
 sudo /bin/bash /usr/libexec/gatebox/install.sh enable-qualified
 QUALIFY
 ```
+
+C1-SEALED, C2-CANARY and C3-RESTART run through test_installed.py and are
+mandatory qualification rows. They use real root/mothergate DAC, the production
+shim/template and collector, disposable exact-instance runtime dependencies,
+a FIFO barrier with a 25-second deadline, a root canary, a pending payload job,
+collector death and an actual supervisor restart. BindsTo may cancel the queued
+job on restart; custody and the admission blocker must remain until an explicit
+settled stop proves cleanup. No payload restriction changes. Cleanup removes only
+verified known leaves; ambiguity fails and retains custody for review. Direct
+test_custody.py discovery runs proofs without recording rows; use test_installed.py
+to qualify. Unavailable/skipped proofs FAIL qualification and cannot enable admission.
+
+B2 proves denial of the tested direct manager calls. It also checks that the
+installed polkit rule matches its installed-files hash. Whether this specific
+rule caused denial, or wins over earlier conflicting rules, is UNVERIFIED.
 
 Enable verifies every acceptance row, protected provenance and current installed
 hashes. A host-only qualification invocation fails CLIENTS. Failed attempts are
@@ -172,15 +219,17 @@ host namespace baseline; they do not claim a new independent host-canary run.
 ## Maintenance: retained custody and reboot-only reinstallation
 
 The installer never deletes or changes ownership of an existing
-`/run/mothergate-control` entry. After validating all inputs and staged policy,
-it publishes the validated units, reloads systemd, stops both `mothergate.socket`
+`/run/mothergate-control` entry. After validating inputs, it checks absence
+read-only before staging any units and rechecks before publication. It publishes
+the validated units, reloads systemd, stops both `mothergate.socket`
 and `mothergate.service`, and checks the control name without following links.
 Any entry (including an empty directory, a file or a dangling symlink) refuses
 installation with **reboot required after review of retained custody**. Stop,
 inspection or tmpfiles errors abort installation. It rechecks absence immediately
 before the fixed `systemd-tmpfiles --create` call; tmpfiles is not a migration
-or repair tool for an old supervisor-owned directory. A refusal can leave the
-validated units published; follow the reviewed removal procedure before retry.
+or repair tool for an old supervisor-owned directory. A pre-existing control
+entry leaves no published unit files. State appearing after the precheck can
+still leave partial outputs; follow reviewed removal before retry.
 
 Retained `sealed/RUN_ID`, `.pending-RUN_ID` and `.used-RUN_ID` state is evidence,
 not disposable scratch. A start timeout does not prove job cancellation. A
@@ -213,8 +262,12 @@ Manual removal after a failed or interrupted install requires Owner review of
 retained receipts and the pre-install accounts/groups. Preflight validates
 inputs, identities, unit syntax and sudoers before persistent account/file
 changes; its only earlier write is a root-only temporary staging directory.
-Validated units are then published and reloaded before stopping runtime services;
-accounts and the remaining outputs follow only after the absence check.
+After the read-only precheck, units are published and reloaded before stopping
+runtime services; accounts and remaining outputs follow the second absence check.
+`/etc/gatebox/created-accounts.json` records exactly the users/groups created by a
+successful account step; pre-existing entries are excluded. It is hashed in
+installed-files.json. A failure during account creation may precede the record:
+missing records require actual-state review, never guessed deletion authority.
 I/O or command failure can still leave partial outputs; there is no automatic
 rollback. Preserve evidence before running these host commands in a
 `bash -euo pipefail` subshell:
@@ -231,15 +284,57 @@ sudo /usr/bin/rm -f /etc/systemd/system/mothergate.socket \
 sudo /usr/bin/systemctl daemon-reload
 sudo /usr/bin/systemctl reset-failed
 sudo /usr/bin/gpasswd -d nexus gatesubmit
-# Only delete accounts/groups that this installation created:
-sudo /usr/sbin/userdel mothergate
-sudo /usr/sbin/userdel gaterun
-if getent group mothergate >/dev/null; then sudo /usr/sbin/groupdel mothergate; fi
-if getent group gaterun >/dev/null; then sudo /usr/sbin/groupdel gaterun; fi
-if getent group gatesubmit >/dev/null; then sudo /usr/sbin/groupdel gatesubmit; fi
+# Read the protected creation record BEFORE removing configuration. If missing,
+# stop for review rather than guessing account provenance.
+sudo /usr/bin/python3 -I -B - <<'PY'
+import grp, json, os, pathlib, stat, subprocess
+record = pathlib.Path('/etc/gatebox/created-accounts.json')
+for path in [*reversed(record.parents),record]:
+    info = path.lstat()
+    if info.st_uid or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+        raise SystemExit('unprotected creation record')
+    if any(n.startswith('system.posix_acl_') for n in os.listxattr(path)):
+        raise SystemExit('ACL on creation record')
+created = json.loads(record.read_bytes())
+if set(created) != {'users','groups'}: raise SystemExit('unknown record schema')
+for key,allowed in [('users',{'mothergate','gaterun'}),
+                    ('groups',{'mothergate','gaterun','gatesubmit'})]:
+    names = created[key]
+    if type(names) is not list or any(type(n) is not str for n in names):
+        raise SystemExit('bad record list')
+    if len(names)!=len(set(names)) or not set(names)<=allowed:
+        raise SystemExit('unknown/duplicate recorded identity')
+for name in created['users']:
+    subprocess.run(['/usr/sbin/userdel',name],check=True)
+# Some userdel configurations also remove an empty private group.
+for name in created['groups']:
+    try: grp.getgrnam(name)
+    except KeyError: continue
+    subprocess.run(['/usr/sbin/groupdel',name],check=True)
+PY
 # Includes retained receipts: copy reviewed evidence elsewhere first.
-sudo /usr/bin/rm -rf /usr/libexec/gatebox /etc/gatebox /usr/lib/gatebox/root \
-  /var/lib/mothergate /var/lib/gatebox-source /root/gatebox-slice1
+# Review each root-owned tree and any crash-left staging directory first.
+sudo /usr/bin/python3 -I -B - <<'PY'
+import os, pathlib, re, stat, subprocess
+paths = list(map(pathlib.Path,('/usr/libexec/gatebox','/etc/gatebox',
+    '/usr/lib/gatebox/root','/var/lib/mothergate','/var/lib/gatebox-source',
+    '/root/gatebox-slice1')))
+for path in pathlib.Path('/etc').glob('.gatebox-*'):
+    if not re.fullmatch(r'\.gatebox-[a-z0-9_]{8}',path.name):
+        raise SystemExit('unexpected staging name; review required')
+    paths.append(path)
+for path in paths:
+    for parent in [*reversed(path.parents),path]:
+        try: info = parent.lstat()
+        except FileNotFoundError: break
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid or info.st_mode & 0o022:
+            raise SystemExit('unsafe removal root/ancestor: '+str(parent))
+        if any(n.startswith('system.posix_acl_') for n in os.listxattr(parent)):
+            raise SystemExit('ACL on removal root/ancestor')
+subprocess.run(['/usr/bin/rm','-rf','--one-file-system','--',*map(str,paths)],check=True)
+PY
+# Remove /usr/lib/gatebox only if empty; preserve unrelated contents.
+sudo /usr/bin/rmdir --ignore-fail-on-non-empty /usr/lib/gatebox
 # Do not recursively delete runtime custody; use the reviewed reboot path above.
 sudo /usr/bin/rm -f /run/mothergate-submit.sock
 REMOVE

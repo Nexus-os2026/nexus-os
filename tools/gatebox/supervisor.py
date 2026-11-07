@@ -22,7 +22,7 @@ def sibling(name):
     spec.loader.exec_module(module)
     return module
 snapshot, receipt = sibling('snapshot'), sibling('receipt')
-ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'}
+ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS','C1-SEALED','C2-CANARY','C3-RESTART'}
 # PR-2b install.sh must create /etc/gatebox/qualification.json with this value
 # before starting the service. It permits qualifying only; normal still fails closed.
 QUALIFICATION_PLACEHOLDER = {'identity':None,'passed':[]}

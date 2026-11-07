@@ -169,6 +169,9 @@ class InstalledAcceptance(unittest.TestCase):
     def test_b3(self): self.check('B3','protected-receipt')
     def test_b4(self): self.check('B4','complete-evidence-or-failure')
     def test_clients(self): self.check('CLIENTS','claude-qualification')
+    def test_c1(self): self.check('C1-SEALED','sealed-DAC')
+    def test_c2(self): self.check('C2-CANARY','executor-canary')
+    def test_c3(self): self.check('C3-RESTART','pending-restart')
     def test_e2e(self): self.check('E2E','899e3872c5b61223c87b905f63c66947a816259b full PASS_SCOPED')
 
 class Q8F1Oracles(unittest.TestCase):
