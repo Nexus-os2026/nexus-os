@@ -522,7 +522,51 @@ impl SessionDoor {
         request: &str,
         expected_identity: [u8; 32],
     ) -> Result<(), crate::authority::AuthorityError> {
-        let _ = (run, contract_hash, request, expected_identity, self.kind);
-        Err(crate::authority::AuthorityError::Halted) // SB-3A inert surface: deny-only.
+        use crate::authority::AuthorityError as E;
+        let DoorKind::Original { file_grant } = self.kind else {
+            return Err(E::Halted); // A continuation never binds.
+        };
+        if !self.context.scope.live(self.core.cell.session_word()) {
+            return Err(E::Halted);
+        }
+        // Installed M, observed without waiting; released before the run table.
+        let identity = {
+            let s = hold(&self.core).map_err(|_| E::Unavailable("model slot unavailable"))?;
+            let r = s.registration.as_ref().ok_or(E::ModelNotRegistered)?;
+            if self.core.model.uncertain.load(Ordering::SeqCst) || r.watch.check_now().is_err() {
+                return Err(E::Halted);
+            }
+            r.digest
+        };
+        if identity != expected_identity {
+            return Err(E::ModelIdentityMismatch);
+        }
+        let backend = self.door.session_backend();
+        let q_run = match self.context.scope.mother_run.get() {
+            Some((control, known)) if control.ptr_eq(&backend) => Some(*known),
+            Some(_) => return Err(E::NotMember),
+            None => None,
+        };
+        let control = backend.upgrade().ok_or(E::Halted)?;
+        let authority = control.authority();
+        let clock = (
+            authority.clock().monotonic_ms(),
+            authority.clock().wall_ms(),
+        );
+        authority
+            .runs()
+            .admit_session_inference(crate::authority::run::SessionBinding {
+                run,
+                agent: self.door.agent(),
+                group: self.door.origin(),
+                contract_hash,
+                request,
+                identity,
+                original: &self.context.cell,
+                q_run,
+                grants: authority.grants(),
+                grant: file_grant,
+                clock,
+            })
     }
 }

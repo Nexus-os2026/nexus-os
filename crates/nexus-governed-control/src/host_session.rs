@@ -570,7 +570,6 @@ pub struct SessionDoor {
 #[derive(Clone, Copy)]
 enum DoorKind {
     Original {
-        #[cfg_attr(not(test), expect(dead_code, reason = "SB-3A: wired by SB-3C"))]
         file_grant: crate::authority::ids::GrantId,
     },
     Continuation,

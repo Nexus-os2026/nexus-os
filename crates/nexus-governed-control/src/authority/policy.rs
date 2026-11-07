@@ -447,8 +447,12 @@ impl GrantStore {
         mono_ms: u64,
         wall_ms: u64,
     ) -> Result<Option<GrantScope>, GrantObservation> {
-        let _ = (id, mono_ms, wall_ms, TryLockError::<()>::WouldBlock);
-        Err(GrantObservation::Contended) // SB-3A inert surface: deny-only.
+        let grants = self.grants.try_lock().map_err(|error| match error {
+            TryLockError::WouldBlock => GrantObservation::Contended,
+            TryLockError::Poisoned(_) => GrantObservation::Poisoned,
+        })?;
+        let grant = grants.map.get(&id).filter(|g| g.live(mono_ms, wall_ms));
+        Ok(grant.map(|g| g.scope.clone()))
     }
     #[cfg(test)]
     pub(crate) fn hold_for_test(&self) -> impl Drop + '_ {

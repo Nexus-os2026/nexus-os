@@ -700,5 +700,15 @@ Plants (A): MP-SB-3-S/-D/-R/-Q (each association predicate), MP-SB-3-C-hash/
 life), MP-SB-3-M, MP-SB-3-CAS (fresh and idempotent), MP-SB-3-grant (ignore or
 substitute), MP-SB-4-Q, MP-SB-A1 (fresh never-revoked observer), MP-SB-A1-order
 (revoke after journal I/O), O2 contention latch. Named dead-code expectations
-(non-test builds; wired by SB-3C): `SessionDoor::bind_inference_private`,
-`DoorKind::Original::file_grant`. Receipts follow in §12.1.
+(non-test builds; wired by SB-3C): `SessionDoor::bind_inference_private`
+only. Receipts follow in §12.1.
+
+### 12.1 SB-3A receipts (outside the Codex sandbox; RuntimeRoot/AF_UNIX real)
+Commit 1 (`88b55952`, inert): governed-control filter `model_call_tests`
+0/5 passed, each RED at its first intended assertion (O1 revoke; R2 valid
+binding `halted`; G0 `halted` != `grant_not_live`; R3 CAS not reached; O2
+run contention `halted`); Mother L1 RED in all four children with the
+forwarded observer live (`[false]`). Commit 2: the same tests GREEN (5/5;
+L1 4/4 children); retained C1 goldens, including `m2e_budget` invalidation
+boundaries, pass unchanged. Plant receipts are reported with the candidate;
+none is committed.

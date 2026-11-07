@@ -1,18 +1,17 @@
 //! Replay accounting never restores the borrowed live caller or its deny latch.
 use super::*;
-use nexus_governed_control::inference::{CallMeter, Charged, MeterRefusal};
-use std::sync::atomic::{AtomicBool, Ordering};
+use nexus_governed_control::inference::{
+    CallMeter, Charged, InvocationObserver, InvocationOwner, MeterRefusal,
+};
+use std::sync::atomic::Ordering;
 
-/// Memory-only deny latch for one invocation; never replayed or reset.
-/// This observation seam grants no permission of its own.
+/// SB-3 (O1): the sealed caller's view of its invocation's broker-owned,
+/// memory-only deny latch; never replayed or reset, no permission of its own.
 #[derive(Clone)]
-pub(crate) struct InvocationLiveness(Arc<AtomicBool>);
+pub(crate) struct InvocationLiveness(InvocationObserver);
 impl InvocationLiveness {
-    fn new() -> Self {
-        Self(Arc::new(AtomicBool::new(false)))
-    }
     pub(crate) fn is_revoked(&self) -> bool {
-        self.0.load(Ordering::Acquire)
+        self.0.is_revoked()
     }
 }
 
@@ -72,20 +71,14 @@ impl CallAccounting {
 }
 
 pub(super) struct LaneCalls {
+    /// Revoked by every invalidation, and by Drop (coordinator teardown).
+    pub(super) owner: InvocationOwner,
     pub(super) liveness: InvocationLiveness,
     invocation: InvocationId,
     generation: u64,
     in_flight: bool,
     at_mono_ms: u64,
     at_wall_ms: u64,
-}
-
-// Dropping the live invocation denies every retained observer, including
-// coordinator teardown. The atomic has no route back to false.
-impl Drop for LaneCalls {
-    fn drop(&mut self) {
-        self.liveness.0.store(true, Ordering::Release);
-    }
 }
 
 /// The sole live reservation step, also used by the in-process oracle caller.
@@ -132,8 +125,11 @@ pub(super) fn reserve_lane(
     let declared = if cap == 0 { 0 } else { budget };
     let accounting = CallAccounting::reserved(m, invocation, cap, declared)
         .map_err(|_| CoordinatorError::Contract(ContractError::ModelCapOutOfRange))?;
+    let owner = InvocationOwner::new();
+    let liveness = InvocationLiveness(owner.observer());
     let live = (cap > 0).then(|| LaneCalls {
-        liveness: InvocationLiveness::new(),
+        owner,
+        liveness,
         invocation,
         generation,
         in_flight: false,
@@ -435,14 +431,13 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             return Err(ModelCallError::Invalidated);
         }
         let c = self.meter.coordinator;
-        // SB-3A inert surface: a fresh observer, never this caller's own.
-        let inert = nexus_governed_control::inference::InvocationOwner::new();
+        // O1: this caller's own observer; never a fresh or replaced one.
         let attempt = c.port.model_call(
             self.meter.invocation.mission,
             request,
             self,
             self,
-            &inert.observer(),
+            &self.liveness.0,
         );
         // Recording is independent of liveness and the first terminal cause.
         if matches!(attempt, Ok(ModelAttempt::Unrecorded(_))) {

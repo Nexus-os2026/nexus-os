@@ -349,13 +349,21 @@ impl InvocationOwner {
     pub fn new() -> Self {
         Self(Arc::new(AtomicBool::new(false)))
     }
-    /// SB-3A inert surface: not yet revoked by anything.
-    pub fn revoke(&self) {}
+    /// Final and idempotent: there is no route back to live.
+    pub fn revoke(&self) {
+        self.0.store(true, AtomicOrdering::SeqCst);
+    }
     pub fn observer(&self) -> InvocationObserver {
         InvocationObserver(self.0.clone())
     }
     pub fn is_revoked(&self) -> bool {
         self.0.load(AtomicOrdering::Acquire)
+    }
+}
+
+impl Drop for InvocationOwner {
+    fn drop(&mut self) {
+        self.revoke();
     }
 }
 

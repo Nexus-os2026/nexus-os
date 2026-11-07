@@ -2044,12 +2044,130 @@ pub(crate) struct SessionBinding<'a> {
     pub(crate) clock: (u64, u64),
 }
 impl RunRegistry {
+    // No producer/model hold is carried here; no filesystem, evidence or
+    // callback work happens under the run-table hold.
     pub(crate) fn admit_session_inference(
         &self,
-        binding: SessionBinding<'_>,
+        b: SessionBinding<'_>,
     ) -> Result<(), AuthorityError> {
-        let _ = binding;
-        Err(AuthorityError::Halted) // SB-3A inert surface: deny-only.
+        let mut table = self.runs.try_lock().map_err(|error| {
+            if matches!(error, TryLockError::Poisoned(_)) {
+                b.original.fail_session();
+            }
+            AuthorityError::Unavailable("model run hold unavailable")
+        })?;
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        let now = Life {
+            stop_epoch: self.stop_number.load(Ordering::SeqCst),
+            halted: false,
+            closed: false,
+        };
+        let door = live_door(&mut table.doors, b.group, b.agent)?;
+        let listed = door.members.contains(&b.run);
+        let mut matching = door.consents.iter().filter(|c| {
+            c.life == now && c.contract_hash == b.contract_hash && c.request == b.request
+        });
+        let consent = matching.next().cloned();
+        let agreed = consent
+            .as_ref()
+            .is_some_and(|first| matching.all(|c| c.page_facts == first.page_facts));
+        let entry = table.runs.get(&b.run).ok_or(AuthorityError::UnknownRun)?;
+        if &entry.view.agent != b.agent {
+            return Err(AuthorityError::WrongAgent);
+        }
+        if entry.class != RunClass::Agent {
+            return Err(AuthorityError::WrongRun);
+        }
+        if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged)
+            || table.in_halted_group(entry)
+        {
+            return Err(AuthorityError::Halted);
+        }
+        if entry.view.finished {
+            return Err(AuthorityError::RunNotActive);
+        }
+        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
+            return Err(AuthorityError::RunCancelled);
+        }
+        // One predicate per original association: S, D, R; then Q.
+        let s = entry
+            .file_cell
+            .as_ref()
+            .is_some_and(|c| c.host() && c.same(b.original));
+        let d = listed && entry.groups.contains(&b.group);
+        let r = entry.opened_by == Some(b.group);
+        if !s || !d || !r {
+            return Err(AuthorityError::NotMember);
+        }
+        let files = entry
+            .files_admission
+            .as_ref()
+            .ok_or(AuthorityError::NotAdmitted)?;
+        if b.q_run != Some(b.run) {
+            return Err(AuthorityError::NotMember);
+        }
+        let grant = b
+            .grants
+            .try_live_at(b.grant, b.clock.0, b.clock.1)
+            .map_err(|error| {
+                if error == super::policy::GrantObservation::Poisoned {
+                    b.original.fail_session();
+                }
+                AuthorityError::Unavailable("model grant hold unavailable")
+            })?;
+        if !matches!(grant, Some(super::policy::GrantScope::Files { workspace, identity, .. })
+            if workspace == files.workspace.id && identity == files.workspace.identity)
+        {
+            return Err(AuthorityError::GrantNotLive);
+        }
+        let consent = consent
+            .filter(|_| agreed)
+            .ok_or(AuthorityError::NoConsent)?;
+        let fresh = match &entry.inference_admission {
+            Some(bound)
+                if bound.contract_hash == consent.contract_hash
+                    && bound.request == consent.request
+                    && bound.identity == b.identity =>
+            {
+                false
+            }
+            Some(_) => return Err(AuthorityError::AlreadyAdmitted),
+            None => true,
+        };
+        if fresh
+            && (consent.contract_hash != files.contract_hash
+                || consent.request != files.request
+                || consent.evidence_seq != files.evidence_seq
+                || consent.kind != files.kind
+                || consent.at_wall_ms != files.consented_wall_ms
+                || consent.page_facts != files.page_facts)
+        {
+            return Err(AuthorityError::NoConsent);
+        }
+        let admission = InferenceAdmission {
+            contract_hash: consent.contract_hash,
+            request: consent.request,
+            evidence_seq: consent.evidence_seq,
+            kind: consent.kind,
+            consented_wall_ms: consent.at_wall_ms,
+            identity: b.identity,
+        };
+        #[cfg(test)]
+        super::file_session::probe(Some(b.original), "model.bind.checked");
+        b.original.admit()?; // Q's real same-word CAS, idempotent success included.
+        if fresh {
+            let entry = table
+                .runs
+                .get_mut(&b.run)
+                .ok_or(AuthorityError::UnknownRun)?;
+            entry.inference_admission = Some(admission);
+        }
+        Ok(())
     }
 }
 #[cfg(test)]
