@@ -1438,7 +1438,7 @@ impl SessionDoor {
     /// SB-3 C (R1): the installed model's identity at an original door
     /// whose request, session and registration watch are live. No authority.
     pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {
-        None // SB-3 C1 inert surface
+        self.model_identity_private()
     }
 
     /// SB-3 C (R2): bind this original door's own File run, once, to its
@@ -1450,8 +1450,8 @@ impl SessionDoor {
         request: &str,
         expected_identity: [u8; 32],
     ) -> Result<(), SessionFailure> {
-        let _ = (run, contract_hash, request, expected_identity);
-        Err(crate::authority::AuthorityError::Halted.into()) // SB-3 C1 inert surface
+        self.bind_inference_private(run, contract_hash, request, expected_identity)
+            .map_err(Into::into)
     }
 
     /// SB-3 C (R3-R8): one model call of the bound run, charged to the C1
@@ -1464,8 +1464,8 @@ impl SessionDoor {
         deadline: &dyn crate::inference::CallDeadline,
         invocation: &crate::inference::InvocationObserver,
     ) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {
-        let _ = (run, request, meter, deadline, invocation);
-        Err(crate::authority::AuthorityError::Halted.into()) // SB-3 C1 inert surface
+        self.model_call_private(run, request, meter, deadline, invocation)
+            .map_err(Into::into)
     }
 }
 
