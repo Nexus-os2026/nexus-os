@@ -1,0 +1,15 @@
+[Unit]
+Description=Gate Box submission socket
+
+[Socket]
+ListenStream=/run/mothergate-submit.sock
+SocketUser=root
+SocketGroup=gatesubmit
+SocketMode=0660
+Accept=no
+Backlog=8
+RemoveOnStop=yes
+Service=mothergate.service
+
+[Install]
+WantedBy=sockets.target

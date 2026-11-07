@@ -1,0 +1,21 @@
+{
+  "units": {
+    "mothergate.service": [
+      [
+        "RuntimeDirectory=mothergate-control\nRuntimeDirectoryMode=0700\n",
+        "ReadWritePaths=/run/mothergate-control\n"
+      ]
+    ],
+    "mothergate-run@.service": [
+      [
+        "file:/run/mothergate-control/%i.log.sock",
+        "file:/run/mothergate-control/sealed/%i/log.sock"
+      ],
+      [
+        "file:/run/mothergate-control/%i.status.sock",
+        "file:/run/mothergate-control/sealed/%i/status.sock"
+      ]
+    ]
+  },
+  "tmpfiles": "d /run/mothergate-control 0755 root root -\nd /run/mothergate-control/incoming 0700 mothergate mothergate -\nd /run/mothergate-control/sealed 0700 root root -\n"
+}
