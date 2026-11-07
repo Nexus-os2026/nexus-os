@@ -1015,19 +1015,8 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         Err(_) => return false,
     };
     let ingress = seed.ingress();
-    let mut terminal = match Terminal::open(ingress.clone()) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("{}", e.code());
-            return false;
-        }
-    };
-    if !nexus_governed_control::files::make_non_dumpable() {
-        terminal.shared.fail(crate::terminal::Failure::Input);
-        return false;
-    }
-    let screen = terminal.shared.clone();
-    let confirmer = terminal.confirmer.clone();
+    // Reserve startup before the reader can accept Quit: a closing session
+    // refuses new producers, and startup must still report and close honestly.
     let startup_debt = match ingress.producer(ProducerKind::Startup) {
         Ok(p) => p,
         Err(_) => {
@@ -1035,6 +1024,23 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             return false;
         }
     };
+    let mut terminal = match Terminal::open(ingress.clone()) {
+        Ok(t) => t,
+        Err(e) => {
+            startup_debt.joined();
+            eprintln!("{}", e.code());
+            return false;
+        }
+    };
+    #[cfg(test)]
+    hands_tests::ptyr1_after_terminal_open(&terminal.shared);
+    if !nexus_governed_control::files::make_non_dumpable() {
+        startup_debt.joined();
+        terminal.shared.fail(crate::terminal::Failure::Input);
+        return false;
+    }
+    let screen = terminal.shared.clone();
+    let confirmer = terminal.confirmer.clone();
     let startup_screen = screen.clone();
     let mut startup = std::thread::Builder::new()
         .name("hands-startup".into())
