@@ -14,6 +14,16 @@ use std::sync::{Mutex, MutexGuard, TryLockError};
 pub(super) struct ModelSlot {
     pub(super) state: Mutex<State>,
     pub(super) uncertain: AtomicBool,
+    /// SB-3B1b test seams: the ordered gate trace, the backstop clock skew
+    /// and the uncharged/spent chat-latch replays.
+    #[cfg(test)]
+    pub(super) trace: Mutex<Vec<&'static str>>,
+    #[cfg(test)]
+    pub(super) backstop_skew: Arc<std::sync::atomic::AtomicU64>,
+    #[cfg(test)]
+    pub(super) chat_replay: AtomicBool,
+    #[cfg(test)]
+    pub(super) chat_early: AtomicBool,
 }
 #[derive(Default)]
 pub(super) struct State {
@@ -328,7 +338,7 @@ use crate::authority::evidence::EndStatus;
 use crate::authority::ids::{AgentId, RunId};
 use crate::authority::run::{GroupId, OriginalGrant, RunRegistry, SessionAttempt};
 use crate::authority::{Authority, AuthorityError};
-use crate::inference::{InvocationObserver, ModelRequest};
+use crate::inference::{CallMeter, InvocationObserver, ModelRequest};
 pub(super) struct Attempt {
     owner: Owner,
     runs: Arc<RunRegistry>,
@@ -622,5 +632,27 @@ impl SessionDoor {
             &grant,
             invocation,
         )
+    }
+}
+
+// SB-3B1b R5: the private original-door call; no public route.
+impl SessionDoor {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SB-3B1b: private call, wired by SB-3C; session route unavailable"
+        )
+    )]
+    pub(super) fn model_call_private(
+        &self,
+        run: RunId,
+        request: &ModelRequest,
+        meter: &dyn CallMeter,
+        deadline: &dyn CallDeadline,
+        invocation: &InvocationObserver,
+    ) -> Result<crate::inference::ModelCallOutcome, AuthorityError> {
+        let _ = (run, request, meter, deadline, invocation);
+        Err(AuthorityError::Halted) // Deny-only stub until the feat commit.
     }
 }

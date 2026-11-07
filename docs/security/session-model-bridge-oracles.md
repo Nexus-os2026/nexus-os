@@ -908,3 +908,51 @@ Gates, each binary alone:
 - fmt; clippy (3 crates, all targets, -D warnings); diff --check
 Repeats: 10 serial and 10 parallel runs of `host_session::model`, 48/48
 each.
+
+### 13.6 B1b mapping and frozen oracles (SB3B-R3, on B1a final 47fa1f88)
+The oracles are in `host_session/model_call_tests.rs`, on deny-only stubs:
+`SessionDoor::model_call_private` refuses `halted`, and the ModelSlot
+seams are declared but unused. They were written alongside a saved draft
+and are disclosed as such (SB3B-R1 ruling 6).
+
+The mapping is the `SB3-*b` rows of the cases TSV: G0 (R5), G1-G5, L2,
+C2 (with metadata failure and refused charge), T1, F1, F2 with F8 (R5
+classes, no new charge), F3, F4, F5 (composed zeros carried to C/D), F7
+(Mother-side withholding carried to D), F8 (pre-ticket refusals through
+the call: zero charges, meter entries and records), F11, the SB3B-R5 (3)
+carry (`sb3_call_gate_reads_clocks_before_any_hold`), and SB3B-R5 (1)
+applied at R5, which is builder-proposed
+(`sb3_call_grant_revocation_cannot_precede_the_cas`).
+
+Notes on the last two:
+- The SB3B-R5 (3) oracle uses a blocking clock. While a clock reading
+  inside a call gate is blocked, it asserts that neither the run table
+  nor the grant store is held, and that the call still completes.
+- The builder-proposed oracle applies SB3B-R5 (1) at R5: a revocation
+  started after a gate's observer read cannot complete before that gate's
+  CAS. Its bounded wait is 2 s, and a slow revoker can only let a mutant
+  survive, never fail correct code.
+
+B1b seams, all `#[cfg(test)]` and guarded by F11 in this unit:
+- ModelSlot `trace`: the ordered per-predicate refusal and poll trace.
+- `backstop_skew` / `SkewClock`: the clock-controlled backstop, which
+  replaces `backstop_spent`.
+- `chat_replay` / `chat_early`: the spent and uncharged chat latch.
+- SplitClock `on_read`: the blocking clock, test fixture only.
+
+Moved to the test-only B1e (pure evidence, SB3B-R3):
+- A2/F6, F9 and F10 (manifest and watchdog).
+- The call-level R4 row and G0's R3 case; B1a already covers both.
+- SB-2a registration-gate contention.
+
+Forecast against 47fa1f88:
+- This oracle-add: 1,202 changed lines (code 1,139, this record and
+  the TSV 63).
+- Feat, estimated from the saved draft: about 260 lines. That assumes
+  `model_call_private` reuses `admit_attempt_private` rather than
+  rewriting it. Parts: model.rs about 175, run.rs about 45, inference.rs
+  27, host_session.rs about 12 for admission with captured clocks.
+- Receipts: about 10 lines.
+- Total: about 1,470 of 1,500. If the feat runs over, the next
+  pure-evidence candidates for B1e are F5 and the call-level F8 rows;
+  moving them needs a ruling.

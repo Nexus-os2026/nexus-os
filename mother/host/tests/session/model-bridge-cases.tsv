@@ -53,3 +53,22 @@ SB3-R4c	sb3_attempt_contention_and_poison_latch_exactly	R3 grant/run contention 
 SB3-R4g	sb3_attempt_grant_clocks_and_identity_are_independent	monotonic-only, wall-only, identity	grant_not_live; nothing	SB3B-R4
 SB3-R6t	sb3_attempt_grant_revocation_cannot_precede_the_cas	revoker thread started at model.attempt.granted, bounded 2 s wait	never completed-before-CAS and admitted; revocation lands; refusal leaves nothing; guard-release plant RED 10/10	SB3B-R6
 SB3-R5r	sb3_attempt_rollback_hold_expiry_latches_uncertainty	pre-ticket refusal whose rollback completion hold expires	unavailable; uncertainty and failure latched; no ticket	SB3B-R5
+SB3-G0r5	sb3_original_file_grant_remains_required_per_request	revoked,expired,scope,substitute before each of the four gates	boundary and successors 0; recorded	SB-3B1b
+SB3-G1b	sb3_call_override_required_at_each_request	run-table contention at each gate; poison	model_cancelled; prefix; no latch / latched	SB-3B1b
+SB3-G2b	sb3_pre_gate_ingress_sends_no_request	four restriction sinks before each gate	affected and successors 0; prior charge kept	SB-3B1b
+SB3-G3b	sb3_paused_before_cas_ingress_wins	ingress after the observer read, before the CAS	ingress wins; no refreshed retry	SB-3B1b
+SB3-G4b	sb3_entered_request_grants_no_successor	entered and held request, then restrict	selected once; successors 0	SB-3B1b
+SB3-G5b	sb3_held_request_cancels_and_joins	held request x four sinks	closure seen; joined under 1 s; no retry	SB-3B1b
+SB3-L2b	sb3_revocation_between_observer_read_and_cas_is_entered_only	revoke after the observer read	at most the selected request	SB-3B1b
+SB3-C2b	sb3_invalidation_after_charge_prevents_chat	revoke at charge; metadata failure; refused charge	charge 1 chat 0; 1/0/0; recorded	SB-3B1b
+SB3-T1b	sb3_original_deadlines_and_watch_are_not_renewed	q, mission, backstop, watch before gate 1	later gates refuse; call two not renewed	SB-3B1b
+SB3-F1b	sb3_r5_predicate_order_is_exact	adjacent predicate pairs; chat-latch pairs	earlier step refuses (trace)	SB3B-R2
+SB3-F2b	sb3_r5_each_predicate_refuses_literally	each predicate alone at each gate; latch; grant contention/poison	literal class at its own step; no new charge	SB3B-R2
+SB3-F3b	sb3_contended_gate_polls_live_and_notifies_nothing	contention at each gate	polling None; no notice; one admission per gate	SB3B-R2
+SB3-F4b	sb3_call_clocks_backstop_and_watch_are_fixed	each mission clock; fixed backstop; Stop and resume	model_timeout / model_stopped; nothing renewed	SB3B-R2
+SB3-F5b	sb3_late_recorded_reply_is_not_acceptable_at_the_broker	revoke after the observer read	never acceptable; no File dispatch	SB3B-R3
+SB3-F7b	sb3_unsettled_recorded_call_is_uncertain	recorded success, pin cannot settle	Uncertain; result kept; one record; slot debt	SB3B-R3
+SB3-F8b	sb3_call_r3_refusals_charge_nothing	grant, observer, ninth, q, member, sticky	literal class; 0/0/0	SB3B-R2
+SB3-S1b	sb3_b1b_test_seams_are_test_only	masked scan of the B1b seams	all under cfg(test)	SB3B-R2 F11
+SB3-K1b	sb3_call_gate_reads_clocks_before_any_hold	blocking clock reading inside the gates	no run or grant hold; call completes	SB3B-R5
+SB3-H1b	sb3_call_grant_revocation_cannot_precede_the_cas	revoker started after each gate's observer read	never completed-before-CAS and sent	SB3B-R5
