@@ -125,8 +125,9 @@ before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
 - **Command.** Exactly `nexus-mother check-page <file> [--facts <file>]`.
   Paths are used as given (relative or absolute, UTF-8 or not), never
   canonicalized; a path that is empty or starts with `--`, a missing,
-  duplicate, unknown or extra argument is usage. Any other first argument
-  runs the desktop exactly as before.
+  duplicate, unknown or extra argument is usage. `check-page` anywhere but
+  first (`--` included) is usage, exit 2, before any desktop start (M3E-R9).
+  Any other argument list runs the desktop exactly as before.
 - **Read-only.** The page (at most 65,536 + 1 bytes) and the facts file are
   read once each through the M-1 adapter reader (`input_files`: no final
   link, no blocking, regular file, bounded read) and the M-1 facts parser.
@@ -160,8 +161,9 @@ before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
   missing fact (`name_not_heading`, `name_not_title`, `hours_line_missing:<i>`,
   `phone_missing`, `foreign_number`). V4 is `reader_unsupported`,
   `name_not_visible`, `hours_line_not_visible:<i>`, `phone_not_visible`. V5 is
-  `email_not_supported`. V3/V4 are `not run` after a page refusal; each key
-  that runs is printed.
+  `email_not_supported`. V3/V4 are `not run` after a page refusal (even if
+  the facts file is malformed too, M3E-R9); each key that runs is printed,
+  and each one vetoes on its own.
 - **Exit.** 0 PASS. 1 any refusal, including semantic facts refusals and a
   page over 65,536 B. 2 usage (`ERROR usage: nexus-mother check-page <file>
   [--facts <file>]`), a read refusal of the page or facts file (`ERROR <code>
@@ -180,6 +182,9 @@ before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
 | `s1ae_supplied_facts_two_keys` (M3-O41) | Matching facts: exact golden with facts-file sha256, facts hash, policy facts line, `visible text: pass`, T14 pass; non-fact edit passes; changed name/hours/phone: its own facts hash, both keys refused with their exact codes, V3's code first, no location; a foreign number: V3 refuses while V4 passes. |
 | `s1ae_refusal_location_and_exit_contract` | `<a href>` on its planted line, `<script>` and the old template: the kernel's exact code, line and column, bare and with facts (V3/V4 `not run`); invalid facts syntax: facts line only; cap + 1: no prefix hash; at cap: hashed and refused by the kernel; read refusals and usage exit 2 with fixed lines; non-UTF-8 and relative paths; canaries absent. |
 | `s1ae_self_identity_unavailable_refuses_before_any_read` (unit) | Image unavailable: exactly `ERROR self_identity_unavailable`, exit 2, nothing read. |
+| `s1ae_page_refusal_precedes_malformed_facts` (M3E-R9 2) | Script page and malformed facts: V3 and V4 `not run`, result the page's S1a code with its location, exit 1. |
+| `s1ae_v4_vetoes_when_v3_is_forced_to_pass` (unit, M3E-R9 3) | V3 forced to pass, page name not the facts': `visible text: refused name_not_visible`, result `REFUSED name_not_visible`, exit 1. |
+| `s1ae_misplaced_check_page_never_reaches_the_desktop` (desktop, M3E-R9 1) | `-- check-page …`, `x check-page …`, `--check-page check-page …`: exit 2, exactly the usage line, no stderr, HOME stays empty. |
 | `s1ae_headless_binary_has_no_home_side_effect` (desktop) | The real binary, no display, fresh HOME/XDG roots: `sha256sum`-equal hashes, exit 0/1/2, no stderr, HOME stays empty, inputs untouched. |
 
 ### Plants
@@ -192,3 +197,6 @@ before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
 | P-U2b-3 | force V3 to pass | two_keys: changed name refuses with V3's code |
 | P-U2b-4 | force V4 to pass | two_keys: changed name `visible text: refused` |
 | P-U2c | run GTK before the dispatch | desktop headless: exit 0 |
+| P-R9-1 | drop the non-first-position `check-page` refusal | desktop misplaced: exit 2 + usage |
+| P-R9-2 | V3's facts refusal before the page-refusal precedence | precedence: `facts present as given: not run` |
+| P-R9-3 | omit V4 from the result aggregation | veto: exit 1 |

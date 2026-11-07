@@ -311,6 +311,46 @@ fn shown_path(path: &Path) -> String {
 mod tests {
     use super::*;
 
+    const BAKERY: &str = include_str!("../../src/oracles/m3a_bakery.html");
+
+    // M3E-R9 (3): V4 vetoes independently. With V3 forced to pass, a page
+    // whose name is not the facts' still refuses with V4's code.
+    #[test]
+    fn s1ae_v4_vetoes_when_v3_is_forced_to_pass() {
+        let hours = ["Tuesday to Sunday, 7am to 3pm", "Closed on Mondays"];
+        let facts = Facts {
+            sha256: [0; 32],
+            parsed: Ok(ApprovedFacts::new("Rosa's Cakes", &hours, "555-0142").unwrap()),
+        };
+        let forced: V3 = |_, _, _| Ok("facts present as given: forced".into());
+        let mut lines = Vec::new();
+        let page = Some((BAKERY.as_bytes(), [0; 32]));
+        let code = assess(
+            &mut lines,
+            page,
+            Some(&facts),
+            Some(Path::new("f.txt")),
+            forced,
+        );
+        let tail: Vec<&str> = lines
+            .iter()
+            .rev()
+            .take(4)
+            .rev()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(code, 1, "{lines:?}");
+        assert_eq!(
+            tail,
+            [
+                "facts present as given: forced",
+                "visible text: refused name_not_visible",
+                "result: REFUSED name_not_visible",
+                t14_refused("name_not_visible", None).as_str(),
+            ]
+        );
+    }
+
     #[test]
     fn s1ae_self_identity_unavailable_refuses_before_any_read() {
         let mut out = Vec::new();
