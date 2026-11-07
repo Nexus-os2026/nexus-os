@@ -44,9 +44,11 @@ class ContractTests(unittest.TestCase):
         policy = json.loads((HERE/'policy/gates.json').read_text())
         self.assertEqual((policy['schema_version'],policy['gate_set_id'],policy['success_status']), (1,'full','PASS_SCOPED'))
         self.assertIs(policy['no_fail_fast'],True)
-        self.assertEqual(policy['environment'],{'PATH':'/opt/rust/bin:/usr/bin:/bin','LANG':'C.UTF-8',
-                         'HOME':'/work/home','CARGO_HOME':'/work/cargo',
-                         'CARGO_NET_OFFLINE':'true','CARGO_TARGET_DIR':'/work/target'})
+        self.assertEqual(policy['environment'],{'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
+                         'CARGO_HOME':'/work/cargo','CARGO_TARGET_DIR':'/work/target','CARGO_BUILD_JOBS':'4',
+                         'RUST_TEST_THREADS':'4','CARGO_TERM_COLOR':'never','CARGO_NET_OFFLINE':'true',
+                         'RUST_BACKTRACE':'1','TMPDIR':'/run/gate/tmp','XDG_RUNTIME_DIR':'/run/gate/xdg',
+                         'XDG_CACHE_HOME':'/work/cache','LANG':'C.UTF-8','LC_ALL':'C.UTF-8','TZ':'UTC','CI':'true'})  # sheet §5: exactly 17 variables
         gates = policy['gates']
         self.assertEqual([g['id'] for g in gates], ['format','clippy','compile-tests','workspace','doctests','host','desktop-live','walk','whitespace'])
         expected = {

@@ -148,10 +148,21 @@
   ],
   "environment": {
     "PATH": "/opt/rust/bin:/usr/bin:/bin",
-    "LANG": "C.UTF-8",
     "HOME": "/work/home",
+    "PWD": "/work/src",
     "CARGO_HOME": "/work/cargo",
+    "CARGO_TARGET_DIR": "/work/target",
+    "CARGO_BUILD_JOBS": "4",
+    "RUST_TEST_THREADS": "4",
+    "CARGO_TERM_COLOR": "never",
     "CARGO_NET_OFFLINE": "true",
-    "CARGO_TARGET_DIR": "/work/target"
+    "RUST_BACKTRACE": "1",
+    "TMPDIR": "/run/gate/tmp",
+    "XDG_RUNTIME_DIR": "/run/gate/xdg",
+    "XDG_CACHE_HOME": "/work/cache",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TZ": "UTC",
+    "CI": "true"
   }
 }
