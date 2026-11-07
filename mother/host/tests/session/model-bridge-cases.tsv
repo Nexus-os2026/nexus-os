@@ -51,3 +51,5 @@ SB3-S1a	sb3_b1a_test_seams_are_test_only	masked scan of probe,tamper_for_test,mo
 SB3-R4o	sb3_attempt_observer_is_read_after_the_grant	revoke after the grant, before the observer read	halted; nothing; early cached read RED	SB3B-R4
 SB3-R4c	sb3_attempt_contention_and_poison_latch_exactly	R3 grant/run contention and poison	unavailable; no latch / Failed; nothing	SB3B-R4
 SB3-R4g	sb3_attempt_grant_clocks_and_identity_are_independent	monotonic-only, wall-only, identity	grant_not_live; nothing	SB3B-R4
+SB3-R6t	sb3_attempt_grant_revocation_cannot_precede_the_cas	revoker thread started at model.attempt.granted, bounded 2 s wait	never completed-before-CAS and admitted; revocation lands; refusal leaves nothing; guard-release plant RED 10/10	SB3B-R6
+SB3-R5r	sb3_attempt_rollback_hold_expiry_latches_uncertainty	pre-ticket refusal whose rollback completion hold expires	unavailable; uncertainty and failure latched; no ticket	SB3B-R5
