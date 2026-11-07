@@ -1847,10 +1847,10 @@ impl<P: EffectPort> Coordinator<P> {
             };
             let cap = lane.max_model_calls();
             let model = (cap > 0).then(|| self.port.model_identity()).flatten();
-            let (step, caller) = self.step(|inner| {
+            let (step, caller, lane_contract) = self.step(|inner| {
                 inner.mission(id)?.proof.input = verification;
                 if identity.role != *role {
-                    return Ok((Then::End(BlockReason::LaneIdentityChanged), None));
+                    return Ok((Then::End(BlockReason::LaneIdentityChanged), None, None));
                 }
                 if cap > 0 {
                     let c = inner.mission(id)?.contract()?;
@@ -1867,7 +1867,7 @@ impl<P: EffectPort> Coordinator<P> {
                         _ => Some(BlockReason::ModelNotPinned),
                     };
                     if let Some(reason) = reason {
-                        return Ok((Then::End(reason), None));
+                        return Ok((Then::End(reason), None, None));
                     }
                 }
                 let step =
@@ -1881,7 +1881,13 @@ impl<P: EffectPort> Coordinator<P> {
                     )?),
                     _ => None,
                 };
-                Ok((step, caller))
+                let lane_contract =
+                    if matches!(&step, Then::Go(_)) && *role == LaneRole::Builder && cap > 0 {
+                        Some(inner.mission(id)?.contract()?.clone())
+                    } else {
+                        None
+                    };
+                Ok((step, caller, lane_contract))
             })?;
             let input = match self.then(id, step)? {
                 Ok(input) => input,
@@ -1918,6 +1924,7 @@ impl<P: EffectPort> Coordinator<P> {
             #[cfg(all(test, target_os = "linux"))]
             session_journal_oracles::call("entered", "lane_invoke");
             let context = crate::lane::LaneContext {
+                contract: lane_contract.as_ref(),
                 model: caller.as_ref().map(|c| c as &dyn crate::lane::ModelCaller),
             };
             let output = lane.invoke_in(&input, &context);

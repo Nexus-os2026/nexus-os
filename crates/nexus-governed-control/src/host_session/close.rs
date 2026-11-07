@@ -281,6 +281,11 @@ impl HostSession {
             )
         };
         Ok(CloseObligations {
+            model: self
+                .core
+                .model
+                .snapshot()
+                .ok_or(SessionError::Unavailable)?,
             actions_unacknowledged,
             producers_live,
             producers_lost,
@@ -361,6 +366,9 @@ impl HostSession {
             return Err(SessionError::Restricted);
         }
         if producers.slots.iter().any(|s| s.live || s.lost) {
+            return Err(SessionError::Unavailable);
+        }
+        if !self.core.model.quiescent() {
             return Err(SessionError::Unavailable);
         }
         let stop = self.stop_obligations()?;
@@ -498,9 +506,21 @@ impl HostSession {
 /// Current-process close debt; no operational handles.
 #[derive(Clone, Copy, Debug)]
 pub struct CloseObligations {
+    pub model: ModelObligations,
     pub actions_unacknowledged: usize,
     pub producers_live: usize,
     pub producers_lost: usize,
     pub authority_closed: bool,
     pub halt: crate::authority::halt::HaltRecords,
+}
+
+/// Content-free current-process registration obligations; never authority.
+#[derive(Clone, Copy, Debug)]
+pub struct ModelObligations {
+    pub operation: &'static str,
+    pub active: bool,
+    pub owner_complete: bool,
+    pub child_complete: bool,
+    pub record: &'static str,
+    pub uncertain: bool,
 }

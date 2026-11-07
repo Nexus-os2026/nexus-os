@@ -14,12 +14,43 @@ fn code(path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+// Dependency-free matcher for pub(\s+(const|async|unsafe|extern(\s+"[^"]*")?))*\s+fn.
+fn public_function(mut line: &str) -> bool {
+    fn word<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+        line.strip_prefix(prefix)
+            .filter(|r| r.starts_with(char::is_whitespace))
+            .map(str::trim_start)
+    }
+    let Some(rest) = word(line, "pub") else {
+        return false;
+    };
+    line = rest.trim_start();
+    loop {
+        if let Some(rest) = ["const", "async", "unsafe"]
+            .iter()
+            .find_map(|p| word(line, p))
+        {
+            line = rest.trim_start();
+        } else if let Some(rest) = word(line, "extern") {
+            line = if let Some(abi) = rest.strip_prefix('"') {
+                let Some(end) = abi.find('"') else {
+                    return false;
+                };
+                abi[end + 1..].trim_start()
+            } else {
+                rest
+            };
+        } else {
+            return word(line, "fn").is_some();
+        }
+    }
+}
 fn signatures(source: &str) -> Vec<String> {
     let mut result = Vec::new();
     let mut current = None;
     for line in source.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("pub fn ") || trimmed.starts_with("pub async fn ") {
+        if public_function(trimmed) {
             assert!(current.is_none(), "unterminated public signature");
             current = Some(String::new());
         }
@@ -89,6 +120,7 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
             "FnMut",
             "Fn(",
             "Option<HaltCell>",
+            "model",
         ] {
             assert!(!sig.contains(forbidden), "public session escape: {sig}");
         }
@@ -275,4 +307,107 @@ fn fix1_f13_published_hands_build_is_self_contained() {
         shell.contains("target/debug/mother-hands"),
         "run the artifact built by the documented command"
     );
+}
+
+// C1-S1-SB2 adds private machinery, never a public nested escape.
+fn sb2_public_escape(text: &str) -> bool {
+    let text = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if signatures(&text).iter().any(|s| {
+        let s = s
+            .replace("crate::authority::ids::CommitmentId", "CommitmentId")
+            .to_ascii_lowercase();
+        [
+            "model",
+            "inference",
+            "governedcontrol",
+            "agentdoor",
+            "transport",
+            "stopwatch",
+            "fnonce",
+            "fnmut",
+            "fn(",
+        ]
+        .iter()
+        .any(|n| s.contains(n))
+            || s.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .any(|w| w == "authority")
+    }) {
+        return true;
+    }
+    text.lines().map(str::trim).any(|l| {
+        l.starts_with("pub use ")
+            || l.starts_with("pub type ")
+            || (l.starts_with("pub ")
+                && !l.contains("fn ")
+                && [
+                    "GovernedControl",
+                    "AgentDoor",
+                    "Transport",
+                    "StopWatch",
+                    "Authority",
+                ]
+                .iter()
+                .any(|n| l.contains(n)))
+    })
+}
+#[test]
+fn sb2_private_model_submodules_expose_no_callable_route() {
+    fn visit(path: &Path) {
+        if path.is_dir() {
+            for e in std::fs::read_dir(path).unwrap() {
+                visit(&e.unwrap().path());
+            }
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            assert!(
+                !sb2_public_escape(&code(path)),
+                "nested escape {}",
+                path.display()
+            );
+        }
+    }
+    visit(&root().join("crates/nexus-governed-control/src/host_session"));
+    assert!(!sb2_public_escape(
+        "pub fn lookup(id: crate::authority::ids::CommitmentId) {}"
+    ));
+    assert!(sb2_public_escape(
+        "pub fn raw() -> crate::authority::Authority {}"
+    ));
+    assert!(!sb2_public_escape(
+        "pub fn settle_close_authority(&self) {}"
+    ));
+    for plant in [
+        "pub fn raw(&self) -> Arc<GovernedControl> { unreachable!() }",
+        "pub fn model_identity(&self) -> String { unreachable!() }",
+    ] {
+        assert!(sb2_public_escape(plant));
+    }
+}
+
+#[test]
+fn sb2_signature_collection_catches_qualified_model_aliases() {
+    for qualifiers in [
+        "",
+        "const ",
+        "async ",
+        "unsafe ",
+        "extern \"C\" ",
+        "extern ",
+        "const unsafe ",
+        "unsafe extern \"C\" ",
+        "unsafe extern ",
+    ] {
+        let plant = format!(
+            "pub {qualifiers}fn raw(\n&self,\n) -> model::RegistrationReceipt {{ unreachable!() }}"
+        );
+        assert_eq!(
+            signatures(&plant).len(),
+            1,
+            "collect qualified facade: {plant}"
+        );
+        assert!(sb2_public_escape(&plant), "reject aliased model signature");
+    }
 }
