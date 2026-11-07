@@ -26,6 +26,14 @@ It does not claim an actual OS generator failure.
 |---|---|---|
 | MP-Cb-D1 | Swallow injected entropy failure, return zero bytes | `m3cb_broker_marker_is_fallible_v4` typed-error assertion |
 | MP-Cb-D2 | Counter-derived v4-shaped source | `m3cb_broker_marker_uses_approved_entropy` production-body control |
+| MP-Cb-D2s | Seeded xorshift v4-shaped source | `m3cb_broker_marker_uses_approved_entropy` production-body control |
+
+Evidence (local, Linux): inert stub, both oracles RED as registered; implementation,
+both GREEN. D1 killed: fault returned `Ok("00000000000040008000000000000000")`
+(the structural control also failed). D2 and D2s killed by the structural control
+alone; their outputs passed the behavioral format/distinctness oracle, showing
+the control discriminates v4-shaped deterministic sources. Each plant was
+restored byte-for-byte (file and diff hashes equal) and never committed.
 
 Structural equality pins source text; it is not a statistical proof of
 unpredictability. MP-Cb-9 (fallback after typed failure) is owned by Cb1.

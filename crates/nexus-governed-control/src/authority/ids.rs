@@ -68,7 +68,14 @@ pub struct MarkerUnavailable;
 /// is framing data only; it proves no consent, identity or authority.
 /// Generator failure is an error, never a panic or a substitute value.
 pub fn fresh_page_marker() -> Result<String, MarkerUnavailable> {
-    Err(MarkerUnavailable)
+    let mut bytes = [0u8; 16];
+    let filled = getrandom::getrandom(&mut bytes);
+    #[cfg(test)]
+    let filled = marker_fault::inject(filled);
+    filled.map_err(|_| MarkerUnavailable)?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Ok(hex::encode(bytes))
 }
 
 /// Test-only, one-shot generator fault for this module's marker oracles.
@@ -82,6 +89,14 @@ mod marker_fault {
 
     pub(super) fn fail_next() {
         FAIL_NEXT.with(|fail| fail.set(true));
+    }
+
+    /// Replaces the generator's result with a failure, once, if armed.
+    pub(super) fn inject(filled: Result<(), getrandom::Error>) -> Result<(), getrandom::Error> {
+        if FAIL_NEXT.with(|fail| fail.replace(false)) {
+            return Err(getrandom::Error::UNSUPPORTED);
+        }
+        filled
     }
 }
 
