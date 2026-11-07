@@ -473,7 +473,11 @@ class OfflineServiceTests(unittest.TestCase):
                     event = dict(start_event(),gate_id=gate,argv=argv)
                     if internal is not None: event['internal'] = internal
                     summary = fixture.success()
-                    next(c for c in summary['commands'] if c['gate_id']==gate).update({k:v for k,v in event.items() if k in ('argv','internal')})
+                    command = next(c for c in summary['commands'] if c['gate_id']==gate)
+                    command.update({k:v for k,v in event.items() if k in ('argv','internal')})
+                    if internal is None:
+                        event.pop('internal',None)
+                        command.pop('internal',None)
                     for validate in (lambda:supervisor.Evidence().accept(event),lambda:verify.receipt.validate_summary(summary)):
                         if gate in ('host','whitespace') and argv is None and internal is True: validate()
                         else:
