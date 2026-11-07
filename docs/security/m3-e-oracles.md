@@ -282,3 +282,7 @@ is a separate unit).
 | P-M3a-5 | `stop` stored as a goal | stop/quit: `stop` is Stop |
 | P-R11-1 | clear the goal buffer without draining when goal mode ends | timeout mid-line |
 | P-R11-2 | no command-line continuation across the handoff | stop / quit / partial command handoff |
+| P-R13-1 | ownership derived from buffer contents (empty buffers: no owner) | generative (10,200 cases); erasing reproducer |
+| P-R13-2 | per-buffer CR flag (CR fed to the buffers, no stream pairing) | generative (2,073 cases); old-CR reproducer |
+
+P-R11-1 and P-R11-2 mutate code that R13 replaced; their oracles still pass.

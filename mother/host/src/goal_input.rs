@@ -62,11 +62,6 @@ impl GoalBuffer {
         self.bytes.len()
     }
 
-    /// M3E-R11: a line has begun and its terminator has not arrived.
-    pub(crate) fn pending(&self) -> bool {
-        !self.bytes.is_empty() || self.overflow || self.stale
-    }
-
     /// Bytes already typed can never complete a goal.
     pub(crate) fn invalidate(&mut self) {
         if !self.bytes.is_empty() || self.overflow {
