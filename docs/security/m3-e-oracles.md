@@ -469,7 +469,8 @@ journal does not hold: a publication receipt for a File that was asked and
 not confirmed unpublished, the receipt's policy hash, the receipt's link to
 its approved action), `mismatched` (evidence joined to another effect or
 action) and `invalid` (a journal value outside its domain: digests are 64
-lower-case hex, check records are the six closed V0..V5 codes once each).
+lower-case hex, check records hold V0..V5 at most once each, with closed codes; a check
+left out is not recorded, never a pass).
 An invalid value is never copied into the receipt or any summary. T16's
 success phrase needs the receipt and the check record joined to the File
 effect. The host names each gap by kind (`unavailable:`, `missing:`,

@@ -21,9 +21,13 @@
 //!   or a settlement confirmed not published), and otherwise, once a File was
 //!   asked for, uncertain;
 //! - T13 follows only a recorded all-pass; T5, T7 and T15 are phase lines for
-//!   M-5 to call.
+//!   M-5 to call;
+//! - M3E-R19: a receipt joins only the File's effect with a 64 lower-case hex
+//!   digest, else it is [`Publication::Unconfirmed`] (T9 uncertain); checks
+//!   count only as a valid V0..V5 record of the receipt's effect.
 
-use crate::contract::MissionContract;
+use crate::contract::{EffectKind, MissionContract};
+use crate::coordinator::page_receipt::{is_digest, valid_checks};
 use crate::evidence::{LapseReason, SettlementOutcome};
 use crate::journal::{Entry, Event, MissionId};
 use crate::state::Trigger;
@@ -40,8 +44,13 @@ use nexus_governed_control::authority::evidence::escaped;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Publication {
     None,
-    Written { sha256: String, bytes: u64 },
+    Written {
+        sha256: String,
+        bytes: u64,
+    },
     Overtaken,
+    /// A receipt outside its domain or for another effect than the File's.
+    Unconfirmed,
 }
 
 /// How the mission ended, from its journaled triggers.
@@ -77,6 +86,7 @@ pub struct PageView {
     consented: Option<String>,
     file_asked: bool,
     publication: Publication,
+    /// Valid checks recorded for the receipt's effect only.
     checks: Option<Vec<(String, String)>>,
     end: PageEnd,
 }
@@ -119,6 +129,8 @@ pub fn page_view(entries: &[Entry], id: MissionId) -> PageView {
         checks: None,
         end: PageEnd::Open,
     };
+    let (mut file_effect, mut receipt_effect) = (None, None);
+    let mut verified = None;
     for entry in entries.iter().filter(|e| e.mission == id) {
         match &entry.event {
             Event::Transition { trigger } => match trigger {
@@ -150,16 +162,27 @@ pub fn page_view(entries: &[Entry], id: MissionId) -> PageView {
                 }
                 _ => {}
             },
-            Event::ApprovalPending { .. } | Event::EffectDispatched { .. } => {
-                view.file_asked = true
+            Event::EffectDispatched { effect, kind, .. } => {
+                view.file_asked = true;
+                if *kind == EffectKind::File {
+                    file_effect = Some(*effect);
+                }
+            }
+            Event::ApprovalPending { effect, .. } => {
+                view.file_asked = true;
+                file_effect = file_effect.or(Some(*effect));
             }
             Event::PublicationReceipt {
+                effect,
                 sha256,
                 bytes,
                 overtaken,
                 ..
             } => {
-                view.publication = if *overtaken {
+                receipt_effect = Some(*effect);
+                view.publication = if file_effect != Some(*effect) || !is_digest(sha256) {
+                    Publication::Unconfirmed
+                } else if *overtaken {
                     Publication::Overtaken
                 } else {
                     Publication::Written {
@@ -168,10 +191,21 @@ pub fn page_view(entries: &[Entry], id: MissionId) -> PageView {
                     }
                 }
             }
-            Event::VerificationRecorded { checks, .. } => view.checks = Some(checks.clone()),
+            Event::VerificationRecorded { effect, checks, .. } => {
+                verified = Some((*effect, checks.clone()))
+            }
             _ => {}
         }
     }
+    let joined = !matches!(
+        view.publication,
+        Publication::None | Publication::Unconfirmed
+    );
+    view.checks = verified
+        .filter(|(effect, checks)| {
+            joined && receipt_effect == Some(*effect) && valid_checks(checks)
+        })
+        .map(|(_, checks)| checks);
     view
 }
 
@@ -200,7 +234,7 @@ impl PageView {
                 Some(Err(code)) => t16_failed(&escaped(&code)),
                 None => T16_UNCHECKED.to_string(),
             },
-            Publication::Overtaken => T16_UNCONFIRMED.to_string(),
+            Publication::Overtaken | Publication::Unconfirmed => T16_UNCONFIRMED.to_string(),
             Publication::None => match self.end {
                 PageEnd::Declined => T16_DECLINED.to_string(),
                 PageEnd::Expired => T16_EXPIRED.to_string(),
@@ -257,6 +291,7 @@ impl PageView {
                 }
             }
             Publication::Overtaken => lines.push(t12_unchecked()),
+            Publication::Unconfirmed => lines.push(T9_UNCERTAIN.into()),
             Publication::None => match self.end {
                 PageEnd::Declined => lines.push(T9_DECLINED.into()),
                 PageEnd::Expired => lines.push(T9_EXPIRED.into()),

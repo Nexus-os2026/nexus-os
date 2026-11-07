@@ -8,6 +8,11 @@
 //! and journal fields count toward `host-measured: complete`; the export
 //! never claims to be complete overall (R18 (6)).
 //!
+//! M3E-R19: each gap in `host-measured: incomplete (…)` is named by kind:
+//! `unavailable:` (not measured here), `missing:` (absent from the
+//! journal), `mismatched:` (joined to another effect, action or snapshot)
+//! and `invalid:` (outside its domain; shown `invalid`, never its value).
+//!
 //! Data-only (R18 (1)): no terminal alias or hands projection; M-5 calls it.
 
 use crate::binary_identity::SelfIdentityUnavailable;
@@ -32,7 +37,7 @@ pub(crate) fn receipts(host: &HostMeasured<'_>, mission: &MissionReceipt) -> Str
     let binary = match &host.binary_sha256 {
         Ok(hash) => sha256_hex(hash),
         Err(_) => {
-            incomplete.push("nexus-mother sha256".into());
+            incomplete.push("unavailable:nexus-mother sha256".into());
             "unavailable".into()
         }
     };
@@ -82,7 +87,7 @@ pub(crate) fn receipts(host: &HostMeasured<'_>, mission: &MissionReceipt) -> Str
         .ok()
         .map(|a| sha256_hex(&a.hash()));
     if snapshot.is_none() {
-        incomplete.push("facts hash, snapshot".into());
+        incomplete.push("unavailable:facts hash, snapshot".into());
     }
     lines.push(format!(
         "facts hash, snapshot: {} (measured at start)",
@@ -90,7 +95,7 @@ pub(crate) fn receipts(host: &HostMeasured<'_>, mission: &MissionReceipt) -> Str
     ));
     lines.extend(mission_lines(mission, &mut incomplete));
     if snapshot.is_some() && mission.facts_hash.is_some() && snapshot != mission.facts_hash {
-        incomplete.push("identity:facts".into());
+        incomplete.push("mismatched:facts".into());
     }
     lines.push("model and runtime: unavailable (model not registered)".into());
     lines.push("timing (dispatch, return, t_stop): not measured (D6 deferred)".into());
@@ -107,6 +112,7 @@ pub(crate) fn receipts(host: &HostMeasured<'_>, mission: &MissionReceipt) -> Str
 }
 
 fn mission_lines(m: &MissionReceipt, incomplete: &mut Vec<String>) -> Vec<String> {
+    let invalid = |field: &str| m.invalid.contains(&field);
     let mut lines = vec![
         format!("mission: {}", m.mission),
         format!(
@@ -146,11 +152,14 @@ fn mission_lines(m: &MissionReceipt, incomplete: &mut Vec<String>) -> Vec<String
             "sha256 {}, bytes {}, policy {}, overtaken {}",
             escaped(&p.sha256),
             p.bytes,
-            p.policy_hash
-                .as_deref()
-                .map_or("unavailable".into(), escaped),
+            match p.policy_hash.as_deref() {
+                Some(hash) => escaped(hash),
+                None if invalid("receipt_policy_hash") => "invalid".into(),
+                None => "unavailable".into(),
+            },
             if p.overtaken { "yes" } else { "no" }
         ),
+        None if invalid("receipt_sha256") => "invalid".into(),
         None if m.missing.contains(&"publication_receipt") => "unavailable".into(),
         None => "none".into(),
     };
@@ -163,16 +172,22 @@ fn mission_lines(m: &MissionReceipt, incomplete: &mut Vec<String>) -> Vec<String
             .map(|(id, code)| format!("{} {}", escaped(id), escaped(code)))
             .collect::<Vec<_>>()
             .join(", "),
+        _ if invalid("checks") => "invalid".into(),
         _ => "none recorded".into(),
     };
     lines.push(format!("checks: {checks} (mother journal)"));
     lines.push(format!(
         "report digest: {} (mother journal)",
-        m.report_digest.as_deref().map_or("none".into(), escaped)
+        match m.report_digest.as_deref() {
+            Some(digest) => escaped(digest),
+            None if invalid("report_digest") => "invalid".into(),
+            None => "none".into(),
+        }
     ));
     lines.push(format!("end: {} (mother journal)", m.end));
-    incomplete.extend(m.missing.iter().map(|f| f.to_string()));
-    incomplete.extend(m.mismatched.iter().map(|f| format!("identity:{f}")));
+    incomplete.extend(m.missing.iter().map(|f| format!("missing:{f}")));
+    incomplete.extend(m.mismatched.iter().map(|f| format!("mismatched:{f}")));
+    incomplete.extend(m.invalid.iter().map(|f| format!("invalid:{f}")));
     lines
 }
 
