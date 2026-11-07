@@ -270,7 +270,9 @@ fn m3e_u1_input_bounds_and_nofollow() {
         );
 
         // Size-0 /proc file with content: read from the descriptor.
-        assert!(snap(kind, Path::new("/proc/self/status")).unwrap().len() > 0);
+        assert!(!snap(kind, Path::new("/proc/self/status"))
+            .unwrap()
+            .is_empty());
         // A read error on the opened descriptor.
         let mem = OpenedInput::open(kind, Path::new("/proc/self/mem")).unwrap();
         assert_eq!(
@@ -490,7 +492,7 @@ fn m3e_u1_facts_grammar_and_manifest() {
     // Rendered facts + notes = 2,433 B (MAX-A facts, 1,446 B note) refuses.
     let (facts_file, _) = maximum('A');
     let line = "x".repeat(200);
-    let over = format!("{}\n{}", vec![line.as_str(); 7].join("\n"), "x".repeat(39));
+    let over = format!("{}\n{}", [line.as_str(); 7].join("\n"), "x".repeat(39));
     assert_eq!(over.len(), 1446);
     let max_a = facts_of(facts_file.as_bytes()).unwrap();
     assert_eq!(
