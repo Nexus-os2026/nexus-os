@@ -51,6 +51,12 @@ impl ModelSlot {
     pub(super) fn installed(&self) -> bool {
         self.state.lock().unwrap().registration.is_some()
     }
+    /// SB-3B1b test seam: re-read the installed M identity (no authority).
+    #[cfg(test)]
+    pub(super) fn registered_identity_for_test(&self) -> Option<[u8; 32]> {
+        let s = self.state.lock().unwrap();
+        s.registration.as_ref().map(|r| r.digest)
+    }
     pub(super) fn ready(&self) -> Result<bool, SessionError> {
         let s = self.state.try_lock().map_err(|e| {
             if matches!(e, TryLockError::Poisoned(_)) {

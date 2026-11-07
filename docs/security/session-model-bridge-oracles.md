@@ -956,3 +956,49 @@ Forecast against 47fa1f88:
 - Total: about 1,470 of 1,500. If the feat runs over, the next
   pure-evidence candidates for B1e are F5 and the call-level F8 rows;
   moving them needs a ruling.
+
+### 13.7 SB3B-R8 (B1b spec check, 10 MED) oracle-add
+Finding 1 was fixed in ec34e80b. Findings 2–10 and the dead/halted-Q row
+are new oracles on the stubs:
+- F2: added `try_health` None (store held), an independent
+  host-prerequisite failure (`view_id`), a removed pin (`unpin`) and a
+  dead/halted Q (`emergency`, model_cancelled). The four G0 per-gate
+  grant cases are now literal `model_cancelled`.
+- `sb3_r5_holds_contend_and_poison_exactly`: the run table and the grant
+  store, each contended and each poisoned, at every gate. Contention
+  latches nothing; poison latches both.
+- F3: a poll taken under contention returns None before the refusal.
+  `observer: None` is checked within `session_transport`. G3 counts gates,
+  admissions and notices, and G4 counts gates.
+- F4: time is advanced before attempt two, so only the original deadline
+  is crossed. The identity re-read goes through the slot
+  (`registered_identity_for_test`), not the cached value.
+- L2 absorbs F5: at most the selected request, a Recorded outcome, and
+  inventory, commitments, pending target and non-model evidence all
+  unchanged. The vacuous acceptability check is dropped.
+- Chat latch: literal `probe:model_cancelled`, the exact peer sequence,
+  and exactly one charge.
+- Blocking CallDeadline: added to the blocking-clock control.
+- F11: scans model.rs, host_session.rs, close.rs, inference.rs, run.rs
+  and file_session.rs. Every seam must be declared and used. Removing
+  each seam's `#[cfg(test)]` or adding a production use is RED.
+- The R5 revocation oracle is rebuilt per finding 8. A
+  `model.call.admitted` probe fires right after a successful CAS, under
+  the holds. The revoker is joined before judging. The invariant is that
+  no admission follows a completed revocation.
+
+B1a's `sb3_attempt_grant_revocation_cannot_precede_the_cas` does not
+share the finding-8 flaw. It joins the revoker before judging. It judges
+the attempt's admission result, which is Ok only after the CAS. And it
+asserts nothing about successors.
+
+Trace vocabulary the feat must emit:
+- `gate:N`
+- `refused:N`, `refused:hold`
+- `admitted`
+- `poll:none`, `poll:cancelled`
+- `early`, `replay`
+- `probe:<class>`
+
+The size exception (SB3B-R8) is 1,800 changed lines, with production
+at most 350.

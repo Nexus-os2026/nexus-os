@@ -2270,6 +2270,7 @@ impl RunRegistry {
             "opened_by" => entry.opened_by = Some(u64::MAX),
             "view_id" => entry.view.id = RunId::fresh(),
             "pin" => entry.model_pins = entry.model_pins.iter().map(|p| p + 100).collect(),
+            "unpin" => entry.model_pins.clear(),
             "sticky" => entry
                 .inference_admission
                 .as_mut()
