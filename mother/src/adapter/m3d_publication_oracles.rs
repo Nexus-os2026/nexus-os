@@ -689,6 +689,10 @@ fn m3d_db_broker_child() {
             // Replay accepts exactly what live wrote.
             let replayed = crate::coordinator::inspect_history_lines(&f.journal.lines());
             assert!(replayed.is_ok(), "{replayed:?}");
+            // Db2-R1 L3: kept for D-R1's relink mutations.
+            if let Ok(dir) = std::env::var("M3D_DB_DIR") {
+                save_lines(std::path::Path::new(&dir), &f.journal.lines());
+            }
         }
         other => panic!("unknown case {other}"),
     }

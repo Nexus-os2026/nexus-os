@@ -145,6 +145,31 @@ fn m3d_recovery_never_closes_an_unproven_publication() {
         first,
         "the same crash prefix recovers the same"
     );
+    // Db2-R1 L2: later public lifecycle calls cross no ack or closure
+    // boundary, and a second recovery of what they left finds the same.
+    let after = scratch("h1-after");
+    let mut env = env.to_vec();
+    env.push(("M3D_DB_PREFIX", (a + 1).to_string()));
+    env.push(("M3D_DB_OUT", after.display().to_string()));
+    let out = run_child_with(CHILD, "h1-lifecycle", &env);
+    let at = out.find("H1-LIFE ").expect("lifecycle");
+    assert_eq!(
+        out[at..].lines().next().unwrap(),
+        format!(
+            "H1-LIFE into=ok stop=Ok(Failed) notice=Ok(Some({WRITTEN:?})) reason=Ok(Some(\"journal_failed\")) close=err closures=0 acks=0"
+        )
+    );
+    let left = load_lines(&after).len();
+    let again = run_child_with(
+        CHILD,
+        "h1-recover",
+        &[
+            ("M3D_DB_DIR", after.display().to_string()),
+            ("M3D_DB_PREFIX", left.to_string()),
+        ],
+    );
+    let at = again.find("H1-OBS ").expect("second recovery");
+    assert_eq!(again[at..].lines().next().unwrap(), first);
     for n in a + 2..=closed {
         let proven = recover(n);
         assert!(
@@ -163,16 +188,101 @@ fn m3d_settlement_receipt_append_failure_reports_written() {
 #[test]
 fn m3d_replay_rejects_relinked_or_out_of_order_proof() {
     run_child(CHILD, "dr1");
+    // Db2-R1 L3: the early-publication history (receipt with no journaled
+    // pending action). Relinking only its receipt to another valid identity
+    // must not replay.
+    let dir = scratch("l3");
+    let env = [("M3D_DB_DIR", dir.display().to_string())];
+    run_child_with(
+        "adapter::m3d_publication_oracles::m3d_db_broker_child",
+        "l4-early",
+        &env,
+    );
+    let records: Records = crate::journal::verify(&load_lines(&dir))
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.mission, e.event))
+        .collect();
+    let p = records.iter().position(|r| is_receipt(&r.1)).unwrap();
+    assert!(inspect_history_lines(&rechain(&records)).is_ok());
+    let relinked: [(&str, fn(&mut PendingAction)); 2] = [
+        ("early receipt of another commitment", |a| {
+            a.commitment = CMT.into()
+        }),
+        ("early receipt of another run", |a| a.run = RUN.into()),
+    ];
+    for (name, edit) in relinked {
+        let mut changed = records.clone();
+        if let Event::PublicationReceipt { action, .. } = &mut changed[p].1 {
+            edit(action);
+        }
+        assert_ne!(changed, records, "{name}");
+        assert!(
+            matches!(
+                inspect_history_lines(&rechain(&changed)),
+                Err(JournalError::Inconsistent {
+                    code: ReplayViolation::ProofConflict,
+                    ..
+                })
+            ),
+            "{name}"
+        );
+    }
 }
 
 type Records = Vec<(MissionId, Event)>;
 
-/// A fresh broker recovers the saved journal's first `M3D_DB_PREFIX` lines.
-fn recover_prefix(dir: &std::path::Path) {
-    use crate::adapter::m2c_support::{port_for, Home};
+type Opened = (
+    Result<
+        crate::coordinator::Coordinator<crate::adapter::GovernedPort>,
+        crate::coordinator::CoordinatorError,
+    >,
+    crate::journal::MemoryJournal,
+    std::sync::Arc<crate::adapter::GovernedPort>,
+    crate::adapter::m2c_support::Home,
+);
+
+/// A fresh broker recovers the saved journal's first `M3D_DB_PREFIX` lines;
+/// `h1-lifecycle` then drives the public lifecycle and saves what it left.
+fn recover_prefix(dir: &std::path::Path, lifecycle: bool) {
     let n: usize = std::env::var("M3D_DB_PREFIX").unwrap().parse().unwrap();
+    let (opened, journal, port, _home) = reopen(load_lines(dir)[..n].to_vec());
+    if !lifecycle {
+        observe(&opened, &journal, &port, n);
+        return;
+    }
+    let id = MissionId(1);
+    let s = opened.unwrap().into_file_session();
+    let seen = match &s {
+        Ok(s) => format!(
+            "into=ok stop={:?} notice={:?} reason={:?} close={}",
+            s.stop(id),
+            s.notice(id),
+            s.reason(id),
+            if s.close().is_err() { "err" } else { "ok" }
+        ),
+        Err(e) => format!("into=err {e:?}"),
+    };
+    let lines = journal.lines();
+    let added: Vec<Event> = crate::journal::verify(&lines).unwrap()[n..]
+        .iter()
+        .map(|e| e.event.clone())
+        .collect();
+    let closures = count(&added, |e| matches!(e, Event::ApprovalClosed { .. }));
+    println!(
+        "H1-LIFE {seen} closures={closures} acks={}",
+        port.acks_tried()
+    );
+    save_lines(
+        std::path::Path::new(&std::env::var("M3D_DB_OUT").unwrap()),
+        &lines,
+    );
+}
+
+fn reopen(lines: Vec<String>) -> Opened {
+    use crate::adapter::m2c_support::{port_for, Home};
     let journal = crate::journal::MemoryJournal::new();
-    journal.set_lines(load_lines(dir)[..n].to_vec());
+    journal.set_lines(lines);
     let home = Home::fresh_temp("m3db-h1").unwrap();
     let port = std::sync::Arc::new(port_for(&home.control, true));
     let opened = crate::coordinator::Coordinator::open(
@@ -182,13 +292,25 @@ fn recover_prefix(dir: &std::path::Path) {
         std::sync::Arc::new(nexus_governed_control::authority::clock::SystemClock::default()),
         home.private(),
     );
+    (opened, journal, port, home)
+}
+
+fn observe(
+    opened: &Result<
+        crate::coordinator::Coordinator<crate::adapter::GovernedPort>,
+        crate::coordinator::CoordinatorError,
+    >,
+    journal: &crate::journal::MemoryJournal,
+    port: &crate::adapter::GovernedPort,
+    n: usize,
+) {
     let added: Vec<Event> = crate::journal::verify(&journal.lines()).unwrap()[n..]
         .iter()
         .map(|e| e.event.clone())
         .collect();
     let closures = count(&added, |e| matches!(e, Event::ApprovalClosed { .. }));
     let id = MissionId(1);
-    let seen = match &opened {
+    let seen = match opened {
         Ok(c) => format!(
             "open=ok state={:?} reason={:?} notice={:?} close={}",
             c.state(id),
@@ -238,8 +360,8 @@ fn m3d_db_internal_child() {
         return;
     };
     let dir = std::env::var("M3D_DB_DIR").map(std::path::PathBuf::from);
-    if case == "h1-recover" {
-        recover_prefix(&dir.unwrap());
+    if case == "h1-recover" || case == "h1-lifecycle" {
+        recover_prefix(&dir.unwrap(), case == "h1-lifecycle");
         println!("m3d-db-receipt:{case}");
         return;
     }
@@ -264,8 +386,14 @@ fn m3d_db_internal_child() {
             save_lines(&dir.unwrap(), &f.journal.lines());
         } else {
             assert_eq!(m.stop(id), Ok(MissionState::Failed));
-            assert_eq!(m.coordinator.file_notice(id), Ok(Some(WRITTEN)));
-            assert_eq!(m.coordinator.reason(id).as_deref(), Some("journal_failed"));
+            // Db2-R1 M1: the public, read-only observation; asked twice, it
+            // never retries settlement against the poisoned journal.
+            let lines = f.journal.lines().len();
+            for _ in 0..2 {
+                assert_eq!(m.notice(id), Ok(Some(WRITTEN)));
+                assert_eq!(m.reason(id), Ok(Some("journal_failed".into())));
+            }
+            assert_eq!(f.journal.lines().len(), lines);
             let events = f.events();
             assert_eq!(count(&events, is_receipt), 0);
             let ended = |e: &Event| {

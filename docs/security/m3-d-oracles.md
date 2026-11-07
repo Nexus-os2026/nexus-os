@@ -213,3 +213,17 @@ H1 recovery and M2 settlement failure are in memory only: Failed
 `journal_failed`, notice `written; proof not recorded`, no closure or ack,
 clean close refused. M3 ends Blocked `receipt_missing` with the Settled
 outcome still Published. Plants: MP-D-H1, MP-D-M2, MP-D-M3, MP-D-L6.
+
+## M3-Db2 review-1 (Db2-R1 repairs, stacked on 7ac984cb)
+
+| Finding | Oracle | On 7ac984cb |
+|---|---|---|
+| M1 public notice()/reason() after a settlement receipt append failure | m3d_settlement_receipt_append_failure_reports_written (public API, asked twice, no new line) | red: Err(Journal(FailedEarlier)) |
+| L2 ack/closure after recovery via into_file_session() + stop(), close | m3d_recovery_never_closes_an_unproven_publication (H1-LIFE, then a second fresh-broker recovery) | red: acks=1 |
+| L3 early receipt relinked to another valid identity | m3d_replay_rejects_relinked_or_out_of_order_proof (D-R1, l4-early history: other commitment, other run) | red: replay accepts |
+
+Notice and reason of an unrecorded proof are a read-only observation: no
+settlement is retried. The unrecorded-proof barrier holds at every ack and
+closure. An early settlement receipt's action must equal the Settled action
+(`ProofConflict`). Journal appends still write and sync under the coordinator
+lock, by existing design. Plants: MP-D-M1, MP-D-L2, MP-D-L3.
