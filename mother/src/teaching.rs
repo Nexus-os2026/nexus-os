@@ -64,16 +64,14 @@ pub const T16_NONE_RECORDED: &str = "none recorded";
 
 /// T16's outcome after a recorded failed check `code` (escaped by the caller).
 pub fn t16_failed(code: &str) -> String {
-    let _ = code;
-    String::new()
+    format!("index.html was written; the second check reported {code}")
 }
 
 /// T16, the summary: `outcome` is one of the closed phrases above, `checked`
 /// the recorded checks or [`T16_NONE_RECORDED`]. It labels nothing OBSERVED
 /// or CORROBORATED; it says when each would apply.
 pub fn t16(outcome: &str, checked: &str) -> String {
-    let _ = (outcome, checked);
-    String::new()
+    format!("What happened: {outcome}.\nChecked by my code in this run: {checked}.\nFor you to confirm: the page's other sentences and how it looks in your browser.\nOPEN: the 375 px and 1366 px views; the page's other sentences; no backup yet.\nThis run is a demonstration: it counts as OBSERVED when you confirm it, and CORROBORATED only after the records and identities are checked independently.")
 }
 
 /// The claims guard's refusals (design §7.2), ASCII case-insensitive.

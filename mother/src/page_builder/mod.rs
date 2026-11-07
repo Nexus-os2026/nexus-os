@@ -29,11 +29,27 @@ pub struct RequestIdentity {
 }
 
 pub fn request_identity() -> RequestIdentity {
+    use sha2::{Digest, Sha256};
+    use DraftCode::*;
+    let hash = |text: &str| -> [u8; 32] { Sha256::digest(text.as_bytes()).into() };
+    let codes = [
+        NotOneObject,
+        Empty,
+        Markup,
+        CharNotAllowed,
+        WordTooLong,
+        TooLarge,
+        ForeignNumber,
+        Email,
+    ];
     RequestIdentity {
-        system: [0; 32],
-        task: [0; 32],
-        schema: [0; 32],
-        corrections: Vec::new(),
+        system: hash(prompt::SYSTEM_M3),
+        task: hash(prompt::TASK_M3),
+        schema: hash(prompt::SCHEMA),
+        corrections: codes
+            .iter()
+            .filter_map(|c| c.correction().map(|text| (c.code(), hash(&text))))
+            .collect(),
     }
 }
 

@@ -188,9 +188,38 @@ impl PageView {
     /// journaled facts only. `None` while nothing has ended or been written,
     /// or for a mission that is not a page.
     pub fn summary(&self, contract: &MissionContract) -> Result<Option<String>, ViewError> {
-        let _ = (contract, &self.consented);
-        Ok(None)
-}
+        if contract.page_facts.is_none() {
+            return Ok(None);
+        }
+        if self.consented.as_deref() != Some(contract.hash().to_hex().as_str()) {
+            return Err(ViewError::NotConsented);
+        }
+        let outcome = match &self.publication {
+            Publication::Written { .. } => match self.recorded() {
+                Some(Ok(())) => T16_PASSED.to_string(),
+                Some(Err(code)) => t16_failed(&escaped(&code)),
+                None => T16_UNCHECKED.to_string(),
+            },
+            Publication::Overtaken => T16_UNCONFIRMED.to_string(),
+            Publication::None => match self.end {
+                PageEnd::Declined => T16_DECLINED.to_string(),
+                PageEnd::Expired => T16_EXPIRED.to_string(),
+                PageEnd::Stopped => T16_STOPPED.to_string(),
+                PageEnd::Uncertain => T16_UNCONFIRMED.to_string(),
+                PageEnd::Done | PageEnd::Other if self.file_asked => T16_UNCONFIRMED.to_string(),
+                PageEnd::Open | PageEnd::Done | PageEnd::Other => return Ok(None),
+            },
+        };
+        let checked = match &self.checks {
+            Some(checks) if !checks.is_empty() => checks
+                .iter()
+                .map(|(id, code)| format!("{} {}", escaped(id), escaped(code)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            _ => T16_NONE_RECORDED.to_string(),
+        };
+        Ok(Some(t16(&outcome, &checked)))
+    }
 
     /// The recorded checks, if the Verifier's record exists.
     pub fn checks(&self) -> Option<&[(String, String)]> {

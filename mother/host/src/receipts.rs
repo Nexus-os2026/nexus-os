@@ -26,8 +26,84 @@ pub(crate) struct HostMeasured<'a> {
 /// The export, for `mission` (from the verified journal).
 #[allow(dead_code)] // Consumed by M-5's page-mode wiring.
 pub(crate) fn receipts(host: &HostMeasured<'_>, mission: &MissionReceipt) -> String {
-    let _ = (host, mission);
-    String::new()
+    let mut incomplete: Vec<String> = Vec::new();
+    let mut lines =
+        vec!["receipts (content-free: no page, notes, facts text or answers)".to_string()];
+    let binary = match &host.binary_sha256 {
+        Ok(hash) => sha256_hex(hash),
+        Err(_) => {
+            incomplete.push("nexus-mother sha256".into());
+            "unavailable".into()
+        }
+    };
+    lines.push(format!("nexus-mother sha256: {binary} (measured at start)"));
+    lines.push("mother-hands sha256: unavailable (external)".into());
+    lines.push(format!(
+        "policy hash: {} (this build)",
+        sha256_hex(&policy_hash())
+    ));
+    let css: [u8; 32] = Sha256::digest(MOTHER_CSS.as_bytes()).into();
+    lines.push(format!("css sha256: {} (this build)", sha256_hex(&css)));
+    let request = nexus_mother::request_identity();
+    lines.push(format!(
+        "system prompt sha256: {} (this build)",
+        sha256_hex(&request.system)
+    ));
+    lines.push(format!(
+        "task prompt sha256: {} (this build)",
+        sha256_hex(&request.task)
+    ));
+    lines.push(format!(
+        "schema sha256: {} (this build)",
+        sha256_hex(&request.schema)
+    ));
+    for (code, hash) in &request.corrections {
+        lines.push(format!(
+            "correction {code} sha256: {} (this build)",
+            sha256_hex(hash)
+        ));
+    }
+    let inputs = host.inputs;
+    lines.push(format!(
+        "notes file sha256: {} (measured at start)",
+        sha256_hex(&inputs.notes_sha256)
+    ));
+    lines.push(format!(
+        "facts file sha256: {} (measured at start)",
+        sha256_hex(&inputs.facts_sha256)
+    ));
+    let goal = inputs
+        .goal_sha256
+        .as_ref()
+        .map_or("none".into(), sha256_hex);
+    lines.push(format!("goal file sha256: {goal} (measured at start)"));
+    let hours: Vec<&str> = inputs.facts.hours.iter().map(String::as_str).collect();
+    let snapshot = ApprovedFacts::new(&inputs.facts.name, &hours, &inputs.facts.phone)
+        .ok()
+        .map(|a| sha256_hex(&a.hash()));
+    if snapshot.is_none() {
+        incomplete.push("facts hash, snapshot".into());
+    }
+    lines.push(format!(
+        "facts hash, snapshot: {} (measured at start)",
+        snapshot.as_deref().unwrap_or("unavailable")
+    ));
+    lines.extend(mission_lines(mission, &mut incomplete));
+    if snapshot.is_some() && mission.facts_hash.is_some() && snapshot != mission.facts_hash {
+        incomplete.push("identity:facts".into());
+    }
+    lines.push("model and runtime: unavailable (model not registered)".into());
+    lines.push("timing (dispatch, return, t_stop): not measured (D6 deferred)".into());
+    lines.push("build, CI, toolchain, installed files, host: unavailable (external)".into());
+    lines.push(if incomplete.is_empty() {
+        "host-measured: complete".into()
+    } else {
+        format!("host-measured: incomplete ({})", incomplete.join(", "))
+    });
+    lines.push("overall: incomplete (external and timing fields are not provided)".into());
+    let mut text = lines.join("\n");
+    text.push('\n');
+    text
 }
 
 fn mission_lines(m: &MissionReceipt, incomplete: &mut Vec<String>) -> Vec<String> {
