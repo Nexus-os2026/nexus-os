@@ -73,6 +73,7 @@ impl Lane for FileLane {
             })
             .collect();
         LaneOutput {
+            verification: None,
             text: "the lane wrote".into(),
             effects,
             verdict: if verifier {

@@ -223,6 +223,7 @@ impl Lane for StopsWhileBuilding {
     fn invoke(&self, _: &crate::lane::LaneInput) -> crate::lane::LaneOutput {
         self.port.get().expect("port").set_emergency(true);
         crate::lane::LaneOutput {
+            verification: None,
             text: "built".into(),
             effects: vec![effect_of(EffectKind::Network)],
             verdict: Verdict::Continue,

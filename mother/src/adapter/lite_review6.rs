@@ -36,12 +36,14 @@ impl Lane for FileThenFailure {
         // first call publish A so EVERY role can fail after A is recognised.
         if self.role == LaneRole::Sentinel && self.first.swap(false, Ordering::SeqCst) {
             return LaneOutput {
+                verification: None,
                 text: "publish File A".into(),
                 effects: vec![file("a.txt", "A\n")],
                 verdict: Verdict::Continue,
             };
         }
         LaneOutput {
+            verification: None,
             text: "lane result after File A".into(),
             effects: vec![],
             verdict: if self.role == self.failing {

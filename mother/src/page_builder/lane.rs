@@ -92,6 +92,7 @@ impl Lane for PageBuilderLane {
                         verdict: Verdict::Continue,
                         text: String::new(),
                         effects,
+                        verification: None,
                     }
                 }
                 BuildStep::Failed(code) => return failure(code.failure()),
@@ -112,6 +113,7 @@ fn failure(code: &str) -> LaneOutput {
         },
         text: String::new(),
         effects: vec![],
+        verification: None,
     }
 }
 fn input_code(code: BuildInputCode) -> &'static str {

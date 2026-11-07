@@ -69,6 +69,7 @@ fn input(c: &MissionContract) -> LaneInput {
         pass_criteria: c.pass_criteria.clone(),
         prior_outputs: vec![],
         builder_input: None,
+        verification: None,
     }
 }
 fn no_work(w: &World) {
@@ -297,7 +298,7 @@ fn m3d_builder_input_is_the_consented_snapshot() {
         .collect();
     let w = world_with(lanes);
     let id = w.approved(c.clone());
-    for _ in 0..5 {
+    for _ in 0..4 {
         w.mother.advance(id).unwrap();
     }
     let inputs = seen.lock().unwrap();
@@ -342,6 +343,7 @@ impl Lane for Capture {
     fn invoke(&self, i: &LaneInput) -> LaneOutput {
         self.seen.lock().unwrap().push(i.clone());
         LaneOutput {
+            verification: None,
             text: "done".into(),
             effects: vec![],
             verdict: if self.role == LaneRole::Verifier {
