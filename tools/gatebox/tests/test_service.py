@@ -28,6 +28,9 @@ from contextlib import ExitStack
 from unittest.mock import patch, Mock
 
 HERE = Path(__file__).resolve().parents[1]
+# Q6: installed fixtures use the protected pinned copy; offline reads repository.
+HARNESS = (HERE/'policy/phase2_live_sandbox.rs' if HERE == Path('/usr/libexec/gatebox') else
+           HERE.parents[1]/'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs')
 def load(name):
     spec = importlib.util.spec_from_file_location('gbx_'+name, HERE/(name+'.py'))
     module = importlib.util.module_from_spec(spec)
@@ -344,7 +347,7 @@ class OfflineServiceTests(unittest.TestCase):
                 (directory/'Cargo.toml').write_text('[package]\nname = '+json.dumps(p)+'\nversion = "0.1.0"\n')
             source = root/'src/crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
             source.parent.mkdir(parents=True)
-            source.write_bytes((HERE.parents[1]/'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs').read_bytes())
+            source.write_bytes(HARNESS.read_bytes())
             routed = []
             popen = subprocess.Popen
             def spawn(argv, **options):
@@ -425,7 +428,7 @@ class OfflineServiceTests(unittest.TestCase):
                               'package_id':'path+file:///work/src/cj#0.1.0'}),'nexus-verifier-sandbox')
 
     def test_q5_n1_static_exclusion_never_spawns(self):
-        source = (HERE.parents[1]/'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs').read_bytes()
+        source = HARNESS.read_bytes()
         for variant in ('valid','missing','duplicate','path','symlink','blob','missing-name','extra-name','duplicate-name'):
             with self.subTest(variant=variant):
                 policy, exclusions = supervisor.receipt.policy()
@@ -557,6 +560,7 @@ class OfflineServiceTests(unittest.TestCase):
                 patch.object(init.os,'dup2'), patch.object(init.signal,'signal'), patch.object(init,'Path'), \
                 patch.object(init.shutil,'copytree'), patch.object(init.os,'walk',return_value=[]), \
                 patch.object(init,'observations',return_value={'fixture':True}), patch.object(init,'resources',return_value={}), \
+                patch.object(init,'probe_payload',return_value=({},{})), \
                 patch.object(init.Runner,'gates',gates), patch.object(init.subprocess,'Popen',spawn):
             init.main()
 
