@@ -1,0 +1,7 @@
+polkit.addRule(function(action, subject) {
+    if ((subject.user === "mothergate" || subject.user === "gaterun") &&
+        action.id.indexOf("org.freedesktop.systemd1.") === 0) {
+        return polkit.Result.NO;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

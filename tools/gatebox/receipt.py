@@ -35,6 +35,12 @@ def policy():
 def string_list(value):
     return isinstance(value,list) and all(isinstance(item,str) for item in value)
 
+def valid_invocation(command):
+    if command.get('gate_id',command.get('id')) in ('host','whitespace'):
+        return 'argv' in command and command['argv'] is None and command.get('internal') is True
+    return ('internal' not in command and string_list(command.get('argv'))
+            and bool(command['argv']))
+
 def validate_summary(summary):
     if not isinstance(summary,dict) or set(summary) != REQUIRED: raise ValueError('receipt fields')
     if (type(summary['schema_version']) is not int or summary['schema_version'] != 1
@@ -48,8 +54,7 @@ def validate_summary(summary):
     if len(summary['commands']) > 512: raise ValueError('command bound')
     for command in summary['commands']:
         if (not isinstance(command,dict) or not isinstance(command.get('id'),str)
-                or not isinstance(command.get('argv'),list) or not command['argv']
-                or not all(type(arg) is str for arg in command['argv'])
+                or not valid_invocation(command)
                 or command.get('cwd') != '/work/src' or not isinstance(command.get('environment'),dict)
                 or any(key in command and not isinstance(command[key],str) for key in ('gate_id','artifact_id'))
                 or ('artifact_ids' in command and not string_list(command['artifact_ids']))
@@ -96,7 +101,8 @@ def validate_summary(summary):
                 or not artifact['executable'].startswith('/work/target/')
                 or '..' in artifact['executable'].split('/')
                 or any(not isinstance(artifact.get(k),str) or not artifact[k] for k in ('package','target'))
-                or artifact['target'] == exclusions['target']): raise ValueError('unsupported/invalid artifact')
+                or (artifact['package'],artifact['target']) == ('nexus-verifier-sandbox',exclusions['target'])):
+            raise ValueError('unsupported/invalid artifact')
         eligible[artifact['id']] = artifact
     workspace = [c for c in summary['commands'] if c.get('gate_id',c['id']) == 'workspace']
     executed = [c.get('artifact_id') for c in workspace]
