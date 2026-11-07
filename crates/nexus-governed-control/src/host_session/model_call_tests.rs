@@ -876,6 +876,84 @@ fn sb3_attempt_grant_clocks_and_identity_are_independent() {
     }
 }
 
+/// SB3B-R5 (1): a grant revoked after its observation and before Q's CAS,
+/// with the invocation live, admits nothing.
+#[test]
+fn sb3_attempt_grant_revoked_before_the_cas_admits_nothing() {
+    let f = Admit::bound();
+    assert!(f.admit().is_ok(), "positive control");
+    let f = Admit::bound();
+    let (control, grant) = (f.b.control(), f.b.grant());
+    f.b.session
+        .core
+        .cell
+        .1
+        .arm("model.attempt.granted", move || {
+            let _ = control.authority().grants().revoke(grant);
+        });
+    assert_eq!(
+        f.admit().map(|_| ()),
+        Err("grant_not_live"),
+        "revoked before the CAS"
+    );
+    assert!(!f.owner.is_revoked(), "the invocation stayed live");
+    f.nothing("granted revoke");
+}
+
+/// SB3B-R5 (2): the retained SB-2b rollback contract. A pre-ticket refusal
+/// whose rollback completion hold expires latches uncertainty and failure;
+/// no ticket, pin or record exists.
+#[test]
+fn sb3_attempt_rollback_hold_expiry_latches_uncertainty() {
+    let f = Admit::bound();
+    f.b.control()
+        .authority()
+        .grants()
+        .revoke(f.b.grant())
+        .unwrap();
+    let core = Arc::downgrade(&f.b.session.core);
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    let held = std::sync::Mutex::new(Some(held));
+    let holder = Arc::new(std::sync::Mutex::new(None));
+    let keep = holder.clone();
+    f.b.session
+        .core
+        .cell
+        .1
+        .arm("model.attempt.refused", move || {
+            let (core, held) = (
+                core.upgrade().unwrap(),
+                held.lock().unwrap().take().unwrap(),
+            );
+            let (ready, wait) = std::sync::mpsc::channel();
+            *keep.lock().unwrap() = Some(std::thread::spawn(move || {
+                let _hold = core.model.state.lock().unwrap();
+                ready.send(()).unwrap();
+                let _ = held.recv_timeout(Duration::from_secs(5));
+            }));
+            wait.recv_timeout(Duration::from_secs(1)).unwrap();
+        });
+    let refused = f.admit().map(|_| ());
+    let _ = release.send(());
+    holder
+        .lock()
+        .unwrap()
+        .take()
+        .expect("refusal reached")
+        .join()
+        .unwrap();
+    assert_eq!(refused, Err("unavailable"), "the rollback hold expired");
+    let uncertain = f.b.session.core.model.uncertain.load(Ordering::SeqCst);
+    assert!(uncertain && f.failed(), "uncertainty and failure latched");
+    let (attempts, pins, binding) = f.b.runs().model_ledger_for_test(f.b.run);
+    assert_eq!(
+        (attempts, pins.len(), f.calls().len()),
+        (0, 0, 0),
+        "no ticket"
+    );
+    assert_eq!(binding, f.binding, "binding kept");
+}
+
 /// F11 (SB3B-R1 2, SB3B-R4 1): every B1a seam is reachable only under
 /// `#[cfg(test)]` on its own statement or an enclosing item, judged on code
 /// with comments (nested included) and literal contents masked.
@@ -892,6 +970,13 @@ fn sb3_b1a_test_seams_are_test_only() {
     );
     assert_eq!(leaks(nested, &["probe"]), 1, "a nested comment is masked");
     assert_eq!(leaks(gated, &["probe"]), 0, "gated statement and item");
+    // SB3B-R5 (4): escaped and byte character literals never open a string.
+    for literal in [r#"'\"'"#, r#"'\''"#, r#"'\\'"#, r#"b'\"'"#, r#"b'\''"#] {
+        let escaped = format!(
+            "fn production() {{\n    let _c = {literal};\n    probe(None, \"unused\");\n}}\n"
+        );
+        assert_eq!(leaks(&escaped, &["probe"]), 1, "escaped literal {literal}");
+    }
     let sources = [
         ("model.rs", include_str!("model.rs")),
         ("run.rs", include_str!("../authority/run.rs")),
