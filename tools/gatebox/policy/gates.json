@@ -64,14 +64,8 @@
       "id": "host",
       "adapter": "reconcile-all-artifacts",
       "package": "nexus-mother-host",
-      "argv": [
-        "/usr/bin/python3",
-        "-I",
-        "-B",
-        "/gate/bin/init.py",
-        "--gate",
-        "host"
-      ]
+      "argv": null,
+      "internal": true
     },
     {
       "id": "desktop-live",
@@ -122,14 +116,8 @@
       "id": "whitespace",
       "adapter": "snapshot-whitespace",
       "label": "approximation to git diff --check",
-      "argv": [
-        "/usr/bin/python3",
-        "-I",
-        "-B",
-        "/gate/bin/init.py",
-        "--gate",
-        "whitespace"
-      ]
+      "argv": null,
+      "internal": true
     }
   ],
   "coverage": {
