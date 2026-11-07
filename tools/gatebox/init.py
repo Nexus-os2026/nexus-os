@@ -132,15 +132,22 @@ class Runner:
                                 raise ValueError('artifact escaped private target')
                             package = artifact_package(item)
                             if (package,target) == ('nexus-verifier-sandbox',exclusions['target']):
-                                excluded.append(executable)
+                                excluded.append(item)
                                 continue
                             self.artifacts.append(dict(id='a'+str(len(self.artifacts)),adapter='libtest',
                                                        package=package,target=target,executable=executable))
-                        if len(excluded) != 1: raise ValueError('missing/duplicate excluded artifact')
-                        _, code, listing = self.command('excluded-list',[excluded[0],'--list','--format','terse'])
-                        names = re.findall(r'^(.+): test$',listing,re.M)
-                        if code or len(names) != len(exclusions['cases']) or set(names) != set(exclusions['cases']):
-                            raise ValueError('excluded case names changed')
+                        if len(excluded) != 1: raise ValueError('EXCLUSION_ARTIFACT: missing/duplicate test artifact')
+                        source = Path('/work/src/crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs')
+                        if (Path(excluded[0]['target'].get('src_path','')) != source
+                                or source.is_symlink() or source.resolve() != source):
+                            raise ValueError('EXCLUSION_SOURCE: unexpected path or symlink')
+                        data = source.read_bytes()
+                        blob = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+                        if blob != exclusions['source_blob']: raise ValueError('EXCLUSION_BLOB: source identity changed')
+                        names = re.findall(rb'"(p2[a-z][0-9]*_live_[a-z0-9_]+)"',data)
+                        if (len(names) != 39 or len(set(names)) != 39 or len(exclusions['cases']) != 39
+                                or {n.decode() for n in names} != set(exclusions['cases'])):
+                            raise ValueError('EXCLUSION_CASES: missing/extra/duplicate name')
                 elif kind == 'workspace':
                     if not self.artifacts: raise ValueError('missing compilation inventory')
                     for artifact in self.artifacts:
