@@ -93,10 +93,14 @@ Host changes made by the installer and these Owner commands:
   state/receipts in `/var/lib/mothergate`; `/var/lib/gatebox-source` mount point.
 - `/etc/systemd/system/mothergate.socket`, `/etc/systemd/system/mothergate.service`,
   `/etc/systemd/system/mothergate-run@.service`, `/etc/sudoers.d/gatebox`,
-  `/etc/polkit-1/rules.d/00-gatebox-deny.rules`; temporary root-only `/etc/.gatebox-*` staging.
-- Systemd reload and socket enable/start, including the boot-enabling link
+  `/etc/polkit-1/rules.d/00-gatebox-deny.rules`,
+  `/etc/tmpfiles.d/mothergate-control.conf`; temporary root-only `/etc/.gatebox-*` staging.
+- Installer systemd reload, socket/service stop and tmpfiles creation; Owner
+  socket enable/start, including the boot-enabling link
   `/etc/systemd/system/sockets.target.wants/mothergate.socket`; runtime
-  `/run/mothergate-submit.sock` and `/run/mothergate-control` when systemd starts them.
+  `/run/mothergate-submit.sock` when the socket starts. Tmpfiles creates
+  `/run/mothergate-control` root:root 0755, `incoming/` mothergate 0700 and
+  `sealed/` root 0700 at installation and boot.
 
 The installer verifies units/sudoers and leaves admission `qualifying`, with
 `qualification.json` initially exactly `{"identity": null, "passed": []}`.
@@ -165,10 +169,52 @@ Deferred limitations (not qualified or protected by Slice 1):
 Live host canaries cover qualification only. Normal receipts reuse the recorded
 host namespace baseline; they do not claim a new independent host-canary run.
 
+## Maintenance: retained custody and reboot-only reinstallation
+
+The installer never deletes or changes ownership of an existing
+`/run/mothergate-control` entry. After validating all inputs and staged policy,
+it publishes the validated units, reloads systemd, stops both `mothergate.socket`
+and `mothergate.service`, and checks the control name without following links.
+Any entry (including an empty directory, a file or a dangling symlink) refuses
+installation with **reboot required after review of retained custody**. Stop,
+inspection or tmpfiles errors abort installation. It rechecks absence immediately
+before the fixed `systemd-tmpfiles --create` call; tmpfiles is not a migration
+or repair tool for an old supervisor-owned directory. A refusal can leave the
+validated units published; follow the reviewed removal procedure before retry.
+
+Retained `sealed/RUN_ID`, `.pending-RUN_ID` and `.used-RUN_ID` state is evidence,
+not disposable scratch. A start timeout does not prove job cancellation. A
+partial relocation after timeout or interruption can leave only one leaf in
+`sealed/RUN_ID` and another in `incoming/`. Stop cannot validate the required
+pair, so cleanup refuses and pending custody continues blocking admission.
+Do not repair this by moving leaves, deleting markers, recursively deleting the
+control tree or rerunning tmpfiles over it.
+
+Owner maintenance path:
+
+1. Disable socket activation and stop the collector as in Manual removal below.
+   Preserve receipts, manager job/state and exact cgroup evidence, and inspect
+   retained custody without following any links. A stopped collector alone does
+   not prove a payload stopped.
+2. For an intact endpoint pair, the installed fixed lifecycle stop for the exact
+   reviewed run ID may clean up only after an empty `Job=`, inactive/failed unit
+   and unpopulated/absent exact cgroup are proved. Used-ID markers remain.
+3. Missing/partial pairs, unexpected entries or ambiguous manager/cgroup state
+   require Owner/Architect review. Preserve reviewed evidence outside `/run`
+   before reboot, because `/run` is volatile. No automatic crash recovery or
+   generic recursive deletion is provided.
+4. After review, remove the installed tmpfiles policy and disable the socket
+   before reboot so an old layout is not recreated. Complete reviewed persistent
+   output removal below (retaining pre-existing accounts and evidence). Reboot,
+   then retry the independently reviewed bundle only with the control name
+   absent. If anything recreates it, investigate and refuse again.
+
 Manual removal after a failed or interrupted install requires Owner review of
 retained receipts and the pre-install accounts/groups. Preflight validates
 inputs, identities, unit syntax and sudoers before persistent account/file
 changes; its only earlier write is a root-only temporary staging directory.
+Validated units are then published and reloaded before stopping runtime services;
+accounts and the remaining outputs follow only after the absence check.
 I/O or command failure can still leave partial outputs; there is no automatic
 rollback. Preserve evidence before running these host commands in a
 `bash -euo pipefail` subshell:
@@ -180,7 +226,8 @@ sudo /usr/bin/systemctl stop mothergate.service
 sudo /usr/bin/systemctl stop 'mothergate-run@*.service'
 sudo /usr/bin/rm -f /etc/systemd/system/mothergate.socket \
   /etc/systemd/system/mothergate.service /etc/systemd/system/mothergate-run@.service \
-  /etc/sudoers.d/gatebox /etc/polkit-1/rules.d/00-gatebox-deny.rules
+  /etc/sudoers.d/gatebox /etc/polkit-1/rules.d/00-gatebox-deny.rules \
+  /etc/tmpfiles.d/mothergate-control.conf
 sudo /usr/bin/systemctl daemon-reload
 sudo /usr/bin/systemctl reset-failed
 sudo /usr/bin/gpasswd -d nexus gatesubmit
@@ -193,7 +240,7 @@ if getent group gatesubmit >/dev/null; then sudo /usr/sbin/groupdel gatesubmit; 
 # Includes retained receipts: copy reviewed evidence elsewhere first.
 sudo /usr/bin/rm -rf /usr/libexec/gatebox /etc/gatebox /usr/lib/gatebox/root \
   /var/lib/mothergate /var/lib/gatebox-source /root/gatebox-slice1
-sudo /usr/bin/rm -rf /run/mothergate-control
+# Do not recursively delete runtime custody; use the reviewed reboot path above.
 sudo /usr/bin/rm -f /run/mothergate-submit.sock
 REMOVE
 ```

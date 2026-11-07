@@ -23,12 +23,16 @@ DEST = Path('/usr/libexec/gatebox')
 CONFIG = Path('/etc/gatebox')
 ROOT = Path('/usr/lib/gatebox/root')
 STATE = Path('/var/lib/mothergate')
+CONTROL = Path('/run/mothergate-control')
+CONTROL_POLICY = Path('/etc/tmpfiles.d/mothergate-control.conf')
 BOOT = Path('/root/gatebox-slice1')
 FIXTURE = '899e3872c5b61223c87b905f63c66947a816259b'
 HARNESS = 'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
 FILES = ['MISSION.md','snapshot.py','receipt.py','supervisor.py','init.py','client.py',
          'lifecycle.py','verify.py','probe.py','install.sh','README.md','tests/test_service.py',
          'tests/test_unit_core.py','tests/test_unit_contract.py','tests/test_installed.py',
+         'tests/test_custody.py','tests/test_install_composition.py',
+         'policy/custody.json','policy/mothergate-control.conf',
          'policy/gates.json','policy/exclusions.json','policy/registry.json','policy/sudoers',
          'policy/deny-systemd.rules','units/mothergate.socket','units/mothergate.service',
          'units/mothergate-run@.service']
@@ -78,6 +82,28 @@ def payload_policies(files):
 def run(argv):
     return subprocess.run(argv,env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,close_fds=True,timeout=30,check=True).stdout
+
+def require_control_absent():
+    # Reboot-only maintenance: no removal, repair, traversal or chown of an
+    # existing runtime entry. Even a dangling link is retained and refused.
+    protected(CONTROL.parent)
+    fd = os.open(CONTROL.parent,os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        try: os.stat(CONTROL.name,dir_fd=fd,follow_symlinks=False)
+        except FileNotFoundError: return
+        raise ValueError('reboot required after review of retained custody: '+str(CONTROL))
+    finally: os.close(fd)
+
+def prepare_control():
+    # Stop activation as well as the collector before inspecting runtime state.
+    # Any manager failure propagates; it never permits tmpfiles to proceed.
+    run(['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
+    require_control_absent()
+
+def create_control():
+    # Recheck immediately before creation in case state appeared during install.
+    require_control_absent()
+    run(['/usr/bin/systemd-tmpfiles','--create',str(CONTROL_POLICY)])
 
 def write(path,data,mode=0o644):
     protected(path.parent)
@@ -199,7 +225,7 @@ def main():
         source = BOOT/'tools/gatebox'/name
         protected(source)
         if source.read_bytes() != files['tools/gatebox/'+name]: raise ValueError('bootstrap bytes differ')
-    targets = [DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source'),
+    targets = [DEST,CONFIG,STATE,ROOT,CONTROL_POLICY,Path('/var/lib/gatebox-source'),
                Path('/etc/sudoers.d/gatebox'),Path('/etc/polkit-1/rules.d/00-gatebox-deny.rules')]
     targets += [Path('/etc/systemd/system')/n for n in ('mothergate.socket','mothergate.service','mothergate-run@.service')]
     for path in targets:
@@ -207,7 +233,7 @@ def main():
         ancestor = path.parent
         while not ancestor.exists(): ancestor = ancestor.parent
         protected(ancestor)
-    for executable in ('git','systemctl','systemd-analyze','python3','Xvfb','xdotool','dbus-run-session','gdbus','awk','passwd','runuser','visudo','useradd','groupadd','usermod'):
+    for executable in ('git','systemctl','systemd-tmpfiles','systemd-analyze','python3','Xvfb','xdotool','dbus-run-session','gdbus','awk','passwd','runuser','visudo','useradd','groupadd','usermod'):
         if not shutil.which(executable,path=ENV['PATH']): raise ValueError('missing offline prerequisite: '+executable)
     if int(run(['/usr/bin/systemctl','--version']).split()[1]) < 259: raise ValueError('systemd 259 required')
     for path,expected in (('/proc/sys/dev/tty/legacy_tiocsti','0'),('/proc/sys/kernel/apparmor_restrict_unprivileged_userns','1')):
@@ -234,6 +260,13 @@ def main():
         if parent.stat().st_dev != Path('/etc').stat().st_dev: raise ValueError('cross-filesystem security staging')
     with tempfile.TemporaryDirectory(prefix='.gatebox-',dir='/etc') as temporary:
         staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,Path(temporary))
+        # Publish validated units and load them before the fixed stop. On a
+        # fresh host, stopping unknown units would fail and prevent bootstrap.
+        outputs = []
+        for staged,target in staged_security[:3]:
+            os.rename(staged,target); outputs.append(target)
+        run(['/usr/bin/systemctl','daemon-reload'])
+        prepare_control()
         apply_accounts(plan,args.submit_user)
         for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
         for name in FILES:
@@ -270,9 +303,11 @@ def main():
         registration = {'mother':dict(uid=submit.pw_uid,user=args.submit_user,object_format='sha1',common_directory=str(source),
                                       device=info.st_dev,inode=info.st_ino,fixture_sha=FIXTURE,qualification_gate_set='full')}
         record(CONFIG/'registry.json',registration)
-        outputs = []
-        for staged,target in staged_security:
+        for staged,target in staged_security[3:]:
             os.rename(staged,target); outputs.append(target)
+        write(CONTROL_POLICY,files['tools/gatebox/policy/mothergate-control.conf'])
+        outputs.append(CONTROL_POLICY)
+        create_control()
         for name,data in payload_policies(files).items():
             write(CONFIG/name,data); outputs.append(CONFIG/name)
         record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
