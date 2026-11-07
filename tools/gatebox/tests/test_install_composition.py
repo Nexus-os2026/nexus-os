@@ -461,7 +461,7 @@ class Q16Oracles(unittest.TestCase):
                 if elapsed >= delay:
                     if 'pending' not in retained: marker.unlink(missing_ok=True)
                     if 'staging' not in retained and stage.exists(): stage.rmdir()
-            summary = dict(status='PASS_SCOPED')
+            summary = dict(status='PASS_SCOPED',missing_evidence=[])
             sock = Mock(); sock.getsockname.return_value = ('127.0.0.1',12345)
             replacements = dict(Path=path,require_installed=Mock(),
                 config=Mock(return_value={'mother':{'uid':1234}}),claude_context=Mock(return_value={}),
@@ -559,7 +559,7 @@ class Q16Oracles(unittest.TestCase):
         block=source.split("<<'PIN'",1)[1].split('\nPIN',1)[0]
         tree=ast.parse(block)
         argv=[ast.literal_eval(n) for n in ast.walk(tree) if isinstance(n,ast.List)
-              and n.elts and isinstance(n.elts[0],ast.Constant) and n.elts[0].value=='git']
+              and n.elts and all(isinstance(e,ast.Constant) for e in n.elts) and n.elts[0].value=='git']
         self.assertIn(['git','--no-replace-objects','for-each-ref','--format=%(refname)','refs/replace'],argv)
         self.assertIn("['git', '--no-replace-objects', 'fsck'",ast.unparse(tree))
         self.assertLess(block.index("'fsck'"),block.index("tarfile.open"))

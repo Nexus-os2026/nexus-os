@@ -651,6 +651,7 @@ print(json.dumps(results))
         self.hold_custody = True
         result = self.command(['/usr/bin/python3','-I','-B',str(HERE/'lifecycle.py'),'start',self.run],check=False)
         self.assertNotEqual(result.returncode,0)
+        self.assertIn('unsafe sealed endpoint',result.stderr)
         state = self.state(self.unit)
         self.assertEqual(state['Job'],'')
         self.assertEqual(state['InvocationID'],'')
@@ -693,6 +694,14 @@ print(json.dumps(results))
             try: return action()
             except Exception as exc: errors.append(repr(exc))
         if self.launch is not None: attempt(lambda:self.manager('stop',self.unit))
+        elif self.hold_custody:
+            # A regressed C2 (or the host plant) can start without a launcher.
+            # Query the exact instance; stop a queued/running instance as well.
+            def stop_started():
+                state = self.state(self.unit)
+                if state['Job'] or state['ActiveState'] not in ('inactive','failed') or state['MainPID']!='0':
+                    self.manager('stop',self.unit)
+            attempt(stop_started)
         if Path('/run/systemd/system',self.blocker) in self.files:
             attempt(lambda:self.manager('stop',self.blocker))
         launch_done = True
@@ -703,8 +712,8 @@ print(json.dumps(results))
         settled = False
         try:
             if self.hold_custody:
-                # C2 proves no start was submitted. No installed instance or
-                # barrier to stop; verify settlement and retain quarantine.
+                # Verify settlement even after a regressed start was stopped;
+                # never remove C2's intentional symlink quarantine.
                 self.bridge.settled(self.run)
                 self.assertTrue(self.sealed.is_dir())
             else:
