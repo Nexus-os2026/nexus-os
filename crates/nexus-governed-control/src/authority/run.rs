@@ -1878,6 +1878,24 @@ impl RunRegistry {
             .get(&run)
             .map(|e| (e.model_attempts, e.model_pins.len()))
     }
+    /// SB-3B1a: attempts, exact pins and binding of `run`, poison included.
+    pub(crate) fn model_ledger_for_test(
+        &self,
+        run: RunId,
+    ) -> (u32, Vec<u32>, Option<InferenceAdmission>) {
+        let table = match self.runs.try_lock() {
+            Ok(table) => table,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => panic!("no run hold"),
+        };
+        let entry = &table.runs[&run];
+        let pins = entry.model_pins.iter().copied().collect();
+        (
+            entry.model_attempts,
+            pins,
+            entry.inference_admission.clone(),
+        )
+    }
     /// SB-3B1a: the exact outstanding model ordinals of `run`.
     pub(crate) fn model_pins_for_test(&self, run: RunId) -> Vec<u32> {
         let table = self.runs.try_lock().expect("no run hold");
@@ -1990,6 +2008,8 @@ impl RunRegistry {
             .model_attempts
             .checked_add(1)
             .ok_or(AuthorityError::Capacity)?;
+        #[cfg(test)]
+        super::file_session::probe(Some(&cell), "model.attempt.granted");
         let ticket = SessionAttempt {
             run,
             agent: agent.clone(),
@@ -2220,6 +2240,7 @@ impl RunRegistry {
             "kind" => files.kind = ConsentKind::Resume,
             "time" => files.consented_wall_ms += 1,
             "workspace" => files.workspace.id.push('x'),
+            "identity" => files.workspace.identity = Digest::of("sb3b-other", &[]),
             _ => {}
         }
     }

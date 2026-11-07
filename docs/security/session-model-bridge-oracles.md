@@ -803,3 +803,22 @@ SB-3A `door_with`. Carried: F5 composed zeros and F7 Mother withholding to
 C/D (SB3B-R3 1, 2). Figures (additions + deletions vs c3bffa92): this
 oracle tree 687; forecast feat +86 (run.rs 41, model.rs 45); B1a about 783
 with receipts, under the 1,500 cap. B1b is forecast separately on its branch.
+
+### 13.2 SB3B-R4 B1a gap oracles (re-check of e137e136, 5 MED)
+(1) F11 rewritten: nested block comments masked; a statement start is
+found at its own nesting, so an enclosing parenthesis never borrows a
+sibling statement's attribute; regression controls are the two crafted
+leaks (sibling attribute, nested comment) and a gated control; both crafted
+cases pass the e137e136 scanner (RED shown on it). New seams
+`model.attempt.granted`, `tamper_for_test("identity")`,
+`model_ledger_for_test` are scanned. (2) `sb3_attempt_observer_is_read_after_the_grant`:
+a revocation at `model.attempt.granted` (after the grant, before the read)
+refuses; an early cached read admits. (3)
+`sb3_attempt_contention_and_poison_latch_exactly`: R3 grant and run-table
+contention `unavailable` with uncertain and Failed both false; grant and
+run-table poison latch Failed; each with no attempt, pin, record, active
+slot or binding change. (4) `sb3_attempt_grant_clocks_and_identity_are_independent`:
+monotonic-only and wall-only expiry (SplitClock) and same-id different
+workspace identity each `grant_not_live`. (5) every pre-ticket refusal
+(`nothing`) compares the retained binding before/after (Debug bytes and
+equality; poison-tolerant ledger).

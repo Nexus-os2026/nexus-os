@@ -48,3 +48,6 @@ SB3-R4a	sb3_private_attempt_refuses_before_ticket	Continuation,conversation,Q,ex
 SB3-A1a	sb3_attempt_ceiling_is_eight_on_the_original_run	attempts 1..8 incl. failed; ninth	(n,1) then (n,0); ninth model_over_budget; no record	SB-3B1a
 SB3-A3a	sb3_attempt_record_and_pin_are_exact	cancel,finish,capacity; substituted ordinal	pin [1] until settlement; one correlated record; [101] never settles, debt latched	SB-3B1a
 SB3-S1a	sb3_b1a_test_seams_are_test_only	masked scan of probe,tamper_for_test,model_pins_for_test,model_call_tests	all under cfg(test); leak plants RED	SB3B-R2 F11
+SB3-R4o	sb3_attempt_observer_is_read_after_the_grant	revoke after the grant, before the observer read	halted; nothing; early cached read RED	SB3B-R4
+SB3-R4c	sb3_attempt_contention_and_poison_latch_exactly	R3 grant/run contention and poison	unavailable; no latch / Failed; nothing	SB3B-R4
+SB3-R4g	sb3_attempt_grant_clocks_and_identity_are_independent	monotonic-only, wall-only, identity	grant_not_live; nothing	SB3B-R4

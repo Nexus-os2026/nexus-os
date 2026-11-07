@@ -6,7 +6,6 @@ use crate::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, AgentDoorConfirmation, ControlConfirmer,
     GrantConfirmation, MissionConfirmation, ResumeConfirmation,
 };
-use crate::authority::clock::ManualClock;
 use crate::authority::ids::{GrantId, RunId};
 use crate::authority::run::{InferenceAdmission, RunRegistry};
 use crate::inference::{InvocationOwner, ModelIdentity};
@@ -47,11 +46,38 @@ fn mission(hash: &str, label: &str) -> MissionConfirmation {
     }
 }
 
+/// SB-3B1a: a test clock whose monotonic and wall readings move apart.
+#[derive(Default)]
+struct SplitClock {
+    mono: std::sync::atomic::AtomicU64,
+    wall: std::sync::atomic::AtomicU64,
+}
+impl SplitClock {
+    fn advance(&self, by: Duration) {
+        self.mono_only(by);
+        self.wall_only(by);
+    }
+    fn mono_only(&self, by: Duration) {
+        self.mono.fetch_add(by.as_millis() as u64, Ordering::SeqCst);
+    }
+    fn wall_only(&self, by: Duration) {
+        self.wall.fetch_add(by.as_millis() as u64, Ordering::SeqCst);
+    }
+}
+impl crate::authority::clock::Clock for SplitClock {
+    fn monotonic_ms(&self) -> u64 {
+        self.mono.load(Ordering::SeqCst)
+    }
+    fn wall_ms(&self) -> u64 {
+        1_700_000_000_000 + self.wall.load(Ordering::SeqCst)
+    }
+}
+
 /// Original Bootstrap registration, Q, D with its retained grant, cached
 /// native consent and the existing File run R: every R2 prerequisite.
 struct Bind {
     session: Arc<HostSession>,
-    clock: Arc<ManualClock>,
+    clock: Arc<SplitClock>,
     q: SessionRequest,
     door: SessionDoor,
     run: RunId,
@@ -78,7 +104,7 @@ impl Bind {
             vec![],
         )
         .unwrap();
-        let clock = Arc::new(ManualClock::default());
+        let clock = Arc::new(SplitClock::default());
         let session = Arc::new(
             HostSession::open(
                 SessionSeed::new().unwrap(),
@@ -415,6 +441,7 @@ fn request() -> ModelRequest {
 struct Admit {
     b: Bind,
     owner: Arc<InvocationOwner>,
+    binding: Option<InferenceAdmission>,
 }
 impl Admit {
     fn new() -> Self {
@@ -424,11 +451,13 @@ impl Admit {
         Self {
             b,
             owner: Arc::new(InvocationOwner::new()),
+            binding: None,
         }
     }
     fn bound() -> Self {
-        let f = Self::new();
+        let mut f = Self::new();
         assert_eq!(f.b.bind(), Ok(()), "R2 binding");
+        f.binding = f.b.bound();
         f
     }
     fn on(
@@ -466,9 +495,17 @@ impl Admit {
         rows.map(|r| serde_json::from_str(&r.body).unwrap())
             .collect()
     }
-    /// Pre-ticket refusal: no attempt, pin, record or active slot (F8).
+    /// Pre-ticket refusal: no attempt, pin, record or active slot (F8), and
+    /// the retained binding unchanged (SB3B-R4 5).
     fn nothing(&self, case: &str) {
-        assert_eq!(self.counts(), (0, 0), "{case}: no attempt or pin");
+        let (attempts, pins, binding) = self.b.runs().model_ledger_for_test(self.b.run);
+        assert_eq!(
+            format!("{binding:?}"),
+            format!("{:?}", self.binding),
+            "{case}: binding"
+        );
+        assert_eq!(binding, self.binding, "{case}: binding kept");
+        assert_eq!((attempts, pins.len()), (0, 0), "{case}: no attempt or pin");
         assert_eq!(self.calls().len(), 0, "{case}: no record");
         assert!(
             !self.b.session.core.model.snapshot().unwrap().active,
@@ -751,10 +788,110 @@ fn sb3_attempt_record_and_pin_are_exact() {
     assert!(o.active && o.uncertain && f.failed(), "slot debt latched");
 }
 
-/// F11 (SB3B-R1 2): every B1a seam is reachable only under `#[cfg(test)]`,
-/// judged on code with comments and string contents masked.
+/// SB3B-R4 (2): R3 reads the invocation after the grant, then the CAS: a
+/// revocation published between them refuses (no early cached read).
+#[test]
+fn sb3_attempt_observer_is_read_after_the_grant() {
+    let f = Admit::bound();
+    assert!(f.admit().is_ok(), "positive control");
+    let f = Admit::bound();
+    let owner = f.owner.clone();
+    f.b.session
+        .core
+        .cell
+        .1
+        .arm("model.attempt.granted", move || owner.revoke());
+    assert_eq!(f.admit().map(|_| ()), Err("halted"), "read after the grant");
+    f.nothing("granted");
+}
+
+/// SB3B-R4 (3): R3 contention latches nothing; poison latches failure;
+/// neither issues an attempt, pin, record or binding change.
+#[test]
+fn sb3_attempt_contention_and_poison_latch_exactly() {
+    let f = Admit::bound();
+    assert!(f.admit().is_ok(), "positive control");
+    let latched = |f: &Admit| {
+        (
+            f.b.session.core.model.uncertain.load(Ordering::SeqCst),
+            f.failed(),
+        )
+    };
+    for held in ["grants", "runs"] {
+        let f = Admit::bound();
+        let (control, runs) = (f.b.control(), f.b.runs());
+        let refused = match held {
+            "grants" => {
+                let _hold = control.authority().grants().hold_for_test();
+                f.admit().map(|_| ())
+            }
+            _ => {
+                let _hold = runs.model_observer();
+                f.admit().map(|_| ())
+            }
+        };
+        assert_eq!(refused, Err("unavailable"), "R3 {held} contention");
+        assert_eq!(
+            latched(&f),
+            (false, false),
+            "{held}: contention latches nothing"
+        );
+        f.nothing(held);
+    }
+    for poisoned in ["grants", "runs"] {
+        let f = Admit::bound();
+        let (control, runs) = (f.b.control(), f.b.runs());
+        let _ = std::thread::spawn(move || {
+            if poisoned == "runs" {
+                runs.panic_holding_the_runs_lock();
+            }
+            let _hold = control.authority().grants().hold_for_test();
+            panic!("poison the grant store (test)");
+        })
+        .join();
+        assert_eq!(
+            f.admit().map(|_| ()),
+            Err("unavailable"),
+            "R3 {poisoned} poison"
+        );
+        assert!(f.failed(), "{poisoned}: poison latches session failure");
+        f.nothing(poisoned);
+    }
+}
+
+/// SB3B-R4 (4): each grant clock and the workspace identity independently.
+#[test]
+fn sb3_attempt_grant_clocks_and_identity_are_independent() {
+    let f = Admit::bound();
+    assert!(f.admit().is_ok(), "positive control");
+    for case in ["monotonic", "wall", "identity"] {
+        let f = Admit::bound();
+        match case {
+            "monotonic" => f.b.clock.mono_only(Duration::from_secs(3600)),
+            "wall" => f.b.clock.wall_only(Duration::from_secs(3600)),
+            _ => f.b.runs().tamper_for_test(f.b.run, "identity"),
+        }
+        assert_eq!(f.admit().map(|_| ()), Err("grant_not_live"), "R3 {case}");
+        f.nothing(case);
+    }
+}
+
+/// F11 (SB3B-R1 2, SB3B-R4 1): every B1a seam is reachable only under
+/// `#[cfg(test)]` on its own statement or an enclosing item, judged on code
+/// with comments (nested included) and literal contents masked.
 #[test]
 fn sb3_b1a_test_seams_are_test_only() {
+    // Regression controls: the two crafted leaks of the B1a re-check.
+    let sibling = "fn production() {\n    #[cfg(test)] let marker = { 0 };\n    consume(probe(None, \"unused\"));\n}\n";
+    let nested = "/* outer /* inner */ #[cfg(test)] */\npub(crate) fn probe(cell: u8) {}\n";
+    let gated = "#[cfg(test)]\nfn probe() {}\nfn f() {\n    #[cfg(test)]\n    probe();\n}\n";
+    assert_eq!(
+        leaks(sibling, &["probe"]),
+        1,
+        "a sibling's attribute never governs"
+    );
+    assert_eq!(leaks(nested, &["probe"]), 1, "a nested comment is masked");
+    assert_eq!(leaks(gated, &["probe"]), 0, "gated statement and item");
     let sources = [
         ("model.rs", include_str!("model.rs")),
         ("run.rs", include_str!("../authority/run.rs")),
@@ -768,38 +905,52 @@ fn sb3_b1a_test_seams_are_test_only() {
         "probe",
         "tamper_for_test",
         "model_pins_for_test",
+        "model_ledger_for_test",
         "model_call_tests",
     ];
     let mut found = 0;
     for (file, source) in sources {
-        let code = mask(source);
-        for seam in seams {
-            for (at, _) in code.match_indices(seam) {
-                let word = |i: usize| {
-                    code.as_bytes()
-                        .get(i)
-                        .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
-                };
-                if word(at + seam.len()) || at.checked_sub(1).is_some_and(word) {
-                    continue;
-                }
-                found += 1;
-                assert!(
-                    test_only(&code, at),
-                    "{file}: `{seam}` reachable outside cfg(test)"
-                );
-            }
-        }
+        found += seam_sites(source, &seams).len();
+        assert_eq!(
+            leaks(source, &seams),
+            0,
+            "{file}: a seam reachable outside cfg(test)"
+        );
     }
     assert!(found >= 8, "the seams were scanned: {found}");
 }
-/// Comments and the contents of string and char literals become spaces.
+fn seam_sites(source: &str, seams: &[&str]) -> Vec<usize> {
+    let code = mask(source);
+    let word = |i: usize| {
+        code.as_bytes()
+            .get(i)
+            .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+    };
+    let mut sites = Vec::new();
+    for seam in seams {
+        for (at, _) in code.match_indices(seam) {
+            if !word(at + seam.len()) && !at.checked_sub(1).is_some_and(word) {
+                sites.push(at);
+            }
+        }
+    }
+    sites
+}
+fn leaks(source: &str, seams: &[&str]) -> usize {
+    let code = mask(source);
+    seam_sites(source, seams)
+        .into_iter()
+        .filter(|&at| !test_only(&code, at))
+        .count()
+}
+/// Comments (nested block comments included) and the contents of string
+/// and char literals become spaces; line structure is kept.
 fn mask(source: &str) -> String {
     let b = source.as_bytes();
     let mut out = b.to_vec();
     let mut i = 0;
     let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
-        for c in &mut out[from..to] {
+        for c in &mut out[from..to.min(b.len())] {
             if *c != b'\n' {
                 *c = b' ';
             }
@@ -814,9 +965,18 @@ fn mask(source: &str) -> String {
             blank(&mut out, i, end);
             i = end;
         } else if b[i..].starts_with(b"/*") {
-            let end = source[i + 2..].find("*/").map_or(b.len(), |n| i + n + 4);
-            blank(&mut out, i, end);
-            i = end;
+            let (mut depth, mut j) = (1, i + 2);
+            while j < b.len() && depth > 0 {
+                if b[j..].starts_with(b"/*") {
+                    (depth, j) = (depth + 1, j + 2);
+                } else if b[j..].starts_with(b"*/") {
+                    (depth, j) = (depth - 1, j + 2);
+                } else {
+                    j += 1;
+                }
+            }
+            blank(&mut out, i, j);
+            i = j;
         } else if b[i] == b'r'
             && (b[i + 1..].starts_with(b"#") || b[i + 1..].starts_with(b"\""))
             && (i == 0 || !b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'b')
@@ -836,7 +996,7 @@ fn mask(source: &str) -> String {
             while j < b.len() && b[j] != b'"' {
                 j += if b[j] == b'\\' { 2 } else { 1 };
             }
-            blank(&mut out, i + 1, j.min(b.len()));
+            blank(&mut out, i + 1, j);
             i = j + 1;
         } else if b[i] == b'\'' && b.get(i + 2) == Some(&b'\'') {
             blank(&mut out, i + 1, i + 2);
@@ -847,40 +1007,32 @@ fn mask(source: &str) -> String {
     }
     String::from_utf8(out).unwrap()
 }
-/// The statement or item holding `at`, or one enclosing it, is attributed
-/// `#[cfg(test)]`.
+/// The statement or item holding `at`, or an item or block enclosing it,
+/// carries `#[cfg(test)]`. Statement starts are found at the same nesting;
+/// an enclosing parenthesis never borrows a sibling statement's attribute.
 fn test_only(code: &str, at: usize) -> bool {
     let b = code.as_bytes();
     let mut end = at;
     loop {
-        // Back to this statement's start at the same depth.
-        let mut depth = 0i32;
-        let mut i = end;
+        let (mut depth, mut i) = (0usize, end);
         let start = loop {
             if i == 0 {
                 break 0;
             }
             i -= 1;
             match b[i] {
-                b')' | b']' => depth += 1,
-                b'(' | b'[' => depth -= 1,
-                b'}' if depth == 0 => break i + 1,
-                b'}' => depth += 1,
-                b'{' if depth == 0 => break i + 1,
-                b'{' => depth -= 1,
-                b';' | b',' if depth == 0 => break i + 1,
+                b')' | b']' | b'}' if depth > 0 || b[i] != b'}' => depth += 1,
+                b'(' | b'[' | b'{' if depth > 0 => depth -= 1,
+                b'(' | b'[' => {}
+                b'}' | b'{' | b';' | b',' => break i + 1,
                 _ => {}
             }
         };
         if code[start..].trim_start().starts_with("#[cfg(test)]") {
             return true;
         }
-        if start == 0 {
-            return false;
-        }
         // Up to the block that encloses this statement.
-        let mut depth = 0i32;
-        let mut i = start;
+        let (mut depth, mut i) = (0usize, start);
         loop {
             if i == 0 {
                 return false;
