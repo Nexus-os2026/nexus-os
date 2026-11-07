@@ -124,10 +124,13 @@ impl Drop for Fixture {
 // parent moves that home to the name a second, waiting child would derive
 // from its own PID, then lets it build its fixture. Each fixture must still
 // get a fresh, startup-ready home; the leaked one is never reopened.
+// Each child runs under its own owned TMPDIR, and both children are waited
+// with a deadline, so every exit path kills, reaps and removes what it made.
 #[test]
 fn session_fixture_never_reuses_a_leaked_home() {
-    use std::io::{BufRead, Write};
-    use std::process::{Command, Stdio};
+    use std::io::Write;
+    use std::process::{Child, Command, ExitStatus, Stdio};
+    use std::time::{Duration, Instant};
     const MODE: &str = "M2DD_TH_R1_CHILD";
     const TEST: &str = "adapter::session_support::session_fixture_never_reuses_a_leaked_home";
     match std::env::var(MODE).as_deref() {
@@ -146,6 +149,75 @@ fn session_fixture_never_reuses_a_leaked_home() {
         }
         _ => {}
     }
+    // Removes the uniquely named directory this test created, on any exit.
+    struct OwnedDir(PathBuf);
+    impl Drop for OwnedDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    // Kills and reaps a child this test spawned unless it was already reaped.
+    struct Reaped(Option<Child>);
+    impl Drop for Reaped {
+        fn drop(&mut self) {
+            if let Some(mut child) = self.0.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+    impl Reaped {
+        fn finish(&mut self, deadline: Instant) -> (Option<ExitStatus>, String, String) {
+            let child = self.0.as_mut().unwrap();
+            let read = |mut pipe: Box<dyn std::io::Read + Send>| {
+                std::thread::spawn(move || {
+                    let mut text = String::new();
+                    let _ = pipe.read_to_string(&mut text);
+                    text
+                })
+            };
+            let out = read(Box::new(child.stdout.take().unwrap()));
+            let err = read(Box::new(child.stderr.take().unwrap()));
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status);
+                }
+                if Instant::now() >= deadline {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            // Exited: already reaped by try_wait. Expired: kill, then reap.
+            if let Some(mut child) = self.0.take() {
+                if status.is_none() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
+            (status, out.join().unwrap(), err.join().unwrap())
+        }
+    }
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let owned = |n: u32| {
+        let dir =
+            std::env::temp_dir().join(format!("m2dd-th-r1-{}-{nonce}-{n}", std::process::id()));
+        std::fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+        OwnedDir(dir)
+    };
+    let spawn = |mode: &str, tmp: &OwnedDir| {
+        Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", TEST, "--nocapture"])
+            .env(MODE, mode)
+            .env("TMPDIR", &tmp.0)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
     let home_of = |text: &str| {
         let line = text
             .lines()
@@ -153,51 +225,33 @@ fn session_fixture_never_reuses_a_leaked_home() {
             .unwrap();
         PathBuf::from(line)
     };
-    let leak = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", TEST, "--nocapture"])
-        .env(MODE, "leak")
-        .output()
-        .unwrap();
-    assert!(leak.status.success());
-    let leaked = home_of(&String::from_utf8_lossy(&leak.stdout));
-    let mut fresh = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", TEST, "--nocapture"])
-        .env(MODE, "fresh")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let first_tmp = owned(1);
+    let mut first = Reaped(Some(spawn("leak", &first_tmp)));
+    let (status, out, err) = first.finish(Instant::now() + Duration::from_secs(30));
+    assert!(
+        status.is_some_and(|s| s.success()),
+        "bounded leak child: {status:?} {out}{err}"
+    );
+    let leaked = home_of(&out);
+    let second_tmp = owned(2);
+    let mut second = Reaped(Some(spawn("fresh", &second_tmp)));
+    let pid = second.0.as_ref().unwrap().id();
     let name = leaked.file_name().unwrap().to_str().unwrap().replacen(
         &format!("-{}", leak_pid(&leaked)),
-        &format!("-{}", fresh.id()),
+        &format!("-{pid}"),
         1,
     );
-    let planted = leaked.with_file_name(name);
+    let planted = second_tmp.0.join(name);
     std::fs::rename(&leaked, &planted).unwrap();
     let journal = std::fs::read(planted.join("mother-journal.jsonl")).ok();
-    fresh.stdin.take().unwrap().write_all(b"go\n").unwrap();
-    let stdout = std::io::BufReader::new(fresh.stdout.take().unwrap());
-    let reader = std::thread::spawn(move || stdout.lines().map(Result::unwrap).collect::<Vec<_>>());
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    let status = loop {
-        if let Some(status) = fresh.try_wait().unwrap() {
-            break status;
-        }
-        if std::time::Instant::now() >= deadline {
-            fresh.kill().unwrap();
-            break fresh.wait().unwrap();
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    };
-    let out = reader.join().unwrap().join("\n");
-    let mut err = String::new();
-    std::io::Read::read_to_string(&mut fresh.stderr.take().unwrap(), &mut err).unwrap();
+    let mut stdin = second.0.as_mut().unwrap().stdin.take().unwrap();
+    stdin.write_all(b"go\n").unwrap();
+    drop(stdin);
+    let (status, out, err) = second.finish(Instant::now() + Duration::from_secs(30));
     let reused = std::fs::read(planted.join("mother-journal.jsonl")).ok() != journal;
-    let _ = std::fs::remove_dir_all(&planted);
     assert!(
-        status.success(),
-        "a leaked home at this PID's name must not be reopened: {out}{err}"
+        status.is_some_and(|s| s.success()),
+        "a leaked home at this PID's name must not be reopened: {status:?} {out}{err}"
     );
     assert_ne!(home_of(&out), planted, "fresh home, never the leaked one");
     assert!(!reused, "the leaked home is left untouched");
