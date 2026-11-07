@@ -39,3 +39,5 @@ SB3-R3	sb3_stop_before_binding_installs_nothing	paused before actual binding CAS
 SB3-O2	sb3_binding_contention_refuses_without_latching	run-table and grant try_lock; poison	contention unavailable without Failed; poison refuses and latches Failed	SB-3A
 SB3-L1	sb3_invocation_observer_is_monotonic_and_original	return,overtake,transition,fence before journal I/O	second-thread revoked observation under the owning lock; forwarded observer never un-revoked	SB-3A Mother
 SB3-L1x	sb3_invocation_observer_is_monotonic_and_original	l1/excluded: hold,settlement,close with a live caller	grammar refuses Held/SettlementStarted while a model lane is pending; close Busy until the caller returns; L1 not claimed there	SB3A-R1 oracle-fix
+SB3-R2c	sb3_inference_binding_is_exact_and_idempotent	R2 isolated door_cell: run cell differs from the door's retained cell	not_member; no binding, attempt or pin	SB3A-R2
+SB3-R2i	sb3_idempotent_rebind_revalidates_file_consent	bind, tamper File evidence_seq, identical rebind	no_consent; binding unchanged	SB3A-R2

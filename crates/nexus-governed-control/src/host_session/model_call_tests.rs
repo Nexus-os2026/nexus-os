@@ -175,7 +175,7 @@ impl Bind {
                 self.door_with(self.session.context(&q2).unwrap(), self.door.kind)
             }
             "continuation" => self.door_with(self.door.context(), DoorKind::Continuation),
-            "groups" | "opened_by" | "seq" | "kind" | "time" | "life" => {
+            "groups" | "opened_by" | "door_cell" | "seq" | "kind" | "time" | "life" => {
                 self.runs().tamper_for_test(self.run, case);
                 return self.bind();
             }
@@ -282,6 +282,7 @@ fn sb3_inference_binding_is_exact_and_idempotent() {
         ("q", "not_member"),
         ("groups", "not_member"),
         ("opened_by", "not_member"),
+        ("door_cell", "not_member"),
         ("unknown_run", "unknown_run"),
         ("files", "not_admitted"),
         ("consent", "no_consent"),
@@ -299,6 +300,22 @@ fn sb3_inference_binding_is_exact_and_idempotent() {
         assert_eq!(f.bound(), None, "R2 {case} binds nothing");
         f.unchanged(case);
     }
+}
+
+/// SB3A-R2: an idempotent success still requires the File association.
+#[test]
+fn sb3_idempotent_rebind_revalidates_file_consent() {
+    let f = Bind::new();
+    assert_eq!(f.bind(), Ok(()));
+    let first = f.bound();
+    f.runs().tamper_for_test(f.run, "seq");
+    assert_eq!(
+        f.bind(),
+        Err("no_consent"),
+        "idempotent rebind revalidates File consent"
+    );
+    assert_eq!(f.bound(), first, "rebind refusal changes nothing");
+    f.unchanged("rebind");
 }
 
 #[test]

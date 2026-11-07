@@ -2176,6 +2176,10 @@ impl RunRegistry {
     pub(crate) fn tamper_for_test(&self, run: RunId, what: &str) {
         let mut table = self.runs.lock().unwrap();
         let group = table.runs[&run].opened_by.unwrap();
+        if what == "door_cell" {
+            table.doors.get_mut(&group).unwrap().file_cell = Some(HaltCell::new_host());
+            return;
+        }
         if what == "life" {
             for consent in &mut table.doors.get_mut(&group).unwrap().consents {
                 consent.life.stop_epoch += 1;
