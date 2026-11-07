@@ -151,6 +151,8 @@ class GitSource:
             raise ValueError('noncanonical registered source')
         info = self.path.stat()
         if (info.st_dev,info.st_ino) != self.identity: raise ValueError('source identity changed')
+        if any(os.path.lexists(self.path/name) for name in ('commondir','gitdir')):
+            raise ValueError('Git administration indirection')
         for name in ('alternates','http-alternates'):
             if os.path.lexists(self.path/'objects/info'/name): raise ValueError('alternate source')
         pack = self.path/'objects/pack'
