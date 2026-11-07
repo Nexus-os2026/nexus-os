@@ -42,8 +42,8 @@ Owner commands, from the host after independent bundle review (never run the
 checkout installer as root):
 
 ```bash
-set -euo pipefail
-read -r -p 'Independently reviewed bundle SHA-256: ' GBX_BUNDLE_SHA
+bash -euo pipefail <<'OWNER'
+read -r -p 'Independently reviewed bundle SHA-256: ' GBX_BUNDLE_SHA </dev/tty
 [[ "$GBX_BUNDLE_SHA" =~ ^[0-9a-f]{64}$ ]]
 sudo /usr/bin/install -d -o root -g root -m 0700 /root/gatebox-slice1
 sudo /usr/bin/install -o root -g root -m 0600 \
@@ -78,7 +78,25 @@ sudo /bin/bash /root/gatebox-slice1/tools/gatebox/install.sh install \
   --fixture-sha 899e3872c5b61223c87b905f63c66947a816259b
 sudo /usr/bin/systemctl daemon-reload
 sudo /usr/bin/systemctl enable --now mothergate.socket
+OWNER
 ```
+
+`enable --now` starts the socket immediately and persists at boot through
+`sockets.target`; it is not limited to the current session.
+
+Host changes made by the installer and these Owner commands:
+
+- Locked `mothergate`/`gaterun` accounts and primary groups when absent;
+  `gatesubmit` when absent, and nexus's supplementary membership.
+- Bootstrap files in `/root/gatebox-slice1`; code in `/usr/libexec/gatebox`;
+  configuration in `/etc/gatebox`; payload skeleton in `/usr/lib/gatebox/root`;
+  state/receipts in `/var/lib/mothergate`; `/var/lib/gatebox-source` mount point.
+- `/etc/systemd/system/mothergate.socket`, `/etc/systemd/system/mothergate.service`,
+  `/etc/systemd/system/mothergate-run@.service`, `/etc/sudoers.d/gatebox`,
+  `/etc/polkit-1/rules.d/00-gatebox-deny.rules`; temporary root-only `/etc/.gatebox-*` staging.
+- Systemd reload and socket enable/start, including the boot-enabling link
+  `/etc/systemd/system/sockets.target.wants/mothergate.socket`; runtime
+  `/run/mothergate-submit.sock` and `/run/mothergate-control` when systemd starts them.
 
 The installer verifies units/sudoers and leaves admission `qualifying`, with
 `qualification.json` initially exactly `{"identity": null, "passed": []}`.
@@ -98,12 +116,14 @@ approval for host/root testing. The suite records the Claude ancestor, invokes
 run receipt and the refused non-qualification reply, and authenticates on host:
 
 ```bash
+bash -euo pipefail <<'QUALIFY'
 sudo /usr/bin/python3 -I -B -m unittest discover \
   -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v
 sudo /usr/bin/python3 -I -B /usr/libexec/gatebox/verify.py --latest \
   --repo mother --sha 899e3872c5b61223c87b905f63c66947a816259b \
   --gateset full --require-status PASS_SCOPED
 sudo /bin/bash /usr/libexec/gatebox/install.sh enable-qualified
+QUALIFY
 ```
 
 Enable verifies every acceptance row, protected provenance and current installed

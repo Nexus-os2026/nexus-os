@@ -207,7 +207,7 @@ def main():
         ancestor = path.parent
         while not ancestor.exists(): ancestor = ancestor.parent
         protected(ancestor)
-    for executable in ('git','systemctl','systemd-analyze','python3','Xvfb','dbus-run-session','gdbus','awk','passwd','runuser','visudo','useradd','groupadd','usermod'):
+    for executable in ('git','systemctl','systemd-analyze','python3','Xvfb','xdotool','dbus-run-session','gdbus','awk','passwd','runuser','visudo','useradd','groupadd','usermod'):
         if not shutil.which(executable,path=ENV['PATH']): raise ValueError('missing offline prerequisite: '+executable)
     if int(run(['/usr/bin/systemctl','--version']).split()[1]) < 259: raise ValueError('systemd 259 required')
     for path,expected in (('/proc/sys/dev/tty/legacy_tiocsti','0'),('/proc/sys/kernel/apparmor_restrict_unprivileged_userns','1')):
