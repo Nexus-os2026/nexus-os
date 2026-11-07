@@ -59,6 +59,47 @@ pub(crate) fn random16() -> [u8; 16] {
     bytes
 }
 
+/// The operating system's generator could not supply a fresh page marker.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MarkerUnavailable;
+
+/// A fresh page-framing marker: 16 new bytes from the operating system's
+/// generator with UUID version 4 bits, as 32 lowercase hex digits. A marker
+/// is framing data only; it proves no consent, identity or authority.
+/// Generator failure is an error, never a panic or a substitute value.
+pub fn fresh_page_marker() -> Result<String, MarkerUnavailable> {
+    let mut bytes = [0u8; 16];
+    let filled = ::getrandom::getrandom(&mut bytes);
+    #[cfg(test)]
+    let filled = marker_fault::inject(filled);
+    filled.map_err(|_| MarkerUnavailable)?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Ok(::hex::encode(bytes))
+}
+
+/// Test-only, one-shot generator fault for this module's marker oracles.
+#[cfg(test)]
+mod marker_fault {
+    use std::cell::Cell;
+
+    thread_local! {
+        static FAIL_NEXT: Cell<bool> = const { Cell::new(false) };
+    }
+
+    pub(super) fn fail_next() {
+        FAIL_NEXT.with(|fail| fail.set(true));
+    }
+
+    /// Replaces the generator's result with a failure, once, if armed.
+    pub(super) fn inject(filled: Result<(), getrandom::Error>) -> Result<(), getrandom::Error> {
+        if FAIL_NEXT.with(|fail| fail.replace(false)) {
+            return Err(getrandom::Error::UNSUPPORTED);
+        }
+        filled
+    }
+}
+
 macro_rules! opaque_id {
     ($(#[$doc:meta])* $name:ident, $prefix:literal) => {
         $(#[$doc])*
@@ -176,5 +217,375 @@ impl fmt::Display for AgentId {
 impl fmt::Debug for AgentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "AgentId({})", self.0)
+    }
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn is_v4_marker(marker: &str) -> bool {
+        let b = marker.as_bytes();
+        b.len() == 32
+            && b.iter().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'))
+            && b[12] == b'4'
+            && matches!(b[16], b'8' | b'9' | b'a' | b'b')
+    }
+
+    #[test]
+    fn m3cb_broker_marker_is_fallible_v4() {
+        let normal: Vec<_> = (0..32).map(|_| fresh_page_marker()).collect();
+        assert!(
+            normal.iter().all(|m| m.as_deref().is_ok_and(is_v4_marker)),
+            "default helper: 32 lowercase hex, v4 bits: {normal:?}"
+        );
+        assert!(normal.windows(2).all(|w| w[0] != w[1]), "{normal:?}");
+        marker_fault::fail_next();
+        let faulted = std::panic::catch_unwind(fresh_page_marker);
+        assert!(
+            matches!(faulted, Ok(Err(MarkerUnavailable))),
+            "entropy failure: exactly Err(MarkerUnavailable), no panic or fallback: {:?}",
+            faulted.as_ref().ok()
+        );
+        let after = fresh_page_marker();
+        assert!(after.as_deref().is_ok_and(is_v4_marker), "{after:?}");
+        assert!(!normal.contains(&after), "no previous marker after a fault");
+    }
+
+    /// The approved non-test generation path, compared token for token.
+    const APPROVED: &str = "{
+        let mut bytes = [0u8; 16];
+        let filled = ::getrandom::getrandom(&mut bytes);
+        #[cfg(test)]
+        let filled = marker_fault::inject(filled);
+        filled.map_err(|_| MarkerUnavailable)?;
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        Ok(::hex::encode(bytes))
+    }";
+    const SIGNATURE: &str = "pub fn fresh_page_marker() -> Result<String, MarkerUnavailable> {";
+
+    fn approved(body: &str) -> bool {
+        let tokens = |code: &str| -> String { code_only(code).split_whitespace().collect() };
+        tokens(body) == tokens(APPROVED)
+    }
+
+    /// The length of the string or char literal starting `code`, if any.
+    /// Raw strings are not lexed; `rejects_section` refuses them first.
+    fn literal_len(code: &[u8]) -> Option<usize> {
+        match code {
+            [b'\'', b'\\', ..] => {
+                let end = code.iter().skip(3).take(10).position(|&c| c == b'\'');
+                end.map(|j| j + 4)
+            }
+            [b'\'', c, ..] => {
+                let n = match c {
+                    0xf0.. => 4,
+                    0xe0.. => 3,
+                    0xc0.. => 2,
+                    _ => 1,
+                };
+                (code.get(1 + n) == Some(&b'\'')).then_some(n + 2)
+            }
+            [b'"', rest @ ..] => {
+                let mut i = 0;
+                while i < rest.len() && rest[i] != b'"' {
+                    i += if rest[i] == b'\\' { 2 } else { 1 };
+                }
+                Some((i + 2).min(code.len()))
+            }
+            _ => None,
+        }
+    }
+
+    /// `code` with every comment replaced by one space; literals kept.
+    fn code_only(code: &str) -> String {
+        let b = code.as_bytes();
+        let (mut out, mut i) = (Vec::with_capacity(b.len()), 0);
+        while i < b.len() {
+            if b[i..].starts_with(b"//") {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+                out.push(b' ');
+            } else if b[i..].starts_with(b"/*") {
+                let mut depth = 0usize;
+                while i < b.len() {
+                    if b[i..].starts_with(b"/*") {
+                        (depth, i) = (depth + 1, i + 2);
+                    } else if b[i..].starts_with(b"*/") {
+                        (depth, i) = (depth - 1, i + 2);
+                        if depth == 0 {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                out.push(b' ');
+            } else {
+                let n = literal_len(&b[i..]).unwrap_or(1);
+                out.extend_from_slice(&b[i..i + n]);
+                i += n;
+            }
+        }
+        String::from_utf8(out).unwrap_or_default()
+    }
+
+    /// Adjacent word pairs that could rebind `::getrandom`/`::hex` or shadow them.
+    const REBINDINGS: &[[&str; 2]] = &[
+        ["extern", "crate"],
+        ["mod", "getrandom"],
+        ["mod", "hex"],
+        ["as", "getrandom"],
+        ["as", "hex"],
+    ];
+    /// The header that ends the checked production section.
+    const CUT: &str = "\n#[cfg(test)]\nmod marker_tests {";
+
+    /// Whether `code` holds a raw string, byte/C raw string or raw identifier.
+    fn has_raw_prefix(code: &str) -> bool {
+        let b = code.as_bytes();
+        let ident = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+        (0..b.len()).any(|i| {
+            let starts = match i.checked_sub(1).map(|p| b[p]) {
+                None => true,
+                Some(b'b' | b'c') => i < 2 || !ident(b[i - 2]),
+                Some(p) => !ident(p),
+            };
+            b[i] == b'r' && starts && matches!(b.get(i + 1), Some(b'"' | b'#'))
+        })
+    }
+
+    /// Fail closed on anything the stripper does not lex exactly (raw literals),
+    /// and on a rebinding pair in the raw text or the comment-stripped text, so
+    /// neither a comment nor a mis-lex can split or hide one.
+    fn rejects_section(raw: &str) -> bool {
+        let stripped = code_only(raw);
+        let pairs = |text: &str| -> bool {
+            let words: Vec<&str> = text
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .filter(|w| !w.is_empty())
+                .collect();
+            words.windows(2).any(|w| REBINDINGS.iter().any(|r| w == r))
+        };
+        has_raw_prefix(&stripped) || pairs(raw) || pairs(&stripped)
+    }
+
+    /// The unique, ungated production definition's body, comments removed.
+    fn production_body(source: &str) -> Option<String> {
+        let source = source.replace("\r\n", "\n");
+        if source.matches(CUT).count() != 1 {
+            return None;
+        }
+        let raw = &source[..source.find(CUT)?];
+        if rejects_section(raw) {
+            return None;
+        }
+        let production = code_only(raw);
+        let ok = production.matches("fresh_page_marker").count() == 1
+            && production.matches("mod marker_fault").count() == 1
+            && production
+                .matches("\n#[cfg(test)]\nmod marker_fault {")
+                .count()
+                == 1;
+        let at = production.find(SIGNATURE).filter(|_| ok)?;
+        if production[..at].trim_end().ends_with(']') {
+            return None;
+        }
+        let (b, open) = (production.as_bytes(), at + SIGNATURE.len() - 1);
+        let (mut i, mut depth) = (open, 0usize);
+        while i < b.len() {
+            if let Some(n) = literal_len(&b[i..]) {
+                i += n;
+                continue;
+            }
+            match b[i] {
+                b'{' => depth += 1,
+                b'}' if depth == 1 => return production.get(open..=i).map(str::to_string),
+                b'}' => depth -= 1,
+                _ => {}
+            }
+            i += 1;
+        }
+        None
+    }
+
+    /// The pre-review body: `getrandom`/`hex` resolved relative to this module.
+    const UNPINNED: &str = "{
+        let mut bytes = [0u8; 16];
+        let filled = getrandom::getrandom(&mut bytes);
+        #[cfg(test)]
+        let filled = marker_fault::inject(filled);
+        filled.map_err(|_| MarkerUnavailable)?;
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        Ok(hex::encode(bytes))
+    }";
+    /// Production-only modules that would capture a relative path.
+    const SHADOWS: &[&str] = &[
+        "#[cfg(not(test))]\nmod getrandom {\n    pub fn getrandom(b: &mut [u8]) \
+         -> Result<(), ::getrandom::Error> {\n        b.fill(0x5a);\n        Ok(())\n    }\n}\n\n",
+        "#[cfg(not(test))]\nmod hex {\n    pub fn encode(_: [u8; 16]) -> String {\n        \
+         \"5a\".repeat(16)\n    }\n}\n\n",
+    ];
+    /// Harmless comments inside the production body.
+    const COMMENTS: &[&str] = &["\n    // } temporary buffer", "\n    /* } */"];
+    /// Rebinding declarations whose tokens are split by whitespace or comments.
+    const REBINDS: &[&str] = &[
+        "extern\ncrate self as getrandom;\n\n",
+        "extern\ncrate self as\ngetrandom;\n\n",
+        "extern /* */ crate self as /* */ hex;\n\n",
+        "use ::std as\ngetrandom;\n\n",
+        "pub mod\thex {}\n\n",
+        "mod /**/ getrandom {}\n\n",
+        "mod r#hex {}\n\n",
+    ];
+    /// Literals a comment stripper can mis-lex, hiding later declarations.
+    const MISLEXED: &[&str] = &[
+        "const _: &str = r#\"/*\"#;\n\n",
+        "const _: &str = r\"\\\";\nconst _: &str = \"/*\";\nextern crate self as getrandom;\n// */\n\n",
+        "const _: &[u8] = br#\"x\"#;\n\n",
+        "const _: char = '\\\"';\nconst _: &str = \"/*\";\nextern crate self as hex;\n// */\n\n",
+        "const _: (char, char) = ('é','\"');\nconst _: &str = \"/*\";\nextern crate self as hex;\n// */\n\n",
+    ];
+    /// A second test-module header in production, truncating the checked section.
+    const FAKE_CUT: &str =
+        "\nconst _: &str = \"\n#[cfg(test)]\nmod marker_tests {\";\nextern crate self as hex;\n";
+
+    /// The source with `insert` placed after the first `at` (the production one).
+    fn edited(source: &str, at: &str, insert: &str, before: bool) -> String {
+        let with = if before {
+            format!("{insert}{at}")
+        } else {
+            format!("{at}{insert}")
+        };
+        source.replacen(at, &with, 1)
+    }
+
+    fn approved_source(source: &str) -> bool {
+        production_body(source).is_some_and(|body| approved(&body))
+    }
+
+    // Deterministic substitutes whose outputs look like fresh v4 markers.
+    macro_rules! substitutes {
+        ($($name:ident $body:block)*) => {
+            $(fn $name() -> Result<String, MarkerUnavailable> $body)*
+            type Generate = fn() -> Result<String, MarkerUnavailable>;
+            const SUBSTITUTES: &[(&str, Generate, &str)] =
+                &[$((stringify!($name), $name, stringify!($body))),*];
+        };
+    }
+    substitutes! {
+        fixed {
+            let mut bytes = [0x5a_u8; 16];
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            Ok(hex::encode(bytes))
+        }
+        counter {
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let mut bytes = [0u8; 16];
+            bytes[8..].copy_from_slice(&NEXT.fetch_add(1, Ordering::Relaxed).to_be_bytes());
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            Ok(hex::encode(bytes))
+        }
+        timestamp {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH);
+            let mut bytes = now.map_err(|_| MarkerUnavailable)?.as_nanos().to_be_bytes();
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            Ok(hex::encode(bytes))
+        }
+        seeded {
+            thread_local! {
+                static STATE: Cell<u64> = const { Cell::new(0x9e37_79b9_7f4a_7c15) };
+            }
+            let mut bytes = [0u8; 16];
+            for chunk in bytes.chunks_mut(8) {
+                let mut x = STATE.with(Cell::get);
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                STATE.with(|state| state.set(x));
+                chunk.copy_from_slice(&x.to_le_bytes());
+            }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            Ok(hex::encode(bytes))
+        }
+        overwritten {
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let mut bytes = [0u8; 16];
+            let filled = getrandom::getrandom(&mut bytes);
+            filled.map_err(|_| MarkerUnavailable)?;
+            bytes[..8].copy_from_slice(&NEXT.fetch_add(1, Ordering::Relaxed).to_be_bytes());
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            Ok(hex::encode(bytes))
+        }
+    }
+
+    #[test]
+    fn m3cb_broker_marker_uses_approved_entropy() {
+        for (name, generate, body) in SUBSTITUTES {
+            let (a, b) = (generate(), generate());
+            let shaped = [&a, &b]
+                .iter()
+                .all(|m| m.as_deref().is_ok_and(is_v4_marker));
+            assert!(shaped, "{name}: v4-shaped {a:?} {b:?}");
+            if !matches!(*name, "fixed" | "timestamp") {
+                assert_ne!(a, b, "{name}: distinct");
+            }
+            assert!(
+                !approved(body),
+                "{name}: deterministic substitute must fail"
+            );
+        }
+        let source = include_str!("ids.rs");
+        let body = production_body(source);
+        assert!(
+            body.as_deref().is_some_and(approved),
+            "non-test fresh_page_marker is not the approved fallible getrandom path: {body:?}"
+        );
+        let mut failures = Vec::new();
+        if approved(UNPINNED) {
+            failures.push("relative getrandom/hex paths accepted".to_string());
+        }
+        let doc = "/// A fresh page-framing marker";
+        for shadow in SHADOWS {
+            if approved_source(&edited(source, doc, shadow, true)) {
+                failures.push(format!("shadow accepted: {shadow:?}"));
+            }
+        }
+        for plant in REBINDS {
+            if approved_source(&edited(source, doc, plant, true)) {
+                failures.push(format!("split rebinding accepted: {plant:?}"));
+            }
+        }
+        for plant in MISLEXED {
+            if approved_source(&edited(source, doc, plant, true)) {
+                failures.push(format!("mis-lexable literal accepted: {plant:?}"));
+            }
+        }
+        if approved_source(&edited(source, CUT, FAKE_CUT, true)) {
+            failures.push("second test-module header accepted".to_string());
+        }
+        for comment in COMMENTS {
+            if !approved_source(&edited(source, SIGNATURE, comment, false)) {
+                failures.push(format!("harmless comment rejected: {comment:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+        let crate_root = include_str!("../lib.rs").replace("\r\n", "\n");
+        assert!(!rejects_section(&crate_root), "no crate-root rebinding");
+        let manifest = include_str!("../../Cargo.toml").replace("\r\n", "\n");
+        for dependency in ["\ngetrandom = \"0.2\"\n", "\nhex = \"0.4\"\n"] {
+            assert!(manifest.contains(dependency), "unrenamed {dependency:?}");
+        }
     }
 }
