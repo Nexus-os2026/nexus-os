@@ -650,3 +650,90 @@ fn r5_classifier_subject_allows_unrelated_helpers_but_keeps_refusal_bytes() {
         &raw.replace("agent file reads stay closed", "allowed")
     ));
 }
+
+#[test]
+fn k05_live_checkpoint_paths_are_absent() {
+    for path in ["kernel/src/checkpoint.rs", "kernel/src/checkpoint"] {
+        assert!(!root().join(path).exists(), "f7-absence: {path}");
+    }
+    assert!(!paths_at(5).contains("kernel/src/checkpoint.rs"));
+}
+
+#[test]
+fn k05_live_checkpoint_declaration_is_absent() {
+    let code = prod(&read("kernel/src/lib.rs")).0;
+    assert!(
+        !module_names(&code).contains("checkpoint"),
+        "f7-absence: kernel/src/lib.rs"
+    );
+    assert!(!module_edges(5)["kernel/src/lib.rs"].contains("checkpoint"));
+}
+
+#[test]
+fn k05_live_checkpoint_symbols_are_absent() {
+    let findings = successor(LIVE_STAGE, &load_live_tree());
+    assert!(
+        !findings
+            .iter()
+            .any(|(oracle, _)| *oracle == "f7-dependency"),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn k05_checkpoint_no_return_controls() {
+    for stage in 5..=22 {
+        for path in [
+            "kernel/src/checkpoint.rs",
+            "kernel/src/checkpoint",
+            "kernel/src/checkpoint/mod.rs",
+            "kernel/src/checkpoint/note.txt",
+        ] {
+            let mut tree = clean_tree(stage);
+            tree.insert(path.into(), String::new());
+            rejected(stage, &tree, "f7-absence", path);
+        }
+        let mut tree = clean_tree(stage);
+        tree.get_mut("kernel/src/lib.rs")
+            .unwrap()
+            .push_str("pub mod checkpoint;");
+        rejected(stage, &tree, "f7-absence", "kernel/src/lib.rs");
+        for plant in [
+            "use crate::checkpoint::Unknown;",
+            "pub use nexus_kernel::checkpoint::Unknown;",
+        ] {
+            let mut tree = clean_tree(stage);
+            tree.get_mut("kernel/src/privacy.rs")
+                .unwrap()
+                .push_str(plant);
+            rejected(stage, &tree, "f7-dependency", "kernel/src/privacy.rs");
+        }
+        for name in CHECKPOINT_SYMBOLS {
+            for path in [
+                "kernel/src/privacy.rs",
+                "kernel/src/persistence.rs",
+                "kernel/src/replacement_checkpoint.rs",
+            ] {
+                // Inert private stubs: fixture code only, never a replacement runtime.
+                // replacement_checkpoint.rs is an unregistered path, so it is
+                // f7-dependency by path; it is not counted as symbol coverage
+                // (privacy.rs and stage-5 persistence.rs prove the symbol rule).
+                let mut tree = clean_tree(stage);
+                tree.entry(path.into())
+                    .or_default()
+                    .push_str(&format!("\nstruct {name};\n"));
+                rejected(stage, &tree, "f7-dependency", path);
+            }
+        }
+        let mut tree = clean_tree(stage);
+        let harmless = format!(
+            "// {}\nstruct SideEffect; struct StepOutput;",
+            CHECKPOINT_SYMBOLS.join(" ")
+        );
+        tree.get_mut("kernel/src/privacy.rs")
+            .unwrap()
+            .push_str(&harmless);
+        tree.prove_fixture();
+        assert_eq!(successor(stage, &tree), Findings::new());
+    }
+}

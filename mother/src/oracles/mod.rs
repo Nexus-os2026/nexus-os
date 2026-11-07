@@ -21,6 +21,7 @@ pub(crate) mod m2c_owner;
 mod m3a_reader_fixtures;
 mod m3a_s_o4;
 mod m3a_verifier;
+pub(crate) mod m3d_manifest;
 mod mn01;
 mod review;
 mod state;
@@ -665,6 +666,7 @@ pub fn contract_with(markers: &str) -> MissionContract {
         model: None,
         notes: vec![],
         deliverable: None,
+        page_facts: None,
         owner_words: "  Make me a small website for my bakery, \"Rosa's\".\n  Keep it simple!  "
             .into(),
         restatement: format!("A one-page site for Rosa's bakery {markers}")

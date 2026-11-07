@@ -121,6 +121,7 @@ mod walk {
             model: None,
             notes: vec![],
             deliverable: None,
+            page_facts: None,
             owner_words: "Make me a small website for my bakery, Rosa's. Keep it simple!".into(),
             restatement: restatement.into(),
             requested_folder: Some("~/Sites/rosas-bakery".into()),
