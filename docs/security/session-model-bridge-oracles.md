@@ -991,7 +991,7 @@ Receipts, on the final code head; plants restored by sha256:
   "exact admission attempts".
 - Gates, each binary alone: governed-control lib 915, Mother lib 360,
   host 166, m2e_a2 54, m2e_transport 39; fmt, clippy, diff --check.
-- Repeats: 17/20. Three non-poison failures of the P1 control came from
-  a harness race in the oracle: the grant checker signalled "free"
-  while still holding the store. The fix (release, then signal) is
-  pending a ruling; with it, 30/30 runs alone and 20/20 repeats pass.
+- Repeats 17/20 on c7001a57: the P1 control's grant checker signalled
+  "free" while still holding the store, an oracle race. The SB3B-R12
+  oracle-fix releases first. Afterwards: 30/30 alone, and 10 serial +
+  10 parallel 20/20 on the final head.
