@@ -61,14 +61,14 @@ class ContractTests(unittest.TestCase):
             if g['id'] in expected: self.assertEqual(g['argv'],[CARGO,'--offline']+expected[g['id']])
         self.assertEqual(gates[3],{'id':'workspace','adapter':'libtest','artifacts':'every eligible emitted test artifact','list_before_execute':True})
         self.assertEqual(gates[5],{'id':'host','adapter':'reconcile-all-artifacts','package':'nexus-mother-host',
-                                        'argv':['/usr/bin/python3','-I','-B','/gate/bin/init.py','--gate','host']})
+                                        'argv':None,'internal':True})
         desktop = gates[6]
         self.assertEqual((desktop['adapter'],desktop['package'],desktop['target'],desktop['minimum']), ('libtest-repeat','nexus-mother-desktop','live',14))
         self.assertEqual(len(desktop['expected_names']),23)
         self.assertEqual(len(set(desktop['expected_names'])),23)
         self.assertEqual(hashlib.sha256('\n'.join(desktop['expected_names']).encode()).hexdigest(), '326ab2d036bb6c0c114507d81724817272c6474cf61f08b5b7862cc2ab79bb91')
         self.assertEqual(gates[8],{'id':'whitespace','adapter':'snapshot-whitespace','label':'approximation to git diff --check',
-                                        'argv':['/usr/bin/python3','-I','-B','/gate/bin/init.py','--gate','whitespace']})
+                                        'argv':None,'internal':True})
         self.assertEqual(policy['coverage'],{'reject_unknown_harness':True,'reconcile_names_and_results':True,'missing_artifact_fails':True,'compile_excluded_target':True,'execute_excluded_target':False,'excluded_target':'phase2_live_sandbox','exclusions_file':'exclusions.json'})
     def test_exact_exclusions(self):
         exclusions = json.loads((HERE/'policy/exclusions.json').read_text())

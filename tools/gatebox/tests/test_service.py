@@ -454,6 +454,28 @@ class OfflineServiceTests(unittest.TestCase):
                         reason = 'ARTIFACT' if variant in ('missing','duplicate') else 'SOURCE' if variant in ('path','symlink') else 'BLOB' if variant=='blob' else 'CASES'
                         with self.assertRaisesRegex(ValueError,'EXCLUSION_'+reason): runner.gates()
 
+    def test_q5_n2_internal_invocations(self):
+        from test_unit_core import ReceiptTests
+        fixture = ReceiptTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        for gate in ('host','whitespace','format'):
+            for argv, internal in ((None,True),(['fabricated'],True),(None,False),(['fabricated'],False),(None,None)):
+                with self.subTest(gate=gate,argv=argv,internal=internal):
+                    event = dict(start_event(),gate_id=gate,argv=argv)
+                    if internal is not None: event['internal'] = internal
+                    summary = fixture.success()
+                    next(c for c in summary['commands'] if c['gate_id']==gate).update({k:v for k,v in event.items() if k in ('argv','internal')})
+                    for validate in (lambda:supervisor.Evidence().accept(event),lambda:verify.receipt.validate_summary(summary)):
+                        if gate in ('host','whitespace') and argv is None and internal is True: validate()
+                        else:
+                            with self.assertRaises(ValueError): validate()
+        fixture.summary = fixture.success()
+        fixture.publish()
+        with patch.object(verify,'ROOT',fixture.receipts), patch.object(verify,'host_context'), \
+                patch.object(verify,'host_ancestry'), patch.object(verify.pwd,'getpwnam',return_value=Mock(pw_uid=os.getuid())):
+            self.assertEqual(verify.authenticate(fixture.run_id)['summary']['status'],'PASS_SCOPED')
+
     def test_review4_collect_detects_failed_start(self):
         selector = Mock()
         selector.select.return_value = []

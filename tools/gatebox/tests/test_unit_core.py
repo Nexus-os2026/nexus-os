@@ -227,6 +227,7 @@ class ReceiptTests(unittest.TestCase):
                                cwd='/work/src',environment=dict(summary['environment']),exit_code=0,signal=None,
                                timed_out=False,oom=False,status_complete=True,collector_complete=True,
                                log='run.log',log_sha256=summary['logs'][0]['sha256'])
+                if gate['id'] in ('host','whitespace'): command.update(argv=None,internal=True)
                 if artifact: command['artifact_id'] = artifact['id']
                 if gate['id'] == 'host': command['artifact_ids'] = ['host-bin']
                 if 'adapter' in gate and gate['id'] != 'whitespace':
