@@ -3576,6 +3576,9 @@ fn sb3_deadline_lapsed_under_the_hold_times_out() {
 /// readings of the limits would let the narrowing fall between them.
 #[test]
 fn sb3_narrowing_at_the_eligibility_read_times_out() {
+    if watched("sb3_narrowing_at_the_eligibility_read_times_out") {
+        return;
+    }
     positive("positive control");
     for class in ["mission_wall_narrowed", "mission_mono_narrowed"] {
         for i in 0..4 {
@@ -3613,4 +3616,5 @@ fn sb3_narrowing_at_the_eligibility_read_times_out() {
             );
         }
     }
+    println!("{HELD_DONE} sb3_narrowing_at_the_eligibility_read_times_out");
 }
