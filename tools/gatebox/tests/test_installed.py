@@ -108,6 +108,21 @@ class OfflineInstallTests(unittest.TestCase):
             with self.assertRaises(ValueError): check({},value,{},lambda run: None)
 
 class InstallReviewOracles(unittest.TestCase):
+    def test_empty_command_has_an_authenticated_empty_capture(self):
+        init = load('init'); events = []
+        runner = init.Runner(111,222)
+        with patch.object(init,'packet',side_effect=lambda fd,value: events.append((fd,value))):
+            name,code,output = runner.command('format',[os.sys.executable,'-I','-c','pass'])
+        self.assertEqual((code,output),(0,''))
+        self.assertIn((111,{'id':name,'data':''}),events)
+    def test_host_process_identity_ignores_volatile_counters(self):
+        identify = load('probe').process_identity
+        fields = ['0']*30; fields[19]='1234'
+        first = '456 (host canary) '+' '.join(fields)
+        fields[10]='9999'
+        self.assertEqual(identify(first),identify('456 (host canary) '+' '.join(fields)))
+        fields[19]='5678'
+        self.assertNotEqual(identify(first),identify('456 (host canary) '+' '.join(fields)))
     def test_payload_policy_outputs_match_readonly_bind(self):
         files = {'tools/gatebox/policy/'+n:(HERE/'policy'/n).read_bytes()
                  for n in ('gates.json','exclusions.json')}
