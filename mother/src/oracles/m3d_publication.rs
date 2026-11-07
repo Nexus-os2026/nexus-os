@@ -49,7 +49,7 @@ fn m3d_proof_records_are_frozen_evidence() {
         },
         sha256: RAW_SHA.into(),
         bytes: 8,
-        policy_hash: "ab".repeat(32),
+        policy_hash: "ab".repeat(32).into(),
         overtaken: false,
     };
     let receipt_json = format!(

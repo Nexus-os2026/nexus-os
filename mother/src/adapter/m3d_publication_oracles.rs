@@ -381,7 +381,7 @@ fn m3d_db_broker_child() {
             };
             assert_eq!(sha256, sha(&broker));
             assert_eq!(bytes, BAKERY.len() as u64);
-            assert_eq!(policy_hash, hex::encode(policy));
+            assert_eq!(serde_json::json!(policy_hash), hex::encode(policy));
             assert!(!overtaken);
             assert!(events.iter().any(|e| matches!(e, Event::ApprovalPending { effect: e2, pending } if *e2 == effect && *pending == action)));
             assert!(events.iter().any(
