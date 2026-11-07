@@ -1363,7 +1363,9 @@ pub(crate) mod session_support;
 #[cfg(test)]
 mod c1b_coordinator_oracles;
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod m3cb_lane_oracles;
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
+#[cfg(test)]
 mod m3cb_support;

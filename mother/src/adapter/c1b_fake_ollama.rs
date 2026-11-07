@@ -44,13 +44,14 @@ pub(crate) enum Answer {
 }
 
 type Route = Arc<dyn Fn(&str) -> Option<Answer> + Send + Sync>;
+type RawBodies = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
 
 pub(crate) struct FakeOllama {
     addr: SocketAddr,
     events: Mutex<Receiver<Seen>>,
     log: Arc<Mutex<Vec<String>>>,
     route: Arc<Mutex<Route>>,
-    bodies: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
+    bodies: RawBodies,
 }
 
 /// A successful chat envelope whose content is `content`.
