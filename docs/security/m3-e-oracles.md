@@ -50,6 +50,19 @@ Tests: `mother/host/tests/page_inputs.rs` (and the in-module unit test in
   `shown` (CR, controls, bidi, zero-width, non-ASCII spaces) →
   `goal_not_plain`; more than 4,096 scalars in the stored text (LFs counted)
   → `goal_too_long`. Otherwise stored verbatim.
+- **CR (M3E-R3 2).** Any CR anywhere refuses: facts `facts_file_invalid`
+  at its line, notes `notes_carriage_return`, goal `goal_not_plain`.
+  Parsed values (`InputValue`) never show input text in `Debug`.
+- **Recorded limitations (M3E-R3 3, 4).** Parent-directory symlinks of the
+  Owner-supplied absolute paths are followed; a device path is opened
+  (read-only, non-blocking) before `fstat` refuses it.
+- **Placement (M3E-R3).** All descriptor, `fstat`, read and digest code,
+  including the `/proc/self/exe` hash, lives in the Mother adapter
+  (`mother/src/adapter/input_files.rs`); host `inputs.rs` and
+  `binary_identity.rs` hold only pure parsing and types and call it.
+- **Carry.** `MissionContract` notes validation uses `str::lines()`, so an
+  interior `\r\n` passes the contract; a later Mother slice fixes the core.
+  The host refusal above is the M-1 fail-closed control.
 - **Goal precedence (recorded for M-3).** A goal file together with a typed
   goal is refused; there is no precedence. Typed mode does not exist in M-1.
 - **Page flags (M3E-R2 1(a)).** `parse_page_args` accepts exactly
@@ -75,9 +88,12 @@ Tests: `mother/host/tests/page_inputs.rs` (and the in-module unit test in
 | `m3e_u1_goal_file_verbatim_and_bounds` | Verbatim with allowed whitespace; exactly one final LF dropped; 4,096 multibyte scalars accepted, 4,097 refused; LFs counted; 16,384 B accepted, 16,385 B refused; CR/CRLF, bidi, tab, zero-width, U+3000, BEL refused; empty and whitespace-only `goal_empty`; `approve` is data; goal symlink refused. |
 | `m3e_u1_page_args_parse_only` | Exact flags accepted, goal optional; duplicate, unknown (`--home`), missing value, missing or other mission, missing notes/facts, relative or empty path refused with their codes. |
 | `m3e_u1_running_binary_identity` | Digest equals an independent hash of this test image; a running copy whose pathname is replaced and whose argv[0] names the replacement reports the original image's digest (bounded child, killed and reaped). |
+| `m3e_u1_values_redacted_and_any_cr_refused` (M3E-R3) | Goal, notes and facts canaries absent from parsed-value and snapshot `Debug`; CR, CRLF, lone and trailing CR refuse in notes (`notes_carriage_return`), goal (`goal_not_plain`) and facts (`facts_file_invalid` at the line). |
 | `m3e_u1_running_binary_identity_unavailable` (unit) | Real image digest first; then a missing path, a directory and a size-0 `/proc` file each give `self_identity_unavailable`. |
 
 ### Plants (each temporary, killed at its named assertion, never committed)
+
+After M3E-R3, P-U1a, P-U1b and P-U1d target `mother/src/adapter/input_files.rs`.
 
 | Plant | Mutation | Killing oracle |
 |---|---|---|

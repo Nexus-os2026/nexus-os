@@ -745,6 +745,54 @@ fn m3e_u1_page_args_parse_only() {
     }
 }
 
+// M3E-R3 (1)(2): parsed values never show input text in Debug, and the
+// host refuses any CR anywhere in notes, facts and goal.
+#[test]
+fn m3e_u1_values_redacted_and_any_cr_refused() {
+    let d = Dir::new("redact");
+    let facts = format!("name: {CANARY}\nhours: a\nphone: 1234567\n");
+    let goal = format!("Make the {CANARY} page");
+    let notes = format!("{CANARY} notes");
+    for (kind, text) in [
+        (InputKind::Goal, &goal),
+        (InputKind::Notes, &notes),
+        (InputKind::Facts, &facts),
+    ] {
+        let s = snap(kind, &d.file(kind.as_str(), text.as_bytes())).unwrap();
+        let shown = format!("{:?} {s:?}", s.parse().unwrap());
+        assert!(!shown.contains(CANARY), "{kind:?}: {shown}");
+    }
+    let code = |kind, text: &str| {
+        let s = snap(kind, &d.file("cr", text.as_bytes())).unwrap();
+        s.parse().map(|_| ()).map_err(|e| (e.code(), e.line()))
+    };
+    for text in ["a\r\nb", "a\rb", "a\r", "a\r\n", "\r", "a\nb\r\nc\n"] {
+        let notes = code(InputKind::Notes, text);
+        assert_eq!(
+            notes,
+            Err(("notes_carriage_return", None)),
+            "notes {text:?}"
+        );
+        assert_eq!(
+            code(InputKind::Goal, text),
+            Err(("goal_not_plain", None)),
+            "goal {text:?}"
+        );
+    }
+    for (text, line) in [
+        ("name: a\nhours: a\rb\nphone: 1234567\n", 2),
+        ("name: a\nhours: a\nphone: 1234567\r", 3),
+        ("name: a\r", 1),
+    ] {
+        let facts = code(InputKind::Facts, text);
+        assert_eq!(
+            facts,
+            Err(("facts_file_invalid", Some(line))),
+            "facts {text:?}"
+        );
+    }
+}
+
 const CHILD: &str = "M3E_U1_IDENTITY_CHILD";
 
 // Child half of the identity oracle: inert unless the parent set CHILD.
