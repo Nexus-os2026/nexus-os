@@ -233,6 +233,20 @@ specifies failed-proof recovery and the reboot; no generic custody deletion.
 Linux oracle socket addresses use an open private parent descriptor and a
 short absolute /proc/self/fd name, independent of cwd and TMPDIR length.
 The installed FILES allowlist remains exact and unchanged (27 files). The
-host-only plant removes lifecycle's post-relocation endpoint check: Owner must
-observe installed C2 RED, restore the SHA-256-verified reviewed bytes and reboot.
+host-only plant removes lifecycle's post-relocation endpoint check in memory in
+the child only: Owner must use a root-owned 0700 copy of host_plant.py, verify
+its reviewed SHA-256, run without a TMPDIR override, observe installed C2 RED
+and reboot. Installed bytes remain unchanged; there is nothing to restore.
 This mission claims no installed PASS, CI parity or phase advancement.
+
+## Q16 pre-install correction
+
+After authenticating the fixture receipt, wait at most five seconds, polling,
+for that run's pending marker and staging tree to disappear. Timeout retains
+the existing leftover failure and never caches a successful session. C2 now
+asserts the endpoint rejection cause and stops an accidentally started exact
+instance before independently proving settlement; quarantine is retained.
+README records the reviewed Owner order, protected host-plant copy, saved
+qualification log, replacement-disabled/fsck PIN, evidence-preserving reset
+and exact recovery commands. FILES remains exactly 27. No installed acceptance,
+host action, CI parity or phase advancement is claimed.

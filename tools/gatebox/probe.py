@@ -527,6 +527,14 @@ def fixture():
             result = sibling('verify').authenticate(run); summary = result['summary']
             atomic_config(attempt,dict(provenance,state='receipt-published',run_id=run,status=summary['status']))
             require(summary['status']=='PASS_SCOPED','fixture failed: '+str(summary['missing_evidence']))
+            # Publication precedes the supervisor's staging/pending cleanup.
+            # Wait only for this run; unrelated leftovers still fail qualify().
+            cleanup_deadline = time.monotonic()+5
+            while ((Path('/var/lib/mothergate/pending')/('.'+run)).exists()
+                   or (Path('/var/lib/mothergate/staging')/run).exists()):
+                remaining = cleanup_deadline-time.monotonic()
+                require(remaining>0,'custody leftovers after proof; reviewed recovery required')
+                time.sleep(min(.01,remaining))
             SESSION = (summary,dict(context,uid=registration['uid'],accepted=accepted,refused=refused,
                                    codex='unsupported (runner denies AF_UNIX)'))
         finally:

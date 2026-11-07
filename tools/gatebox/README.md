@@ -16,27 +16,17 @@ copies its verified bytes to
 until the pinned policy is re-pinned through a reviewed PR.** The excluded
 executable is compiled but never spawned, including for discovery.
 
-Build the uncompressed bundle from the reviewed repository root, without root:
+Owner order (Q16, each step requires the preceding evidence):
 
-```bash
-bash -euo pipefail <<'BUILD'
-python3 -I -B - <<'PY' | tar --exclude='__pycache__' --no-recursion --null --files-from=- -cf /home/nexus/NEXUS/gatebox-slice1.tar
-import ast, pathlib, stat, sys
-text = pathlib.Path('tools/gatebox/install.sh').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
-values = {n.targets[0].id: ast.literal_eval(n.value) for n in ast.parse(text).body
-          if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
-          and n.targets[0].id in ('FILES','HARNESS')}
-for name in ['tools/gatebox/'+n for n in values['FILES']]+[values['HARNESS']]:
-    if not stat.S_ISREG(pathlib.Path(name).lstat().st_mode): raise SystemExit('not a regular file')
-    sys.stdout.buffer.write(name.encode()+b'\0')
-PY
-sha256sum /home/nexus/NEXUS/gatebox-slice1.tar
-BUILD
-```
-
-Independently review the bundle and record its SHA-256. The sheet §10 installer
-command needs `--bundle-sha256 "$GBX_BUNDLE_SHA"`, as included below; the sheet
-itself is outside this PR's allowed files.
+1. Fix M-a and the Q16 pre-install findings; collect offline oracles and plants.
+2. Obtain independent delta review of the final full commit and procedures.
+3. Complete H1 below, including reboot and both group checks.
+4. PIN below: verify objects, build from the reviewed commit and record bundle SHA-256.
+5. Install the reviewed bundle using OWNER below, verify checks, then **STOP**.
+6. After review lifts STOP, run the protected host plant below; preserve evidence and reboot.
+7. Qualify with C2 last, saving all output to the root-owned log below.
+8. Reboot after qualification succeeds and evidence is saved.
+9. Run enable-qualified below; do not repeat qualification between C2 and enable.
 
 Owner H1 steps, **before installation**, in a host terminal. Close every agent,
 background task and sub-agent, including this session. This check must print
@@ -49,26 +39,55 @@ sudo gpasswd -d nexus docker
 sudo reboot
 ```
 
-After reboot, confirm both `id -nG` and `id -nG nexus` omit `docker`. Docker is
+After reboot, run both checks; both outputs must omit `docker`:
+
+```bash
+id -nG
+id -nG nexus
+```
+
+Docker is
 subsequently available only through `sudo docker`. Do not restart agents during
 the Owner sudo session. In a second host terminal keep `sudo -i` open as lockout
 insurance until the post-install checks pass.
 
 Re-pin install-review-2 C1 to the **final independently reviewed full commit SHA
 and its worktree**, not d5ef01d7 or mother-gbs2b. After H1 reboot, with agents
-closed, personally compare every bundle member to that commit before the OWNER
-block, then record the bundle hash again. From the final reviewed repository root:
+closed, build and compare every bundle member to that commit before the OWNER
+block. The PIN block refuses replacement refs and corrupt/missing objects before
+building. It reads committed blobs, not worktree bytes. Move any previous bundle
+aside for review first; exclusive creation refuses to overwrite it. From the
+final reviewed repository root, as nexus (not root):
 
 ```bash
 read -r -p 'Final reviewed full commit SHA: ' GBX_REVIEWED_SHA
 python3 -I -B - "$GBX_REVIEWED_SHA" <<'PIN'
-import hashlib, pathlib, re, subprocess, sys, tarfile
+import ast, hashlib, pathlib, re, shlex, subprocess, sys, tarfile, tempfile
 sha=sys.argv[1]
 if not re.fullmatch('[0-9a-f]{40}',sha): raise SystemExit('full reviewed SHA required')
-def blob(path): return subprocess.check_output(['git','show',sha+':'+path])
-names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha,'--','tools/gatebox']).decode().splitlines()
-names+=['crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs']
+replacements=subprocess.check_output(['git','--no-replace-objects','for-each-ref','--format=%(refname)','refs/replace'])
+if replacements.strip(): raise SystemExit('replacement refs present; stop for review')
+subprocess.run(['git','--no-replace-objects','fsck','--full','--strict',sha],check=True)
+def blob(path): return subprocess.check_output(['git','--no-replace-objects','show',sha+':'+path])
+names=subprocess.check_output(['git','--no-replace-objects','ls-tree','-r','--name-only',sha,'--','tools/gatebox']).decode().splitlines()
+body=blob('tools/gatebox/install.sh').decode().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
+values={n.targets[0].id:ast.literal_eval(n.value) for n in ast.parse(body).body
+        if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
+        and n.targets[0].id in ('FILES','HARNESS')}
+if len(values['FILES'])!=27 or set(names)!={'tools/gatebox/'+n for n in values['FILES']}:
+    raise SystemExit('reviewed FILES inventory mismatch')
+names+=[values['HARNESS']]
 bundle=pathlib.Path('/home/nexus/NEXUS/gatebox-slice1.tar')
+with tempfile.TemporaryDirectory(prefix='gatebox-pin-') as temporary:
+    for name in names:
+        path=pathlib.Path(temporary)/name; path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(blob(name))
+    # Keep the original explicit-member, no-recursion tar contract. Its source
+    # is this private tree of verified blobs, never the mutable checkout.
+    command=shlex.split("tar --exclude='__pycache__' --no-recursion --null --files-from=- -cf -")
+    with bundle.open('xb') as output:
+        subprocess.run(command,cwd=temporary,input=b''.join(n.encode()+b'\0' for n in names),
+                       stdout=output,check=True)
 with tarfile.open(bundle,'r:') as archive:
     members=[m for m in archive if not m.isdir()]
     if len(members)!=len(names) or {m.name for m in members}!=set(names):
@@ -79,6 +98,10 @@ with tarfile.open(bundle,'r:') as archive:
 print('reviewed_sha='+sha+' bundle_sha256='+hashlib.sha256(bundle.read_bytes()).hexdigest())
 PIN
 ```
+
+Independently review the bundle and record its SHA-256. The sheet §10 installer
+command needs `--bundle-sha256 "$GBX_BUNDLE_SHA"`, as included below; the sheet
+itself is outside this PR's allowed files.
 
 Owner bundle/install commands, after H1 and independent bundle review (never run
 the checkout installer as root; never use sudo -E or preserve the environment):
@@ -167,8 +190,47 @@ Make the new gatesubmit membership effective in the actual Claude context.
 
 CLIENTS context is a process-ancestry heuristic based on process command lines,
 not an attestation of agent identity; it can be spoofed by the registered user.
-Run sudo commands via Claude Code's `!` shell prefix to retain that ancestry:
+For qualification only, start the actual foreground Claude context after the
+host plant reboot, with no background agents. Run commands via its `!` shell
+prefix to retain that ancestry:
 `!sudo /usr/bin/python3 -I -B -m unittest discover -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v`.
+
+Host-only endpoint-check plant (step 6), **after the installation STOP is lifted**:
+with agents closed, the Owner uses a host terminal. This is the reviewed Q15
+script, SHA-256 `d529f1b8be40af8e0222a424092c7c6579103ec59ac5cc32aec6fe7e495f17cd`.
+Copy it into root custody before executing; never run root code from the scratch
+path. The script changes only the child validator in memory and verifies installed
+lifecycle bytes unchanged. There is nothing to restore on disk. It records no
+qualification row. A real payload may start and quarantine remains until reboot.
+
+```bash
+bash -euo pipefail <<'HOSTPLANT'
+sudo /usr/bin/install -d -o root -g root -m 0700 /root/gatebox-slice1/host-plant
+sudo /usr/bin/install -o root -g root -m 0600 \
+  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/53f6c814-4d9f-4dfc-bcb5-ab55762fc5cc/scratchpad/gbq15-out/host_plant.py \
+  /root/gatebox-slice1/host-plant/host_plant.py
+printf '%s  %s\n' d529f1b8be40af8e0222a424092c7c6579103ec59ac5cc32aec6fe7e495f17cd \
+  /root/gatebox-slice1/host-plant/host_plant.py | sudo /usr/bin/sha256sum --check -
+set +e
+sudo /usr/bin/env -u TMPDIR -u TEMP -u TMP /usr/bin/python3 -I -B \
+  /root/gatebox-slice1/host-plant/host_plant.py 2>&1 |
+  sudo /usr/bin/tee /root/gatebox-slice1/host-plant/output.log
+GBX_STATUS=("${PIPESTATUS[@]}")
+set -e
+[[ "${GBX_STATUS[0]}" == 1 && "${GBX_STATUS[1]}" == 0 ]]
+HOSTPLANT
+```
+
+The expected exit 1 alone is insufficient: review `HOST PLANT REACHED`, the C2
+assertion failure (not a preflight error/skip), and the unchanged installed hash
+in `/root/gatebox-slice1/host-plant/output.log`. On any different result, STOP.
+Preserve the printed run, canary, manager/cgroup and fixture evidence outside
+`/run`; follow exact-name recovery below if persistent leftovers remain. Once
+reviewed and persistent staging/pending are empty, perform the required reboot:
+
+```bash
+sudo reboot
+```
 
 Separate qualification procedure (only after the installation STOP is lifted):
 run from the actual Claude Code process context, with Owner approval for host/root
@@ -179,15 +241,23 @@ run receipt and the refused non-qualification reply, and authenticates on host:
 ```bash
 bash -euo pipefail <<'QUALIFY'
 sudo /usr/bin/python3 -I -B -m unittest discover \
-  -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v
+  -s /usr/libexec/gatebox/tests -p 'test_installed.py' -v 2>&1 |
+  sudo /usr/bin/tee -a /root/gatebox-slice1/qualification.log
 sudo -k
 sudo /usr/bin/python3 -I -B /usr/libexec/gatebox/verify.py --latest \
   --repo mother --sha 899e3872c5b61223c87b905f63c66947a816259b \
-  --gateset full --require-status PASS_SCOPED
-# C2 runs LAST and intentionally leaves root custody held. Preserve the output
-# and /etc/gatebox/qualification.json for review. Reboot is mandatory.
-sudo reboot
+  --gateset full --require-status PASS_SCOPED 2>&1 |
+  sudo /usr/bin/tee -a /root/gatebox-slice1/qualification.log
 QUALIFY
+```
+
+Output, including stderr, is saved in the root-owned
+`/root/gatebox-slice1/qualification.log`; pipefail preserves suite/verifier errors.
+C2 runs LAST and intentionally leaves root custody held. Preserve the log and
+`/etc/gatebox/qualification.json` for review, then step 8 requires reboot:
+
+```bash
+sudo reboot
 ```
 
 After the reviewed reboot, in a host terminal, with no pending submissions:
@@ -313,8 +383,15 @@ It prints `run_id`, every retained path and SHA-256 of each runtime unit fixture
 Never guess these values. Preserve that output, qualification evidence, canary
 and manager/cgroup state outside `/run` before the required reviewed reboot.
 
-For the **recorded** 32-lowercase-hex RUN only, stop socket activation and the
-supervisor, then invoke `/usr/libexec/gatebox/lifecycle.py stop RUN` as root.
+For the **recorded** 32-lowercase-hex RUN only, use a host terminal:
+
+```bash
+read -r -p 'Recorded custody RUN: ' GBX_RUN
+[[ "$GBX_RUN" =~ ^[0-9a-f]{32}$ ]]
+sudo /usr/bin/systemctl stop mothergate.socket mothergate.service
+sudo /usr/bin/python3 -I -B /usr/libexec/gatebox/lifecycle.py stop "$GBX_RUN"
+```
+
 Require an empty Job, inactive/failed state and the production exact-cgroup
 settlement proof. For C2's intentional symlink quarantine this command stops
 the unit but refuses endpoint deletion; the read-only `Custody.settled(RUN)`
@@ -343,11 +420,9 @@ RECOVER
 This removes only `/var/lib/mothergate/staging/RUN/request.json`, the empty
 `staging/RUN/snapshot`, `staging/RUN`, and `/var/lib/mothergate/pending/.RUN`.
 Unexpected contents or symlinks at directory names are refused. No root write
-occurs below those mothergate-owned parents. Remove only the recorded runtime
-fixtures `/run/systemd/system/mothergate-run@RUN.service.d/custody.conf` and
-`/run/systemd/system/gatebox-custody-RUN.service` after protected ancestry and
-their recorded SHA-256 match; rmdir the exact empty drop-in directory, then
-daemon-reload. A hash mismatch means STOP. Preserve `/run/gatebox-custody-RUN`
+occurs below those mothergate-owned parents. Manual runtime-fixture removal is
+unnecessary: the reviewed reboot clears the exact drop-in, barrier and canary
+fixtures under `/run` along with custody. Preserve `/run/gatebox-custody-RUN`
 for review (exact known leaves: `release`, `canary`; `missing` must be absent).
 Do not delete or repair sealed quarantine/markers. After reviewed evidence
 preservation, reboot clears `/run`; the installed tmpfiles policy recreates the
@@ -355,6 +430,43 @@ current layout. Persistent staging/pending must already be empty. Verify clean
 custody before enable-qualified; a failed qualification requires reviewed
 requalification, not manual insertion of passed rows. This proof recovery does
 not require uninstalling the reviewed bundle.
+
+### Reviewed qualification reset after refusal
+
+After C2 is recorded every qualify refuses. If enable-qualified refuses, STOP
+for review; never insert or edit passed rows. After preserving evidence and the
+exact-name recovery above, reboot first. If the same installed identity is still
+in the **qualifying** stage and custody is clean, the Owner may reset the entire
+qualification, retaining a root-owned copy of the previous evidence. Changed
+installed bytes/identity require independent review and reinstallation instead.
+This reset does not enable admission or convert any failure into a pass.
+
+```bash
+sudo /usr/bin/systemctl stop mothergate.socket mothergate.service
+sudo /usr/bin/python3 -I -B - <<'RESET'
+import fcntl, os, sys, uuid
+sys.path.insert(0,'/usr/libexec/gatebox')
+import probe
+probe.require_installed()
+fd=os.open(probe.CONFIG/'qualification.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
+try:
+    probe.protected(probe.CONFIG/'qualification.lock')
+    fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)  # refuse a concurrent qualification
+    probe.require(probe.config('admission.json')==dict(identity=probe.installed_identity(),stage='qualifying'),
+                  'reset requires qualifying stage')
+    probe.require(probe.clean_custody(),'custody leftovers; review required')
+    previous=probe.config('qualification.json')
+    backup='qualification-reset-'+uuid.uuid4().hex+'.json'
+    probe.atomic_config(backup,previous)
+    probe.atomic_config('qualification.json',{'identity':None,'passed':[]})
+    print('previous evidence retained at '+str(probe.CONFIG/backup))
+finally: os.close(fd)
+RESET
+sudo /usr/bin/systemctl start mothergate.socket
+```
+
+Resume the full QUALIFY procedure in the actual Claude context, C2 last, save
+the log, reboot, then enable-qualified. Prior receipts and attempt records remain.
 
 Manual removal after a failed or interrupted install requires Owner review of
 retained receipts and the pre-install accounts/groups. Preflight validates
@@ -399,8 +511,17 @@ if os.path.lexists(record):
             raise SystemExit('ACL on creation record')
     created = json.loads(record.read_bytes())
 else:
-    if os.path.lexists(record.parent) or os.path.lexists('/usr/libexec/gatebox'):
-        raise SystemExit('missing creation record; review required')
+    # Even with no output directories, a crash during apply_accounts may have
+    # left accounts. Inspect actual identities; never silently assume absence.
+    present=[]
+    for name in ('mothergate','gaterun'):
+        try: pwd.getpwnam(name); present.append('user:'+name)
+        except KeyError: pass
+    for name in ('mothergate','gaterun','gatesubmit'):
+        try: grp.getgrnam(name); present.append('group:'+name)
+        except KeyError: pass
+    if present or os.path.lexists(record.parent) or os.path.lexists('/usr/libexec/gatebox'):
+        raise SystemExit('missing creation record; actual-state review required: '+repr(present))
     created = dict(users=[],groups=[])
 if set(created) != {'users','groups'}: raise SystemExit('unknown record schema')
 for key,allowed in [('users',{'mothergate','gaterun'}),
@@ -412,9 +533,12 @@ for key,allowed in [('users',{'mothergate','gaterun'}),
         raise SystemExit('unknown/duplicate recorded identity')
 try: group=grp.getgrnam('gatesubmit')
 except KeyError: group=None
-# Omit this membership removal if nexus was already a member before install.
+# Prior nexus membership is not recorded. Preserve it here; changing it needs
+# separate evidence of its pre-install state, never a manual code edit.
 if group is not None and 'nexus' in group.gr_mem:
-    subprocess.run(['/usr/bin/gpasswd','-d','nexus','gatesubmit'],check=True)
+    if 'gatesubmit' in created['groups']:
+        subprocess.run(['/usr/bin/gpasswd','-d','nexus','gatesubmit'],check=True)
+    else: print('preserving nexus membership in pre-existing gatesubmit')
 for name in created['users']:
     try: pwd.getpwnam(name)
     except KeyError: continue
@@ -455,7 +579,10 @@ sudo /usr/bin/rm -f /run/mothergate-submit.sock
 REMOVE
 ```
 
-For a partial installation, omit commands for objects that were never created;
-retain every pre-existing account/group and its original membership. If nexus
-was already a gatesubmit member, retain that membership. `rm -rf` above deletes
+For a partial installation, absent outputs are skipped; retain every pre-existing
+account/group and its original membership. A pre-existing gatesubmit group keeps
+nexus membership because its prior state is unrecorded. Removing a newly created
+gatesubmit group also removes its membership. A missing record with any relevant
+identity present blocks removal for actual-state review, including a crash before
+output directories were created. `rm -rf` above deletes
 only the listed installation trees, including their evidence after review.
