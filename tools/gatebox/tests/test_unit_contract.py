@@ -44,6 +44,9 @@ class ContractTests(unittest.TestCase):
         policy = json.loads((HERE/'policy/gates.json').read_text())
         self.assertEqual((policy['schema_version'],policy['gate_set_id'],policy['success_status']), (1,'full','PASS_SCOPED'))
         self.assertIs(policy['no_fail_fast'],True)
+        self.assertEqual(policy['environment'],{'PATH':'/opt/rust/bin:/usr/bin:/bin','LANG':'C.UTF-8',
+                         'HOME':'/work/home','CARGO_HOME':'/work/cargo',
+                         'CARGO_NET_OFFLINE':'true','CARGO_TARGET_DIR':'/work/target'})
         gates = policy['gates']
         self.assertEqual([g['id'] for g in gates], ['format','clippy','compile-tests','workspace','doctests','host','desktop-live','walk','whitespace'])
         expected = {
@@ -55,13 +58,15 @@ class ContractTests(unittest.TestCase):
         for g in gates:
             if g['id'] in expected: self.assertEqual(g['argv'],[CARGO,'--offline']+expected[g['id']])
         self.assertEqual(gates[3],{'id':'workspace','adapter':'libtest','artifacts':'every eligible emitted test artifact','list_before_execute':True})
-        self.assertEqual(gates[5],{'id':'host','adapter':'reconcile-all-artifacts','package':'nexus-mother-host'})
+        self.assertEqual(gates[5],{'id':'host','adapter':'reconcile-all-artifacts','package':'nexus-mother-host',
+                                        'argv':['/usr/bin/python3','-I','-B','/gate/bin/init.py','--gate','host']})
         desktop = gates[6]
         self.assertEqual((desktop['adapter'],desktop['package'],desktop['target'],desktop['minimum']), ('libtest-repeat','nexus-mother-desktop','live',14))
         self.assertEqual(len(desktop['expected_names']),23)
         self.assertEqual(len(set(desktop['expected_names'])),23)
         self.assertEqual(hashlib.sha256('\n'.join(desktop['expected_names']).encode()).hexdigest(), '326ab2d036bb6c0c114507d81724817272c6474cf61f08b5b7862cc2ab79bb91')
-        self.assertEqual(gates[8],{'id':'whitespace','adapter':'snapshot-whitespace','label':'approximation to git diff --check'})
+        self.assertEqual(gates[8],{'id':'whitespace','adapter':'snapshot-whitespace','label':'approximation to git diff --check',
+                                        'argv':['/usr/bin/python3','-I','-B','/gate/bin/init.py','--gate','whitespace']})
         self.assertEqual(policy['coverage'],{'reject_unknown_harness':True,'reconcile_names_and_results':True,'missing_artifact_fails':True,'compile_excluded_target':True,'execute_excluded_target':False,'excluded_target':'phase2_live_sandbox','exclusions_file':'exclusions.json'})
     def test_exact_exclusions(self):
         exclusions = json.loads((HERE/'policy/exclusions.json').read_text())

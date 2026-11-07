@@ -276,6 +276,33 @@ class ReceiptTests(unittest.TestCase):
             if change == 'invocation': summary['commands'].pop(0)
             if change == 'commands': summary['commands'] = []
             with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
+    def test_pinned_invocations_and_host_inventory(self):
+        for change in ('host-argv','whitespace-argv','command-env','summary-env','empty-host','wrong-host','empty-host-workspace'):
+            summary = self.success()
+            host = next(c for c in summary['commands'] if c['gate_id'] == 'host')
+            if change.endswith('-argv'):
+                next(c for c in summary['commands'] if c['gate_id'] == change[:-5])['argv'] = ['/bin/true']
+            if change == 'command-env': summary['commands'][0]['environment']['RUSTC_WRAPPER'] = '/bin/true'
+            if change == 'summary-env': summary['environment']['RUSTC_WRAPPER'] = '/bin/true'
+            if change in ('empty-host','empty-host-workspace','wrong-host'):
+                names = ['invented'] if change == 'wrong-host' else []
+                for key in ('expected','executed','passed'): host['inventory'][key] = list(names)
+            if change == 'empty-host-workspace':
+                for key in ('expected','executed','passed'): summary['commands'][3]['inventory'][key] = []
+            with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
+        summary = self.success()
+        extra = dict(summary['coverage']['artifacts'][0],id='host-extra',executable='/work/target/host-extra')
+        summary['coverage']['artifacts'].append(extra)
+        summary['coverage']['host_artifacts'].append(extra['id'])
+        command = copy.deepcopy(summary['commands'][3])
+        command.update(id='workspace-extra',artifact_id=extra['id'],argv=[extra['executable']])
+        for key in ('expected','executed','passed'): command['inventory'][key] = ['second_test']
+        summary['commands'].append(command)
+        host = next(c for c in summary['commands'] if c['gate_id'] == 'host')
+        host['artifact_ids'] = ['host-bin','host-extra']
+        with self.assertRaises(ValueError): receipt.validate_summary(summary)
+        for key in ('expected','executed','passed'): host['inventory'][key] = ['host_test','second_test']
+        receipt.validate_summary(summary)
     def test_publication_destination_race(self):
         # A competing publisher wins after lexists; only NOREPLACE prevents clobbering it.
         destination = self.receipts/self.run_id
