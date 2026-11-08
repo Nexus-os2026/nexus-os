@@ -301,6 +301,31 @@ class Q21Oracles(unittest.TestCase):
         self.assertFalse(alive,'diagnostic delivery blocked past its deadline')
         self.assertLess(clock.monotonic()-began,6)
         self.assertEqual(done,[True])  # descriptor blocking mode restored
+        # Partly free pipe: room for one frame, not all eight-deep chain frames.
+        # Delivery must still finish or give up within its deadline.
+        read, write = os.pipe()
+        os.set_blocking(write,False)
+        try:
+            while True: os.write(write,b'x'*65536)
+        except BlockingIOError: pass
+        os.set_blocking(write,True)
+        os.set_blocking(read,False); os.read(read,4096); os.set_blocking(read,True)
+        runner = init.Runner(write,write); done = []
+        def chain8(depth=8):
+            try:
+                if depth: chain8(depth-1)
+                else: raise ValueError('root '+'q'*511)
+            except ValueError as error:
+                raise ValueError('level '+str(depth)+' '+'w'*511) from error
+        def many():
+            try: chain8()
+            except ValueError: init.report_failure(runner); done.append(True)
+        worker = threading.Thread(target=many,daemon=True); began = clock.monotonic(); worker.start(); worker.join(10)
+        alive = worker.is_alive()
+        os.close(read); worker.join(5); os.close(write)
+        self.assertFalse(alive,'diagnostic delivery blocked on a partly free pipe')
+        self.assertLess(clock.monotonic()-began,6)
+        self.assertEqual(done,[True])
         class Closed: log, total = 987654, 0
         try: raise RuntimeError('original')
         except RuntimeError: init.report_failure(Closed())  # broken channel never masks
