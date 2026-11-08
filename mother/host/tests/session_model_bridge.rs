@@ -36,35 +36,35 @@ R0|registration_install|-|slot installation in register_model_private (model.ins
 R0|registration_readiness|-|HostSession::finish_bootstrap readiness over the model slot|sb2_bootstrap_cannot_overtake_registration|R0|MP-SB-2
 R1|identity_view|-|SessionDoor::model_identity (model_identity_private)|sb3c_identity_is_original_request_read_only|R1|MP-SB-4-Q
 R2|inference_binding|-|SessionDoor::admit_inference to bind_inference_private original-door CAS|sb3c_public_binding_is_exact_and_idempotent|R2|MP-SB-3-CAS
-R3|call_slot_reserve|-|model::Attempt admit slot reservation in admit_attempt_private|sb3_concurrent_operation_refuses_before_ticket|A2|MP-SB-5-slot
-R3|attempt_ticket|-|Runs::admit_session_attempt original-snapshot CAS|sb3_attempt_ceiling_is_eight_on_the_original_run|A1|MP-SB-5-count
-R4|charge_append|-|Mother ModelMeter charge ModelCallCharged append (coordinator/model_calls.rs)|sb3_caps_and_budget_keep_existing_goldens|C1|MP-SB-7-charge
-R4|meter_settle|-|Mother BorrowedMeter settle clears in_flight (coordinator/model_calls.rs)|sb3_caps_and_budget_keep_existing_goldens|C3|MP-SB-7-charge
+R3|call_slot_reserve|-|model::Attempt::acquire slot reservation|sb3_concurrent_operation_refuses_before_ticket|A2|MP-SB-5-slot
+R3|attempt_ticket|-|run table admit_session_attempt original-snapshot CAS|sb3_attempt_ceiling_is_eight_on_the_original_run|A1|MP-SB-5-count
+R4|charge_append|-|Mother BorrowedMeter::charge ModelCallCharged append (coordinator/model_calls.rs)|sb3_caps_and_budget_keep_existing_goldens|C1|MP-SB-7-charge
+R4|meter_settle|-|Mother BorrowedMeter::settle clears in_flight (coordinator/model_calls.rs)|sb3_caps_and_budget_keep_existing_goldens|C3|MP-SB-7-charge
 R5|registration_version|reg-1|RegistrationGate::admit_request /api/version|session_override_required_at_each_request|G1|MP-SB-6-default
 R5|registration_status|reg-2|RegistrationGate::admit_request /api/status|session_override_required_at_each_request|G1|MP-SB-6-default
 R5|registration_tags|reg-3|RegistrationGate::admit_request /api/tags|session_override_required_at_each_request|G1|MP-SB-6-default
 R5|registration_show|reg-4|RegistrationGate::admit_request /api/show|session_override_required_at_each_request|G1|MP-SB-6-default
-R5|call_version|call-1|CallGate original-snapshot CAS /api/version|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
-R5|call_status|call-2|CallGate original-snapshot CAS /api/status|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
-R5|call_tags|call-3|CallGate original-snapshot CAS /api/tags|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
-R5|call_chat|call-4|CallGate original-snapshot CAS /api/chat|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
+R5|call_version|call-1|CallGate::admit_request /api/version|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
+R5|call_status|call-2|CallGate::admit_request /api/status|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
+R5|call_tags|call-3|CallGate::admit_request /api/tags|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
+R5|call_chat|call-4|CallGate::admit_request /api/chat|sb3_call_override_required_at_each_request|G3|MP-SB-6-CAS
 R6|cancel_run|-|SessionDoor::cancel_run|sb3_held_request_cancels_and_joins|G5|MP-SB-6-once
 R6|door_halt|-|SessionDoor::halt|sb3_held_request_cancels_and_joins|G5|MP-SB-6-once
 R6|emergency_restrict|-|SessionIngress::emergency|sb3_held_request_cancels_and_joins|G5|MP-SB-6-once
 R6|close_restrict|-|SessionIngress::accept(Quit)|sb3_held_request_cancels_and_joins|G5|MP-SB-6-once
 R7|attempt_record|-|model::Attempt::record_return native model_call record|sb3_attempt_record_and_pin_are_exact|A3|MP-SB-9-record
-R7|attempt_pin_release|-|Runs::settle_session_attempt exact model pin|sb3_attempt_record_and_pin_are_exact|A3|MP-SB-5-pin
+R7|attempt_pin_release|-|run table settle_session_attempt exact model pin|sb3_attempt_record_and_pin_are_exact|A3|MP-SB-5-pin
 R7|operation_complete|-|Attempt::complete to Owner::complete slot release|sb2_owner_completion_is_bounded_and_poison_fails_closed|A2|MP-SB-5-slot
 R8|record_first_classify|-|Mother adapter::classify, record before reply (adapter/mod.rs)|sb3_registered_session_executes_one_recorded_call|O1|MP-SB-9-record
 R8|post_record_recheck|-|Mother Caller::call C1 recheck after the record (coordinator/model_calls.rs)|sb3_revocation_after_chat_entry_is_entered_only|O2|MP-SB-10
-R8|lane_result_admission|-|Mother lane-result admission (coordinator advance)|sb3_registered_session_executes_one_recorded_call|O2|MP-SB-10
+R8|lane_result_admission|-|Mother Coordinator LaneReturned append (coordinator.rs)|sb3_registered_session_executes_one_recorded_call|O2|MP-SB-10
 R9|close_obligations|-|HostSession::close_obligations (host_session/close.rs)|sb3_open_model_request_at_deadline_blocks_seal|H2-held|MP-SB-11
 R9|close_report|-|Runtime::close_report (mother/host/src/hands.rs)|sb2_close_report_has_one_model_line|H1|MP-SB-11
-R9|producer_join|-|HostSession::settle_close_resources producer join|sb3_completed_call_allows_existing_clean_close|H1|MP-SB-11
+R9|producer_join|-|Producer::joined for the close operation (settle_close_resources)|sb3_completed_call_allows_existing_clean_close|H1|MP-SB-11
 R9|seal|-|HostSession::seal_close (host_session/close.rs)|sb3_unjoined_or_owed_prevents_clean_close|H2|MP-SB-11
 R9|mother_end|-|CloseSeal::begin_mother_end / observe_mother_end|sb3_post_seal_model_events_are_absent|H5|MP-SB-9-meter
-R9|primary_end|-|primary session_closed record after the Mother end|sb3_post_seal_model_events_are_absent|H5|MP-SB-9-meter
-R9|delivery|-|final close-report delivery fact|sb3_post_seal_model_events_are_absent|H5|MP-SB-9-meter
+R9|primary_end|-|HostSession::close_primary session_closed record|sb3_post_seal_model_events_are_absent|H5|MP-SB-9-meter
+R9|delivery|-|CloseSeal::finish_delivery|sb3_post_seal_model_events_are_absent|H5|MP-SB-9-meter
 ";
 const NA_REASONS: &str = "BOOTSTRAP_NO_MISSION PREBIND_NO_RUN_OR_CONSENT NO_INVOCATION_AT_REGISTRATION METADATA_HAS_NO_CHARGE SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION LIFECYCLE_DENIES_BEFORE_THIS_SINK LEGACY_FINALIZATION_ONLY";
 /// The earlier denial oracles a lifecycle N/A may name (spec 8.4).
