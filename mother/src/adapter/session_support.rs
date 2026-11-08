@@ -27,7 +27,23 @@ impl Fixture {
     pub fn canonical(label: &str) -> Self {
         Self::with_inspector(label, true)
     }
+    /// SB-3 C (SB3C-R1 Q2): the same fresh, owned home, with the local model
+    /// registered through the public route during Bootstrap.
+    pub fn with_model(
+        label: &str,
+        endpoint: &str,
+        spec: nexus_governed_control::inference::ModelPinSpec,
+    ) -> Self {
+        Self::build(label, false, Some((endpoint, spec)))
+    }
     fn with_inspector(label: &str, canonical: bool) -> Self {
+        Self::build(label, canonical, None)
+    }
+    fn build(
+        label: &str,
+        canonical: bool,
+        model: Option<(&str, nexus_governed_control::inference::ModelPinSpec)>,
+    ) -> Self {
         // A PID alone is reused after wrap; a leaked or concurrent home is
         // never reopened, and this fixture removes only the home it created.
         let parent = std::env::temp_dir();
@@ -72,6 +88,9 @@ impl Fixture {
         let workspace = dir.join("workspace");
         create_private(&workspace).unwrap();
         let info = session.bootstrap_workspace(&workspace, &[]).unwrap();
+        if let Some((endpoint, spec)) = model {
+            session.register_local_model(endpoint, spec).unwrap();
+        }
         session.finish_bootstrap().unwrap();
         let request = session.ingress().accept(CommandKind::Run, 1).unwrap();
         let port = Arc::new(SessionPort::new(

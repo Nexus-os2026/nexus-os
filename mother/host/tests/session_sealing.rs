@@ -109,7 +109,16 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
     );
     let signatures = signatures(&text);
     assert!(!signatures.is_empty());
-    for sig in signatures {
+    let exposed: Vec<_> = signatures
+        .iter()
+        .filter(|sig| sb3c_exposed_signature(sig))
+        .collect();
+    assert_eq!(
+        exposed.len(),
+        SB3C_EXPOSED.len(),
+        "exactly the SB-3 C route"
+    );
+    for sig in signatures.iter().filter(|sig| !sb3c_exposed_signature(sig)) {
         for forbidden in [
             "GovernedControl",
             "Authority",
@@ -124,8 +133,17 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
         ] {
             assert!(!sig.contains(forbidden), "public session escape: {sig}");
         }
+        // Any case: a qualified model type names a model too (S3).
+        let lower = sig.to_lowercase();
+        assert!(
+            !lower.contains("model") && !lower.contains("inference"),
+            "public session model escape: {sig}"
+        );
     }
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(sb3c_route_bound(&raw), Ok(()), "SB3C-R4 bound route");
     for line in text.lines().map(str::trim) {
+        assert!(!aliased(line), "the facade renames no import: {line}");
         assert!(
             !line.starts_with("pub use "),
             "session cannot re-export legacy authority: {line}"
@@ -147,6 +165,98 @@ fn session_public_facade_has_no_raw_owner_door_kernel_or_checked_closure_escape(
             }
         }
     }
+}
+
+/// SB-3 C (spec §8.1, S3): the exposed session model route is exactly these
+/// receivers, methods and signatures (whitespace-free); any other public
+/// signature naming a model still fails the facade guard.
+const SB3C_EXPOSED: [&str; 4] = [
+    "pubfnregister_local_model(&self,endpoint:&str,spec:crate::inference::ModelPinSpec,)->Result<crate::inference::ModelIdentityView,SessionError>",
+    "pubfnmodel_identity(&self)->Option<crate::inference::ModelIdentityView>",
+    "pubfnadmit_inference(&self,run:crate::authority::ids::RunId,contract_hash:&str,request:&str,expected_identity:[u8;32],)->Result<(),SessionFailure>",
+    "pubfnmodel_call(&self,run:crate::authority::ids::RunId,request:&crate::inference::ModelRequest,meter:&dyncrate::inference::CallMeter,deadline:&dyncrate::inference::CallDeadline,invocation:&crate::inference::InvocationObserver,)->Result<crate::inference::ModelCallOutcome,SessionFailure>",
+];
+/// SB3C-R4 (6): the four route methods, bound to their receivers (rustfmt).
+const SB3C_ROUTE: [(&str, &str); 4] = [
+    ("HostSession", "    pub fn register_local_model(\n        &self,\n        endpoint: &str,\n        spec: crate::inference::ModelPinSpec,\n    ) -> Result<crate::inference::ModelIdentityView, SessionError> {"),
+    ("SessionDoor", "    pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {"),
+    ("SessionDoor", "    pub fn admit_inference(\n        &self,\n        run: crate::authority::ids::RunId,\n        contract_hash: &str,\n        request: &str,\n        expected_identity: [u8; 32],\n    ) -> Result<(), SessionFailure> {"),
+    ("SessionDoor", "    pub fn model_call(\n        &self,\n        run: crate::authority::ids::RunId,\n        request: &crate::inference::ModelRequest,\n        meter: &dyn crate::inference::CallMeter,\n        deadline: &dyn crate::inference::CallDeadline,\n        invocation: &crate::inference::InvocationObserver,\n    ) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {"),
+];
+/// One definition each, in its receiver's impl, with exactly that signature.
+fn sb3c_route_bound(facade: &str) -> Result<(), String> {
+    for (receiver, sig) in SB3C_ROUTE {
+        let name = sig.trim_start().split('(').next().unwrap();
+        let at: Vec<_> = facade.match_indices(&format!("{name}(")).collect();
+        let [(i, _)] = at[..] else {
+            return Err(format!("{name}: {} definitions", at.len()));
+        };
+        let owner = facade[..i].rsplit("\nimpl ").next().unwrap();
+        if owner.split(" {").next() != Some(receiver) || facade.find(sig) != Some(i - 4) {
+            return Err(format!("{name}: not the bound signature"));
+        }
+    }
+    Ok(())
+}
+/// A renaming import would let a public signature name a model type
+/// without the word (S3).
+fn aliased(line: &str) -> bool {
+    line.starts_with("use ") && line.contains(" as ")
+}
+fn sb3c_exposed_signature(sig: &str) -> bool {
+    let flat: String = sig.split_whitespace().collect();
+    SB3C_EXPOSED.contains(&flat.as_str())
+}
+
+/// S3 escape controls: raw transport/watch/registration getters, qualified,
+/// aliased, multiline-renamed and generic-closure variants of the exposed
+/// signatures are not exempt and still trip the facade guard.
+#[test]
+fn sb3_only_registered_session_surfaces_are_exposed() {
+    let exposed = "pub fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {";
+    assert!(sb3c_exposed_signature(&signatures(exposed)[0]));
+    // A trailing-comma variant is another signature, not an exemption.
+    let reformatted =
+        "pub fn model_identity(\n    &self,\n) -> Option<crate::inference::ModelIdentityView> {";
+    assert!(!sb3c_exposed_signature(&signatures(reformatted)[0]));
+    for plant in [
+        "pub fn model_transport(&self) -> Arc<VerifiedOllama> {",
+        "pub fn model_watch(&self) -> StopWatch {",
+        "pub fn register_model_for_lane(&self, lane: &str) -> Result<(), SessionError> {",
+        "pub unsafe fn model_identity(&self) -> Option<crate::inference::ModelIdentityView> {",
+        "pub fn model_identity(&self) -> Option<model::RegistrationReceipt> {",
+        "pub fn model_identity_with(&self, f: impl FnOnce() -> bool) -> Option<crate::inference::ModelIdentityView> {",
+        "pub fn model_call(&self,\nrun: crate::authority::ids::RunId,\n) -> Result<crate::inference::ModelCallOutcome, SessionFailure> {",
+        "pub fn view_raw(\n    &self,\n) -> Option<\n    crate::inference::ModelIdentityView,\n> {",
+    ] {
+        let parsed = signatures(plant);
+        assert_eq!(parsed.len(), 1, "collect {plant}");
+        assert!(!sb3c_exposed_signature(&parsed[0]), "not exempt: {plant}");
+        let lower = parsed[0].to_lowercase();
+        assert!(lower.contains("model"), "the facade guard rejects {plant}");
+    }
+    // SB3C-R4 (6): a second receiver, a duplicate or a reformat is refused.
+    let facade =
+        std::fs::read_to_string(root().join("crates/nexus-governed-control/src/host_session.rs"))
+            .unwrap();
+    let extra =
+        "\nimpl HostSession {\n    pub fn admit_inference(\n        &self,\n    ) -> bool {\n";
+    let one_line = SB3C_ROUTE[3]
+        .1
+        .replace("\n        ", " ")
+        .replace(",\n    )", ")");
+    for escape in [
+        format!("{facade}{extra}"),
+        facade.replace(SB3C_ROUTE[3].1, &one_line),
+        facade.replacen("impl SessionDoor {", "impl HostSession {", 1),
+    ] {
+        assert!(sb3c_route_bound(&escape).is_err(), "SB3C-R4 escape refused");
+    }
+    assert!(aliased("use crate::inference::ModelIdentityView as View;"));
+    assert!(aliased(
+        "use crate::inference::{ModelIdentityView as View};"
+    ));
+    assert!(!aliased("use std::fmt;"));
 }
 
 #[test]

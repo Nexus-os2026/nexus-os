@@ -258,13 +258,6 @@ impl CallCancel for RegistrationGate<'_> {
     }
 }
 impl HostSession {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-2a: private, wired by SB-3; session route unavailable"
-        )
-    )]
     pub(super) fn register_model_private(
         &self,
         endpoint: &str,
@@ -512,13 +505,6 @@ pub(super) fn historical_outcome(end: Option<EndStatus>) -> &'static str {
 
 // SB-3A R2: the private original-door inference binding; no public route.
 impl SessionDoor {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-3A: private binding, wired by SB-3C; session route unavailable"
-        )
-    )]
     pub(super) fn bind_inference_private(
         &self,
         run: RunId,
@@ -573,6 +559,25 @@ impl SessionDoor {
                 clock,
             })
             .inspect_err(|e| poisoned_grant(e, &self.context.cell))
+    }
+}
+
+// SB-3C R1: an original door's read-only view of the installed model.
+impl SessionDoor {
+    pub(super) fn model_identity_private(&self) -> Option<ModelIdentityView> {
+        let DoorKind::Original { .. } = self.kind else {
+            return None; // A continuation sees no model.
+        };
+        if !self.context.scope.live(self.core.cell.session_word()) {
+            return None;
+        }
+        // Installed M, observed without waiting (poison latches, as elsewhere).
+        let s = hold(&self.core).ok()?;
+        let r = s.registration.as_ref()?;
+        if self.core.model.uncertain.load(Ordering::SeqCst) || r.watch.check_now().is_err() {
+            return None;
+        }
+        Some(r.model.view.clone())
     }
 }
 
@@ -845,13 +850,6 @@ impl CallGate<'_> {
     }
 }
 impl SessionDoor {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SB-3B1b: private call, wired by SB-3C; session route unavailable"
-        )
-    )]
     pub(super) fn model_call_private(
         &self,
         run: RunId,

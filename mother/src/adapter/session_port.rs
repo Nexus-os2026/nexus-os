@@ -9,9 +9,6 @@ use nexus_governed_control::inference::{
     CallDeadline, CallMeter, InvocationObserver, ModelCallOutcome, ModelIdentityView, ModelRequest,
 };
 
-/// M2d-D R32: the sealed session issues no model capability.
-const NO_SESSION_MODEL: &str = "inference is not a session route";
-
 pub(super) enum PortDoor {
     Legacy(AgentDoor),
     Session(SessionDoor),
@@ -179,7 +176,7 @@ impl PortDoor {
     pub(super) fn model_identity(&self) -> Option<ModelIdentityView> {
         match self {
             Self::Legacy(door) => door.model_identity(),
-            Self::Session(_) => None,
+            Self::Session(door) => door.model_identity(),
         }
     }
     pub(super) fn admit_inference(
@@ -191,7 +188,9 @@ impl PortDoor {
     ) -> Result<(), AuthorityError> {
         match self {
             Self::Legacy(door) => door.admit_inference(run, contract_hash, request, identity),
-            Self::Session(_) => Err(AuthorityError::Unavailable(NO_SESSION_MODEL)),
+            Self::Session(door) => door
+                .admit_inference(run, contract_hash, request, identity)
+                .map_err(Into::into),
         }
     }
     pub(super) fn model_call(
@@ -200,11 +199,14 @@ impl PortDoor {
         request: &ModelRequest,
         meter: &dyn CallMeter,
         deadline: &dyn CallDeadline,
-        _invocation: &InvocationObserver,
+        invocation: &InvocationObserver,
     ) -> Result<ModelCallOutcome, AuthorityError> {
         match self {
+            // The ordinary door has no session invocation to observe.
             Self::Legacy(door) => door.model_call(run, request, meter, deadline),
-            Self::Session(_) => Err(AuthorityError::Unavailable(NO_SESSION_MODEL)),
+            Self::Session(door) => door
+                .model_call(run, request, meter, deadline, invocation)
+                .map_err(Into::into),
         }
     }
 }
@@ -269,7 +271,42 @@ impl SessionPort {
         }
     }
 }
+/// SB-3 C (spec §4.4): an unconfigured session keeps its default
+/// denial; only an absent registration reads as no broker route.
+fn unconfigured(refusal: EffectRefusal) -> EffectRefusal {
+    if refusal.class == BrokerClass::ModelNotRegistered {
+        refused(BrokerClass::NoBrokerRoute)
+    } else {
+        refusal
+    }
+}
 impl EffectPort for SessionPort {
+    fn model_identity(&self) -> Option<ModelIdentityView> {
+        self.inner.model_identity()
+    }
+    fn admit_inference(
+        &self,
+        mission: MissionId,
+        contract_hash: &str,
+        request: &str,
+        identity: [u8; 32],
+    ) -> Result<(), EffectRefusal> {
+        self.inner
+            .admit_inference(mission, contract_hash, request, identity)
+            .map_err(unconfigured)
+    }
+    fn model_call(
+        &self,
+        mission: MissionId,
+        request: &ModelRequest,
+        meter: &dyn CallMeter,
+        deadline: &dyn CallDeadline,
+        invocation: &InvocationObserver,
+    ) -> Result<ModelAttempt, EffectRefusal> {
+        self.inner
+            .model_call(mission, request, meter, deadline, invocation)
+            .map_err(unconfigured)
+    }
     fn prepare_file_wait(
         &self,
         mission: MissionId,

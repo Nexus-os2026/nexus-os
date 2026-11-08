@@ -222,3 +222,145 @@ fn sb2_attempt_death_prefixes_are_report_only() {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+/// SB-3B2 X1-B: real private-call death around the actual ticket, the
+/// dispatch (killed while the chat is held open), the reply, the record and
+/// the slot completion. Only verified prefixes; every restart is
+/// report-only: no request, registration, run, consent, binding or attempt.
+#[test]
+fn sb3_private_call_death_restarts_report_only() {
+    const KEY: &str = "NEXUS_SB3B2_DEATH_CHILD";
+    if let Ok(point) = std::env::var(KEY) {
+        let f = super::model_call_tests::Call::at(&std::env::var("NEXUS_SB3B2_PEER").unwrap());
+        let [root, selected] = f.b.roots();
+        println!(
+            "SB3B2_ROOT={}\nSB3B2_SELECTED={}",
+            root.display(),
+            selected.display()
+        );
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+        let at = match point.as_str() {
+            "ticket" => Some("model.call.gate"),
+            "reply" => Some("model.attempt.return"),
+            "record" => Some("model.settle.before"),
+            _ => None, // "dispatch": the parent kills it; "completed": below.
+        };
+        if let Some(at) = at {
+            f.b.session.core.cell.1.arm(at, || std::process::abort());
+        }
+        let outcome = f.call().expect("ticketed attempt");
+        if point == "completed" && outcome.result().is_ok() {
+            std::process::abort();
+        }
+        panic!("death boundary not reached: {point}");
+    }
+    let call = ["/api/version", "/api/status", "/api/tags", "/api/chat"];
+    for point in ["ticket", "dispatch", "reply", "record", "completed"] {
+        let peer = super::model_tests::Peer::chat((point == "dispatch").then_some(7), None);
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "host_session::model_death_tests::sb3_private_call_death_restarts_report_only",
+                "--nocapture",
+            ])
+            .env(KEY, point)
+            .env("NEXUS_SB3B2_PEER", &peer.endpoint)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let limit = Instant::now() + Duration::from_secs(20);
+        if point == "dispatch" {
+            for _ in 0..8 {
+                let (_, closed) = peer.events.recv_timeout(Duration::from_secs(10)).unwrap();
+                assert!(!closed, "dispatch: the chat entered and is held");
+            }
+            child.kill().unwrap(); // Killed while its chat request is open.
+        }
+        while child.try_wait().unwrap().is_none() {
+            if Instant::now() >= limit {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("private call death watchdog {point}");
+            }
+            std::thread::sleep(Duration::from_millis(5)); // Polls exit only.
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success(), "{point}: the child died");
+        let text = String::from_utf8_lossy(&output.stdout);
+        let line = |key: &str| {
+            text.lines()
+                .find_map(|l| l.strip_prefix(key))
+                .map(str::to_owned)
+        };
+        let (Some(root), Some(selected)) = (line("SB3B2_ROOT="), line("SB3B2_SELECTED=")) else {
+            panic!(
+                "{point}: unreached: {text}{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        let sent = if point == "ticket" {
+            &call[..0]
+        } else {
+            &call[..]
+        };
+        assert_eq!(
+            peer.paths.lock().unwrap()[4..],
+            *sent,
+            "{point}: verified call prefix"
+        );
+        let established = matches!(point, "record" | "completed");
+        for _ in 0..2 {
+            let evidence = crate::evidence_store::PrimaryEvidence::open(
+                &std::path::Path::new(&root).join("p3-evidence/evidence.sqlite3"),
+                vec![],
+            )
+            .unwrap();
+            let session = HostSession::open(
+                SessionSeed::new().unwrap(),
+                std::path::Path::new(&root),
+                evidence.clone(),
+                Arc::new(crate::authority::clock::SystemClock::default()),
+                Arc::new(crate::harness_tests::Yes::new(true)),
+            )
+            .unwrap();
+            let rows = evidence.store().rows();
+            let ends: Vec<_> = rows.iter().filter(|r| r.phase == "model_call").collect();
+            assert_eq!(
+                ends.len(),
+                usize::from(established),
+                "{point}: verified ends only"
+            );
+            let status = model::historical_outcome(
+                ends.first()
+                    .map(|r| crate::authority::evidence::EndStatus::Recorded { seq: r.seq }),
+            );
+            let expected = if established { "recorded" } else { "unknown" };
+            assert_eq!(status, expected, "{point}: a missing outcome stays unknown");
+            assert!(
+                !session.core.model.installed(),
+                "{point}: no restored registration"
+            );
+            assert_eq!(
+                session.core.model.snapshot().unwrap().operation,
+                "none",
+                "{point}"
+            );
+            assert!(
+                !session.startup_report().ready(),
+                "{point}: report-only restart"
+            );
+            assert_eq!(
+                session.control.authority().runs().review2_counts(),
+                [0; 4],
+                "{point}: no restored run, consent, binding or attempt"
+            );
+            let after = peer.paths.lock().unwrap().len();
+            assert_eq!(after, 4 + sent.len(), "{point}: restart metadata/chat 0/0");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(selected).unwrap();
+    }
+}
