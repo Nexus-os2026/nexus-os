@@ -406,7 +406,10 @@ fn first(arg: &str) {
         }
         let first = outcome(&ask(ctx));
         tx.send((first, terminal(&fx, MissionId(1)))).unwrap();
-        if !matches!(mode.as_str(), "stop-then-debt" | "stop-then-budget" | "emergency") {
+        if !matches!(
+            mode.as_str(),
+            "stop-then-debt" | "stop-then-budget" | "emergency"
+        ) {
             let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
         }
         match mode.as_str() {
