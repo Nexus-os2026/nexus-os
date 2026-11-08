@@ -232,24 +232,81 @@ class Q21Oracles(unittest.TestCase):
         self.assertIn('rename(source,run_id.encode(),target,run_id.encode(),1)',receipt)
         self.assertIn("for name in ('staging','pending','receipts'):",(HERE/'install.sh').read_text())
 
+    def drain(self,fd):
+        os.set_blocking(fd,False); data = bytearray()
+        while True:
+            try: block = os.read(fd,65536)
+            except BlockingIOError: break
+            if not block: break
+            data.extend(block)
+        out = bytearray()
+        while data:
+            size = int.from_bytes(data[:4],'big'); event = json.loads(bytes(data[4:4+size])); del data[:4+size]
+            self.assertEqual(event['id'],'init-error'); out.extend(__import__('base64').b64decode(event['data']))
+        return bytes(out)
+
+    def report(self,init,raiser):
+        read, write = os.pipe(); self.addCleanup(os.close,read); self.addCleanup(os.close,write)
+        runner = init.Runner(write,write)
+        try: raiser()
+        except BaseException: init.report_failure(runner)
+        return self.drain(read), runner
+
     def test_init_failure_publishes_bounded_reason(self):
         # Q21 D2 evidence: init died before its first frame; fds 0-2 are
         # /dev/null, so the FAILED receipt carried no reason. A failure must
-        # leave a bounded init-error log frame, then still fail (re-raise).
-        init = load('init'); frames = []
-        class Fake:
-            def output(self,name,block): frames.append((name,block))
-        try: raise ValueError('probe X failed: '+'y'*200000)
-        except ValueError: init.report_failure(Fake())
-        self.assertEqual([n for n,_ in frames],['init-error'])
-        self.assertLessEqual(len(frames[0][1]),64*1024)
-        # The reason line itself (not merely the raising source line) must survive.
-        self.assertIn(b'\nValueError: probe X failed: yyy',frames[0][1])
-        self.assertTrue(frames[0][1].startswith(b'Traceback (most recent call last):\n'))
-        class Broken:
-            def output(self,name,block): raise OSError('collector lost')
+        # leave a bounded init-error frame naming the PRIMARY failure even when
+        # cleanup raises a second one; type, bounded reason and file:line only
+        # (no source text, no locals); then still fail (re-raise).
+        init = load('init')
+        def chained():
+            try: raise ValueError('probe-original')
+            except ValueError: raise OSError('sampler-secondary')
+        text, runner = self.report(init,chained)
+        self.assertIn(b'primary ValueError: probe-original',text)
+        self.assertIn(b'then OSError: sampler-secondary',text)
+        self.assertLess(text.index(b'probe-original'),text.index(b'sampler-secondary'))
+        self.assertIn(b'test_installed.py:',text)
+        self.assertNotIn(b'raise ValueError(',text)  # no source lines in receipts
+        self.assertEqual(runner.total,len(text))
+        def huge(): raise ValueError('probe X failed: '+'y'*2000000)
+        text, _ = self.report(init,huge)
+        self.assertIn(b'primary ValueError: probe X failed: yyy',text)
+        self.assertIn(b'[truncated]',text)
+        self.assertLessEqual(len(text),16*1024)
+        def deep(n=300):
+            if n: deep(n-1)
+            raise RuntimeError('bottom')
+        text, _ = self.report(init,deep)
+        self.assertLessEqual(text.count(b'\n  at '),8)
+        self.assertIn(b'primary RuntimeError: bottom',text)
+
+    def test_init_failure_report_never_blocks_or_masks(self):
+        import threading, time as clock
+        init = load('init')
+        read, write = os.pipe()
+        os.set_blocking(write,False)
+        try:
+            while True: os.write(write,b'x'*65536)
+        except BlockingIOError: pass
+        os.set_blocking(write,True)
+        runner = init.Runner(write,write); done = []
+        def stalled():
+            try: raise ValueError('collector stalled')
+            except ValueError: init.report_failure(runner); done.append(os.get_blocking(write))
+        worker = threading.Thread(target=stalled,daemon=True); began = clock.monotonic(); worker.start(); worker.join(10)
+        alive = worker.is_alive()
+        os.close(read)  # releases a blocked writer with EPIPE
+        worker.join(5); os.close(write)
+        self.assertFalse(alive,'diagnostic delivery blocked past its deadline')
+        self.assertLess(clock.monotonic()-began,6)
+        self.assertEqual(done,[True])  # descriptor blocking mode restored
+        class Closed: log, total = 987654, 0
         try: raise RuntimeError('original')
-        except RuntimeError: init.report_failure(Broken())  # must never mask the original
+        except RuntimeError: init.report_failure(Closed())  # broken channel never masks
+        with patch.object(init,'send_bounded',side_effect=SystemExit(143)):
+            try: raise RuntimeError('original')
+            except RuntimeError: init.report_failure(init.Runner(1,1))  # SIGTERM while reporting
         main = next(n for n in ast.parse((HERE/'init.py').read_text()).body
                     if isinstance(n,ast.FunctionDef) and n.name=='main')
         handlers = [h for t in ast.walk(main) if isinstance(t,ast.Try) for h in t.handlers]
