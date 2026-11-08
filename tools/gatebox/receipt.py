@@ -145,12 +145,18 @@ def validate_summary(summary):
                 raise ValueError('test reconciliation')
             if gate['id'] == 'desktop-live' and (names != gate['expected_names'] or ignored):
                 raise ValueError('desktop inventory')
-    host_names = set()
+    host_names, host_passed, host_ignored = set(), set(), set()
     for command in workspace:
-        if command['artifact_id'] in host: host_names.update(command['inventory']['expected'])
+        if command['artifact_id'] in host:
+            host_names.update(command['inventory']['expected'])
+            host_passed.update(command['inventory']['passed'])
+            host_ignored.update(command['inventory']['ignored'])
     for command in summary['commands']:
         if command.get('gate_id',command['id']) == 'host':
-            if not host_names or set(command['inventory']['expected']) != host_names:
+            inventory = command['inventory']
+            # Q33 (review F6-3 note 4): the aggregate carries the workspace partition exactly.
+            if (not host_names or set(inventory['expected']) != host_names
+                    or set(inventory['passed']) != host_passed or set(inventory['ignored']) != host_ignored):
                 raise ValueError('host test inventory mismatch')
 
 def check(info, owner_uid, directory=False):

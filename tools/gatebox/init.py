@@ -30,8 +30,8 @@ def reconcile(names, output):
     # Q33: every listed test either passes or is reported ignored by libtest (#[ignore]); ignored
     # names are recorded as ignored, never as passed, and the totals must agree. Nothing else.
     passed, ignored = [], []
-    for name, result in re.findall(r'^test (.+) \.\.\. (.*)$',output,re.M):
-        if name.endswith(SHOULD_PANIC): name = name[:-len(SHOULD_PANIC)]
+    # libtest names are Rust paths (no whitespace); the marker is the only text before " ... ".
+    for name, _, result in re.findall(r'^test (\S+)( - should panic)? \.\.\. (.*)$',output,re.M):
         if result == 'ok': passed.append(name)
         elif result == 'ignored' or result.startswith('ignored, '): ignored.append(name)
         else: raise ValueError('missing/unexpected/failed libtest names or totals')
@@ -130,10 +130,13 @@ class Runner:
             self.children.discard(proc)
     def libtest(self, gate, artifact, expected=None):
         _, code, listing = self.command(gate+'-list',[artifact['executable'],'--list','--format','terse'])
-        names = re.findall(r'^(.+): test$',listing,re.M)
         # Q33: a zero-test target lists nothing; reconcile then requires libtest's own zero-test run.
-        if code or any(line and not line.endswith(': test') for line in listing.splitlines()):
-            raise ValueError('unknown test adapter')
+        # One pass validates and extracts (review F6-3 B1): every line is "<path>: test", LF only.
+        lines = listing.split('\n')
+        if lines[-1] == '': lines.pop()
+        matches = [re.fullmatch(r'(\S+): test',line) for line in lines]
+        if code or not all(matches): raise ValueError('unknown test adapter')
+        names = [match[1] for match in matches]
         if expected is not None:
             if set(names) != set(expected): raise ValueError('desktop names changed')
             names = expected

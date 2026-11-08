@@ -385,7 +385,8 @@ class ReceiptTests(unittest.TestCase):
         receipt.validate_summary(summary)
         for change in ('ignored-also-passed','ignored-not-expected','passed-missing','duplicate-ignored',
                        'failed','filtered','desktop-ignored','host-empty-expected','ignored-not-list',
-                       'duplicate-ignored-only','ignored-empty-string','host-partition'):
+                       'duplicate-ignored-only','ignored-empty-string','host-partition',
+                       'nonhost-ignored-also-passed','nonhost-ignored-empty-string'):
             summary = ignored_summary()
             inv = summary['commands'][3]['inventory']
             if change == 'ignored-also-passed': inv['passed'] = inv['executed'] = ['host_test','child_entry']
@@ -396,6 +397,11 @@ class ReceiptTests(unittest.TestCase):
             if change == 'filtered': inv['filtered'] = ['child_entry']
             if change == 'ignored-not-list': inv['ignored'] = 'child_entry'
             if change == 'duplicate-ignored-only': inv['ignored'] = ['child_entry','child_entry']
+            if change.startswith('nonhost-'):
+                # Per-command consistency also holds for a workspace artifact outside the host aggregate.
+                other = next(c for c in summary['commands'] if c['gate_id'] == 'workspace' and c['artifact_id'] != 'host-bin')['inventory']
+                if change == 'nonhost-ignored-also-passed': other['ignored'] = [other['expected'][0]]
+                else: other['ignored'] = ''
             if change == 'host-partition':
                 # review F6-3 note 4: the host aggregate must carry the workspace partition exactly.
                 host = next(c for c in summary['commands'] if c['gate_id'] == 'host')['inventory']
