@@ -539,7 +539,7 @@ fn verify_cases_in(cases: &str, sources: String) -> Result<usize, String> {
                 "{class}: the reduction differs from the listed one"
             ));
         }
-        if f[2] == "none" && !owned || !owned && !is_test(session_test, &sources) {
+        if !owned && (f[2] == "none" || !is_test(session_test, &sources)) {
             return Err(format!("{class}: no executed session-level primitive"));
         }
         if f[2] != "none" && !is_test(f[2], &host) {
