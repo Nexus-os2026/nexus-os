@@ -145,29 +145,41 @@ def cmdline_tokens(raw):
     # ASCII whitespace around arguments; split on NUL and every ASCII whitespace byte.
     return [t for part in raw.split(b'\0') for t in part.split() if t]
 def chrome_args(raw):
-    # Q27: NUL boundaries are exact; only a rewritten title (one NUL-padded string) is space-joined.
-    parts = [part for part in raw.split(b'\0') if part]
-    return parts[0].split(b' ') if len(parts)==1 else parts
+    # Q27/Q28: NUL boundaries are exact and keep empty positions; only a rewritten title (one
+    # string followed by NUL padding) is space-joined.
+    body = raw.rstrip(b'\0')
+    return body.split(b'\0') if b'\0' in body else body.split(b' ')
 def chrome_process_is_renderer(raw):
     # Q26/Q27: the denial over-approximates every Chromium spelling (any '-' prefix, '=value',
     # surrounding whitespace, even after '--'); the renderer type follows Chromium's parser exactly.
     names = {t.lstrip(b'-').partition(b'=')[0] for t in cmdline_tokens(raw) if t.startswith(b'-')}
     require(not {b'no-sandbox',b'disable-setuid-sandbox'} & names,'unsafe Chrome flag')
-    types = []
+    kind = None
     for arg in chrome_args(raw)[1:]:
         arg = arg.strip(b' \t\n\v\f\r')
         if arg==b'--': break
         body = arg[2:] if arg.startswith(b'--') else arg[1:] if arg.startswith(b'-') else None
         if body is None: continue  # '---type' yields name '-type', never 'type'
-        name,separator,value = body.partition(b'=')
-        if name==b'type': types.append(value if separator else b'')
-    return types==[b'renderer']
+        name,_,value = body.partition(b'=')
+        if name==b'type': kind = value  # Chromium: the last duplicate switch wins
+    return kind==b'renderer'
 def renderer_isolated(info,browser):
     # Q26: Seccomp=2 alone is systemd's filter; Chrome's own filter adds to the browser's filter count.
     filters,base = int(info['Seccomp_filters']),int(browser['Seccomp_filters'])
     levels = len(info['NSpid'].split())
     require(info['Seccomp'].strip()=='2' and levels>=3 and filters>base,'renderer isolation')
     return dict(seccomp=2,pid_levels=levels,seccomp_filters=filters,browser_seccomp_filters=base)
+def select_renderer(candidates,parents,browser_pid,browser):
+    # Q28: a renderer publishes its title before installing Chrome's filter. Return evidence only
+    # when every descendant renderer in this sample is isolated; otherwise None (keep waiting
+    # within the caller's bounded deadline, which fails closed).
+    chosen = None
+    for pid,info in sorted(candidates.items()):
+        if not descendant(pid,browser_pid,parents): continue
+        try: evidence = renderer_isolated(info,browser)
+        except ValueError: return None
+        chosen = chosen or dict(evidence,pid=pid,parents=parents)
+    return chosen
 
 def isolation(context):
     records = mounts(); current = status()
@@ -346,9 +358,7 @@ def chrome_observation():
                     info = status(path.name); pid = int(path.name); parents[pid] = int(info['PPid'])
                     if chrome_process_is_renderer((path/'cmdline').read_bytes()): candidates[pid] = info
                 except (FileNotFoundError,ProcessLookupError): continue
-            for pid,info in candidates.items():
-                if descendant(pid,proc.pid,parents):
-                    renderer = dict(renderer_isolated(info,status(proc.pid)),pid=pid,parents=parents)
+            renderer = select_renderer(candidates,parents,proc.pid,status(proc.pid))
             label = Path('/proc',str(proc.pid),'attr/current').read_text().strip()
     finally: stop(proc); proc.stderr.close()
     base = [chrome,'--headless=new','--disable-gpu','--no-first-run','--user-data-dir=/run/gate/tmp/chrome-report','--dump-dom']

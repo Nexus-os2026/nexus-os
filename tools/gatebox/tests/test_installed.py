@@ -338,7 +338,7 @@ class Q28Oracles(unittest.TestCase):
     def test_empty_nul_fields_keep_argument_positions(self):
         is_renderer = self.probe.chrome_process_is_renderer
         self.assertFalse(is_renderer(b'\0--\0--type=renderer\0'))
-        self.assertFalse(is_renderer(b'\0--type=renderer\0'))
+        self.assertTrue(is_renderer(b'\0--type=renderer\0'))   # empty argv[0] keeps its position
         self.assertTrue(is_renderer(b'chrome\0\0--type=renderer\0'))
     def test_last_duplicate_type_wins_like_chromium(self):
         is_renderer = self.probe.chrome_process_is_renderer
