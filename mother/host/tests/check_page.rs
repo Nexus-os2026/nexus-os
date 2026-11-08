@@ -399,13 +399,25 @@ fn s1ae_refusal_location_and_exit_contract() {
     let odd = d.0.join(OsString::from_vec(b"page-\xff.html".to_vec()));
     std::fs::write(&odd, BAKERY).unwrap();
     assert_eq!(cli(&[&odd]).0, 0, "non-UTF-8 path");
-    let relative = Path::new("../src/oracles/m3a_bakery.html");
+    // Cargo starts a test in its package directory and the Gate Box in the
+    // repository root, so the path is worked out from wherever this test started.
     let here = std::env::current_dir().unwrap();
+    let target = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("src/oracles/m3a_bakery.html");
+    let shared = here
+        .components()
+        .zip(target.components())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let relative = PathBuf::from("../".repeat(here.components().count() - shared))
+        .join(target.components().skip(shared).collect::<PathBuf>());
     assert!(
-        here.join(relative).is_file(),
-        "cargo runs tests in the package dir"
+        relative.is_relative() && relative.is_file(),
+        "a relative path from the test's own directory"
     );
-    assert_eq!(cli(&[relative]).0, 0, "relative path");
+    assert_eq!(cli(&[&relative]).0, 0, "relative path");
     // No content of the page or facts ever appears in the output.
     let edited = BAKERY.replace(BREAD, &format!("<p>We bake {CANARY} rye daily.</p>"));
     let canary_facts = F_BAKERY.replace("Rosa's Bakery", CANARY);
