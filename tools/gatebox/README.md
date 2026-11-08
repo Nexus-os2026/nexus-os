@@ -140,7 +140,7 @@ PY
 sudo /bin/bash /root/gatebox-slice1/tools/gatebox/install.sh install \
   --bundle-sha256 "$GBX_BUNDLE_SHA" --repo-id mother \
   --source-git /home/nexus/NEXUS/nexus-os/.git --submit-user nexus \
-  --fixture-sha 899e3872c5b61223c87b905f63c66947a816259b
+  --fixture-sha 0c8cb6d360b1296262b7a5c478261e5e47e5c7f5
 sudo /usr/bin/systemctl daemon-reload
 sudo /usr/bin/systemctl enable --now mothergate.socket
 OWNER
@@ -250,7 +250,7 @@ sudo /usr/bin/python3 -I -B -m unittest discover \
   sudo /usr/bin/tee -a /root/gatebox-slice1/qualification.log
 sudo -k
 sudo /usr/bin/python3 -I -B /usr/libexec/gatebox/verify.py --latest \
-  --repo mother --sha 899e3872c5b61223c87b905f63c66947a816259b \
+  --repo mother --sha 0c8cb6d360b1296262b7a5c478261e5e47e5c7f5 \
   --gateset full --require-status PASS_SCOPED 2>&1 |
   sudo /usr/bin/tee -a /root/gatebox-slice1/qualification.log
 QUALIFY

@@ -82,7 +82,7 @@ class OfflineInstallTests(unittest.TestCase):
             with self.assertRaises(ValueError): probe.validate_sensor(row,{})
     def test_q1_clients_requires_receipt_and_refusal(self):
         probe = load('probe')
-        sha = '899e3872c5b61223c87b905f63c66947a816259b'
+        sha = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
         value = dict(uid=1234,context='claude',accepted={'status':'ACCEPTED','run_id':'a'*32},
                      refused={'status':'UNQUALIFIED','reason':'QUALIFICATION_ONLY'},
                      codex='unsupported (runner denies AF_UNIX)')
@@ -177,7 +177,7 @@ class InstalledAcceptance(unittest.TestCase):
     def test_c1(self): self.check('C1-SEALED','sealed-DAC')
     def test_zz_c2(self): self.check('C2-CANARY','pre-handoff-canary-reboot-required')
     def test_c3(self): self.check('C3-RESTART','pending-restart')
-    def test_e2e(self): self.check('E2E','899e3872c5b61223c87b905f63c66947a816259b full PASS_SCOPED')
+    def test_e2e(self): self.check('E2E','0c8cb6d360b1296262b7a5c478261e5e47e5c7f5 full PASS_SCOPED')
 
 class Q8F1Oracles(unittest.TestCase):
     def test_canary_open_denial(self):
@@ -617,6 +617,20 @@ class Q31Oracles(unittest.TestCase):
         text = (HERE/'init.py').read_text()
         loop = text.split('while selector.get_map():',1)[1].split('code = proc.wait(',1)[0]
         self.assertIn('self.reap_orphans()',loop)
+
+class Q32Oracles(unittest.TestCase):
+    """Q32 (review F6-1 B3): fixture 899e3872's o18_d/o18_g read the REAL /sys for the root device's
+    hardware backing, which a tmpfs payload root cannot provide. The fixture is re-pinned to
+    0c8cb6d3 = 899e3872 + one test-only commit giving both tests a fake /sys. One SHA everywhere."""
+    FIXTURE = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
+    def test_one_fixture_sha_everywhere(self):
+        self.assertEqual(installer()['FIXTURE'],self.FIXTURE)
+        self.assertIn("FIXTURE = '"+self.FIXTURE+"'",(HERE/'probe.py').read_text())
+        self.assertEqual(json.loads((HERE/'policy/registry.json').read_text())['mother']['fixture_sha'],self.FIXTURE)
+        doc = (HERE/'README.md').read_text()
+        self.assertIn('--fixture-sha '+self.FIXTURE,doc); self.assertIn('--sha '+self.FIXTURE,doc)
+        for name in ('install.sh','probe.py','policy/registry.json','README.md','init.py','supervisor.py','client.py'):
+            self.assertNotIn('899e3872c5b61223c87b905f63c66947a816259b',(HERE/name).read_text(),name)
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):

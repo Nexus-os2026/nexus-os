@@ -39,7 +39,7 @@ def load(name):
 supervisor, lifecycle, init, verify = [load(n) for n in
                                       ('supervisor','lifecycle','init','verify')]
 RUN = 'a'*32
-SHA = '899e3872c5b61223c87b905f63c66947a816259b'
+SHA = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
 REQUEST = {'repo_id':'mother','full_sha':SHA,'gate_set_id':'full'}
 REGISTRY = {'mother':{'uid':os.getuid(),'object_format':'sha1'}}
 ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',

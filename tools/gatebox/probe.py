@@ -33,7 +33,7 @@ import uuid
 
 HERE = Path(__file__).resolve().parent
 CONFIG = Path('/etc/gatebox')
-FIXTURE = '899e3872c5b61223c87b905f63c66947a816259b'
+FIXTURE = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
 HARNESS = Path('/usr/libexec/gatebox/policy/phase2_live_sandbox.rs')
 SESSION = None
 CUSTODY_TESTS = {
