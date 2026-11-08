@@ -1183,14 +1183,25 @@ fn m2d_b1_d_o18_d_subtree_bind_mounts_are_refused() {
         reserved,
         uid: crate::launcher::effective_uid(),
     };
+    // The device this table calls ext4 must be on real hardware (an NVMe
+    // partition in a fake /sys), whatever backs this host's own `/`: on a
+    // host or sandbox whose root is tmpfs or a virtual disk, the real /sys
+    // would refuse the control rows for a reason this test does not probe.
+    let hardware = FakeSys::new(dirs.path("sys"));
+    hardware
+        .disk("nvme0n1", "259:0", &[])
+        .partition("nvme0n1", "nvme0n1p1", "259:1")
+        .link(&dev_of(Path::new("/")), "nvme0n1/nvme0n1p1");
     let select = |mountinfo: Option<Result<String, ()>>, path: &Path, reserved: Vec<PathBuf>| {
         mountinfo_for_test(mountinfo);
+        crate::files::sysfs_for_test(Some(hardware.0.clone()));
         let gov = control(&root, &evidence);
         let result = gov
             .register_workspace_in(path, &with(reserved))
             .map(|_| ())
             .map_err(|error| error.class());
         mountinfo_for_test(None);
+        crate::files::sysfs_for_test(None);
         result
     };
     let refused = Err("unsupported_mount_topology");
@@ -1574,8 +1585,16 @@ fn m2d_b1_d_o18_g_empty_required_fields_refuse_the_table() {
             "{ordinary}9 1 4095:1048575 / /nexus-m2d-b1-elsewhere rw,relatime shared:9 - {tail}\n"
         )
     };
+    // As in o18_d: the device called ext4 is on real hardware in a fake /sys,
+    // independent of what backs this host's own `/`.
+    let hardware = FakeSys::new(dirs.path("sys"));
+    hardware
+        .disk("nvme0n1", "259:0", &[])
+        .partition("nvme0n1", "nvme0n1p1", "259:1")
+        .link(&rootfs, "nvme0n1/nvme0n1p1");
     let select = |mountinfo: String| {
         mountinfo_for_test(Some(Ok(mountinfo)));
+        crate::files::sysfs_for_test(Some(hardware.0.clone()));
         let gov = control(&root, &evidence);
         let result = gov
             .register_workspace_in(
@@ -1590,6 +1609,7 @@ fn m2d_b1_d_o18_g_empty_required_fields_refuse_the_table() {
             .map(|_| ())
             .map_err(|error| error.class());
         mountinfo_for_test(None);
+        crate::files::sysfs_for_test(None);
         result
     };
     let outcomes = vec![
