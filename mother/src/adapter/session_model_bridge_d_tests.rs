@@ -389,6 +389,8 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/reply-lapse-then-stop",
             "first/reply-lapse",
             "first/poll-crossing-then-stop",
+            "first/admission-lapse-then-stop",
+            "first/admission-scope-only-then-stop",
             "first/scope-only-then-stop",
             "first/scope-entry-order-then-stop",
             "first/scope-reply-order-then-stop",
@@ -624,6 +626,41 @@ fn first(arg: &str) {
             drop(release);
             assert!(adv.join().unwrap().is_err());
             "block:budget_time"
+        }
+        // SB3C-R17 (review f1-4): the poll before the final admission reads
+        // the budget unexpired, the admission refuses Timeout without asking
+        // the caller, and Stop lands as the attempt returns. Scope-only: that
+        // refusal with Mother's budget not lapsed must not latch.
+        "admission-lapse-then-stop" | "admission-scope-only-then-stop" => {
+            let budget = arg == "admission-lapse-then-stop";
+            let (returned_tx, returned_rx) = signal();
+            let (resume_tx, resume_rx) = signal();
+            let resume_rx = Mutex::new(resume_rx);
+            m.hooks_for_test().model_returned.arm(0, move || {
+                let _ = returned_tx.send(());
+                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+            });
+            let fx = f.clone();
+            // Past the exchange's own check, at its poll's sample.
+            m.hooks_for_test().model_deadline_sampled.arm(1, move || {
+                let clock = fx.home.clock.clone();
+                if budget {
+                    clock.advance(Duration::from_millis(61_000));
+                } else {
+                    let context = fx.home.port.context();
+                    context.narrow_mission_deadlines(clock, 1, 1).unwrap();
+                }
+            });
+            let adv = advance_in(&m, id);
+            within(&returned_rx);
+            let state = [MissionState::Stopped, MissionState::Blocked][usize::from(budget)];
+            assert_eq!(m.stop(id), Ok(state), "{arg}: Stop arrives second");
+            resume_tx.send(()).unwrap();
+            let (first, _) = within(&rx);
+            assert_eq!(first, "failed:model_timeout", "{arg}");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            ["stop:owner", "block:budget_time"][usize::from(budget)]
         }
         // SB3C-R16: the scope refuses with the mission budget not lapsed, the
         // state a lapsed request deadline Q leaves (Q itself is 300 s of real
