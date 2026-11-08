@@ -204,6 +204,20 @@ class Q8F2Oracles(unittest.TestCase):
         text = (HERE/'install.sh').read_text()
         self.assertLess(text.index("'proc'"),text.index("record(CONFIG/'skeleton.json',inventory)"))
 
+class Q20Oracles(unittest.TestCase):
+    def test_skeleton_ships_manager_created_root_mountpoint(self):
+        # Q20 evidence: systemd 259 created RootDirectory/root (root:root 0750)
+        # while setting up the first payload's namespace, after skeleton.json was
+        # recorded, so installed identity could never re-verify. The manager may
+        # only find it already present; the inventory check is never relaxed.
+        tree = ast.parse((HERE/'install.sh').read_text().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
+        loops = [n for n in ast.walk(tree) if isinstance(n,ast.For) and isinstance(n.iter,ast.Tuple)
+                 and all(isinstance(e,ast.Constant) and isinstance(e.value,str) for e in n.iter.elts)]
+        directories = next(ast.literal_eval(n.iter) for n in loops if 'dev/shm' in ast.literal_eval(n.iter))
+        self.assertIn('root',directories)
+        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
+        self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
+
 class Q8F3Oracles(unittest.TestCase):
     def test_private_stage_validates_before_publish(self):
         scope = installer()
