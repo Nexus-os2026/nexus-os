@@ -403,9 +403,9 @@ SB3C/ingress/EOF	OPEN:D2	StopRoute::press then SessionIngress::fail	host:d_o20_s
 SB3C/ingress/partial_Ctrl_D	OPEN:D2	partial line then Ctrl-D, no retained test performs it	host:none	SB-3C
 SB3C/ingress/master_close	OPEN:D2	StopRoute::press then SessionIngress::fail	host:d_o20_stop_ctrl_d_and_master_close_before_publication	SB-3C
 SB3C/ingress/read_failure	OPEN:D2	StopRoute::press then SessionIngress::fail	host:d_o20_read_error_during_held_execution_engages_stop_before_exit	SB-3C
-SB3C/ingress/mission_stop	sb3_matrix_r5_observer_before	Coordinator::stop to SessionDoor::cancel_run	host:session_literal_thirteen_states_against_real_terminal_paths	SB-3C
+SB3C/ingress/mission_stop	OPEN:D2	Coordinator::stop to SessionDoor::cancel_run	host:session_literal_thirteen_states_against_real_terminal_paths	SB-3C
 SB3C/ingress/stop_all	OPEN:D2	Coordinator::stop_all, no retained session-route evidence	host:none	SB-3C
-SB3C/ingress/door_fence	sb3_matrix_r5_observer_before	SessionPort::fence to SessionDoor::halt	host:session_literal_thirteen_states_against_real_terminal_paths	SB-3C
+SB3C/ingress/door_fence	OPEN:D2	SessionPort::fence to SessionDoor::halt	host:session_literal_thirteen_states_against_real_terminal_paths	SB-3C
 SB3C/ingress/budget	sb3_matrix_r5_observer_before	mission wall and monotonic deadline	host:fix1_original_budget_is_rechecked_under_final_run_hold	SB-3C
 SB3C/ingress/grant_revocation	sb3_matrix_r5_observer_before	original grant revocation	host:session_each_native_work_step_rechecks_its_actual_prerequisites	SB-3C
 SB3C/ingress/grant_expiry	sb3_matrix_r5_observer_before	original grant expiry	host:session_each_native_work_step_rechecks_its_actual_prerequisites	SB-3C

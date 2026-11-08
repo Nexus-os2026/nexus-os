@@ -1443,23 +1443,23 @@ still land in that order, each proven.
 
 ### 14.6 Dispositions
 
-Counts through the SB3C-R8, R9, R10 and R11 audits, 65050de0 being the original
+Counts through the SB3C-R8 to R12 audits, 65050de0 being the original
 table. The audit table is `/home/nexus/NEXUS/sb3c2-citation-audit.md` (outside
 the repository): one row per distinct cited test.
 
-| Disposition | 65050de0 | After R8 | After R9 | After R10 | After R11 |
-|---|---:|---:|---:|---:|---:|
-| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 | 239 |
-| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 | 2 |
-| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 | 65 |
-| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 | 92 |
-| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 | 54 |
-| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 | 14 |
-| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 | 5 |
-| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 | 10 |
-| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 | 94 |
-| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 | 614 |
-| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 | 1 |
+| Disposition | 65050de0 | After R8 | After R9 | After R10 | After R11 | After R12 |
+|---|---:|---:|---:|---:|---:|---:|
+| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 | 239 | 226 |
+| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 | 2 | 2 |
+| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 | 65 | 65 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 | 92 | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 | 54 | 54 |
+| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 | 14 | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 | 5 | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 | 10 | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 | 94 | 94 |
+| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 | 614 | 627 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 | 1 | 1 |
 
 Every cell is bound by the verifier's literal CELLS table (SB3C-R8 (d)): a
 disposition that is not the audited one for that (sink, dimension, value) fails,
@@ -1478,7 +1478,8 @@ Each of the 17 classes keeps its exact name. The `SB-3C` block of
 reduction, and the session-level test; the verifier compares each row with a
 literal table. EOF, partial Ctrl-D, master close and read failure press Stop and
 then fail the session (`mother/host/src/terminal.rs`). `door_fence` and
-`mission_stop` reach `halt` and `cancel_run` through SessionPort.
+`mission_stop` reach `halt` and `cancel_run` through SessionPort; both rows are
+OPEN:D2 at session level (14.14).
 `stop_all` has only ordinary-route evidence (`lite_*`), so it is OPEN at every
 non-finalization sink (32 cells) rather than mapped by assumption.
 
@@ -1601,3 +1602,15 @@ toward opening the model route.** The route opens only on real tests executed on
 the real composed route, with every OPEN cell resolved. Passing
 `check-citations.py` does not change this: it shows a cited test ran, not that
 the test reaches the sink.
+
+### 14.14 SB3C-R12 repair
+
+The ingress map defines `mission_stop` as `Coordinator::stop` to
+`SessionDoor::cancel_run` and `door_fence` as `SessionPort::fence` to
+`SessionDoor::halt`. The broker matrix injects both classes on the inner
+`AgentDoor` (`Call::restriction`), so the named reduction is not performed. The
+13 surviving `c:` cells with those ingress values and the two `SB3C/ingress/` rows
+are OPEN:D2. The host column is unchanged:
+`session_literal_thirteen_states_against_real_terminal_paths` drives the real
+`Coordinator::stop` and `SessionPort::fence` on a session fixture, as evidence for
+the reduction alone and not for any model-route sink.

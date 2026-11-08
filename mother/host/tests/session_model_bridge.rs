@@ -130,8 +130,8 @@ ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_
 fault|none,poison|c:sb3_matrix_r3_reserve_before|call_slot_reserve
 schedule|after|c:sb3_matrix_r3_reserve_after|call_slot_reserve
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_r3_cas_before|attempt_ticket
-ingress|CR,LF,CRLF,door_fence,budget,quit,fatal|c:sb3_matrix_r3_cas_before|attempt_ticket
-ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,grant_revocation,grant_expiry|open:D2|attempt_ticket
+ingress|CR,LF,CRLF,budget,quit,fatal|c:sb3_matrix_r3_cas_before|attempt_ticket
+ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,grant_revocation,grant_expiry|open:D2|attempt_ticket
 fault|none|c:sb3_matrix_r3_cas_before|attempt_ticket
 schedule|before|c:sb3_matrix_r3_cas_before|attempt_ticket
 schedule|after|c:sb3_matrix_r3_cas_after|attempt_ticket
@@ -150,8 +150,8 @@ fault|poison,panic|open:D2|registration_version,registration_status,registration
 schedule|before|c:sb2_paused_before_cas_ingress_wins_dispatches_nothing|registration_version,registration_status,registration_tags,registration_show
 schedule|after|c:sb2_held_registration_request_cancels_and_joins|registration_version,registration_status,registration_tags,registration_show
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
-ingress|CR,LF,CRLF,mission_stop,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
-ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,stop_all|open:D2|call_version,call_status,call_tags,call_chat,attempt_record,attempt_pin_release
+ingress|CR,LF,CRLF,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
+ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence|open:D2|call_version,call_status,call_tags,call_chat,attempt_record,attempt_pin_release
 fault|none,poison|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
 fault|decline,panic|open:D2|call_version,call_status,call_tags
 schedule|before|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
@@ -165,7 +165,7 @@ fault|none|c:sb3_held_request_cancels_and_joins|emergency_restrict,close_restric
 ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,fatal|open:D2|close_restrict,close_obligations,producer_join,seal
 ingress|quit|c:sb3_held_request_cancels_and_joins|close_restrict
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_record_before|attempt_record
-ingress|CR,LF,CRLF,mission_stop,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_record_before|attempt_record
+ingress|CR,LF,CRLF,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_record_before|attempt_record
 fault|none|c:sb3_matrix_record_before|attempt_record
 fault|record_failed|c:sb2_record_debt_blocks_seal_and_reuse|attempt_record
 fault|record_unknown,poison|open:D2|attempt_record
@@ -173,7 +173,7 @@ fault|panic|c:sb2_attempt_drop_panic_and_poison_retain_ownership|attempt_record
 schedule|before|c:sb3_matrix_record_before|attempt_record
 schedule|after|c:sb3_matrix_settle_before|attempt_record
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_settle_before|attempt_pin_release
-ingress|CR,LF,CRLF,mission_stop,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_settle_before|attempt_pin_release
+ingress|CR,LF,CRLF,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_settle_before|attempt_pin_release
 fault|none,poison|c:sb3_matrix_settle_before|attempt_pin_release
 fault|record_failed,record_unknown,panic|open:D2|attempt_pin_release
 schedule|before|c:sb3_matrix_settle_before|attempt_pin_release
@@ -228,9 +228,9 @@ EOF|StopRoute::press then SessionIngress::fail|d_o20_stop_ctrl_d_and_master_clos
 partial_Ctrl_D|partial line then Ctrl-D, no retained test performs it|none|OPEN:D2
 master_close|StopRoute::press then SessionIngress::fail|d_o20_stop_ctrl_d_and_master_close_before_publication|OPEN:D2
 read_failure|StopRoute::press then SessionIngress::fail|d_o20_read_error_during_held_execution_engages_stop_before_exit|OPEN:D2
-mission_stop|Coordinator::stop to SessionDoor::cancel_run|session_literal_thirteen_states_against_real_terminal_paths|sb3_matrix_r5_observer_before
+mission_stop|Coordinator::stop to SessionDoor::cancel_run|session_literal_thirteen_states_against_real_terminal_paths|OPEN:D2
 stop_all|Coordinator::stop_all, no retained session-route evidence|none|OPEN:D2
-door_fence|SessionPort::fence to SessionDoor::halt|session_literal_thirteen_states_against_real_terminal_paths|sb3_matrix_r5_observer_before
+door_fence|SessionPort::fence to SessionDoor::halt|session_literal_thirteen_states_against_real_terminal_paths|OPEN:D2
 budget|mission wall and monotonic deadline|fix1_original_budget_is_rechecked_under_final_run_hold|sb3_matrix_r5_observer_before
 grant_revocation|original grant revocation|session_each_native_work_step_rechecks_its_actual_prerequisites|sb3_matrix_r5_observer_before
 grant_expiry|original grant expiry|session_each_native_work_step_rechecks_its_actual_prerequisites|sb3_matrix_r5_observer_before
