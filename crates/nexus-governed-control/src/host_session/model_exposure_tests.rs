@@ -393,6 +393,7 @@ fn sb3c_public_binding_is_exact_and_idempotent() {
     for (case, class) in [
         ("s", "unknown_run"),
         ("q", "not_member"),
+        ("d", "not_member"),
         ("unknown_run", "unknown_run"),
         ("files", "not_admitted"),
         ("consent", "no_consent"),
@@ -413,6 +414,11 @@ fn sb3c_public_binding_is_exact_and_idempotent() {
                 let q2 = f.session.ingress().accept(CommandKind::Run, 2).unwrap();
                 let door = f.session.open_file_door(&q2).unwrap();
                 door.admit_inference(f.run, HASH, LABEL, f.identity)
+            }
+            // SB3C-R4 (1), real objects: another door issued for the same Q.
+            "d" => {
+                let d2 = f.session.open_file_door(&f.q).unwrap();
+                d2.admit_inference(f.run, HASH, LABEL, f.identity)
             }
             "unknown_run" => f
                 .door
@@ -443,6 +449,15 @@ fn sb3c_public_binding_is_exact_and_idempotent() {
             assert!(!other.bound(), "binding s: the receiver binds nothing");
         }
     }
+    // SB3C-R4 (1): an R opened by another request cannot exist while R is
+    // attached (one File port per session), so `opened_by` stays cited.
+    let f = Pub::new();
+    let q2 = f.session.ingress().accept(CommandKind::Run, 2).unwrap();
+    let other = f.session.open_file_door(&q2).unwrap();
+    assert!(
+        other.file_port().is_err(),
+        "no second File port: no foreign R"
+    );
     // The consent-association fields: cited to A's private tamper oracle.
     assert!(CITED.contains("fn sb3_inference_binding_is_exact_and_idempotent()"));
     for case in TAMPERED {
@@ -561,4 +576,39 @@ fn sb3c_public_continuation_conversation_and_grant() {
         "ok",
         "valid grant reaches chat"
     );
+}
+
+/// SB3C-R4 (3): public G0 at each of the four call gates: the original
+/// grant revoked or expired there, or another live grant present, refuses
+/// that request and every successor; the attempt is still recorded.
+#[test]
+fn sb3c_public_grant_is_required_at_every_call_gate() {
+    for case in ["revoked", "expired", "substitute"] {
+        for i in 0..4 {
+            let f = Pub::new();
+            assert_eq!(f.admit(&f.door), Ok(()));
+            let DoorKind::Original { file_grant } = f.door.kind else {
+                unreachable!("an original door")
+            };
+            let (control, clock) = (f.session.control_for_test(), f.clock.clone());
+            if case == "substitute" {
+                let other = f.session.grant_for_test(&f.q).unwrap();
+                let live = control.authority().grants().live(other).is_some();
+                assert!(live, "another live grant");
+            }
+            nth(&f.session, "model.call.gate", i, move || match case {
+                "expired" => clock.advance(Duration::from_secs(3600)),
+                _ => control.authority().grants().revoke(file_grant).unwrap(),
+            });
+            let before = f.paths().len();
+            assert_eq!(
+                f.class(&Meter::default()),
+                "model_cancelled",
+                "G0 {i} {case}"
+            );
+            let sent = f.paths()[before..].to_vec();
+            assert_eq!(sent, CALL[..i], "G0 gate {i} {case}: it and successors 0");
+            assert_eq!(f.records("model_call"), 1, "G0 gate {i} {case}: recorded");
+        }
+    }
 }

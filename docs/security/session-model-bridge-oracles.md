@@ -1419,3 +1419,198 @@ the cited test and each of its rows exist.
 - **Phase 2 (evidence replay, not committed; accepted by SB3C-R2):** R0 and R1 wired. The Mother composition oracles fail at their named assertions, since phase 1 refuses the model lane at draft (`ModelLaneUnavailable`).
 
 Logs are in the builder scratchpad (`c1/replay-p1-*`, `c1/replay-p2-*`).
+
+### 14.4 SB-3 C2: R32 supplement register (SB3C-R6)
+
+Test-only. C1 landed alone as #147 (SB3C-R6 preamble); C2, D1, D2 and SB3C-F1
+still land in that order, each proven.
+
+### 14.5 The supplement
+
+- `mother/host/tests/session/model-bridge-sinks.tsv`: the frozen 35 sinks (spec 8.3).
+- `mother/host/tests/session_model_bridge.rs`: the TSV-only verifier. It joins rows
+  only against literal tables and a source-text typo lint on test names; it calls no
+  production classifier. `session_oracles.rs` requires it and the retained
+  validator; the 153,000 is labelled the historical retained matrix.
+- A cell is (sink, dimension, value): 35 x (9 + 17 + 6 + 2) = 1,190. This is the
+  B1e side x value precedent and spec 8.4's per-dimension N/A; the 64,260-cell
+  cross product is neither authored nor claimed.
+- **Lifecycle (ruling (b)):** nine states, literally `SessionState`. The forecast's
+  "10" was an estimate. `sb3c_lifecycle_list_matches_the_session_states` fails on
+  divergence and is separate from the TSV-only verifier.
+- **Faults (ruling (c)):** exactly `coverage.rs` FAILURES. That list already
+  contains `none`, so "plus none" adds nothing.
+
+### 14.6 Dispositions
+
+Counts through the SB3C-R8 to R12 audits, 65050de0 being the original
+table. The audit table is `/home/nexus/NEXUS/sb3c2-citation-audit.md` (outside
+the repository): one row per distinct cited test.
+
+| Disposition | 65050de0 | After R8 | After R9 | After R10 | After R11 | After R12 |
+|---|---:|---:|---:|---:|---:|---:|
+| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 | 239 | 226 |
+| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 | 2 | 2 |
+| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 | 65 | 65 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 | 92 | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 | 54 | 54 |
+| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 | 14 | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 | 5 | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 | 10 | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 | 94 | 94 |
+| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 | 614 | 627 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 | 1 | 1 |
+
+Every cell is bound by the verifier's literal CELLS table (SB3C-R8 (d)): a
+disposition that is not the audited one for that (sink, dimension, value) fails,
+including a citation of a real test, an N/A from the closed list and OPEN. 51 of
+the D2 cells are `decline` or `record_*` at a sink with no Owner answer or no
+durable record: not reachable, but the closed list has no reason for them, so
+they stay OPEN rather than take a misfit reason. Narrowing them is an Architect
+ruling. `LEGACY_FINALIZATION_ONLY` is spec 8.3's explicit exclusion of existing
+finalization work, not a claim of unreachability; `SealedFinalizing` and `none`
+at `mother_end`, `primary_end` and `delivery` remain cited positives (H5).
+
+### 14.7 Ingress reductions (ruling (a), forecast 8.5)
+
+Each of the 17 classes keeps its exact name. The `SB-3C` block of
+`model-bridge-cases.tsv` names its primitive, the retained evidence for the
+reduction, and the session-level test; the verifier compares each row with a
+literal table. EOF, partial Ctrl-D, master close and read failure press Stop and
+then fail the session (`mother/host/src/terminal.rs`). `door_fence` and
+`mission_stop` reach `halt` and `cancel_run` through SessionPort; both rows are
+OPEN:D2 at session level (14.14).
+`stop_all` has only ordinary-route evidence (`lite_*`), so it is OPEN at every
+non-finalization sink (32 cells) rather than mapped by assumption.
+
+SB3C-R8 (b): a reduction is covered only by a test that performs it, order and
+repetition included. The session-level matrix runs single emergency and failure
+cases, so `original_cell_unscheduled`, `repeated`, `EOF`, `partial_Ctrl_D`,
+`master_close` and `read_failure` are OPEN at every sink that cited it (126
+cells). Their host evidence stays recorded for the reduction itself, except
+`partial_Ctrl_D`: `d_o20_stop_ctrl_d_and_master_close_before_publication` sends
+Ctrl-D without a partial line, and no retained test performs real partial input
+before Ctrl-D, so its host evidence is `none`.
+
+### 14.8 Review findings carried (SB3C-R6 (e), (f))
+
+- **(1) Foreign R:** reachable-limited. One File port per session
+  (`file_session.rs:529`), so a public foreign-R row cannot be constructed; the
+  second-file-port refusal and the retained private citations stand.
+- **(5) Poison:** a poisoned-broker SessionPort case is not constructible from
+  Mother with existing seams. The broker's holds are private to its crate and no
+  hold crosses a caller callback (P1). It needs a production seam, so it is
+  recorded OPEN:D2 and not claimed. Broker-level poison stays cited.
+
+### 14.9 SB3C-R8 repair (attempt 1)
+
+Codex review f7/review-sb3c2-1 found 23 of 50 sampled citations wrong or loose.
+An audit of all 42 distinct cited tests dropped 232 cited cells; none was
+reworded or moved to a nearby test. The largest drops: every `charge_append`,
+`meter_settle`, `record_first_classify`, `post_record_recheck` and `close_report`
+broker citation, because those sinks are Mother or host code the broker matrix
+never runs (its meter is a counting mock); the six ingress reductions above;
+fault, state and schedule claims the cited test does not exercise.
+`emergency_restrict`, `close_restrict` and `close_obligations` are reachable at
+Bootstrap (N/A corrected; `close_obligations` is witnessed by
+`sb2_install_completion_is_atomic_to_close_observers`, the others OPEN). R6's
+sealed and closed denials named an oracle for model-call refusal, not those
+restrictions, and are OPEN.
+
+### 14.10 SB3C-R9 repair (attempt 2)
+
+Codex review f7/review-sb3c2-2 found ten sampled citations and one denial still
+unsupported, and that the verifier accepted disabled tests. Every surviving `c:`
+cell and every LIFECYCLE_DENIES entry was re-checked for the same patterns, not
+only the listed ones. 15 cited cells and 14 denials became OPEN:
+
+- A fault that never reaches the sink: `registration_install` / `record_failed`
+  (the failed record returns before install admission).
+- A fault that only lands after the boundary: `attempt_ticket` / `poison`,
+  `mission_stop`, `grant_revocation`, `grant_expiry` (the retained rows are `at:`,
+  judged after the ticket); `attempt_record` / `poison` (the record does not take
+  the poisoned table; the failure is the pin's).
+- Before or after a different boundary: all eight R6 schedule cells (their
+  reference is R5 request entry); `registration_record` / `before` (the injected
+  faults are at the metadata gates).
+- A denial oracle for another operation: `registration_readiness` Normal and
+  sealed/closed (`finish_bootstrap` is its own method); `registration_reserve`
+  Normal and sealed/closed (the refusal is in `reserve` itself, and the seal
+  oracle does not exercise it); `record_first_classify` and `post_record_recheck`
+  sealed/closed (they run after the slot is released, so the active-slot
+  exclusion does not reach them).
+
+**Reading of the sources.** `is_test` is a typo lint on cited names; SB3C-R10 (b)
+supersedes R9 (c) as proof. It reads source text and does not establish that a
+test is compiled, enabled or run. Forms known to pass it although the test would
+not run: `#[ignore]` or `#[cfg(any())]` above a comment line ending in `;` such
+as `/* note */ // x;`; a whole test inside a nested block comment after an
+item-like line; a file-level `#! [cfg(any())]` with the space; and a `cfg` on an
+enclosing module's `mod` declaration in a parent file. It is not hardened further.
+
+**Accepted limits (R9 (e), R10 (d)), stated plainly.** An early no-op or an empty
+body in a cited test is not detectable by this verifier; only independent review
+covers it. The literal tables and the sink file come from one audit plan, so
+agreement between them shows nothing changed since the audit and does not show
+the audit was right. No claim is made beyond the per-cell citation.
+
+**What actually ran (R10 (c)).** Execution proof is `check-citations.py` against
+the Gate Box receipt for the exact head (R11 (b)). Each cited test is bound to
+(package, target, full module path) through the receipt's `coverage.artifacts`,
+and the executable that ran must match that artifact row. It must be in that
+row's passed inventory and not in its ignored list. It is an Architect gate outside the repository, so it proves the
+landing head only. It must be re-run on each later SB-3 landing head (D1, F1, D2)
+and before the route opens. A test compiled out by a `cfg` on its enclosing
+module, like the forms above, is covered by that check and not by this verifier.
+
+Cited names are extractable from the data alone. In `model-bridge-sinks.tsv`
+(tab-separated, one header line, 11 columns): the primitive is column 9; columns
+5 to 8 are `;`-separated clauses `value[,value]=disposition`, where `c:NAME` and
+`x:NAME` cite NAME and `na:REASON(NAME)` names a denial oracle (any other
+disposition cites nothing). In the `SB3C/ingress/` rows of
+`model-bridge-cases.tsv`: column 2 is a session test unless it starts with
+`OPEN:`, and column 4 is `host:NAME` unless it is `host:none`. Host names from
+`faults.rs` and `pty.rs` are `target_os = "linux"` tests.
+
+### 14.11 SB3C-R10 repair (after Deep Diagnostic)
+
+`sb3_matrix_r3_reserve_before` applies its restriction before the route, so
+`admit_attempt_private` returns at its live check before `Attempt::acquire`. The
+19 `call_slot_reserve` lifecycle, ingress and `schedule=before` citations never
+reached the reservation and are OPEN:D2; the boundary is the frozen
+`model::Attempt::acquire slot reservation` wording. Fault `none` and `poison`
+stay: reservation runs with the table already poisoned.
+
+### 14.12 SB3C-R11 repair
+
+Review 4 found that `sb3_held_request_cancels_and_joins` reaches cancellation and
+halt through `Call::restriction`, which clones the inner `AgentDoor`.
+`SessionDoor::cancel_run` and `SessionDoor::halt`, with their settlement
+registration, join and pending-context handling, never run. Lifecycle `Normal`,
+the owned ingress value and fault `none` for `cancel_run` and `door_halt` (six
+cells) are OPEN:D2. Those two rows' `primitive` column still names that test,
+because a replacement would be a new citation; it is not evidence for either
+wrapper. `identity_view` and `inference_binding`, the other sinks naming
+`SessionDoor`, were checked: their witnesses hold a `SessionDoor`.
+
+### 14.13 Route-opening rule (SB3C-R11 (d)), binding on later units
+
+A `c:` citation claims that a retained test executes a sink's boundary on a
+value. Those claims were independently reviewed by sampling; they are not proven,
+and every review round so far found wrong ones. **`c:` citations do not count
+toward opening the model route.** The route opens only on real tests executed on
+the real composed route, with every OPEN cell resolved. Passing
+`check-citations.py` does not change this: it shows a cited test ran, not that
+the test reaches the sink.
+
+### 14.14 SB3C-R12 repair
+
+The ingress map defines `mission_stop` as `Coordinator::stop` to
+`SessionDoor::cancel_run` and `door_fence` as `SessionPort::fence` to
+`SessionDoor::halt`. The broker matrix injects both classes on the inner
+`AgentDoor` (`Call::restriction`), so the named reduction is not performed. The
+13 surviving `c:` cells with those ingress values and the two `SB3C/ingress/` rows
+are OPEN:D2. The host column is unchanged:
+`session_literal_thirteen_states_against_real_terminal_paths` drives the real
+`Coordinator::stop` and `SessionPort::fence` on a session fixture, as evidence for
+the reduction alone and not for any model-route sink.

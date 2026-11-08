@@ -102,8 +102,8 @@ R29	R	housekeeping_sync
 R30	D	implicit_drain
 R30	D	implicit_retire
 R31	D	lift
-R32	D	inference_binding
-R32	D	model_attempt
+R32	D	residual_unlisted_inference_binding
+R32	D	residual_unlisted_model_attempt
 R33	O	status
 R33	O	evidence
 R33	O	detail

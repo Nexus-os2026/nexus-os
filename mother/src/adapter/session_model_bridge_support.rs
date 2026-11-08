@@ -7,21 +7,65 @@ use crate::adapter::session_support::Fixture;
 use crate::adapter::SessionPort;
 use crate::contract::{MissionContract, ModelChoice};
 use crate::coordinator::{Coordinator, CoordinatorError, FileSession, Lanes};
-use crate::journal::{verify, Event, MissionId};
+use crate::journal::{verify, Event, JournalError, JournalStore, MissionId, StoreFailure};
 use crate::lane::{Lane, LaneContext, LaneOutput, LaneRole};
 use crate::oracles::lite_support::files_lanes;
 use crate::oracles::m2c_confirmers::answering;
 use crate::oracles::{contract_with, keyed_lanes, Yes};
 use crate::state::MissionState;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+/// A hook run just before the first journal line containing `needle` is
+/// appended, or a refusal of that append.
+type Hook = (&'static str, Box<dyn FnOnce() -> bool + Send>);
+#[derive(Clone, Default)]
+pub(crate) struct Probe(Arc<Mutex<Vec<Hook>>>);
+impl Probe {
+    /// Run `hook` before the append; the append proceeds.
+    pub(crate) fn at(&self, needle: &'static str, hook: impl FnOnce() + Send + 'static) {
+        let hook = Box::new(move || {
+            hook();
+            true
+        });
+        self.0.lock().unwrap().push((needle, hook));
+    }
+    /// Refuse that append, as a failed store write.
+    pub(crate) fn refuse(&self, needle: &'static str) {
+        self.0.lock().unwrap().push((needle, Box::new(|| false)));
+    }
+}
+pub(crate) struct ProbeStore<J> {
+    inner: J,
+    probe: Probe,
+}
+impl<J: JournalStore> JournalStore for ProbeStore<J> {
+    fn load(&self) -> Result<Vec<String>, JournalError> {
+        self.inner.load()
+    }
+    fn append(&mut self, line: &str) -> Result<(), JournalError> {
+        let hook = {
+            let mut hooks = self.probe.0.lock().unwrap();
+            let at = hooks.iter().position(|(needle, _)| line.contains(needle));
+            at.map(|at| hooks.remove(at).1)
+        };
+        if hook.is_some_and(|hook| !hook()) {
+            return Err(JournalError::Store(StoreFailure::NotRegularFile));
+        }
+        self.inner.append(line)
+    }
+    fn poison(&mut self) -> Result<(), JournalError> {
+        self.inner.poison()
+    }
+}
 
 pub(crate) type Mother = Arc<FileSession<SessionPort>>;
 
 pub(crate) struct SFx {
     pub(crate) home: Fixture,
     pub(crate) fake: Arc<FakeOllama>,
+    pub(crate) probe: Probe,
     pub(crate) invoked: Arc<AtomicUsize>,
 }
 impl SFx {
@@ -40,13 +84,18 @@ impl SFx {
         Self {
             home,
             fake,
+            probe: Probe::default(),
             invoked: Arc::new(AtomicUsize::new(0)),
         }
     }
     fn open(&self, lanes: Vec<Arc<dyn Lane>>) -> Mother {
+        let store = ProbeStore {
+            inner: self.home.journal(),
+            probe: self.probe.clone(),
+        };
         Arc::new(
             Coordinator::open(
-                self.home.journal(),
+                store,
                 self.home.port.clone(),
                 Lanes::new(lanes).unwrap(),
                 self.home.clock.clone(),
@@ -134,6 +183,27 @@ impl SFx {
         let charged = |e: &Event| matches!(e, Event::ModelCallCharged { .. });
         self.events().iter().filter(|e| charged(e)).count()
     }
+    pub(crate) fn dispatched(&self) -> usize {
+        let dispatched = |e: &Event| matches!(e, Event::EffectDispatched { .. });
+        self.events().iter().filter(|e| dispatched(e)).count()
+    }
+    /// Answers journaled for the model lane's invocations.
+    pub(crate) fn model_lane_returned(&self) -> usize {
+        let events = self.events();
+        let model: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::LaneInvoked {
+                    invocation,
+                    model_cap,
+                    ..
+                } if *model_cap > 0 => Some(*invocation),
+                _ => None,
+            })
+            .collect();
+        let returned = |e: &&Event| matches!(e, Event::LaneReturned { invocation, .. } if model.contains(invocation));
+        events.iter().filter(returned).count()
+    }
 }
 
 /// `advance` on another thread, its result returned at join.
@@ -151,4 +221,7 @@ pub(crate) fn within<T>(rx: &Receiver<T>) -> T {
 /// A one-shot signal pair.
 pub(crate) fn signal() -> (std::sync::mpsc::SyncSender<()>, Receiver<()>) {
     sync_channel(1)
+}
+pub(crate) fn count(counter: &AtomicUsize) -> usize {
+    counter.load(Ordering::SeqCst)
 }
