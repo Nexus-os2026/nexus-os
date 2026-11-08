@@ -237,7 +237,7 @@ class Q23Oracles(unittest.TestCase):
         unit = self.unit()
         entries = [e for line in unit.splitlines() if line.startswith('InaccessiblePaths=')
                    for e in line.split('=',1)[1].split()]
-        self.assertEqual(sorted(entries),sorted(['+/usr/local','+/usr/share/ollama',
+        self.assertEqual(sorted(entries),sorted(['+/usr/share/ollama',
                                                  '-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json']))
         for entry in entries:
             self.assertTrue(entry.lstrip('-').startswith('+/'),entry)
@@ -359,6 +359,22 @@ class Q28Oracles(unittest.TestCase):
         self.assertIsNone(select({90:self.status()},parents,2,browser))                  # not a descendant
         chosen = select({71:self.status(),72:self.status(),90:self.status(filters='1')},parents,2,browser)
         self.assertEqual(chosen,dict(seccomp=2,pid_levels=3,seccomp_filters=18,browser_seccomp_filters=17,pid=71,parents=parents))
+
+class Q29Oracles(unittest.TestCase):
+    """Q29 (qualification attempt 4): '+/usr/local' as InaccessiblePaths made /usr/local a mode-000
+    node; GCC's default /usr/local/include then fails with EACCES ('cc1: error: Permission denied')
+    and every C build script (ring) broke. Hide /usr/local with an EMPTY read-only tmpfs instead."""
+    def unit(self): return (HERE/'units/mothergate-run@.service').read_text()
+    def test_usr_local_is_an_empty_readonly_tmpfs(self):
+        self.assertIn('TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n',self.unit())
+    def test_no_inaccessible_entry_covers_toolchain_default_search_paths(self):
+        entries = [e.lstrip('-+') for line in self.unit().splitlines() if line.startswith('InaccessiblePaths=')
+                   for e in line.split('=',1)[1].split()]
+        for searched in ('/usr/local/include','/usr/local/lib','/usr/include','/usr/lib','/usr/libexec/gcc','/usr/bin'):
+            for entry in entries:
+                with self.subTest(entry=entry,searched=searched):
+                    self.assertFalse(searched==entry or searched.startswith(entry.rstrip('/')+'/'),
+                                     'inaccessible node on a compiler/linker default search path')
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):

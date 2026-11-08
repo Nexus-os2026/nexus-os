@@ -38,7 +38,9 @@ UNITS = {
         # Q24: '+' makes InaccessiblePaths root-relative under RootDirectory= (else silently dropped).
         ['BindReadOnlyPaths=/usr\n','BindReadOnlyPaths=/usr:/usr:norbind\n'],
         ['InaccessiblePaths=/usr/local /usr/share/ollama\n',
-         'InaccessiblePaths=+/usr/local +/usr/share/ollama\nInaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n']]}
+         # Q29: /usr/local is an empty read-only tmpfs (an inaccessible node breaks GCC's default include path).
+         'InaccessiblePaths=+/usr/share/ollama\nInaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n'
+         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n']]}
 
 class CustodyTests(unittest.TestCase):
     def setUp(self):
