@@ -385,7 +385,7 @@ class ReceiptTests(unittest.TestCase):
         receipt.validate_summary(summary)
         for change in ('ignored-also-passed','ignored-not-expected','passed-missing','duplicate-ignored',
                        'failed','filtered','desktop-ignored','host-empty-expected','ignored-not-list',
-                       'duplicate-ignored-only','ignored-empty-string'):
+                       'duplicate-ignored-only','ignored-empty-string','host-partition'):
             summary = ignored_summary()
             inv = summary['commands'][3]['inventory']
             if change == 'ignored-also-passed': inv['passed'] = inv['executed'] = ['host_test','child_entry']
@@ -396,6 +396,10 @@ class ReceiptTests(unittest.TestCase):
             if change == 'filtered': inv['filtered'] = ['child_entry']
             if change == 'ignored-not-list': inv['ignored'] = 'child_entry'
             if change == 'duplicate-ignored-only': inv['ignored'] = ['child_entry','child_entry']
+            if change == 'host-partition':
+                # review F6-3 note 4: the host aggregate must carry the workspace partition exactly.
+                host = next(c for c in summary['commands'] if c['gate_id'] == 'host')['inventory']
+                host.update(passed=['host_test','child_entry'],executed=['host_test','child_entry'],ignored=[])
             if change == 'ignored-empty-string':
                 inv.update(ignored='',passed=list(inv['expected']),executed=list(inv['expected']))
             if change == 'desktop-ignored':

@@ -695,6 +695,15 @@ class Q33Oracles(unittest.TestCase):
             with self.subTest(listing=listing,code=code), self.assertRaises(ValueError):
                 self.run_libtest(listing,libtest_run(['test a ... ok'],1,0),list_code=code)
         with self.assertRaises(ValueError): self.run_libtest('a: test\n',libtest_run(['test a ... ok'],1,0),run_code=101)
+    def test_malformed_listing_is_never_an_empty_inventory(self):
+        # review F6-3 B1: validation and extraction must agree; a CR line or a nameless entry is
+        # not a zero-test target even when the run then prints libtest's zero-test transcript.
+        for listing in ('hidden_test: test\r\n',': test\n','a: test\r\nb: test\n',' : test\n','a b: test\n'):
+            with self.subTest(listing=listing), self.assertRaises(ValueError):
+                self.run_libtest(listing,libtest_run([],0,0))
+    def test_ignore_reason_may_contain_the_delimiter(self):
+        out = libtest_run(['test a ... ok','test b ... ignored, waits ... for the parent'],1,1)
+        self.assertEqual(self.init.reconcile(['a','b'],out)['ignored'],['b'])
     def test_desktop_live_keeps_strict_names_and_no_ignored(self):
         expected = ['a','b']
         self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ok'],2,0),expected=expected)
