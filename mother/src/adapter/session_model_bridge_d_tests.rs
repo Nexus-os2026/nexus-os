@@ -1252,6 +1252,10 @@ fn sb3_d1_schedules_run_in_child_processes() {
         .unwrap();
     let body = &body[..body.find("\n    }\n").unwrap()];
     assert_eq!(body.matches(".expired()").count(), 1, "one clock sample");
+    // SB3C-R17, source text only: the exit asks the caller for a timeout alone.
+    let gate = include_str!("../../../crates/nexus-governed-control/src/host_session/model.rs");
+    let exit = "if matches!(result, Err(ModelError::Timeout)) {\n            let _ = deadline";
+    assert!(gate.contains(exit), "one exit observation, Timeout only");
     let tests: Vec<&str> = source.split("#[test]\nfn ").skip(1).collect();
     assert!(tests.len() >= 6, "the D1 tests are found");
     for test in tests {

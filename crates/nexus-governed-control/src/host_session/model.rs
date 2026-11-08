@@ -901,6 +901,10 @@ impl SessionDoor {
                 };
                 crate::inference::session_transport(&model, request, (&gate, &gate, &gate), &watch)
             });
+        // SB3C-R17: every broker expiry site ends the attempt here, unrecorded.
+        if matches!(result, Err(ModelError::Timeout)) {
+            let _ = deadline.expired();
+        }
         // One native writer; no hold crosses it. Debt is never upgraded.
         let returned = result.as_ref().map(|_| ()).map_err(|e| *e);
         let record = match attempt.record_return(authority, returned) {

@@ -86,10 +86,15 @@ deadline sample is expired and no latched cause, Closing, Failed, Sealed or Emer
 a race with Stop. Mother takes that sample:
 
 - at `CallDeadline::expired` and after the attempt returns: `note_lapse`, whose one sample is what it returns;
-- at call entry and at the Replied guard: once, immediately before `live()`. Nothing is read after the refusal.
+- at call entry and at the Replied guard: once, immediately before `live()`. No clock is read after the refusal.
 
 `CallGate::expired` evaluates the scope first and then always the caller, so a timeout the broker returns from a
 scope expiry is followed by Mother's own observation. The two are the same mission budget on the same clock.
+
+SB3C-R17: the broker judges expiry at several sites (the polled deadline, request admission, the cancel poll that
+defers to it), and admission's timeout never asks the caller. Every site ends the attempt at one exit: the transport
+returns, no hold crossing it, before native recording. On `Err(Timeout)` only, the broker asks Mother's deadline once
+there; that single exit is what covers every broker expiry site. A Q or backstop timeout has Mother's sample false.
 
 The request deadline is not the mission budget. A session scope refuses for its own request deadline Q (300 s for
 Run and Approve, from when the command was accepted) as well as for the mission budget, and Q writes nothing to the
@@ -105,6 +110,8 @@ Limits of this unit. F1 fixes ordered schedules: a lapse that is observed before
 a lapse and a Stop fall within adjacent clock reads, or the wall clock moves backward, the cause can still be
 attributed either way. In every such case the mission still ends and the halt is unaffected. These are recorded
 residuals, not repaired further.
+A Stop between a broker timeout and that exit is the same residual. A refusal before the attempt exists (the scope
+refused at attempt admission) never reaches the exit: it has no recording, and Mother's post-call sample follows it.
 
 Schedules (SB3C-R14 (d)). A held lane waits for its explicit release, and an expired hold exits the case's child
 process, so the coordinator's own budget boundary cannot satisfy these cases. In `stop-then-budget` the lane asks only
@@ -120,6 +127,8 @@ RED, each on the oracle commit against the production before its fix:
 - `03d9f467` (against `ee547a7e`): `poll-crossing-then-stop` `Ok(Stopped)` for `Ok(Blocked)`; `scope-entry-order-` and
   `scope-reply-order-then-stop` latched (`Some(Fence)`, want `None`). `scope-only-then-stop` passed there; its plant
   below is what shows it discriminates.
+- R17 oracle commit (against `33ff3f65`): `admission-lapse-then-stop` `Ok(Stopped)` for `Ok(Blocked)`.
+  `admission-scope-only-then-stop` passed there. Stop lands after recording returns: no seam inside it reaches Mother.
 
 Plants on the final code (applied to the real path, restored by sha256, not committed). All are behaviour kills
 unless stated:
