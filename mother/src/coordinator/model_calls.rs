@@ -425,21 +425,23 @@ impl<'a, P: EffectPort> Caller<'a, P> {
             && !self.meter.coordinator.port.emergency_stopped()
     }
     /// O3 (SB3C-F1): once the mission deadline lapses a session-scoped File
-    /// cell already reads engaged, with no cause latched, so `live` cannot
-    /// tell whether this lapse is the first cause. Only a latched cause, a
-    /// revoked invocation or the emergency stop withholds it; the cell's
-    /// first-wins latch still decides any race with Stop. `live` is unchanged:
-    /// admission and reply release stay as they were.
-    fn latch_lapse(&self) {
+    /// cell already reads engaged with nothing in its word, so `live` cannot
+    /// tell whether this lapse is the first cause. It is the first cause only
+    /// as the sole invalidation: a restriction in the word (a latched cause,
+    /// Failed, Closing), a revoked invocation or the emergency stop withholds
+    /// it. The cell's first-wins latch still decides any race with Stop. The
+    /// returned expiry is the one sample that drove the latch.
+    fn note_lapse(&self) -> bool {
+        let expired = self.deadline.expired();
         let c = self.meter.coordinator;
-        // Read in the old `expired && live` order: an unexpired poll does no more.
-        if self.deadline.expired()
+        if expired
             && !self.liveness.is_revoked()
-            && c.file.as_ref().is_some_and(|f| f.cell.reason().is_none())
+            && c.file.as_ref().is_some_and(|f| !f.cell.word_restricted())
             && !c.port.emergency_stopped()
         {
             self.deny(BlockReason::BudgetTime);
         }
+        expired
     }
     fn deny(&self, reason: BlockReason) {
         let c = self.meter.coordinator;
@@ -462,7 +464,7 @@ impl<P: EffectPort> Drop for Caller<'_, P> {
 impl<P: EffectPort> ModelCaller for Caller<'_, P> {
     fn call(&self, request: &ModelRequest) -> Result<ModelReply, ModelCallError> {
         if !self.live() {
-            self.latch_lapse();
+            self.note_lapse();
             return Err(ModelCallError::Invalidated);
         }
         let c = self.meter.coordinator;
@@ -484,7 +486,7 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
             return Err(ModelCallError::RecordUnavailable);
         }
-        self.latch_lapse();
+        self.note_lapse();
         #[cfg(test)]
         if matches!(attempt, Ok(ModelAttempt::Replied(_))) {
             c.hooks.model_replied.fire();
@@ -493,7 +495,10 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             Ok(ModelAttempt::Failed(class)) => Err(ModelCallError::Failed(class)),
             Err(refusal) => Err(ModelCallError::Refused(refusal.class)),
             Ok(ModelAttempt::Replied(reply)) if self.live() => Ok(reply),
-            _ => Err(ModelCallError::Invalidated),
+            _ => {
+                self.note_lapse();
+                Err(ModelCallError::Invalidated)
+            }
         }
     }
 }
@@ -531,7 +536,6 @@ impl<P: EffectPort> CallMeter for Caller<'_, P> {
 }
 impl<P: EffectPort> CallDeadline for Caller<'_, P> {
     fn expired(&self) -> bool {
-        self.latch_lapse();
-        self.deadline.expired()
+        self.note_lapse()
     }
 }

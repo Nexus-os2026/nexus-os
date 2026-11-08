@@ -336,6 +336,20 @@ impl HaltCell {
                         | EMERGENCY)
                     != 0)
     }
+    /// Read-only: this cell's word records a restriction, a latched cause or
+    /// a session lifecycle state. A lapsed deadline writes nothing to the
+    /// word, so a scoped cell can read engaged while this is false.
+    pub fn word_restricted(&self) -> bool {
+        let word = self.0.load(Ordering::SeqCst);
+        HaltCause::of(word).is_some()
+            || (self.host()
+                && word
+                    & (crate::host_session::CLOSING
+                        | crate::host_session::FAILED
+                        | crate::host_session::SEALED
+                        | EMERGENCY)
+                    != 0)
+    }
     pub fn cause(&self) -> Option<HaltCause> {
         self.reason().map(|(cause, _)| cause)
     }
