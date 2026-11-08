@@ -143,6 +143,21 @@ def status(pid='self'): return dict(line.split(':',1) for line in Path('/proc',s
 def cmdline_tokens(raw):
     # Q23: Chrome rewrites its process title into one space-joined string; split on NUL and space.
     return [t for part in raw.split(b'\0') for t in part.split(b' ') if t]
+def chrome_process_is_renderer(raw):
+    # Q26: Chromium on POSIX accepts '--' and '-' switch prefixes and 'name=value'; compare switch names.
+    switches = {}
+    for token in cmdline_tokens(raw):
+        if token.startswith(b'-'):
+            name,_,value = token.lstrip(b'-').partition(b'=')
+            switches.setdefault(name,set()).add(value)
+    require(not {b'no-sandbox',b'disable-setuid-sandbox'} & switches.keys(),'unsafe Chrome flag')
+    return switches.get(b'type')=={b'renderer'}
+def renderer_isolated(info,browser):
+    # Q26: Seccomp=2 alone is systemd's filter; Chrome's own filter adds to the browser's filter count.
+    filters,base = int(info['Seccomp_filters']),int(browser['Seccomp_filters'])
+    levels = len(info['NSpid'].split())
+    require(info['Seccomp'].strip()=='2' and levels>=3 and filters>base,'renderer isolation')
+    return dict(seccomp=2,pid_levels=levels,seccomp_filters=filters,browser_seccomp_filters=base)
 
 def isolation(context):
     records = mounts(); current = status()
@@ -319,19 +334,16 @@ def chrome_observation():
                 if not path.name.isdigit(): continue
                 try:
                     info = status(path.name); pid = int(path.name); parents[pid] = int(info['PPid'])
-                    args = cmdline_tokens((path/'cmdline').read_bytes())
-                    require(b'--no-sandbox' not in args and b'--disable-setuid-sandbox' not in args,'unsafe Chrome flag')
-                    if b'--type=renderer' in args: candidates[pid] = info
+                    if chrome_process_is_renderer((path/'cmdline').read_bytes()): candidates[pid] = info
                 except (FileNotFoundError,ProcessLookupError): continue
             for pid,info in candidates.items():
                 if descendant(pid,proc.pid,parents):
-                    require(info['Seccomp'].strip()=='2' and len(info['NSpid'].split())>=3,'renderer isolation')
-                    renderer = dict(pid=pid,seccomp=2,pid_levels=len(info['NSpid'].split()),parents=parents)
+                    renderer = dict(renderer_isolated(info,status(proc.pid)),pid=pid,parents=parents)
             label = Path('/proc',str(proc.pid),'attr/current').read_text().strip()
     finally: stop(proc); proc.stderr.close()
     base = [chrome,'--headless=new','--disable-gpu','--no-first-run','--user-data-dir=/run/gate/tmp/chrome-report','--dump-dom']
     # Q25: Chrome's sandbox self-report page is unavailable under --headless=new; the evidence is the
-    # kernel-observed renderer above (Seccomp=2, nested PID namespaces, lineage).
+    # kernel-observed renderer above (Chrome's own seccomp filter, nested PID namespaces, lineage).
     local = capture(base+[page.as_uri()])
     require('gatebox-local' in local,'Chrome local rendering')
     return dict(argv=argv,browser_pid=proc.pid,renderer=renderer,browser_label=label,local_html=local,
@@ -362,6 +374,8 @@ def validate_sensor(row,value):
     if row=='A5':
         renderer = value['renderer']
         require(renderer.get('seccomp')==2 and renderer.get('pid_levels',0)>=3
+                and isinstance(renderer.get('browser_seccomp_filters'),int) and isinstance(renderer.get('seccomp_filters'),int)
+                and renderer['seccomp_filters']>renderer['browser_seccomp_filters']>=1
                 and descendant(renderer['pid'],value['browser_pid'],{int(k):v for k,v in renderer['parents'].items()}),'renderer lineage')
         require(not any('--no-sandbox' in a for a in value.get('argv',[])),'unsafe flags')
     if row=='A6':
