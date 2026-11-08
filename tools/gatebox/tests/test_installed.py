@@ -494,6 +494,21 @@ class Q30Oracles(unittest.TestCase):
                               mount=self.fake_mount(calls),ismount=lambda path: True)
                 self.assertEqual(calls[-1],['/usr/bin/umount',str(base/self.RUN)])
                 self.assertFalse((base/self.RUN).exists())
+    def test_rootfs_refuses_a_root_that_is_not_exactly_the_manifest(self):
+        # A mount that does not yield an empty fresh tmpfs (stray entry) must never become "/".
+        rootfs = load('rootfs')
+        with tempfile.TemporaryDirectory() as tmp:
+            skeleton, manifest, base, _ = self.fixture(tmp)
+            calls = []
+            inner = self.fake_mount(calls)
+            def mount(argv):
+                inner(argv)
+                if argv[:3] == ['/usr/bin/mount','-t','tmpfs']: (Path(argv[-1])/'stray').write_bytes(b'x')
+            with self.assertRaisesRegex(ValueError,'differs from manifest'):
+                rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),
+                          mount=mount,ismount=lambda path: True)
+            self.assertEqual(calls[-1],['/usr/bin/umount',str(base/self.RUN)])
+            self.assertFalse((base/self.RUN).exists())
     def test_rootfs_refuses_bad_identity_layout_and_reuse(self):
         rootfs = load('rootfs')
         for run in ('C'*32,'c'*31,'../'+'c'*29,'c'*32+'\n'):
@@ -533,7 +548,8 @@ class Q30Oracles(unittest.TestCase):
         stacked = [self.mount('259:6','/usr/lib/gatebox/root','/','ext4'),self.mount('0:80','/','/')]
         shared = good+[self.mount('0:80','/etc','/gate/policy')]
         writable = [self.mount('0:80','/','/',options=('rw',))]+good[1:]
-        for records in (bind,stacked,shared,writable):
+        subtree = [self.mount('0:80','/sub','/')]+good[1:]
+        for records in (bind,stacked,shared,writable,subtree):
             with self.subTest(records=records), self.assertRaises(ValueError): probe.whole_mount(records,'/',readonly=True)
         with self.assertRaises(ValueError): probe.whole_mount(good[:1],'/work')
         text = (HERE/'probe.py').read_text()
