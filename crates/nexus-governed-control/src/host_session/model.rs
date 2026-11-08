@@ -676,7 +676,10 @@ impl CallMeter for CallGate<'_> {
 }
 impl CallDeadline for CallGate<'_> {
     fn expired(&self) -> bool {
-        self.deadline.expired() || self.lapsed(self.sample())
+        // Scope first, then always the caller: a scope expiry returned here
+        // has its observation in the caller's latch.
+        let scope = self.lapsed(self.sample());
+        self.deadline.expired() || scope
     }
 }
 impl CallGate<'_> {
