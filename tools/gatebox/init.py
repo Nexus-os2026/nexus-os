@@ -12,8 +12,10 @@ import selectors
 import shutil
 import signal
 import struct
+import sys
 import time
 import tomllib
+import traceback
 ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
        'CARGO_HOME':'/work/cargo','CARGO_TARGET_DIR':'/work/target','CARGO_BUILD_JOBS':'4',
        'RUST_TEST_THREADS':'4','CARGO_TERM_COLOR':'never','CARGO_NET_OFFLINE':'true',
@@ -41,6 +43,15 @@ def packet(fd, value):
         count = os.write(fd,data)
         if not count: raise ValueError('collector lost')
         data = data[count:]
+
+def report_failure(runner):
+    """Best effort: leave a bounded reason frame; never mask the original failure."""
+    try:
+        kind, value, trace = sys.exc_info()
+        frames = ''.join(traceback.format_tb(trace)).encode('utf-8',errors='replace')[-48*1024:]
+        reason = ''.join(traceback.format_exception_only(kind,value)).encode('utf-8',errors='replace')[:8*1024]
+        runner.output('init-error',b'Traceback (most recent call last):\n'+frames+reason)
+    except Exception: pass
 
 def artifact_package(item):
     return tomllib.loads(Path(item['manifest_path']).read_text())['package']['name']
@@ -235,6 +246,9 @@ def main():
             runner.output('resources',json.dumps(accounting).encode())
             runner.output('inputs',json.dumps({'before':before,'after':observations()}).encode())
         packet(status,{'event':'complete'})
+    except BaseException:
+        report_failure(runner)
+        raise
     finally:
         for proc in runner.children:
             if proc.poll() is None:

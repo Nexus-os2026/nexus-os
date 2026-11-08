@@ -4,6 +4,10 @@
       [
         "RuntimeDirectory=mothergate-control\nRuntimeDirectoryMode=0700\n",
         "ReadWritePaths=/run/mothergate-control\n"
+      ],
+      [
+        "ReadWritePaths=/var/lib/mothergate/staging\nReadWritePaths=/var/lib/mothergate/pending\nReadWritePaths=/var/lib/mothergate/receipts\n",
+        "ReadWritePaths=/var/lib/mothergate\n"
       ]
     ],
     "mothergate-run@.service": [
