@@ -215,7 +215,10 @@ class Q20Oracles(unittest.TestCase):
                  and all(isinstance(e,ast.Constant) and isinstance(e.value,str) for e in n.iter.elts)]
         directories = next(ast.literal_eval(n.iter) for n in loops if 'dev/shm' in ast.literal_eval(n.iter))
         self.assertIn('root',directories)
-        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
+        # Q30: the skeleton stays at /usr/lib/gatebox/root; each payload root is a manifest-checked
+        # tmpfs copy of it, so the manager-created 'root' must still ship in the skeleton.
+        self.assertIn("SKELETON = Path('/usr/lib/gatebox/root')",(HERE/'rootfs.py').read_text())
+        self.assertIn('RootDirectory=/run/mothergate-root/%i\n',(HERE/'units/mothergate-run@.service').read_text())
         self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
 
 class Q23Oracles(unittest.TestCase):
@@ -227,7 +230,8 @@ class Q23Oracles(unittest.TestCase):
         unit = self.unit()
         self.assertIn('BindReadOnlyPaths=/usr:/usr:norbind\n',unit)
         self.assertNotIn('BindReadOnlyPaths=/usr\n',unit)
-        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',unit)
+        # Q30: the skeleton source remains under /usr; norbind still keeps host submounts out.
+        self.assertIn("SKELETON = Path('/usr/lib/gatebox/root')",(HERE/'rootfs.py').read_text())
     def test_vendor_gpu_egl_icd_hidden(self):
         # No GPU devices exist in the payload; the NVIDIA EGL ICD segfaults Xvfb.
         self.assertIn('InaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n',self.unit())
@@ -375,6 +379,205 @@ class Q29Oracles(unittest.TestCase):
                 with self.subTest(entry=entry,searched=searched):
                     self.assertFalse(searched==entry or searched.startswith(entry.rstrip('/')+'/'),
                                      'inaccessible node on a compiler/linker default search path')
+
+class Q30Oracles(unittest.TestCase):
+    """Q30 (qualification attempt 5): the product admits a workspace only when "/", the workspace,
+    HOME and the identity home each sit on a WHOLE filesystem mount (device listed once, root "/",
+    ext4/xfs/tmpfs). RootDirectory=/usr/lib/gatebox/root made the payload "/" a bind of a subdirectory
+    of 259:6, so every governed workspace was refused (unsupported_mount_topology). systemd v259
+    namespace.c only self-binds RootDirectory when it is NOT already a mount point, so a per-run
+    tmpfs mounted at the root path becomes the payload "/" unchanged."""
+    RUN = 'c'*32
+    def unit(self, name='mothergate-run@.service'): return (HERE/'units'/name).read_text()
+    def test_payload_root_is_a_per_run_mount_owned_by_a_bound_root_unit(self):
+        unit = self.unit()
+        self.assertIn('RootDirectory=/run/mothergate-root/%i\n',unit)
+        self.assertNotIn('RootDirectory=/usr/lib/gatebox/root',unit)
+        head = unit.split('[Service]',1)[0]
+        self.assertIn('BindsTo=mothergate-root@%i.service\n',head)
+        self.assertIn('After=mothergate-root@%i.service\n',head)
+    def test_root_unit_mounts_in_the_host_namespace_and_stops_with_the_payload(self):
+        unit = self.unit('mothergate-root@.service')
+        for line in ('StopWhenUnneeded=yes','RefuseManualStart=yes','Type=oneshot','RemainAfterExit=yes',
+                     'ExecStart=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py up %i',
+                     'ExecStop=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py down %i',
+                     'StandardInput=null','StandardOutput=journal','StandardError=journal'):
+            self.assertIn(line+'\n',unit)
+        # Any mount-namespace option would hide the tmpfs from the payload's namespace setup.
+        for option in ('PrivateMounts','ProtectSystem','ProtectHome','PrivateTmp','PrivateDevices','RootDirectory',
+                       'RootImage','TemporaryFileSystem','BindPaths','BindReadOnlyPaths','ReadOnlyPaths',
+                       'ReadWritePaths','InaccessiblePaths','MountAPIVFS','ProtectKernel','ProtectControlGroups',
+                       'ProtectProc','ProcSubset','PrivateUsers','DynamicUser','User='):
+            self.assertNotIn(option,unit)
+        # Its output must never reach the payload's single-accept capture sockets.
+        self.assertNotIn('mothergate-control',unit)
+    def test_installer_ships_and_publishes_the_root_unit(self):
+        scope = installer()
+        self.assertTrue({'rootfs.py','units/mothergate-root@.service'} <= set(scope['FILES']))
+        files = {'tools/gatebox/'+n:(HERE/n).read_bytes() for n in scope['FILES']}
+        calls = []
+        scope['run'] = lambda argv: calls.append(argv) or ''
+        scope['protected'] = lambda path: None
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp); stage.chmod(0o700)
+            outputs = scope['stage_security'](files,1234,5678,stage)
+        units = ['mothergate.socket','mothergate.service','mothergate-run@.service','mothergate-root@.service']
+        self.assertEqual([t for s,t in outputs[:4]],[Path('/etc/systemd/system')/n for n in units])
+        self.assertEqual(calls[-1],['/usr/bin/systemd-analyze','verify',*[str(stage/n) for n in units]])
+        text = (HERE/'install.sh').read_text()
+        for fragment in ('publish_units(staged_security[:4])','for staged,target in staged_security[4:]:',
+                         "for n in ('mothergate.socket','mothergate.service','mothergate-run@.service','mothergate-root@.service')"):
+            self.assertIn(fragment,text)
+        doc = (HERE/'README.md').read_text()
+        for fragment in ('/etc/systemd/system/mothergate-root@.service',"'mothergate-root@*.service'",'/run/mothergate-root'):
+            self.assertIn(fragment,doc)
+
+    # rootfs.py behaviour, offline: a fake skeleton, manifest and mount runner (no real mount).
+    def fixture(self, tmp):
+        tmp = Path(tmp); skeleton, base = tmp/'skeleton', tmp/'base'
+        skeleton.mkdir(mode=0o755); base.mkdir(mode=0o700)
+        (skeleton/'etc').mkdir(mode=0o755); (skeleton/'gate').mkdir(mode=0o755); (skeleton/'root').mkdir(mode=0o755)
+        (skeleton/'etc/passwd').write_bytes(b'root:x:0:0::/nonexistent:/usr/sbin/nologin\n'); (skeleton/'etc/passwd').chmod(0o644)
+        (skeleton/'gate/request.json').write_bytes(b''); (skeleton/'gate/request.json').chmod(0o444)
+        (skeleton/'bin').symlink_to('usr/bin')
+        manifest = {'bin':{'link':'usr/bin'},'etc':{'directory':True},'etc/passwd':{'sha256':hashlib.sha256((skeleton/'etc/passwd').read_bytes()).hexdigest()},
+                    'gate':{'directory':True},'gate/request.json':{'sha256':hashlib.sha256(b'').hexdigest()},'root':{'directory':True}}
+        (tmp/'skeleton.json').write_text(json.dumps(manifest)); (tmp/'skeleton.json').chmod(0o644)
+        return skeleton, tmp/'skeleton.json', base, manifest
+    def up(self, rootfs, skeleton, manifest, base, mounted=None):
+        calls = []
+        def mount(argv): calls.append(argv)
+        rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),mount=mount,
+                  ismount=(lambda path: True) if mounted is None else mounted)
+        return calls
+    def test_rootfs_copies_exactly_the_manifest_then_seals_read_only(self):
+        rootfs = load('rootfs')
+        with tempfile.TemporaryDirectory() as tmp:
+            skeleton, manifest, base, expected = self.fixture(tmp)
+            calls = self.up(rootfs,skeleton,manifest,base)
+            target = base/self.RUN
+            self.assertEqual(calls,[['/usr/bin/mount','-t','tmpfs','-o',rootfs.OPTIONS,'gatebox-root',str(target)],
+                                    ['/usr/bin/mount','-o','remount,ro,'+rootfs.OPTIONS,str(target)]])
+            self.assertIn('mode=0755',rootfs.OPTIONS); self.assertIn('nodev',rootfs.OPTIONS); self.assertIn('nosuid',rootfs.OPTIONS)
+            self.assertEqual(rootfs.inventory(target),expected)
+            self.assertEqual(os.readlink(target/'bin'),'usr/bin')
+            self.assertEqual(oct((target/'gate/request.json').stat().st_mode & 0o777),'0o444')
+            self.assertEqual(oct((target/'etc').stat().st_mode & 0o777),'0o755')
+            self.assertEqual(oct(target.stat().st_mode & 0o777),'0o755')
+    def test_rootfs_refuses_any_skeleton_drift_and_unwinds(self):
+        rootfs = load('rootfs')
+        def changed(s): (s/'etc/passwd').write_bytes(b'root::0:0::/:/bin/sh\n')
+        def extra(s): (s/'etc/shadow').write_bytes(b'x')
+        def relinked(s): (s/'bin').unlink(); (s/'bin').symlink_to('/tmp')
+        def retyped(s): (s/'bin').unlink(); (s/'bin').mkdir()
+        def writable(s): (s/'etc').chmod(0o775)
+        def missing(s): (s/'gate/request.json').unlink()
+        for tamper in (changed,extra,relinked,retyped,writable,missing):
+            with self.subTest(tamper=tamper.__name__), tempfile.TemporaryDirectory() as tmp:
+                skeleton, manifest, base, _ = self.fixture(tmp)
+                tamper(skeleton)
+                calls = []
+                with self.assertRaises(ValueError):
+                    rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),
+                              mount=calls.append,ismount=lambda path: True)
+                self.assertEqual(calls[-1],['/usr/bin/umount',str(base/self.RUN)])
+                self.assertFalse((base/self.RUN).exists())
+    def test_rootfs_refuses_bad_identity_layout_and_reuse(self):
+        rootfs = load('rootfs')
+        for run in ('C'*32,'c'*31,'../'+'c'*29,'c'*32+'\n'):
+            with self.subTest(run=run), tempfile.TemporaryDirectory() as tmp:
+                skeleton, manifest, base, _ = self.fixture(tmp)
+                with self.assertRaises(ValueError):
+                    rootfs.up(run,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),mount=self.fail,ismount=lambda p: True)
+        for layout in ('reused','open-base','linked-base'):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as tmp:
+                skeleton, manifest, base, _ = self.fixture(tmp)
+                if layout == 'reused': (base/self.RUN).mkdir()
+                elif layout == 'open-base': base.chmod(0o755)
+                else: base.rmdir(); base.symlink_to(skeleton)
+                with self.assertRaises((ValueError,OSError)):
+                    rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),mount=self.fail,ismount=lambda p: True)
+    def test_rootfs_down_unmounts_then_removes_and_is_idempotent(self):
+        rootfs = load('rootfs')
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)/'base'; base.mkdir(mode=0o700); (base/self.RUN).mkdir(mode=0o755)
+            calls = []
+            rootfs.down(self.RUN,base=base,owner=os.getuid(),mount=calls.append,ismount=lambda path: True)
+            self.assertEqual(calls,[['/usr/bin/umount',str(base/self.RUN)]])
+            self.assertFalse((base/self.RUN).exists())
+            rootfs.down(self.RUN,base=base,owner=os.getuid(),mount=self.fail,ismount=lambda path: False)
+            with self.assertRaises(ValueError): rootfs.down('x',base=base,owner=os.getuid(),mount=self.fail,ismount=lambda p: False)
+
+    # A1 sensor: the product's whole-filesystem rule, enforced on the live payload.
+    def mount(self, device, root, point, kind='tmpfs', options=('ro','nosuid','nodev')):
+        return dict(device=device,root=root,point=point,options=list(options),type=kind,super=['rw'])
+    def test_a1_requires_whole_filesystem_root_work_and_tmp(self):
+        probe = load('probe')
+        good = [self.mount('0:80','/','/'),self.mount('259:6','/usr','/usr','ext4'),
+                self.mount('0:81','/','/work',options=('rw','nosuid','nodev')),self.mount('0:82','/','/tmp',options=('rw','nosuid','nodev'))]
+        probe.whole_mount(good,'/',readonly=True)
+        probe.whole_mount(good,'/work'); probe.whole_mount(good,'/tmp')
+        bind = [self.mount('259:6','/usr/lib/gatebox/root','/','ext4'),self.mount('259:6','/usr','/usr','ext4')]
+        stacked = [self.mount('259:6','/usr/lib/gatebox/root','/','ext4'),self.mount('0:80','/','/')]
+        shared = good+[self.mount('0:80','/etc','/gate/policy')]
+        writable = [self.mount('0:80','/','/',options=('rw',))]+good[1:]
+        for records in (bind,stacked,shared,writable):
+            with self.subTest(records=records), self.assertRaises(ValueError): probe.whole_mount(records,'/',readonly=True)
+        with self.assertRaises(ValueError): probe.whole_mount(good[:1],'/work')
+        text = (HERE/'probe.py').read_text()
+        body = text.split('def isolation(context):',1)[1].split('\ndef ',1)[0]
+        for call in ("whole_mount(records,'/',readonly=True)","whole_mount(records,'/work')","whole_mount(records,'/tmp')"):
+            self.assertIn(call,body)
+
+class Q31Oracles(unittest.TestCase):
+    """Q31 (qualification attempt 5, kernel desktop_tripwire_symlinks g0_s7): payload PID 1 reaped
+    orphans only in its final block, so a killed grandchild stayed a zombie and `kill -0` still saw
+    it. A host init reaps adopted orphans promptly; Popen keeps sole ownership of its own children."""
+    def test_adopted_orphan_is_reaped_while_the_command_runs(self):
+        init = load('init')
+        options = init.child_options
+        read, write = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            result = 91
+            try:
+                os.close(read)
+                import ctypes
+                if ctypes.CDLL(None,use_errno=True).prctl(36,1,0,0,0) != 0: os._exit(90)  # PR_SET_CHILD_SUBREAPER
+                runner = init.Runner(-1,-1)
+                with tempfile.TemporaryDirectory() as directory, \
+                        patch.object(init,'child_options',side_effect=lambda fd: dict(options(fd),cwd=directory)), \
+                        patch.object(init,'packet'):
+                    _,code,output = runner.command('format',['/bin/sh','-c','( sleep 0.2 & echo $! ); sleep 1.5; exit 7'])
+                orphan = int(output.split()[0])
+                try: state = Path('/proc',str(orphan),'stat').read_text().rsplit(')',1)[1].split()[0]
+                except FileNotFoundError: state = 'reaped'
+                os.write(write,json.dumps([code,state]).encode()); result = 0
+            finally: os._exit(result)
+        os.close(write)
+        with os.fdopen(read,'rb') as stream: data = stream.read()
+        _, status = os.waitpid(pid,0)
+        self.assertEqual(status,0)
+        self.assertEqual(json.loads(data),[7,'reaped'])
+    def test_owned_children_are_never_waited_by_the_reaper(self):
+        init = load('init'); runner = init.Runner(-1,-1)
+        owned = type('Owned',(),{'pid':4242})(); runner.children.add(owned)
+        calls = []
+        with patch.object(init.os,'listdir',return_value=[str(os.getpid())]), \
+                patch.object(init.Path,'read_text',return_value='4242 5151\n'), \
+                patch.object(init.os,'waitpid',side_effect=lambda pid,flags: calls.append((pid,flags)) or (0,0)):
+            runner.reap_orphans()
+        self.assertEqual(calls,[(5151,os.WNOHANG)])
+    def test_unreadable_child_list_fails_closed(self):
+        init = load('init'); runner = init.Runner(-1,-1)
+        with patch.object(init.os,'listdir',return_value=[str(os.getpid())]), \
+                patch.object(init.Path,'read_text',side_effect=FileNotFoundError('children')), \
+                self.assertRaises(OSError):
+            runner.reap_orphans()
+    def test_command_loop_reaps(self):
+        text = (HERE/'init.py').read_text()
+        loop = text.split('while selector.get_map():',1)[1].split('code = proc.wait(',1)[0]
+        self.assertIn('self.reap_orphans()',loop)
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
