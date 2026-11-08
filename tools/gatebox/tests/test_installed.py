@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 import sys
@@ -757,6 +758,46 @@ class Q34Oracles(unittest.TestCase):
         for old in ('899e3872c5b61223c87b905f63c66947a816259b','0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'):
             for name in ('install.sh','probe.py','policy/registry.json','README.md','init.py','supervisor.py','client.py'):
                 self.assertNotIn(old,(HERE/name).read_text(),name)
+
+class Q35Oracles(unittest.TestCase):
+    """Q35 (post-merge, F6): F6 added rootfs.py and the root unit to FILES (29), but the README PIN
+    recipe still refused any inventory other than 27, so the reviewed bundle could not be built.
+    The recipe's count is the installer's FILES length, always."""
+    def test_readme_pin_count_is_the_installer_inventory(self):
+        counts = re.findall(r"len\(values\['FILES'\]\)!=(\d+)",(HERE/'README.md').read_text())
+        self.assertEqual(counts,[str(len(installer()['FILES']))])
+
+class Q36Oracles(unittest.TestCase):
+    """Q36 (review Q35-1, inherited from F6): the qualification probe checked the effective
+    configuration of only the original three units, so a drop-in broadening mothergate-root@
+    (root, CAP_SYS_ADMIN) would escape it. The root template is checked like the others."""
+    RUN = 'a'*32
+    def values(self):
+        return {'mothergate.socket':dict(FragmentPath='/etc/systemd/system/mothergate.socket'),
+                'mothergate.service':dict(FragmentPath='/etc/systemd/system/mothergate.service'),
+                'mothergate-run@'+self.RUN+'.service':dict(FragmentPath='/etc/systemd/system/mothergate-run@.service',
+                    User='gaterun',PrivatePIDs='yes',PrivateNetwork='yes',PrivateIPC='yes',NoNewPrivileges='yes',
+                    BindLogSockets='no',SystemCallArchitectures='native'),
+                'mothergate-root@'+self.RUN+'.service':dict(FragmentPath='/etc/systemd/system/mothergate-root@.service',
+                    User='',NoNewPrivileges='yes',PrivateMounts='no',PrivateNetwork='no',CapabilityBoundingSet='cap_sys_admin')}
+    def run_probe(self, values):
+        probe = load('probe'); asked = []
+        def capture(argv, **_):
+            asked.append(argv[2])
+            unit = dict(values[argv[2]]); unit.setdefault('DropInPaths','')
+            return ''.join(k+'='+v+'\n' for k,v in unit.items())
+        with patch.object(probe,'capture',side_effect=capture): probe.effective_units()
+        return asked
+    def test_root_template_is_checked(self):
+        self.assertIn('mothergate-root@'+self.RUN+'.service',self.run_probe(self.values()))
+    def test_root_template_overrides_are_refused(self):
+        name = 'mothergate-root@'+self.RUN+'.service'
+        for key, value in (('DropInPaths','/etc/systemd/system/mothergate-root@.service.d/x.conf'),
+                           ('FragmentPath','/run/systemd/system/mothergate-root@.service'),
+                           ('CapabilityBoundingSet','cap_sys_admin cap_dac_override'),('NoNewPrivileges','no'),
+                           ('PrivateMounts','yes'),('PrivateNetwork','yes'),('User','gaterun')):
+            values = self.values(); values[name][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError): self.run_probe(values)
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):

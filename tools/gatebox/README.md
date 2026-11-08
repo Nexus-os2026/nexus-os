@@ -74,7 +74,7 @@ body=blob('tools/gatebox/install.sh').decode().split("<<'PY'\n",1)[1].rsplit('\n
 values={n.targets[0].id:ast.literal_eval(n.value) for n in ast.parse(body).body
         if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
         and n.targets[0].id in ('FILES','HARNESS')}
-if len(values['FILES'])!=27 or set(names)!={'tools/gatebox/'+n for n in values['FILES']}:
+if len(values['FILES'])!=29 or set(names)!={'tools/gatebox/'+n for n in values['FILES']}:
     raise SystemExit('reviewed FILES inventory mismatch')
 names+=[values['HARNESS']]
 bundle=pathlib.Path('/home/nexus/NEXUS/gatebox-slice1.tar')
