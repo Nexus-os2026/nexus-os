@@ -218,6 +218,20 @@ class Q20Oracles(unittest.TestCase):
         self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
         self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
 
+class Q21Oracles(unittest.TestCase):
+    def test_publication_dirs_share_one_supervisor_mount(self):
+        # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
+        # became two bind mounts of one device in the supervisor namespace, so
+        # receipt.publish's renameat2 failed with EXDEV and no receipt (PASS or
+        # FAIL) could ever publish. One mount at the root-owned parent keeps
+        # DAC unchanged (parent root 0755) and makes the rename same-mount.
+        unit = (HERE/'units/mothergate.service').read_text().splitlines()
+        state = [l for l in unit if l.startswith('ReadWritePaths=') and 'mothergate-control' not in l]
+        self.assertEqual(state,['ReadWritePaths=/var/lib/mothergate'])
+        receipt = (HERE/'receipt.py').read_text()
+        self.assertIn('rename(source,run_id.encode(),target,run_id.encode(),1)',receipt)
+        self.assertIn("for name in ('staging','pending','receipts'):",(HERE/'install.sh').read_text())
+
 class Q8F3Oracles(unittest.TestCase):
     def test_private_stage_validates_before_publish(self):
         scope = installer()
