@@ -372,6 +372,13 @@ impl<P: EffectPort> FileSession<P> {
         self.touch()?;
         self.call(Coordinator::journal)
     }
+    /// M3E-R12 (1)(a): the verified journal, read without touching the
+    /// lifecycle: no budget check, no `file_stop`, no state change, and no
+    /// action or authority. Display reads only this; the next real
+    /// interaction still enforces a lapse.
+    pub fn journal_view(&self) -> Result<Vec<Entry>, CoordinatorError> {
+        self.coordinator.journal()
+    }
     pub fn reason(&self, id: MissionId) -> Result<Option<String>, CoordinatorError> {
         self.observe(id)?;
         self.call(|c| Ok(c.reason(id)))

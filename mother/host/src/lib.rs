@@ -19,6 +19,8 @@ pub mod binary_identity;
 #[cfg(target_os = "linux")]
 pub mod check_page;
 #[cfg(target_os = "linux")]
+mod goal_input;
+#[cfg(target_os = "linux")]
 pub mod hands;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
@@ -29,6 +31,10 @@ pub mod inputs;
 mod legacy_stop;
 #[cfg(target_os = "linux")]
 pub mod legacy_terminal;
+#[cfg(target_os = "linux")]
+mod page_display;
+#[cfg(target_os = "linux")]
+mod receipts;
 #[cfg(target_os = "linux")]
 mod session_home;
 #[cfg(target_os = "linux")]

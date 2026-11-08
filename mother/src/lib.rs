@@ -246,6 +246,7 @@ pub mod evidence;
 pub mod journal;
 pub mod lane;
 mod page_builder;
+pub use page_builder::{request_identity, RequestIdentity};
 pub mod page_inputs;
 pub mod page_verifier;
 pub mod private;

@@ -1,5 +1,6 @@
 //! Linux terminal protocol: one reader, one renderer and one active dialogue.
 //! The reader owns freshness acknowledgement; backend ingress is atomic only.
+use crate::goal_input::{goal_display, GoalBuffer, GoalLine, TypedGoal, GOAL_PROMPT};
 use crate::session_home::DoorPrompt;
 use crate::stop::StopRoute;
 use nexus_governed_control::authority::approval::{
@@ -76,6 +77,9 @@ impl LineBuffer {
     pub(crate) fn buffered(&self) -> usize {
         self.bytes.len()
     }
+    /// The buffer's own stale marking (its unit contract). The reader's
+    /// invalidation is the stream-level owner's (M3E-R13).
+    #[cfg(test)]
     pub(crate) fn invalidate(&mut self) {
         if !self.bytes.is_empty() || self.overflow {
             self.stale = true;
@@ -206,7 +210,13 @@ pub(crate) struct Input {
     pub(crate) boundary: u64,
     pub(crate) acknowledged: u64,
     pub(crate) active: bool,
-    typing: bool,
+    pub(crate) typing: bool,
+    /// M-3a: the single reader is in typed-goal mode.
+    pub(crate) goal: bool,
+    /// M-3a: the first goal line the reader produced in goal mode.
+    pub(crate) goal_line: Option<Result<String, crate::inputs::InputError>>,
+    /// M3E-R13: which goal read this is (a goal line's owner).
+    pub(crate) goal_read: u64,
     pub(crate) fatal: Option<Failure>,
     pub(crate) eof: bool,
     pub(crate) quit: Option<SessionRequest>,
@@ -292,6 +302,179 @@ impl Shared {
             _ => {
                 self.fail(Failure::Output);
                 false
+            }
+        }
+    }
+    /// M-3a: a goal-mode line from the reader. Stop, Quit and EOF are the
+    /// same ingress as in command mode; a goal never reaches the queue. A
+    /// goal is published only with its read id ([`Shared::publish_goal`]).
+    pub(crate) fn goal_line(&self, line: GoalLine) {
+        match line {
+            GoalLine::Stop => self.receive(Line::Stop, false),
+            GoalLine::Quit => self.receive(Line::Quit, false),
+            GoalLine::Eof => self.receive(Line::Eof, true),
+            GoalLine::Goal(_) => {}
+        }
+    }
+    /// M3E-R15: goal read `read`'s completed line, published only if `read`
+    /// is the current READY read; otherwise it is discarded.
+    pub(crate) fn publish_goal(&self, read: u64, goal: Result<String, crate::inputs::InputError>) {
+        let mut input = self.input();
+        let ready = input.goal
+            && input.active
+            && input.typing
+            && input.boundary == input.acknowledged
+            && input.goal_read == read;
+        if ready {
+            input.goal_line.get_or_insert(goal);
+        }
+        drop(input);
+        self.changed.notify_all();
+    }
+    /// M-3a (R8): read one typed goal through the single reader, by
+    /// `deadline`. The prompt is displayed, earlier input is invalidated at
+    /// a boundary, then `INPUT READY`; the goal is validated by the goal-file
+    /// grammar and displayed (T1, escaped, size, digest). Data-only: wired in
+    /// M-5.
+    #[allow(dead_code)]
+    pub(crate) fn read_goal(&self, deadline: Instant) -> Result<TypedGoal, &'static str> {
+        let epoch = self.stop.ingress.generation();
+        if !self.goal_valid(deadline, epoch) {
+            return Err("goal_unavailable");
+        }
+        let _dialogue = match self.dialogue.try_lock() {
+            Ok(lock) => lock,
+            Err(std::sync::TryLockError::WouldBlock) => return Err("goal_unavailable"),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                self.fail(Failure::Input);
+                return Err("goal_unavailable");
+            }
+        };
+        self.goal_begin();
+        let result = self.read_goal_inner(deadline, epoch);
+        self.goal_end();
+        result
+    }
+    /// M3E-R15: a goal read begins (not yet ready): its id is the next one.
+    pub(crate) fn goal_begin(&self) -> u64 {
+        let mut input = self.input();
+        input.active = true;
+        input.typing = false;
+        input.goal = true;
+        input.goal_line = None;
+        input.goal_read = input.goal_read.wrapping_add(1);
+        input.goal_read
+    }
+    /// The goal read is ready: `INPUT READY` is queued under the input lock.
+    pub(crate) fn goal_ready(&self) -> Result<mpsc::Receiver<Result<(), Failure>>, Failure> {
+        let mut input = self.input();
+        let queued = self.enqueue_frame("INPUT READY\n".into());
+        input.typing = queued.is_ok();
+        queued
+    }
+    /// The goal read ended (returned, refused, interrupted or timed out).
+    pub(crate) fn goal_end(&self) {
+        let mut input = self.input();
+        input.active = false;
+        input.typing = false;
+        input.goal = false;
+        input.goal_line = None;
+        drop(input);
+        self.changed.notify_all();
+    }
+    /// The reader acknowledges `boundary`: earlier input is gone.
+    pub(crate) fn acknowledge(&self, boundary: u64) {
+        let mut input = self.input();
+        input.lines.clear();
+        input.acknowledged = boundary;
+        self.changed.notify_all();
+    }
+    fn goal_valid(&self, deadline: Instant, epoch: u64) -> bool {
+        let ingress = &self.stop.ingress;
+        Instant::now() < deadline
+            && epoch == ingress.generation()
+            && !ingress.emergency_seen()
+            && !ingress.failed()
+            && matches!(
+                ingress.state(),
+                SessionState::Bootstrap | SessionState::Normal
+            )
+            && !self.ended()
+            && self.input().quit.is_none()
+    }
+    fn goal_ended(&self, deadline: Instant) -> &'static str {
+        if Instant::now() >= deadline {
+            "goal_timed_out"
+        } else {
+            "goal_interrupted"
+        }
+    }
+    fn read_goal_inner(&self, deadline: Instant, epoch: u64) -> Result<TypedGoal, &'static str> {
+        let Ok(ack) = self.send(GOAL_PROMPT.into()) else {
+            return Err("goal_unavailable");
+        };
+        loop {
+            if !self.goal_valid(deadline, epoch) {
+                return Err(self.goal_ended(deadline));
+            }
+            match ack.recv_timeout(SLICE.min(deadline.saturating_duration_since(Instant::now()))) {
+                Ok(Ok(())) => break,
+                Ok(Err(e)) => {
+                    self.fail(e);
+                    return Err("goal_unavailable");
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(_) => {
+                    self.fail(Failure::Output);
+                    return Err("goal_unavailable");
+                }
+            }
+        }
+        let boundary = {
+            let mut input = self.input();
+            let Some(next) = input.boundary.checked_add(1) else {
+                drop(input);
+                self.fail(Failure::Capacity);
+                return Err("goal_unavailable");
+            };
+            input.boundary = next;
+            self.changed.notify_all();
+            next
+        };
+        loop {
+            if !self.goal_valid(deadline, epoch) {
+                return Err(self.goal_ended(deadline));
+            }
+            if self.input().acknowledged == boundary {
+                break;
+            }
+            self.wait();
+        }
+        if self.goal_ready().is_err() {
+            self.fail(Failure::Output);
+            return Err("goal_unavailable");
+        }
+        loop {
+            if !self.goal_valid(deadline, epoch) {
+                return Err(self.goal_ended(deadline));
+            }
+            let line = self.input().goal_line.take();
+            match line {
+                Some(Ok(goal)) => {
+                    // Stop, Quit or EOF in the same read was seen first.
+                    if !self.goal_valid(deadline, epoch) {
+                        return Err(self.goal_ended(deadline));
+                    }
+                    if self.send(goal_display(&goal)).is_err() {
+                        return Err("goal_unavailable");
+                    }
+                    return Ok(TypedGoal::new(goal));
+                }
+                Some(Err(e)) => {
+                    let _queued = self.send(format!("GOAL REFUSED {}\n", e.code()));
+                    return Err(e.code());
+                }
+                None => self.wait(),
             }
         }
     }
@@ -1031,16 +1214,174 @@ impl Drop for Terminal {
     }
 }
 
+/// The single reader's two line buffers: commands and codes (64 bytes) and
+/// the typed goal (M-3a). They are storage only (M3E-R13): the line's owner
+/// and the CR flag are the stream's.
+#[derive(Default)]
+pub(crate) struct Buffers {
+    pub(crate) line: LineBuffer,
+    pub(crate) goal: GoalBuffer,
+    owner: Owner,
+    last_was_cr: bool,
+    /// M3E-R15 test seam: runs on the reader at each [`HookPoint`].
+    #[cfg(test)]
+    pub(crate) hook: Option<Box<dyn FnMut(HookPoint) + Send>>,
+}
+/// Where the reader stops for a test: after its mode snapshot, before each
+/// byte, and before a completed goal line is published.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HookPoint {
+    Start,
+    Byte(usize),
+    Publish,
+}
+/// M3E-R13: who owns the line under way. Set by its first byte, cleared only
+/// by its CR, LF or EOF; never derived from buffer contents.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Owner {
+    #[default]
+    None,
+    Command,
+    Goal(u64),
+    DiscardGoal,
+    DiscardCommand,
+}
+impl Buffers {
+    #[cfg(test)]
+    fn fire(&mut self, point: HookPoint) {
+        if let Some(hook) = self.hook.as_mut() {
+            hook(point);
+        }
+    }
+    /// A boundary: the line under way can no longer act as live input.
+    pub(crate) fn invalidate(&mut self) {
+        self.owner = match self.owner {
+            Owner::Command => Owner::DiscardCommand,
+            Owner::Goal(_) => Owner::DiscardGoal,
+            other => other,
+        };
+    }
+}
+
+/// The reader's mode for one read (M3E-R15): whether its bytes are
+/// discarded, and the id of the goal read that is ready (has displayed
+/// `INPUT READY`), if any. One snapshot, under one lock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ReaderMode {
+    pub(crate) discard: bool,
+    pub(crate) read: Option<u64>,
+}
+pub(crate) fn reader_state(shared: &Shared, boundary: Option<u64>) -> ReaderMode {
+    let input = shared.input();
+    let discard = boundary.is_some()
+        || input.boundary != input.acknowledged
+        || (input.active && !input.typing);
+    let ready = !discard && input.goal && input.active && input.typing;
+    ReaderMode {
+        discard,
+        read: ready.then_some(input.goal_read),
+    }
+}
+/// One read's bytes through the buffers. A line finishes with the owner its
+/// first byte gave it. After a goal-mode line the rest of the read is
+/// discarded input (Stop, Quit and EOF still act).
+pub(crate) fn route_read(shared: &Shared, buffers: &mut Buffers, bytes: &[u8], mode: ReaderMode) {
+    #[cfg(test)]
+    buffers.fire(HookPoint::Start);
+    let mut discard = mode.discard;
+    if discard {
+        buffers.invalidate();
+    }
+    // The read id is the snapshot's, never reread (M3E-R15).
+    let mut read = mode.read;
+    let mut echo = String::new();
+    let mut pending = None;
+    for (i, &b) in bytes.iter().enumerate() {
+        #[cfg(test)]
+        buffers.fire(HookPoint::Byte(i));
+        #[cfg(not(test))]
+        let _ = i;
+        // A LF directly after a CR on the stream is that CR's partner.
+        let partner = b == b'\n' && buffers.last_was_cr;
+        buffers.last_was_cr = b == b'\r';
+        if partner {
+            continue;
+        }
+        if b == 4 {
+            buffers.owner = Owner::None;
+            buffers.line = LineBuffer::default();
+            buffers.goal = GoalBuffer::default();
+            shared.receive(Line::Eof, true);
+            continue;
+        }
+        let owner = match buffers.owner {
+            Owner::None if discard => Owner::DiscardCommand,
+            Owner::None => read.map_or(Owner::Command, Owner::Goal),
+            Owner::Command if discard || read.is_some() => Owner::DiscardCommand,
+            Owner::Goal(r) if read != Some(r) => Owner::DiscardGoal,
+            other => other,
+        };
+        let end = b == b'\r' || b == b'\n';
+        buffers.owner = if end { Owner::None } else { owner };
+        // The buffers see one terminator: pairing is the stream's.
+        let b = if end { b'\n' } else { b };
+        if let Owner::Goal(_) | Owner::DiscardGoal = owner {
+            let live = owner != Owner::DiscardGoal;
+            if live {
+                buffers.goal.echo(b, &mut echo);
+            }
+            if let Some(line) = buffers.goal.push(b) {
+                match line {
+                    // Delivered after the rest of this read, so a Stop, Quit
+                    // or EOF typed with it is seen first.
+                    GoalLine::Goal(result) => {
+                        if let Owner::Goal(r) = owner {
+                            pending = Some((r, result));
+                        }
+                    }
+                    other => shared.goal_line(other),
+                }
+                if live {
+                    read = None;
+                    discard = true;
+                }
+            }
+            continue;
+        }
+        let line_discard = owner == Owner::DiscardCommand;
+        if !line_discard {
+            buffers.line.echo(b, &mut echo);
+        }
+        if let Some(line) = buffers.line.push(b) {
+            // Emergency/close ingress always precedes echo queueing.
+            // Ordinary lines are echoed before waking their consumer.
+            if matches!(line, Line::Answer(_)) && !echo.is_empty() {
+                let _queued = shared.queue_frame(std::mem::take(&mut echo));
+            }
+            shared.receive(line, line_discard);
+        }
+    }
+    if !echo.is_empty() {
+        let _queued = shared.queue_frame(echo);
+    }
+    #[cfg(test)]
+    buffers.fire(HookPoint::Publish);
+    if let Some((read, result)) = pending {
+        shared.publish_goal(read, result);
+    }
+}
+
 fn read_input(shared: Arc<Shared>) {
     let stdin = std::io::stdin();
-    let mut buffer = LineBuffer::default();
+    let mut buffers = Buffers::default();
     while !shared.input_end.load(Ordering::SeqCst) {
         let boundary = {
             let input = shared.input();
             (input.boundary != input.acknowledged).then_some(input.boundary)
         };
         if boundary.is_some() {
-            buffer.invalidate();
+            buffers.invalidate();
         }
         let mut fds = [PollFd::new(stdin.as_fd(), PollFlags::POLLIN)];
         let ready = match poll(&mut fds, if boundary.is_some() { 0u16 } else { 10u16 }) {
@@ -1054,10 +1395,7 @@ fn read_input(shared: Arc<Shared>) {
         };
         if ready == 0 {
             if let Some(boundary) = boundary {
-                let mut input = shared.input();
-                input.lines.clear();
-                input.acknowledged = boundary;
-                shared.changed.notify_all();
+                shared.acknowledge(boundary);
             }
             continue;
         }
@@ -1068,35 +1406,8 @@ fn read_input(shared: Arc<Shared>) {
                 break;
             }
             Ok(n) => {
-                let discard = {
-                    let input = shared.input();
-                    boundary.is_some()
-                        || input.boundary != input.acknowledged
-                        || (input.active && !input.typing)
-                };
-                if discard {
-                    buffer.invalidate();
-                }
-                let mut echo = String::new();
-                for b in &bytes[..n] {
-                    if !discard {
-                        buffer.echo(*b, &mut echo);
-                    }
-                    if let Some(line) = buffer.push(*b) {
-                        // Emergency/close ingress always precedes echo queueing.
-                        // Ordinary lines are echoed before waking their consumer.
-                        if matches!(line, Line::Answer(_)) && !echo.is_empty() {
-                            let _queued = shared.queue_frame(std::mem::take(&mut echo));
-                        }
-                        shared.receive(line, discard);
-                    }
-                    if discard {
-                        buffer.invalidate();
-                    }
-                }
-                if !echo.is_empty() {
-                    let _queued = shared.queue_frame(echo);
-                }
+                let mode = reader_state(&shared, boundary);
+                route_read(&shared, &mut buffers, &bytes[..n], mode);
                 if shared.ended() {
                     break;
                 }
