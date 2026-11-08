@@ -33,7 +33,7 @@ import uuid
 
 HERE = Path(__file__).resolve().parent
 CONFIG = Path('/etc/gatebox')
-FIXTURE = '899e3872c5b61223c87b905f63c66947a816259b'
+FIXTURE = '8e0d6ae293df999eb6530e875df1206deac872a8'
 HARNESS = Path('/usr/libexec/gatebox/policy/phase2_live_sandbox.rs')
 SESSION = None
 CUSTODY_TESTS = {
@@ -140,6 +140,57 @@ def capture(argv,timeout=30,limit=1024**2,env=None):
 
 def mounts(): return parse_mounts(Path('/proc/self/mountinfo').read_text())
 def status(pid='self'): return dict(line.split(':',1) for line in Path('/proc',str(pid),'status').read_text().splitlines() if ':' in line)
+def cmdline_tokens(raw):
+    # Q23/Q27: Chrome rewrites its process title into one space-joined string, and Chromium trims
+    # ASCII whitespace around arguments; split on NUL and every ASCII whitespace byte.
+    return [t for part in raw.split(b'\0') for t in part.split() if t]
+def chrome_args(raw):
+    # Q27/Q28: NUL boundaries are exact and keep empty positions; only a rewritten title (one
+    # string followed by NUL padding) is space-joined.
+    body = raw.rstrip(b'\0')
+    return body.split(b'\0') if b'\0' in body else body.split(b' ')
+def chrome_process_is_renderer(raw):
+    # Q26/Q27: the denial over-approximates every Chromium spelling (any '-' prefix, '=value',
+    # surrounding whitespace, even after '--'); the renderer type follows Chromium's parser exactly.
+    names = {t.lstrip(b'-').partition(b'=')[0] for t in cmdline_tokens(raw) if t.startswith(b'-')}
+    require(not {b'no-sandbox',b'disable-setuid-sandbox'} & names,'unsafe Chrome flag')
+    kind = None
+    for arg in chrome_args(raw)[1:]:
+        arg = arg.strip(b' \t\n\v\f\r')
+        if arg==b'--': break
+        body = arg[2:] if arg.startswith(b'--') else arg[1:] if arg.startswith(b'-') else None
+        if body is None: continue  # '---type' yields name '-type', never 'type'
+        name,_,value = body.partition(b'=')
+        if name==b'type': kind = value  # Chromium: the last duplicate switch wins
+    return kind==b'renderer'
+def renderer_isolated(info,browser):
+    # Q26: Seccomp=2 alone is systemd's filter; Chrome's own filter adds to the browser's filter count.
+    filters,base = int(info['Seccomp_filters']),int(browser['Seccomp_filters'])
+    levels = len(info['NSpid'].split())
+    require(info['Seccomp'].strip()=='2' and levels>=3 and filters>base,'renderer isolation')
+    return dict(seccomp=2,pid_levels=levels,seccomp_filters=filters,browser_seccomp_filters=base)
+def select_renderer(candidates,parents,browser_pid,browser):
+    # Q28: a renderer publishes its title before installing Chrome's filter. Return evidence only
+    # when every descendant renderer in this sample is isolated; otherwise None (keep waiting
+    # within the caller's bounded deadline, which fails closed).
+    chosen = None
+    for pid,info in sorted(candidates.items()):
+        if not descendant(pid,browser_pid,parents): continue
+        try: evidence = renderer_isolated(info,browser)
+        except ValueError: return None
+        chosen = chosen or dict(evidence,pid=pid,parents=parents)
+    return chosen
+
+def whole_mount(records, point, readonly=False):
+    # Q30: the product's workspace rule (files::mount_of) on the live payload: exactly one entry
+    # at the point, root '/', its device listed exactly once, and a whole tmpfs.
+    at = [m for m in records if m['point']==point]
+    require(len(at)==1,'whole mount: '+point)
+    entry = at[0]
+    require(entry['type']=='tmpfs' and entry['root']=='/'
+            and sum(m['device']==entry['device'] for m in records)==1,'whole mount: '+point)
+    if readonly: require('ro' in entry['options'],'read-only mount: '+point)
+    return entry
 
 def isolation(context):
     records = mounts(); current = status()
@@ -147,6 +198,7 @@ def isolation(context):
     gate = points['/run/gate']; run = points['/run']
     require(gate['type'] == 'tmpfs' and gate['root'] == '/' and sum(m['device']==gate['device'] for m in records)==1,'whole /run/gate tmpfs')
     require(run['type'] == 'tmpfs' and 'noexec' in run['options'] and 'size=16384k' in run['super'],'/run 16MiB noexec')
+    whole_mount(records,'/',readonly=True); whole_mount(records,'/work'); whole_mount(records,'/tmp')
     require(os.getpid()==1 and os.getuid()==context['payload_uid'] and Path('/proc/self/uid_map').read_text().split()==['0','0','4294967295'],'PID/UID mapping')
     require(current['NoNewPrivs'].strip()=='1' and all(int(current[k],16)==0 for k in ('CapInh','CapPrm','CapEff','CapBnd','CapAmb')),'caps/NNP')
     namespaces = {n:os.readlink('/proc/self/ns/'+n) for n in ('pid','mnt','ipc','uts','net')}
@@ -316,21 +368,18 @@ def chrome_observation():
                 if not path.name.isdigit(): continue
                 try:
                     info = status(path.name); pid = int(path.name); parents[pid] = int(info['PPid'])
-                    args = (path/'cmdline').read_bytes().split(b'\0')
-                    require(b'--no-sandbox' not in args and b'--disable-setuid-sandbox' not in args,'unsafe Chrome flag')
-                    if b'--type=renderer' in args: candidates[pid] = info
+                    if chrome_process_is_renderer((path/'cmdline').read_bytes()): candidates[pid] = info
                 except (FileNotFoundError,ProcessLookupError): continue
-            for pid,info in candidates.items():
-                if descendant(pid,proc.pid,parents):
-                    require(info['Seccomp'].strip()=='2' and len(info['NSpid'].split())>=3,'renderer isolation')
-                    renderer = dict(pid=pid,seccomp=2,pid_levels=len(info['NSpid'].split()),parents=parents)
+            renderer = select_renderer(candidates,parents,proc.pid,status(proc.pid))
             label = Path('/proc',str(proc.pid),'attr/current').read_text().strip()
     finally: stop(proc); proc.stderr.close()
     base = [chrome,'--headless=new','--disable-gpu','--no-first-run','--user-data-dir=/run/gate/tmp/chrome-report','--dump-dom']
-    local = capture(base+[page.as_uri()]); report = capture(base+['chrome://sandbox'])
-    require('gatebox-local' in local and 'sandbox' in report.lower(),'Chrome local/sandbox rendering')
+    # Q25: Chrome's sandbox self-report page is unavailable under --headless=new; the evidence is the
+    # kernel-observed renderer above (Chrome's own seccomp filter, nested PID namespaces, lineage).
+    local = capture(base+[page.as_uri()])
+    require('gatebox-local' in local,'Chrome local rendering')
     return dict(argv=argv,browser_pid=proc.pid,renderer=renderer,browser_label=label,local_html=local,
-                sandbox_html=report,version=capture([chrome,'--version']).strip())
+                version=capture([chrome,'--version']).strip())
 
 def desktop():
     # The registered live adapter starts its own displays/buses too. Prove tools here.
@@ -349,7 +398,7 @@ def desktop():
 
 def validate_sensor(row,value):
     require(isinstance(value,dict),'sensor object')
-    required = {'A1':('fsync','caps_zero','readonly'),'A5':('sandbox_html','version','renderer','private_desktop'),
+    required = {'A1':('fsync','caps_zero','readonly'),'A5':('local_html','version','renderer','private_desktop'),
                 'A6':('tiocsti_denied','host_hidden','reaped','syscalls'),
                 'A8':('loopback4','loopback6','unix','host_denied','services_absent')}
     require(all(value.get(k) for k in required[row]),'missing '+row+' sensor evidence')
@@ -357,6 +406,8 @@ def validate_sensor(row,value):
     if row=='A5':
         renderer = value['renderer']
         require(renderer.get('seccomp')==2 and renderer.get('pid_levels',0)>=3
+                and isinstance(renderer.get('browser_seccomp_filters'),int) and isinstance(renderer.get('seccomp_filters'),int)
+                and renderer['seccomp_filters']>renderer['browser_seccomp_filters']>=1
                 and descendant(renderer['pid'],value['browser_pid'],{int(k):v for k,v in renderer['parents'].items()}),'renderer lineage')
         require(not any('--no-sandbox' in a for a in value.get('argv',[])),'unsafe flags')
     if row=='A6':
@@ -416,11 +467,17 @@ def installed_identity():
 
 def effective_units():
     observations = {}
-    for name in ('mothergate.socket','mothergate.service','mothergate-run@'+('a'*32)+'.service'):
-        text = capture(['/usr/bin/systemctl','show',name,'--property=FragmentPath,DropInPaths,User,PrivatePIDs,PrivateNetwork,PrivateIPC,NoNewPrivileges,BindLogSockets,SystemCallArchitectures'])
+    for name in ('mothergate.socket','mothergate.service','mothergate-run@'+('a'*32)+'.service',
+                 'mothergate-root@'+('a'*32)+'.service'):
+        text = capture(['/usr/bin/systemctl','show',name,'--property=FragmentPath,DropInPaths,User,PrivatePIDs,PrivateNetwork,PrivateIPC,NoNewPrivileges,BindLogSockets,SystemCallArchitectures,PrivateMounts,CapabilityBoundingSet'])
         values = dict(line.split('=',1) for line in text.splitlines() if '=' in line)
-        template = 'mothergate-run@.service' if name.startswith('mothergate-run@') else name
+        template = name.split('@',1)[0]+'@.service' if '@' in name else name
         require(values.get('FragmentPath')=='/etc/systemd/system/'+template and not values.get('DropInPaths'),'unit fragment/override changed')
+        if template=='mothergate-root@.service':
+            # Q36: the root helper runs as root with CAP_SYS_ADMIN only, in the host mount namespace.
+            for key,expected in dict(User='',NoNewPrivileges='yes',PrivateMounts='no',PrivateNetwork='no',
+                                     CapabilityBoundingSet='cap_sys_admin').items():
+                require(values.get(key)==expected,'effective root unit property: '+key)
         if template=='mothergate-run@.service':
             for key,expected in dict(User='gaterun',PrivatePIDs='yes',PrivateNetwork='yes',PrivateIPC='yes',
                                      NoNewPrivileges='yes',BindLogSockets='no',SystemCallArchitectures='native').items():

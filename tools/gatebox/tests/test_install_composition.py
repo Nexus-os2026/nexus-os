@@ -247,7 +247,8 @@ class Q13Oracles(unittest.TestCase):
         # The remaining rename in main is only for staged sudoers/polkit.
         loops = [n for n in ast.walk(main) if isinstance(n,ast.For) and
                  any(isinstance(c,ast.Call) and ast.unparse(c.func)=='os.rename' for c in ast.walk(n))]
-        self.assertEqual([ast.unparse(n.iter) for n in loops],['staged_security[3:]'])
+        # Q30: four staged units precede sudoers/polkit.
+        self.assertEqual([ast.unparse(n.iter) for n in loops],['staged_security[4:]'])
 
     def test_offline_tempdirs_outside_installed_tree(self):
         for name in ('test_service.py','test_unit_core.py','test_custody.py'):

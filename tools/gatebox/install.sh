@@ -26,16 +26,16 @@ STATE = Path('/var/lib/mothergate')
 CONTROL = Path('/run/mothergate-control')
 CONTROL_POLICY = Path('/etc/tmpfiles.d/mothergate-control.conf')
 BOOT = Path('/root/gatebox-slice1')
-FIXTURE = '899e3872c5b61223c87b905f63c66947a816259b'
+FIXTURE = '8e0d6ae293df999eb6530e875df1206deac872a8'
 HARNESS = 'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
 FILES = ['MISSION.md','snapshot.py','receipt.py','supervisor.py','init.py','client.py',
-         'lifecycle.py','verify.py','probe.py','install.sh','README.md','tests/test_service.py',
+         'lifecycle.py','verify.py','probe.py','rootfs.py','install.sh','README.md','tests/test_service.py',
          'tests/test_unit_core.py','tests/test_unit_contract.py','tests/test_installed.py',
          'tests/test_custody.py','tests/test_install_composition.py',
          'policy/custody.json','policy/mothergate-control.conf',
          'policy/gates.json','policy/exclusions.json','policy/registry.json','policy/sudoers',
          'policy/deny-systemd.rules','units/mothergate.socket','units/mothergate.service',
-         'units/mothergate-run@.service']
+         'units/mothergate-run@.service','units/mothergate-root@.service']
 PLACEHOLDER = {'identity':None,'passed':[]}
 ENV = {'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','HOME':'/root'}
 
@@ -199,7 +199,7 @@ def stage_security(files,uid,gid,stage):
     protected(stage)
     if stat.S_IMODE(stage.stat().st_mode) != 0o700: raise ValueError('private staging required')
     outputs = []
-    for name in ('mothergate.socket','mothergate.service','mothergate-run@.service'):
+    for name in ('mothergate.socket','mothergate.service','mothergate-run@.service','mothergate-root@.service'):
         path = stage/name
         write(path,render(files['tools/gatebox/units/'+name].decode(),uid,gid).encode())
         outputs.append((path,Path('/etc/systemd/system')/name))
@@ -208,7 +208,7 @@ def stage_security(files,uid,gid,stage):
         path = stage/name; write(path,files['tools/gatebox/policy/'+name],mode)
         outputs.append((path,Path(target)))
     run(['/usr/sbin/visudo','-cf',str(stage/'sudoers')])
-    run(['/usr/bin/systemd-analyze','verify',*[str(p) for p,t in outputs[:3]]])
+    run(['/usr/bin/systemd-analyze','verify',*[str(p) for p,t in outputs[:4]]])
     return outputs
 
 def main():
@@ -245,7 +245,7 @@ def main():
         if source.read_bytes() != files['tools/gatebox/'+name]: raise ValueError('bootstrap bytes differ')
     targets = [DEST,CONFIG,STATE,ROOT,CONTROL_POLICY,Path('/var/lib/gatebox-source'),
                Path('/etc/sudoers.d/gatebox'),Path('/etc/polkit-1/rules.d/00-gatebox-deny.rules')]
-    targets += [Path('/etc/systemd/system')/n for n in ('mothergate.socket','mothergate.service','mothergate-run@.service')]
+    targets += [Path('/etc/systemd/system')/n for n in ('mothergate.socket','mothergate.service','mothergate-run@.service','mothergate-root@.service')]
     for path in targets:
         if path.exists() or path.is_symlink(): raise ValueError('existing output needs review: '+str(path))
         ancestor = path.parent
@@ -281,7 +281,7 @@ def main():
         staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,Path(temporary))
         # Publish validated units and load them before the fixed stop. On a
         # fresh host, stopping unknown units would fail and prevent bootstrap.
-        outputs = publish_units(staged_security[:3])
+        outputs = publish_units(staged_security[:4])
         prepare_control()
         created = apply_accounts(plan,args.submit_user)
         for path in (DEST,CONFIG,STATE,ROOT,Path('/var/lib/gatebox-source')): path.mkdir(parents=True,mode=0o755)
@@ -294,7 +294,7 @@ def main():
             path = STATE/name; path.mkdir(mode=0o755 if name == 'receipts' else 0o700)
             os.chown(path,manager.pw_uid,manager.pw_gid)
         for name in ('usr/bin','usr/sbin','usr/lib','usr/lib64','opt/google/chrome','opt/rust','inputs/registry',
-                     'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm','proc','sys'):
+                     'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm','proc','sys','root'):
             (ROOT/name).mkdir(parents=True,exist_ok=True,mode=0o755)
         write(ROOT/'gate/request.json',b'',0o444)
         for name,target in {'bin':'usr/bin','sbin':'usr/sbin','lib':'usr/lib','lib64':'usr/lib64','var/run':'/run','var/tmp':'/tmp'}.items():
@@ -320,7 +320,7 @@ def main():
         registration = {'mother':dict(uid=submit.pw_uid,user=args.submit_user,object_format='sha1',common_directory=str(source),
                                       device=info.st_dev,inode=info.st_ino,fixture_sha=FIXTURE,qualification_gate_set='full')}
         record(CONFIG/'registry.json',registration)
-        for staged,target in staged_security[3:]:
+        for staged,target in staged_security[4:]:
             os.rename(staged,target); outputs.append(target)
         write(CONTROL_POLICY,files['tools/gatebox/policy/mothergate-control.conf'])
         outputs.append(CONTROL_POLICY)

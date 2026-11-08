@@ -26,10 +26,29 @@ LAYOUT = 'd /run/mothergate-control 0755 root root -\nd /run/mothergate-control/
 UNITS = {
     'mothergate.service': [
         ['RuntimeDirectory=mothergate-control\nRuntimeDirectoryMode=0700\n',
-         'ReadWritePaths=/run/mothergate-control\n']],
+         'ReadWritePaths=/run/mothergate-control\n'],
+        # Q21 D1: one same-mount state root so receipt renameat2 is not EXDEV.
+        ['ReadWritePaths=/var/lib/mothergate/staging\nReadWritePaths=/var/lib/mothergate/pending\n'
+         'ReadWritePaths=/var/lib/mothergate/receipts\n','ReadWritePaths=/var/lib/mothergate\n']],
     'mothergate-run@.service': [
         ['file:/run/mothergate-control/%i.log.sock','file:/run/mothergate-control/sealed/%i/log.sock'],
-        ['file:/run/mothergate-control/%i.status.sock','file:/run/mothergate-control/sealed/%i/status.sock']]}
+        ['file:/run/mothergate-control/%i.status.sock','file:/run/mothergate-control/sealed/%i/status.sock'],
+        # Q23: skeleton lives under /usr, so the /usr bind must not be recursive;
+        # the NVIDIA EGL ICD segfaults Xvfb in the device-less payload.
+        # Q24: '+' makes InaccessiblePaths root-relative under RootDirectory= (else silently dropped).
+        ['BindReadOnlyPaths=/usr\n','BindReadOnlyPaths=/usr:/usr:norbind\n'],
+        # Q30: "/" must be a whole filesystem for the product's workspace rule; a per-run tmpfs
+        # owned by mothergate-root@%i.service replaces the bind of the skeleton directory.
+        ['After=mothergate.service\n','After=mothergate.service\nBindsTo=mothergate-root@%i.service\nAfter=mothergate-root@%i.service\n'],
+        ['RootDirectory=/usr/lib/gatebox/root\n','RootDirectory=/run/mothergate-root/%i\n'],
+        ['InaccessiblePaths=/usr/local /usr/share/ollama\n',
+         # Q29: /usr/local is an empty read-only tmpfs (an inaccessible node breaks GCC's default include path).
+         'InaccessiblePaths=+/usr/share/ollama\nInaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n'
+         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n'],
+        # Q30 (review F6-1 B2): /root is its own tmpfs, never a self-bind of the root filesystem.
+        ['TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n',
+         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n'
+         'TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n']]}
 
 class CustodyTests(unittest.TestCase):
     def setUp(self):
