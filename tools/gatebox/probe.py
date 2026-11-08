@@ -467,11 +467,17 @@ def installed_identity():
 
 def effective_units():
     observations = {}
-    for name in ('mothergate.socket','mothergate.service','mothergate-run@'+('a'*32)+'.service'):
-        text = capture(['/usr/bin/systemctl','show',name,'--property=FragmentPath,DropInPaths,User,PrivatePIDs,PrivateNetwork,PrivateIPC,NoNewPrivileges,BindLogSockets,SystemCallArchitectures'])
+    for name in ('mothergate.socket','mothergate.service','mothergate-run@'+('a'*32)+'.service',
+                 'mothergate-root@'+('a'*32)+'.service'):
+        text = capture(['/usr/bin/systemctl','show',name,'--property=FragmentPath,DropInPaths,User,PrivatePIDs,PrivateNetwork,PrivateIPC,NoNewPrivileges,BindLogSockets,SystemCallArchitectures,PrivateMounts,CapabilityBoundingSet'])
         values = dict(line.split('=',1) for line in text.splitlines() if '=' in line)
-        template = 'mothergate-run@.service' if name.startswith('mothergate-run@') else name
+        template = name.split('@',1)[0]+'@.service' if '@' in name else name
         require(values.get('FragmentPath')=='/etc/systemd/system/'+template and not values.get('DropInPaths'),'unit fragment/override changed')
+        if template=='mothergate-root@.service':
+            # Q36: the root helper runs as root with CAP_SYS_ADMIN only, in the host mount namespace.
+            for key,expected in dict(User='',NoNewPrivileges='yes',PrivateMounts='no',PrivateNetwork='no',
+                                     CapabilityBoundingSet='cap_sys_admin').items():
+                require(values.get(key)==expected,'effective root unit property: '+key)
         if template=='mothergate-run@.service':
             for key,expected in dict(User='gaterun',PrivatePIDs='yes',PrivateNetwork='yes',PrivateIPC='yes',
                                      NoNewPrivileges='yes',BindLogSockets='no',SystemCallArchitectures='native').items():
