@@ -37,7 +37,9 @@ Real C1 caller → SessionPort → session broker → fake peer.
   |---|---|
   | debt-then-stop | `block:broker_refused:evidence_unavailable` |
   | stop-then-debt | `stop:owner`, with recording debt kept as a separate fact |
-  | budget-then-stop | **OPEN:SB3C-F1**: today `Stopped` / `stop:owner` |
+  | budget-then-stop | `block:budget_time` (SB3C-F1) |
+  | budget-entry-then-stop (lapse before the lane's first call) | `block:budget_time` (SB3C-F1) |
+  | stop-then-budget (Stop engaged, then the lapse) | `stop:owner` |
   | budget (no Stop) | `block:budget_time` |
   | emergency | `stop:emergency_stop` |
   | fail-then-stop | `fail:lane_fail:builder` |
@@ -60,17 +62,36 @@ Real C1 caller → SessionPort → session broker → fake peer.
     is the existing SQLite mode, recorded here and not claimed.
   - Failed, unrecorded and late replies leave no deliverable on any path.
 
-## Known defect OPEN:SB3C-F1 (SB3C-R5)
+## SB3C-F1 (SB3C-R5): the budget cause on the session route
 
-A held chat on the session route meets the budget deadline. The broker's own mission expiry is seen
-first, and the lane gets `failed:model_timeout` with the File cell already engaged. An Owner Stop that
-then arrives while the lane is still running ends the mission `Stopped` / `stop:owner`.
+The defect: a held chat on the session route met the budget deadline, the lane got `failed:model_timeout`,
+and an Owner Stop that arrived while the lane was still running ended the mission `Stopped` / `stop:owner`.
+Spec O3 requires the earlier cause; the ordinary route had it.
 
-The ordinary route keeps `Blocked` / `block:budget_time` for the same schedule. Without the Stop, the
-session mission also ends `block:budget_time`.
+Observed cause (probe, restored by sha256). The earlier hypothesis, that the broker's B1f expiry latches a tag
+on the shared File cell, was wrong:
+- `HaltCell::is_engaged` on a session-scoped cell returns `!scope.live(word)`. B1f's mission deadlines make the
+  scope report lapsed, so the cell read engaged while its word held no cause (`reason()` None, word `0x40`).
+- `Caller::live()` was therefore false at the budget observation sites, the `BudgetTime` deny did not run, and
+  nothing was latched until the Stop's `OwnerStop` (word `0x40` to `0xffff41`).
 
-The cell asserts today's behaviour exactly. The guard binds the tag to this one cell, and production
-unit SB3C-F1 flips it.
+The fix (`Caller::latch_lapse`, `coordinator/model_calls.rs`): the budget latch is withheld only for a latched
+cause (`reason()`, not `is_engaged()`), a revoked invocation, or the emergency stop, at the existing observation
+sites and at call entry (where the session route refuses before the meter's `OutOfTime` deny can run). `live()`
+is unchanged, so admission and reply release are unchanged. The first-wins cell decides a race with Stop. The
+ordinary cell is `CellMode::Legacy`, so there `reason().is_none()` is the same as `!is_engaged()`.
+
+RED before the fix, on `7bbe4ef5`: `first/budget-then-stop` and `first/budget-entry-then-stop` failed at
+`Stop arrives second`, `Ok(Stopped)` for `Ok(Blocked)`; `first/stop-then-budget` passed.
+
+Plants on the fixed code (applied to the real path, restored by sha256, not committed):
+
+| Plant | Mutation | Result |
+|---|---|---|
+| Stop-wins mapping restored | `file_finish_intent`: a budget `Failure` intent ends `Stop(Owner)` | Killed at `Stop arrives second` (D1 budget-then-stop, budget-entry-then-stop; ordinary `c1_s6`); also `budget: the first cause is kept` |
+| session latch removed (ordinary/session divergence) | `latch_lapse` guarded by `live()` | Killed at `Stop arrives second` on the two session cases; ordinary `c1_s6` still passes |
+| latch after Stop could win | latch moved to `Caller::drop` | Killed at `Stop arrives second` on the two session cases; ordinary `c1_s6` killed earlier, at its `engaged && !terminal` assertion |
+| entry latch removed | `latch_lapse` not called at call entry | Killed at `Stop arrives second` on budget-entry-then-stop only |
 
 ## The R8 acceptance sinks (SB3D-R3)
 
@@ -120,7 +141,9 @@ Moved to `open:D2` (63), each with why D1 did not execute it at that boundary:
 | admission, lifecycle Emergency to ClosedUnclean (7) and all 17 ingress values | The restriction is refused at `file_boundary` before the `LaneReturned` step. The sink's own append is not reached, so claiming it would be a neighbouring point. |
 | admission, fault decline, record_failed, record_unknown, poison, panic (5) | Not reached at the append: `model_obligations` refuses debt first; no decline or poison seam. |
 
-`mother_end` / `budget` stays OPEN:F1.
+`mother_end` / `budget` stays OPEN:F1: that sink is `CloseSeal::begin_mother_end` / `observe_mother_end`,
+and `first/budget-then-stop` does not execute it (`m.close()` there is `FileSession::close`). SB3C-F1 does not
+flip it.
 
 ### RED record (before the data and check changes)
 
