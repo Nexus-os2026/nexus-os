@@ -34,9 +34,6 @@ const ERROR: &str = "SB3D1_ERROR_CANARY";
 const METADATA: &str = "SB3D1_METADATA_CANARY";
 /// The fake peer's runtime version, which its `/api/version` must keep.
 const PEER_VERSION: &str = "0.40.13";
-/// SB3C-R5: the one known production defect, asserted exactly as it is
-/// today and fixed by unit SB3C-F1. Only this cell may carry the tag.
-const KNOWN_DEFECT: [(&str, &str); 1] = [("first/budget-then-stop", "OPEN:SB3C-F1")];
 
 fn children(test: &str, cases: &[&str]) {
     run_children(MODULE, CASE, test, cases, run);
@@ -376,6 +373,8 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/debt-then-stop",
             "first/stop-then-debt",
             "first/budget-then-stop",
+            "first/budget-entry-then-stop",
+            "first/stop-then-budget",
             "first/budget",
             "first/emergency",
             "first/fail-then-stop",
@@ -401,9 +400,13 @@ fn first(arg: &str) {
                 ..quiet()
             };
         }
+        if mode == "budget-entry-then-stop" {
+            let _ = ready_tx.send(());
+            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+        }
         let first = outcome(&ask(ctx));
         tx.send((first, terminal(&fx, MissionId(1)))).unwrap();
-        if mode != "stop-then-debt" && mode != "emergency" {
+        if !matches!(mode.as_str(), "stop-then-debt" | "stop-then-budget" | "emergency") {
             let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
         }
         match mode.as_str() {
@@ -465,19 +468,53 @@ fn first(arg: &str) {
             assert!(!terminal, "denial before the generation moves");
             let engaged = m.cell_for_test().is_engaged();
             assert!(engaged, "the budget denial is engaged before Stop");
-            // OPEN:SB3C-F1 — today a later Stop replaces the budget cause on
-            // the session route (the ordinary route keeps Blocked). SB3C-F1
-            // flips this cell to Blocked / block:budget_time.
-            let open = KNOWN_DEFECT.contains(&("first/budget-then-stop", "OPEN:SB3C-F1"));
-            let (state, cause) = match open {
-                true => (MissionState::Stopped, "stop:owner"),
-                false => (MissionState::Blocked, "block:budget_time"),
-            };
-            assert_eq!(m.stop(id), Ok(state), "Stop arrives second");
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
             go_tx.send(()).unwrap();
             drop(release);
             assert!(adv.join().unwrap().is_err());
-            cause
+            "block:budget_time"
+        }
+        // The lapse lands before the lane's first call: the same cause, and
+        // the broker never sees a chat.
+        "budget-entry-then-stop" => {
+            let adv = advance_in(&m, id);
+            within(&ready_rx);
+            f.home.clock.advance(Duration::from_millis(61_000));
+            go_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated");
+            assert!(!terminal, "denial before the generation moves");
+            assert_eq!(f.fake.count("/api/chat"), 0, "no chat after the lapse");
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+            go_tx.send(()).unwrap();
+            assert!(adv.join().unwrap().is_err());
+            "block:budget_time"
+        }
+        // Stop is engaged first and the budget lapses behind it: Stop stays.
+        "stop-then-budget" => {
+            let (entered, release) = hold_chat(&f, "{}");
+            let adv = advance_in(&m, id);
+            within(&entered);
+            let (paused_tx, paused_rx) = signal();
+            let (resume_tx, resume_rx) = signal();
+            let resume_rx = Mutex::new(resume_rx);
+            m.hooks_for_test().file_after_halt.arm(0, move || {
+                let _ = paused_tx.send(());
+                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+            });
+            let stopper = {
+                let m = m.clone();
+                std::thread::spawn(move || m.stop(id))
+            };
+            within(&paused_rx); // The Owner's Stop is engaged, not yet recorded.
+            f.home.clock.advance(Duration::from_millis(61_000));
+            let (first, _) = within(&rx);
+            assert_ne!(first, "ok", "no usable reply");
+            drop(release);
+            assert!(adv.join().unwrap().is_err());
+            resume_tx.send(()).unwrap();
+            assert_eq!(stopper.join().unwrap(), Ok(MissionState::Stopped));
+            "stop:owner"
         }
         "budget" => {
             let (entered, release) = hold_chat(&f, "{}");
@@ -992,22 +1029,17 @@ fn after_recheck(point: &str) {
 #[test]
 fn sb3_d1_schedules_run_in_child_processes() {
     let source = include_str!("session_model_bridge_d_tests.rs");
-    // The OPEN tag is bound to its one listed cell: the table and its use.
+    // SB3C-F1 is closed: no first-cause cell here tolerates a known defect.
     let cases = source.split("&[\n            \"first/").count() > 1;
-    assert!(cases && KNOWN_DEFECT.len() == 1, "one known-defect cell");
+    assert!(cases, "the first-cause cases are found");
     assert!(
         source.contains("\"first/budget-then-stop\",\n"),
         "the cell is executed"
     );
     assert_eq!(
-        source.matches(concat!("OPEN:", "SB3C-F1")).count(),
-        3,
-        "tag bound to its cell"
-    );
-    assert_eq!(
         source.matches(concat!("OPEN:", "SB3C")).count(),
-        3,
-        "no other OPEN cell"
+        0,
+        "no tolerated OPEN cell"
     );
     let tests: Vec<&str> = source.split("#[test]\nfn ").skip(1).collect();
     assert!(tests.len() >= 6, "the D1 tests are found");
