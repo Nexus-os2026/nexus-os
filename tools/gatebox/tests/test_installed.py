@@ -398,19 +398,30 @@ class Q30Oracles(unittest.TestCase):
         self.assertIn('After=mothergate-root@%i.service\n',head)
     def test_root_unit_mounts_in_the_host_namespace_and_stops_with_the_payload(self):
         unit = self.unit('mothergate-root@.service')
-        for line in ('StopWhenUnneeded=yes','RefuseManualStart=yes','Type=oneshot','RemainAfterExit=yes',
-                     'ExecStart=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py up %i',
-                     'ExecStop=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py down %i',
-                     'StandardInput=null','StandardOutput=journal','StandardError=journal'):
-            self.assertIn(line+'\n',unit)
-        # Any mount-namespace option would hide the tmpfs from the payload's namespace setup.
-        for option in ('PrivateMounts','ProtectSystem','ProtectHome','PrivateTmp','PrivateDevices','RootDirectory',
-                       'RootImage','TemporaryFileSystem','BindPaths','BindReadOnlyPaths','ReadOnlyPaths',
-                       'ReadWritePaths','InaccessiblePaths','MountAPIVFS','ProtectKernel','ProtectControlGroups',
-                       'ProtectProc','ProcSubset','PrivateUsers','DynamicUser','User='):
-            self.assertNotIn(option,unit)
-        # Its output must never reach the payload's single-accept capture sockets.
-        self.assertNotIn('mothergate-control',unit)
+        sections = {}
+        for line in unit.splitlines():
+            if line.startswith('['): current = sections.setdefault(line,[])
+            elif line and not line.startswith('#'): current.append(line)
+        self.assertEqual(sections['[Unit]'],['Description=Gate Box payload root %i','StopWhenUnneeded=yes',
+                                             'RefuseManualStart=yes','AllowIsolate=no'])
+        # Review F6-1 B1: an ALLOWLIST. Any namespacing option (PrivateNetwork= implies PrivateMounts=
+        # on systemd 259) would mount the tmpfs in a private namespace the payload never sees.
+        # ExecStopPost (not ExecStop) also unwinds a failed or cancelled start.
+        self.assertEqual(sections['[Service]'],[
+            'Type=oneshot','RemainAfterExit=yes',
+            'ExecStart=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py up %i',
+            'ExecStopPost=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py down %i',
+            'PrivateMounts=no','NoNewPrivileges=yes','CapabilityBoundingSet=CAP_SYS_ADMIN','UMask=0077',
+            'TimeoutStartSec=30s','TimeoutStopSec=30s',
+            'StandardInput=null','StandardOutput=journal','StandardError=journal'])
+        self.assertEqual(set(sections),{'[Unit]','[Service]'})
+    def test_root_is_its_own_tmpfs_so_no_alias_of_the_root_device(self):
+        # Review F6-1 B2 (A1 evidence: '259:6 /usr/lib/gatebox/root/root /root'): ProtectSystem=strict
+        # adds /root as a READ_WRITE_IMPLICIT self-bind of the root filesystem, listing the "/" device
+        # twice. An explicit tmpfs at /root outranks the implicit entry (namespace.c drop_duplicates).
+        unit = self.unit()
+        self.assertIn('ProtectSystem=strict\n',unit)
+        self.assertIn('TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n',unit)
     def test_installer_ships_and_publishes_the_root_unit(self):
         scope = installer()
         self.assertTrue({'rootfs.py','units/mothergate-root@.service'} <= set(scope['FILES']))
