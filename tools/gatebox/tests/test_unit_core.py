@@ -362,6 +362,47 @@ class ReceiptTests(unittest.TestCase):
                 for key in ('expected','executed','passed'): desktop['inventory'][key] = []
             else: command[change] = {'exit_code':1,'signal':9,'timed_out':True,'oom':True}.get(change,False)
             with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
+    def test_q33_ignored_and_zero_test_inventories(self):
+        # Q33: a workspace artifact may record #[ignore] tests (never as passed) and a zero-test target
+        # may record empty lists; desktop-live stays exact with nothing ignored; failed/filtered stay [].
+        def ignored_summary():
+            summary = self.success()
+            workspace = summary['commands'][3]
+            workspace['inventory'] = dict(expected=['host_test','child_entry'],executed=['host_test'],passed=['host_test'],
+                                          failed=[],ignored=['child_entry'],filtered=[])
+            host = next(c for c in summary['commands'] if c['gate_id'] == 'host')
+            host['inventory'] = copy.deepcopy(workspace['inventory'])
+            return summary
+        receipt.validate_summary(ignored_summary())
+        summary = self.success()
+        extra = dict(summary['coverage']['artifacts'][0],id='empty-bin',executable='/work/target/empty-bin',
+                     package='nexus-mother',target='nexus-mother')
+        summary['coverage']['artifacts'].append(extra)
+        command = copy.deepcopy(summary['commands'][3])
+        command.update(id='workspace-empty',artifact_id='empty-bin',argv=[extra['executable']],
+                       inventory=dict(expected=[],executed=[],passed=[],failed=[],ignored=[],filtered=[]))
+        summary['commands'].append(command)
+        receipt.validate_summary(summary)
+        for change in ('ignored-also-passed','ignored-not-expected','passed-missing','duplicate-ignored',
+                       'failed','filtered','desktop-ignored','host-empty-expected','ignored-not-list'):
+            summary = ignored_summary()
+            inv = summary['commands'][3]['inventory']
+            if change == 'ignored-also-passed': inv['passed'] = inv['executed'] = ['host_test','child_entry']
+            if change == 'ignored-not-expected': inv['ignored'] = ['invented']
+            if change == 'passed-missing': inv['passed'] = inv['executed'] = []
+            if change == 'duplicate-ignored': inv.update(expected=['host_test','child_entry','child_entry'],ignored=['child_entry','child_entry'])
+            if change == 'failed': inv['failed'] = ['child_entry']
+            if change == 'filtered': inv['filtered'] = ['child_entry']
+            if change == 'ignored-not-list': inv['ignored'] = 'child_entry'
+            if change == 'desktop-ignored':
+                desktop = next(c for c in summary['commands'] if c['gate_id'] == 'desktop-live')['inventory']
+                desktop['ignored'] = [desktop['expected'][0]]
+                desktop['passed'] = desktop['executed'] = desktop['expected'][1:]
+            if change == 'host-empty-expected':
+                for c in summary['commands']:
+                    if c['gate_id'] in ('host',) or c.get('artifact_id') == 'host-bin':
+                        c['inventory'] = dict(expected=[],executed=[],passed=[],failed=[],ignored=[],filtered=[])
+            with self.subTest(change=change), self.assertRaises(ValueError): receipt.validate_summary(summary)
     def test_publication_destination_race(self):
         # A competing publisher wins after lexists; only NOREPLACE prevents clobbering it.
         destination = self.receipts/self.run_id

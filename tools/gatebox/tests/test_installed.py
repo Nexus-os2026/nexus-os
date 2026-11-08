@@ -618,19 +618,118 @@ class Q31Oracles(unittest.TestCase):
         loop = text.split('while selector.get_map():',1)[1].split('code = proc.wait(',1)[0]
         self.assertIn('self.reap_orphans()',loop)
 
-class Q32Oracles(unittest.TestCase):
-    """Q32 (review F6-1 B3): fixture 899e3872's o18_d/o18_g read the REAL /sys for the root device's
-    hardware backing, which a tmpfs payload root cannot provide. The fixture is re-pinned to
-    0c8cb6d3 = 899e3872 + one test-only commit giving both tests a fake /sys. One SHA everywhere."""
-    FIXTURE = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
+# Q32 (review F6-1 B3) pinned 0c8cb6d3 = 899e3872 + the o18_d/o18_g fake-/sys commit. Q34 moved the
+# pin forward to a descendant (8e0d6ae2); Q34Oracles now holds the single-SHA oracle, and also
+# requires both earlier pins to be absent.
+
+LIBTEST_TOTAL = 'test result: ok. {} passed; 0 failed; {} ignored; 0 measured; 0 filtered out; finished in 0.01s\n'
+
+def libtest_run(lines, passed, ignored, running=None):
+    count = passed+ignored if running is None else running
+    return ('\nrunning %d test%s\n' % (count,'' if count == 1 else 's')+''.join(l+'\n' for l in lines)
+            +'\n'+LIBTEST_TOTAL.format(passed,ignored))
+
+class Q33Oracles(unittest.TestCase):
+    """Q33 (diag15 evidence): the frozen libtest adapter rejected three standard libtest forms the
+    fixture uses: #[ignore] tests ("test x ... ignored[, reason]", counted in totals), the
+    #[should_panic] marker ("test x - should panic ... ok") and test targets with zero tests.
+    Ruling: reconcile them truthfully. Ignored names come from the run, must be listed names, are
+    recorded as ignored (never as passed) and must match the totals; every other listed test must
+    pass. A zero-test target must prove libtest's own zero-test run. Anything else stays refused."""
+    def setUp(self): self.init = load('init')
+    def test_should_panic_marker_is_the_listed_name(self):
+        out = libtest_run(['test a ... ok','test b - should panic ... ok'],2,0)
+        self.assertEqual(self.init.reconcile(['a','b'],out)['passed'],['a','b'])
+        for bad in (out.replace('b - should panic','b - should panicX'),
+                    out.replace('test b - should panic','test c - should panic')):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): self.init.reconcile(['a','b'],bad)
+    def test_ignored_tests_are_recorded_not_passed(self):
+        out = libtest_run(['test a ... ok','test b ... ignored','test c ... ignored, child entry; run by the parent','test d ... ok'],2,2)
+        inventory = self.init.reconcile(['a','b','c','d'],out)
+        self.assertEqual(inventory,{'expected':['a','b','c','d'],'executed':['a','d'],'passed':['a','d'],
+                                    'failed':[],'ignored':['b','c'],'filtered':[]})
+        out = libtest_run(['test a - should panic ... ignored','test b ... ok'],1,1)
+        self.assertEqual(self.init.reconcile(['a','b'],out)['ignored'],['a'])
+    def test_ignored_negatives(self):
+        names = ['a','b','c']
+        good = ['test a ... ok','test b ... ok','test c ... ignored']
+        cases = {'ignored-not-listed':libtest_run(good[:2]+['test z ... ignored'],2,1,running=3),
+                 'totals-ignored-count':libtest_run(good,2,0,running=3),
+                 'totals-passed-count':libtest_run(good,3,1,running=3),
+                 'missing-ignored-line':libtest_run(good[:2],2,1,running=3),
+                 'duplicate-line':libtest_run(good+['test c ... ignored'],2,2,running=3),
+                 'ok-and-ignored':libtest_run(good+['test a ... ignored'],2,2,running=3),
+                 'failed':libtest_run(good[:1]+['test b ... FAILED','test c ... ignored'],1,1,running=3),
+                 'unknown-result':libtest_run(good[:2]+['test c ... bench'],2,0,running=3),
+                 'running-count':libtest_run(good,2,1,running=2),
+                 'two-totals':libtest_run(good,2,1)+LIBTEST_TOTAL.format(2,1),
+                 'no-running':libtest_run(good,2,1).replace('running 3 tests\n',''),
+                 'all-ignored-allowed-but-filtered':libtest_run(good,2,1).replace('0 filtered out','1 filtered out')}
+        for case, out in cases.items():
+            with self.subTest(case=case), self.assertRaises(ValueError): self.init.reconcile(names,out)
+        with self.assertRaises(ValueError): self.init.reconcile(['a','a'],libtest_run(['test a ... ok','test a ... ok'],2,0))
+    def test_zero_test_target_needs_libtest_zero_run(self):
+        empty = libtest_run([],0,0)
+        self.assertEqual(self.init.reconcile([],empty),{'expected':[],'executed':[],'passed':[],'failed':[],'ignored':[],'filtered':[]})
+        for bad in ('','custom harness ran 12 checks\n',empty.replace('running 0 tests\n',''),
+                    empty.replace('0 passed','1 passed'),libtest_run(['test a ... ok'],1,0)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): self.init.reconcile([],bad)
+    def run_libtest(self, listing, output, list_code=0, run_code=0, expected=None):
+        calls = []
+        def command(gate, argv):
+            calls.append((gate,argv))
+            return ('c%d' % len(calls),list_code,listing) if '--list' in argv else ('c%d' % len(calls),run_code,output)
+        runner = self.init.Runner(-1,-1)
+        with patch.object(runner,'command',side_effect=command), patch.object(runner,'output'):
+            result = runner.libtest('workspace',{'executable':'/work/target/t'},expected)
+        return result, calls
+    def test_runner_runs_zero_test_targets_and_ignored_targets(self):
+        names, calls = self.run_libtest('',libtest_run([],0,0))
+        self.assertEqual(names,[])
+        self.assertEqual([argv for _, argv in calls],[['/work/target/t','--list','--format','terse'],['/work/target/t']])
+        names, _ = self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ignored'],1,1))
+        self.assertEqual(names,['a','b'])
+    def test_runner_still_refuses_unknown_adapters(self):
+        for listing, code in (('a: test\n',2),('a: benchmark\n',0),('a: test\nnot a listing line\n',0)):
+            with self.subTest(listing=listing,code=code), self.assertRaises(ValueError):
+                self.run_libtest(listing,libtest_run(['test a ... ok'],1,0),list_code=code)
+        with self.assertRaises(ValueError): self.run_libtest('a: test\n',libtest_run(['test a ... ok'],1,0),run_code=101)
+    def test_desktop_live_keeps_strict_names_and_no_ignored(self):
+        expected = ['a','b']
+        self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ok'],2,0),expected=expected)
+        with self.assertRaises(ValueError):
+            self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ignored'],1,1),expected=expected)
+    def test_supervisor_host_inventory_keeps_ignored_separate(self):
+        supervisor = load('supervisor')
+        artifacts = [dict(id='a0',adapter='libtest',package='nexus-mother-host',target='h1',executable='/work/target/h1'),
+                     dict(id='a1',adapter='libtest',package='nexus-mother-host',target='h2',executable='/work/target/h2'),
+                     dict(id='a2',adapter='libtest',package='nexus-mother-host',target='h3',executable='/work/target/h3')]
+        inventories = [dict(expected=['x','y'],executed=['x'],passed=['x'],failed=[],ignored=['y'],filtered=[]),
+                       dict(expected=['z'],executed=['z'],passed=['z'],failed=[],ignored=[],filtered=[]),
+                       dict(expected=[],executed=[],passed=[],failed=[],ignored=[],filtered=[])]
+        evidence = type('E',(),{})()
+        evidence.commands = [dict(id='c%d' % i,gate_id='workspace') for i in range(3)]+[dict(id='c3',gate_id='host')]
+        logs = {'coverage.log':json.dumps(dict(artifacts=artifacts,failures=[])).encode()}
+        for i in range(4): logs['c%d.log' % i] = b'x'
+        for i in range(3): logs['c%d-inventory.log' % i] = json.dumps(dict(artifact=artifacts[i],inventory=inventories[i])).encode()
+        commands, _ = supervisor.coverage(evidence,logs)
+        self.assertEqual(commands[3]['inventory'],dict(expected=['x','y','z'],executed=['x','z'],passed=['x','z'],
+                                                       failed=[],ignored=['y'],filtered=[]))
+
+class Q34Oracles(unittest.TestCase):
+    """Q34 (diag15 evidence): fixture test decision9_host_port_does_not_adopt_legacy_replay asked
+    DNS for example.org inside the network-less payload. The fixture is re-pinned to 8e0d6ae2 =
+    0c8cb6d3 + one test-only commit using a public address literal. One SHA everywhere."""
+    FIXTURE = '8e0d6ae293df999eb6530e875df1206deac872a8'
     def test_one_fixture_sha_everywhere(self):
         self.assertEqual(installer()['FIXTURE'],self.FIXTURE)
         self.assertIn("FIXTURE = '"+self.FIXTURE+"'",(HERE/'probe.py').read_text())
         self.assertEqual(json.loads((HERE/'policy/registry.json').read_text())['mother']['fixture_sha'],self.FIXTURE)
         doc = (HERE/'README.md').read_text()
         self.assertIn('--fixture-sha '+self.FIXTURE,doc); self.assertIn('--sha '+self.FIXTURE,doc)
-        for name in ('install.sh','probe.py','policy/registry.json','README.md','init.py','supervisor.py','client.py'):
-            self.assertNotIn('899e3872c5b61223c87b905f63c66947a816259b',(HERE/name).read_text(),name)
+        for old in ('899e3872c5b61223c87b905f63c66947a816259b','0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'):
+            for name in ('install.sh','probe.py','policy/registry.json','README.md','init.py','supervisor.py','client.py'):
+                self.assertNotIn(old,(HERE/name).read_text(),name)
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):

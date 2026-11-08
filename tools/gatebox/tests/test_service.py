@@ -210,7 +210,7 @@ class OfflineServiceTests(unittest.TestCase):
         self.assertEqual(options['env'],ENV)
     def test_e2e_libtest_reconciliation_rejects_noop(self):
         names = ['alpha','beta']
-        output = 'test alpha ... ok\ntest beta ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
+        output = '\nrunning 2 tests\ntest alpha ... ok\ntest beta ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
         result = init.reconcile(names,output)
         self.assertEqual(result['passed'],names)
         for bad in ('',output.replace('beta ... ok','beta ... ignored'),output.replace('2 passed','1 passed'),
@@ -378,7 +378,7 @@ class OfflineServiceTests(unittest.TestCase):
                     if '--list' in argv: output = ''.join(n+': test\n' for n in names)
                     else:
                         self.assertNotEqual(argv[0],'/work/target/phase2_live_sandbox')
-                        output = ''.join('test '+n+' ... ok\n' for n in names)
+                        output = f'\nrunning {len(names)} test{"" if len(names) == 1 else "s"}\n'+''.join('test '+n+' ... ok\n' for n in names)
                         output += f'test result: ok. {len(names)} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
                 options['cwd'] = str(root/'src')
                 return popen([sys.executable,'-c','import sys; sys.stdout.write(sys.argv[1]); sys.stderr.write("Finished test build\\n")',output],**options)
