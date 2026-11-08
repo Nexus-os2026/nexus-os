@@ -7,7 +7,7 @@
 //! the native debt itself is B's evidence (SB-3B2-C `seal/owed`, SB-3B2-M
 //! `settled:ok:uncertain`, B1e `evidence_failure`).
 use crate::adapter::c1b_coordinator_oracles::{draft, outcome};
-use crate::adapter::c1b_fake_ollama::{chat, Answer, Seen, PATIENCE};
+use crate::adapter::c1b_fake_ollama::{chat, Answer, Seen, NAME, PATIENCE};
 use crate::adapter::c1b_port_oracles::{children as run_children, record_next};
 use crate::adapter::session_model_bridge_support::{advance_in, signal, within, Mother, SFx};
 use crate::contract::Note;
@@ -16,6 +16,7 @@ use crate::journal::{verify, Event, MissionId};
 use crate::lane::{LaneContext, LaneOutput, ModelCallError, Verdict};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::evidence::EndStatus;
+use nexus_governed_control::host_session::{CommandKind, SessionState};
 use nexus_governed_control::inference::{ModelReply, ModelRequest, ResponseSchema};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -29,6 +30,9 @@ const NOTE: &str = "SB3D1_NOTE_CANARY";
 const PROMPT: &str = "SB3D1_PROMPT_CANARY";
 const REPLY: &str = "SB3D1_REPLY_CANARY";
 const ERROR: &str = "SB3D1_ERROR_CANARY";
+const METADATA: &str = "SB3D1_METADATA_CANARY";
+/// The fake peer's runtime version, which its `/api/version` must keep.
+const PEER_VERSION: &str = "0.40.13";
 /// SB3C-R5: the one known production defect, asserted exactly as it is
 /// today and fixed by unit SB3C-F1. Only this cell may carry the tag.
 const KNOWN_DEFECT: [(&str, &str); 1] = [("first/budget-then-stop", "OPEN:SB3C-F1")];
@@ -44,6 +48,9 @@ fn run(case: &str) {
         "first" => first(arg),
         "privacy" => privacy(arg),
         "memory" => memory(arg),
+        "classify" => classified(arg),
+        "recheck" => rechecked(arg),
+        "after" => after_recheck(arg),
         other => panic!("unknown case {other}"),
     }
 }
@@ -142,6 +149,13 @@ fn walk(dir: &Path) -> String {
     }
     text
 }
+fn walk_file(path: &Path) -> String {
+    String::from_utf8_lossy(&std::fs::read(path).unwrap()).into_owned()
+}
+/// The private store, where only the approved contract and draft may rest.
+fn private(f: &SFx) -> String {
+    walk(&f.home.dir.join("private"))
+}
 /// The peer holds `/api/chat` until released, then answers `content`.
 fn hold_chat(
     f: &SFx,
@@ -181,23 +195,26 @@ fn debt(arg: &str) {
     let (tx, rx) = channel();
     let m = f.mother(2, move |ctx| {
         let first = ask(ctx);
+        let exact = first.as_ref().is_ok_and(|r| r.content() == REPLY);
         let second = outcome(&ask(ctx));
-        tx.send((outcome(&first), second)).unwrap();
+        tx.send((outcome(&first), second, exact)).unwrap();
         draft(&first.map(ModelReply::into_content).unwrap_or_default())
     });
     let id = f.building(&m, f.contract());
+    f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
     match arg {
         "owed" => inject(&f, EndStatus::Owed),
         "uncertain" => inject(&f, EndStatus::Uncertain),
         _ => {}
     }
     let advanced = m.advance(id);
-    let (first, second) = within(&rx);
+    let (first, second, exact) = within(&rx);
+    assert_eq!(f.home.session.state(), SessionState::Normal, "{arg}");
     if arg == "recorded" {
         assert_eq!(
-            (first.as_str(), second.as_str()),
-            ("ok", "ok"),
-            "the positive"
+            (first.as_str(), second.as_str(), exact),
+            ("ok", "ok", true),
+            "the positive: the exact reply"
         );
         advanced.unwrap();
         assert_eq!(returned(&f), 1);
@@ -222,6 +239,10 @@ fn debt(arg: &str) {
         "{arg}: nothing accepted"
     );
     assert!(!index(&f), "{arg}: no File effect");
+    assert!(
+        !private(&f).contains(REPLY) && !f.home.lines().concat().contains(REPLY),
+        "{arg}: no private rest"
+    );
     assert_eq!(f.charges(), 1, "{arg}: the charge is retained");
     assert_eq!(f.fake.count("/api/chat"), 1, "{arg}: no second chat");
     assert_eq!(
@@ -326,6 +347,7 @@ fn late(point: &str) {
         !f.home.lines().concat().contains(REPLY),
         "{point}: no content"
     );
+    assert!(!private(&f).contains(REPLY), "{point}: no private draft");
     assert_eq!(f.fake.count("/api/chat"), 1, "{point}: one chat");
     assert_eq!(
         native(&f),
@@ -347,6 +369,7 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/debt-then-stop",
             "first/stop-then-debt",
             "first/budget-then-stop",
+            "first/budget",
             "first/emergency",
             "first/fail-then-stop",
             "first/stop-then-fail",
@@ -449,6 +472,18 @@ fn first(arg: &str) {
             assert!(adv.join().unwrap().is_err());
             cause
         }
+        "budget" => {
+            let (entered, release) = hold_chat(&f, "{}");
+            let adv = advance_in(&m, id);
+            within(&entered);
+            f.home.clock.advance(Duration::from_millis(61_000));
+            let (first, _) = within(&rx);
+            assert_eq!(first, "failed:model_timeout");
+            go_tx.send(()).unwrap();
+            drop(release);
+            assert!(adv.join().unwrap().is_err());
+            "block:budget_time"
+        }
         "emergency" => {
             f.fake.route(|p| (p == "/api/chat").then_some(Answer::Hold));
             f.fake.drain();
@@ -463,7 +498,7 @@ fn first(arg: &str) {
                 "the held chat closes"
             );
             let (first, _) = within(&rx);
-            assert_ne!(first, "ok", "the emergency denies the reply");
+            assert_eq!(first, "failed:model_cancelled", "the emergency's reply");
             let _ = adv.join().unwrap();
             "stop:emergency_stop"
         }
@@ -537,11 +572,14 @@ fn privacy(arg: &str) {
     }];
     let id = f.building(&m, c);
     let calls = AtomicUsize::new(0);
-    f.fake.route(move |p| {
-        (p == "/api/chat").then(|| match calls.fetch_add(1, Ordering::SeqCst) {
+    let metadata = format!("{{\"version\":\"{PEER_VERSION}\",\"note\":\"{METADATA}\"}}");
+    f.fake.route(move |p| match p {
+        "/api/version" => Some(Answer::Json(200, metadata.clone())),
+        "/api/chat" => Some(match calls.fetch_add(1, Ordering::SeqCst) {
             0 => chat(REPLY),
             _ => Answer::Json(500, format!("{{\"error\":\"{ERROR}\"}}")),
-        })
+        }),
+        _ => None,
     });
     if arg == "owed" {
         inject(&f, EndStatus::Owed);
@@ -561,6 +599,17 @@ fn privacy(arg: &str) {
     );
     assert_eq!(native(&f), "recorded", "the native record exists");
     assert!(f.charges() >= 1, "the journal holds the charge");
+    assert!(f.fake.count("/api/version") >= 1, "the metadata was served");
+    let rest = private(&f);
+    assert!(rest.contains(NOTE), "the approved contract rests privately");
+    for canary in [PROMPT, REPLY, ERROR, METADATA] {
+        assert!(!rest.contains(canary), "{arg}: {canary} at private rest");
+        let hex = hex::encode(canary);
+        assert!(
+            !rest.contains(&hex),
+            "{arg}: {canary} at private rest (hex)"
+        );
+    }
     let texts = [
         errors,
         format!("{advance:?}"),
@@ -571,7 +620,7 @@ fn privacy(arg: &str) {
         format!("{:?}", f.home.session.startup_report()),
     ];
     for text in &texts {
-        for canary in [NOTE, PROMPT, REPLY, ERROR, "面包"] {
+        for canary in [NOTE, PROMPT, REPLY, ERROR, METADATA, "面包"] {
             assert!(!text.contains(canary), "{arg}: {canary} leaked");
             let hex = hex::encode(canary);
             assert!(!text.contains(&hex), "{arg}: {canary} leaked (hex)");
@@ -591,6 +640,7 @@ fn sb3_positive_reply_uses_only_intended_memory_path() {
         &[
             "memory/recorded",
             "memory/failed",
+            "memory/rejected",
             "memory/unrecorded",
             "memory/late",
         ],
@@ -605,13 +655,23 @@ fn memory(arg: &str) {
         r.map_or_else(|_| quiet(), |reply| draft(&reply.into_content()))
     });
     let id = f.building(&m, f.contract());
-    let reply = arg != "failed";
-    f.fake.route(move |p| {
-        (p == "/api/chat").then(|| match reply {
-            true => chat(REPLY),
-            false => Answer::Json(500, format!("{{\"error\":\"{ERROR}\"}}")),
-        })
-    });
+    let answer = match arg {
+        "failed" => Answer::Json(500, format!("{{\"error\":\"{ERROR}\"}}")),
+        // Unfinished, so the transport rejects it: the bytes reach Mother's
+        // peer connection and must never become a reply.
+        "rejected" => Answer::Json(
+            200,
+            serde_json::json!({
+                "model": NAME,
+                "message": {"role": "assistant", "content": REPLY},
+                "done": false,
+            })
+            .to_string(),
+        ),
+        _ => chat(REPLY),
+    };
+    f.fake
+        .route(move |p| (p == "/api/chat").then(|| answer.clone()));
     if arg == "unrecorded" {
         inject(&f, EndStatus::Owed);
     }
@@ -655,13 +715,21 @@ fn memory(arg: &str) {
         );
     }
     let kept = kept.contains(REPLY);
-    let mut pending = vec![private];
+    // Everything private, and in the staging tree its folders and every file
+    // holding the accepted bytes, is owner-only.
+    let owner_only = |path: &Path| {
+        let mode = std::os::unix::fs::PermissionsExt::mode(&path.metadata().unwrap().permissions());
+        assert_eq!(mode & 0o077, 0, "{arg}: owner-only {}", path.display());
+    };
+    owner_only(&staging);
+    let mut pending = vec![private, staging.clone()];
     while let Some(dir) = pending.pop() {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
-            let mode =
-                std::os::unix::fs::PermissionsExt::mode(&path.metadata().unwrap().permissions());
-            assert_eq!(mode & 0o077, 0, "{arg}: owner-only {}", path.display());
+            let holds_reply = || !path.is_dir() && walk_file(&path).contains(REPLY);
+            if path.is_dir() || !path.starts_with(&staging) || holds_reply() {
+                owner_only(&path);
+            }
             if path.is_dir() {
                 pending.push(path);
             }
@@ -675,12 +743,228 @@ fn memory(arg: &str) {
         return;
     }
     assert_ne!(got, "ok", "{arg}: no usable reply");
-    if arg != "failed" {
+    if !matches!(arg, "failed" | "rejected") {
         assert_eq!(returned(&f), 0, "{arg}: no LaneReturned");
     }
     assert_eq!(dispatched(&f), 0, "{arg}: no File dispatch");
     assert!(!kept, "{arg}: no deliverable on any path");
     assert!(!index(&f), "{arg}: no File effect");
+}
+
+// ------------------------------------------------- the acceptance sinks
+
+/// One real session restriction; the state it leaves. `emergency` is the one
+/// primitive CR, LF and CRLF reduce to (the terminal bytes are the retained
+/// host evidence), `fatal` is `SessionIngress::fail`, `budget` is the mission
+/// deadline on the shared clock.
+fn restrict(f: &SFx, kind: &str) -> SessionState {
+    let ingress = f.home.session.ingress();
+    let quit = || drop(ingress.accept(CommandKind::Quit, 900).unwrap());
+    match kind {
+        "emergency" => {
+            ingress.emergency().unwrap();
+            SessionState::Emergency
+        }
+        "fatal" => {
+            ingress.fail();
+            SessionState::Failed
+        }
+        "quit" => {
+            quit();
+            SessionState::ClosingNormal
+        }
+        "restricted" => {
+            quit();
+            ingress.emergency().unwrap();
+            SessionState::ClosingRestricted
+        }
+        "budget" => {
+            f.home.clock.advance(Duration::from_millis(61_000));
+            SessionState::Normal
+        }
+        other => panic!("unknown restriction {other}"),
+    }
+}
+/// Nothing of the reply was accepted, and the attempt stayed recorded.
+fn nothing_accepted(f: &SFx, m: &Mother, id: MissionId, case: &str) {
+    assert_eq!(returned(f), 0, "{case}: no LaneReturned");
+    assert_eq!(dispatched(f), 0, "{case}: no File dispatch");
+    assert!(!index(f), "{case}: no File effect");
+    assert!(
+        !f.home.lines().concat().contains(REPLY) && !private(f).contains(REPLY),
+        "{case}: no content at rest"
+    );
+    assert_eq!(
+        native(f),
+        "recorded",
+        "{case}: the conclusive native record"
+    );
+    assert!(terminal(f, id), "{case}: the mission ends");
+    assert!(m.state(id).unwrap().is_some_and(|s| s.is_terminal()));
+}
+
+/// Record-first classification (`adapter::classify`) under each restriction
+/// landing while the admitted chat is held. `failed:` is produced only by
+/// classify's recorded-error arm (a refusal is `refused:`, an unrecorded
+/// attempt `record_unavailable`), so each case proves the sink ran with the
+/// session already in the named state.
+#[test]
+fn sb3_restriction_before_the_record_is_classified() {
+    children(
+        "sb3_restriction_before_the_record_is_classified",
+        &[
+            "classify/emergency",
+            "classify/fatal",
+            "classify/quit",
+            "classify/restricted",
+            "classify/budget",
+        ],
+    );
+}
+fn classified(kind: &str) {
+    let f = SFx::new();
+    let (tx, rx) = channel();
+    let m = f.mother(1, move |ctx| {
+        tx.send(outcome(&ask(ctx))).unwrap();
+        quiet()
+    });
+    let id = f.building(&m, f.contract());
+    f.fake.route(|p| (p == "/api/chat").then_some(Answer::Hold));
+    f.fake.drain();
+    let adv = advance_in(&m, id);
+    let held = f.fake.wait(Seen::Request("/api/chat".into()));
+    assert!(held, "{kind}: the attempt is admitted and held");
+    let state = restrict(&f, kind);
+    assert_eq!(f.home.session.state(), state, "{kind}: before the reply");
+    let closed = f.fake.wait(Seen::Closed("/api/chat".into()));
+    assert!(closed, "{kind}: the held chat closes");
+    let want = match kind {
+        "budget" => "failed:model_timeout",
+        _ => "failed:model_cancelled",
+    };
+    assert_eq!(within(&rx), want, "{kind}: classified as recorded failure");
+    assert!(
+        adv.join().unwrap().is_err(),
+        "{kind}: the advance is refused"
+    );
+    assert_eq!(f.home.session.state(), state, "{kind}: still that state");
+    nothing_accepted(&f, &m, id, kind);
+}
+
+/// The post-record recheck in `Caller::call`, restricted in the one window
+/// between the record and the recheck (the `model_replied` hook, which fires
+/// only for a recorded `Replied`). Without a restriction it releases the
+/// reply; with one, `invalidated`, and only the recheck can produce that here.
+#[test]
+fn sb3_restriction_at_the_post_record_recheck() {
+    children(
+        "sb3_restriction_at_the_post_record_recheck",
+        &[
+            "recheck/none",
+            "recheck/emergency",
+            "recheck/fatal",
+            "recheck/quit",
+            "recheck/restricted",
+            "recheck/budget",
+        ],
+    );
+}
+fn rechecked(kind: &str) {
+    let f = SFx::new();
+    let (tx, rx) = channel();
+    let m = f.mother(1, move |ctx| {
+        let r = ask(ctx);
+        let content = r.as_ref().is_ok_and(|x| x.content().contains(REPLY));
+        tx.send((outcome(&r), content)).unwrap();
+        quiet()
+    });
+    let id = f.building(&m, f.contract());
+    let (entered, release) = hold_chat(&f, REPLY);
+    let (replied_tx, replied_rx) = signal();
+    let (resume_tx, resume_rx) = signal();
+    let resume_rx = Mutex::new(resume_rx);
+    m.hooks_for_test().model_replied.arm(0, move || {
+        let _ = replied_tx.send(());
+        let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+    });
+    let adv = advance_in(&m, id);
+    within(&entered);
+    release.send(()).unwrap();
+    within(&replied_rx);
+    let state = match kind {
+        "none" => SessionState::Normal,
+        restricted => restrict(&f, restricted),
+    };
+    assert_eq!(f.home.session.state(), state, "{kind}: at the recheck");
+    resume_tx.send(()).unwrap();
+    let (got, content) = within(&rx);
+    if kind == "none" {
+        assert_eq!((got.as_str(), content), ("ok", true), "the positive");
+        adv.join().unwrap().unwrap();
+        assert_eq!(returned(&f), 1, "the positive is admitted");
+        return;
+    }
+    let seen = (got.as_str(), content);
+    assert_eq!(seen, ("invalidated", false), "{kind}: the recheck refuses");
+    assert!(
+        adv.join().unwrap().is_err(),
+        "{kind}: the advance is refused"
+    );
+    assert_eq!(f.home.session.state(), state, "{kind}: still that state");
+    nothing_accepted(&f, &m, id, kind);
+}
+
+/// A restriction after the recheck released the reply, before the lane
+/// returns: the lane held the reply and still nothing is accepted. Then a
+/// restriction after the LaneReturned append: the admitted answer stands,
+/// once, and no File is published.
+#[test]
+fn sb3_restriction_after_the_recheck_or_the_append() {
+    children(
+        "sb3_restriction_after_the_recheck_or_the_append",
+        &["after/recheck", "after/append"],
+    );
+}
+fn after_recheck(point: &str) {
+    let f = SFx::new();
+    let (tx, rx) = channel();
+    let (go_tx, go_rx) = signal();
+    let go_rx = Mutex::new(go_rx);
+    let wait = point == "recheck";
+    let m = f.mother(1, move |ctx| {
+        let r = ask(ctx);
+        let content = r.as_ref().is_ok_and(|x| x.content().contains(REPLY));
+        tx.send((outcome(&r), content)).unwrap();
+        if wait {
+            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+        }
+        draft(&r.map(ModelReply::into_content).unwrap_or_default())
+    });
+    let id = f.building(&m, f.contract());
+    f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
+    if point == "append" {
+        let ingress = f.home.session.ingress();
+        f.probe.at("effect_dispatched", move || {
+            ingress.emergency().unwrap();
+        });
+    }
+    let adv = advance_in(&m, id);
+    let seen = within(&rx);
+    assert_eq!((seen.0.as_str(), seen.1), ("ok", true), "the lane has it");
+    if point == "recheck" {
+        assert_eq!(restrict(&f, "emergency"), f.home.session.state());
+        go_tx.send(()).unwrap();
+        assert!(adv.join().unwrap().is_err(), "the result is refused");
+        assert_eq!(end(&f, id), "stop:emergency_stop");
+        return nothing_accepted(&f, &m, id, "after the recheck");
+    }
+    let advanced = adv.join().unwrap();
+    assert_eq!(f.home.session.state(), SessionState::Emergency);
+    assert_eq!(returned(&f), 1, "the admitted answer stands once");
+    assert!(advanced.is_err(), "the advance ends stopped");
+    assert_eq!(m.state(id).unwrap(), Some(MissionState::Stopped));
+    assert_eq!(dispatched(&f), 1, "the restriction lands at that dispatch");
+    assert!(!index(&f), "no File is published");
 }
 
 // --------------------------------------------------------------- guard
