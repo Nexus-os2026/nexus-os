@@ -140,6 +140,9 @@ def capture(argv,timeout=30,limit=1024**2,env=None):
 
 def mounts(): return parse_mounts(Path('/proc/self/mountinfo').read_text())
 def status(pid='self'): return dict(line.split(':',1) for line in Path('/proc',str(pid),'status').read_text().splitlines() if ':' in line)
+def cmdline_tokens(raw):
+    # Q23: Chrome rewrites its process title into one space-joined string; split on NUL and space.
+    return [t for part in raw.split(b'\0') for t in part.split(b' ') if t]
 
 def isolation(context):
     records = mounts(); current = status()
@@ -316,7 +319,7 @@ def chrome_observation():
                 if not path.name.isdigit(): continue
                 try:
                     info = status(path.name); pid = int(path.name); parents[pid] = int(info['PPid'])
-                    args = (path/'cmdline').read_bytes().split(b'\0')
+                    args = cmdline_tokens((path/'cmdline').read_bytes())
                     require(b'--no-sandbox' not in args and b'--disable-setuid-sandbox' not in args,'unsafe Chrome flag')
                     if b'--type=renderer' in args: candidates[pid] = info
                 except (FileNotFoundError,ProcessLookupError): continue
