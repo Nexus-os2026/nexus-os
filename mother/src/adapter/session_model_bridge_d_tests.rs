@@ -16,6 +16,7 @@ use crate::journal::{verify, Event, MissionId};
 use crate::lane::{LaneContext, LaneOutput, ModelCallError, Verdict};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::evidence::EndStatus;
+use nexus_governed_control::authority::ids::Digest;
 use nexus_governed_control::host_session::{CommandKind, SessionState};
 use nexus_governed_control::inference::{ModelReply, ModelRequest, ResponseSchema};
 use std::path::Path;
@@ -151,6 +152,12 @@ fn walk(dir: &Path) -> String {
 }
 fn walk_file(path: &Path) -> String {
     String::from_utf8_lossy(&std::fs::read(path).unwrap()).into_owned()
+}
+/// I6's digest of `text`: `text_digest` is private to its crate, so this is
+/// the same public `Digest::of` over its domain (literal, checked in V1).
+const I6_TEXT_DOMAIN: &str = "nexus.evidence.text.v1";
+fn i6_digest(text: &str) -> String {
+    Digest::of(I6_TEXT_DOMAIN, &[text.as_bytes()]).to_hex()
 }
 /// The private store, where only the approved contract and draft may rest.
 fn private(f: &SFx) -> String {
@@ -591,6 +598,9 @@ fn privacy(arg: &str) {
         arg == "replied",
         "only the lane, on a recorded attempt"
     );
+    let i6 = include_str!("../../../crates/nexus-governed-control/src/authority/evidence.rs");
+    let domain = format!("TEXT_DOMAIN: &str = \"{I6_TEXT_DOMAIN}\";");
+    assert!(i6.contains(&domain), "the digest domain is I6's");
     let broker = f.home.dir.join("broker");
     let sqlite = broker.join("p3-evidence/evidence.sqlite3");
     assert!(
@@ -609,6 +619,8 @@ fn privacy(arg: &str) {
             !rest.contains(&hex),
             "{arg}: {canary} at private rest (hex)"
         );
+        let digest = i6_digest(canary);
+        assert!(!rest.contains(&digest), "{arg}: {canary} at rest (digest)");
     }
     let texts = [
         errors,
@@ -624,6 +636,8 @@ fn privacy(arg: &str) {
             assert!(!text.contains(canary), "{arg}: {canary} leaked");
             let hex = hex::encode(canary);
             assert!(!text.contains(&hex), "{arg}: {canary} leaked (hex)");
+            let digest = i6_digest(canary);
+            assert!(!text.contains(&digest), "{arg}: {canary} leaked (digest)");
         }
     }
 }

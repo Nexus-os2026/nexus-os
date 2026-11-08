@@ -44,7 +44,8 @@ Real C1 caller → SessionPort → session broker → fake peer.
   | stop-then-fail | `stop:owner` |
 
 - **V1** `sb3_canaries_stay_out_of_model_evidence`: note, prompt, reply, error and peer-metadata
-  (`/api/version`) canaries, and their hex forms.
+  (`/api/version`) canaries, their hex forms and their I6 content digests (spec 6.6 also prohibits
+  content hashes).
   - They are absent from the Mother journal, the whole session broker tree (SQLite, WAL, SHM, File
     store), Advance, errors, reasons, `close_obligations()` and `startup_report()`. This holds for the
     replied and owed cases.
@@ -137,13 +138,24 @@ changes all seven verifier tests pass.
 | late content projected | `Caller::call`: `if self.live()` removed from the Replied arm | Killed at O2 `replied: never reaches the lane` |
 | late result admitted | LaneReturned step: the pending-lane condition removed | Killed at O2 `the advance is refused`, one assertion before `no LaneReturned`; V2 `late: no LaneReturned` also fails |
 | first cause lost | `file_latch_terminal`: intent not latched | Killed in O3 at `Stop arrives second`, before the literal; O1's end literal also fails |
-| canary in evidence | reply in the native `model_digest` detail, and the I6 seal skipped for that key | Killed at V1 `REPLY leaked` |
+| canary in evidence, as its digest | reply in the native `model_digest` detail (one edit; I6 seals it to `model_digest_sha256`) | Killed at V1 `REPLY leaked (digest)`, after SB3D-R4 |
+| canary in evidence, raw | the same, and the I6 seal skipped for that key | Killed at V1 `REPLY leaked` |
 | rejected reply reaches the lane | transport `done` check removed | Killed at V2 `rejected: no usable reply` |
 | recorded failure not classified | `Caller::call`: `Failed` mapped to `Invalidated` | Killed at `classified as recorded failure` |
 
-Two first attempts survived and were not counted. The canary plant without the seal change passed because
-I6 replaces an unregistered value with its digest, so nothing leaked. The rejected plant passed because the
-case's body also lacked the eval counts and a later check refused it; the body was corrected.
+Two first attempts survived. The one-edit canary plant survived the first V1, and that was a real gap
+(review f7/review-sb3d1-1, SB3D-R4): I6 replaced the reply with its digest, and that digest of the reply stayed
+in the native evidence, which spec 6.6 also prohibits. V1 searched only plaintext and hex, so it did not see it.
+V1 now searches each canary's I6 digest (the public `Digest::of` over I6's domain, the domain checked against
+the source) and kills that plant. The rejected plant passed because the case's body also lacked the eval
+counts and a later check refused it; the body was corrected.
+
+### V1 limits
+
+- V1 does not inspect `HostSession::inventory()` or an export renderer. `close_obligations()` and
+  `startup_report()` are narrower observations.
+- The digest search matches a digest of exactly one canary. A digest over a larger text that contains a canary
+  (a whole error body, a concatenation) is not detected.
 
 ### Verifier limits
 
