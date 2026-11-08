@@ -41,14 +41,14 @@ UNITS = {
         # owned by mothergate-root@%i.service replaces the bind of the skeleton directory.
         ['After=mothergate.service\n','After=mothergate.service\nBindsTo=mothergate-root@%i.service\nAfter=mothergate-root@%i.service\n'],
         ['RootDirectory=/usr/lib/gatebox/root\n','RootDirectory=/run/mothergate-root/%i\n'],
-        # Q30 (review F6-1 B2): /root is its own tmpfs, never a self-bind of the root filesystem.
-        ['TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n',
-         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n'
-         'TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n'],
         ['InaccessiblePaths=/usr/local /usr/share/ollama\n',
          # Q29: /usr/local is an empty read-only tmpfs (an inaccessible node breaks GCC's default include path).
          'InaccessiblePaths=+/usr/share/ollama\nInaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n'
-         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n']]}
+         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n'],
+        # Q30 (review F6-1 B2): /root is its own tmpfs, never a self-bind of the root filesystem.
+        ['TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n',
+         'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n'
+         'TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n']]}
 
 class CustodyTests(unittest.TestCase):
     def setUp(self):
