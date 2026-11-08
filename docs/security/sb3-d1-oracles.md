@@ -39,7 +39,10 @@ Real C1 caller → SessionPort → session broker → fake peer.
   | stop-then-debt | `stop:owner`, with recording debt kept as a separate fact |
   | budget-then-stop | `block:budget_time` (SB3C-F1) |
   | budget-entry-then-stop (lapse before the lane's first call) | `block:budget_time` (SB3C-F1) |
-  | stop-then-budget (Stop engaged, then the lapse) | `stop:owner` |
+  | stop-then-budget (Stop engaged, lapse, then the caller asks) | `stop:owner` |
+  | failed-, closing-lapse-then-stop (restriction with no cause, lapse, Stop) | `stop:owner`, as at `a299c0d9` |
+  | revoked-lapse-then-stop (invocation revoked, lapse, Stop) | `stop:owner`, as at `a299c0d9` |
+  | reply-lapse-then-stop, reply-lapse (lapse observed by the Replied guard) | `block:budget_time` |
   | budget (no Stop) | `block:budget_time` |
   | emergency | `stop:emergency_stop` |
   | fail-then-stop | `fail:lane_fail:builder` |
@@ -75,23 +78,37 @@ on the shared File cell, was wrong:
 - `Caller::live()` was therefore false at the budget observation sites, the `BudgetTime` deny did not run, and
   nothing was latched until the Stop's `OwnerStop` (word `0x40` to `0xffff41`).
 
-The fix (`Caller::latch_lapse`, `coordinator/model_calls.rs`): the budget latch is withheld only for a latched
-cause (`reason()`, not `is_engaged()`), a revoked invocation, or the emergency stop, at the existing observation
-sites and at call entry (where the session route refuses before the meter's `OutOfTime` deny can run). `live()`
-is unchanged, so admission and reply release are unchanged. The first-wins cell decides a race with Stop. The
-ordinary cell is `CellMode::Legacy`, so there `reason().is_none()` is the same as `!is_engaged()`.
+The fix (`Caller::note_lapse`, `coordinator/model_calls.rs`, as repaired under SB3C-R14) latches budget only when
+the deadline is the sole invalidation. The one crate addition is `HaltCell::word_restricted`, read-only, which
+reports what the word records: a latched cause, or Closing, Failed, Sealed or Emergency. An elapsed deadline writes
+nothing to the word. A revoked invocation or the emergency stop also withholds the latch. It runs at each place the
+caller finds the lapse: call entry, `CallDeadline::expired` (which returns the sample that drove the latch), the
+post-call check, and the Replied guard's refusal. `live()`, Stop and admission are unchanged; the first-wins cell
+decides a race with Stop. On a `CellMode::Legacy` cell `word_restricted` equals `is_engaged`, so the ordinary route
+is unchanged.
 
-RED before the fix, on `7bbe4ef5`: `first/budget-then-stop` and `first/budget-entry-then-stop` failed at
-`Stop arrives second`, `Ok(Stopped)` for `Ok(Blocked)`; `first/stop-then-budget` passed.
+Schedules (SB3C-R14 (d)). A held lane waits for its explicit release, and an expired hold exits the case's child
+process, so the coordinator's own budget boundary cannot satisfy these cases. In `stop-then-budget` the lane asks only
+after Stop is engaged and the clock moved.
 
-Plants on the fixed code (applied to the real path, restored by sha256, not committed):
+RED. On `7bbe4ef5`, before the fix: `budget-then-stop` and `budget-entry-then-stop` failed at `Stop arrives second`.
+On `9bd53ad2` against `bb4c5ec9`'s production: `failed-` and `closing-lapse-then-stop` ended `Ok(Blocked)` for
+`Ok(Stopped)`; `reply-lapse-then-stop` `Ok(Stopped)` for `Ok(Blocked)`; `reply-lapse` `fail:lane_fail:builder`; the
+one-sample guard failed. With `a299c0d9`'s `model_calls.rs`: `failed-`, `closing-`, `revoked-lapse-then-stop` and
+`stop-then-budget` passed, which is where their expected `stop:owner` comes from.
+
+Plants on the final code (applied to the real path, restored by sha256, not committed):
 
 | Plant | Mutation | Result |
 |---|---|---|
-| Stop-wins mapping restored | `file_finish_intent`: a budget `Failure` intent ends `Stop(Owner)` | Killed at `Stop arrives second` (D1 budget-then-stop, budget-entry-then-stop; ordinary `c1_s6`); also `budget: the first cause is kept` |
-| session latch removed (ordinary/session divergence) | `latch_lapse` guarded by `live()` | Killed at `Stop arrives second` on the two session cases; ordinary `c1_s6` still passes |
-| latch after Stop could win | latch moved to `Caller::drop` | Killed at `Stop arrives second` on the two session cases; ordinary `c1_s6` killed earlier, at its `engaged && !terminal` assertion |
-| entry latch removed | `latch_lapse` not called at call entry | Killed at `Stop arrives second` on budget-entry-then-stop only |
+| Stop-wins mapping restored | `file_finish_intent`: a budget `Failure` intent ends `Stop(Owner)` | Killed at `Stop arrives second` (D1 budget-then-stop, budget-entry-then-stop, reply-lapse-then-stop; ordinary `c1_s6`); also both no-Stop literals |
+| session latch removed (ordinary/session divergence) | guard is `live()` | Killed at `Stop arrives second` on the session cases and `reply-lapse`'s literal; ordinary `c1_s6` passes |
+| latch after Stop could win | latch moved to `Caller::drop` | Killed at `Stop arrives second` on the session cases; ordinary `c1_s6` killed earlier, at `engaged && !terminal` (masked there) |
+| entry latch removed | no latch at call entry | Killed at `Stop arrives second` on budget-entry-then-stop only |
+| `is_revoked` guard removed | condition deleted | Killed at `revoked-lapse-then-stop: Stop`, `Ok(Blocked)` for `Ok(Stopped)` |
+| accessor bypassed | `reason().is_none()` for `word_restricted` | Killed at `failed-` and `closing-lapse-then-stop: Stop` |
+| reply latch removed | Replied refusal does not latch | Killed at `Stop arrives second` (reply-lapse-then-stop) and `reply-lapse`'s literal |
+| second clock sample | `expired` re-reads the deadline | Behaviour oracles do not kill it (no session clock seam for that interleaving); killed only by the source-text guard `expired returns the latch's sample` |
 
 ## The R8 acceptance sinks (SB3D-R3)
 
