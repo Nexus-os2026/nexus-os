@@ -415,14 +415,19 @@ impl<'a, P: EffectPort> Caller<'a, P> {
         )
     }
     fn live(&self) -> bool {
-        !self.liveness.is_revoked()
+        let live = !self.liveness.is_revoked()
             && self
                 .meter
                 .coordinator
                 .file
                 .as_ref()
                 .is_some_and(|f| !f.cell.is_engaged())
-            && !self.meter.coordinator.port.emergency_stopped()
+            && !self.meter.coordinator.port.emergency_stopped();
+        #[cfg(test)]
+        if !live {
+            self.meter.coordinator.hooks.model_refused.fire();
+        }
+        live
     }
     /// O3 (SB3C-F1): once the mission deadline lapses a session-scoped File
     /// cell already reads engaged with nothing in its word, so `live` cannot
@@ -434,6 +439,8 @@ impl<'a, P: EffectPort> Caller<'a, P> {
     fn note_lapse(&self) -> bool {
         let expired = self.deadline.expired();
         let c = self.meter.coordinator;
+        #[cfg(test)]
+        c.hooks.model_deadline_sampled.fire();
         if expired
             && !self.liveness.is_revoked()
             && c.file.as_ref().is_some_and(|f| !f.cell.word_restricted())
@@ -486,6 +493,8 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
             return Err(ModelCallError::RecordUnavailable);
         }
+        #[cfg(test)]
+        c.hooks.model_returned.fire();
         self.note_lapse();
         #[cfg(test)]
         if matches!(attempt, Ok(ModelAttempt::Replied(_))) {

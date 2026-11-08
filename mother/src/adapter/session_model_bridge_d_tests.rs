@@ -388,6 +388,10 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/revoked-lapse-then-stop",
             "first/reply-lapse-then-stop",
             "first/reply-lapse",
+            "first/poll-crossing-then-stop",
+            "first/scope-only-then-stop",
+            "first/scope-entry-order-then-stop",
+            "first/scope-reply-order-then-stop",
             "first/budget",
             "first/emergency",
             "first/fail-then-stop",
@@ -420,6 +424,8 @@ fn first(arg: &str) {
                 | "failed-lapse-then-stop"
                 | "closing-lapse-then-stop"
                 | "revoked-lapse-then-stop"
+                | "scope-only-then-stop"
+                | "scope-entry-order-then-stop"
         ) {
             let _ = ready_tx.send(());
             hold(&go_rx);
@@ -589,6 +595,88 @@ fn first(arg: &str) {
             }
             let _ = adv.join().unwrap();
             "block:budget_time"
+        }
+        // SB3C-R15 (b): the deadline crosses inside one poll, after the
+        // caller's sample and before the scope's, and Stop lands while the
+        // attempt is returning to Mother. The timeout's own poll must already
+        // be followed by the caller's observation and latch.
+        "poll-crossing-then-stop" => {
+            let (entered, release) = hold_chat(&f, "{}");
+            let adv = advance_in(&m, id);
+            within(&entered);
+            let (returned_tx, returned_rx) = signal();
+            let (resume_tx, resume_rx) = signal();
+            let resume_rx = Mutex::new(resume_rx);
+            m.hooks_for_test().model_returned.arm(0, move || {
+                let _ = returned_tx.send(());
+                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+            });
+            let clock = f.home.clock.clone();
+            m.hooks_for_test()
+                .model_deadline_sampled
+                .arm(0, move || clock.advance(Duration::from_millis(61_000)));
+            within(&returned_rx); // Before Mother's post-call observation.
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+            resume_tx.send(()).unwrap();
+            let (first, _) = within(&rx);
+            assert_eq!(first, "failed:model_timeout");
+            go_tx.send(()).unwrap();
+            drop(release);
+            assert!(adv.join().unwrap().is_err());
+            "block:budget_time"
+        }
+        // SB3C-R16: the scope refuses with the mission budget not lapsed, the
+        // state a lapsed request deadline Q leaves (Q itself is 300 s of real
+        // time). The `order` cases also lapse the budget after the refusal's
+        // own reading: the sample before `live` decides, never a later one.
+        "scope-only-then-stop" | "scope-entry-order-then-stop" | "scope-reply-order-then-stop" => {
+            let lapse_scope = || {
+                let clock: Arc<dyn nexus_governed_control::authority::clock::Clock> =
+                    f.home.clock.clone();
+                let context = f.home.port.context();
+                context.narrow_mission_deadlines(clock, 1, 1).unwrap();
+            };
+            let refused_late = || {
+                let clock = f.home.clock.clone();
+                m.hooks_for_test()
+                    .model_refused
+                    .arm(0, move || clock.advance(Duration::from_millis(61_000)));
+            };
+            let adv = if arg == "scope-reply-order-then-stop" {
+                let (entered, release) = hold_chat(&f, "{}");
+                let (replied_tx, replied_rx) = signal();
+                let (resume_tx, resume_rx) = signal();
+                let resume_rx = Mutex::new(resume_rx);
+                m.hooks_for_test().model_replied.arm(0, move || {
+                    let _ = replied_tx.send(());
+                    let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+                });
+                let adv = advance_in(&m, id);
+                within(&entered);
+                release.send(()).unwrap();
+                within(&replied_rx);
+                lapse_scope();
+                refused_late();
+                resume_tx.send(()).unwrap();
+                adv
+            } else {
+                let adv = advance_in(&m, id);
+                within(&ready_rx);
+                lapse_scope();
+                if arg == "scope-entry-order-then-stop" {
+                    refused_late();
+                }
+                go_tx.send(()).unwrap();
+                adv
+            };
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated", "{arg}: the scope refused");
+            assert!(!terminal, "{arg}: not yet ended");
+            assert_eq!(m.cell_for_test().cause(), None, "{arg}: nothing latched");
+            assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}: Stop");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            "stop:owner"
         }
         "budget" => {
             let (entered, release) = hold_chat(&f, "{}");
