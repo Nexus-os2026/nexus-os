@@ -312,6 +312,25 @@ class Q26Oracles(unittest.TestCase):
         self.assertIn("chrome_process_is_renderer((path / 'cmdline').read_bytes())",source)
         self.assertIn('renderer_isolated(info, status(proc.pid))',source)
 
+class Q27Oracles(unittest.TestCase):
+    """Q27 (Codex review-2 of GBX-F3): denial over-approximates every Chromium spelling;
+    renderer classification follows Chromium's parser exactly (NUL boundaries, one prefix, '--' terminator)."""
+    def setUp(self): self.is_renderer = load('probe').chrome_process_is_renderer
+    def test_whitespace_and_prefix_variants_are_denied(self):
+        for raw in (b'chrome\0--type=renderer\0\t--no-sandbox\0', b'chrome\0--disable-setuid-sandbox\t\0',
+                    b'chrome\0 --no-sandbox \0', b'chrome\0\n--no-sandbox\r\0', b'chrome\0---no-sandbox\0',
+                    b'chrome\0--\0--no-sandbox\0', b'chrome\0--lang=en --no-sandbox\0',
+                    b'chrome --type=renderer\t--no-sandbox\0\0'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError,'unsafe Chrome flag'): self.is_renderer(raw)
+    def test_renderer_classification_matches_chromium_parser(self):
+        for raw in (b'chrome\0---type=renderer\0', b'chrome\0--\0--type=renderer\0',
+                    b'chrome\0--lang=en --type=renderer\0', b'chrome\0--type=renderer\0--type=gpu-process\0',
+                    b'chrome\0--type= renderer\0', b'chrome\0--Type=renderer\0'):
+            with self.subTest(raw=raw): self.assertFalse(self.is_renderer(raw))
+        for raw in (b'chrome\0--type=renderer\0', b'chrome\0-type=renderer\0', b'chrome\0 --type=renderer\t\0',
+                    b'/opt/google/chrome/chrome --type=renderer --lang=en\0\0\0'):
+            with self.subTest(raw=raw): self.assertTrue(self.is_renderer(raw))
+
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
         # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
