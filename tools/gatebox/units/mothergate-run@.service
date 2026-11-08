@@ -2,6 +2,8 @@
 Description=Gate Box payload %i
 BindsTo=mothergate.service
 After=mothergate.service
+BindsTo=mothergate-root@%i.service
+After=mothergate-root@%i.service
 RequiresMountsFor=/var/lib/mothergate
 AllowIsolate=no
 
@@ -13,7 +15,7 @@ Group=gaterun
 DynamicUser=no
 SupplementaryGroups=
 UMask=0077
-RootDirectory=/usr/lib/gatebox/root
+RootDirectory=/run/mothergate-root/%i
 WorkingDirectory=/
 ExecStart=/usr/bin/python3 -I -B /gate/bin/init.py
 

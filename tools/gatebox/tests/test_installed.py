@@ -444,6 +444,18 @@ class Q30Oracles(unittest.TestCase):
                     'gate':{'directory':True},'gate/request.json':{'sha256':hashlib.sha256(b'').hexdigest()},'root':{'directory':True}}
         (tmp/'skeleton.json').write_text(json.dumps(manifest)); (tmp/'skeleton.json').chmod(0o644)
         return skeleton, tmp/'skeleton.json', base, manifest
+    @staticmethod
+    def fake_mount(calls):
+        # Offline stand-in for mount(8): unmounting a tmpfs discards everything copied into it.
+        def mount(argv):
+            calls.append(argv)
+            if argv[0] == '/usr/bin/umount':
+                for child in Path(argv[1]).iterdir():
+                    if child.is_dir() and not child.is_symlink():
+                        for base, dirs, files in os.walk(child): os.chmod(base,0o700)
+                        import shutil; shutil.rmtree(child)
+                    else: child.unlink()
+        return mount
     def up(self, rootfs, skeleton, manifest, base, mounted=None):
         calls = []
         def mount(argv): calls.append(argv)
@@ -479,7 +491,7 @@ class Q30Oracles(unittest.TestCase):
                 calls = []
                 with self.assertRaises(ValueError):
                     rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),
-                              mount=calls.append,ismount=lambda path: True)
+                              mount=self.fake_mount(calls),ismount=lambda path: True)
                 self.assertEqual(calls[-1],['/usr/bin/umount',str(base/self.RUN)])
                 self.assertFalse((base/self.RUN).exists())
     def test_rootfs_refuses_bad_identity_layout_and_reuse(self):
@@ -564,14 +576,14 @@ class Q31Oracles(unittest.TestCase):
         owned = type('Owned',(),{'pid':4242})(); runner.children.add(owned)
         calls = []
         with patch.object(init.os,'listdir',return_value=[str(os.getpid())]), \
-                patch.object(init.Path,'read_text',return_value='4242 5151\n'), \
+                patch.object(init,'children',return_value='4242 5151\n'), \
                 patch.object(init.os,'waitpid',side_effect=lambda pid,flags: calls.append((pid,flags)) or (0,0)):
             runner.reap_orphans()
         self.assertEqual(calls,[(5151,os.WNOHANG)])
     def test_unreadable_child_list_fails_closed(self):
         init = load('init'); runner = init.Runner(-1,-1)
         with patch.object(init.os,'listdir',return_value=[str(os.getpid())]), \
-                patch.object(init.Path,'read_text',side_effect=FileNotFoundError('children')), \
+                patch.object(init,'children',side_effect=FileNotFoundError('children')), \
                 self.assertRaises(OSError):
             runner.reap_orphans()
     def test_command_loop_reaps(self):
@@ -606,7 +618,7 @@ class Q8F3Oracles(unittest.TestCase):
                 calls.append(argv)
             with patch.dict(scope,run=validate):
                 staged = scope['stage_security'](files,1234,5678,stage)
-            self.assertEqual(len(staged),5)
+            self.assertEqual(len(staged),6)  # Q30: four units (root unit added) + sudoers + polkit.
             self.assertEqual({c[0] for c in calls},{'/usr/sbin/visudo','/usr/bin/systemd-analyze'})
             self.assertEqual(os.stat(stage).st_mode & 0o777,0o700)
             for source,target in staged: self.assertEqual(source.parent,stage)

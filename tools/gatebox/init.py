@@ -42,6 +42,10 @@ def packet(fd, value):
         if not count: raise ValueError('collector lost')
         data = data[count:]
 
+def children(task):
+    # Q31: kernel list of a payload PID-1 thread's direct children (adopted orphans included).
+    with open('/proc/self/task/'+task+'/children') as stream: return stream.read()
+
 def artifact_package(item):
     return tomllib.loads(Path(item['manifest_path']).read_text())['package']['name']
 
@@ -50,6 +54,21 @@ class Runner:
         self.log, self.status = log, status
         self.deadline, self.total, self.serial = time.monotonic()+14000, 0, 0
         self.children, self.artifacts, self.results = set(), [], {}
+    def reap_orphans(self):
+        # Q31: PID 1 adopts every orphan; reap exited ones promptly, as a host init does, so a
+        # killed descendant never lingers as a zombie that kill -0 still reports. The runner's
+        # own Popen children are never waited here: Popen keeps sole ownership of their status.
+        owned = {proc.pid for proc in self.children}
+        main = str(os.getpid())
+        for task in os.listdir('/proc/self/task'):
+            try: text = children(task)
+            except FileNotFoundError:
+                if task == main: raise
+                continue  # A non-main thread exited meanwhile.
+            for pid in map(int,text.split()):
+                if pid in owned: continue
+                try: os.waitpid(pid,os.WNOHANG)
+                except ChildProcessError: pass  # Already reaped by an exiting thread's wait.
     def output(self, name, block):
         self.total += len(block)
         if self.total > 64*1024**2: raise ValueError('run log bound')
@@ -72,6 +91,7 @@ class Runner:
         try:
             while selector.get_map():
                 if time.monotonic() >= self.deadline: raise TimeoutError('payload deadline')
+                self.reap_orphans()
                 for key, _ in selector.select(.1):
                     block = os.read(key.fd,65536)
                     if not block: selector.unregister(key.fileobj)

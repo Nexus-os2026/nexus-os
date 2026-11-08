@@ -1,0 +1,23 @@
+[Unit]
+Description=Gate Box payload root %i
+# Q30: started only as a dependency of mothergate-run@%i.service; stops with it.
+StopWhenUnneeded=yes
+RefuseManualStart=yes
+AllowIsolate=no
+
+[Service]
+# The tmpfs must be mounted in the host mount namespace, so no mount-namespace
+# option may be set here; the payload unit's own namespace setup consumes it.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py up %i
+ExecStop=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py down %i
+NoNewPrivileges=yes
+PrivateNetwork=yes
+CapabilityBoundingSet=CAP_SYS_ADMIN
+UMask=0077
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+StandardInput=null
+StandardOutput=journal
+StandardError=journal

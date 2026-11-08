@@ -181,12 +181,24 @@ def select_renderer(candidates,parents,browser_pid,browser):
         chosen = chosen or dict(evidence,pid=pid,parents=parents)
     return chosen
 
+def whole_mount(records, point, readonly=False):
+    # Q30: the product's workspace rule (files::mount_of) on the live payload: exactly one entry
+    # at the point, root '/', its device listed exactly once, and a whole tmpfs.
+    at = [m for m in records if m['point']==point]
+    require(len(at)==1,'whole mount: '+point)
+    entry = at[0]
+    require(entry['type']=='tmpfs' and entry['root']=='/'
+            and sum(m['device']==entry['device'] for m in records)==1,'whole mount: '+point)
+    if readonly: require('ro' in entry['options'],'read-only mount: '+point)
+    return entry
+
 def isolation(context):
     records = mounts(); current = status()
     points = {m['point']:m for m in records}
     gate = points['/run/gate']; run = points['/run']
     require(gate['type'] == 'tmpfs' and gate['root'] == '/' and sum(m['device']==gate['device'] for m in records)==1,'whole /run/gate tmpfs')
     require(run['type'] == 'tmpfs' and 'noexec' in run['options'] and 'size=16384k' in run['super'],'/run 16MiB noexec')
+    whole_mount(records,'/',readonly=True); whole_mount(records,'/work'); whole_mount(records,'/tmp')
     require(os.getpid()==1 and os.getuid()==context['payload_uid'] and Path('/proc/self/uid_map').read_text().split()==['0','0','4294967295'],'PID/UID mapping')
     require(current['NoNewPrivs'].strip()=='1' and all(int(current[k],16)==0 for k in ('CapInh','CapPrm','CapEff','CapBnd','CapAmb')),'caps/NNP')
     namespaces = {n:os.readlink('/proc/self/ns/'+n) for n in ('pid','mnt','ipc','uts','net')}
