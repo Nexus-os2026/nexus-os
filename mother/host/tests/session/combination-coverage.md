@@ -80,9 +80,17 @@ ingress classes, the 6 retained failures and 2 schedule sides: 1,190 cells.
 That is the B1e side x value form; the full cross product is not authored and
 not claimed. Each cell cites a retained test by exact name (`c:`, primitive
 evidence and never a claim of new-route execution), names a C2-new oracle
-(`x:`), closes with a reason from the closed N/A list, or is OPEN with an owner
-on the verifier's literal allowlist. No historical receipt counts as a test.
+(`x:`), closes with a reason from the closed N/A list, or is OPEN with an owner.
+Every cell is bound to the verifier's literal audited table per (sink, dimension,
+value), row metadata and boundary text included (SB3C-R8); the table records the
+audit (Oracle doc 14.6), it does not prove the audit right. A citation stands
+only where the test executes that sink's own boundary on that value; a mock of
+the boundary or a neighbouring injection point is OPEN. After the audit: 279
+cited, 2 executed, 254 N/A, 655 OPEN (D1 88, D2 566, F1 1). No historical receipt
+counts as a test.
 
 The `SB-3C` block of `model-bridge-cases.tsv` lists, for each ingress class, the
 session-level primitive it reduces to and the retained evidence for that
-reduction. `stop_all` has no retained session-route evidence and is OPEN.
+reduction. `stop_all` has no retained session-route evidence and is OPEN; six
+reductions no session-level test performs (including real partial Ctrl-D input)
+are OPEN at the session level (Oracle doc 14.7).

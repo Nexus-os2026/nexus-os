@@ -1443,26 +1443,33 @@ still land in that order, each proven.
 
 ### 14.6 Dispositions
 
-| Disposition | Cells |
-|---|---:|
-| `c:` retained test, exact name (primitive evidence only) | 510 |
-| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 |
-| N/A BOOTSTRAP_NO_MISSION | 71 |
-| N/A LEGACY_FINALIZATION_ONLY | 92 |
-| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (each names its denial oracle) | 104 |
-| N/A METADATA_HAS_NO_CHARGE | 14 |
-| N/A PREBIND_NO_RUN_OR_CONSENT | 5 |
-| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 |
-| OPEN D1 (reply acceptance, lane result) | 36 |
-| OPEN D2 (composition, restriction, close) | 345 |
-| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 |
+Counts after the SB3C-R8 citation audit, with the pre-audit count at 65050de0.
+The audit table is `/home/nexus/NEXUS/sb3c2-citation-audit.md` (outside the
+repository): one row per distinct cited test.
 
-OPEN is bound to the verifier's literal list (R18 precedent). 51 of the D2 cells
-are `decline` or `record_*` at a sink with no Owner answer or no durable record:
-not reachable, but the closed list has no reason for them, so they stay OPEN
-rather than take a misfit reason. Narrowing them is an Architect ruling.
-`c:` cells are retained broker or private-route tests: they evidence the
-primitive and do not relabel any historical receipt as new-route execution.
+| Disposition | Before | After |
+|---|---:|---:|
+| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 |
+| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 |
+| N/A BOOTSTRAP_NO_MISSION | 71 | 65 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 |
+| N/A METADATA_HAS_NO_CHARGE | 14 | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 | 88 |
+| OPEN D2 (composition, restriction, close) | 345 | 566 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 |
+
+Every cell is bound by the verifier's literal CELLS table (SB3C-R8 (d)): a
+disposition that is not the audited one for that (sink, dimension, value) fails,
+including a citation of a real test, an N/A from the closed list and OPEN. 50 of
+the D2 cells are `decline` or `record_*` at a sink with no Owner answer or no
+durable record: not reachable, but the closed list has no reason for them, so
+they stay OPEN rather than take a misfit reason. Narrowing them is an Architect
+ruling. `LEGACY_FINALIZATION_ONLY` is spec 8.3's explicit exclusion of existing
+finalization work, not a claim of unreachability; `SealedFinalizing` and `none`
+at `mother_end`, `primary_end` and `delivery` remain cited positives (H5).
 
 ### 14.7 Ingress reductions (ruling (a), forecast 8.5)
 
@@ -1475,6 +1482,15 @@ then fail the session (`mother/host/src/terminal.rs`). `door_fence` and
 `stop_all` has only ordinary-route evidence (`lite_*`), so it is OPEN at every
 non-finalization sink (32 cells) rather than mapped by assumption.
 
+SB3C-R8 (b): a reduction is covered only by a test that performs it, order and
+repetition included. The session-level matrix runs single emergency and failure
+cases, so `original_cell_unscheduled`, `repeated`, `EOF`, `partial_Ctrl_D`,
+`master_close` and `read_failure` are OPEN at every sink that cited it (126
+cells). Their host evidence stays recorded for the reduction itself, except
+`partial_Ctrl_D`: `d_o20_stop_ctrl_d_and_master_close_before_publication` sends
+Ctrl-D without a partial line, and no retained test performs real partial input
+before Ctrl-D, so its host evidence is `none`.
+
 ### 14.8 Review findings carried (SB3C-R6 (e), (f))
 
 - **(1) Foreign R:** reachable-limited. One File port per session
@@ -1484,3 +1500,18 @@ non-finalization sink (32 cells) rather than mapped by assumption.
   Mother with existing seams. The broker's holds are private to its crate and no
   hold crosses a caller callback (P1). It needs a production seam, so it is
   recorded OPEN:D2 and not claimed. Broker-level poison stays cited.
+
+### 14.9 SB3C-R8 repair (attempt 1)
+
+Codex review f7/review-sb3c2-1 found 23 of 50 sampled citations wrong or loose.
+An audit of all 42 distinct cited tests dropped 232 cited cells; none was
+reworded or moved to a nearby test. The largest drops: every `charge_append`,
+`meter_settle`, `record_first_classify`, `post_record_recheck` and `close_report`
+broker citation, because those sinks are Mother or host code the broker matrix
+never runs (its meter is a counting mock); the six ingress reductions above;
+fault, state and schedule claims the cited test does not exercise.
+`emergency_restrict`, `close_restrict` and `close_obligations` are reachable at
+Bootstrap (N/A corrected; `close_obligations` is witnessed by
+`sb2_install_completion_is_atomic_to_close_observers`, the others OPEN). R6's
+sealed and closed denials named an oracle for model-call refusal, not those
+restrictions, and are OPEN.
