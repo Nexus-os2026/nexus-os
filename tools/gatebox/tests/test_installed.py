@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 import sys
@@ -757,6 +758,14 @@ class Q34Oracles(unittest.TestCase):
         for old in ('899e3872c5b61223c87b905f63c66947a816259b','0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'):
             for name in ('install.sh','probe.py','policy/registry.json','README.md','init.py','supervisor.py','client.py'):
                 self.assertNotIn(old,(HERE/name).read_text(),name)
+
+class Q35Oracles(unittest.TestCase):
+    """Q35 (post-merge, F6): F6 added rootfs.py and the root unit to FILES (29), but the README PIN
+    recipe still refused any inventory other than 27, so the reviewed bundle could not be built.
+    The recipe's count is the installer's FILES length, always."""
+    def test_readme_pin_count_is_the_installer_inventory(self):
+        counts = re.findall(r"len\(values\['FILES'\]\)!=(\d+)",(HERE/'README.md').read_text())
+        self.assertEqual(counts,[str(len(installer()['FILES']))])
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
