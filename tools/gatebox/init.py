@@ -3,21 +3,17 @@ import os
 import re
 import subprocess
 import base64
-import collections
 import ctypes
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
-import select
 import selectors
 import shutil
 import signal
 import struct
-import sys
 import time
 import tomllib
-import traceback
 ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
        'CARGO_HOME':'/work/cargo','CARGO_TARGET_DIR':'/work/target','CARGO_BUILD_JOBS':'4',
        'RUST_TEST_THREADS':'4','CARGO_TERM_COLOR':'never','CARGO_NET_OFFLINE':'true',
@@ -45,53 +41,6 @@ def packet(fd, value):
         count = os.write(fd,data)
         if not count: raise ValueError('collector lost')
         data = data[count:]
-
-def describe(error, limit=8):
-    """Exception type, a bounded reason and file:line locations only: no source text or locals."""
-    frames = collections.deque(maxlen=limit)
-    for frame, line in traceback.walk_tb(error.__traceback__):
-        frames.append(frame.f_code.co_filename+':'+str(line)+' in '+frame.f_code.co_name)
-    try: reason = str(error)
-    except BaseException: reason = '<unprintable>'
-    if len(reason) > 512: reason = reason[:512]+' [truncated]'
-    return [type(error).__qualname__+': '+reason]+['  at '+f for f in frames]
-
-def send_bounded(fd, frames, seconds):
-    """Write whole frames before a deadline; restore the descriptor's blocking mode."""
-    deadline, blocking = time.monotonic()+seconds, os.get_blocking(fd)
-    os.set_blocking(fd,False)
-    try:
-        for data in frames:
-            while data:
-                remaining = deadline-time.monotonic()
-                if remaining <= 0 or not select.select([],[fd],[],remaining)[1]: return False
-                try: count = os.write(fd,data)
-                except BlockingIOError: continue
-                if not count: return False
-                data = data[count:]
-        return True
-    finally: os.set_blocking(fd,blocking)
-
-def report_failure(runner):
-    """Best effort, bounded in size and time; never masks the original failure."""
-    try:
-        chain, error = [], sys.exc_info()[1]
-        while error is not None and len(chain) < 8 and all(error is not seen for seen in chain):
-            chain.append(error); error = error.__cause__ or error.__context__
-        lines = []
-        for index, item in enumerate(reversed(chain)):
-            head, *frames = describe(item)
-            lines += [('primary ' if index == 0 else 'then ')+head]+frames
-        block = '\n'.join(lines).encode('utf-8',errors='replace')[:16*1024]
-        if runner.total+len(block) > 64*1024**2: return
-        runner.total += len(block)
-        frames = []
-        for offset in range(0,len(block),2048):
-            data = json.dumps({'id':'init-error','data':base64.b64encode(block[offset:offset+2048]).decode()},
-                              separators=(',',':')).encode()
-            frames.append(struct.pack('!I',len(data))+data)
-        send_bounded(runner.log,frames,2.0)
-    except BaseException: pass
 
 def artifact_package(item):
     return tomllib.loads(Path(item['manifest_path']).read_text())['package']['name']
@@ -286,9 +235,6 @@ def main():
             runner.output('resources',json.dumps(accounting).encode())
             runner.output('inputs',json.dumps({'before':before,'after':observations()}).encode())
         packet(status,{'event':'complete'})
-    except BaseException:
-        report_failure(runner)
-        raise
     finally:
         for proc in runner.children:
             if proc.poll() is None:
