@@ -424,6 +424,23 @@ impl<'a, P: EffectPort> Caller<'a, P> {
                 .is_some_and(|f| !f.cell.is_engaged())
             && !self.meter.coordinator.port.emergency_stopped()
     }
+    /// O3 (SB3C-F1): once the mission deadline lapses a session-scoped File
+    /// cell already reads engaged, with no cause latched, so `live` cannot
+    /// tell whether this lapse is the first cause. Only a latched cause, a
+    /// revoked invocation or the emergency stop withholds it; the cell's
+    /// first-wins latch still decides any race with Stop. `live` is unchanged:
+    /// admission and reply release stay as they were. Lock-free, like `deny`.
+    fn latch_lapse(&self) {
+        let c = self.meter.coordinator;
+        let unlatched = c.file.as_ref().is_some_and(|f| f.cell.reason().is_none());
+        if unlatched
+            && !self.liveness.is_revoked()
+            && !c.port.emergency_stopped()
+            && self.deadline.expired()
+        {
+            self.deny(BlockReason::BudgetTime);
+        }
+    }
     fn deny(&self, reason: BlockReason) {
         let c = self.meter.coordinator;
         let _ = c.file_latch_terminal(super::lite_intent::FileTerminal::Failure {
@@ -445,6 +462,7 @@ impl<P: EffectPort> Drop for Caller<'_, P> {
 impl<P: EffectPort> ModelCaller for Caller<'_, P> {
     fn call(&self, request: &ModelRequest) -> Result<ModelReply, ModelCallError> {
         if !self.live() {
+            self.latch_lapse();
             return Err(ModelCallError::Invalidated);
         }
         let c = self.meter.coordinator;
@@ -466,9 +484,7 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
             return Err(ModelCallError::RecordUnavailable);
         }
-        if self.live() && self.deadline.expired() {
-            self.deny(BlockReason::BudgetTime);
-        }
+        self.latch_lapse();
         #[cfg(test)]
         if matches!(attempt, Ok(ModelAttempt::Replied(_))) {
             c.hooks.model_replied.fire();
@@ -515,10 +531,7 @@ impl<P: EffectPort> CallMeter for Caller<'_, P> {
 }
 impl<P: EffectPort> CallDeadline for Caller<'_, P> {
     fn expired(&self) -> bool {
-        let expired = self.deadline.expired();
-        if expired && self.live() {
-            self.deny(BlockReason::BudgetTime);
-        }
-        expired
+        self.latch_lapse();
+        self.deadline.expired()
     }
 }
