@@ -261,8 +261,56 @@ class Q23Oracles(unittest.TestCase):
         tree = ast.parse((HERE/'probe.py').read_text())
         function = next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='chrome_observation')
         source = ast.unparse(function)
-        self.assertIn("cmdline_tokens((path / 'cmdline').read_bytes())",source)
+        self.assertIn("chrome_process_is_renderer((path / 'cmdline').read_bytes())",source)
         self.assertNotIn("split(b'\\x00')",source)
+
+class Q26Oracles(unittest.TestCase):
+    """Q26 (Codex review-1 of GBX-F3): behavioural negative controls for the A5 Chrome checks."""
+    def setUp(self): self.probe = load('probe')
+    def test_switch_parsing_denies_unsafe_flags_in_every_chromium_form(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        for raw in (b'chrome\0--type=renderer\0--no-sandbox\0', b'chrome --type=renderer --no-sandbox\0\0',
+                    b'chrome\0--disable-setuid-sandbox\0', b'chrome\0--no-sandbox=1\0', b'chrome\0-no-sandbox\0',
+                    b'chrome\0--disable-setuid-sandbox=true\0'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError,'unsafe Chrome flag'): is_renderer(raw)
+    def test_only_renderer_type_is_a_renderer(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        self.assertTrue(is_renderer(b'/opt/google/chrome/chrome --type=renderer --lang=en\0\0'))
+        self.assertTrue(is_renderer(b'chrome\0--type=renderer\0'))
+        for raw in (b'chrome\0--type=gpu-process\0', b'chrome\0--type=zygote\0', b'chrome\0', b'',
+                    b'chrome\0--lang=--type=renderer\0', b'chrome\0--type=rendererX\0'):
+            with self.subTest(raw=raw): self.assertFalse(is_renderer(raw))
+    def status(self, seccomp='2', nspid='71\t4\t1', filters='3'):
+        return {'Seccomp':'\t'+seccomp,'NSpid':'\t'+nspid,'Seccomp_filters':'\t'+filters}
+    def test_renderer_isolation_requires_chrome_own_seccomp_filter_and_nested_pid_ns(self):
+        isolated = self.probe.renderer_isolated
+        browser = self.status(filters='2')
+        self.assertEqual(isolated(self.status(),browser),
+                         dict(seccomp=2,pid_levels=3,seccomp_filters=3,browser_seccomp_filters=2))
+        for bad in (self.status(seccomp='0'), self.status(nspid='71\t4'), self.status(filters='2'),
+                    self.status(filters='1')):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError,'renderer isolation'): isolated(bad,browser)
+    def evidence(self, **renderer):
+        base = dict(pid=71,seccomp=2,pid_levels=3,seccomp_filters=3,browser_seccomp_filters=2,parents={'71':15,'15':2,'2':1})
+        base.update(renderer)
+        return dict(argv=['/opt/google/chrome/chrome','--headless=new'],browser_pid=2,renderer=base,browser_label='chrome',
+                    local_html='<p>gatebox-local</p>',version='Google Chrome 1',private_desktop={'display':':0'})
+    def test_validate_sensor_rejects_weakened_a5_evidence(self):
+        validate = self.probe.validate_sensor
+        validate('A5',self.evidence())
+        for bad in (dict(seccomp=0), dict(pid_levels=2), dict(seccomp_filters=2), dict(browser_seccomp_filters=None),
+                    dict(parents={'71':15,'15':9,'9':1})):
+            with self.subTest(bad=bad), self.assertRaises((ValueError,TypeError)): validate('A5',self.evidence(**bad))
+        unsafe = self.evidence(); unsafe['argv'] = unsafe['argv']+['--no-sandbox']
+        with self.assertRaisesRegex(ValueError,'unsafe flags'): validate('A5',unsafe)
+        for key in ('local_html','version','renderer','private_desktop'):
+            missing = self.evidence(); missing.pop(key)
+            with self.subTest(missing=key), self.assertRaisesRegex(ValueError,'missing A5'): validate('A5',missing)
+    def test_chrome_observation_uses_the_shared_helpers(self):
+        tree = ast.parse((HERE/'probe.py').read_text())
+        source = ast.unparse(next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='chrome_observation'))
+        self.assertIn("chrome_process_is_renderer((path / 'cmdline').read_bytes())",source)
+        self.assertIn('renderer_isolated(info, status(proc.pid))',source)
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
