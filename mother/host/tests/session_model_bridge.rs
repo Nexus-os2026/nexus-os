@@ -37,7 +37,7 @@ R0|registration_install|-|slot installation in register_model_private (model.ins
 R0|registration_readiness|-|HostSession::finish_bootstrap readiness over the model slot|sb2_bootstrap_cannot_overtake_registration|R0|MP-SB-2
 R1|identity_view|-|SessionDoor::model_identity (model_identity_private)|sb3c_identity_is_original_request_read_only|R1|MP-SB-4-Q
 R2|inference_binding|-|SessionDoor::admit_inference to bind_inference_private original-door CAS|sb3c_public_binding_is_exact_and_idempotent|R2|MP-SB-3-CAS
-R3|call_slot_reserve|-|admit_attempt_private admission and Attempt::acquire slot reservation|sb3_concurrent_operation_refuses_before_ticket|A2|MP-SB-5-slot
+R3|call_slot_reserve|-|model::Attempt::acquire slot reservation|sb3_concurrent_operation_refuses_before_ticket|A2|MP-SB-5-slot
 R3|attempt_ticket|-|run table admit_session_attempt original-snapshot CAS|sb3_attempt_ceiling_is_eight_on_the_original_run|A1|MP-SB-5-count
 R4|charge_append|-|Mother BorrowedMeter::charge ModelCallCharged append (coordinator/model_calls.rs)|sb3_caps_and_budget_keep_existing_goldens|C1|MP-SB-7-charge
 R4|meter_settle|-|Mother BorrowedMeter::settle clears in_flight (coordinator/model_calls.rs)|sb3_caps_and_budget_keep_existing_goldens|C3|MP-SB-7-charge
@@ -77,13 +77,13 @@ const OWNERS: &str = "D1 D2 F1";
 /// (register 14.6). R18 precedent for OPEN.
 const CELLS: &str = "\
 lifecycle|Bootstrap|c:sb2_one_session_operation_active|registration_reserve
-lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|registration_reserve
+lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|registration_reserve,call_slot_reserve
 ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,stop_all,quit,fatal|open:D2|registration_reserve,registration_record
 ingress|mission_stop,door_fence,budget,grant_revocation,grant_expiry|na:BOOTSTRAP_NO_MISSION|registration_reserve,registration_record,registration_install,registration_readiness,registration_version,registration_status,registration_tags,registration_show
 fault|none|c:sb2_one_session_operation_active|registration_reserve
 fault|decline|na:BOOTSTRAP_NO_MISSION|registration_reserve,registration_record,registration_install,registration_readiness,registration_version,registration_status,registration_tags,registration_show
 fault|record_failed,record_unknown,poison,panic|open:D2|registration_reserve,registration_install,producer_join
-schedule|before|open:D2|registration_reserve,registration_record,mother_end,primary_end,delivery
+schedule|before|open:D2|registration_reserve,registration_record,call_slot_reserve,mother_end,primary_end,delivery
 schedule|after|c:sb2_bootstrap_cannot_overtake_registration|registration_reserve
 lifecycle|Bootstrap|c:sb2_registration_records_before_install_once|registration_record
 lifecycle|Normal|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb3c_registration_is_bootstrap_only_once)|registration_record,registration_install,registration_version,registration_status,registration_tags,registration_show
@@ -125,11 +125,8 @@ ingress|grant_revocation,grant_expiry|c:sb3_original_file_grant_remains_required
 fault|none|c:sb3c_public_binding_is_exact_and_idempotent|inference_binding
 fault|decline,record_failed,record_unknown,poison,panic|open:D2|inference_binding,attempt_ticket,cancel_run,door_halt,emergency_restrict,close_restrict
 schedule|before|c:sb3c_stop_before_public_binding_installs_nothing|inference_binding
-lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|c:sb3_matrix_r3_reserve_before|call_slot_reserve
-ingress|CR,LF,CRLF,mission_stop,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_r3_reserve_before|call_slot_reserve
-ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,stop_all|open:D2|call_slot_reserve,call_version,call_status,call_tags,call_chat,attempt_record,attempt_pin_release
+ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|call_slot_reserve,charge_append,meter_settle,operation_complete,close_report
 fault|none,poison|c:sb3_matrix_r3_reserve_before|call_slot_reserve
-schedule|before|c:sb3_matrix_r3_reserve_before|call_slot_reserve
 schedule|after|c:sb3_matrix_r3_reserve_after|call_slot_reserve
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_r3_cas_before|attempt_ticket
 ingress|CR,LF,CRLF,door_fence,budget,quit,fatal|c:sb3_matrix_r3_cas_before|attempt_ticket
@@ -138,7 +135,6 @@ fault|none|c:sb3_matrix_r3_cas_before|attempt_ticket
 schedule|before|c:sb3_matrix_r3_cas_before|attempt_ticket
 schedule|after|c:sb3_matrix_r3_cas_after|attempt_ticket
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|open:D2|charge_append,meter_settle,operation_complete
-ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|charge_append,meter_settle,operation_complete,close_report
 fault|none,decline,record_unknown,poison,panic|open:D2|charge_append
 fault|record_failed|x:sb3_durable_charge_precedes_chat|charge_append
 schedule|before,after|open:D2|charge_append,meter_settle,cancel_run,door_halt,emergency_restrict,close_restrict,operation_complete,close_obligations,close_report,producer_join
@@ -154,6 +150,7 @@ schedule|before|c:sb2_paused_before_cas_ingress_wins_dispatches_nothing|registra
 schedule|after|c:sb2_held_registration_request_cancels_and_joins|registration_version,registration_status,registration_tags,registration_show
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
 ingress|CR,LF,CRLF,mission_stop,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
+ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,stop_all|open:D2|call_version,call_status,call_tags,call_chat,attempt_record,attempt_pin_release
 fault|none,poison|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
 fault|decline,panic|open:D2|call_version,call_status,call_tags
 schedule|before|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
