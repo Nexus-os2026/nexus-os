@@ -429,14 +429,14 @@ impl<'a, P: EffectPort> Caller<'a, P> {
     /// tell whether this lapse is the first cause. Only a latched cause, a
     /// revoked invocation or the emergency stop withholds it; the cell's
     /// first-wins latch still decides any race with Stop. `live` is unchanged:
-    /// admission and reply release stay as they were. Lock-free, like `deny`.
+    /// admission and reply release stay as they were.
     fn latch_lapse(&self) {
         let c = self.meter.coordinator;
-        let unlatched = c.file.as_ref().is_some_and(|f| f.cell.reason().is_none());
-        if unlatched
+        // Read in the old `expired && live` order: an unexpired poll does no more.
+        if self.deadline.expired()
             && !self.liveness.is_revoked()
+            && c.file.as_ref().is_some_and(|f| f.cell.reason().is_none())
             && !c.port.emergency_stopped()
-            && self.deadline.expired()
         {
             self.deny(BlockReason::BudgetTime);
         }
