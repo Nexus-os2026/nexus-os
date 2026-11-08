@@ -499,7 +499,10 @@ fn read(path: &Path) -> Result<String, String> {
 /// Verifies the `SB-3C` block of `model-bridge-cases.tsv`: the ingress
 /// reductions exactly as listed, and the recorded SB3C-R6 rows.
 pub fn verify_cases(cases: &str) -> Result<usize, String> {
-    let (sources, host) = (evidence_sources(), host_evidence_sources());
+    verify_cases_in(cases, evidence_sources())
+}
+fn verify_cases_in(cases: &str, sources: String) -> Result<usize, String> {
+    let host = host_evidence_sources();
     let mut block: Vec<Vec<&str>> = Vec::new();
     for line in cases.lines() {
         let row: Vec<&str> = line.split('\t').collect();
@@ -787,6 +790,11 @@ fn sb3c_r8_tamper_controls_are_rejected() {
     let sources = evidence_sources().replacen(signature, &ignored, 1);
     let run = verify_in(&real(), sources).map(|_| ());
     check("#[ignore] on a cited test", run, "no such retained test");
+    let primitive = "#[test]\nfn sb3_concurrent_operation_refuses_before_ticket() {";
+    let ignored = format!("#[ignore]\n{primitive}");
+    let sources = evidence_sources().replacen(primitive, &ignored, 1);
+    let run = verify_in(&real(), sources).map(|_| ());
+    check("#[ignore] on a primitive", run, "is not its evidence");
     let text = read(&session_file("model-bridge-cases.tsv")).unwrap();
     let cases = |t: String| verify_cases(&t).map(|_| ());
     let poison = "SB3C/record/poison_session_port\tOPEN:D2";
@@ -798,6 +806,15 @@ fn sb3c_r8_tamper_controls_are_rejected() {
     );
     let orphan = format!("{text}SB3C/ingress/orphan\tt\tb\te\tSB-3C\tx\n");
     check("malformed orphan", cases(orphan), "malformed SB-3C row");
+    let session = "#[test]\nfn sb3_matrix_r5_observer_before() {";
+    let ignored = format!("#[ignore]\n{session}");
+    let sources = evidence_sources().replacen(session, &ignored, 1);
+    let run = verify_cases_in(&text, sources).map(|_| ());
+    check(
+        "#[ignore] on an ingress test",
+        run,
+        "no executed session-level",
+    );
     let eof = "SB3C/ingress/EOF\tOPEN:D2";
     let claimed = "SB3C/ingress/EOF\tsb3_matrix_r5_observer_before";
     check(
