@@ -815,7 +815,7 @@ post_record_recheck|lifecycle|SealedFinalizing|na:LIFECYCLE_DENIES_BEFORE_THIS_S
 /// SB3C-R9 (c): a cited test's definition rewritten so it would not run,
 /// or is not a test at all: label|replacement for `{sig}`. The Rust text
 /// stays plausible; only the verifier's reading of it is under test.
-const DISABLED: [(&str, &str); 10] = [
+const DISABLED: [(&str, &str); 12] = [
     ("ignore above a comment", "#[ignore]\n// Disabled.\n{sig}"),
     ("ignore past a blank line", "#[ignore]\n\n{sig}"),
     ("ignore inside a comment", "// #[ignore]\n{sig}"),
@@ -838,6 +838,8 @@ const DISABLED: [(&str, &str); 10] = [
         "const OFF: &str = r#\"\n{sig}\n}\n\"#;\nfn after() {",
     ),
     ("second definition", "{sig}\n}\n{sig}"),
+    ("another attribute, no test", "#[allow(dead_code)]\n{def}"),
+    ("plain function, no test", "{def}"),
 ];
 /// Sets one cell, whichever clause holds it now.
 fn set_cell(sink: &str, dimension: &str, value: &str, to: &str) -> Result<Summary, String> {
@@ -885,7 +887,10 @@ fn sb3c_r8_tamper_controls_are_rejected() {
     let run = verify_in(&real(), sources).map(|_| ());
     check("#[ignore] on a cited test", run, "no such retained test");
     for (label, form) in DISABLED {
-        let replaced = form.replace("{sig}", signature);
+        let definition = signature.strip_prefix("#[test]\n").unwrap();
+        let replaced = form
+            .replace("{sig}", signature)
+            .replace("{def}", definition);
         let sources = evidence_sources().replacen(signature, &replaced, 1);
         let run = verify_in(&real(), sources).map(|_| ());
         check(label, run, "no such retained test");
