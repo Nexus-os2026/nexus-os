@@ -85,8 +85,8 @@ Every cell is bound to the verifier's literal audited table per (sink, dimension
 value), row metadata and boundary text included (SB3C-R8); the table records the
 audit (Oracle doc 14.6), it does not prove the audit right. A citation stands
 only where the test executes that sink's own boundary on that value; a mock of
-the boundary or a neighbouring injection point is OPEN. After the R8 and R9
-audits: 264 cited, 2 executed, 240 N/A, 684 OPEN (D1 94, D2 589, F1 1). No
+the boundary or a neighbouring injection point is OPEN. After the R8, R9 and R10
+audits: 245 cited, 2 executed, 240 N/A, 703 OPEN (D1 94, D2 608, F1 1). No
 historical receipt counts as a test, and which tests ran is proven by the Gate
 Box receipt, not here (Oracle doc 14.10).
 

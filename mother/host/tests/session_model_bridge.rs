@@ -1,8 +1,9 @@
 //! SB-3C R32 supplement (spec 8.2-8.4; SB3C-R6, R8): the 35 route-level sinks
 //! of the session model bridge, verified from the TSV alone. No production
 //! classifier is called: each row and cell must equal the literal audited
-//! tables below (SB3C-R8 (d)), and each cited test must exist as a non-ignored
-//! test. `c:` cites a retained test only where it executes that sink's own
+//! tables below (SB3C-R8 (d)), and each cited name must pass a source-text
+//! typo lint (`is_test`), which does not show a test is compiled, enabled or
+//! run. `c:` cites a retained test only where it executes that sink's own
 //! boundary on that value (the SB3C-R8 audit); `x:` is a C2-new oracle. The
 //! tables are the audit's record: equality proves a row was not changed since
 //! the audit, not that the audit was right. `session_oracles.rs` requires
@@ -270,11 +271,14 @@ fn host_evidence_sources() -> String {
         "../../../crates/nexus-governed-control/src/governed/session_routes_tests.rs",
     ]
 }
-/// SB3C-R9 (c): one item-level definition at column 0, outside any block
-/// comment, whose whole attribute and comment block holds exactly `#[test]`:
-/// no `#[ignore]`, `#[cfg]` or other attribute, and no commented-out
-/// definition. This reads source text; which tests ran is the Gate Box
-/// receipt's inventory (SB3C-R9 (d)).
+/// A typo lint on a cited name, and nothing more (SB3C-R10 (b)): a column-0
+/// `fn` under a plain `#[test]`, read as source text. It does not establish
+/// that a test is compiled, enabled or run. Forms known to pass it although
+/// the test would not run: `#[ignore]` or `#[cfg(any())]` above a comment line
+/// ending in `;` (`/* note */ // x;`); a whole test inside a nested block
+/// comment after an item-like line; a file-level `#! [cfg(any())]` with the
+/// space; a `cfg` on an enclosing module's `mod` declaration in a parent file.
+/// What ran is the receipt check outside this file (register 14.10).
 fn is_test(name: &str, source: &str) -> bool {
     let definition = format!("\nfn {name}() {{");
     let Some(at) = source.find(&definition) else {
@@ -307,7 +311,7 @@ fn is_test(name: &str, source: &str) -> bool {
     }
     false
 }
-/// Whether the nearest block-comment delimiter above `before`'s end opens one.
+/// A line heuristic for the lint above: nesting is not tracked.
 fn in_block_comment(before: &str) -> bool {
     let delimiter = |l: &&str| l.trim_start().starts_with("/*") || l.contains("*/");
     let nearest = before.lines().rev().find(delimiter);
@@ -809,9 +813,8 @@ registration_reserve|lifecycle|SealedFinalizing|na:LIFECYCLE_DENIES_BEFORE_THIS_
 record_first_classify|lifecycle|ClosedClean|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
 post_record_recheck|lifecycle|SealedFinalizing|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
 ";
-/// SB3C-R9 (c): a cited test's definition rewritten so it would not run,
-/// or is not a test at all: label|replacement for `{sig}`. The Rust text
-/// stays plausible; only the verifier's reading of it is under test.
+/// Spellings the `is_test` typo lint catches: label|replacement for `{sig}`.
+/// Not a claim about other spellings of the same thing; see `is_test`.
 const DISABLED: [(&str, &str); 12] = [
     ("ignore above a comment", "#[ignore]\n// Disabled.\n{sig}"),
     ("ignore past a blank line", "#[ignore]\n\n{sig}"),

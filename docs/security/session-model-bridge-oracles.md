@@ -1429,7 +1429,7 @@ still land in that order, each proven.
 
 - `mother/host/tests/session/model-bridge-sinks.tsv`: the frozen 35 sinks (spec 8.3).
 - `mother/host/tests/session_model_bridge.rs`: the TSV-only verifier. It joins rows
-  only against literal tables and an exact-name test-source check; it calls no
+  only against literal tables and a source-text typo lint on test names; it calls no
   production classifier. `session_oracles.rs` requires it and the retained
   validator; the 153,000 is labelled the historical retained matrix.
 - A cell is (sink, dimension, value): 35 x (9 + 17 + 6 + 2) = 1,190. This is the
@@ -1443,23 +1443,23 @@ still land in that order, each proven.
 
 ### 14.6 Dispositions
 
-Counts through the SB3C-R8 and SB3C-R9 audits, 65050de0 being the original
+Counts through the SB3C-R8, R9 and R10 audits, 65050de0 being the original
 table. The audit table is `/home/nexus/NEXUS/sb3c2-citation-audit.md` (outside
 the repository): one row per distinct cited test.
 
-| Disposition | 65050de0 | After R8 | After R9 |
-|---|---:|---:|---:|
-| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 |
-| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 |
-| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 |
-| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 |
-| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 |
-| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 |
-| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 |
-| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 |
-| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 |
-| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 |
-| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 |
+| Disposition | 65050de0 | After R8 | After R9 | After R10 |
+|---|---:|---:|---:|---:|
+| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 |
+| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 |
+| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 |
+| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 |
+| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 |
 
 Every cell is bound by the verifier's literal CELLS table (SB3C-R8 (d)): a
 disposition that is not the audited one for that (sink, dimension, value) fails,
@@ -1539,20 +1539,27 @@ only the listed ones. 15 cited cells and 14 denials became OPEN:
   sealed/closed (they run after the slot is released, so the active-slot
   exclusion does not reach them).
 
-Reading of the sources (R9 (c)): a cited test is one column-0 definition outside
-any block comment, whose whole attribute and comment block holds exactly
-`#[test]`; `#[ignore]`, any `#[cfg]`, a commented-out definition and a
-file-level `cfg` in the evidence sources all fail.
+**Reading of the sources.** `is_test` is a typo lint on cited names; SB3C-R10 (b)
+supersedes R9 (c) as proof. It reads source text and does not establish that a
+test is compiled, enabled or run. Forms known to pass it although the test would
+not run: `#[ignore]` or `#[cfg(any())]` above a comment line ending in `;` such
+as `/* note */ // x;`; a whole test inside a nested block comment after an
+item-like line; a file-level `#! [cfg(any())]` with the space; and a `cfg` on an
+enclosing module's `mod` declaration in a parent file. It is not hardened further.
 
-**Accepted limits (R9 (e)), stated plainly.** An early no-op or an empty body in a
-cited test is not detectable by this verifier; only independent review covers it.
-The literal tables and the sink file come from one audit plan, so agreement
-between them shows nothing changed since the audit and does not show the audit
-was right. No claim is made beyond the per-cell citation.
+**Accepted limits (R9 (e), R10 (d)), stated plainly.** An early no-op or an empty
+body in a cited test is not detectable by this verifier; only independent review
+covers it. The literal tables and the sink file come from one audit plan, so
+agreement between them shows nothing changed since the audit and does not show
+the audit was right. No claim is made beyond the per-cell citation.
 
-**What actually ran (R9 (d)).** This verifier reads source text and does not know
-which tests ran. Proof is outside it: every cited name must be in the Gate Box
-receipt's passed inventory for the exact head and absent from its ignored list.
+**What actually ran (R10 (c)).** Execution proof is `check-citations.py` against
+the Gate Box receipt for the exact head: each cited test is matched by pinned
+binary and full module path, and must be in the passed inventory and not in the
+ignored list. It is an Architect gate outside the repository, so it proves the
+landing head only. It must be re-run on each later SB-3 landing head (D1, F1, D2)
+and before the route opens. A test compiled out by a `cfg` on its enclosing
+module, like the forms above, is covered by that check and not by this verifier.
 
 Cited names are extractable from the data alone. In `model-bridge-sinks.tsv`
 (tab-separated, one header line, 11 columns): the primitive is column 9; columns
@@ -1562,3 +1569,12 @@ disposition cites nothing). In the `SB3C/ingress/` rows of
 `model-bridge-cases.tsv`: column 2 is a session test unless it starts with
 `OPEN:`, and column 4 is `host:NAME` unless it is `host:none`. Host names from
 `faults.rs` and `pty.rs` are `target_os = "linux"` tests.
+
+### 14.11 SB3C-R10 repair (after Deep Diagnostic)
+
+`sb3_matrix_r3_reserve_before` applies its restriction before the route, so
+`admit_attempt_private` returns at its live check before `Attempt::acquire`. The
+19 `call_slot_reserve` lifecycle, ingress and `schedule=before` citations never
+reached the reservation and are OPEN:D2; the boundary is the frozen
+`model::Attempt::acquire slot reservation` wording. Fault `none` and `poison`
+stay: reservation runs with the table already poisoned.
