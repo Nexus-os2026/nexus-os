@@ -466,6 +466,8 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
             self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
             return Err(ModelCallError::RecordUnavailable);
         }
+        #[cfg(test)]
+        c.hooks.model_returned.fire();
         if self.live() && self.deadline.expired() {
             self.deny(BlockReason::BudgetTime);
         }
@@ -499,6 +501,8 @@ impl<P: EffectPort> Coordinator<P> {
 // Publish denial at the callback, before the broker's attempt recording.
 impl<P: EffectPort> CallMeter for Caller<'_, P> {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
+        #[cfg(test)]
+        self.meter.coordinator.hooks.model_charging.fire();
         let result = self.meter.charge();
         match result {
             Err(MeterRefusal::Exhausted | MeterRefusal::InFlight) => {
@@ -516,6 +520,8 @@ impl<P: EffectPort> CallMeter for Caller<'_, P> {
 impl<P: EffectPort> CallDeadline for Caller<'_, P> {
     fn expired(&self) -> bool {
         let expired = self.deadline.expired();
+        #[cfg(test)]
+        self.meter.coordinator.hooks.model_deadline_sampled.fire();
         if expired && self.live() {
             self.deny(BlockReason::BudgetTime);
         }

@@ -1069,6 +1069,7 @@ fn c1_s6_first_cause_and_separate_recording_facts() {
             "first/debt-then-stop",
             "first/stop-then-debt",
             "first/budget-then-stop",
+            "first/ordinary-lapse-then-stop",
         ],
     );
 }
@@ -1092,6 +1093,13 @@ fn first_cause(arg: &str) {
     cell.set(m.cell_for_test()).unwrap();
     let (id, _) = f.building(&m, f.contract());
     match arg {
+        // SB3C-R18 (b): the ordinary route is unchanged: an unobserved lapse
+        // still loses to Stop here.
+        "ordinary-lapse-then-stop" => {
+            f.clock.advance(Duration::from_millis(61_000));
+            assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}");
+            assert_eq!(f.end(id), "stop:owner", "{arg}");
+        }
         "debt-then-stop" => {
             record_next(&f.port, EndStatus::Owed);
             let adv = advance_in(&m, id);
@@ -1153,7 +1161,7 @@ fn first_cause(arg: &str) {
             assert_eq!(f.end(id), "block:budget_time");
         }
     }
-    let recording = arg != "budget-then-stop";
+    let recording = !matches!(arg, "budget-then-stop" | "ordinary-lapse-then-stop");
     assert_eq!(
         m.close().err() == Some(CoordinatorError::Recording),
         recording,
