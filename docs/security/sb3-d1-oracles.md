@@ -1,7 +1,7 @@
 # SB-3 D1: Mother composition oracles (SB3D-R1, R2; SB3C-R5)
 
-Test-only. The route is unchanged. Base: C1 `bc5eb000`, plus a merge of C2 `64da66fd` for the SB3D-R1
-Q2 `SessionPort::inner_for_test` seam only.
+Test-only. The route is unchanged. Base: main `7f406d2a` (C1 and C2), merged into the earlier D1
+branch that had started on C2's `64da66fd` Q2 seam.
 
 D1 lives in its own files so it does not collide with C2 (SB3D-R2):
 - `mother/src/adapter/session_model_bridge_d_tests.rs`;
@@ -23,13 +23,14 @@ Real C1 caller → SessionPort → session broker → fake peer.
   - The calls give `record_unavailable` then `invalidated`. The end is
     `block:broker_refused:evidence_unavailable`, with no LaneReturned, File dispatch or effect.
   - The charge is retained and there is one chat. The broker's own record is still `recorded`.
-  - Later work and `close()` are refused with `Recording`.
+  - Later work and `close()` are refused with `Recording`. No reply content rests in the journal or
+    the private store.
 - **O2** `sb3_late_content_never_projects`: invalidation at three Mother-reachable points (SB3D-R1
   Q3; the broker interior is B2's reply:after and record:before cells).
   - The points are: the held chat, the `model_replied` hook, and after the lane returned (final
     result admission).
-  - There is no LaneReturned, File dispatch, accepted output or content in the journal. The native
-    record stays conclusive.
+  - There is no LaneReturned, File dispatch, accepted output, or content in the journal or the private
+    store. The native record stays conclusive.
 - **O3** `sb3_first_terminal_cause_survives_model_failure`:
 
   | Case | Expected end |
@@ -37,21 +38,25 @@ Real C1 caller → SessionPort → session broker → fake peer.
   | debt-then-stop | `block:broker_refused:evidence_unavailable` |
   | stop-then-debt | `stop:owner`, with recording debt kept as a separate fact |
   | budget-then-stop | **OPEN:SB3C-F1**: today `Stopped` / `stop:owner` |
+  | budget (no Stop) | `block:budget_time` |
   | emergency | `stop:emergency_stop` |
   | fail-then-stop | `fail:lane_fail:builder` |
   | stop-then-fail | `stop:owner` |
 
-- **V1** `sb3_canaries_stay_out_of_model_evidence`: note, prompt, reply and error canaries, and
-  their hex forms.
+- **V1** `sb3_canaries_stay_out_of_model_evidence`: note, prompt, reply, error and peer-metadata
+  (`/api/version`) canaries, and their hex forms.
   - They are absent from the Mother journal, the whole session broker tree (SQLite, WAL, SHM, File
     store), Advance, errors, reasons, `close_obligations()` and `startup_report()`. This holds for the
     replied and owed cases.
+  - The private store holds the approved contract (the note) and no prompt, reply, error or metadata.
   - The native store exists and holds the expected record.
-- **V2** `sb3_positive_reply_uses_only_intended_memory_path`: recorded, failed, unrecorded and late
-  cases.
+- **V2** `sb3_positive_reply_uses_only_intended_memory_path`: recorded, failed, rejected (the
+  transport refuses an unfinished reply), unrecorded and late cases.
   - The reply's content appears only on the intended paths: the private store and the File run's
     staging.
-  - Every private entry is owner-only.
+  - Every private entry, the staging folders and every staged file holding the accepted bytes are
+    owner-only. The broker's own `broker/files/ledger.db-wal` is `0644` inside the `0700` folder; that
+    is the existing SQLite mode, recorded here and not claimed.
   - Failed, unrecorded and late replies leave no deliverable on any path.
 
 ## Known defect OPEN:SB3C-F1 (SB3C-R5)
@@ -65,3 +70,67 @@ session mission also ends `block:budget_time`.
 
 The cell asserts today's behaviour exactly. The guard binds the tag to this one cell, and production
 unit SB3C-F1 flips it.
+
+## The R8 acceptance sinks (SB3D-R3)
+
+Three more oracles, each case in a child process, real C1 caller to SessionPort to fake peer. Each
+restriction is the session primitive the ingress map names: `emergency` (CR, LF and CRLF reduce to it),
+`SessionIngress::fail`, `accept(Quit)`, Quit then emergency for `ClosingRestricted`, and the mission
+deadline on the shared clock. The session state is asserted at the sink.
+
+- `sb3_restriction_before_the_record_is_classified`: restriction lands while the admitted chat is held.
+  `failed:model_cancelled` (`failed:model_timeout` for budget). `failed:` is produced only by
+  `classify`'s recorded-error arm, so the sink ran.
+- `sb3_restriction_at_the_post_record_recheck`: restriction at the `model_replied` hook, which fires only
+  for a recorded `Replied`, between the record and the recheck. Gives `invalidated`; with no restriction,
+  `ok` and the exact reply (the positive that rules out blanket denial).
+- `sb3_restriction_after_the_recheck_or_the_append`: emergency after the lane received the reply (nothing
+  accepted), and emergency after the `LaneReturned` line, at the next journal line (the answer stands
+  once, no File published).
+
+### Register update
+
+Before: 226 cited, 2 executed, 240 N/A, OPEN D1 94, D2 627, F1 1. After: 226 cited, 33 executed, 240 N/A,
+OPEN D1 0, D2 690, F1 1. Total 1,190.
+
+Cells that became `x:` (31; `t` = `..._before_the_record_is_classified`, `r` = `..._at_the_post_record_recheck`,
+`a` = `..._after_the_recheck_or_the_append`, `o` = `sb3_unrecorded_reply_is_unusable`):
+
+| Sink | Lifecycle | Ingress | Fault | Schedule |
+|---|---|---|---|---|
+| `record_first_classify` | Normal `o`; Emergency, Failed, ClosingNormal, ClosingRestricted `t` | CR, LF, CRLF, budget, quit, fatal `t` | none, record_failed, record_unknown `o` | before `t`; after `r` |
+| `post_record_recheck` | Normal, Emergency, Failed, ClosingNormal, ClosingRestricted `r` | CR, LF, CRLF, budget, quit, fatal `r` | none `r` | before `r`; after `a` |
+| `lane_result_admission` | none | none | none | after `a` |
+
+record_failed and record_unknown at `classify` are the Owed and Uncertain statuses injected at the adapter
+(SB3D-R1 Q1): the status is `classify`'s own input there. Native debt stays B's evidence.
+
+Moved to `open:D2` (63), each with why D1 did not execute it at that boundary:
+
+| Cells | Reason |
+|---|---|
+| classify and recheck, lifecycle SealedFinalizing, ClosedClean, ClosedUnclean (6) | No attempt can be in flight after the seal; reaching the sink there is D2's H5 work. |
+| classify and recheck, ingress `original_cell_unscheduled`, `repeated`, `EOF`, `partial_Ctrl_D`, `master_close`, `read_failure`, `stop_all` (14) | No session-level test performs that reduction (ingress map OPEN:D2, or no evidence); D1 adds none. |
+| classify and recheck, ingress `mission_stop`, `door_fence` (4) | The reductions to `SessionDoor::cancel_run` and `halt` are OPEN:D2 under SB3C-R12; D1 does not prove them. |
+| classify and recheck, ingress `grant_revocation`, `grant_expiry` (4) | The original File grant cannot be revoked or expired from Mother with existing seams. |
+| classify, fault poison, panic (2) | `classify` holds no lock and is pure; no seam injects these at it. |
+| recheck, fault record_failed, record_unknown (2) | `Caller::call` returns `RecordUnavailable` before the recheck, so it is not reached on these values. |
+| recheck, fault poison, panic (2) | No Mother-reachable seam at the recheck. |
+| admission, lifecycle Emergency to ClosedUnclean (7) and all 17 ingress values | The restriction is refused at `file_boundary` before the `LaneReturned` step. The sink's own append is not reached, so claiming it would be a neighbouring point. |
+| admission, fault decline, record_failed, record_unknown, poison, panic (5) | Not reached at the append: `model_obligations` refuses debt first; no decline or poison seam. |
+
+`mother_end` / `budget` stays OPEN:F1.
+
+### RED record (before the data and check changes)
+
+With the new controls added and the verifier's logic and data untouched: `sb3d_r3_d1_citation_controls_are_rejected`
+failed with 20 controls RED (the 14 `x:` cases wanted their specific errors and got the old "only a C2-new oracle";
+`open:D1` x3, `#[ignore]` on a D1 oracle, a D1 name that is not a test, and a D1 test as a retained `c:` were all
+accepted) and `sb3d_r3_d1_cells_are_executed_or_owned` failed (executed 2, `open:D1` 94). After the data and logic
+changes all seven verifier tests pass.
+
+### Verifier limits
+
+The verifier shows that a D1 `x:` is a `#[test]` in that file at a cell its table lists, and nothing more:
+it does not run the test or show it reaches the sink (register 14.10, 14.13). `is_test` reads source text and
+the D1 module's `#[cfg]` lines are outside it. The literal tables and these docs share one audit origin.

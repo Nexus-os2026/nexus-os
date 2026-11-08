@@ -1447,19 +1447,19 @@ Counts through the SB3C-R8 to R12 audits, 65050de0 being the original
 table. The audit table is `/home/nexus/NEXUS/sb3c2-citation-audit.md` (outside
 the repository): one row per distinct cited test.
 
-| Disposition | 65050de0 | After R8 | After R9 | After R10 | After R11 | After R12 |
-|---|---:|---:|---:|---:|---:|---:|
-| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 | 239 | 226 |
-| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 | 2 | 2 |
-| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 | 65 | 65 |
-| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 | 92 | 92 |
-| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 | 54 | 54 |
-| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 | 14 | 14 |
-| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 | 5 | 5 |
-| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 | 10 | 10 |
-| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 | 94 | 94 |
-| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 | 614 | 627 |
-| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 | 1 | 1 |
+| Disposition | 65050de0 | After R8 | After R9 | After R10 | After R11 | After R12 | After SB3D-R3 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 | 239 | 226 | 226 |
+| `x:` C2-new oracle (`session_model_composition_tests`), and at the three R8 sinks a D1 oracle (`session_model_bridge_d_tests`) | 2 | 2 | 2 | 2 | 2 | 2 | 33 |
+| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 | 65 | 65 | 65 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 | 92 | 92 | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 | 54 | 54 | 54 |
+| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 | 14 | 14 | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 | 5 | 5 | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 | 10 | 10 | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 | 94 | 94 | 0 |
+| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 | 614 | 627 | 690 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
 
 Every cell is bound by the verifier's literal CELLS table (SB3C-R8 (d)): a
 disposition that is not the audited one for that (sink, dimension, value) fails,
@@ -1614,3 +1614,14 @@ are OPEN:D2. The host column is unchanged:
 `session_literal_thirteen_states_against_real_terminal_paths` drives the real
 `Coordinator::stop` and `SessionPort::fence` on a session fixture, as evidence for
 the reduction alone and not for any model-route sink.
+
+### 14.15 SB-3 D1: the R8 acceptance sinks (SB3D-R3)
+
+D1 executed 31 of the 94 `open:D1` cells on the real SessionPort route and cites
+them as `x:` from `mother/src/adapter/session_model_bridge_d_tests.rs`; the other 63
+moved to `open:D2`. Cell by cell, with the reason for every move, in
+[`sb3-d1-oracles.md`](sb3-d1-oracles.md). The verifier accepts a D1 `x:` only at the
+three R8 sinks, on the cell its literal table lists, and only for a `#[test]` in that
+file. Section 14.13 still governs: these citations are not proven by the verifier, and
+the exact-head receipt check runs them; the Architect adds the D1 file to
+`check-citations.py`'s pins.
