@@ -10,6 +10,7 @@
 //!
 //! A cell is (sink, dimension, value), the B1e side x value precedent. The
 //! full cross product is not authored and not claimed (register 14.5).
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -270,14 +271,48 @@ fn host_evidence_sources() -> String {
         "../../../crates/nexus-governed-control/src/governed/session_routes_tests.rs",
     ]
 }
-/// An executed test: `#[test]` directly on the function, and no attribute
-/// (`#[ignore]`, `#[cfg]`) stacked above it.
+/// SB3C-R9 (c): one item-level definition at column 0, outside any block
+/// comment, whose whole attribute and comment block holds exactly `#[test]`:
+/// no `#[ignore]`, `#[cfg]` or other attribute, and no commented-out
+/// definition. This reads source text; which tests ran is the Gate Box
+/// receipt's inventory (SB3C-R9 (d)).
 fn is_test(name: &str, source: &str) -> bool {
-    let Some(at) = source.find(&format!("#[test]\nfn {name}() {{")) else {
+    let definition = format!("\nfn {name}() {{");
+    let Some(at) = source.find(&definition) else {
         return false;
     };
-    let above = source[..at].trim_end().lines().last().unwrap_or("");
-    !above.trim_start().starts_with("#[")
+    if source.matches(&definition).count() != 1 {
+        return false;
+    }
+    let before = &source[..at];
+    let mut tests = 0;
+    for line in before.lines().rev() {
+        let text = line.trim();
+        if text.is_empty() {
+            continue;
+        }
+        if text.starts_with("//") {
+            let disabled = ["#[ignore", "#[test]", &format!("fn {name}(")];
+            if disabled.iter().any(|d| text.contains(d)) {
+                return false;
+            }
+        } else if text.starts_with("#[") {
+            if line != "#[test]" {
+                return false;
+            }
+            tests += 1;
+        } else {
+            let item_level = text.ends_with('}') || text.ends_with(';');
+            return tests == 1 && item_level && !in_block_comment(before);
+        }
+    }
+    false
+}
+/// Whether the nearest block-comment delimiter above `before`'s end opens one.
+fn in_block_comment(before: &str) -> bool {
+    let delimiter = |l: &&str| l.trim_start().starts_with("/*") || l.contains("*/");
+    let nearest = before.lines().rev().find(delimiter);
+    nearest.is_some_and(|l| !l.contains("*/"))
 }
 fn words(s: &'static str) -> Vec<&'static str> {
     s.split(' ').collect()
@@ -305,6 +340,15 @@ struct Context {
     cells: BTreeMap<(String, String, String), &'static str>,
     sources: String,
     receipts: BTreeSet<&'static str>,
+    executed: RefCell<BTreeMap<String, bool>>,
+}
+impl Context {
+    /// `is_test` once per name: the block walk re-reads the sources.
+    fn executed(&self, name: &str) -> bool {
+        let mut seen = self.executed.borrow_mut();
+        let entry = seen.entry(name.to_owned());
+        *entry.or_insert_with(|| is_test(name, &self.sources))
+    }
 }
 fn context(sources: String) -> Context {
     let mut cells = BTreeMap::new();
@@ -329,6 +373,7 @@ fn context(sources: String) -> Context {
         cells,
         sources,
         receipts,
+        executed: RefCell::default(),
     }
 }
 
@@ -349,7 +394,7 @@ fn check_disposition(
             if kind == "x" && !is_test(rest, C2_ORACLES) {
                 return Err(format!("{at}: x: only a C2-new oracle may claim execution"));
             }
-            if kind == "c" && !is_test(rest, &c.sources) {
+            if kind == "c" && !c.executed(rest) {
                 return Err(format!("{at}: no such retained test {rest}"));
             }
             listed(c, (sink, dimension, value), disposition)?;
@@ -372,7 +417,7 @@ fn check_disposition(
             match oracle {
                 Some(o) if denies => {
                     let named = words(DENIAL_ORACLES).contains(&o);
-                    if !named || !is_test(o, &c.sources) {
+                    if !named || !c.executed(o) {
                         return Err(format!("{at}: {o} is not this sink's denial oracle"));
                     }
                 }
@@ -419,7 +464,7 @@ fn check_row(c: &Context, f: &[&str], summary: &mut Summary) -> Result<(), Strin
     if f[3] != *boundary {
         return Err(format!("{sink}: boundary {:?} is not its boundary", f[3]));
     }
-    let known = is_test(f[8], &c.sources) || is_test(f[8], C2_ORACLES);
+    let known = c.executed(f[8]) || is_test(f[8], C2_ORACLES);
     if f[8] != *primitive || !known {
         return Err(format!("{sink}: primitive {} is not its evidence", f[8]));
     }
@@ -458,6 +503,9 @@ pub fn verify(tsv: &str) -> Result<Summary, String> {
 }
 /// `verify` against `sources`, so a control can plant an ignored test.
 fn verify_in(tsv: &str, sources: String) -> Result<Summary, String> {
+    if sources.contains("#![cfg") {
+        return Err("a file-level cfg in the evidence sources".into());
+    }
     let c = context(sources);
     let mut lines = tsv.lines();
     if lines.next() != Some(HEADER) {
@@ -744,7 +792,51 @@ close_restrict|lifecycle|Bootstrap|na:BOOTSTRAP_NO_MISSION|not the audited
 close_obligations|lifecycle|Bootstrap|na:BOOTSTRAP_NO_MISSION|not the audited
 emergency_restrict|lifecycle|ClosedClean|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb3_post_seal_model_events_are_absent)|denial oracle
 delivery|lifecycle|SealedFinalizing|na:LEGACY_FINALIZATION_ONLY|not the audited
+registration_install|fault|record_failed|c:sb2_unrecorded_failed_or_late_registration_is_absent|not the audited
+registration_record|schedule|before|c:sb2_unrecorded_failed_or_late_registration_is_absent|not the audited
+attempt_ticket|fault|poison|c:sb3_matrix_r3_cas_before|not the audited
+attempt_ticket|ingress|mission_stop|c:sb3_matrix_r3_cas_before|not the audited
+attempt_ticket|ingress|grant_revocation|c:sb3_matrix_r3_cas_before|not the audited
+attempt_ticket|ingress|grant_expiry|c:sb3_matrix_r3_cas_before|not the audited
+attempt_record|fault|poison|c:sb3_matrix_record_before|not the audited
+cancel_run|schedule|before|c:sb3_pre_gate_ingress_sends_no_request|not the audited
+door_halt|schedule|after|c:sb3_held_request_cancels_and_joins|not the audited
+emergency_restrict|schedule|before|c:sb3_pre_gate_ingress_sends_no_request|not the audited
+close_restrict|schedule|after|c:sb3_held_request_cancels_and_joins|not the audited
+registration_readiness|lifecycle|Normal|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb3c_registration_is_bootstrap_only_once)|not the audited
+registration_readiness|lifecycle|ClosedClean|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
+registration_reserve|lifecycle|Normal|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb3c_registration_is_bootstrap_only_once)|not the audited
+registration_reserve|lifecycle|SealedFinalizing|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
+record_first_classify|lifecycle|ClosedClean|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
+post_record_recheck|lifecycle|SealedFinalizing|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
 ";
+/// SB3C-R9 (c): a cited test's definition rewritten so it would not run,
+/// or is not a test at all: label|replacement for `{sig}`. The Rust text
+/// stays plausible; only the verifier's reading of it is under test.
+const DISABLED: [(&str, &str); 10] = [
+    ("ignore above a comment", "#[ignore]\n// Disabled.\n{sig}"),
+    ("ignore past a blank line", "#[ignore]\n\n{sig}"),
+    ("ignore inside a comment", "// #[ignore]\n{sig}"),
+    (
+        "foreign cfg above a comment",
+        "#[cfg(windows)]\n// Note.\n{sig}",
+    ),
+    ("commented-out test attribute", "// {sig}"),
+    (
+        "block-commented definition",
+        "/*\n{sig}\n}\n*/\nfn after() {",
+    ),
+    (
+        "wide block comment",
+        "/*\nfn earlier() {}\n\n{sig}\n}\n*/\nfn after() {",
+    ),
+    ("unindented cfg module", "#[cfg(windows)]\nmod off {\n{sig}"),
+    (
+        "inside a raw string",
+        "const OFF: &str = r#\"\n{sig}\n}\n\"#;\nfn after() {",
+    ),
+    ("second definition", "{sig}\n}\n{sig}"),
+];
 /// Sets one cell, whichever clause holds it now.
 fn set_cell(sink: &str, dimension: &str, value: &str, to: &str) -> Result<Summary, String> {
     let at = DIMENSIONS.iter().position(|d| d.0 == dimension).unwrap();
@@ -790,6 +882,15 @@ fn sb3c_r8_tamper_controls_are_rejected() {
     let sources = evidence_sources().replacen(signature, &ignored, 1);
     let run = verify_in(&real(), sources).map(|_| ());
     check("#[ignore] on a cited test", run, "no such retained test");
+    for (label, form) in DISABLED {
+        let replaced = form.replace("{sig}", signature);
+        let sources = evidence_sources().replacen(signature, &replaced, 1);
+        let run = verify_in(&real(), sources).map(|_| ());
+        check(label, run, "no such retained test");
+    }
+    let inner = format!("#![cfg(windows)]\n{}", evidence_sources());
+    let run = verify_in(&real(), inner).map(|_| ());
+    check("file-level cfg in the sources", run, "file-level cfg");
     let primitive = "#[test]\nfn sb3_concurrent_operation_refuses_before_ticket() {";
     let ignored = format!("#[ignore]\n{primitive}");
     let sources = evidence_sources().replacen(primitive, &ignored, 1);
