@@ -141,17 +141,27 @@ def capture(argv,timeout=30,limit=1024**2,env=None):
 def mounts(): return parse_mounts(Path('/proc/self/mountinfo').read_text())
 def status(pid='self'): return dict(line.split(':',1) for line in Path('/proc',str(pid),'status').read_text().splitlines() if ':' in line)
 def cmdline_tokens(raw):
-    # Q23: Chrome rewrites its process title into one space-joined string; split on NUL and space.
-    return [t for part in raw.split(b'\0') for t in part.split(b' ') if t]
+    # Q23/Q27: Chrome rewrites its process title into one space-joined string, and Chromium trims
+    # ASCII whitespace around arguments; split on NUL and every ASCII whitespace byte.
+    return [t for part in raw.split(b'\0') for t in part.split() if t]
+def chrome_args(raw):
+    # Q27: NUL boundaries are exact; only a rewritten title (one NUL-padded string) is space-joined.
+    parts = [part for part in raw.split(b'\0') if part]
+    return parts[0].split(b' ') if len(parts)==1 else parts
 def chrome_process_is_renderer(raw):
-    # Q26: Chromium on POSIX accepts '--' and '-' switch prefixes and 'name=value'; compare switch names.
-    switches = {}
-    for token in cmdline_tokens(raw):
-        if token.startswith(b'-'):
-            name,_,value = token.lstrip(b'-').partition(b'=')
-            switches.setdefault(name,set()).add(value)
-    require(not {b'no-sandbox',b'disable-setuid-sandbox'} & switches.keys(),'unsafe Chrome flag')
-    return switches.get(b'type')=={b'renderer'}
+    # Q26/Q27: the denial over-approximates every Chromium spelling (any '-' prefix, '=value',
+    # surrounding whitespace, even after '--'); the renderer type follows Chromium's parser exactly.
+    names = {t.lstrip(b'-').partition(b'=')[0] for t in cmdline_tokens(raw) if t.startswith(b'-')}
+    require(not {b'no-sandbox',b'disable-setuid-sandbox'} & names,'unsafe Chrome flag')
+    types = []
+    for arg in chrome_args(raw)[1:]:
+        arg = arg.strip(b' \t\n\v\f\r')
+        if arg==b'--': break
+        body = arg[2:] if arg.startswith(b'--') else arg[1:] if arg.startswith(b'-') else None
+        if body is None: continue  # '---type' yields name '-type', never 'type'
+        name,separator,value = body.partition(b'=')
+        if name==b'type': types.append(value if separator else b'')
+    return types==[b'renderer']
 def renderer_isolated(info,browser):
     # Q26: Seccomp=2 alone is systemd's filter; Chrome's own filter adds to the browser's filter count.
     filters,base = int(info['Seccomp_filters']),int(browser['Seccomp_filters'])
