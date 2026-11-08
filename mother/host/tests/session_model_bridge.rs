@@ -78,7 +78,7 @@ const OWNERS: &str = "D1 D2 F1";
 /// (register 14.6). R18 precedent for OPEN.
 const CELLS: &str = "\
 lifecycle|Bootstrap|c:sb2_one_session_operation_active|registration_reserve
-lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|registration_reserve,call_slot_reserve
+lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|registration_reserve,call_slot_reserve,cancel_run,door_halt
 ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,stop_all,quit,fatal|open:D2|registration_reserve,registration_record
 ingress|mission_stop,door_fence,budget,grant_revocation,grant_expiry|na:BOOTSTRAP_NO_MISSION|registration_reserve,registration_record,registration_install,registration_readiness,registration_version,registration_status,registration_tags,registration_show
 fault|none|c:sb2_one_session_operation_active|registration_reserve
@@ -124,9 +124,9 @@ ingress|CR,LF,CRLF|c:sb3c_stop_before_public_binding_installs_nothing|inference_
 ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,quit,fatal|open:D2|inference_binding
 ingress|grant_revocation,grant_expiry|c:sb3_original_file_grant_remains_required|inference_binding
 fault|none|c:sb3c_public_binding_is_exact_and_idempotent|inference_binding
-fault|decline,record_failed,record_unknown,poison,panic|open:D2|inference_binding,attempt_ticket,cancel_run,door_halt,emergency_restrict,close_restrict
+fault|decline,record_failed,record_unknown,poison,panic|open:D2|inference_binding,attempt_ticket,emergency_restrict,close_restrict
 schedule|before|c:sb3c_stop_before_public_binding_installs_nothing|inference_binding
-ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|call_slot_reserve,charge_append,meter_settle,operation_complete,close_report
+ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|call_slot_reserve,charge_append,meter_settle,cancel_run,door_halt,operation_complete,close_report
 fault|none,poison|c:sb3_matrix_r3_reserve_before|call_slot_reserve
 schedule|after|c:sb3_matrix_r3_reserve_after|call_slot_reserve
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_r3_cas_before|attempt_ticket
@@ -156,16 +156,12 @@ fault|none,poison|c:sb3_matrix_r5_observer_before|call_version,call_status,call_
 fault|decline,panic|open:D2|call_version,call_status,call_tags
 schedule|before|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
 schedule|after|c:sb3_matrix_r5_cas_after|call_version,call_status,call_tags,call_chat
-lifecycle|Normal|c:sb3_held_request_cancels_and_joins|cancel_run,door_halt,emergency_restrict,close_restrict
-lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|cancel_run,door_halt,close_obligations
-ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|cancel_run
-ingress|mission_stop|c:sb3_held_request_cancels_and_joins|cancel_run
-fault|none|c:sb3_held_request_cancels_and_joins|cancel_run,door_halt,emergency_restrict,close_restrict
-ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|door_halt
-ingress|door_fence|c:sb3_held_request_cancels_and_joins|door_halt
+fault|none,decline,record_failed,record_unknown,poison,panic|open:D2|cancel_run,door_halt
 lifecycle|Bootstrap,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|emergency_restrict,close_restrict
+lifecycle|Normal|c:sb3_held_request_cancels_and_joins|emergency_restrict,close_restrict
 ingress|CR,LF,CRLF|c:sb3_held_request_cancels_and_joins|emergency_restrict
 ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|emergency_restrict
+fault|none|c:sb3_held_request_cancels_and_joins|emergency_restrict,close_restrict
 ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,fatal|open:D2|close_restrict,close_obligations,producer_join,seal
 ingress|quit|c:sb3_held_request_cancels_and_joins|close_restrict
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_record_before|attempt_record
@@ -194,6 +190,7 @@ fault|decline,record_failed,record_unknown,poison,panic|open:D1|lane_result_admi
 schedule|before|x:sb3_revocation_after_chat_entry_is_entered_only|lane_result_admission
 schedule|after|open:D1|lane_result_admission
 lifecycle|Normal|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
+lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|close_obligations
 ingress|quit|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 fault|none|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 fault|record_failed,poison|c:sb3_unjoined_or_owed_prevents_clean_close|close_obligations
