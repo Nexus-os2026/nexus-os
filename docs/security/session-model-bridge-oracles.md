@@ -1419,3 +1419,68 @@ the cited test and each of its rows exist.
 - **Phase 2 (evidence replay, not committed; accepted by SB3C-R2):** R0 and R1 wired. The Mother composition oracles fail at their named assertions, since phase 1 refuses the model lane at draft (`ModelLaneUnavailable`).
 
 Logs are in the builder scratchpad (`c1/replay-p1-*`, `c1/replay-p2-*`).
+
+### 14.4 SB-3 C2: R32 supplement register (SB3C-R6)
+
+Test-only. C1 landed alone as #147 (SB3C-R6 preamble); C2, D1, D2 and SB3C-F1
+still land in that order, each proven.
+
+### 14.5 The supplement
+
+- `mother/host/tests/session/model-bridge-sinks.tsv`: the frozen 35 sinks (spec 8.3).
+- `mother/host/tests/session_model_bridge.rs`: the TSV-only verifier. It joins rows
+  only against literal tables and an exact-name test-source check; it calls no
+  production classifier. `session_oracles.rs` requires it and the retained
+  validator; the 153,000 is labelled the historical retained matrix.
+- A cell is (sink, dimension, value): 35 x (9 + 17 + 6 + 2) = 1,190. This is the
+  B1e side x value precedent and spec 8.4's per-dimension N/A; the 64,260-cell
+  cross product is neither authored nor claimed.
+- **Lifecycle (ruling (b)):** nine states, literally `SessionState`. The forecast's
+  "10" was an estimate. `sb3c_lifecycle_list_matches_the_session_states` fails on
+  divergence and is separate from the TSV-only verifier.
+- **Faults (ruling (c)):** exactly `coverage.rs` FAILURES. That list already
+  contains `none`, so "plus none" adds nothing.
+
+### 14.6 Dispositions
+
+| Disposition | Cells |
+|---|---:|
+| `c:` retained test, exact name (primitive evidence only) | 510 |
+| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 |
+| N/A BOOTSTRAP_NO_MISSION | 71 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (each names its denial oracle) | 104 |
+| N/A METADATA_HAS_NO_CHARGE | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 |
+| OPEN D2 (composition, restriction, close) | 345 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 |
+
+OPEN is bound to the verifier's literal list (R18 precedent). 51 of the D2 cells
+are `decline` or `record_*` at a sink with no Owner answer or no durable record:
+not reachable, but the closed list has no reason for them, so they stay OPEN
+rather than take a misfit reason. Narrowing them is an Architect ruling.
+`c:` cells are retained broker or private-route tests: they evidence the
+primitive and do not relabel any historical receipt as new-route execution.
+
+### 14.7 Ingress reductions (ruling (a), forecast 8.5)
+
+Each of the 17 classes keeps its exact name. The `SB-3C` block of
+`model-bridge-cases.tsv` names its primitive, the retained evidence for the
+reduction, and the session-level test; the verifier compares each row with a
+literal table. EOF, partial Ctrl-D, master close and read failure press Stop and
+then fail the session (`mother/host/src/terminal.rs`). `door_fence` and
+`mission_stop` reach `halt` and `cancel_run` through SessionPort.
+`stop_all` has only ordinary-route evidence (`lite_*`), so it is OPEN at every
+non-finalization sink (32 cells) rather than mapped by assumption.
+
+### 14.8 Review findings carried (SB3C-R6 (e), (f))
+
+- **(1) Foreign R:** reachable-limited. One File port per session
+  (`file_session.rs:529`), so a public foreign-R row cannot be constructed; the
+  second-file-port refusal and the retained private citations stand.
+- **(5) Poison:** a poisoned-broker SessionPort case is not constructible from
+  Mother with existing seams. The broker's holds are private to its crate and no
+  hold crosses a caller callback (P1). It needs a production seam, so it is
+  recorded OPEN:D2 and not claimed. Broker-level poison stays cited.
