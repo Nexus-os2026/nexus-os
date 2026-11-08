@@ -330,10 +330,12 @@ def chrome_observation():
             label = Path('/proc',str(proc.pid),'attr/current').read_text().strip()
     finally: stop(proc); proc.stderr.close()
     base = [chrome,'--headless=new','--disable-gpu','--no-first-run','--user-data-dir=/run/gate/tmp/chrome-report','--dump-dom']
-    local = capture(base+[page.as_uri()]); report = capture(base+['chrome://sandbox'])
-    require('gatebox-local' in local and 'sandbox' in report.lower(),'Chrome local/sandbox rendering')
+    # Q25: Chrome's sandbox self-report page is unavailable under --headless=new; the evidence is the
+    # kernel-observed renderer above (Seccomp=2, nested PID namespaces, lineage).
+    local = capture(base+[page.as_uri()])
+    require('gatebox-local' in local,'Chrome local rendering')
     return dict(argv=argv,browser_pid=proc.pid,renderer=renderer,browser_label=label,local_html=local,
-                sandbox_html=report,version=capture([chrome,'--version']).strip())
+                version=capture([chrome,'--version']).strip())
 
 def desktop():
     # The registered live adapter starts its own displays/buses too. Prove tools here.
@@ -352,7 +354,7 @@ def desktop():
 
 def validate_sensor(row,value):
     require(isinstance(value,dict),'sensor object')
-    required = {'A1':('fsync','caps_zero','readonly'),'A5':('sandbox_html','version','renderer','private_desktop'),
+    required = {'A1':('fsync','caps_zero','readonly'),'A5':('local_html','version','renderer','private_desktop'),
                 'A6':('tiocsti_denied','host_hidden','reaped','syscalls'),
                 'A8':('loopback4','loopback6','unix','host_denied','services_absent')}
     require(all(value.get(k) for k in required[row]),'missing '+row+' sensor evidence')
