@@ -294,7 +294,7 @@ def main():
             path = STATE/name; path.mkdir(mode=0o755 if name == 'receipts' else 0o700)
             os.chown(path,manager.pw_uid,manager.pw_gid)
         for name in ('usr/bin','usr/sbin','usr/lib','usr/lib64','opt/google/chrome','opt/rust','inputs/registry',
-                     'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm','proc','sys'):
+                     'gate/bin','gate/policy','input','etc','var','run','work','tmp','dev/shm','proc','sys','root'):
             (ROOT/name).mkdir(parents=True,exist_ok=True,mode=0o755)
         write(ROOT/'gate/request.json',b'',0o444)
         for name,target in {'bin':'usr/bin','sbin':'usr/sbin','lib':'usr/lib','lib64':'usr/lib64','var/run':'/run','var/tmp':'/tmp'}.items():
