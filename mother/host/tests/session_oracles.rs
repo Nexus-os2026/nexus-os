@@ -11,6 +11,8 @@ use support::{Fixture, Pty};
 
 #[path = "session/coverage.rs"]
 mod coverage;
+#[path = "session_model_bridge.rs"]
+mod model_bridge;
 
 #[test]
 fn frozen_manifest_has_every_catalogue_row_and_unique_sink() {
@@ -35,15 +37,26 @@ fn frozen_manifest_has_every_catalogue_row_and_unique_sink() {
 #[test]
 fn independently_generated_schedule_manifest_is_nonempty_for_every_sink() {
     let keys = coverage::required();
-    assert_eq!(keys.len(), 153_000);
+    assert_eq!(keys.len(), 153_000, "historical retained matrix");
     assert_eq!(
         coverage::verify(&keys, include_str!("session/combination-dispositions.tsv")).unwrap(),
         keys.len()
     );
     println!(
-        "scheduled matrix: {} explicitly dispositioned keys; executions counted separately",
+        "historical retained matrix: {} explicitly dispositioned keys; executions counted separately",
         keys.len()
     );
+}
+
+/// SB-3C (spec 8.2, 8.4): the historical retained matrix and the R32
+/// supplement are separate validators; both must pass.
+#[test]
+fn retained_and_supplemental_r32_validators_are_both_required() {
+    let keys = coverage::required();
+    assert_eq!(keys.len(), 153_000, "historical retained matrix");
+    coverage::verify(&keys, include_str!("session/combination-dispositions.tsv")).unwrap();
+    let supplement = model_bridge::verify_supplement().unwrap();
+    assert_eq!(supplement.rows, 35, "the frozen supplemental sinks");
 }
 
 #[test]

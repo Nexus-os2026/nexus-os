@@ -112,3 +112,402 @@ A change needed to `ApprovedFacts` policy, credential rules or the §9.5
 manifest; running-image identity unavailable on the test platform; a new
 dependency version or `Cargo.lock` change beyond the host package's own
 dependency list.
+
+## M-2 — `check-page`, bare and with `--facts` (S1a-E)
+
+Code: `mother/host/src/check_page.rs`; dispatch in `mother/desktop/src/main.rs`
+before any home or GTK. Tests: `mother/host/tests/check_page.rs`,
+`mother/desktop/tests/check_page_cli.rs`, and the in-module unit test in
+`check_page.rs`. Rulings M3E-R1..R6; design §5.5, T14.
+
+### Frozen behaviour (M3E-R6)
+
+- **Command.** Exactly `nexus-mother check-page <file> [--facts <file>]`.
+  Paths are used as given (relative or absolute, UTF-8 or not), never
+  canonicalized; a path that is empty or starts with `--`, a missing,
+  duplicate, unknown or extra argument is usage. `check-page` anywhere but
+  first (`--` included) is usage, exit 2, before any desktop start (M3E-R9).
+  Any other argument list runs the desktop exactly as before.
+- **Read-only.** The page (at most 65,536 + 1 bytes) and the facts file are
+  read once each through the M-1 adapter reader (`input_files`: no final
+  link, no blocking, regular file, bounded read) and the M-1 facts parser.
+  Nothing is written, fixed, rendered or sent; no model, network, browser,
+  home, journal or GTK.
+- **Output golden** (stdout, one item per line):
+  1. `binary sha256 <hex>` (the running image, M-1);
+  2. `policy <hex>  css <hex>`;
+  3. `file bytes <n> sha256 <hex>`, or for a page over 65,536 B
+     `file bytes unavailable (over 65536) sha256 unavailable` (no prefix hash);
+  4. `LABEL_PASSED`, or `refused: <s1a_code> at line L, column C` (the
+     kernel's `Refusal`, 1-based, columns in characters), or
+     `refused: input_too_large`;
+  5. the OPEN line (`not checked: how the page looks in a browser (375 px and
+     1366 px are OPEN)`);
+  6. bare: `facts: not checked (no --facts given)`; with `--facts`, three
+     lines: `facts file sha256 <hex>  facts hash <hex|unavailable>` (the facts
+     hash is `ApprovedFacts::hash`, as the consent dialog shows it);
+     `facts present as given: name, hours (N lines), phone` (the policy's
+     template, only when V3 passes) or `… refused <code>` or `… not run`;
+     `visible text: pass` / `refused <code>` / `not run`;
+  7. `result: PASS` or `result: REFUSED <code>`;
+  8. T14 (frozen, `teaching.rs`): `t14_passed(<escaped facts path>, <facts
+     hash>)` only for a with-facts PASS; `t14_refused(<code>, <location>)` for
+     every refusal (the location only for a page-check refusal); nothing for a
+     bare PASS.
+- **Order and codes.** First failure in V2 → V3 → V4 → V5 order. V2 is the
+  bare S1a code (`script_element`, …) or `input_too_large`. V3 is a facts-file
+  refusal (`facts_file_invalid (facts file line L)`, `facts_word_too_long
+  (facts file line L)`, `ApprovedFacts` codes, `input_not_utf8`) or the first
+  missing fact (`name_not_heading`, `name_not_title`, `hours_line_missing:<i>`,
+  `phone_missing`, `foreign_number`). V4 is `reader_unsupported`,
+  `name_not_visible`, `hours_line_not_visible:<i>`, `phone_not_visible`. V5 is
+  `email_not_supported`. V3/V4 are `not run` after a page refusal (even if
+  the facts file is malformed too, M3E-R9); each key that runs is printed,
+  and each one vetoes on its own.
+- **Exit.** 0 PASS. 1 any refusal, including semantic facts refusals and a
+  page over 65,536 B. 2 usage (`ERROR usage: nexus-mother check-page <file>
+  [--facts <file>]`), a read refusal of the page or facts file (`ERROR <code>
+  (page)` / `ERROR <code> (facts file)`, M-1 codes, no OS text; a facts file
+  over 2,048 B included), or the running image unavailable (`ERROR
+  self_identity_unavailable`, before any read).
+- **Claim.** Bare never claims facts. With `--facts`, a PASS means agreement
+  with the supplied snapshot only; acceptance compares the printed facts hash
+  with the consent's. No fictitious publication receipt is made.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `s1ae_bare_receipt_has_no_facts_claim` (S-O17, M3-O41) | Bakery and S1a reference pages: exact golden, exit 0, no facts claim, facts hash or T14 pass; email-shaped page exit 1 `email_not_supported` with T14 refused. Binary, policy, CSS and file hashes independent. |
+| `s1ae_supplied_facts_two_keys` (M3-O41) | Matching facts: exact golden with facts-file sha256, facts hash, policy facts line, `visible text: pass`, T14 pass; non-fact edit passes; changed name/hours/phone: its own facts hash, both keys refused with their exact codes, V3's code first, no location; a foreign number: V3 refuses while V4 passes. |
+| `s1ae_refusal_location_and_exit_contract` | `<a href>` on its planted line, `<script>` and the old template: the kernel's exact code, line and column, bare and with facts (V3/V4 `not run`); invalid facts syntax: facts line only; cap + 1: no prefix hash; at cap: hashed and refused by the kernel; read refusals and usage exit 2 with fixed lines; non-UTF-8 and relative paths; canaries absent. |
+| `s1ae_self_identity_unavailable_refuses_before_any_read` (unit) | Image unavailable: exactly `ERROR self_identity_unavailable`, exit 2, nothing read. |
+| `s1ae_page_refusal_precedes_malformed_facts` (M3E-R9 2) | Script page and malformed facts: V3 and V4 `not run`, result the page's S1a code with its location, exit 1. |
+| `s1ae_v4_vetoes_when_v3_is_forced_to_pass` (unit, M3E-R9 3) | V3 forced to pass, page name not the facts': `visible text: refused name_not_visible`, result `REFUSED name_not_visible`, exit 1. |
+| `s1ae_misplaced_check_page_never_reaches_the_desktop` (desktop, M3E-R9 1) | `-- check-page …`, `x check-page …`, `--check-page check-page …`: exit 2, exactly the usage line, no stderr, HOME stays empty. |
+| `s1ae_headless_binary_has_no_home_side_effect` (desktop) | The real binary, no display, fresh HOME/XDG roots: `sha256sum`-equal hashes, exit 0/1/2, no stderr, HOME stays empty, inputs untouched. |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| MP-M3-14 | `check-page` ignores `--facts` | two_keys: matching facts golden |
+| MP-M3-24 | bare run prints a facts line | bare: golden |
+| P-U2a | skip V5 | bare: email page refuses |
+| P-U2b-3 | force V3 to pass | two_keys: changed name refuses with V3's code |
+| P-U2b-4 | force V4 to pass | two_keys: changed name `visible text: refused` |
+| P-U2c | run GTK before the dispatch | desktop headless: exit 0 |
+| P-R9-1 | drop the non-first-position `check-page` refusal | desktop misplaced: exit 2 + usage |
+| P-R9-2 | V3's facts refusal before the page-refusal precedence | precedence: `facts present as given: not run` |
+| P-R9-3 | omit V4 from the result aggregation | veto: exit 1 |
+
+## M-3a — typed goal mode and goal display
+
+Code: `mother/host/src/goal_input.rs`, the single reader in
+`mother/host/src/terminal.rs`, `inputs::validate_goal`. Tests: the `m3a`
+module of `mother/host/src/terminal_tests.rs`, `mother/host/tests/goal_input.rs`.
+Rulings M3E-R1, R8 (M-3b, the teaching/T10/T11/T12/explain display and O34,
+is a separate unit).
+
+### Frozen behaviour (M3E-R8 3 (a)–(h))
+
+- **Data-only.** `Shared::read_goal` / `goal_input::read_typed_goal` are not
+  called from the scripted `run` flow; the existing walk, PTY and usability
+  output is unchanged. M-5 wires them.
+- **One line, one reader.** The terminal's single reader switches to a
+  separate goal buffer only after the goal prompt is acknowledged, a boundary
+  invalidates earlier input, and `INPUT READY` is queued. Return (CR, LF or
+  CRLF) ends the goal; a typed goal holds no CR or LF.
+- **Bounds and grammar.** At most 16,384 bytes; more is `goal_too_long` and
+  every byte is discarded. The bytes then go through `inputs::validate_goal`,
+  the goal-file grammar (`input_not_utf8`, `goal_empty`, `goal_not_plain`,
+  `goal_too_long` over 4,096 scalars). The goal is kept verbatim.
+- **Ingress.** A line that is exactly `stop` or `quit` is Stop or Quit;
+  Ctrl-D is EOF; a read error is a failure. None yields a goal. A goal line is
+  delivered after the rest of its read, so Stop, Quit or EOF in the same read
+  wins (`goal_interrupted`). Every other text, `approve` and codes included,
+  is data and never reaches the command queue or a confirmation; the rest of
+  the read after a goal line is discarded command input.
+- **Line continuity (M3E-R11).** A line always finishes in the mode it
+  started in. A goal line left unfinished when goal mode ends (timeout,
+  interruption) is read on to its terminator as discarded goal input, never
+  as a command. A command line left unfinished when goal mode starts is read
+  on to its terminator in the command buffer (stale; only an exact `stop` or
+  `quit` acts); the goal starts after it. Stop, Quit and EOF always act.
+- **Line ownership (M3E-R13, supersedes R11's CR rule).** The reader keeps
+  one stream-level owner of the line under way: `None`, `Command`,
+  `Goal(read)`, `DiscardGoal` or `DiscardCommand`. The first byte of a line
+  sets it (any byte but a terminator, editing keys included); only CR, LF or
+  EOF clears it; it is never derived from buffer contents, so erasing a line
+  keeps its owner. A boundary or the end of its goal read makes a live owner
+  a discard owner. One stream-level `last_was_cr`: a LF directly after a CR
+  on the stream is that CR's partner; any other byte clears the flag. The
+  buffers are storage only. EOF acts at once and clears the line.
+- **Echo and editing.** Only `shown` characters are echoed; Backspace removes
+  one scalar, Ctrl-U the line. The 64-byte command/code mode is unchanged.
+- **Display.** `teaching::t1` with the goal through `evidence::escaped`, then
+  `goal: <bytes> bytes, sha256 <hex>`. A refusal shows `GOAL REFUSED <code>`
+  only. `GoalLine` and `TypedGoal` `Debug` show sizes or codes, never text.
+- **Goal file given.** Typed mode is refused with `goal_already_given`; no
+  prompt is shown. Other refusals: `goal_unavailable` (no valid session or a
+  dialogue already open), `goal_timed_out`, `goal_interrupted`.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_m3a_goal_line_rules_share_the_file_grammar` | Verbatim goals (spaces, `approve`, a code, multibyte, 4,096 scalars, 16,384 B) accepted exactly; 4,097 scalars, 16,385 B, empty, blank, tab, bidi, zero-width, ESC and invalid UTF-8 refused with `validate_goal`'s own codes; CR, LF and CRLF each end one line; overflow keeps no byte. |
+| `m3e_m3a_stop_quit_eof_and_stale_input_never_yield_a_goal` | `stop`, `quit`, Ctrl-D; stale input before a boundary never completes a goal, and a stale `stop` still stops. |
+| `m3e_m3a_echo_and_editing_show_only_shown_characters` | No control, bidi or bell byte echoed; Backspace one scalar; Ctrl-U the line. |
+| `m3e_m3a_goal_read_through_the_single_reader` | Prompt, boundary, `INPUT READY`; input typed in the gap is dropped; the goal is returned verbatim and displayed exactly; no command or line queued; a refusal shows its code only; Stop, Quit and EOF interrupt; Stop in the same read wins; command mode is unchanged afterwards. |
+| `m3e_m3a_r11_goal_timeout_mid_line_never_becomes_a_command` | `Please ` in goal mode, timeout, then `run\r`: no Run, no goal; command mode resumes. |
+| `m3e_m3a_r11_stop_split_across_the_handoff_stops` | `st` in the gap, `op\r` after ready: Stop acts, no goal. |
+| `m3e_m3a_r11_quit_split_across_the_handoff_quits` | `qu` in the gap, `it\r` after ready: Quit acts, no goal. |
+| `m3e_m3a_r11_a_partial_command_line_finishes_before_the_goal` | `ab` in the gap, `cd\r`, then `goal\r`: the goal is `goal`; no command or line queued. |
+| `m3e_m3a_r13_generative_routing_keeps_i1_to_i5` | Through `route`, against the ruled stream semantics: every sequence of up to 4 over {s,t,o,p,q,u,i,r,n,a,' ',BS,^U,CR,LF,^D} × {ready, timeout} in both read groupings; every sequence of up to 6 over one byte of each class and both events; 200,000 seeded sequences of up to 7 tokens (a token may be `stop`, `quit`, `run` or half of one) with random grouping. I1 returned goals only from lines started in their ready read; I2 commands only from lines started in command mode; I3 exact `stop`/`quit` acts; I4 LF pairs only with the stream's preceding CR; I5 EOF acts. |
+| `m3e_m3a_r13_erasing_a_timed_out_goal_line_never_makes_a_command` | Review 2 MED, both timings: `Please `, timeout, `^U run\r`; `Please ^U`, timeout, `run\r`: no command or line; command mode resumes. |
+| `m3e_m3a_r13_an_old_cr_never_pairs_with_a_later_lf` | Review 2 LOW: `goal\r` returns `goal`; `status\n` is a command; in the next goal read a lone `\n` is `goal_empty`. |
+| `m3e_m3a_goal_file_given_refuses_typed_mode_and_debug_is_content_free` | `goal_already_given`, no prompt, goal mode never entered; canaries absent from `Debug`. |
+| `m3e_m3a_typed_and_file_goals_share_one_grammar` (host) | For each text, `validate_goal` equals the goal file's parse, with and without one final LF. |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| P-U3a | a goal line goes through the command path | single reader: no command queued / goal returned |
+| P-M3a-1 | bypass `validate_goal` (a second, laxer grammar) | grammar: 4,097 scalars refused |
+| P-M3a-2 | CR is data, not Return | grammar: CR ends a line |
+| P-M3a-3 | ignore stale input | stale: never completes a goal |
+| P-M3a-4 | echo every byte | echo: no control byte echoed |
+| P-M3a-5 | `stop` stored as a goal | stop/quit: `stop` is Stop |
+| P-R11-1 | clear the goal buffer without draining when goal mode ends | timeout mid-line |
+| P-R11-2 | no command-line continuation across the handoff | stop / quit / partial command handoff |
+| P-R13-1 | ownership derived from buffer contents (empty buffers: no owner) | generative (10,200 cases); erasing reproducer |
+| P-R13-2 | per-buffer CR flag (CR fed to the buffers, no stream pairing) | generative (2,073 cases); old-CR reproducer |
+
+P-R11-1 and P-R11-2 mutate code that R13 replaced; their oracles still pass.
+
+## M-3a2 — goal publication carries its read id (M3E-R15)
+
+Stacked review unit on `mother/m3e-m3a2-publish` (base 861654c3; M-3a's own
+size is at its cap). Code: `mother/host/src/terminal.rs`. Tests: the
+`m3a_r13` module of `mother/host/src/terminal_tests.rs`.
+
+### Frozen behaviour (R15)
+
+- **Read id end to end.** A completed goal line carries the id of the goal
+  read that owns it to publication. `Shared::publish_goal` stores it only if
+  that id is the current READY read's (`goal`, `active`, `typing`, boundary
+  acknowledged, same `goal_read`); otherwise the line is discarded. Exact
+  `stop`/`quit` lines and EOF still act.
+- **One snapshot.** `reader_state` returns the discard flag and the ready
+  read's id together, under one lock; `route_read` uses that id and never
+  rereads it.
+- **Seams (tests only).** `Buffers::hook` runs at `HookPoint::Start` (after
+  the snapshot), `Byte(i)` and `Publish` (before publication). The goal
+  read's transitions are named production functions (`goal_begin`,
+  `goal_ready`, `goal_end`, `acknowledge`), used by `read_goal`, the reader
+  and the harness alike. Every test routes through `reader_state` and
+  `route_read` with the complete `ReaderMode` (R17: the split test adapters
+  are removed).
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_m3a_r13_generative_routing_keeps_i1_to_i5` (amended by R15) | Drives readiness through the production read-id path and puts events inside reads at the reader's hook points. Every sequence of up to 3 over the whole alphabet in every partition into reads; every sequence of 4 in both extreme partitions; every sequence of up to 5 over one byte per class and both events in every partition; 200,000 seeded sequences of up to 7 tokens with random cuts; the explicit split-position cases (`stop`, `quit`, `run` split at every index, across reads and across a read's start or timeout, in command and goal mode); the publication-interrupted cases. I1–I5 against the stream model, with returned goals recorded under the production read id. Control: in every case production `goal_read` equals the reads begun, and some case reaches two reads. |
+| `m3e_m3a_r15_interrupted_publication_never_reaches_another_read` | Five named schedules (timeout, or timeout and a new read, at publication or inside the read): each read returns only its own line; the model agrees. |
+| `m3e_m3a_r15_a_goal_paused_before_publication_never_reaches_the_next_read` | Real `read_goal` workers. A's `old goal` is complete, the reader pauses before publication, A times out, B begins (not ready, then ready), the reader resumes: no goal is published to B; B returns its own `new goal`; two production read ids. |
+| `m3e_m3a_r15_a_stale_mode_snapshot_never_takes_the_next_read_id` | The same, paused right after the reader's mode snapshot (A ready) and before routing `x\r`: `x` never reaches B. |
+| `m3e_m3a_r17_a_saved_snapshot_never_publishes_to_a_newer_read` (R17) | Through the test path: a snapshot saved while A is ready; A times out; B begins and is ready through the reader's own boundary path; routing `x\r` under the saved snapshot publishes nothing to B; B returns its own `new goal`. |
+
+## M-3b — page teaching display (data-only) and O34
+
+Code: `mother/src/coordinator/page_display.rs` (projection and selection),
+`FileSession::journal_view` in `mother/src/coordinator/lite.rs`,
+`mother/host/src/page_display.rs` (escape and emit only). Tests:
+`mother/src/oracles/m3e_display.rs`, and the `oracles` module of
+`mother/host/src/page_display.rs` (R14 Q2: the emit function is
+crate-private). Rulings M3E-R1, R8, R12, R14.
+
+### Frozen behaviour
+
+- **Data-only (R12 (2)).** Nothing in the scripted `run` flow calls it; M-5
+  wires it. The walk is byte-identical.
+- **Touch-free view (R12 (1)(a)).** `journal_view` is `store.load()` plus
+  `verify` under the coordinator lock: no budget check, no `file_stop`, no
+  state change, no action or authority. Display reads only this; the next
+  real interaction still enforces a lapse.
+- **Projection.** A content-free `PageView` of one mission: the consented
+  contract hash, whether a File was asked for, the broker receipt
+  (`PublicationReceipt`: sha256, bytes, overtaken), the recorded checks
+  (`VerificationRecorded`), and the recorded end. Lines are selected only for
+  the consented contract (`NotConsented` otherwise) and only for a page
+  mission.
+- **T10 (R12 (4)).** Folder from the consented contract's `requested_folder`;
+  bytes and digest only from the journaled receipt, never from Mother's
+  retained candidate. No receipt, no T10. Overtaken: `t12_unchecked`, never
+  T10 or success.
+- **T11/T12/T13.** T11, `t12_passed` and T13 only when V0..V5 are all
+  recorded `pass`; the first recorded failure (or a missing check,
+  `not_recorded`) is `t12_failed(code)`; written with no record is
+  `t12_unchecked`. A scripted VerifyPass is no recorded check. Every T12 form
+  keeps every OPEN line.
+- **T9.** Declined (consent or action denied), expired (`ApprovalLapsed`
+  approval_expired), stopped (Stop with nothing asked, or a settled
+  NotPublished), uncertain (a settled Uncertain, another lapse, or a File
+  asked for with no receipt and no other end).
+- **Phase lines (R12 (6)).** `phase_line` gives T5, T7 and T15; M-5 calls it.
+- **Host.** `page_text` escapes every line through `evidence::escaped` and
+  keeps the line breaks.
+- **O34 (R14).** Broker-clock expiry is unreachable by design: Mother's held
+  deadline is never later than the broker's. The port takes its deadline as
+  `asked_at + lifetime`, read before the broker prepares
+  (`adapter/mod.rs:598–610`); the broker expires an action only at or after
+  its own deadline on either clock (`commitment.rs:1262`, `:2149`); Mother
+  withdraws an elapsed wait before reading the broker (`lite_settle.rs:581`).
+  O34 is therefore `approval_expired` at Mother's held deadline, with the
+  broker record still `Prepared` and the mission budget live. The R12
+  "deadline live" clause is withdrawn as unsatisfiable.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_m3b_t10_requires_a_journaled_broker_receipt` | Pending: no line. T10 is the receipt's bytes and digest with the consented folder, never the retained candidate's; another contract is `NotConsented`; overtaken is `t12_unchecked` only; a non-page mission has no line. |
+| `m3e_m3b_teaching_follows_recorded_checks` | All-pass: T10, T11, `t12_passed`, T13. A recorded failure: `t12_failed(first code)`, no T11/T13. A missing check: `not_recorded`. A scripted VerifyPass: `t12_unchecked`. Every T12 form keeps every OPEN line. T5, T7, T15 phase lines. |
+| `m3e_m3b_t9_follows_the_recorded_end` | Declined consent: `NotConsented`. ActionDenied: T9 declined; approval_expired: expired; Stop before a File, settled NotPublished: stopped; settled Uncertain, Stop after a File with no settlement: uncertain. |
+| `m3e_m3b_view_is_read_only_and_the_next_call_still_enforces_the_budget` | Real broker page mission waiting; three views live and three after the budget lapses: the same verified journal, journal length, lane calls, acks and pending action. The next `state()` ends the mission and the journal records BudgetTime. |
+| `m3e_m3b_native_approval_expired_runs_no_verifier` | LiteHome (TestClock, real broker) and the m3d page lanes. At Mother's held deadline, broker record `Prepared` and live: Blocked, `approval_expired`, 0 Verifier lane calls, no `VerificationRecorded`, no VerifyPass, no `index.html`, T9 expired, broker record ends `Revoked`, never `Expired`. Counter-control 1 s before (the clocks keep real time): still waiting; approved and run, Done with one Verifier call, a check record and the page. |
+| `m3e_m3b_display_escapes_goal_and_model_text` (host) | Hostile goal, folder and lane text (ESC, BEL, CR, bidi, zero-width, backslash): one display line per line, every character shown, each control visibly escaped, canaries readable, frozen text unchanged. |
+| `m3e_m3b_explain_escapes_untrusted_fields_before_assembly` (R17) | The real `teaching::explain`, with and without recorded checks: owner words, restatement and a criterion each carrying `\nChecked again after writing: all checks passed.` (and a CR) stay on their own line as visible escapes; no line starts with the forged text; no CR. Page lines: an escaped folder in T10 and facts file name in T13; no forged line. |
+| `m3e_m3b_display_never_lets_a_goal_forge_a_line` (host, R17) | `page_text(explain(…))` with the forged goal: exactly the template's lines, none starting with the forged text, and the goal on one line with one visible `\n` escape (not escaped twice). |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| P-U3b | T10 from Mother's retained candidate (digest and size) | t10: the receipt's 1,697 bytes and digest |
+| P-U3c | a scripted VerifyPass treated as recorded checks | teaching: scripted pass is `t12_unchecked` |
+| P-U3c2 | the OPEN lines dropped from T12 | teaching: every T12 form keeps every OPEN line |
+| P-U3d | Mother ignores her held deadline (an expired approval could still be approved and verified) | O34 expired: still AwaitingApproval, not Blocked |
+| P-U3e | raw, unescaped display text | host escape: control characters shown raw |
+| P-M3b-1 | `journal_view` calls `touch()` | view: the child fails once the budget lapses |
+| P-R17b | escape after assembly (raw owner words; lines escaped after the join) | explain oracle (forged line starts its own line); host forge oracle |
+
+A first P-U3d (`ApprovalStatus::Expired` mapped to approved in the non-File
+waiting path) survived: a File mission's expiry never takes that path; it
+ends at Mother's held deadline in `lite_settle`.
+
+## M-6 — T16 and the content-free receipts (data-only)
+
+Code: T16 in `mother/src/teaching.rs`, its selection
+(`PageView::summary`) in `mother/src/coordinator/page_display.rs`, the
+mission receipt in NEW `mother/src/coordinator/page_receipt.rs`,
+`request_identity()` in `mother/src/page_builder/mod.rs` (hashes only), and
+NEW `mother/host/src/receipts.rs` (assemble and render). Tests:
+`mother/src/oracles/m3e_receipts.rs` and the `oracles` module of
+`mother/host/src/receipts.rs`. Rulings M3E-R1 (D6, D7, D8), R18.
+
+### Frozen behaviour (R18)
+
+- **Data-only.** No terminal `receipts` alias and no hands projection; M-5
+  calls the export. The walk is byte-identical.
+- **T16.** The mission's frozen text, with closed «backend outcome» phrases
+  (written and the second check passed; written, the second check reported
+  «code»; written, no second check is recorded; I could not confirm what
+  became of the request (also overtaken); you said no / the file dialog
+  timed out / you stopped, nothing was written) and «recorded checks» as
+  recorded, or `none recorded`. Selected only from the journal projection;
+  untrusted parts escaped before assembly; no current OBSERVED or
+  CORROBORATED label. `None` while nothing has ended or been written.
+- **Mission receipt.** From the verified journal and the consented contract
+  only: contract hash; the consent's journal seq, entry hash and wall time
+  (its broker `evidence_seq` is not journaled); the consented facts hash;
+  lane calls per role; model calls charged; effects dispatched; the broker
+  receipt; recorded checks and report digest; the recorded end. A field the
+  journal should hold but does not is `missing` (never zero); a receipt or
+  check record of another effect, or a receipt for another action, is
+  `mismatched`. Content-free, pure, consumes no working detail.
+- **Export.** Fixed `key: value` lines, each with its provenance: measured
+  at start (the start-time self-hash, the input file digests, the snapshot
+  facts hash), this build (policy, CSS, system/task prompt, schema and the
+  eight correction-block hashes), mother journal, `unavailable (external)`
+  (the other binary, build/CI/toolchain/installed/host metadata),
+  `unavailable (model not registered)`, `not measured (D6 deferred)`. No
+  page, notes, facts text, answers or path. `host-measured: complete` only
+  when every host and journal field is present and the identities join (the
+  snapshot facts hash equals the consented one); the last line always says
+  the export is incomplete overall.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_u10_summary_never_promotes_evidence` | All-pass: the frozen T16 byte for byte. Failed: its first code and the recorded checks. Written unrecorded, scripted VerifyPass: unchecked, none recorded. Overtaken, settled Uncertain: unconfirmed. Denied, expired, settled NotPublished: their phrases. Waiting: no summary. Another contract: `NotConsented`. No current OBSERVED/CORROBORATED wording; the claims guard passes; rendering changes nothing. |
+| `m3e_u10_receipt_identities_join_and_missing_is_listed` | The exact receipt of a published, all-pass journal; repeated identical; journal unchanged. A receipt and a check record of other effects: `receipt_effect`, `verification_effect`. Approved with no receipt: `publication_receipt` missing. Declined: nothing missing. `NotConsented`, `NotAPage`. |
+| `m3e_u10_request_identity_is_the_frozen_bytes` | The system, task and schema hashes and the eight correction-block hashes equal the design's frozen values (§4, §9.5). |
+| `m3e_u10_receipts_from_a_real_page_mission` | Real broker page mission to Done: receipt digest and size equal the bakery page; all checks pass; facts hash equals the consented facts'; one Verifier call; nothing missing or mismatched; no page, fact or note canary in the receipt's Debug; repeated identical; journal unchanged; T16 all-pass. |
+| `m3e_u10_receipts_exact_schema_and_privacy` (host) | The exact export, line for line; note, fact and path canaries absent from the export and every Debug; repeated identical. |
+| `m3e_u10_receipts_missing_is_not_zero` (host) | No self-hash, no journaled receipt, no consented facts hash: `unavailable`, `host-measured: incomplete (…)` naming them, no zero hash. Not applicable is `none`; timing is `not measured`; overall always incomplete. |
+| `m3e_u10_timestamps_and_identities_join` (host) | Snapshot and consented facts hashes differ: `incomplete (identity:facts)`. Mismatched effects: named. No dispatch, return or stop timestamp is ever exported (D6). |
+
+### Plants
+
+| Plant | Mutation | Killing oracle |
+|---|---|---|
+| P-U10a | the notes text exported in place of its digest | host exact schema and privacy |
+| P-U10b | a missing self-hash shown as a zero hash | host missing is not zero |
+| P-U10c | T16 labels the run CORROBORATED | summary: the frozen T16 golden |
+| P-U10d | the facts file digest re-derived from the parsed facts instead of the snapshot | host exact schema |
+
+## M-6b — R19: confirmed vs unavailable evidence (stacked on M-6)
+
+`mission_receipt` separates three kinds of gap, each named and never
+shown as a value: `missing` (evidence the run should have produced and the
+journal does not hold: a publication receipt for a File that was asked and
+not confirmed unpublished, the receipt's policy hash, the receipt's link to
+its approved action), `mismatched` (evidence joined to another effect or
+action) and `invalid` (a journal value outside its domain: digests are 64
+lower-case hex, check records hold V0..V5 at most once each, with closed codes; a check
+left out is not recorded, never a pass).
+An invalid value is never copied into the receipt or any summary. T16's
+success phrase needs the receipt and the check record joined to the File
+effect. The host names each gap by kind (`unavailable:`, `missing:`,
+`mismatched:`, `invalid:`).
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_u10_r19_unavailable_publication_is_missing` | Settled `Uncertain` with no receipt: `publication_receipt` missing. A receipt with no policy hash: `publication_policy` missing. Denied, approval expired, settled `NotPublished`, stopped before the ask: nothing missing. |
+| `m3e_u10_r19_every_receipt_needs_its_action_link` | No pending and no settlement identity, or a pending for another effect only: `action-link` missing. A pending naming another action: `action` mismatched. A settlement identity alone links it. |
+| `m3e_u10_r19_summary_success_only_on_joined_evidence` | All-pass checks recorded for another effect: T16 unchecked, none recorded. A receipt for another effect than the File's: unconfirmed, none recorded. |
+| `m3e_u10_r19_values_are_validated_before_projection` | Non-hex or upper-case receipt digest, non-hex policy hash, an unknown check code, a non-hex report digest: each listed `invalid` by field, never copied (publication or checks `None`); the canary absent from the receipt's Debug and from T16; no success phrase on an invalid receipt or check record. |
+| `m3e_u10_r19_real_uncertain_settlement_is_missing_evidence` | LiteHome, real broker: the approved action held executing past Mother's held deadline; the real settlement records `Uncertain` (reason `file_publication_uncertain`) and no receipt; the receipt lists `publication_receipt` missing, no publication; T16 unconfirmed, none recorded. |
+| `m3e_u10_r19_host_names_each_gap` (host) | Missing, mismatched and invalid gaps named by kind in order; checks and report digest shown `invalid`, never their values. The M-6 host labels are amended to the same kinds (`unavailable:`, `missing:`, `mismatched:`). |
+
+### Plants
+
+| Plant | Mutation | Killing oracle (named assertion) |
+|---|---|---|
+| P-R19a | a settled Uncertain with no receipt not counted missing | unavailable publication: `missing == ["publication_receipt"]` |
+| P-R19b | an absent receipt policy hash not counted missing | unavailable publication: `missing == ["publication_policy"]` |
+| P-R19c | a receipt accepted with no action identity for its effect | action link: `missing == ["action-link"]` |
+| P-R19d | T16 success from checks not joined to the receipt | joined evidence: T16 unchecked, none recorded |
+| P-R19e | the receipt digest copied without validation | value domains: `invalid == ["receipt_sha256"]` |
+
+## M-6b — R21 (review-1 LOW findings)
+
+| Oracle | Required assertions |
+|---|---|
+| `m3e_u10_r21_t16_join_needs_a_file_dispatch` | Consent, pending, receipt and all-pass checks of effect 1 with no File dispatch: T16 unconfirmed, none recorded, never the success phrase; the receipt lists `receipt_effect` mismatched. Control: with the dispatch, the all-pass T16. |
+| `m3e_u10_r21_any_conflicting_action_is_reported` | Pending A, receipt A, settlement B for the same effect: `mismatched == ["action"]`, nothing missing. Pending A, receipt A, settlement A: nothing reported. (Settlement-only linkage stays valid: `m3e_u10_r19_every_receipt_needs_its_action_link`.) |
+
+| Plant | Mutation | Killing oracle (named assertion) |
+|---|---|---|
+| P-R21a | a pending approval stands in for the File dispatch | File-dispatch join: T16 unconfirmed, none recorded |
+| P-R21b | one matching identity hides a conflicting one | conflicting action: `mismatched == ["action"]` |
+
+The M-3b display fixture (`asked`) is amended (oracle-amend) to journal the File dispatch
+before the pending approval, as the coordinator does; no assertion changed.

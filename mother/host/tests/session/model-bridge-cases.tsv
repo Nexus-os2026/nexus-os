@@ -394,3 +394,23 @@ SB3B2-C/death/dispatch	sb3_private_call_death_restarts_report_only	close	killed 
 SB3B2-C/death/reply	sb3_private_call_death_restarts_report_only	close	died after the reply: prefix 4, end unknown, restart report-only	SB-3B2-C
 SB3B2-C/death/record	sb3_private_call_death_restarts_report_only	close	died after the record: end recorded, restart report-only	SB-3B2-C
 SB3B2-C/death/completed	sb3_private_call_death_restarts_report_only	close	died after completion: end recorded, restart report-only	SB-3B2-C
+SB3C/ingress/CR	sb3_matrix_r5_observer_before	SessionIngress::emergency	host:review1_real_cr_lf_crlf_stop_during_publish_hold	SB-3C
+SB3C/ingress/LF	sb3_matrix_r5_observer_before	SessionIngress::emergency	host:review1_real_cr_lf_crlf_stop_during_publish_hold	SB-3C
+SB3C/ingress/CRLF	sb3_matrix_r5_observer_before	SessionIngress::emergency	host:review1_real_cr_lf_crlf_stop_during_publish_hold	SB-3C
+SB3C/ingress/original_cell_unscheduled	OPEN:D2	HaltCell::engage_emergency on the session word	host:session_setup_each_final_boundary_has_its_own_unscheduled_ingress_control	SB-3C
+SB3C/ingress/repeated	OPEN:D2	SessionIngress::emergency twice	host:m2dd_original_ingress_invalidates_queued_work_and_repeated_commands	SB-3C
+SB3C/ingress/EOF	OPEN:D2	StopRoute::press then SessionIngress::fail	host:d_o20_stop_ctrl_d_and_master_close_before_publication	SB-3C
+SB3C/ingress/partial_Ctrl_D	OPEN:D2	partial line then Ctrl-D, no retained test performs it	host:none	SB-3C
+SB3C/ingress/master_close	OPEN:D2	StopRoute::press then SessionIngress::fail	host:d_o20_stop_ctrl_d_and_master_close_before_publication	SB-3C
+SB3C/ingress/read_failure	OPEN:D2	StopRoute::press then SessionIngress::fail	host:d_o20_read_error_during_held_execution_engages_stop_before_exit	SB-3C
+SB3C/ingress/mission_stop	OPEN:D2	Coordinator::stop to SessionDoor::cancel_run	host:session_literal_thirteen_states_against_real_terminal_paths	SB-3C
+SB3C/ingress/stop_all	OPEN:D2	Coordinator::stop_all, no retained session-route evidence	host:none	SB-3C
+SB3C/ingress/door_fence	OPEN:D2	SessionPort::fence to SessionDoor::halt	host:session_literal_thirteen_states_against_real_terminal_paths	SB-3C
+SB3C/ingress/budget	sb3_matrix_r5_observer_before	mission wall and monotonic deadline	host:fix1_original_budget_is_rechecked_under_final_run_hold	SB-3C
+SB3C/ingress/grant_revocation	sb3_matrix_r5_observer_before	original grant revocation	host:session_each_native_work_step_rechecks_its_actual_prerequisites	SB-3C
+SB3C/ingress/grant_expiry	sb3_matrix_r5_observer_before	original grant expiry	host:session_each_native_work_step_rechecks_its_actual_prerequisites	SB-3C
+SB3C/ingress/quit	sb3_matrix_r5_observer_before	SessionIngress::accept(Quit)	host:quit_during_dialogue_cancels_without_waiting_for_an_answer	SB-3C
+SB3C/ingress/fatal	sb3_matrix_r5_observer_before	SessionIngress::fail	host:fix1_b_first_failure_deadline_cannot_be_refreshed_by_concurrent_quit	SB-3C
+SB3C/record/foreign_r	N/A:reachable-limited	one File port per session (file_session.rs:529)	SB3C-R6 (e): public foreign-R row not constructible; second-file-port refusal plus retained private citations stand	SB-3C
+SB3C/record/poison_session_port	OPEN:D2	no existing test seam reaches a broker hold from Mother	SB3C-R6 (f): poisoned-broker SessionPort case needs a production seam; not claimed	SB-3C
+SB3C/guard/lifecycle_states	sb3c_lifecycle_list_matches_the_session_states	SessionState (9 states; the forecast "10" was an estimate)	SB3C-R6 (b): guard test fails on divergence	SB-3C

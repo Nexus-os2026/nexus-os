@@ -133,18 +133,30 @@ def validate_summary(summary):
             raise ValueError('failed/incomplete command')
         if gate.get('adapter') in ('libtest','libtest-repeat','reconcile-all-artifacts'):
             inventory = command.get('inventory',{})
-            names = inventory.get('expected')
+            names, ignored = inventory.get('expected'), inventory.get('ignored')
+            # Q33: #[ignore] tests are recorded as ignored (a subset of the listed names, never passed);
+            # every other listed test passed. Only a workspace artifact may be a zero-test target.
             if (not string_list(names) or len(set(names)) != len(names)
-                    or inventory.get('passed') != names or inventory.get('executed') != names
-                    or any(inventory.get(k) != [] for k in ('failed','ignored','filtered'))):
+                    or not string_list(ignored) or len(set(ignored)) != len(ignored) or not set(ignored) <= set(names)
+                    or inventory.get('passed') != [n for n in names if n not in set(ignored)]
+                    or inventory.get('executed') != inventory['passed']
+                    or (not names and gate['id'] != 'workspace')
+                    or any(inventory.get(k) != [] for k in ('failed','filtered'))):
                 raise ValueError('test reconciliation')
-            if gate['id'] == 'desktop-live' and names != gate['expected_names']: raise ValueError('desktop inventory')
-    host_names = set()
+            if gate['id'] == 'desktop-live' and (names != gate['expected_names'] or ignored):
+                raise ValueError('desktop inventory')
+    host_names, host_passed, host_ignored = set(), set(), set()
     for command in workspace:
-        if command['artifact_id'] in host: host_names.update(command['inventory']['expected'])
+        if command['artifact_id'] in host:
+            host_names.update(command['inventory']['expected'])
+            host_passed.update(command['inventory']['passed'])
+            host_ignored.update(command['inventory']['ignored'])
     for command in summary['commands']:
         if command.get('gate_id',command['id']) == 'host':
-            if not host_names or set(command['inventory']['expected']) != host_names:
+            inventory = command['inventory']
+            # Q33 (review F6-3 note 4): the aggregate carries the workspace partition exactly.
+            if (not host_names or set(inventory['expected']) != host_names
+                    or set(inventory['passed']) != host_passed or set(inventory['ignored']) != host_ignored):
                 raise ValueError('host test inventory mismatch')
 
 def check(info, owner_uid, directory=False):

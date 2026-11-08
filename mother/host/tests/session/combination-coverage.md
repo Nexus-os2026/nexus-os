@@ -60,3 +60,38 @@ It refuses a missing referenced execution; it never synthesizes an observed
 success. The checked-in expanded manifest is intentional: the independently
 generated required set must match an explicit reviewable disposition for every
 key, including negative controls and structurally absent combinations.
+
+## SB-3C R32 supplement (spec 8.2-8.4, SB3C-R6)
+
+The 153,000 keys above are the **historical retained matrix**: their sink
+catalogue, dispositions and receipts are unchanged, and `session_oracles.rs`
+still asserts exactly that count. The two R32 rows in `sinks.tsv` and
+`exclusions.tsv` are relabelled residual/unlisted routes and narrowed to
+anything outside the 35 listed sinks; they stay `D`, so the matrix is untouched.
+
+`model-bridge-sinks.tsv` is a separate, frozen supplement: 35 rows, one per
+SB-R0..R9 sink, each with its owning boundary, primitive evidence, oracle and
+effective plant. `mother/host/tests/session_model_bridge.rs` verifies it from
+the TSV alone and never calls a production classifier. A separate guard test
+fails if the lifecycle list and the code's `SessionState` diverge.
+
+A supplement cell is (sink, dimension, value) over 9 lifecycle states, the 17
+ingress classes, the 6 retained failures and 2 schedule sides: 1,190 cells.
+That is the B1e side x value form; the full cross product is not authored and
+not claimed. Each cell cites a retained test by exact name (`c:`, primitive
+evidence and never a claim of new-route execution), names a C2-new oracle
+(`x:`), closes with a reason from the closed N/A list, or is OPEN with an owner.
+Every cell is bound to the verifier's literal audited table per (sink, dimension,
+value), row metadata and boundary text included (SB3C-R8); the table records the
+audit (Oracle doc 14.6), it does not prove the audit right. A citation stands
+only where the test executes that sink's own boundary on that value; a mock of
+the boundary or a neighbouring injection point is OPEN. After the R8 to R12
+audits: 226 cited, 2 executed, 240 N/A, 722 OPEN (D1 94, D2 627, F1 1). No
+historical receipt counts as a test, and which tests ran is proven by the Gate
+Box receipt, not here (Oracle doc 14.10).
+
+The `SB-3C` block of `model-bridge-cases.tsv` lists, for each ingress class, the
+session-level primitive it reduces to and the retained evidence for that
+reduction. `stop_all` has no retained session-route evidence and is OPEN; six
+reductions no session-level test performs (including real partial Ctrl-D input)
+are OPEN at the session level (Oracle doc 14.7).
