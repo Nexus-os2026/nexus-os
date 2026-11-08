@@ -3,6 +3,9 @@
 Authority: Owner request, 2026-11-07, authorizes PR-1 implementation only.
 Branch: mother/gatebox-slice1-core.
 Base: 899e3872c5b61223c87b905f63c66947a816259b; no branch movement.
+Q32 (GBX-F6): the qualification fixture is re-pinned to 0c8cb6d360b1296262b7a5c478261e5e47e5c7f5 = 899e3872 plus one test-only portability commit (governed-control o18_d/o18_g use a fake /sys); product code unchanged.
+Q34 (GBX-F6): re-pinned again to 8e0d6ae293df999eb6530e875df1206deac872a8 = 0c8cb6d3 plus one test-only hermeticity commit (mother decision9 host-port oracle uses a public address literal, no DNS); product code unchanged.
+Q33 (GBX-F6): libtest reconciliation is truthful to libtest: #[ignore] tests are recorded as ignored (subset of listed names, never passed, totals agree), the #[should_panic] marker maps to the listed name, and a zero-test target needs libtest's own zero-test run; failed/filtered stay empty, desktop-live stays exact with nothing ignored.
 Frozen sheet: /home/nexus/NEXUS/gatebox/slice1-mission.md.
 Sheet SHA-256: 28ac57fc6eb1565353d2ea956225703db396ebe009efd66fc34fef0b2f8a8094.
 This register incorporates the frozen sheet by byte identity. The sheet's
@@ -205,3 +208,48 @@ Oracles precede fixes in numbered checkpoint folders. Real custody and its plant
 require an outside run with protected TMPDIR (Q11); no ownership-remap modelling.
 Q12 F-6 remains #115 installer scope. No installation, host action, Git write,
 network, phase advancement or installed acceptance is performed by this mission.
+
+## Q13 installer qualification amendment
+
+C1-SEALED, C2-CANARY and C3-RESTART are mandatory installed custody rows in
+qualification and admission. Without installed host root, direct custody tests
+skip; qualification rejects a skipped, failed or unavailable proof. Installed
+results remain UNVERIFIED until the Owner runs the separately reviewed procedure.
+B2 proves denial of tested manager calls and verifies the installed polkit rule
+against installed-files.json. Attribution of denial to that rule and precedence
+over earlier conflicting policy remain UNVERIFIED. The Owner must close agents,
+remove nexus from docker and reboot before install (README H1). This amendment
+claims no host action, installed PASS, phase advancement or CI parity.
+
+## Q15 installer correction (supersedes Q13 custody procedure)
+
+C2 is the real installed F5 pre-handoff substitution, runs LAST, and leaves
+root quarantine until a mandatory reviewed reboot. Enable-qualified requires
+content-checked row/run_id/pre-reboot boot_id evidence, a different current
+boot_id, and clean custody. C1 covers the two endpoint files only. C1/C3 call
+lifecycle.py directly as root and collect on the host as mothergate; these
+proofs do not exercise privilege elevation or the service collector sandbox.
+Cleanup is registered before setUp writes, continues after stop errors, proves
+settlement before exact-name persistent removal as mothergate, reports errors
+and retained paths, and fails qualification on unexpected leftovers. README
+specifies failed-proof recovery and the reboot; no generic custody deletion.
+Linux oracle socket addresses use an open private parent descriptor and a
+short absolute /proc/self/fd name, independent of cwd and TMPDIR length.
+The installed FILES allowlist remains exact and unchanged (27 files). The
+host-only plant removes lifecycle's post-relocation endpoint check in memory in
+the child only: Owner must use a root-owned 0700 copy of host_plant.py, verify
+its reviewed SHA-256, run without a TMPDIR override, observe installed C2 RED
+and reboot. Installed bytes remain unchanged; there is nothing to restore.
+This mission claims no installed PASS, CI parity or phase advancement.
+
+## Q16 pre-install correction
+
+After authenticating the fixture receipt, wait at most five seconds, polling,
+for that run's pending marker and staging tree to disappear. Timeout retains
+the existing leftover failure and never caches a successful session. C2 now
+asserts the endpoint rejection cause and stops an accidentally started exact
+instance before independently proving settlement; quarantine is retained.
+README records the reviewed Owner order, protected host-plant copy, saved
+qualification log, replacement-disabled/fsck PIN, evidence-preserving reset
+and exact recovery commands. FILES remains exactly 27. No installed acceptance,
+host action, CI parity or phase advancement is claimed.
