@@ -230,7 +230,25 @@ class Q23Oracles(unittest.TestCase):
         self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',unit)
     def test_vendor_gpu_egl_icd_hidden(self):
         # No GPU devices exist in the payload; the NVIDIA EGL ICD segfaults Xvfb.
-        self.assertIn('InaccessiblePaths=-/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n',self.unit())
+        self.assertIn('InaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n',self.unit())
+    def test_inaccessible_paths_are_root_relative(self):
+        # Q24 (systemd v259 namespace.c): with RootDirectory=, an InaccessiblePaths entry without '+'
+        # is host-absolute and silently dropped by drop_outside_root(); '+' makes it root-relative.
+        unit = self.unit()
+        entries = [e for line in unit.splitlines() if line.startswith('InaccessiblePaths=')
+                   for e in line.split('=',1)[1].split()]
+        self.assertEqual(sorted(entries),sorted(['+/usr/local','+/usr/share/ollama',
+                                                 '-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json']))
+        for entry in entries:
+            self.assertTrue(entry.lstrip('-').startswith('+/'),entry)
+    def test_a5_evidence_is_kernel_observed_not_headless_sandbox_page(self):
+        # Q25: chrome://sandbox renders the New Tab page under --headless=new; A5 keeps local render,
+        # version, label and the kernel-observed renderer (Seccomp=2, nested PID ns, lineage).
+        source = (HERE/'probe.py').read_text()
+        self.assertNotIn('chrome://sandbox',source)
+        self.assertNotIn('sandbox_html',source)
+        self.assertIn("'A5':('local_html','version','renderer','private_desktop')",source)
+        self.assertIn("require('gatebox-local' in local,'Chrome local rendering')",source)
     def test_cmdline_tokens_see_rewritten_process_titles(self):
         tokens = load('probe').cmdline_tokens
         rewritten = b'/opt/google/chrome/chrome --type=renderer --no-sandbox --lang=en\0\0\0'
