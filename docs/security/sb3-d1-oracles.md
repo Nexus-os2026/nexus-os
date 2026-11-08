@@ -143,10 +143,13 @@ unless stated:
 | `is_revoked` guard removed | condition deleted | Killed at `revoked-lapse-then-stop: Stop` |
 | accessor bypassed | `reason().is_none()` for `word_restricted` | Killed at `failed-` and `closing-lapse-then-stop: Stop` |
 | second clock sample | `expired` re-reads the deadline | Killed at poll-crossing `Stop arrives second`, and by the source guard |
-| broker reorder undone | `CallGate::expired` caller first, short-circuit | Killed at poll-crossing only |
+| broker reorder undone | `CallGate::expired` caller first, short-circuit | Not killed on the final code: masked by the exit observation (killed at poll-crossing at `33ff3f65`) |
 | sample after `live()`, entry | sample moved into the refusal | Killed at `scope-entry-order: nothing latched` |
 | sample after `live()`, Replied | sample moved into the refusal | Killed at `scope-reply-order: nothing latched` |
 | expired condition removed at the refusals | `latch_lapse(true)` at entry and Replied | Killed at `scope-only: nothing latched` and both order cases |
+| exit observation removed | no call at the attempt's exit | Killed at `admission-lapse-then-stop`, and by the source guard |
+| exit observation unconditional | called for every result | Source guard only: it would let a budget sample pre-empt an Owed record's cause, and no deterministic seam reaches that |
+| expired condition removed in `note_lapse` | `latch_lapse(true)` | Killed at `admission-scope-only: Stop arrives second`; also kills many other cases |
 
 ## The R8 acceptance sinks (SB3D-R3)
 
