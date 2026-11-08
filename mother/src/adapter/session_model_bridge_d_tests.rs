@@ -160,6 +160,14 @@ fn i6_digest(text: &str) -> String {
 fn private(f: &SFx) -> String {
     walk(&f.home.dir.join("private"))
 }
+/// The lane stays held until its explicit release. Each case is one child
+/// process, so an expired hold fails the case here, whatever the mission does.
+fn hold(go: &Mutex<std::sync::mpsc::Receiver<()>>) {
+    if go.lock().unwrap().recv_timeout(PATIENCE).is_err() {
+        eprintln!("the lane hold expired without its release");
+        std::process::exit(97);
+    }
+}
 /// The peer holds `/api/chat` until released, then answers `content`.
 fn hold_chat(
     f: &SFx,
@@ -375,6 +383,11 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/budget-then-stop",
             "first/budget-entry-then-stop",
             "first/stop-then-budget",
+            "first/failed-lapse-then-stop",
+            "first/closing-lapse-then-stop",
+            "first/revoked-lapse-then-stop",
+            "first/reply-lapse-then-stop",
+            "first/reply-lapse",
             "first/budget",
             "first/emergency",
             "first/fail-then-stop",
@@ -392,7 +405,7 @@ fn first(arg: &str) {
     let m = f.mother(1, move |ctx| {
         if mode == "stop-then-fail" {
             let _ = ready_tx.send(());
-            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+            hold(&go_rx);
             return LaneOutput {
                 verdict: Verdict::Fail {
                     reason: ERROR.into(),
@@ -400,20 +413,27 @@ fn first(arg: &str) {
                 ..quiet()
             };
         }
-        if mode == "budget-entry-then-stop" {
+        if matches!(
+            mode.as_str(),
+            "budget-entry-then-stop"
+                | "stop-then-budget"
+                | "failed-lapse-then-stop"
+                | "closing-lapse-then-stop"
+                | "revoked-lapse-then-stop"
+        ) {
             let _ = ready_tx.send(());
-            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+            hold(&go_rx);
         }
         let first = outcome(&ask(ctx));
         tx.send((first, terminal(&fx, MissionId(1)))).unwrap();
         if !matches!(
             mode.as_str(),
-            "stop-then-debt" | "stop-then-budget" | "emergency"
+            "stop-then-debt" | "stop-then-budget" | "emergency" | "reply-lapse"
         ) {
-            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+            hold(&go_rx);
         }
         match mode.as_str() {
-            "fail-then-stop" => LaneOutput {
+            "fail-then-stop" | "reply-lapse" => LaneOutput {
                 verdict: Verdict::Fail {
                     reason: ERROR.into(),
                 },
@@ -493,11 +513,11 @@ fn first(arg: &str) {
             assert!(adv.join().unwrap().is_err());
             "block:budget_time"
         }
-        // Stop is engaged first and the budget lapses behind it: Stop stays.
+        // Stop is engaged first and the budget lapses behind it; the caller
+        // observes the lapse only after both. Stop stays.
         "stop-then-budget" => {
-            let (entered, release) = hold_chat(&f, "{}");
             let adv = advance_in(&m, id);
-            within(&entered);
+            within(&ready_rx);
             let (paused_tx, paused_rx) = signal();
             let (resume_tx, resume_rx) = signal();
             let resume_rx = Mutex::new(resume_rx);
@@ -511,13 +531,64 @@ fn first(arg: &str) {
             };
             within(&paused_rx); // The Owner's Stop is engaged, not yet recorded.
             f.home.clock.advance(Duration::from_millis(61_000));
+            go_tx.send(()).unwrap(); // Only now does the lane ask.
             let (first, _) = within(&rx);
-            assert_ne!(first, "ok", "no usable reply");
-            drop(release);
+            assert_eq!(first, "invalidated", "the caller saw the lapse after Stop");
             assert!(adv.join().unwrap().is_err());
             resume_tx.send(()).unwrap();
             assert_eq!(stopper.join().unwrap(), Ok(MissionState::Stopped));
             "stop:owner"
+        }
+        // SB3C-R14 (a): an earlier restriction with no latched cause, then the
+        // lapse, is not a budget cause: these end as they did before F1.
+        // Revocation is the same with no session restriction at all.
+        "failed-lapse-then-stop" | "closing-lapse-then-stop" | "revoked-lapse-then-stop" => {
+            let adv = advance_in(&m, id);
+            within(&ready_rx);
+            match arg {
+                "failed-lapse-then-stop" => assert_eq!(restrict(&f, "fatal"), SessionState::Failed),
+                "closing-lapse-then-stop" => {
+                    assert_eq!(restrict(&f, "quit"), SessionState::ClosingNormal)
+                }
+                _ => m.revoke_model_for_test(id).unwrap(),
+            }
+            assert_eq!(m.cell_for_test().cause(), None, "{arg}: no latched cause");
+            f.home.clock.advance(Duration::from_millis(61_000));
+            go_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated", "{arg}: refused at entry");
+            assert!(!terminal, "{arg}: not yet ended");
+            assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}: Stop");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            "stop:owner"
+        }
+        // SB3C-R14 (b): the lapse lands after the post-call read, and the
+        // Replied guard is what observes it.
+        "reply-lapse-then-stop" | "reply-lapse" => {
+            let (entered, release) = hold_chat(&f, "{}");
+            let (replied_tx, replied_rx) = signal();
+            let (resume_tx, resume_rx) = signal();
+            let resume_rx = Mutex::new(resume_rx);
+            m.hooks_for_test().model_replied.arm(0, move || {
+                let _ = replied_tx.send(());
+                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+            });
+            let adv = advance_in(&m, id);
+            within(&entered);
+            release.send(()).unwrap();
+            within(&replied_rx);
+            f.home.clock.advance(Duration::from_millis(61_000));
+            resume_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated", "{arg}: the Replied guard refused");
+            assert!(!terminal, "{arg}: not yet ended");
+            if arg == "reply-lapse-then-stop" {
+                assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+                go_tx.send(()).unwrap();
+            }
+            let _ = adv.join().unwrap();
+            "block:budget_time"
         }
         "budget" => {
             let (entered, release) = hold_chat(&f, "{}");
@@ -1044,6 +1115,18 @@ fn sb3_d1_schedules_run_in_child_processes() {
         0,
         "no tolerated OPEN cell"
     );
+    // SB3C-R14 (c), source text only: the expiry the broker receives is the
+    // one sample that drove the latch (a real interleaving needs a clock seam
+    // the session fixture does not have).
+    let caller = include_str!("../coordinator/model_calls.rs");
+    let one = "CallDeadline for Caller<'_, P> {\n    fn expired(&self) -> bool {\n        self.note_lapse()\n    }\n}";
+    assert!(caller.contains(one), "expired returns the latch's sample");
+    let body = caller
+        .split("fn note_lapse(&self) -> bool {")
+        .nth(1)
+        .unwrap();
+    let body = &body[..body.find("\n    }\n").unwrap()];
+    assert_eq!(body.matches(".expired()").count(), 1, "one clock sample");
     let tests: Vec<&str> = source.split("#[test]\nfn ").skip(1).collect();
     assert!(tests.len() >= 6, "the D1 tests are found");
     for test in tests {

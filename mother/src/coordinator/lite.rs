@@ -236,6 +236,14 @@ impl<P: EffectPort> FileSession<P> {
             Ok(())
         })
     }
+    /// Revokes the invocation's observer and latches no cell cause.
+    #[cfg(test)]
+    pub(crate) fn revoke_model_for_test(&self, id: MissionId) -> Result<(), CoordinatorError> {
+        self.coordinator.try_with_lock(|inner| {
+            inner.mission(id)?.invalidate_calls();
+            Ok(())
+        })
+    }
     #[cfg(test)]
     pub(crate) fn end_for_test(
         &self,
