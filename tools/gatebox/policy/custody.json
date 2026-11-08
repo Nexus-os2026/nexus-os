@@ -18,6 +18,14 @@
       [
         "file:/run/mothergate-control/%i.status.sock",
         "file:/run/mothergate-control/sealed/%i/status.sock"
+      ],
+      [
+        "BindReadOnlyPaths=/usr\n",
+        "BindReadOnlyPaths=/usr:/usr:norbind\n"
+      ],
+      [
+        "InaccessiblePaths=/usr/local /usr/share/ollama\n",
+        "InaccessiblePaths=+/usr/local +/usr/share/ollama\nInaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n"
       ]
     ]
   },

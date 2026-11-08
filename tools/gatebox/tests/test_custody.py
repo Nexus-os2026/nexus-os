@@ -32,7 +32,13 @@ UNITS = {
          'ReadWritePaths=/var/lib/mothergate/receipts\n','ReadWritePaths=/var/lib/mothergate\n']],
     'mothergate-run@.service': [
         ['file:/run/mothergate-control/%i.log.sock','file:/run/mothergate-control/sealed/%i/log.sock'],
-        ['file:/run/mothergate-control/%i.status.sock','file:/run/mothergate-control/sealed/%i/status.sock']]}
+        ['file:/run/mothergate-control/%i.status.sock','file:/run/mothergate-control/sealed/%i/status.sock'],
+        # Q23: skeleton lives under /usr, so the /usr bind must not be recursive;
+        # the NVIDIA EGL ICD segfaults Xvfb in the device-less payload.
+        # Q24: '+' makes InaccessiblePaths root-relative under RootDirectory= (else silently dropped).
+        ['BindReadOnlyPaths=/usr\n','BindReadOnlyPaths=/usr:/usr:norbind\n'],
+        ['InaccessiblePaths=/usr/local /usr/share/ollama\n',
+         'InaccessiblePaths=+/usr/local +/usr/share/ollama\nInaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n']]}
 
 class CustodyTests(unittest.TestCase):
     def setUp(self):

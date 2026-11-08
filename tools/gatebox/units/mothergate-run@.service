@@ -50,7 +50,7 @@ SystemCallArchitectures=native
 SystemCallErrorNumber=EPERM
 SystemCallFilter=~@obsolete @raw-io @reboot @swap @module @clock @cpu-emulation @debug @keyring bpf userfaultfd io_uring_setup process_vm_readv process_vm_writev
 
-BindReadOnlyPaths=/usr
+BindReadOnlyPaths=/usr:/usr:norbind
 BindReadOnlyPaths=/opt/google/chrome
 BindReadOnlyPaths=/usr/libexec/gatebox:/gate/bin
 BindReadOnlyPaths=/etc/gatebox:/gate/policy
@@ -58,7 +58,8 @@ BindReadOnlyPaths=/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu
 BindReadOnlyPaths=/home/nexus/.cargo/registry:/inputs/registry
 BindReadOnlyPaths=/var/lib/mothergate/staging/%i/snapshot:/input
 BindReadOnlyPaths=/var/lib/mothergate/staging/%i/request.json:/gate/request.json
-InaccessiblePaths=/usr/local /usr/share/ollama
+InaccessiblePaths=+/usr/local +/usr/share/ollama
+InaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 TemporaryFileSystem=/work:rw,nodev,nosuid,mode=0700,uid=@GATERUN_UID@,gid=@GATERUN_GID@,size=16G,nr_inodes=1048576
 TemporaryFileSystem=/run:rw,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=16M,nr_inodes=4096

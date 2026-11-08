@@ -218,6 +218,148 @@ class Q20Oracles(unittest.TestCase):
         self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
         self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
 
+class Q23Oracles(unittest.TestCase):
+    """Q23 live evidence (diag rounds 1-3): payload environment defects on systemd 259/NVIDIA hosts."""
+    def unit(self): return (HERE/'units/mothergate-run@.service').read_text()
+    def test_usr_bind_is_not_recursive(self):
+        # The skeleton lives under /usr; a recursive /usr bind copied the payload's own
+        # mounts (e.g. /run/gate twice), defeating the whole-tmpfs isolation check.
+        unit = self.unit()
+        self.assertIn('BindReadOnlyPaths=/usr:/usr:norbind\n',unit)
+        self.assertNotIn('BindReadOnlyPaths=/usr\n',unit)
+        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',unit)
+    def test_vendor_gpu_egl_icd_hidden(self):
+        # No GPU devices exist in the payload; the NVIDIA EGL ICD segfaults Xvfb.
+        self.assertIn('InaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n',self.unit())
+    def test_inaccessible_paths_are_root_relative(self):
+        # Q24 (systemd v259 namespace.c): with RootDirectory=, an InaccessiblePaths entry without '+'
+        # is host-absolute and silently dropped by drop_outside_root(); '+' makes it root-relative.
+        unit = self.unit()
+        entries = [e for line in unit.splitlines() if line.startswith('InaccessiblePaths=')
+                   for e in line.split('=',1)[1].split()]
+        self.assertEqual(sorted(entries),sorted(['+/usr/local','+/usr/share/ollama',
+                                                 '-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json']))
+        for entry in entries:
+            self.assertTrue(entry.lstrip('-').startswith('+/'),entry)
+    def test_a5_evidence_is_kernel_observed_not_headless_sandbox_page(self):
+        # Q25: chrome://sandbox renders the New Tab page under --headless=new; A5 keeps local render,
+        # version, label and the kernel-observed renderer (Seccomp=2, nested PID ns, lineage).
+        source = (HERE/'probe.py').read_text()
+        self.assertNotIn('chrome://sandbox',source)
+        self.assertNotIn('sandbox_html',source)
+        self.assertIn("'A5':('local_html','version','renderer','private_desktop')",source)
+        self.assertIn("require('gatebox-local' in local,'Chrome local rendering')",source)
+    def test_cmdline_tokens_see_rewritten_process_titles(self):
+        tokens = load('probe').cmdline_tokens
+        rewritten = b'/opt/google/chrome/chrome --type=renderer --no-sandbox --lang=en\0\0\0'
+        self.assertIn(b'--type=renderer',tokens(rewritten))
+        self.assertIn(b'--no-sandbox',tokens(rewritten))
+        self.assertIn(b'--disable-setuid-sandbox',tokens(b'chrome\0--type=renderer\0--disable-setuid-sandbox\0'))
+        self.assertNotIn(b'',tokens(rewritten))
+        self.assertEqual(tokens(b''),[])
+    def test_chrome_observation_uses_tokens_for_type_and_unsafe_flags(self):
+        tree = ast.parse((HERE/'probe.py').read_text())
+        function = next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='chrome_observation')
+        source = ast.unparse(function)
+        self.assertIn("chrome_process_is_renderer((path / 'cmdline').read_bytes())",source)
+        self.assertNotIn("split(b'\\x00')",source)
+
+class Q26Oracles(unittest.TestCase):
+    """Q26 (Codex review-1 of GBX-F3): behavioural negative controls for the A5 Chrome checks."""
+    def setUp(self): self.probe = load('probe')
+    def test_switch_parsing_denies_unsafe_flags_in_every_chromium_form(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        for raw in (b'chrome\0--type=renderer\0--no-sandbox\0', b'chrome --type=renderer --no-sandbox\0\0',
+                    b'chrome\0--disable-setuid-sandbox\0', b'chrome\0--no-sandbox=1\0', b'chrome\0-no-sandbox\0',
+                    b'chrome\0--disable-setuid-sandbox=true\0'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError,'unsafe Chrome flag'): is_renderer(raw)
+    def test_only_renderer_type_is_a_renderer(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        self.assertTrue(is_renderer(b'/opt/google/chrome/chrome --type=renderer --lang=en\0\0'))
+        self.assertTrue(is_renderer(b'chrome\0--type=renderer\0'))
+        for raw in (b'chrome\0--type=gpu-process\0', b'chrome\0--type=zygote\0', b'chrome\0', b'',
+                    b'chrome\0--lang=--type=renderer\0', b'chrome\0--type=rendererX\0'):
+            with self.subTest(raw=raw): self.assertFalse(is_renderer(raw))
+    def status(self, seccomp='2', nspid='71\t4\t1', filters='3'):
+        return {'Seccomp':'\t'+seccomp,'NSpid':'\t'+nspid,'Seccomp_filters':'\t'+filters}
+    def test_renderer_isolation_requires_chrome_own_seccomp_filter_and_nested_pid_ns(self):
+        isolated = self.probe.renderer_isolated
+        browser = self.status(filters='2')
+        self.assertEqual(isolated(self.status(),browser),
+                         dict(seccomp=2,pid_levels=3,seccomp_filters=3,browser_seccomp_filters=2))
+        for bad in (self.status(seccomp='0'), self.status(nspid='71\t4'), self.status(filters='2'),
+                    self.status(filters='1')):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError,'renderer isolation'): isolated(bad,browser)
+    def evidence(self, **renderer):
+        base = dict(pid=71,seccomp=2,pid_levels=3,seccomp_filters=3,browser_seccomp_filters=2,parents={'71':15,'15':2,'2':1})
+        base.update(renderer)
+        return dict(argv=['/opt/google/chrome/chrome','--headless=new'],browser_pid=2,renderer=base,browser_label='chrome',
+                    local_html='<p>gatebox-local</p>',version='Google Chrome 1',private_desktop={'display':':0'})
+    def test_validate_sensor_rejects_weakened_a5_evidence(self):
+        validate = self.probe.validate_sensor
+        validate('A5',self.evidence())
+        for bad in (dict(seccomp=0), dict(pid_levels=2), dict(seccomp_filters=2), dict(browser_seccomp_filters=None),
+                    dict(parents={'71':15,'15':9,'9':1})):
+            with self.subTest(bad=bad), self.assertRaises((ValueError,TypeError)): validate('A5',self.evidence(**bad))
+        unsafe = self.evidence(); unsafe['argv'] = unsafe['argv']+['--no-sandbox']
+        with self.assertRaisesRegex(ValueError,'unsafe flags'): validate('A5',unsafe)
+        for key in ('local_html','version','renderer','private_desktop'):
+            missing = self.evidence(); missing.pop(key)
+            with self.subTest(missing=key), self.assertRaisesRegex(ValueError,'missing A5'): validate('A5',missing)
+    def test_chrome_observation_uses_the_shared_helpers(self):
+        tree = ast.parse((HERE/'probe.py').read_text())
+        source = ast.unparse(next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='chrome_observation'))
+        self.assertIn("chrome_process_is_renderer((path / 'cmdline').read_bytes())",source)
+        self.assertIn('select_renderer(candidates, parents, proc.pid, status(proc.pid))',source)
+
+class Q27Oracles(unittest.TestCase):
+    """Q27 (Codex review-2 of GBX-F3): denial over-approximates every Chromium spelling;
+    renderer classification follows Chromium's parser exactly (NUL boundaries, one prefix, '--' terminator)."""
+    def setUp(self): self.is_renderer = load('probe').chrome_process_is_renderer
+    def test_whitespace_and_prefix_variants_are_denied(self):
+        for raw in (b'chrome\0--type=renderer\0\t--no-sandbox\0', b'chrome\0--disable-setuid-sandbox\t\0',
+                    b'chrome\0 --no-sandbox \0', b'chrome\0\n--no-sandbox\r\0', b'chrome\0---no-sandbox\0',
+                    b'chrome\0--\0--no-sandbox\0', b'chrome\0--lang=en --no-sandbox\0',
+                    b'chrome --type=renderer\t--no-sandbox\0\0'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError,'unsafe Chrome flag'): self.is_renderer(raw)
+    def test_renderer_classification_matches_chromium_parser(self):
+        for raw in (b'chrome\0---type=renderer\0', b'chrome\0--\0--type=renderer\0',
+                    b'chrome\0--lang=en --type=renderer\0',
+                    b'chrome\0--type= renderer\0', b'chrome\0--Type=renderer\0'):
+            with self.subTest(raw=raw): self.assertFalse(self.is_renderer(raw))
+        for raw in (b'chrome\0--type=renderer\0', b'chrome\0-type=renderer\0', b'chrome\0 --type=renderer\t\0',
+                    b'/opt/google/chrome/chrome --type=renderer --lang=en\0\0\0'):
+            with self.subTest(raw=raw): self.assertTrue(self.is_renderer(raw))
+
+class Q28Oracles(unittest.TestCase):
+    """Q28 (Codex review-3 of GBX-F3): empty NUL fields keep positions; last duplicate switch wins;
+    the renderer start-up window (title before Chrome's filter) waits within the deadline."""
+    def setUp(self): self.probe = load('probe')
+    def test_empty_nul_fields_keep_argument_positions(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        self.assertFalse(is_renderer(b'\0--\0--type=renderer\0'))
+        self.assertTrue(is_renderer(b'\0--type=renderer\0'))   # empty argv[0] keeps its position
+        self.assertTrue(is_renderer(b'chrome\0\0--type=renderer\0'))
+    def test_last_duplicate_type_wins_like_chromium(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        self.assertTrue(is_renderer(b'chrome\0--type=gpu-process\0--type=renderer\0'))
+        self.assertTrue(is_renderer(b'chrome\0--type=renderer\0--type=renderer\0'))
+        self.assertFalse(is_renderer(b'chrome\0--type=renderer\0--type=gpu-process\0'))
+        self.assertFalse(is_renderer(b'chrome\0--type=renderer\0--type\0'))
+    def status(self, filters='18', nspid='71\t4\t1'):
+        return {'Seccomp':'\t2','NSpid':'\t'+nspid,'Seccomp_filters':'\t'+filters}
+    def test_select_renderer_waits_for_every_sampled_renderer_to_isolate(self):
+        select = self.probe.select_renderer
+        parents = {71:15,72:15,15:2,2:1,90:1}
+        browser = self.status(filters='17')
+        self.assertIsNone(select({},parents,2,browser))
+        self.assertIsNone(select({71:self.status(filters='17')},parents,2,browser))      # filter not yet installed
+        self.assertIsNone(select({71:self.status(),72:self.status(filters='17')},parents,2,browser))
+        self.assertIsNone(select({71:self.status(nspid='71\t4')},parents,2,browser))
+        self.assertIsNone(select({90:self.status()},parents,2,browser))                  # not a descendant
+        chosen = select({71:self.status(),72:self.status(),90:self.status(filters='1')},parents,2,browser)
+        self.assertEqual(chosen,dict(seccomp=2,pid_levels=3,seccomp_filters=18,browser_seccomp_filters=17,pid=71,parents=parents))
+
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
         # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
