@@ -8,6 +8,7 @@ use crate::journal::MissionId;
 use crate::oracles::contract_with;
 use crate::page_inputs::{page_criteria, PageFacts};
 use crate::teaching::*;
+use nexus_governed_control::authority::evidence::escaped;
 
 const LABEL: &str = "inert page check: passed (not rendered)";
 const OPEN_LOOK: &str =
@@ -70,8 +71,9 @@ const ALL_PASS: [&str; 6] = ["pass"; 6];
 fn expected(id: MissionId, c: &MissionContract, body: &[String], tally: &str) -> String {
     let mut lines = vec![
         format!("Mission {id} is done."),
-        format!("You asked: {}", c.owner_words.trim()),
-        format!("I understood: {}", c.restatement),
+        // M3E-R17 (b): untrusted fields are escaped before assembly.
+        format!("You asked: {}", escaped(c.owner_words.trim())),
+        format!("I understood: {}", escaped(&c.restatement)),
     ];
     lines.extend(body.iter().cloned());
     lines.push(tally.to_string());

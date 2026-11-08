@@ -22,7 +22,7 @@ def sibling(name):
     spec.loader.exec_module(module)
     return module
 snapshot, receipt = sibling('snapshot'), sibling('receipt')
-ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS'}
+ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS','C1-SEALED','C2-CANARY','C3-RESTART'}
 # PR-2b install.sh must create /etc/gatebox/qualification.json with this value
 # before starting the service. It permits qualifying only; normal still fails closed.
 QUALIFICATION_PLACEHOLDER = {'identity':None,'passed':[]}
@@ -240,10 +240,12 @@ def coverage(evidence, logs):
             inventory = json.loads(logs[command['id']+'-inventory.log'])
             command.update(artifact_id=inventory['artifact']['id'],inventory=inventory['inventory'])
         if command['gate_id'] == 'host':
-            names = [n for c in commands if c['gate_id'] == 'workspace' and c['artifact_id'] in hosts
-                     for n in c['inventory']['expected']]
-            command.update(artifact_ids=hosts,inventory=dict(expected=names,executed=names,passed=names,
-                                                            failed=[],ignored=[],filtered=[]))
+            host = [c['inventory'] for c in commands if c['gate_id'] == 'workspace' and c['artifact_id'] in hosts]
+            names = [n for i in host for n in i['expected']]
+            executed = [n for i in host for n in i['passed']]
+            ignored = [n for i in host for n in i['ignored']]
+            command.update(artifact_ids=hosts,inventory=dict(expected=names,executed=executed,passed=executed,
+                                                            failed=[],ignored=ignored,filtered=[]))
         commands.append(command)
     expected = [g['id'] for g in gates['gates']]
     return commands, dict(expected=expected,executed=expected,passed=expected,failed=[],ignored=[],filtered=[],
