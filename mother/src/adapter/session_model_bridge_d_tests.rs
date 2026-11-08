@@ -657,14 +657,16 @@ fn memory(arg: &str) {
     let id = f.building(&m, f.contract());
     let answer = match arg {
         "failed" => Answer::Json(500, format!("{{\"error\":\"{ERROR}\"}}")),
-        // Unfinished, so the transport rejects it: the bytes reach Mother's
-        // peer connection and must never become a reply.
+        // Only unfinished, as a real reply otherwise: the transport's done
+        // check rejects it, and it must never become a reply.
         "rejected" => Answer::Json(
             200,
             serde_json::json!({
                 "model": NAME,
                 "message": {"role": "assistant", "content": REPLY},
                 "done": false,
+                "prompt_eval_count": 587,
+                "eval_count": 378,
             })
             .to_string(),
         ),
