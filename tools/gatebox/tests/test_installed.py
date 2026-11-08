@@ -243,8 +243,9 @@ class Q21Oracles(unittest.TestCase):
         except ValueError: init.report_failure(Fake())
         self.assertEqual([n for n,_ in frames],['init-error'])
         self.assertLessEqual(len(frames[0][1]),64*1024)
-        self.assertIn(b'probe X failed',frames[0][1])
-        self.assertIn(b'ValueError',frames[0][1])
+        # The reason line itself (not merely the raising source line) must survive.
+        self.assertIn(b'\nValueError: probe X failed: yyy',frames[0][1])
+        self.assertTrue(frames[0][1].startswith(b'Traceback (most recent call last):\n'))
         class Broken:
             def output(self,name,block): raise OSError('collector lost')
         try: raise RuntimeError('original')

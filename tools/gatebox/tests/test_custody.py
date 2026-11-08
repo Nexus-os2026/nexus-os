@@ -26,7 +26,10 @@ LAYOUT = 'd /run/mothergate-control 0755 root root -\nd /run/mothergate-control/
 UNITS = {
     'mothergate.service': [
         ['RuntimeDirectory=mothergate-control\nRuntimeDirectoryMode=0700\n',
-         'ReadWritePaths=/run/mothergate-control\n']],
+         'ReadWritePaths=/run/mothergate-control\n'],
+        # Q21 D1: one same-mount state root so receipt renameat2 is not EXDEV.
+        ['ReadWritePaths=/var/lib/mothergate/staging\nReadWritePaths=/var/lib/mothergate/pending\n'
+         'ReadWritePaths=/var/lib/mothergate/receipts\n','ReadWritePaths=/var/lib/mothergate\n']],
     'mothergate-run@.service': [
         ['file:/run/mothergate-control/%i.log.sock','file:/run/mothergate-control/sealed/%i/log.sock'],
         ['file:/run/mothergate-control/%i.status.sock','file:/run/mothergate-control/sealed/%i/status.sock']]}
