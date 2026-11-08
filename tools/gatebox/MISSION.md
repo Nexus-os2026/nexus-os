@@ -3,6 +3,9 @@
 Authority: Owner request, 2026-11-07, authorizes PR-1 implementation only.
 Branch: mother/gatebox-slice1-core.
 Base: 899e3872c5b61223c87b905f63c66947a816259b; no branch movement.
+Q32 (GBX-F6): the qualification fixture is re-pinned to 0c8cb6d360b1296262b7a5c478261e5e47e5c7f5 = 899e3872 plus one test-only portability commit (governed-control o18_d/o18_g use a fake /sys); product code unchanged.
+Q34 (GBX-F6): re-pinned again to 8e0d6ae293df999eb6530e875df1206deac872a8 = 0c8cb6d3 plus one test-only hermeticity commit (mother decision9 host-port oracle uses a public address literal, no DNS); product code unchanged.
+Q33 (GBX-F6): libtest reconciliation is truthful to libtest: #[ignore] tests are recorded as ignored (subset of listed names, never passed, totals agree), the #[should_panic] marker maps to the listed name, and a zero-test target needs libtest's own zero-test run; failed/filtered stay empty, desktop-live stays exact with nothing ignored.
 Frozen sheet: /home/nexus/NEXUS/gatebox/slice1-mission.md.
 Sheet SHA-256: 28ac57fc6eb1565353d2ea956225703db396ebe009efd66fc34fef0b2f8a8094.
 This register incorporates the frozen sheet by byte identity. The sheet's

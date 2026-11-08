@@ -24,14 +24,26 @@ def child_options(log_fd):
     return {'stdin':subprocess.DEVNULL,'stdout':log_fd,'stderr':subprocess.STDOUT,
             'close_fds':True,'env':dict(ENV),'cwd':'/work/src','start_new_session':True}
 
+SHOULD_PANIC = ' - should panic'  # libtest's marker after a #[should_panic] test's name
+
 def reconcile(names, output):
-    passed = re.findall(r'^test (.+) \.\.\. ok$',output,re.M)
+    # Q33: every listed test either passes or is reported ignored by libtest (#[ignore]); ignored
+    # names are recorded as ignored, never as passed, and the totals must agree. Nothing else.
+    passed, ignored = [], []
+    # libtest names are Rust paths (no whitespace); the marker is the only text before " ... ".
+    for name, _, result in re.findall(r'^test (\S+)( - should panic)? \.\.\. (.*)$',output,re.M):
+        if result == 'ok': passed.append(name)
+        elif result == 'ignored' or result.startswith('ignored, '): ignored.append(name)
+        else: raise ValueError('missing/unexpected/failed libtest names or totals')
     totals = re.findall(r'^test result: ok\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out;',output,re.M)
-    if (not names or len(set(names)) != len(names) or len(passed) != len(names)
-            or set(passed) != set(names) or totals != [(str(len(names)),'0','0','0','0')]
-            or re.search(r'^test .+ \.\.\. (?!ok$)',output,re.M)):
+    running = re.findall(r'^running (\d+) tests?$',output,re.M)
+    run = [n for n in names if n not in set(ignored)]
+    if (len(set(names)) != len(names) or len(set(passed+ignored)) != len(passed)+len(ignored)
+            or sorted(passed) != sorted(run) or not set(ignored) <= set(names)
+            or running != [str(len(names))] or totals != [(str(len(run)),'0',str(len(ignored)),'0','0')]):
         raise ValueError('missing/unexpected/failed libtest names or totals')
-    return {'expected':names,'executed':names,'passed':names,'failed':[],'ignored':[],'filtered':[]}
+    ignored = [n for n in names if n in set(ignored)]
+    return {'expected':names,'executed':run,'passed':run,'failed':[],'ignored':ignored,'filtered':[]}
 
 def packet(fd, value):
     data = json.dumps(value,separators=(',',':')).encode()
@@ -42,6 +54,10 @@ def packet(fd, value):
         if not count: raise ValueError('collector lost')
         data = data[count:]
 
+def children(task):
+    # Q31: kernel list of a payload PID-1 thread's direct children (adopted orphans included).
+    with open('/proc/self/task/'+task+'/children') as stream: return stream.read()
+
 def artifact_package(item):
     return tomllib.loads(Path(item['manifest_path']).read_text())['package']['name']
 
@@ -50,6 +66,21 @@ class Runner:
         self.log, self.status = log, status
         self.deadline, self.total, self.serial = time.monotonic()+14000, 0, 0
         self.children, self.artifacts, self.results = set(), [], {}
+    def reap_orphans(self):
+        # Q31: PID 1 adopts every orphan; reap exited ones promptly, as a host init does, so a
+        # killed descendant never lingers as a zombie that kill -0 still reports. The runner's
+        # own Popen children are never waited here: Popen keeps sole ownership of their status.
+        owned = {proc.pid for proc in self.children}
+        main = str(os.getpid())
+        for task in os.listdir('/proc/self/task'):
+            try: text = children(task)
+            except FileNotFoundError:
+                if task == main: raise
+                continue  # A non-main thread exited meanwhile.
+            for pid in map(int,text.split()):
+                if pid in owned: continue
+                try: os.waitpid(pid,os.WNOHANG)
+                except ChildProcessError: pass  # Already reaped by an exiting thread's wait.
     def output(self, name, block):
         self.total += len(block)
         if self.total > 64*1024**2: raise ValueError('run log bound')
@@ -61,7 +92,10 @@ class Runner:
         packet(self.status,dict(event='start',id=name,gate_id=gate,argv=argv,
                                 cwd='/work/src',environment=ENV))
         options = child_options(subprocess.PIPE)
-        if gate == 'compile-tests': options['stderr'] = subprocess.PIPE
+        # Parsed results are stdout only (cargo JSON, libtest listings/results); stderr, where test
+        # helpers' panics land, is still logged but cannot split a parsed line (Q33, diag15 c75).
+        if gate in ('compile-tests','workspace','workspace-list','desktop-live','desktop-live-list'):
+            options['stderr'] = subprocess.PIPE
         proc = subprocess.Popen(argv,**options)
         self.children.add(proc)
         output = bytearray()
@@ -72,6 +106,7 @@ class Runner:
         try:
             while selector.get_map():
                 if time.monotonic() >= self.deadline: raise TimeoutError('payload deadline')
+                self.reap_orphans()
                 for key, _ in selector.select(.1):
                     block = os.read(key.fd,65536)
                     if not block: selector.unregister(key.fileobj)
@@ -95,14 +130,20 @@ class Runner:
             self.children.discard(proc)
     def libtest(self, gate, artifact, expected=None):
         _, code, listing = self.command(gate+'-list',[artifact['executable'],'--list','--format','terse'])
-        names = re.findall(r'^(.+): test$',listing,re.M)
-        if code or ': benchmark' in listing or not names: raise ValueError('unknown/empty test adapter')
+        # Q33: a zero-test target lists nothing; reconcile then requires libtest's own zero-test run.
+        # One pass validates and extracts (review F6-3 B1): every line is "<path>: test", LF only.
+        lines = listing.split('\n')
+        if lines[-1] == '': lines.pop()
+        matches = [re.fullmatch(r'(\S+): test',line) for line in lines]
+        if code or not all(matches): raise ValueError('unknown test adapter')
+        names = [match[1] for match in matches]
         if expected is not None:
             if set(names) != set(expected): raise ValueError('desktop names changed')
             names = expected
         name, code, output = self.command(gate,[artifact['executable']])
         inventory = reconcile(names,output)
         if code: raise ValueError('libtest failed')
+        if expected is not None and inventory['ignored']: raise ValueError('desktop test ignored')
         self.output(name+'-inventory',json.dumps(dict(artifact=artifact,inventory=inventory)).encode())
         return names
     def gates(self):

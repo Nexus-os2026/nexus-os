@@ -30,7 +30,7 @@ fn decision9_host_port_does_not_adopt_legacy_replay() {
     control
         .request_grant(
             &nexus_governed_control::governed::GrantRequest::Egress {
-                origin: "https://example.org".into(),
+                origin: "https://93.184.216.34".into(),
                 methods: vec!["POST".into()],
                 allow_private: false,
             },
@@ -41,14 +41,15 @@ fn decision9_host_port_does_not_adopt_legacy_replay() {
     let run = control
         .open_run(mother_agent(), RunOrigin::AgentGoal)
         .unwrap();
-    // Preparation only: this test makes no network request or model attempt.
+    // Preparation only: this test makes no network request or model attempt. A
+    // public address literal keeps it hermetic: no name lookup is needed.
     let AgentOutcome::AwaitingApproval(view) = control
         .agent_action(
             &mother_agent(),
             run,
             &Intent::Request(EgressIntent {
                 method: "POST".into(),
-                url: "https://example.org/decision9".into(),
+                url: "https://93.184.216.34/decision9".into(),
                 headers: vec![],
                 body: None,
             }),
