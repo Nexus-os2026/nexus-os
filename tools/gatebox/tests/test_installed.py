@@ -767,6 +767,38 @@ class Q35Oracles(unittest.TestCase):
         counts = re.findall(r"len\(values\['FILES'\]\)!=(\d+)",(HERE/'README.md').read_text())
         self.assertEqual(counts,[str(len(installer()['FILES']))])
 
+class Q36Oracles(unittest.TestCase):
+    """Q36 (review Q35-1, inherited from F6): the qualification probe checked the effective
+    configuration of only the original three units, so a drop-in broadening mothergate-root@
+    (root, CAP_SYS_ADMIN) would escape it. The root template is checked like the others."""
+    RUN = 'a'*32
+    def values(self):
+        return {'mothergate.socket':dict(FragmentPath='/etc/systemd/system/mothergate.socket'),
+                'mothergate.service':dict(FragmentPath='/etc/systemd/system/mothergate.service'),
+                'mothergate-run@'+self.RUN+'.service':dict(FragmentPath='/etc/systemd/system/mothergate-run@.service',
+                    User='gaterun',PrivatePIDs='yes',PrivateNetwork='yes',PrivateIPC='yes',NoNewPrivileges='yes',
+                    BindLogSockets='no',SystemCallArchitectures='native'),
+                'mothergate-root@'+self.RUN+'.service':dict(FragmentPath='/etc/systemd/system/mothergate-root@.service',
+                    User='',NoNewPrivileges='yes',PrivateMounts='no',PrivateNetwork='no',CapabilityBoundingSet='cap_sys_admin')}
+    def run_probe(self, values):
+        probe = load('probe'); asked = []
+        def capture(argv, **_):
+            asked.append(argv[2])
+            unit = dict(values[argv[2]]); unit.setdefault('DropInPaths','')
+            return ''.join(k+'='+v+'\n' for k,v in unit.items())
+        with patch.object(probe,'capture',side_effect=capture): probe.effective_units()
+        return asked
+    def test_root_template_is_checked(self):
+        self.assertIn('mothergate-root@'+self.RUN+'.service',self.run_probe(self.values()))
+    def test_root_template_overrides_are_refused(self):
+        name = 'mothergate-root@'+self.RUN+'.service'
+        for key, value in (('DropInPaths','/etc/systemd/system/mothergate-root@.service.d/x.conf'),
+                           ('FragmentPath','/run/systemd/system/mothergate-root@.service'),
+                           ('CapabilityBoundingSet','cap_sys_admin cap_dac_override'),('NoNewPrivileges','no'),
+                           ('PrivateMounts','yes'),('PrivateNetwork','yes'),('User','gaterun')):
+            values = self.values(); values[name][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError): self.run_probe(values)
+
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
         # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
