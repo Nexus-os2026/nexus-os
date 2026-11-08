@@ -1443,23 +1443,23 @@ still land in that order, each proven.
 
 ### 14.6 Dispositions
 
-Counts through the SB3C-R8, R9 and R10 audits, 65050de0 being the original
+Counts through the SB3C-R8, R9, R10 and R11 audits, 65050de0 being the original
 table. The audit table is `/home/nexus/NEXUS/sb3c2-citation-audit.md` (outside
 the repository): one row per distinct cited test.
 
-| Disposition | 65050de0 | After R8 | After R9 | After R10 |
-|---|---:|---:|---:|---:|
-| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 |
-| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 |
-| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 |
-| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 |
-| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 |
-| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 |
-| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 |
-| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 |
-| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 |
-| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 |
-| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 |
+| Disposition | 65050de0 | After R8 | After R9 | After R10 | After R11 |
+|---|---:|---:|---:|---:|---:|
+| `c:` retained test, exact name, executes the sink's own boundary on the value | 510 | 279 | 264 | 245 | 239 |
+| `x:` C2-new oracle (`session_model_composition_tests` only) | 2 | 2 | 2 | 2 | 2 |
+| N/A BOOTSTRAP_NO_MISSION | 71 | 65 | 65 | 65 | 65 |
+| N/A LEGACY_FINALIZATION_ONLY | 92 | 92 | 92 | 92 | 92 |
+| N/A LIFECYCLE_DENIES_BEFORE_THIS_SINK (names its denial oracle) | 104 | 68 | 54 | 54 | 54 |
+| N/A METADATA_HAS_NO_CHARGE | 14 | 14 | 14 | 14 | 14 |
+| N/A PREBIND_NO_RUN_OR_CONSENT | 5 | 5 | 5 | 5 | 5 |
+| N/A SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION | 10 | 10 | 10 | 10 | 10 |
+| OPEN D1 (reply acceptance, lane result) | 36 | 88 | 94 | 94 | 94 |
+| OPEN D2 (composition, restriction, close) | 345 | 566 | 589 | 608 | 614 |
+| OPEN F1 (`mother_end` / `budget`, the SB3C-R5 first-cause defect) | 1 | 1 | 1 | 1 | 1 |
 
 Every cell is bound by the verifier's literal CELLS table (SB3C-R8 (d)): a
 disposition that is not the audited one for that (sink, dimension, value) fails,
@@ -1554,9 +1554,10 @@ agreement between them shows nothing changed since the audit and does not show
 the audit was right. No claim is made beyond the per-cell citation.
 
 **What actually ran (R10 (c)).** Execution proof is `check-citations.py` against
-the Gate Box receipt for the exact head: each cited test is matched by pinned
-binary and full module path, and must be in the passed inventory and not in the
-ignored list. It is an Architect gate outside the repository, so it proves the
+the Gate Box receipt for the exact head (R11 (b)). Each cited test is bound to
+(package, target, full module path) through the receipt's `coverage.artifacts`,
+and the executable that ran must match that artifact row. It must be in that
+row's passed inventory and not in its ignored list. It is an Architect gate outside the repository, so it proves the
 landing head only. It must be re-run on each later SB-3 landing head (D1, F1, D2)
 and before the route opens. A test compiled out by a `cfg` on its enclosing
 module, like the forms above, is covered by that check and not by this verifier.
@@ -1578,3 +1579,25 @@ disposition cites nothing). In the `SB3C/ingress/` rows of
 reached the reservation and are OPEN:D2; the boundary is the frozen
 `model::Attempt::acquire slot reservation` wording. Fault `none` and `poison`
 stay: reservation runs with the table already poisoned.
+
+### 14.12 SB3C-R11 repair
+
+Review 4 found that `sb3_held_request_cancels_and_joins` reaches cancellation and
+halt through `Call::restriction`, which clones the inner `AgentDoor`.
+`SessionDoor::cancel_run` and `SessionDoor::halt`, with their settlement
+registration, join and pending-context handling, never run. Lifecycle `Normal`,
+the owned ingress value and fault `none` for `cancel_run` and `door_halt` (six
+cells) are OPEN:D2. Those two rows' `primitive` column still names that test,
+because a replacement would be a new citation; it is not evidence for either
+wrapper. `identity_view` and `inference_binding`, the other sinks naming
+`SessionDoor`, were checked: their witnesses hold a `SessionDoor`.
+
+### 14.13 Route-opening rule (SB3C-R11 (d)), binding on later units
+
+A `c:` citation claims that a retained test executes a sink's boundary on a
+value. Those claims were independently reviewed by sampling; they are not proven,
+and every review round so far found wrong ones. **`c:` citations do not count
+toward opening the model route.** The route opens only on real tests executed on
+the real composed route, with every OPEN cell resolved. Passing
+`check-citations.py` does not change this: it shows a cited test ran, not that
+the test reaches the sink.

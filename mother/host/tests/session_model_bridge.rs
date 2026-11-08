@@ -340,12 +340,12 @@ struct Context {
     cells: BTreeMap<(String, String, String), &'static str>,
     sources: String,
     receipts: BTreeSet<&'static str>,
-    executed: RefCell<BTreeMap<String, bool>>,
+    named_tests: RefCell<BTreeMap<String, bool>>,
 }
 impl Context {
     /// `is_test` once per name: the block walk re-reads the sources.
-    fn executed(&self, name: &str) -> bool {
-        let mut seen = self.executed.borrow_mut();
+    fn names_test(&self, name: &str) -> bool {
+        let mut seen = self.named_tests.borrow_mut();
         let entry = seen.entry(name.to_owned());
         *entry.or_insert_with(|| is_test(name, &self.sources))
     }
@@ -373,7 +373,7 @@ fn context(sources: String) -> Context {
         cells,
         sources,
         receipts,
-        executed: RefCell::default(),
+        named_tests: RefCell::default(),
     }
 }
 
@@ -394,7 +394,7 @@ fn check_disposition(
             if kind == "x" && !is_test(rest, C2_ORACLES) {
                 return Err(format!("{at}: x: only a C2-new oracle may claim execution"));
             }
-            if kind == "c" && !c.executed(rest) {
+            if kind == "c" && !c.names_test(rest) {
                 return Err(format!("{at}: no such retained test {rest}"));
             }
             listed(c, (sink, dimension, value), disposition)?;
@@ -417,7 +417,7 @@ fn check_disposition(
             match oracle {
                 Some(o) if denies => {
                     let named = words(DENIAL_ORACLES).contains(&o);
-                    if !named || !c.executed(o) {
+                    if !named || !c.names_test(o) {
                         return Err(format!("{at}: {o} is not this sink's denial oracle"));
                     }
                 }
@@ -464,7 +464,7 @@ fn check_row(c: &Context, f: &[&str], summary: &mut Summary) -> Result<(), Strin
     if f[3] != *boundary {
         return Err(format!("{sink}: boundary {:?} is not its boundary", f[3]));
     }
-    let known = c.executed(f[8]) || is_test(f[8], C2_ORACLES);
+    let known = c.names_test(f[8]) || is_test(f[8], C2_ORACLES);
     if f[8] != *primitive || !known {
         return Err(format!("{sink}: primitive {} is not its evidence", f[8]));
     }
@@ -588,7 +588,7 @@ fn verify_cases_in(cases: &str, sources: String) -> Result<usize, String> {
             ));
         }
         if !owned && (f[2] == "none" || !is_test(session_test, &sources)) {
-            return Err(format!("{class}: no executed session-level primitive"));
+            return Err(format!("{class}: no session-level primitive named"));
         }
         if f[2] != "none" && !is_test(f[2], &host) {
             return Err(format!("{class}: no such retained evidence {}", f[2]));
@@ -918,7 +918,7 @@ fn sb3c_r8_tamper_controls_are_rejected() {
     check(
         "#[ignore] on an ingress test",
         run,
-        "no executed session-level",
+        "no session-level primitive named",
     );
     let eof = "SB3C/ingress/EOF\tOPEN:D2";
     let claimed = "SB3C/ingress/EOF\tsb3_matrix_r5_observer_before";
