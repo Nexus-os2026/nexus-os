@@ -2,6 +2,8 @@
 Description=Gate Box payload %i
 BindsTo=mothergate.service
 After=mothergate.service
+BindsTo=mothergate-root@%i.service
+After=mothergate-root@%i.service
 RequiresMountsFor=/var/lib/mothergate
 AllowIsolate=no
 
@@ -13,7 +15,7 @@ Group=gaterun
 DynamicUser=no
 SupplementaryGroups=
 UMask=0077
-RootDirectory=/usr/lib/gatebox/root
+RootDirectory=/run/mothergate-root/%i
 WorkingDirectory=/
 ExecStart=/usr/bin/python3 -I -B /gate/bin/init.py
 
@@ -61,6 +63,7 @@ BindReadOnlyPaths=/var/lib/mothergate/staging/%i/request.json:/gate/request.json
 InaccessiblePaths=+/usr/share/ollama
 InaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json
 TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16
+TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16
 
 TemporaryFileSystem=/work:rw,nodev,nosuid,mode=0700,uid=@GATERUN_UID@,gid=@GATERUN_GID@,size=16G,nr_inodes=1048576
 TemporaryFileSystem=/run:rw,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=16M,nr_inodes=4096

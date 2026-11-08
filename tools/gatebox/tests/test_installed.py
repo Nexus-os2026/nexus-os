@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -82,7 +83,7 @@ class OfflineInstallTests(unittest.TestCase):
             with self.assertRaises(ValueError): probe.validate_sensor(row,{})
     def test_q1_clients_requires_receipt_and_refusal(self):
         probe = load('probe')
-        sha = '899e3872c5b61223c87b905f63c66947a816259b'
+        sha = '8e0d6ae293df999eb6530e875df1206deac872a8'
         value = dict(uid=1234,context='claude',accepted={'status':'ACCEPTED','run_id':'a'*32},
                      refused={'status':'UNQUALIFIED','reason':'QUALIFICATION_ONLY'},
                      codex='unsupported (runner denies AF_UNIX)')
@@ -177,7 +178,7 @@ class InstalledAcceptance(unittest.TestCase):
     def test_c1(self): self.check('C1-SEALED','sealed-DAC')
     def test_zz_c2(self): self.check('C2-CANARY','pre-handoff-canary-reboot-required')
     def test_c3(self): self.check('C3-RESTART','pending-restart')
-    def test_e2e(self): self.check('E2E','899e3872c5b61223c87b905f63c66947a816259b full PASS_SCOPED')
+    def test_e2e(self): self.check('E2E','8e0d6ae293df999eb6530e875df1206deac872a8 full PASS_SCOPED')
 
 class Q8F1Oracles(unittest.TestCase):
     def test_canary_open_denial(self):
@@ -215,7 +216,10 @@ class Q20Oracles(unittest.TestCase):
                  and all(isinstance(e,ast.Constant) and isinstance(e.value,str) for e in n.iter.elts)]
         directories = next(ast.literal_eval(n.iter) for n in loops if 'dev/shm' in ast.literal_eval(n.iter))
         self.assertIn('root',directories)
-        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
+        # Q30: the skeleton stays at /usr/lib/gatebox/root; each payload root is a manifest-checked
+        # tmpfs copy of it, so the manager-created 'root' must still ship in the skeleton.
+        self.assertIn("SKELETON = Path('/usr/lib/gatebox/root')",(HERE/'rootfs.py').read_text())
+        self.assertIn('RootDirectory=/run/mothergate-root/%i\n',(HERE/'units/mothergate-run@.service').read_text())
         self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
 
 class Q23Oracles(unittest.TestCase):
@@ -227,7 +231,8 @@ class Q23Oracles(unittest.TestCase):
         unit = self.unit()
         self.assertIn('BindReadOnlyPaths=/usr:/usr:norbind\n',unit)
         self.assertNotIn('BindReadOnlyPaths=/usr\n',unit)
-        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',unit)
+        # Q30: the skeleton source remains under /usr; norbind still keeps host submounts out.
+        self.assertIn("SKELETON = Path('/usr/lib/gatebox/root')",(HERE/'rootfs.py').read_text())
     def test_vendor_gpu_egl_icd_hidden(self):
         # No GPU devices exist in the payload; the NVIDIA EGL ICD segfaults Xvfb.
         self.assertIn('InaccessiblePaths=-+/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n',self.unit())
@@ -376,6 +381,383 @@ class Q29Oracles(unittest.TestCase):
                     self.assertFalse(searched==entry or searched.startswith(entry.rstrip('/')+'/'),
                                      'inaccessible node on a compiler/linker default search path')
 
+class Q30Oracles(unittest.TestCase):
+    """Q30 (qualification attempt 5): the product admits a workspace only when "/", the workspace,
+    HOME and the identity home each sit on a WHOLE filesystem mount (device listed once, root "/",
+    ext4/xfs/tmpfs). RootDirectory=/usr/lib/gatebox/root made the payload "/" a bind of a subdirectory
+    of 259:6, so every governed workspace was refused (unsupported_mount_topology). systemd v259
+    namespace.c only self-binds RootDirectory when it is NOT already a mount point, so a per-run
+    tmpfs mounted at the root path becomes the payload "/" unchanged."""
+    RUN = 'c'*32
+    def unit(self, name='mothergate-run@.service'): return (HERE/'units'/name).read_text()
+    def test_payload_root_is_a_per_run_mount_owned_by_a_bound_root_unit(self):
+        unit = self.unit()
+        self.assertIn('RootDirectory=/run/mothergate-root/%i\n',unit)
+        self.assertNotIn('RootDirectory=/usr/lib/gatebox/root',unit)
+        head = unit.split('[Service]',1)[0]
+        self.assertIn('BindsTo=mothergate-root@%i.service\n',head)
+        self.assertIn('After=mothergate-root@%i.service\n',head)
+    def test_root_unit_mounts_in_the_host_namespace_and_stops_with_the_payload(self):
+        unit = self.unit('mothergate-root@.service')
+        sections = {}
+        for line in unit.splitlines():
+            if line.startswith('['): current = sections.setdefault(line,[])
+            elif line and not line.startswith('#'): current.append(line)
+        self.assertEqual(sections['[Unit]'],['Description=Gate Box payload root %i','StopWhenUnneeded=yes',
+                                             'RefuseManualStart=yes','AllowIsolate=no'])
+        # Review F6-1 B1: an ALLOWLIST. Any namespacing option (PrivateNetwork= implies PrivateMounts=
+        # on systemd 259) would mount the tmpfs in a private namespace the payload never sees.
+        # ExecStopPost (not ExecStop) also unwinds a failed or cancelled start.
+        self.assertEqual(sections['[Service]'],[
+            'Type=oneshot','RemainAfterExit=yes',
+            'ExecStart=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py up %i',
+            'ExecStopPost=/usr/bin/python3 -I -B /usr/libexec/gatebox/rootfs.py down %i',
+            'PrivateMounts=no','NoNewPrivileges=yes','CapabilityBoundingSet=CAP_SYS_ADMIN','UMask=0077',
+            'TimeoutStartSec=30s','TimeoutStopSec=30s',
+            'StandardInput=null','StandardOutput=journal','StandardError=journal'])
+        self.assertEqual(set(sections),{'[Unit]','[Service]'})
+    def test_root_is_its_own_tmpfs_so_no_alias_of_the_root_device(self):
+        # Review F6-1 B2 (A1 evidence: '259:6 /usr/lib/gatebox/root/root /root'): ProtectSystem=strict
+        # adds /root as a READ_WRITE_IMPLICIT self-bind of the root filesystem, listing the "/" device
+        # twice. An explicit tmpfs at /root outranks the implicit entry (namespace.c drop_duplicates).
+        unit = self.unit()
+        self.assertIn('ProtectSystem=strict\n',unit)
+        self.assertIn('TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n',unit)
+    def test_installer_ships_and_publishes_the_root_unit(self):
+        scope = installer()
+        self.assertTrue({'rootfs.py','units/mothergate-root@.service'} <= set(scope['FILES']))
+        files = {'tools/gatebox/'+n:(HERE/n).read_bytes() for n in scope['FILES']}
+        calls = []
+        scope['run'] = lambda argv: calls.append(argv) or ''
+        scope['protected'] = lambda path: None
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp); stage.chmod(0o700)
+            outputs = scope['stage_security'](files,1234,5678,stage)
+        units = ['mothergate.socket','mothergate.service','mothergate-run@.service','mothergate-root@.service']
+        self.assertEqual([t for s,t in outputs[:4]],[Path('/etc/systemd/system')/n for n in units])
+        self.assertEqual(calls[-1],['/usr/bin/systemd-analyze','verify',*[str(stage/n) for n in units]])
+        text = (HERE/'install.sh').read_text()
+        for fragment in ('publish_units(staged_security[:4])','for staged,target in staged_security[4:]:',
+                         "for n in ('mothergate.socket','mothergate.service','mothergate-run@.service','mothergate-root@.service')"):
+            self.assertIn(fragment,text)
+        doc = (HERE/'README.md').read_text()
+        for fragment in ('/etc/systemd/system/mothergate-root@.service',"'mothergate-root@*.service'",'/run/mothergate-root'):
+            self.assertIn(fragment,doc)
+
+    # rootfs.py behaviour, offline: a fake skeleton, manifest and mount runner (no real mount).
+    def fixture(self, tmp):
+        tmp = Path(tmp); skeleton, base = tmp/'skeleton', tmp/'base'
+        skeleton.mkdir(mode=0o755); base.mkdir(mode=0o700)
+        (skeleton/'etc').mkdir(mode=0o755); (skeleton/'gate').mkdir(mode=0o755); (skeleton/'root').mkdir(mode=0o755)
+        (skeleton/'etc/passwd').write_bytes(b'root:x:0:0::/nonexistent:/usr/sbin/nologin\n'); (skeleton/'etc/passwd').chmod(0o644)
+        (skeleton/'gate/request.json').write_bytes(b''); (skeleton/'gate/request.json').chmod(0o444)
+        (skeleton/'bin').symlink_to('usr/bin')
+        manifest = {'bin':{'link':'usr/bin'},'etc':{'directory':True},'etc/passwd':{'sha256':hashlib.sha256((skeleton/'etc/passwd').read_bytes()).hexdigest()},
+                    'gate':{'directory':True},'gate/request.json':{'sha256':hashlib.sha256(b'').hexdigest()},'root':{'directory':True}}
+        (tmp/'skeleton.json').write_text(json.dumps(manifest)); (tmp/'skeleton.json').chmod(0o644)
+        return skeleton, tmp/'skeleton.json', base, manifest
+    @staticmethod
+    def fake_mount(calls):
+        # Offline stand-in for mount(8): unmounting a tmpfs discards everything copied into it.
+        def mount(argv):
+            calls.append(argv)
+            if argv[0] == '/usr/bin/umount':
+                for child in Path(argv[1]).iterdir():
+                    if child.is_dir() and not child.is_symlink():
+                        for base, dirs, files in os.walk(child): os.chmod(base,0o700)
+                        import shutil; shutil.rmtree(child)
+                    else: child.unlink()
+        return mount
+    def up(self, rootfs, skeleton, manifest, base, mounted=None):
+        calls = []
+        def mount(argv): calls.append(argv)
+        rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),mount=mount,
+                  ismount=(lambda path: True) if mounted is None else mounted)
+        return calls
+    def test_rootfs_copies_exactly_the_manifest_then_seals_read_only(self):
+        rootfs = load('rootfs')
+        with tempfile.TemporaryDirectory() as tmp:
+            skeleton, manifest, base, expected = self.fixture(tmp)
+            calls = self.up(rootfs,skeleton,manifest,base)
+            target = base/self.RUN
+            self.assertEqual(calls,[['/usr/bin/mount','-t','tmpfs','-o',rootfs.OPTIONS,'gatebox-root',str(target)],
+                                    ['/usr/bin/mount','-o','remount,ro,'+rootfs.OPTIONS,str(target)]])
+            self.assertIn('mode=0755',rootfs.OPTIONS); self.assertIn('nodev',rootfs.OPTIONS); self.assertIn('nosuid',rootfs.OPTIONS)
+            self.assertEqual(rootfs.inventory(target),expected)
+            self.assertEqual(os.readlink(target/'bin'),'usr/bin')
+            self.assertEqual(oct((target/'gate/request.json').stat().st_mode & 0o777),'0o444')
+            self.assertEqual(oct((target/'etc').stat().st_mode & 0o777),'0o755')
+            self.assertEqual(oct(target.stat().st_mode & 0o777),'0o755')
+    def test_rootfs_refuses_any_skeleton_drift_and_unwinds(self):
+        rootfs = load('rootfs')
+        def changed(s): (s/'etc/passwd').write_bytes(b'root::0:0::/:/bin/sh\n')
+        def extra(s): (s/'etc/shadow').write_bytes(b'x')
+        def relinked(s): (s/'bin').unlink(); (s/'bin').symlink_to('/tmp')
+        def retyped(s): (s/'bin').unlink(); (s/'bin').mkdir()
+        def writable(s): (s/'etc').chmod(0o775)
+        def missing(s): (s/'gate/request.json').unlink()
+        for tamper in (changed,extra,relinked,retyped,writable,missing):
+            with self.subTest(tamper=tamper.__name__), tempfile.TemporaryDirectory() as tmp:
+                skeleton, manifest, base, _ = self.fixture(tmp)
+                tamper(skeleton)
+                calls = []
+                with self.assertRaises(ValueError):
+                    rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),
+                              mount=self.fake_mount(calls),ismount=lambda path: True)
+                self.assertEqual(calls[-1],['/usr/bin/umount',str(base/self.RUN)])
+                self.assertFalse((base/self.RUN).exists())
+    def test_rootfs_refuses_a_root_that_is_not_exactly_the_manifest(self):
+        # A mount that does not yield an empty fresh tmpfs (stray entry) must never become "/".
+        rootfs = load('rootfs')
+        with tempfile.TemporaryDirectory() as tmp:
+            skeleton, manifest, base, _ = self.fixture(tmp)
+            calls = []
+            inner = self.fake_mount(calls)
+            def mount(argv):
+                inner(argv)
+                if argv[:3] == ['/usr/bin/mount','-t','tmpfs']: (Path(argv[-1])/'stray').write_bytes(b'x')
+            with self.assertRaisesRegex(ValueError,'differs from manifest'):
+                rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),
+                          mount=mount,ismount=lambda path: True)
+            self.assertEqual(calls[-1],['/usr/bin/umount',str(base/self.RUN)])
+            self.assertFalse((base/self.RUN).exists())
+    def test_rootfs_refuses_bad_identity_layout_and_reuse(self):
+        rootfs = load('rootfs')
+        for run in ('C'*32,'c'*31,'../'+'c'*29,'c'*32+'\n'):
+            with self.subTest(run=run), tempfile.TemporaryDirectory() as tmp:
+                skeleton, manifest, base, _ = self.fixture(tmp)
+                with self.assertRaises(ValueError):
+                    rootfs.up(run,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),mount=self.fail,ismount=lambda p: True)
+        for layout in ('reused','open-base','linked-base'):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as tmp:
+                skeleton, manifest, base, _ = self.fixture(tmp)
+                if layout == 'reused': (base/self.RUN).mkdir()
+                elif layout == 'open-base': base.chmod(0o755)
+                else: base.rmdir(); base.symlink_to(skeleton)
+                with self.assertRaises((ValueError,OSError)):
+                    rootfs.up(self.RUN,skeleton=skeleton,manifest=manifest,base=base,owner=os.getuid(),mount=self.fail,ismount=lambda p: True)
+    def test_rootfs_down_unmounts_then_removes_and_is_idempotent(self):
+        rootfs = load('rootfs')
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)/'base'; base.mkdir(mode=0o700); (base/self.RUN).mkdir(mode=0o755)
+            calls = []
+            rootfs.down(self.RUN,base=base,owner=os.getuid(),mount=calls.append,ismount=lambda path: True)
+            self.assertEqual(calls,[['/usr/bin/umount',str(base/self.RUN)]])
+            self.assertFalse((base/self.RUN).exists())
+            rootfs.down(self.RUN,base=base,owner=os.getuid(),mount=self.fail,ismount=lambda path: False)
+            with self.assertRaises(ValueError): rootfs.down('x',base=base,owner=os.getuid(),mount=self.fail,ismount=lambda p: False)
+
+    # A1 sensor: the product's whole-filesystem rule, enforced on the live payload.
+    def mount(self, device, root, point, kind='tmpfs', options=('ro','nosuid','nodev')):
+        return dict(device=device,root=root,point=point,options=list(options),type=kind,super=['rw'])
+    def test_a1_requires_whole_filesystem_root_work_and_tmp(self):
+        probe = load('probe')
+        good = [self.mount('0:80','/','/'),self.mount('259:6','/usr','/usr','ext4'),
+                self.mount('0:81','/','/work',options=('rw','nosuid','nodev')),self.mount('0:82','/','/tmp',options=('rw','nosuid','nodev'))]
+        probe.whole_mount(good,'/',readonly=True)
+        probe.whole_mount(good,'/work'); probe.whole_mount(good,'/tmp')
+        bind = [self.mount('259:6','/usr/lib/gatebox/root','/','ext4'),self.mount('259:6','/usr','/usr','ext4')]
+        stacked = [self.mount('259:6','/usr/lib/gatebox/root','/','ext4'),self.mount('0:80','/','/')]
+        shared = good+[self.mount('0:80','/etc','/gate/policy')]
+        writable = [self.mount('0:80','/','/',options=('rw',))]+good[1:]
+        subtree = [self.mount('0:80','/sub','/')]+good[1:]
+        for records in (bind,stacked,shared,writable,subtree):
+            with self.subTest(records=records), self.assertRaises(ValueError): probe.whole_mount(records,'/',readonly=True)
+        with self.assertRaises(ValueError): probe.whole_mount(good[:1],'/work')
+        text = (HERE/'probe.py').read_text()
+        body = text.split('def isolation(context):',1)[1].split('\ndef ',1)[0]
+        for call in ("whole_mount(records,'/',readonly=True)","whole_mount(records,'/work')","whole_mount(records,'/tmp')"):
+            self.assertIn(call,body)
+
+class Q31Oracles(unittest.TestCase):
+    """Q31 (qualification attempt 5, kernel desktop_tripwire_symlinks g0_s7): payload PID 1 reaped
+    orphans only in its final block, so a killed grandchild stayed a zombie and `kill -0` still saw
+    it. A host init reaps adopted orphans promptly; Popen keeps sole ownership of its own children."""
+    def test_adopted_orphan_is_reaped_while_the_command_runs(self):
+        init = load('init')
+        options = init.child_options
+        read, write = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            result = 91
+            try:
+                os.close(read)
+                import ctypes
+                if ctypes.CDLL(None,use_errno=True).prctl(36,1,0,0,0) != 0: os._exit(90)  # PR_SET_CHILD_SUBREAPER
+                runner = init.Runner(-1,-1)
+                with tempfile.TemporaryDirectory() as directory, \
+                        patch.object(init,'child_options',side_effect=lambda fd: dict(options(fd),cwd=directory)), \
+                        patch.object(init,'packet'):
+                    _,code,output = runner.command('format',['/bin/sh','-c','( sleep 0.2 & echo $! ); sleep 1.5; exit 7'])
+                orphan = int(output.split()[0])
+                try: state = Path('/proc',str(orphan),'stat').read_text().rsplit(')',1)[1].split()[0]
+                except FileNotFoundError: state = 'reaped'
+                os.write(write,json.dumps([code,state]).encode()); result = 0
+            finally: os._exit(result)
+        os.close(write)
+        with os.fdopen(read,'rb') as stream: data = stream.read()
+        _, status = os.waitpid(pid,0)
+        self.assertEqual(status,0)
+        self.assertEqual(json.loads(data),[7,'reaped'])
+    def test_owned_children_are_never_waited_by_the_reaper(self):
+        init = load('init'); runner = init.Runner(-1,-1)
+        owned = type('Owned',(),{'pid':4242})(); runner.children.add(owned)
+        calls = []
+        with patch.object(init.os,'listdir',return_value=[str(os.getpid())]), \
+                patch.object(init,'children',return_value='4242 5151\n'), \
+                patch.object(init.os,'waitpid',side_effect=lambda pid,flags: calls.append((pid,flags)) or (0,0)):
+            runner.reap_orphans()
+        self.assertEqual(calls,[(5151,os.WNOHANG)])
+    def test_unreadable_child_list_fails_closed(self):
+        init = load('init'); runner = init.Runner(-1,-1)
+        with patch.object(init.os,'listdir',return_value=[str(os.getpid())]), \
+                patch.object(init,'children',side_effect=FileNotFoundError('children')), \
+                self.assertRaises(OSError):
+            runner.reap_orphans()
+    def test_command_loop_reaps(self):
+        text = (HERE/'init.py').read_text()
+        loop = text.split('while selector.get_map():',1)[1].split('code = proc.wait(',1)[0]
+        self.assertIn('self.reap_orphans()',loop)
+
+# Q32 (review F6-1 B3) pinned 0c8cb6d3 = 899e3872 + the o18_d/o18_g fake-/sys commit. Q34 moved the
+# pin forward to a descendant (8e0d6ae2); Q34Oracles now holds the single-SHA oracle, and also
+# requires both earlier pins to be absent.
+
+LIBTEST_TOTAL = 'test result: ok. {} passed; 0 failed; {} ignored; 0 measured; 0 filtered out; finished in 0.01s\n'
+
+def libtest_run(lines, passed, ignored, running=None):
+    count = passed+ignored if running is None else running
+    return ('\nrunning %d test%s\n' % (count,'' if count == 1 else 's')+''.join(l+'\n' for l in lines)
+            +'\n'+LIBTEST_TOTAL.format(passed,ignored))
+
+class Q33Oracles(unittest.TestCase):
+    """Q33 (diag15 evidence): the frozen libtest adapter rejected three standard libtest forms the
+    fixture uses: #[ignore] tests ("test x ... ignored[, reason]", counted in totals), the
+    #[should_panic] marker ("test x - should panic ... ok") and test targets with zero tests.
+    Ruling: reconcile them truthfully. Ignored names come from the run, must be listed names, are
+    recorded as ignored (never as passed) and must match the totals; every other listed test must
+    pass. A zero-test target must prove libtest's own zero-test run. Anything else stays refused."""
+    def setUp(self): self.init = load('init')
+    def test_should_panic_marker_is_the_listed_name(self):
+        out = libtest_run(['test a ... ok','test b - should panic ... ok'],2,0)
+        self.assertEqual(self.init.reconcile(['a','b'],out)['passed'],['a','b'])
+        for bad in (out.replace('b - should panic','b - should panicX'),
+                    out.replace('test b - should panic','test c - should panic')):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): self.init.reconcile(['a','b'],bad)
+    def test_ignored_tests_are_recorded_not_passed(self):
+        out = libtest_run(['test a ... ok','test b ... ignored','test c ... ignored, child entry; run by the parent','test d ... ok'],2,2)
+        inventory = self.init.reconcile(['a','b','c','d'],out)
+        self.assertEqual(inventory,{'expected':['a','b','c','d'],'executed':['a','d'],'passed':['a','d'],
+                                    'failed':[],'ignored':['b','c'],'filtered':[]})
+        out = libtest_run(['test a - should panic ... ignored','test b ... ok'],1,1)
+        self.assertEqual(self.init.reconcile(['a','b'],out)['ignored'],['a'])
+    def test_ignored_negatives(self):
+        names = ['a','b','c']
+        good = ['test a ... ok','test b ... ok','test c ... ignored']
+        cases = {'ignored-not-listed':libtest_run(good[:2]+['test z ... ignored'],2,1,running=3),
+                 'totals-ignored-count':libtest_run(good,2,0,running=3),
+                 'totals-passed-count':libtest_run(good,3,1,running=3),
+                 'missing-ignored-line':libtest_run(good[:2],2,1,running=3),
+                 'duplicate-line':libtest_run(good+['test c ... ignored'],2,2,running=3),
+                 'ok-and-ignored':libtest_run(good+['test a ... ignored'],2,2,running=3),
+                 'failed':libtest_run(good[:1]+['test b ... FAILED','test c ... ignored'],1,1,running=3),
+                 'unknown-result':libtest_run(good[:2]+['test c ... bench'],2,0,running=3),
+                 'running-count':libtest_run(good,2,1,running=2),
+                 'two-totals':libtest_run(good,2,1)+LIBTEST_TOTAL.format(2,1),
+                 'no-running':libtest_run(good,2,1).replace('running 3 tests\n',''),
+                 'all-ignored-allowed-but-filtered':libtest_run(good,2,1).replace('0 filtered out','1 filtered out')}
+        for case, out in cases.items():
+            with self.subTest(case=case), self.assertRaises(ValueError): self.init.reconcile(names,out)
+        with self.assertRaises(ValueError): self.init.reconcile(['a','a'],libtest_run(['test a ... ok','test a ... ok'],2,0))
+    def test_zero_test_target_needs_libtest_zero_run(self):
+        empty = libtest_run([],0,0)
+        self.assertEqual(self.init.reconcile([],empty),{'expected':[],'executed':[],'passed':[],'failed':[],'ignored':[],'filtered':[]})
+        for bad in ('','custom harness ran 12 checks\n',empty.replace('running 0 tests\n',''),
+                    empty.replace('0 passed','1 passed'),libtest_run(['test a ... ok'],1,0)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): self.init.reconcile([],bad)
+    def run_libtest(self, listing, output, list_code=0, run_code=0, expected=None):
+        calls = []
+        def command(gate, argv):
+            calls.append((gate,argv))
+            return ('c%d' % len(calls),list_code,listing) if '--list' in argv else ('c%d' % len(calls),run_code,output)
+        runner = self.init.Runner(-1,-1)
+        with patch.object(runner,'command',side_effect=command), patch.object(runner,'output'):
+            result = runner.libtest('workspace',{'executable':'/work/target/t'},expected)
+        return result, calls
+    def test_runner_runs_zero_test_targets_and_ignored_targets(self):
+        names, calls = self.run_libtest('',libtest_run([],0,0))
+        self.assertEqual(names,[])
+        self.assertEqual([argv for _, argv in calls],[['/work/target/t','--list','--format','terse'],['/work/target/t']])
+        names, _ = self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ignored'],1,1))
+        self.assertEqual(names,['a','b'])
+    def test_runner_still_refuses_unknown_adapters(self):
+        for listing, code in (('a: test\n',2),('a: benchmark\n',0),('a: test\nnot a listing line\n',0)):
+            with self.subTest(listing=listing,code=code), self.assertRaises(ValueError):
+                self.run_libtest(listing,libtest_run(['test a ... ok'],1,0),list_code=code)
+        with self.assertRaises(ValueError): self.run_libtest('a: test\n',libtest_run(['test a ... ok'],1,0),run_code=101)
+    def test_malformed_listing_is_never_an_empty_inventory(self):
+        # review F6-3 B1: validation and extraction must agree; a CR line or a nameless entry is
+        # not a zero-test target even when the run then prints libtest's zero-test transcript.
+        for listing in ('hidden_test: test\r\n',': test\n','a: test\r\nb: test\n',' : test\n','a b: test\n'):
+            with self.subTest(listing=listing), self.assertRaises(ValueError):
+                self.run_libtest(listing,libtest_run([],0,0))
+    def test_ignore_reason_may_contain_the_delimiter(self):
+        out = libtest_run(['test a ... ok','test b ... ignored, waits ... for the parent'],1,1)
+        self.assertEqual(self.init.reconcile(['a','b'],out)['ignored'],['b'])
+    def test_desktop_live_keeps_strict_names_and_no_ignored(self):
+        expected = ['a','b']
+        self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ok'],2,0),expected=expected)
+        with self.assertRaises(ValueError):
+            self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ignored'],1,1),expected=expected)
+    def test_libtest_results_are_parsed_from_stdout_only(self):
+        # diag15 c75: a test's helper child panicked on the shared stderr while libtest had written
+        # "test x ... " but not yet "ok", splitting the result line. libtest reports results on stdout
+        # only; stderr still reaches the log but never the parsed output (as for compile-tests).
+        options = self.init.child_options
+        script = ('import os,sys,time\nos.write(1,b"test a ... ")\ntime.sleep(.05)\n'
+                  'os.write(2,b"child panicked\\n")\ntime.sleep(.05)\nos.write(1,b"ok\\n")\n')
+        for gate in ('workspace','workspace-list','desktop-live','desktop-live-list'):
+            runner = self.init.Runner(-1,-1)
+            logged = []
+            with tempfile.TemporaryDirectory() as directory, \
+                    patch.object(self.init,'child_options',side_effect=lambda fd: dict(options(fd),cwd=directory)), \
+                    patch.object(self.init,'packet'), patch.object(runner,'output',side_effect=lambda n,b: logged.append(b)):
+                _, code, output = runner.command(gate,[sys.executable,'-I','-c',script])
+            with self.subTest(gate=gate):
+                self.assertEqual((code,output),(0,'test a ... ok\n'))
+                self.assertIn(b'child panicked\n',b''.join(logged))
+    def test_supervisor_host_inventory_keeps_ignored_separate(self):
+        supervisor = load('supervisor')
+        artifacts = [dict(id='a0',adapter='libtest',package='nexus-mother-host',target='h1',executable='/work/target/h1'),
+                     dict(id='a1',adapter='libtest',package='nexus-mother-host',target='h2',executable='/work/target/h2'),
+                     dict(id='a2',adapter='libtest',package='nexus-mother-host',target='h3',executable='/work/target/h3')]
+        inventories = [dict(expected=['x','y'],executed=['x'],passed=['x'],failed=[],ignored=['y'],filtered=[]),
+                       dict(expected=['z'],executed=['z'],passed=['z'],failed=[],ignored=[],filtered=[]),
+                       dict(expected=[],executed=[],passed=[],failed=[],ignored=[],filtered=[])]
+        evidence = type('E',(),{})()
+        evidence.commands = [dict(id='c%d' % i,gate_id='workspace') for i in range(3)]+[dict(id='c3',gate_id='host')]
+        logs = {'coverage.log':json.dumps(dict(artifacts=artifacts,failures=[])).encode()}
+        for i in range(4): logs['c%d.log' % i] = b'x'
+        for i in range(3): logs['c%d-inventory.log' % i] = json.dumps(dict(artifact=artifacts[i],inventory=inventories[i])).encode()
+        commands, _ = supervisor.coverage(evidence,logs)
+        self.assertEqual(commands[3]['inventory'],dict(expected=['x','y','z'],executed=['x','z'],passed=['x','z'],
+                                                       failed=[],ignored=['y'],filtered=[]))
+
+class Q34Oracles(unittest.TestCase):
+    """Q34 (diag15 evidence): fixture test decision9_host_port_does_not_adopt_legacy_replay asked
+    DNS for example.org inside the network-less payload. The fixture is re-pinned to 8e0d6ae2 =
+    0c8cb6d3 + one test-only commit using a public address literal. One SHA everywhere."""
+    FIXTURE = '8e0d6ae293df999eb6530e875df1206deac872a8'
+    def test_one_fixture_sha_everywhere(self):
+        self.assertEqual(installer()['FIXTURE'],self.FIXTURE)
+        self.assertIn("FIXTURE = '"+self.FIXTURE+"'",(HERE/'probe.py').read_text())
+        self.assertEqual(json.loads((HERE/'policy/registry.json').read_text())['mother']['fixture_sha'],self.FIXTURE)
+        doc = (HERE/'README.md').read_text()
+        self.assertIn('--fixture-sha '+self.FIXTURE,doc); self.assertIn('--sha '+self.FIXTURE,doc)
+        for old in ('899e3872c5b61223c87b905f63c66947a816259b','0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'):
+            for name in ('install.sh','probe.py','policy/registry.json','README.md','init.py','supervisor.py','client.py'):
+                self.assertNotIn(old,(HERE/name).read_text(),name)
+
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
         # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
@@ -403,7 +785,7 @@ class Q8F3Oracles(unittest.TestCase):
                 calls.append(argv)
             with patch.dict(scope,run=validate):
                 staged = scope['stage_security'](files,1234,5678,stage)
-            self.assertEqual(len(staged),5)
+            self.assertEqual(len(staged),6)  # Q30: four units (root unit added) + sudoers + polkit.
             self.assertEqual({c[0] for c in calls},{'/usr/sbin/visudo','/usr/bin/systemd-analyze'})
             self.assertEqual(os.stat(stage).st_mode & 0o777,0o700)
             for source,target in staged: self.assertEqual(source.parent,stage)

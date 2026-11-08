@@ -39,7 +39,7 @@ def load(name):
 supervisor, lifecycle, init, verify = [load(n) for n in
                                       ('supervisor','lifecycle','init','verify')]
 RUN = 'a'*32
-SHA = '899e3872c5b61223c87b905f63c66947a816259b'
+SHA = '8e0d6ae293df999eb6530e875df1206deac872a8'
 REQUEST = {'repo_id':'mother','full_sha':SHA,'gate_set_id':'full'}
 REGISTRY = {'mother':{'uid':os.getuid(),'object_format':'sha1'}}
 ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
@@ -210,7 +210,7 @@ class OfflineServiceTests(unittest.TestCase):
         self.assertEqual(options['env'],ENV)
     def test_e2e_libtest_reconciliation_rejects_noop(self):
         names = ['alpha','beta']
-        output = 'test alpha ... ok\ntest beta ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
+        output = '\nrunning 2 tests\ntest alpha ... ok\ntest beta ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
         result = init.reconcile(names,output)
         self.assertEqual(result['passed'],names)
         for bad in ('',output.replace('beta ... ok','beta ... ignored'),output.replace('2 passed','1 passed'),
@@ -378,10 +378,12 @@ class OfflineServiceTests(unittest.TestCase):
                     if '--list' in argv: output = ''.join(n+': test\n' for n in names)
                     else:
                         self.assertNotEqual(argv[0],'/work/target/phase2_live_sandbox')
-                        output = ''.join('test '+n+' ... ok\n' for n in names)
+                        output = f'\nrunning {len(names)} test{"" if len(names) == 1 else "s"}\n'+''.join('test '+n+' ... ok\n' for n in names)
                         output += f'test result: ok. {len(names)} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
                 options['cwd'] = str(root/'src')
-                return popen([sys.executable,'-c','import sys; sys.stdout.write(sys.argv[1]); sys.stderr.write("Finished test build\\n")',output],**options)
+                # Only cargo writes progress to stderr; a libtest listing is exactly its "name: test" lines.
+                stderr = 'Finished test build\\n' if argv[0] == '/opt/rust/bin/cargo' else ''
+                return popen([sys.executable,'-c','import sys; sys.stdout.write(sys.argv[1]); sys.stderr.write(sys.argv[2])',output,stderr],**options)
             def payload_path(path):
                 value = str(path)
                 if value.startswith('/gate/policy/'): return HERE/'policy'/Path(value).name

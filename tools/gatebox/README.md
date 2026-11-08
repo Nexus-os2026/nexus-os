@@ -140,7 +140,7 @@ PY
 sudo /bin/bash /root/gatebox-slice1/tools/gatebox/install.sh install \
   --bundle-sha256 "$GBX_BUNDLE_SHA" --repo-id mother \
   --source-git /home/nexus/NEXUS/nexus-os/.git --submit-user nexus \
-  --fixture-sha 899e3872c5b61223c87b905f63c66947a816259b
+  --fixture-sha 8e0d6ae293df999eb6530e875df1206deac872a8
 sudo /usr/bin/systemctl daemon-reload
 sudo /usr/bin/systemctl enable --now mothergate.socket
 OWNER
@@ -171,7 +171,8 @@ Host changes made by the installer and these Owner commands:
   configuration in `/etc/gatebox`; payload skeleton in `/usr/lib/gatebox/root`;
   state/receipts in `/var/lib/mothergate`; `/var/lib/gatebox-source` mount point.
 - `/etc/systemd/system/mothergate.socket`, `/etc/systemd/system/mothergate.service`,
-  `/etc/systemd/system/mothergate-run@.service`, `/etc/sudoers.d/gatebox`,
+  `/etc/systemd/system/mothergate-run@.service`,
+  `/etc/systemd/system/mothergate-root@.service`, `/etc/sudoers.d/gatebox`,
   `/etc/polkit-1/rules.d/00-gatebox-deny.rules`,
   `/etc/tmpfiles.d/mothergate-control.conf`; temporary root-only `/etc/.gatebox-*` staging.
 - Installer systemd reload, socket/service stop and tmpfiles creation; Owner
@@ -180,6 +181,10 @@ Host changes made by the installer and these Owner commands:
   `/run/mothergate-submit.sock` when the socket starts. Tmpfiles creates
   `/run/mothergate-control` root:root 0755, `incoming/` mothergate 0700 and
   `sealed/` root 0700 at installation and boot.
+- Q30: each payload run's `mothergate-root@<run>.service` mounts a read-only
+  tmpfs copy of the manifest-checked skeleton at `/run/mothergate-root/<run>`
+  (base root 0700), so the payload "/" is a whole filesystem; it is unmounted
+  when the payload stops, and `/run` is cleared at boot.
 
 The installer verifies units/sudoers and leaves admission `qualifying`, with
 `qualification.json` initially exactly `{"identity": null, "passed": []}`.
@@ -245,7 +250,7 @@ sudo /usr/bin/python3 -I -B -m unittest discover \
   sudo /usr/bin/tee -a /root/gatebox-slice1/qualification.log
 sudo -k
 sudo /usr/bin/python3 -I -B /usr/libexec/gatebox/verify.py --latest \
-  --repo mother --sha 899e3872c5b61223c87b905f63c66947a816259b \
+  --repo mother --sha 8e0d6ae293df999eb6530e875df1206deac872a8 \
   --gateset full --require-status PASS_SCOPED 2>&1 |
   sudo /usr/bin/tee -a /root/gatebox-slice1/qualification.log
 QUALIFY
@@ -491,8 +496,10 @@ if [[ -e /etc/systemd/system/mothergate.service ]]; then
   sudo /usr/bin/systemctl stop mothergate.service
 fi
 sudo /usr/bin/systemctl stop 'mothergate-run@*.service'
+sudo /usr/bin/systemctl stop 'mothergate-root@*.service'
 sudo /usr/bin/rm -f /etc/systemd/system/mothergate.socket \
   /etc/systemd/system/mothergate.service /etc/systemd/system/mothergate-run@.service \
+  /etc/systemd/system/mothergate-root@.service \
   /etc/sudoers.d/gatebox /etc/polkit-1/rules.d/00-gatebox-deny.rules \
   /etc/tmpfiles.d/mothergate-control.conf
 sudo /usr/bin/systemctl daemon-reload

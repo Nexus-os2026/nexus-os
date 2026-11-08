@@ -2,7 +2,7 @@
   "mother": {
     "object_format": "sha1",
     "common_directory": "/home/nexus/NEXUS/nexus-os/.git",
-    "fixture_sha": "899e3872c5b61223c87b905f63c66947a816259b",
+    "fixture_sha": "8e0d6ae293df999eb6530e875df1206deac872a8",
     "qualification_gate_set": "full"
   }
 }
