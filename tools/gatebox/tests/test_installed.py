@@ -310,7 +310,7 @@ class Q26Oracles(unittest.TestCase):
         tree = ast.parse((HERE/'probe.py').read_text())
         source = ast.unparse(next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='chrome_observation'))
         self.assertIn("chrome_process_is_renderer((path / 'cmdline').read_bytes())",source)
-        self.assertIn('renderer_isolated(info, status(proc.pid))',source)
+        self.assertIn('select_renderer(candidates, parents, proc.pid, status(proc.pid))',source)
 
 class Q27Oracles(unittest.TestCase):
     """Q27 (Codex review-2 of GBX-F3): denial over-approximates every Chromium spelling;
@@ -324,12 +324,41 @@ class Q27Oracles(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaisesRegex(ValueError,'unsafe Chrome flag'): self.is_renderer(raw)
     def test_renderer_classification_matches_chromium_parser(self):
         for raw in (b'chrome\0---type=renderer\0', b'chrome\0--\0--type=renderer\0',
-                    b'chrome\0--lang=en --type=renderer\0', b'chrome\0--type=renderer\0--type=gpu-process\0',
+                    b'chrome\0--lang=en --type=renderer\0',
                     b'chrome\0--type= renderer\0', b'chrome\0--Type=renderer\0'):
             with self.subTest(raw=raw): self.assertFalse(self.is_renderer(raw))
         for raw in (b'chrome\0--type=renderer\0', b'chrome\0-type=renderer\0', b'chrome\0 --type=renderer\t\0',
                     b'/opt/google/chrome/chrome --type=renderer --lang=en\0\0\0'):
             with self.subTest(raw=raw): self.assertTrue(self.is_renderer(raw))
+
+class Q28Oracles(unittest.TestCase):
+    """Q28 (Codex review-3 of GBX-F3): empty NUL fields keep positions; last duplicate switch wins;
+    the renderer start-up window (title before Chrome's filter) waits within the deadline."""
+    def setUp(self): self.probe = load('probe')
+    def test_empty_nul_fields_keep_argument_positions(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        self.assertFalse(is_renderer(b'\0--\0--type=renderer\0'))
+        self.assertFalse(is_renderer(b'\0--type=renderer\0'))
+        self.assertTrue(is_renderer(b'chrome\0\0--type=renderer\0'))
+    def test_last_duplicate_type_wins_like_chromium(self):
+        is_renderer = self.probe.chrome_process_is_renderer
+        self.assertTrue(is_renderer(b'chrome\0--type=gpu-process\0--type=renderer\0'))
+        self.assertTrue(is_renderer(b'chrome\0--type=renderer\0--type=renderer\0'))
+        self.assertFalse(is_renderer(b'chrome\0--type=renderer\0--type=gpu-process\0'))
+        self.assertFalse(is_renderer(b'chrome\0--type=renderer\0--type\0'))
+    def status(self, filters='18', nspid='71\t4\t1'):
+        return {'Seccomp':'\t2','NSpid':'\t'+nspid,'Seccomp_filters':'\t'+filters}
+    def test_select_renderer_waits_for_every_sampled_renderer_to_isolate(self):
+        select = self.probe.select_renderer
+        parents = {71:15,72:15,15:2,2:1,90:1}
+        browser = self.status(filters='17')
+        self.assertIsNone(select({},parents,2,browser))
+        self.assertIsNone(select({71:self.status(filters='17')},parents,2,browser))      # filter not yet installed
+        self.assertIsNone(select({71:self.status(),72:self.status(filters='17')},parents,2,browser))
+        self.assertIsNone(select({71:self.status(nspid='71\t4')},parents,2,browser))
+        self.assertIsNone(select({90:self.status()},parents,2,browser))                  # not a descendant
+        chosen = select({71:self.status(),72:self.status(),90:self.status(filters='1')},parents,2,browser)
+        self.assertEqual(chosen,dict(seccomp=2,pid_levels=3,seccomp_filters=18,browser_seccomp_filters=17,pid=71,parents=parents))
 
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
