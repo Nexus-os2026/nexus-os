@@ -129,6 +129,22 @@ failed with 20 controls RED (the 14 `x:` cases wanted their specific errors and 
 accepted) and `sb3d_r3_d1_cells_are_executed_or_owned` failed (executed 2, `open:D1` 94). After the data and logic
 changes all seven verifier tests pass.
 
+### Plants (each applied to the real code, restored by sha256, not committed)
+
+| Plant | Mutation | Result |
+|---|---|---|
+| unrecorded reply projected | `classify`: Owed releases the reply | Killed at O1 `owed: unusable` |
+| late content projected | `Caller::call`: `if self.live()` removed from the Replied arm | Killed at O2 `replied: never reaches the lane` |
+| late result admitted | LaneReturned step: the pending-lane condition removed | Killed at O2 `the advance is refused`, one assertion before `no LaneReturned`; V2 `late: no LaneReturned` also fails |
+| first cause lost | `file_latch_terminal`: intent not latched | Killed in O3 at `Stop arrives second`, before the literal; O1's end literal also fails |
+| canary in evidence | reply in the native `model_digest` detail, and the I6 seal skipped for that key | Killed at V1 `REPLY leaked` |
+| rejected reply reaches the lane | transport `done` check removed | Killed at V2 `rejected: no usable reply` |
+| recorded failure not classified | `Caller::call`: `Failed` mapped to `Invalidated` | Killed at `classified as recorded failure` |
+
+Two first attempts survived and were not counted. The canary plant without the seal change passed because
+I6 replaces an unregistered value with its digest, so nothing leaked. The rejected plant passed because the
+case's body also lacked the eval counts and a later check refused it; the body was corrected.
+
 ### Verifier limits
 
 The verifier shows that a D1 `x:` is a `#[test]` in that file at a cell its table lists, and nothing more:
