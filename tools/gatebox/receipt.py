@@ -133,12 +133,18 @@ def validate_summary(summary):
             raise ValueError('failed/incomplete command')
         if gate.get('adapter') in ('libtest','libtest-repeat','reconcile-all-artifacts'):
             inventory = command.get('inventory',{})
-            names = inventory.get('expected')
+            names, ignored = inventory.get('expected'), inventory.get('ignored')
+            # Q33: #[ignore] tests are recorded as ignored (a subset of the listed names, never passed);
+            # every other listed test passed. Only a workspace artifact may be a zero-test target.
             if (not string_list(names) or len(set(names)) != len(names)
-                    or inventory.get('passed') != names or inventory.get('executed') != names
-                    or any(inventory.get(k) != [] for k in ('failed','ignored','filtered'))):
+                    or not string_list(ignored) or len(set(ignored)) != len(ignored) or not set(ignored) <= set(names)
+                    or inventory.get('passed') != [n for n in names if n not in set(ignored)]
+                    or inventory.get('executed') != inventory['passed']
+                    or (not names and gate['id'] != 'workspace')
+                    or any(inventory.get(k) != [] for k in ('failed','filtered'))):
                 raise ValueError('test reconciliation')
-            if gate['id'] == 'desktop-live' and names != gate['expected_names']: raise ValueError('desktop inventory')
+            if gate['id'] == 'desktop-live' and (names != gate['expected_names'] or ignored):
+                raise ValueError('desktop inventory')
     host_names = set()
     for command in workspace:
         if command['artifact_id'] in host: host_names.update(command['inventory']['expected'])

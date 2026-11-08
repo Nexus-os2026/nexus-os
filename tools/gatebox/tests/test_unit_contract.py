@@ -6,7 +6,7 @@ import struct
 import unittest
 from test_unit_core import snapshot, HERE
 
-SHA = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
+SHA = '8e0d6ae293df999eb6530e875df1206deac872a8'
 CARGO = '/opt/rust/bin/cargo'
 class ContractTests(unittest.TestCase):
     def setUp(self):

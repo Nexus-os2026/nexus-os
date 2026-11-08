@@ -26,7 +26,7 @@ STATE = Path('/var/lib/mothergate')
 CONTROL = Path('/run/mothergate-control')
 CONTROL_POLICY = Path('/etc/tmpfiles.d/mothergate-control.conf')
 BOOT = Path('/root/gatebox-slice1')
-FIXTURE = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
+FIXTURE = '8e0d6ae293df999eb6530e875df1206deac872a8'
 HARNESS = 'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
 FILES = ['MISSION.md','snapshot.py','receipt.py','supervisor.py','init.py','client.py',
          'lifecycle.py','verify.py','probe.py','rootfs.py','install.sh','README.md','tests/test_service.py',

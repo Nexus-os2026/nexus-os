@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -82,7 +83,7 @@ class OfflineInstallTests(unittest.TestCase):
             with self.assertRaises(ValueError): probe.validate_sensor(row,{})
     def test_q1_clients_requires_receipt_and_refusal(self):
         probe = load('probe')
-        sha = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
+        sha = '8e0d6ae293df999eb6530e875df1206deac872a8'
         value = dict(uid=1234,context='claude',accepted={'status':'ACCEPTED','run_id':'a'*32},
                      refused={'status':'UNQUALIFIED','reason':'QUALIFICATION_ONLY'},
                      codex='unsupported (runner denies AF_UNIX)')
@@ -177,7 +178,7 @@ class InstalledAcceptance(unittest.TestCase):
     def test_c1(self): self.check('C1-SEALED','sealed-DAC')
     def test_zz_c2(self): self.check('C2-CANARY','pre-handoff-canary-reboot-required')
     def test_c3(self): self.check('C3-RESTART','pending-restart')
-    def test_e2e(self): self.check('E2E','0c8cb6d360b1296262b7a5c478261e5e47e5c7f5 full PASS_SCOPED')
+    def test_e2e(self): self.check('E2E','8e0d6ae293df999eb6530e875df1206deac872a8 full PASS_SCOPED')
 
 class Q8F1Oracles(unittest.TestCase):
     def test_canary_open_denial(self):
@@ -699,6 +700,23 @@ class Q33Oracles(unittest.TestCase):
         self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ok'],2,0),expected=expected)
         with self.assertRaises(ValueError):
             self.run_libtest('a: test\nb: test\n',libtest_run(['test a ... ok','test b ... ignored'],1,1),expected=expected)
+    def test_libtest_results_are_parsed_from_stdout_only(self):
+        # diag15 c75: a test's helper child panicked on the shared stderr while libtest had written
+        # "test x ... " but not yet "ok", splitting the result line. libtest reports results on stdout
+        # only; stderr still reaches the log but never the parsed output (as for compile-tests).
+        options = self.init.child_options
+        script = ('import os,sys,time\nos.write(1,b"test a ... ")\ntime.sleep(.05)\n'
+                  'os.write(2,b"child panicked\\n")\ntime.sleep(.05)\nos.write(1,b"ok\\n")\n')
+        for gate in ('workspace','workspace-list','desktop-live','desktop-live-list'):
+            runner = self.init.Runner(-1,-1)
+            logged = []
+            with tempfile.TemporaryDirectory() as directory, \
+                    patch.object(self.init,'child_options',side_effect=lambda fd: dict(options(fd),cwd=directory)), \
+                    patch.object(self.init,'packet'), patch.object(runner,'output',side_effect=lambda n,b: logged.append(b)):
+                _, code, output = runner.command(gate,[sys.executable,'-I','-c',script])
+            with self.subTest(gate=gate):
+                self.assertEqual((code,output),(0,'test a ... ok\n'))
+                self.assertIn(b'child panicked\n',b''.join(logged))
     def test_supervisor_host_inventory_keeps_ignored_separate(self):
         supervisor = load('supervisor')
         artifacts = [dict(id='a0',adapter='libtest',package='nexus-mother-host',target='h1',executable='/work/target/h1'),

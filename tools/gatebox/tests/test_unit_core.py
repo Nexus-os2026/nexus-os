@@ -384,7 +384,8 @@ class ReceiptTests(unittest.TestCase):
         summary['commands'].append(command)
         receipt.validate_summary(summary)
         for change in ('ignored-also-passed','ignored-not-expected','passed-missing','duplicate-ignored',
-                       'failed','filtered','desktop-ignored','host-empty-expected','ignored-not-list'):
+                       'failed','filtered','desktop-ignored','host-empty-expected','ignored-not-list',
+                       'duplicate-ignored-only','ignored-empty-string'):
             summary = ignored_summary()
             inv = summary['commands'][3]['inventory']
             if change == 'ignored-also-passed': inv['passed'] = inv['executed'] = ['host_test','child_entry']
@@ -394,6 +395,9 @@ class ReceiptTests(unittest.TestCase):
             if change == 'failed': inv['failed'] = ['child_entry']
             if change == 'filtered': inv['filtered'] = ['child_entry']
             if change == 'ignored-not-list': inv['ignored'] = 'child_entry'
+            if change == 'duplicate-ignored-only': inv['ignored'] = ['child_entry','child_entry']
+            if change == 'ignored-empty-string':
+                inv.update(ignored='',passed=list(inv['expected']),executed=list(inv['expected']))
             if change == 'desktop-ignored':
                 desktop = next(c for c in summary['commands'] if c['gate_id'] == 'desktop-live')['inventory']
                 desktop['ignored'] = [desktop['expected'][0]]

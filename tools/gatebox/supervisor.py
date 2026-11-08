@@ -240,10 +240,12 @@ def coverage(evidence, logs):
             inventory = json.loads(logs[command['id']+'-inventory.log'])
             command.update(artifact_id=inventory['artifact']['id'],inventory=inventory['inventory'])
         if command['gate_id'] == 'host':
-            names = [n for c in commands if c['gate_id'] == 'workspace' and c['artifact_id'] in hosts
-                     for n in c['inventory']['expected']]
-            command.update(artifact_ids=hosts,inventory=dict(expected=names,executed=names,passed=names,
-                                                            failed=[],ignored=[],filtered=[]))
+            host = [c['inventory'] for c in commands if c['gate_id'] == 'workspace' and c['artifact_id'] in hosts]
+            names = [n for i in host for n in i['expected']]
+            executed = [n for i in host for n in i['passed']]
+            ignored = [n for i in host for n in i['ignored']]
+            command.update(artifact_ids=hosts,inventory=dict(expected=names,executed=executed,passed=executed,
+                                                            failed=[],ignored=ignored,filtered=[]))
         commands.append(command)
     expected = [g['id'] for g in gates['gates']]
     return commands, dict(expected=expected,executed=expected,passed=expected,failed=[],ignored=[],filtered=[],

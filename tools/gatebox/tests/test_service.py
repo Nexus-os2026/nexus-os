@@ -39,7 +39,7 @@ def load(name):
 supervisor, lifecycle, init, verify = [load(n) for n in
                                       ('supervisor','lifecycle','init','verify')]
 RUN = 'a'*32
-SHA = '0c8cb6d360b1296262b7a5c478261e5e47e5c7f5'
+SHA = '8e0d6ae293df999eb6530e875df1206deac872a8'
 REQUEST = {'repo_id':'mother','full_sha':SHA,'gate_set_id':'full'}
 REGISTRY = {'mother':{'uid':os.getuid(),'object_format':'sha1'}}
 ENV = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
@@ -381,7 +381,9 @@ class OfflineServiceTests(unittest.TestCase):
                         output = f'\nrunning {len(names)} test{"" if len(names) == 1 else "s"}\n'+''.join('test '+n+' ... ok\n' for n in names)
                         output += f'test result: ok. {len(names)} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n'
                 options['cwd'] = str(root/'src')
-                return popen([sys.executable,'-c','import sys; sys.stdout.write(sys.argv[1]); sys.stderr.write("Finished test build\\n")',output],**options)
+                # Only cargo writes progress to stderr; a libtest listing is exactly its "name: test" lines.
+                stderr = 'Finished test build\\n' if argv[0] == '/opt/rust/bin/cargo' else ''
+                return popen([sys.executable,'-c','import sys; sys.stdout.write(sys.argv[1]); sys.stderr.write(sys.argv[2])',output,stderr],**options)
             def payload_path(path):
                 value = str(path)
                 if value.startswith('/gate/policy/'): return HERE/'policy'/Path(value).name
