@@ -218,6 +218,34 @@ class Q20Oracles(unittest.TestCase):
         self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
         self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
 
+class Q23Oracles(unittest.TestCase):
+    """Q23 live evidence (diag rounds 1-3): payload environment defects on systemd 259/NVIDIA hosts."""
+    def unit(self): return (HERE/'units/mothergate-run@.service').read_text()
+    def test_usr_bind_is_not_recursive(self):
+        # The skeleton lives under /usr; a recursive /usr bind copied the payload's own
+        # mounts (e.g. /run/gate twice), defeating the whole-tmpfs isolation check.
+        unit = self.unit()
+        self.assertIn('BindReadOnlyPaths=/usr:/usr:norbind\n',unit)
+        self.assertNotIn('BindReadOnlyPaths=/usr\n',unit)
+        self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',unit)
+    def test_vendor_gpu_egl_icd_hidden(self):
+        # No GPU devices exist in the payload; the NVIDIA EGL ICD segfaults Xvfb.
+        self.assertIn('InaccessiblePaths=-/usr/share/glvnd/egl_vendor.d/10_nvidia.json\n',self.unit())
+    def test_cmdline_tokens_see_rewritten_process_titles(self):
+        tokens = load('probe').cmdline_tokens
+        rewritten = b'/opt/google/chrome/chrome --type=renderer --no-sandbox --lang=en\0\0\0'
+        self.assertIn(b'--type=renderer',tokens(rewritten))
+        self.assertIn(b'--no-sandbox',tokens(rewritten))
+        self.assertIn(b'--disable-setuid-sandbox',tokens(b'chrome\0--type=renderer\0--disable-setuid-sandbox\0'))
+        self.assertNotIn(b'',tokens(rewritten))
+        self.assertEqual(tokens(b''),[])
+    def test_chrome_observation_uses_tokens_for_type_and_unsafe_flags(self):
+        tree = ast.parse((HERE/'probe.py').read_text())
+        function = next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='chrome_observation')
+        source = ast.unparse(function)
+        self.assertIn("cmdline_tokens((path / 'cmdline').read_bytes())",source)
+        self.assertNotIn("split(b'\\x00')",source)
+
 class Q21Oracles(unittest.TestCase):
     def test_publication_dirs_share_one_supervisor_mount(self):
         # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
