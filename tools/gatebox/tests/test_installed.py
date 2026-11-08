@@ -218,6 +218,47 @@ class Q20Oracles(unittest.TestCase):
         self.assertIn('RootDirectory=/usr/lib/gatebox/root\n',(HERE/'units/mothergate-run@.service').read_text())
         self.assertIn("require(actual==expected,'skeleton inventory changed')",(HERE/'probe.py').read_text())
 
+class Q21Oracles(unittest.TestCase):
+    def test_publication_dirs_share_one_supervisor_mount(self):
+        # Q21 D1 evidence: separate ReadWritePaths for pending/ and receipts/
+        # became two bind mounts of one device in the supervisor namespace, so
+        # receipt.publish's renameat2 failed with EXDEV and no receipt (PASS or
+        # FAIL) could ever publish. One mount at the root-owned parent keeps
+        # DAC unchanged (parent root 0755) and makes the rename same-mount.
+        unit = (HERE/'units/mothergate.service').read_text().splitlines()
+        state = [l for l in unit if l.startswith('ReadWritePaths=') and 'mothergate-control' not in l]
+        self.assertEqual(state,['ReadWritePaths=/var/lib/mothergate'])
+        receipt = (HERE/'receipt.py').read_text()
+        self.assertIn('rename(source,run_id.encode(),target,run_id.encode(),1)',receipt)
+        self.assertIn("for name in ('staging','pending','receipts'):",(HERE/'install.sh').read_text())
+
+    def test_init_failure_publishes_bounded_reason(self):
+        # Q21 D2 evidence: init died before its first frame; fds 0-2 are
+        # /dev/null, so the FAILED receipt carried no reason. A failure must
+        # leave a bounded init-error log frame, then still fail (re-raise).
+        init = load('init'); frames = []
+        class Fake:
+            def output(self,name,block): frames.append((name,block))
+        try: raise ValueError('probe X failed: '+'y'*200000)
+        except ValueError: init.report_failure(Fake())
+        self.assertEqual([n for n,_ in frames],['init-error'])
+        self.assertLessEqual(len(frames[0][1]),64*1024)
+        self.assertIn(b'probe X failed',frames[0][1])
+        self.assertIn(b'ValueError',frames[0][1])
+        class Broken:
+            def output(self,name,block): raise OSError('collector lost')
+        try: raise RuntimeError('original')
+        except RuntimeError: init.report_failure(Broken())  # must never mask the original
+        main = next(n for n in ast.parse((HERE/'init.py').read_text()).body
+                    if isinstance(n,ast.FunctionDef) and n.name=='main')
+        handlers = [h for t in ast.walk(main) if isinstance(t,ast.Try) for h in t.handlers]
+        reporting = [h for h in handlers if any(isinstance(c,ast.Call) and getattr(c.func,'id',None)=='report_failure'
+                                                 for c in ast.walk(h))]
+        self.assertEqual(len(reporting),1)
+        self.assertIsInstance(reporting[0].body[-1],ast.Raise)
+        self.assertIsNone(reporting[0].body[-1].exc)
+        self.assertEqual(getattr(reporting[0].type,'id',None),'BaseException')
+
 class Q8F3Oracles(unittest.TestCase):
     def test_private_stage_validates_before_publish(self):
         scope = installer()
