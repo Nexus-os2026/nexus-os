@@ -221,11 +221,11 @@ fn el1_n2_sql_load_extension_is_refused() {
     assert!(error.to_string().contains("not authorized"), "{error}");
 }
 
-/// §2 (D-30a/b of the lineage, kept): the linked SQLite is 3.45.0, this
+/// §2 (D-30a/b of the lineage, kept): the linked SQLite is 3.54.1, this
 /// exact source.
 #[test]
 fn el1_n2_the_linked_sqlite_is_pinned() {
-    assert_eq!(rusqlite::version(), "3.45.0");
+    assert_eq!(rusqlite::version(), "3.54.1");
     let scratch = Scratch::new();
     let store = open(&scratch.store());
     let inner = store.inner();
@@ -235,7 +235,7 @@ fn el1_n2_the_linked_sqlite_is_pinned() {
         .unwrap();
     assert_eq!(
         source,
-        "2024-01-15 17:01:13 1066602b2b1976fe58b5150777cced894af17c803e068f5918390d6915b46e1d"
+        "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
     );
 }
 

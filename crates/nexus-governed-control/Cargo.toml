@@ -20,7 +20,7 @@ base64 = "0.22"
 nexus-kernel = { path = "../../kernel" }
 png = "0.18"
 unicode-segmentation = "1.12"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
