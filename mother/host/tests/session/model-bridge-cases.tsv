@@ -425,7 +425,7 @@ SB3D/lane_result_admission	sb3_restriction_after_the_recheck_or_the_append	Mothe
 SB3D/close_obligations	sb3_mother_open_model_request_blocks_close	HostSession::close_obligations (host_session/close.rs)	an open metadata or chat request is an unresolved slot and Busy	SB-3D
 SB3D/close_report	OPEN:M2e-D	Runtime::close_report (mother/host/src/hands.rs)	Runtime::close_report is host wiring: M2e-D	SB-3D
 SB3D/producer_join	sb3_mother_completed_call_allows_clean_close	Producer::joined for the close operation (settle_close_resources)	producers joined: no live or lost producer after the clean close	SB-3D
-SB3D/seal	sb3_mother_unjoined_or_owed_prevents_clean_close	HostSession::seal_close (host_session/close.rs)	unjoined work refuses the seal; the joined call seals clean	SB-3D
+SB3D/seal	sb3_mother_unjoined_or_owed_prevents_clean_close	HostSession::seal_close (host_session/close.rs)	Held chat/charge refuses sealing; a separate call released and joined before Quit seals clean. The held-through-Quit case remains unresolved after joining.	SB-3D
 SB3D/mother_end	sb3_mother_post_seal_model_events_are_absent	CloseSeal::begin_mother_end / observe_mother_end	one Mother end, distinct from the primary end and delivery	SB-3D
 SB3D/primary_end	sb3_mother_post_seal_model_events_are_absent	HostSession::close_primary session_closed record	primary end recorded only at its own step	SB-3D
 SB3D/delivery	sb3_mother_post_seal_model_events_are_absent	CloseSeal::finish_delivery	delivery recorded only at its own step	SB-3D

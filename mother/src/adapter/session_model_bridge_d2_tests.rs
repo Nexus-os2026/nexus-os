@@ -646,7 +646,12 @@ fn repeat_triggers(session: &HostSession, case: &str, base: u64) {
     ingress.emergency().expect("the emergency");
     assert!(ingress.emergency_seen(), "{case}: the emergency restricts");
     closing(SessionState::ClosingRestricted);
+    assert!(
+        !ingress.failed(),
+        "{case}: not failed before the fatal trigger"
+    );
     ingress.fail();
+    assert!(ingress.failed(), "{case}: the fatal trigger takes effect");
     closing(SessionState::ClosingRestricted);
     ingress.emergency().expect("the second emergency");
     let last = ingress
@@ -780,8 +785,7 @@ fn reach(point: &str) {
     println!("{REACHED}{point}");
     std::io::stdout().flush().unwrap();
 }
-/// Dies at the armed journal boundary (the `lite_crash` pattern): before the
-/// charge line is written, after a durable line, and never by a mock port.
+/// Dies at the armed journal boundary, before or after the durable line.
 struct Dying {
     file: crate::adapter::FileJournal,
     point: String,
@@ -927,8 +931,7 @@ fn count(lines: &[String], want: fn(&Event) -> bool) -> usize {
 fn charged(e: &Event) -> bool {
     matches!(e, Event::ModelCallCharged { .. })
 }
-/// Waits for a child under one 30 s deadline (kill and wait), killing it when
-/// the watched peer sees its chat if `kill_at_chat`; returns its output.
+/// Waits for a child under one 30 s deadline; returns its output.
 fn finished(
     command: &mut Command,
     kill_at_chat: Option<&crate::adapter::c1b_fake_ollama::FakeOllama>,
