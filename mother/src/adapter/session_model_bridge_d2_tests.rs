@@ -565,8 +565,8 @@ impl CallDeadline for Late {
         false
     }
 }
-/// `model_call` occurrences in the native store; the store is held exclusive,
-/// so bytes, compared across the step, are what a Mother test can read.
+/// `model_call` substring occurrences across the native store files: a limited
+/// sentinel, not a count of logical records.
 fn native_records(home: &std::path::Path) -> usize {
     std::fs::read_dir(home.join("broker/p3-evidence"))
         .unwrap()

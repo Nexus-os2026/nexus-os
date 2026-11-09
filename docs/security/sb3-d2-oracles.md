@@ -18,7 +18,7 @@ peer. Each schedule runs in a watched child: one 30 s deadline set before spawn,
 
 These results do not establish H5's specified race. A reply released after Quit cannot reach a successful seal: the F1-b
 `pending_lane` debt leaves the mission unresolved and history refuses (pinned, `seal_refused_after_cancel`). That schedule is
-**unconstructed**. In this harness, all Mother advances are joined before `sole`; the post-seal calls therefore use retained port and door handles. Native records are compared as store bytes: the store is held exclusive.
+**unconstructed**. In this harness, all Mother advances are joined before `sole`; the post-seal calls therefore use retained port and door handles. The native count is `model_call` substring occurrences across the store files, a limited sentinel.
 
 ## File at Quit (R6 e)
 
@@ -47,6 +47,6 @@ pending File (accepted page, `AwaitingApproval`) after a recorded call closes cl
 
 226 cited, 45 executed, 240 N/A, 679 OPEN: D2 645, M2e-D 33 (`close_report`), F1 1 (`mother_end/budget`). Total 1,190. The 12 D2 `x:`
 cells are listed in the verifier's table. Changing an OPEN cell’s owner leaves it OPEN. Before route opening, every OPEN cell must be resolved, and retained c: citations do not count; section 14.13 governs. The verifier checks literal table agreement and a source-text typo lint; it does not establish that a test is compiled, enabled or run.
-Outstanding: H5's race (unconstructed); File refused at prepare (Architect); the two surviving plants; masked controls; retained B1, B2, C1, C2
+Outstanding: H5's race (unconstructed); SB3D-F2 (the refused File); the two surviving plants; masked controls; retained B1, B2, C1, C2
 plants and 10x10 on the integrated head; the unplanted `Reopened` guard; broker-owned restoration observations; retained SB-1/SB-2 and C1 MP-E15/16/21-24 qualification; the exact-head citation check; CI and Gate Box. Deferred: H3, host X1, wiring (M2e-D), Dd, KSPAWN.
 Recorded product defect SB3D-F2, not fixed by this unit: a File refused at prepare leaves an action with no discharge path, so that session stays unsealed and the host reports a failed close.
