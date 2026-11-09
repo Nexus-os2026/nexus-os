@@ -603,7 +603,7 @@ fn late_attempt(f: &SFx, id: crate::journal::MissionId, run: RunId) {
         0,
         "no callback"
     );
-    assert_eq!(facts(f), before, "post-seal counts, occurrences, obligations");
+    assert_eq!(facts(f), before, "post-seal counts and obligations");
     assert_eq!(f.home.session.state(), SessionState::SealedFinalizing);
 }
 
