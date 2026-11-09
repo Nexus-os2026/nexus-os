@@ -396,6 +396,7 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/admission-lapse-then-stop",
             "first/admission-scope-only-then-stop",
             "first/scope-only-then-stop",
+            "first/emergency-lapse-then-stop",
             "first/lapse-stop-never-waits",
             "first/no-budget-stop",
             "first/terminal-lapse-stop",
@@ -526,6 +527,13 @@ fn first(arg: &str) {
                 assert_eq!(m.stop_all(), Ok(1), "{arg}");
             }
             "block:budget_time"
+        }
+        // SB3C-R18 (a): the emergency stop is earlier, and stays the cause.
+        "emergency-lapse-then-stop" => {
+            f.home.session.ingress().emergency().unwrap();
+            f.home.clock.advance(Duration::from_millis(61_000));
+            assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}");
+            "stop:emergency_stop"
         }
         // SB3C-R18 (c): Stop's budget decision and engagement need no lock.
         "lapse-stop-never-waits" => {
