@@ -8,12 +8,19 @@ use crate::adapter::c1b_fake_ollama::{chat, Answer, Seen, PATIENCE};
 use crate::adapter::c1b_port_oracles::record_next;
 use crate::adapter::session_model_bridge_support::{advance_in, signal, within, Mother, SFx};
 use crate::coordinator::{CoordinatorError, PreparedSessionEnd};
+use crate::evidence::BrokerClass;
 use crate::journal::Event;
 use crate::lane::{LaneContext, LaneOutput, ModelCallError, Verdict};
 use nexus_governed_control::authority::evidence::EndStatus;
+use nexus_governed_control::authority::ids::RunId;
+use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::host_session::close::{CloseObligations, CloseSeal, FinalStatus};
+use nexus_governed_control::host_session::HostSession;
 use nexus_governed_control::host_session::{CommandKind, SessionRequest, SessionState};
-use nexus_governed_control::inference::{ModelReply, ModelRequest, ResponseSchema};
+use nexus_governed_control::inference::{
+    CallDeadline, CallMeter, Charged, InvocationOwner, MeterRefusal, ModelReply, ModelRequest,
+    ResponseSchema,
+};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -81,13 +88,15 @@ fn run(case: &str) {
     }
 }
 
-fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
+fn request() -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    let request = ModelRequest::new("SB3D2 system".into(), "SB3D2 prompt".into(), schema).unwrap();
+    ModelRequest::new("SB3D2 system".into(), "SB3D2 prompt".into(), schema).unwrap()
+}
+fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
     context
         .model
         .expect("a model lane gets a caller")
-        .call(&request)
+        .call(&request())
 }
 fn quiet() -> LaneOutput {
     LaneOutput {
@@ -97,9 +106,40 @@ fn quiet() -> LaneOutput {
         verdict: Verdict::Continue,
     }
 }
-fn signals() -> (SyncSender<()>, Mutex<Receiver<()>>) {
-    let (tx, rx) = signal();
-    (tx, Mutex::new(rx))
+/// An acknowledged hold: the held side reports arrival, and fails if it is not
+/// released in time (a dropped `Hold` included).
+struct Hold {
+    at: Receiver<()>,
+    go: SyncSender<()>,
+}
+impl Hold {
+    fn reached(&self) {
+        within(&self.at);
+    }
+    fn release(&self) {
+        self.go.send(()).unwrap();
+    }
+}
+fn hold() -> (Hold, impl FnOnce() + Send + 'static) {
+    let (arrived, at) = signal();
+    let (go, released) = signal();
+    let held = move || {
+        arrived.send(()).unwrap();
+        released.recv_timeout(PATIENCE).expect("released in time");
+    };
+    (Hold { at, go }, held)
+}
+/// `/api/chat` held at the peer until released, then answered.
+fn held_chat(f: &SFx) -> Hold {
+    let (held, arrive) = hold();
+    let arrive = Mutex::new(Some(arrive));
+    f.fake.route(move |p| {
+        (p == "/api/chat").then(|| {
+            (arrive.lock().unwrap().take().expect("one chat"))();
+            chat(REPLY)
+        })
+    });
+    held
 }
 /// Runs `action` when dropped: a held peer or lane is released on any exit.
 struct Finally<F: FnMut()>(F);
@@ -119,8 +159,11 @@ fn obligations(f: &SFx) -> CloseObligations {
     f.home.session.close_obligations().unwrap()
 }
 fn session_ended(f: &SFx) -> usize {
-    let closed = |e: &Event| matches!(e, Event::SessionClosed);
-    f.events().iter().filter(|e| closed(e)).count()
+    let events = f.events();
+    events
+        .iter()
+        .filter(|e| matches!(e, Event::SessionClosed))
+        .count()
 }
 /// The Mother end, the primary end and delivery, each distinct.
 fn finals(f: &SFx) -> (FinalStatus, FinalStatus, FinalStatus) {
@@ -144,7 +187,8 @@ fn close_clean(
     request: &SessionRequest,
     post_seal: impl FnOnce(&SFx, &CloseSeal),
 ) {
-    use FinalStatus::{Pending, Recorded, Unknown};
+    use FinalStatus::{Pending as P, Recorded as R, Unknown as U};
+    let at = |want, step: &str| assert_eq!(finals(f), want, "{step}");
     let session = &f.home.session;
     let ending: PreparedSessionEnd = sole(m).prepare_session_end().expect("prepared");
     let inventory = session.settle_close_resources(request).unwrap();
@@ -152,24 +196,16 @@ fn close_clean(
     session.settle_close_authority(request).unwrap();
     let seal = session.seal_close(request).expect("the clean seal");
     assert_eq!(session.state(), SessionState::SealedFinalizing);
-    assert_eq!(finals(f), (Pending, Pending, Pending), "nothing yet");
+    at((P, P, P), "nothing yet");
     post_seal(f, &seal);
     ending.record(&seal).unwrap();
-    assert_eq!(
-        finals(f),
-        (Unknown, Pending, Pending),
-        "the Mother end begins"
-    );
+    at((U, P, P), "the Mother end begins");
     session.observe_mother_end(&seal).unwrap();
-    assert_eq!(
-        finals(f),
-        (Recorded, Pending, Pending),
-        "Mother end observed"
-    );
+    at((R, P, P), "Mother end observed");
     session.close_primary(&seal).unwrap();
-    assert_eq!(finals(f), (Recorded, Recorded, Pending), "primary end");
+    at((R, R, P), "primary end");
     assert!(seal.finish_delivery(), "delivered");
-    assert_eq!(finals(f), (Recorded, Recorded, Recorded), "delivery");
+    at((R, R, R), "delivery");
     assert_eq!(session.state(), SessionState::ClosedClean);
     assert_eq!(session_ended(f), 1, "one Mother SessionClosed");
     let o = session.close_obligations().unwrap();
@@ -190,20 +226,12 @@ fn sb3_mother_completed_call_allows_clean_close() {
 }
 fn clean(arg: &str) {
     let completed = arg == "completed";
-    let f = if completed {
-        SFx::canonical()
-    } else {
-        SFx::unregistered()
-    };
-    let m = if completed {
-        f.mother(1, |ctx| {
+    let f = [SFx::unregistered, SFx::canonical][usize::from(completed)]();
+    if completed {
+        let m = f.mother(1, |ctx| {
             assert_eq!(outcome(&ask(ctx)), "ok", "a recorded call");
             quiet()
-        })
-    } else {
-        f.file_mother()
-    };
-    if completed {
+        });
         let id = f.building(&m, f.contract());
         assert_eq!(f.home.session.state(), SessionState::Normal);
         m.advance(id).unwrap();
@@ -216,9 +244,11 @@ fn clean(arg: &str) {
             "{o:?}"
         );
         assert_eq!(o.record, "recorded");
-    } else {
-        f.awaiting(&m);
+        let request = quit(&f);
+        return close_clean(&f, m, &request, |_, _| {});
     }
+    let m = f.file_mother();
+    f.awaiting(&m);
     let request = quit(&f);
     close_clean(&f, m, &request, |_, _| {});
 }
@@ -235,6 +265,7 @@ fn sb3_mother_unjoined_or_owed_prevents_clean_close() {
         "sb3_mother_unjoined_or_owed_prevents_clean_close",
         &[
             "unjoined/chat",
+            "unjoined/chat-seal",
             "unjoined/charge",
             "unjoined/owed",
             "unjoined/uncertain",
@@ -266,63 +297,58 @@ fn unjoined(arg: &str) {
             assert_ne!(f.home.session.state(), SessionState::ClosedClean, "{arg}");
         }
         "chat" => {
-            let (entered_tx, entered) = signal();
-            let (release, release_rx) = signals();
-            f.fake.route(move |p| {
-                (p == "/api/chat").then(|| {
-                    let _ = entered_tx.send(());
-                    let _ = release_rx.lock().unwrap().recv_timeout(PATIENCE);
-                    chat(REPLY)
-                })
-            });
+            let held = held_chat(&f);
             let adv = advance_in(&m, id);
-            within(&entered);
+            held.reached();
             let o = obligations(&f).model;
             assert!(o.active && !o.owner_complete && !o.child_complete, "{o:?}");
             assert_eq!(o.record, "pending", "{o:?}");
             assert_eq!(f.fake.count("/api/chat"), 1, "one open connection");
             assert_eq!(m.close(), Err(CoordinatorError::Busy), "held chat");
-            release.send(()).unwrap();
+            held.release();
             assert_eq!(within(&rx), "ok", "the released reply is recorded");
             adv.join().unwrap().unwrap();
             let request = quit(&f);
             close_clean(&f, m, &request, |_, _| {});
         }
-        "charge" => {
-            let (at_tx, at) = signal();
-            let (resume, resume_rx) = signals();
-            m.hooks_for_test().model_charging.arm(0, move || {
-                let _ = at_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            });
-            let adv = advance_in(&m, id);
-            within(&at); // The attempt is held at its charge, inside the broker.
-            let released = resume.clone();
-            let finally = Finally(move || {
-                let _ = released.try_send(());
-            });
+        "chat-seal" | "charge" => {
+            let (held, arrive) = hold();
+            let chat_held = arg == "chat-seal";
+            let adv = if chat_held {
+                f.fake.route(|p| (p == "/api/chat").then_some(Answer::Hold));
+                f.fake.drain();
+                let adv = advance_in(&m, id);
+                assert!(f.fake.wait(Seen::Request("/api/chat".into())), "held");
+                // Frozen in the broker's poll, the attempt cannot see the Quit.
+                m.hooks_for_test().model_deadline_sampled.arm(0, arrive);
+                adv
+            } else {
+                m.hooks_for_test().model_charging.arm(0, arrive);
+                advance_in(&m, id)
+            };
+            held.reached();
             let o = obligations(&f).model;
-            assert!(o.active && !o.owner_complete, "held charge: {o:?}");
-            assert_eq!(m.close(), Err(CoordinatorError::Busy), "held charge");
+            assert!(o.active && !o.owner_complete, "{arg}: {o:?}");
+            assert_eq!(m.close(), Err(CoordinatorError::Busy), "{arg}");
             let request = quit(&f);
             let session = &f.home.session;
             session.settle_close_resources(&request).unwrap();
             session.settle_close_authority(&request).unwrap();
-            assert!(session.seal_close(&request).is_err(), "unresolved attempt");
-            assert_eq!(
-                f.home
-                    .lines()
-                    .iter()
-                    .filter(|l| l.contains("model_call_charged"))
-                    .count(),
-                0
-            );
-            drop(finally);
+            assert!(session.seal_close(&request).is_err(), "{arg}: unresolved");
+            assert!(obligations(&f).model.active, "{arg}: refused while held");
+            assert_eq!(f.charges(), usize::from(chat_held), "{arg}: the charge");
+            f.fake.drain(); // A close before this point fails the wait below.
+            held.release();
+            if chat_held {
+                let closed = f.fake.wait(Seen::Closed("/api/chat".into()));
+                assert!(closed, "the chat closes only after the refused seal");
+            }
             let got = within(&rx);
-            assert_ne!(got, "ok", "the released charge is too late: {got}");
-            let _ = adv.join().unwrap();
+            assert_ne!(got, "ok", "{arg}: too late to be accepted: {got}");
+            let advanced = adv.join().unwrap();
+            assert!(advanced.is_err(), "{arg}: {advanced:?}");
             let o = obligations(&f).model;
-            assert!(!o.active && o.owner_complete, "concluded after join: {o:?}");
+            assert!(!o.active && o.owner_complete, "after the join: {o:?}");
             seal_refused_after_cancel(&f, m, &request, true);
         }
         other => panic!("unknown case {other}"),
@@ -346,14 +372,8 @@ fn seal_refused_after_cancel(f: &SFx, m: Mother, request: &SessionRequest, settl
     assert_eq!(history.unresolved.len(), 1, "the lane never returned");
     assert_eq!(f.model_lane_returned(), 0, "nothing was accepted");
     assert_eq!(session_ended(f), 0, "no Mother end");
-    assert_eq!(
-        finals(f),
-        (
-            FinalStatus::Pending,
-            FinalStatus::Pending,
-            FinalStatus::Pending
-        )
-    );
+    let pending = FinalStatus::Pending;
+    assert_eq!(finals(f), (pending, pending, pending));
     assert_ne!(session.state(), SessionState::ClosedClean);
 }
 
@@ -414,10 +434,12 @@ fn open_request(arg: &str) {
 
 // ------------------------------------------------------------------- H5
 
-/// H5: a reply released after Quit loses to the close (the seal then refuses:
-/// the known F1-b item, pinned in `seal_refused_after_cancel`); once a clean
-/// close seals, no metadata or chat request, no attempt, no new obligation,
-/// and the Mother end, primary end and delivery stay distinct at each step.
+/// H5: a reply released after Quit loses to the close and the seal refuses
+/// (the F1-b item, pinned in `seal_refused_after_cancel`), so that schedule has
+/// no successful seal. After a successful seal, a real late attempt on the
+/// retained port and on the broker door is refused and moves no request,
+/// native record, callback or obligation; the three end facts stay distinct.
+/// A Mother caller cannot outlive the seal: `sole` needs every thread joined.
 #[test]
 fn sb3_mother_post_seal_model_events_are_absent() {
     watched(
@@ -429,70 +451,88 @@ fn post_seal(arg: &str) {
     let f = SFx::canonical();
     let (tx, rx) = channel();
     let m = f.mother(1, move |ctx| {
-        let r = ask(ctx);
-        tx.send(outcome(&r)).unwrap();
+        tx.send(outcome(&ask(ctx))).unwrap();
         quiet()
     });
     let id = f.building(&m, f.contract());
-    let (release, release_rx) = signals();
-    let (entered_tx, entered) = signal();
-    f.fake.route(move |p| {
-        (p == "/api/chat").then(|| {
-            let _ = entered_tx.send(());
-            let _ = release_rx.lock().unwrap().recv_timeout(PATIENCE);
-            chat(REPLY)
-        })
-    });
-    let adv = advance_in(&m, id);
-    within(&entered);
-    let released = release.clone();
-    let finally = Finally(move || {
-        let _ = released.try_send(());
-    });
-    let request = if arg == "late" {
+    if arg == "late" {
+        let held = held_chat(&f);
+        let adv = advance_in(&m, id);
+        held.reached();
         let request = quit(&f);
-        drop(finally); // The reply comes back after the Quit.
+        held.release(); // The reply comes back after the Quit.
         let got = within(&rx);
         assert_ne!(got, "ok", "the late reply never reaches the lane: {got}");
-        let _ = adv.join().unwrap();
+        assert!(adv.join().unwrap().is_err(), "the advance is refused");
         assert_eq!(f.fake.count("/api/chat"), 1, "one chat");
         return seal_refused_after_cancel(&f, m, &request, false);
-    } else {
-        drop(finally);
-        assert_eq!(within(&rx), "ok");
-        let advanced = adv.join().unwrap();
-        assert!(advanced.is_ok(), "{advanced:?}");
-        assert_eq!(
-            f.model_lane_returned(),
-            1,
-            "the completed reply is accepted"
-        );
-        quit(&f)
+    }
+    f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
+    m.advance(id).expect("the completed call");
+    assert_eq!(within(&rx), "ok");
+    assert_eq!(f.model_lane_returned(), 1, "the reply is accepted");
+    let run = f.home.port.inner_for_test().model_run(id).unwrap();
+    let request = quit(&f);
+    close_clean(&f, m, &request, move |f, _| late_attempt(f, id, run));
+}
+/// Counts every meter and deadline callback a late attempt makes.
+#[derive(Default)]
+struct Late(std::sync::atomic::AtomicUsize);
+impl CallMeter for Late {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Err(MeterRefusal::Stale)
+    }
+    fn settle(&self, _: u32) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+impl CallDeadline for Late {
+    fn expired(&self) -> bool {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        false
+    }
+}
+/// `model_call` occurrences in the native store; the store is held exclusive,
+/// so bytes, compared across the step, are what a Mother test can read.
+fn native_records(home: &std::path::Path) -> usize {
+    std::fs::read_dir(home.join("broker/p3-evidence"))
+        .unwrap()
+        .map(|e| std::fs::read(e.unwrap().path()).unwrap())
+        .map(|b| b.windows(10).filter(|w| w == b"model_call").count())
+        .sum()
+}
+fn late_attempt(f: &SFx, id: crate::journal::MissionId, run: RunId) {
+    let facts = |f: &SFx| {
+        let chats = f.fake.count("/api/chat");
+        let native = native_records(&f.home.dir);
+        let model = format!("{:?}", obligations(f).model);
+        (chats, metadata(&f.fake), native, model)
     };
-    close_clean(&f, m, &request, move |f, _| {
-        let facts = |f: &SFx| {
-            let chats = f.fake.count("/api/chat");
-            let metadata = f.fake.count("/api/version") + f.fake.count("/api/tags");
-            (
-                chats,
-                metadata,
-                f.charges(),
-                format!("{:?}", obligations(f).model),
-            )
-        };
-        let before = facts(f);
-        assert_eq!(before.0, 1, "one chat, no retry");
-        // A later admission on the sealed door is refused and asks nothing.
-        let refused =
-            crate::effect::EffectPort::admit_inference(&*f.home.port, id, "h", "r", [0; 32]);
-        assert!(refused.is_err(), "post-seal admission is refused");
-        assert_eq!(
-            facts(f),
-            before,
-            "post-seal metadata/chat/records/obligations"
-        );
-        assert_eq!(f.home.session.state(), SessionState::SealedFinalizing);
-    });
+    let before = facts(f);
+    assert_eq!(before.0, 1, "one chat, no retry");
+    assert!(before.2 > 0, "the count sees the native record");
+    let (late, owner, body) = (Late::default(), InvocationOwner::new(), request());
+    let invocation = owner.observer();
+    let port = f.home.port.inner_for_test();
+    let seen = port.model_observer.lock().unwrap().len();
+    let attempt =
+        crate::effect::EffectPort::model_call(&*f.home.port, id, &body, &late, &late, &invocation);
+    let entered = port.model_observer.lock().unwrap().len();
+    assert_eq!(entered, seen + 1, "the late attempt entered the port");
+    assert_eq!(attempt.err().map(|r| r.class), Some(BrokerClass::Halted));
+    let door = port.door.model_call(run, &body, &late, &late, &invocation);
+    assert!(
+        matches!(door, Err(AuthorityError::Halted)),
+        "the sealed broker door refuses"
+    );
+    assert_eq!(
+        late.0.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "no callback"
+    );
+    assert_eq!(facts(f), before, "post-seal requests, records, obligations");
+    assert_eq!(f.home.session.state(), SessionState::SealedFinalizing);
 }
 
 // ------------------------------------------------------------------- H4
@@ -515,48 +555,35 @@ fn sb3_shutdown_keeps_first_deadline() {
         ],
     );
 }
-/// The first Quit fixes the deadline; every later trigger leaves it.
-fn repeat_triggers(
-    f_session: &nexus_governed_control::host_session::HostSession,
-    case: &str,
-    base: u64,
-) {
-    let ingress = f_session.ingress();
+/// The first Quit fixes the deadline; every later trigger, each required to
+/// take effect, leaves it.
+fn repeat_triggers(session: &HostSession, case: &str, base: u64) {
+    let ingress = session.ingress();
+    let closing = |want: SessionState| assert_eq!(session.state(), want, "{case}");
     let before = Instant::now();
-    let _quit = ingress
-        .accept(CommandKind::Quit, base)
-        .expect("the first Quit");
+    let quit = ingress.accept(CommandKind::Quit, base).expect("first Quit");
     let after = Instant::now();
     let first = ingress.close_deadline().expect("the first deadline");
     let product = Duration::from_secs(3);
-    assert!(
-        first >= before + product && first <= after + product,
-        "{case}: the three-second budget from acceptance"
-    );
-    assert_eq!(
-        _quit.deadline(),
-        first,
-        "{case}: the request's own deadline"
-    );
-    let closing = |want: SessionState| assert_eq!(f_session.state(), want, "{case}");
+    let budget = first >= before + product && first <= after + product;
+    assert!(budget, "{case}: three seconds from acceptance");
+    assert_eq!(quit.deadline(), first, "{case}: the request's own");
     closing(SessionState::ClosingNormal);
-    let again = ingress
-        .accept(CommandKind::Quit, base + 1)
-        .expect("repeated Quit");
+    let again = ingress.accept(CommandKind::Quit, base + 1).expect("again");
     assert_eq!(again.deadline(), first, "{case}: repeated Quit");
     closing(SessionState::ClosingNormal);
     assert!(!ingress.emergency_seen(), "{case}: no emergency yet");
-    ingress.emergency().ok();
+    ingress.emergency().expect("the emergency");
     assert!(ingress.emergency_seen(), "{case}: the emergency restricts");
     closing(SessionState::ClosingRestricted);
     ingress.fail();
     closing(SessionState::ClosingRestricted);
-    ingress.emergency().ok();
-    let last = ingress.accept(CommandKind::Quit, base + 2);
+    ingress.emergency().expect("the second emergency");
+    let last = ingress
+        .accept(CommandKind::Quit, base + 2)
+        .expect("last Quit");
+    assert_eq!(last.deadline(), first, "{case}: the final Quit");
     assert_eq!(ingress.close_deadline(), Some(first), "{case}: triggers");
-    if let Ok(request) = last {
-        assert_eq!(request.deadline(), first, "{case}");
-    }
 }
 fn first_deadline(case: &str) {
     if case == "bootstrap" {
@@ -564,70 +591,58 @@ fn first_deadline(case: &str) {
     }
     let f = SFx::new();
     let (tx, rx) = channel();
-    let (result_go, result_go_rx) = signals();
-    let late_result = case == "late-result";
+    let (held, arrive) = hold();
+    let arrive = Arc::new(Mutex::new(Some(arrive)));
+    let fire = move || (arrive.lock().unwrap().take().expect("one hold"))();
+    let lane_fire = fire.clone();
+    let late = case == "late-result";
     let m = f.mother(1, move |ctx| {
-        let r = ask(ctx);
-        tx.send(outcome(&r)).unwrap();
-        if late_result {
-            let _ = result_go_rx.lock().unwrap().recv_timeout(PATIENCE);
+        tx.send(outcome(&ask(ctx))).unwrap();
+        if late {
+            lane_fire();
         }
         quiet()
     });
     let id = f.building(&m, f.contract());
-    let (peer_release, peer_release_rx) = signals();
-    let (at_tx, at) = signal();
-    let (resume, resume_rx) = signals();
+    let at = match case {
+        "metadata" => Some("/api/tags"),
+        "chat" => Some("/api/chat"),
+        _ => None,
+    };
+    let hooks = m.hooks_for_test();
     match case {
-        "metadata" => f.fake.route(|p| (p == "/api/tags").then_some(Answer::Hold)),
-        "chat" => f.fake.route(move |p| {
-            (p == "/api/chat").then(|| {
-                let _ = at_tx.send(());
-                let _ = peer_release_rx.lock().unwrap().recv_timeout(PATIENCE);
-                chat(REPLY)
-            })
-        }),
-        "charge" => m.hooks_for_test().model_charging.arm(0, move || {
-            let _ = at_tx.send(());
-            let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-        }),
+        "metadata" | "chat" => f
+            .fake
+            .route(move |p| (Some(p) == at).then_some(Answer::Hold)),
+        "charge" => hooks.model_charging.arm(0, fire),
         "record" => {
             f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
-            m.hooks_for_test().model_replied.arm(0, move || {
-                let _ = at_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            })
+            hooks.model_replied.arm(0, fire);
         }
         _ => f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY))),
     }
     f.fake.drain();
     let adv = advance_in(&m, id);
-    match case {
-        "metadata" => assert!(f.fake.wait(Seen::Request("/api/tags".into())), "held"),
-        "late-result" => assert_eq!(within(&rx), "ok", "the lane has the reply"),
-        _ => within(&at),
+    match at {
+        Some(path) => assert!(f.fake.wait(Seen::Request(path.into())), "{case}: held"),
+        None => held.reached(),
     }
     repeat_triggers(&f.home.session, case, 900);
-    let released = (peer_release.clone(), resume.clone(), result_go.clone());
-    let finally = Finally(move || {
-        let _ = released.0.try_send(());
-        let _ = released.1.try_send(());
-        let _ = released.2.try_send(());
-    });
-    drop(finally);
-    let _ = adv.join().unwrap();
-    if case != "late-result" {
-        let got = within(&rx);
-        assert_ne!(
-            got, "ok",
-            "{case}: the restricted attempt is not accepted: {got}"
-        );
-    }
+    held.release();
+    let advanced = adv.join().unwrap();
+    assert_eq!(advanced.err(), Some(CoordinatorError::Stopped), "{case}");
+    let got = within(&rx);
+    assert_eq!(
+        got == "ok",
+        late,
+        "{case}: only the held result is the reply: {got}"
+    );
     let ingress = f.home.session.ingress();
     let first = ingress.close_deadline().unwrap();
-    if let Ok(later) = ingress.accept(CommandKind::Quit, 950) {
-        assert_eq!(later.deadline(), first, "{case}: after the join");
-    }
+    let later = ingress
+        .accept(CommandKind::Quit, 950)
+        .expect("after the join");
+    assert_eq!(later.deadline(), first, "{case}: after the join");
     assert_eq!(
         ingress.close_deadline(),
         Some(first),
@@ -852,6 +867,7 @@ fn finished(
     what: &str,
 ) -> (std::process::ExitStatus, String) {
     use std::io::Read;
+    let until = Instant::now() + Duration::from_secs(30); // Before the spawn.
     let mut child = Owned(
         command
             .env(PARENT, std::process::id().to_string())
@@ -875,7 +891,6 @@ fn finished(
         assert!(peer.wait(Seen::Request("/api/chat".into())), "{what}: held");
         child.0.kill().unwrap();
     }
-    let until = Instant::now() + Duration::from_secs(30);
     let status = loop {
         if let Some(status) = child.0.try_wait().unwrap() {
             break status;

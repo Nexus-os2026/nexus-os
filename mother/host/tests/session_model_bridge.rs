@@ -73,7 +73,7 @@ const NA_REASONS: &str = "BOOTSTRAP_NO_MISSION PREBIND_NO_RUN_OR_CONSENT NO_INVO
 /// The earlier denial oracles a lifecycle N/A may name (spec 8.4).
 const DENIAL_ORACLES: &str =
     "sb3c_registration_is_bootstrap_only_once sb2_unjoined_or_owed_prevents_clean_close";
-const OWNERS: &str = "D2 F1";
+const OWNERS: &str = "D2 F1 M2e-D";
 /// SB3C-R8 (d): every cell's audited disposition: dimension|values|disposition|sinks.
 /// A false citation, N/A or OPEN cannot match; the audit decided which holds
 /// (register 14.6). R18 precedent for OPEN.
@@ -127,7 +127,7 @@ ingress|grant_revocation,grant_expiry|c:sb3_original_file_grant_remains_required
 fault|none|c:sb3c_public_binding_is_exact_and_idempotent|inference_binding
 fault|decline,record_failed,record_unknown,poison,panic|open:D2|inference_binding,attempt_ticket,emergency_restrict,close_restrict
 schedule|before|c:sb3c_stop_before_public_binding_installs_nothing|inference_binding
-ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|call_slot_reserve,charge_append,meter_settle,cancel_run,door_halt,operation_complete,close_report
+ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|call_slot_reserve,charge_append,meter_settle,cancel_run,door_halt,operation_complete
 fault|none,poison|c:sb3_matrix_r3_reserve_before|call_slot_reserve
 schedule|after|c:sb3_matrix_r3_reserve_after|call_slot_reserve
 lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|c:sb3_matrix_r3_cas_before|attempt_ticket
@@ -144,8 +144,8 @@ lifecycle|ClosingNormal|x:sb3_mother_open_model_request_blocks_close|operation_c
 fault|decline,record_unknown,poison,panic|open:D2|charge_append
 fault|none|x:sb3_mother_completed_call_allows_clean_close|charge_append
 fault|record_failed|x:sb3_durable_charge_precedes_chat|charge_append
-schedule|before,after|open:D2|charge_append,meter_settle,cancel_run,door_halt,emergency_restrict,close_restrict,operation_complete,close_obligations,close_report,producer_join
-fault|none,record_failed,record_unknown,poison,panic|open:D2|meter_settle,close_report
+schedule|before,after|open:D2|charge_append,meter_settle,cancel_run,door_halt,emergency_restrict,close_restrict,operation_complete,close_obligations,producer_join
+fault|none,record_failed,record_unknown,poison,panic|open:D2|meter_settle
 fault|decline|na:SETTLEMENT_HAS_NO_NEW_WORK_ADMISSION|meter_settle,attempt_record,attempt_pin_release,operation_complete,record_first_classify,post_record_recheck,close_obligations,close_report,producer_join,seal
 lifecycle|Bootstrap|c:session_override_required_at_each_request|registration_version,registration_status,registration_tags,registration_show
 lifecycle|Emergency|c:pre_gate_ingress_request_count_eq_zero|registration_version,registration_status,registration_tags,registration_show
@@ -222,7 +222,6 @@ ingress|quit|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 fault|none|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 fault|record_failed,poison|c:sb3_unjoined_or_owed_prevents_clean_close|close_obligations
 fault|record_unknown,panic|open:D2|close_obligations
-lifecycle|Bootstrap,Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|close_report
 lifecycle|Bootstrap,Normal,Emergency,Failed,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|producer_join,seal
 lifecycle|ClosingNormal|c:sb3_completed_call_allows_existing_clean_close|producer_join,seal
 ingress|quit|c:sb3_completed_call_allows_existing_clean_close|producer_join
@@ -240,6 +239,10 @@ fault|none|c:sb3_post_seal_model_events_are_absent|mother_end,primary_end,delive
 fault|decline,record_failed,record_unknown,poison,panic|na:LEGACY_FINALIZATION_ONLY|mother_end,primary_end,delivery
 schedule|after|na:LEGACY_FINALIZATION_ONLY|mother_end,primary_end,delivery
 ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|na:LEGACY_FINALIZATION_ONLY|primary_end,delivery
+lifecycle|Bootstrap,Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:M2e-D|close_report
+ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:M2e-D|close_report
+fault|none,record_failed,record_unknown,poison,panic|open:M2e-D|close_report
+schedule|before,after|open:M2e-D|close_report
 ";
 /// SB3C-R6 (a): class|session-level primitive|retained evidence for the
 /// reduction|session-level test. SB3C-R8 (b): covered only by a test that
@@ -819,7 +822,7 @@ call_chat|5|c:sb3_matrix_r5_observer_before|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK
 call_chat|4|c:sb3_matrix_r5_observer_before|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|not the audited
 call_chat|5|c:sb3_matrix_r5_observer_before|open:D9|OPEN needs an owner
 call_chat|5|c:sb3_matrix_r5_observer_before|open:D2|not the audited
-close_report|5|open:D2|c:sb3_completed_call_allows_existing_clean_close|not the audited
+close_report|5|open:M2e-D|c:sb3_completed_call_allows_existing_clean_close|not the audited
 ";
 #[test]
 fn sb3c_structural_and_dimension_tampering_fails() {
@@ -1191,9 +1194,10 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("executed"),
             count("open:D1"),
             count("open:D2"),
-            count("open:F1")
+            count("open:F1"),
+            count("open:M2e-D")
         ),
-        (45, 0, 678, 1),
+        (45, 0, 645, 1, 33),
         "after D2: {summary:?}"
     );
     assert_eq!(count("cited"), 226, "no retained citation moved");
