@@ -952,3 +952,66 @@ fn scan_m2dd_typed_confirmation_exact_delegates_and_negative_controls() {
         "typed answers must keep the real terminal's exact result"
     );
 }
+
+/// Production lines (rustfmt-checked tree): comments and `#[cfg(test)]` items
+/// removed by indentation. Quoted text stays: it can only fail this guard.
+fn production_text(text: &str) -> String {
+    let indent = |l: &str| l.len() - l.trim_start().len();
+    let (mut out, mut lines) = (String::new(), text.lines().peekable());
+    while let Some(line) = lines.next() {
+        let code = line.split(" // ").next().unwrap();
+        let t = code.trim_start();
+        if t.starts_with("/*") {
+            let mut last = line;
+            while !last.contains("*/") {
+                last = lines.next().unwrap();
+            }
+        } else if t.starts_with("#[cfg(test)]") || t.starts_with("#[cfg(all(test,") {
+            while lines
+                .next_if(|l| l.trim_start().starts_with("#["))
+                .is_some()
+            {}
+            lines.next();
+            loop {
+                while lines
+                    .next_if(|l| l.trim().is_empty() || indent(l) > indent(line))
+                    .is_some()
+                {}
+                let closes = |l: &&str| {
+                    indent(l) == indent(line) && l.trim_start().starts_with(['}', ')', ']'])
+                };
+                if !lines
+                    .next_if(closes)
+                    .is_some_and(|l| l.trim_end().ends_with('{'))
+                {
+                    break;
+                }
+            }
+        } else if !t.starts_with("//") {
+            out = out + code + "\n";
+        }
+    }
+    out
+}
+
+/// SB3C-R19, a source guard only: production tokens that can publish a
+/// stop-owner cause stay the reviewed list classified in the register.
+#[test]
+fn scan_sb3c_stop_owner_publishers_are_the_reviewed_list() {
+    let sample = "a // x\n/* y\nz */\n#[cfg(test)]\nfn e() {\n    f();\n}\nb\n";
+    assert_eq!(production_text(sample), "a\nb\n");
+    let mut sources = production_modules();
+    let host = |rel: &str| rel.starts_with("host/src/") && !rel.ends_with("_tests.rs");
+    sources.extend(mother_sources().into_iter().filter(|(rel, _)| host(rel)));
+    let needles = "StopReason::Owner HaltTag::OwnerStop HaltCause::Stop .engage() .engage_with( .engage_reason( lifecycle_halt(";
+    let mut found = Vec::new();
+    for (rel, text) in &sources {
+        let code = production_text(text);
+        for (needle, n) in needles.split(' ').map(|w| (w, code.matches(w).count())) {
+            found.extend((n > 0).then(|| format!("{rel} {needle} {n}")));
+        }
+    }
+    found.sort();
+    let reviewed = "src/adapter/session_port.rs lifecycle_halt( 1; src/coordinator.rs StopReason::Owner 2; src/coordinator/lite.rs HaltTag::OwnerStop 1; src/coordinator/lite.rs StopReason::Owner 1; src/coordinator/lite_settle.rs HaltCause::Stop 2; src/coordinator/lite_settle.rs StopReason::Owner 6; src/coordinator/session_close.rs StopReason::Owner 1; src/coordinator/session_result.rs HaltCause::Stop 1; src/evidence.rs StopReason::Owner 1";
+    assert_eq!(found.join("; "), reviewed);
+}

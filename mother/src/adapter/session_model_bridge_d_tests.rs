@@ -169,6 +169,22 @@ fn hold(go: &Mutex<std::sync::mpsc::Receiver<()>>) {
         std::process::exit(97);
     }
 }
+/// Arms `slot` to pause there until the returned sender releases it.
+fn pause_at(
+    slot: &crate::oracles::m2as_hooks::HookSlot,
+) -> (
+    std::sync::mpsc::Receiver<()>,
+    std::sync::mpsc::SyncSender<()>,
+) {
+    let (at_tx, at_rx) = signal();
+    let (resume_tx, resume_rx) = signal();
+    let resume_rx = Mutex::new(resume_rx);
+    slot.arm(0, move || {
+        let _ = at_tx.send(());
+        let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+    });
+    (at_rx, resume_tx)
+}
 /// The peer holds `/api/chat` until released, then answers `content`.
 fn hold_chat(
     f: &SFx,
@@ -563,20 +579,13 @@ fn first(arg: &str) {
             assert_eq!(m.stop(id), Ok(MissionState::Blocked), "{arg}");
             "block:phase_interrupted"
         }
-        // Review f1-5: the lapse lands at the charge boundary, so the meter
-        // refuses Stale and no timeout is ever returned; Stop follows it.
+        // Review f1-5: a lapse at the charge boundary: the meter refuses Stale, no timeout is returned.
         "charge-lapse-then-stop" => {
             let clock = f.home.clock.clone();
             m.hooks_for_test()
                 .model_charging
                 .arm(0, move || clock.advance(Duration::from_millis(61_000)));
-            let (returned_tx, returned_rx) = signal();
-            let (resume_tx, resume_rx) = signal();
-            let resume_rx = Mutex::new(resume_rx);
-            m.hooks_for_test().model_returned.arm(0, move || {
-                let _ = returned_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            });
+            let (returned_rx, resume_tx) = pause_at(&m.hooks_for_test().model_returned);
             let adv = advance_in(&m, id);
             within(&returned_rx);
             assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
@@ -587,8 +596,7 @@ fn first(arg: &str) {
             let _ = adv.join().unwrap();
             "block:budget_time"
         }
-        // The lapse lands before the lane's first call: the same cause, and
-        // the broker never sees a chat.
+        // The lapse lands before the lane's first call; the broker never sees a chat.
         "budget-entry-then-stop" => {
             let adv = advance_in(&m, id);
             within(&ready_rx);
@@ -608,13 +616,7 @@ fn first(arg: &str) {
         "stop-then-budget" => {
             let adv = advance_in(&m, id);
             within(&ready_rx);
-            let (paused_tx, paused_rx) = signal();
-            let (resume_tx, resume_rx) = signal();
-            let resume_rx = Mutex::new(resume_rx);
-            m.hooks_for_test().file_after_halt.arm(0, move || {
-                let _ = paused_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            });
+            let (paused_rx, resume_tx) = pause_at(&m.hooks_for_test().file_after_halt);
             let stopper = {
                 let m = m.clone();
                 std::thread::spawn(move || m.stop(id))
@@ -629,9 +631,7 @@ fn first(arg: &str) {
             assert_eq!(stopper.join().unwrap(), Ok(MissionState::Stopped));
             "stop:owner"
         }
-        // SB3C-R18 (a): an earlier restriction in the word, then the lapse, is
-        // not a budget cause. Revocation is not in the word, so it does not
-        // withhold the budget (the expected value that moves; see the register).
+        // SB3C-R18 (a): an earlier restriction in the word is not a budget cause; revocation is not in the word.
         "failed-lapse-then-stop" | "closing-lapse-then-stop" | "revoked-lapse-then-stop" => {
             let adv = advance_in(&m, id);
             within(&ready_rx);
@@ -659,13 +659,7 @@ fn first(arg: &str) {
         // decides; without one no budget cause is observed.
         "reply-lapse-then-stop" | "reply-lapse" => {
             let (entered, release) = hold_chat(&f, "{}");
-            let (replied_tx, replied_rx) = signal();
-            let (resume_tx, resume_rx) = signal();
-            let resume_rx = Mutex::new(resume_rx);
-            m.hooks_for_test().model_replied.arm(0, move || {
-                let _ = replied_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            });
+            let (replied_rx, resume_tx) = pause_at(&m.hooks_for_test().model_replied);
             let adv = advance_in(&m, id);
             within(&entered);
             release.send(()).unwrap();
@@ -682,19 +676,12 @@ fn first(arg: &str) {
             let _ = adv.join().unwrap();
             ["fail:lane_fail:builder", "block:budget_time"][usize::from(arg != "reply-lapse")]
         }
-        // The deadline crosses inside one poll and Stop lands while the
-        // attempt is returning to Mother.
+        // The deadline crosses inside one poll; Stop lands as the attempt returns to Mother.
         "poll-crossing-then-stop" => {
             let (entered, release) = hold_chat(&f, "{}");
             let adv = advance_in(&m, id);
             within(&entered);
-            let (returned_tx, returned_rx) = signal();
-            let (resume_tx, resume_rx) = signal();
-            let resume_rx = Mutex::new(resume_rx);
-            m.hooks_for_test().model_returned.arm(0, move || {
-                let _ = returned_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            });
+            let (returned_rx, resume_tx) = pause_at(&m.hooks_for_test().model_returned);
             let clock = f.home.clock.clone();
             m.hooks_for_test()
                 .model_deadline_sampled
@@ -709,19 +696,11 @@ fn first(arg: &str) {
             assert!(adv.join().unwrap().is_err());
             "block:budget_time"
         }
-        // Review f1-4: the poll before the final admission reads the budget
-        // unexpired, and the admission refuses Timeout. Scope-only: that
-        // refusal with Mother's budget not lapsed (narrowed limits stand in
-        // for a lapsed Q, which is 300 s of real time) stays a plain Stop.
+        // Review f1-4: the poll reads the budget unexpired and the final admission refuses Timeout.
+        // Scope-only: the same refusal with Mother's budget not lapsed (narrowed limits stand in for Q).
         "admission-lapse-then-stop" | "admission-scope-only-then-stop" => {
             let budget = arg == "admission-lapse-then-stop";
-            let (returned_tx, returned_rx) = signal();
-            let (resume_tx, resume_rx) = signal();
-            let resume_rx = Mutex::new(resume_rx);
-            m.hooks_for_test().model_returned.arm(0, move || {
-                let _ = returned_tx.send(());
-                let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
-            });
+            let (returned_rx, resume_tx) = pause_at(&m.hooks_for_test().model_returned);
             let fx = f.clone();
             // Past the exchange's own check, at its poll's sample.
             m.hooks_for_test().model_deadline_sampled.arm(1, move || {
