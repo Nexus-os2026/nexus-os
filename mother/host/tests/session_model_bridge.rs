@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "489898592fa481c300ed94b9bfdb2fb94cc26b701de2d6fa92b4626e49a607be";
+const EXPECT_SHA256: &str = "e81203c86168fe4fbb63ff24986decf2171d9d4b1486bbc1d184851ae51e73bf";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -1269,11 +1269,7 @@ fn check_disposition(
         return check_rc(c, (sink, dimension, value), rest);
     }
     if kind == "na" {
-        // R5.2: a hold row is resolved only by a reviewed recipe or amendment.
-        let row = c.expect_row(sink, dimension, value);
-        if row.is_some_and(|r| r[17].starts_with("hold:")) {
-            return Err(format!("{at}: na: on a hold row"));
-        }
+        // R5.2: only an amend or denial row is reviewed; a hold row falls to `listed`.
         if let Some(key) = reviewed_universe_na(c, (sink, dimension, value), rest) {
             return Ok(key);
         }
@@ -2649,7 +2645,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     check(
         "na: on hold",
         run(&excused, &held, CELLS_RS, &sha256_hex(&held)),
-        "na: on a hold row",
+        "not the audited disposition",
     );
     check(
         "a manifest entry on hold",
@@ -2704,7 +2700,7 @@ fn sb3e_expect_table_is_complete() {
             by_status["denial"],
             by_status["hold"]
         ),
-        (838, 25, 9, 33)
+        (780, 25, 9, 91)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.
@@ -2755,7 +2751,7 @@ fn sb3e_real_table_tampers_are_rejected() {
         table(&edit(panic, 8, "m:738")),
         "mislabelled point",
     );
-    let held = edit("call_chat/lifecycle/Normal", 17, "hold:x");
+    let held = edit("call_chat/ingress/mission_stop", 17, "hold:x");
     check(
         "a hold row keeping a recipe",
         table(&held),
@@ -2766,9 +2762,13 @@ fn sb3e_real_table_tampers_are_rejected() {
         table(&edit(panic, 3, "poison")),
         "expect: duplicate cell",
     );
-    let witness = fixture_edit(EXPECT, panic, |c: &mut Vec<String>| {
-        c[13] = c[13].replace("deadline_fired=none", "deadline_fired=grant_expiry");
-    });
+    let witness = fixture_edit(
+        EXPECT,
+        "call_chat/lifecycle/Normal",
+        |c: &mut Vec<String>| {
+            c[13] = c[13].replace("model.call.sampled", "model.call.observed");
+        },
+    );
     check(
         "witness changed without hash",
         table(&witness),
