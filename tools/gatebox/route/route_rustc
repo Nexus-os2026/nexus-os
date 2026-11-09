@@ -2,8 +2,16 @@
 """SB-3E route lane: RUSTC_WORKSPACE_WRAPPER (design 1.3).
 
 Adds `--cfg mother_route_seams` when, and only when, the crate name and the
-source path both match one of the four named units. Adds nothing else, and
-sets no environment variable, so the compiler and every build script see the
+source path both match one of the four named units. Adds nothing else.
+
+Environment: the compiler is handed exactly the environment this process
+received, read from `/proc/self/environ` (the block the kernel recorded at
+exec), not `os.environ`. Python's startup edits its own environment before
+any of this code runs: under a C or POSIX `LC_CTYPE` it coerces the locale
+and sets `LC_CTYPE=C.UTF-8` (PEP 538; `-I` does not prevent it), which an
+exec would pass on. An environment that cannot be passed on verbatim (an
+entry without `=`, an empty or repeated name, an unterminated block) is
+refused, never repaired. So the compiler and every build script see the
 environment Cargo gave them (A7's exhaustive exceptions are unchanged).
 
 Each invocation is logged to `<CARGO_TARGET_DIR>.route_rustc.log`, a sibling
@@ -26,15 +34,34 @@ UNITS = frozenset(
 CFG = ["--cfg", "mother_route_seams"]
 
 
+def received_environment():
+    """The exec-time environment, in order, as bytes; refuses what execve cannot copy."""
+    try:
+        with open("/proc/self/environ", "rb") as f:
+            block = f.read()
+    except OSError as e:
+        sys.exit("route_rustc: cannot read the received environment: %s" % e)
+    if block and not block.endswith(b"\0"):
+        sys.exit("route_rustc: the received environment block is unterminated")
+    env = {}
+    for entry in block.split(b"\0")[:-1]:
+        name, sep, value = entry.partition(b"=")
+        if not sep or not name or name in env:
+            sys.exit("route_rustc: the received environment cannot be passed on verbatim")
+        env[name] = value
+    return env
+
+
 def crate_name(args):
     names = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--crate-name"]
     return names[0] if len(names) == 1 else None
 
 
 def main():
+    env = received_environment()
     if len(sys.argv) < 2:
         sys.exit("route_rustc: no compiler given")
-    target = os.environ.get("CARGO_TARGET_DIR", "")
+    target = os.fsdecode(env.get(b"CARGO_TARGET_DIR", b""))
     if not target.startswith("/"):
         sys.exit("route_rustc: CARGO_TARGET_DIR must be an absolute path")
     rustc, args = sys.argv[1], sys.argv[2:]
@@ -51,7 +78,7 @@ def main():
         os.write(fd, (json.dumps(entry, sort_keys=True) + "\n").encode())
     finally:
         os.close(fd)
-    os.execv(rustc, [rustc] + args + (CFG if added else []))
+    os.execve(rustc, [rustc] + args + (CFG if added else []), env)
 
 
 if __name__ == "__main__":
