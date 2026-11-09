@@ -514,6 +514,7 @@ impl HostSession {
 #[derive(Clone, Copy, Debug)]
 pub struct CloseObligations {
     pub model: ModelObligations,
+    /// Actions still blocking the action gate: neither acknowledged nor conclusively refused before staging.
     pub actions_unacknowledged: usize,
     /// Refused before staging: discharged, and retained as the record.
     pub actions_refused: usize,

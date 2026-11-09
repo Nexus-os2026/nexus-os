@@ -2914,7 +2914,7 @@ fn sb3d_f2_only_a_refusal_before_staging_is_discharged() {
     );
     assert_eq!(counts(), (0, 5));
     let held = || f._session.inventory().unwrap().entries.len();
-    assert_eq!(held(), 0, "nothing was reserved or staged");
+    assert_eq!(held(), 0, "no Files native resource was registered");
     assert_ne!(crate::launcher::effective_uid(), 0, "root reads any dir");
     let mode = |bits| std::fs::Permissions::from_mode(bits);
     std::fs::set_permissions(&workspace, mode(0o000)).unwrap();
