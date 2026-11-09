@@ -2562,7 +2562,9 @@ impl StateStore for NexusDatabase {
 
     fn clear_all_agents(&self) -> Result<usize> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
-        let count: usize = conn.query_row("SELECT COUNT(*) FROM agents", [], |r| r.get(0))?;
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM agents", [], |r| r.get(0))?;
+        let count = usize::try_from(count)
+            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, count))?;
         conn.execute_batch(
             "DELETE FROM agents;
              DELETE FROM fuel_ledgers;
