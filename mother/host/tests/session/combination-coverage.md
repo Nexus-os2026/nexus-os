@@ -98,8 +98,4 @@ are OPEN at the session level (Oracle doc 14.7).
 
 ## SB-3D composition (spec 8.4, SB3D-R5)
 
-The `SB-3D` block of `model-bridge-cases.tsv` has one row per R4, R7, R8 and R9 sink,
-on its frozen boundary, naming its Mother-level oracle. Two have none and are OPEN:
-`attempt_pin_release` (broker A3 stands) and `close_report` (host, M2e-D). After D2:
-226 cited, 45 executed, 240 N/A, 679 OPEN (D2 678, F1 1). A row is bound to a test
-by source text; which tests ran is proven by the receipt check, not here.
+The `SB-3D` block binds one row per R4, R7, R8 and R9 sink to its oracle; two are OPEN.
