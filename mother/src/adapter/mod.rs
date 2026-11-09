@@ -1400,3 +1400,6 @@ mod m3cb_privacy_oracles;
 #[cfg(target_os = "linux")]
 #[cfg(test)]
 mod m3cb_support;
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod session_model_bridge_d_tests;

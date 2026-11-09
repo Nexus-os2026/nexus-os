@@ -7,7 +7,8 @@
 //! boundary on that value (the SB3C-R8 audit); `x:` is a C2-new oracle. The
 //! tables are the audit's record: equality proves a row was not changed since
 //! the audit, not that the audit was right. `session_oracles.rs` requires
-//! this and the retained 153,000-key matrix validator.
+//! this and the retained 153,000-key matrix validator. `x:` at the three
+//! SB3D-R3 sinks may also cite a D1 oracle (session_model_bridge_d_tests.rs).
 //!
 //! A cell is (sink, dimension, value), the B1e side x value precedent. The
 //! full cross product is not authored and not claimed (register 14.5).
@@ -72,7 +73,7 @@ const NA_REASONS: &str = "BOOTSTRAP_NO_MISSION PREBIND_NO_RUN_OR_CONSENT NO_INVO
 /// The earlier denial oracles a lifecycle N/A may name (spec 8.4).
 const DENIAL_ORACLES: &str =
     "sb3c_registration_is_bootstrap_only_once sb2_unjoined_or_owed_prevents_clean_close";
-const OWNERS: &str = "D1 D2 F1";
+const OWNERS: &str = "D2 F1";
 /// SB3C-R8 (d): every cell's audited disposition: dimension|values|disposition|sinks.
 /// A false citation, N/A or OPEN cannot match; the audit decided which holds
 /// (register 14.6). R18 precedent for OPEN.
@@ -179,16 +180,27 @@ fault|record_failed,record_unknown,panic|open:D2|attempt_pin_release
 schedule|before|c:sb3_matrix_settle_before|attempt_pin_release
 fault|none,record_failed,record_unknown,panic|open:D2|operation_complete
 fault|poison|c:sb2_owner_completion_is_bounded_and_poison_fails_closed|operation_complete
-lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D1|record_first_classify,post_record_recheck
-ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D1|record_first_classify,post_record_recheck,lane_result_admission
-fault|none,record_failed,record_unknown,poison,panic|open:D1|record_first_classify,post_record_recheck
-schedule|before,after|open:D1|record_first_classify,post_record_recheck
+lifecycle|Normal|x:sb3_unrecorded_reply_is_unusable|record_first_classify
+lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted|x:sb3_restriction_before_the_record_is_classified|record_first_classify
+lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|x:sb3_restriction_at_the_post_record_recheck|post_record_recheck
+lifecycle|SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|record_first_classify,post_record_recheck
+ingress|CR,LF,CRLF,budget,quit,fatal|x:sb3_restriction_before_the_record_is_classified|record_first_classify
+ingress|CR,LF,CRLF,budget,quit,fatal|x:sb3_restriction_at_the_post_record_recheck|post_record_recheck
+ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,grant_revocation,grant_expiry|open:D2|record_first_classify,post_record_recheck
+ingress|CR,LF,CRLF,original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|lane_result_admission
+fault|none,record_failed,record_unknown|x:sb3_unrecorded_reply_is_unusable|record_first_classify
+fault|poison,panic|open:D2|record_first_classify
+fault|none|x:sb3_restriction_at_the_post_record_recheck|post_record_recheck
+fault|record_failed,record_unknown,poison,panic|open:D2|post_record_recheck
+schedule|before|x:sb3_restriction_before_the_record_is_classified|record_first_classify
+schedule|after|x:sb3_restriction_at_the_post_record_recheck|record_first_classify
+schedule|before|x:sb3_restriction_at_the_post_record_recheck|post_record_recheck
+schedule|after|x:sb3_restriction_after_the_recheck_or_the_append|post_record_recheck,lane_result_admission
 lifecycle|Normal|c:sb3_registered_session_executes_one_recorded_call|lane_result_admission
-lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D1|lane_result_admission
+lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|lane_result_admission
 fault|none|c:sb3_registered_session_executes_one_recorded_call|lane_result_admission
-fault|decline,record_failed,record_unknown,poison,panic|open:D1|lane_result_admission
+fault|decline,record_failed,record_unknown,poison,panic|open:D2|lane_result_admission
 schedule|before|x:sb3_revocation_after_chat_entry_is_entered_only|lane_result_admission
-schedule|after|open:D1|lane_result_admission
 lifecycle|Normal|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|close_obligations
 ingress|quit|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
@@ -243,6 +255,10 @@ const RECORDED: [&str; 3] = [
     "SB3C/guard/lifecycle_states\tsb3c_lifecycle_list_matches_the_session_states\tSessionState (9 states; the forecast \"10\" was an estimate)\tSB3C-R6 (b): guard test fails on divergence\tSB-3C",
 ];
 const C2_ORACLES: &str = include_str!("../../src/adapter/session_model_composition_tests.rs");
+/// SB3D-R3 (c): the D1 oracle file; its `x:` citations are accepted only at
+/// these sinks, and only on the cells the CELLS table lists.
+const D1_ORACLES: &str = include_str!("../../src/adapter/session_model_bridge_d_tests.rs");
+const D1_SINKS: &str = "record_first_classify post_record_recheck lane_result_admission";
 
 macro_rules! sources {
     ($($file:expr),+ $(,)?) => { [$(include_str!($file)),+].concat() };
@@ -339,6 +355,7 @@ struct Context {
     frozen: BTreeMap<&'static str, Frozen>,
     cells: BTreeMap<(String, String, String), &'static str>,
     sources: String,
+    d1_oracles: String,
     receipts: BTreeSet<&'static str>,
     named_tests: RefCell<BTreeMap<String, bool>>,
 }
@@ -350,7 +367,7 @@ impl Context {
         *entry.or_insert_with(|| is_test(name, &self.sources))
     }
 }
-fn context(sources: String) -> Context {
+fn context(sources: String, d1_oracles: String) -> Context {
     let mut cells = BTreeMap::new();
     for line in CELLS.lines() {
         let f: Vec<_> = line.split('|').collect();
@@ -372,6 +389,7 @@ fn context(sources: String) -> Context {
         frozen: frozen_sinks(),
         cells,
         sources,
+        d1_oracles,
         receipts,
         named_tests: RefCell::default(),
     }
@@ -391,8 +409,11 @@ fn check_disposition(
             if c.receipts.contains(rest) {
                 return Err(format!("{at}: historical receipt {rest} is not a test"));
             }
-            if kind == "x" && !is_test(rest, C2_ORACLES) {
-                return Err(format!("{at}: x: only a C2-new oracle may claim execution"));
+            let d1_oracle = words(D1_SINKS).contains(&sink) && is_test(rest, &c.d1_oracles);
+            if kind == "x" && !d1_oracle && !is_test(rest, C2_ORACLES) {
+                return Err(format!(
+                    "{at}: x: only a C2-new oracle, or a D1 oracle at a D1 sink, may claim execution"
+                ));
             }
             if kind == "c" && !c.names_test(rest) {
                 return Err(format!("{at}: no such retained test {rest}"));
@@ -503,10 +524,14 @@ pub fn verify(tsv: &str) -> Result<Summary, String> {
 }
 /// `verify` against `sources`, so a control can plant an ignored test.
 fn verify_in(tsv: &str, sources: String) -> Result<Summary, String> {
+    verify_with(tsv, sources, D1_ORACLES.to_owned())
+}
+/// `verify_in` against a D1 oracle file other than the checked-in one.
+fn verify_with(tsv: &str, sources: String, d1: String) -> Result<Summary, String> {
     if sources.contains("#![cfg") {
         return Err("a file-level cfg in the evidence sources".into());
     }
-    let c = context(sources);
+    let c = context(sources, d1);
     let mut lines = tsv.lines();
     if lines.next() != Some(HEADER) {
         return Err("missing or altered header".into());
@@ -934,6 +959,93 @@ fn sb3c_r8_tamper_controls_are_rejected() {
         red.join("\n")
     );
 }
+/// SB3D-R3 (c): `sink|dimension|value|disposition|wanted error`. Each is a
+/// D1 claim the audit refused (sb3-d1-oracles.md) or an `x:` outside its cell.
+const D1_CONTROLS: &str = "\
+record_first_classify|fault|poison|x:sb3_restriction_before_the_record_is_classified|not the audited
+post_record_recheck|fault|record_failed|x:sb3_unrecorded_reply_is_unusable|not the audited
+post_record_recheck|lifecycle|SealedFinalizing|x:sb3_restriction_at_the_post_record_recheck|not the audited
+record_first_classify|ingress|mission_stop|x:sb3_restriction_before_the_record_is_classified|not the audited
+record_first_classify|ingress|door_fence|x:sb3_restriction_before_the_record_is_classified|not the audited
+lane_result_admission|lifecycle|Emergency|x:sb3_restriction_after_the_recheck_or_the_append|not the audited
+lane_result_admission|ingress|CR|x:sb3_restriction_after_the_recheck_or_the_append|not the audited
+lane_result_admission|fault|record_failed|x:sb3_unrecorded_reply_is_unusable|not the audited
+record_first_classify|lifecycle|Emergency|x:sb3_late_content_never_projects|not the audited
+record_first_classify|schedule|after|x:sb3_restriction_before_the_record_is_classified|not the audited
+post_record_recheck|schedule|after|x:sb3_restriction_at_the_post_record_recheck|not the audited
+post_record_recheck|ingress|budget|x:sb3_restriction_before_the_record_is_classified|not the audited
+call_chat|lifecycle|Normal|x:sb3_restriction_at_the_post_record_recheck|or a D1 oracle at a D1 sink
+post_record_recheck|schedule|after|x:sb3_no_such_d1_oracle|or a D1 oracle at a D1 sink
+record_first_classify|lifecycle|Normal|open:D1|OPEN needs an owner
+post_record_recheck|lifecycle|Normal|open:D1|OPEN needs an owner
+lane_result_admission|schedule|after|open:D1|OPEN needs an owner
+";
+/// SB3D-R3 (c): D1's `x:` cells are bound cell by cell, and only to a test
+/// the D1 file really defines.
+#[test]
+fn sb3d_r3_d1_citation_controls_are_rejected() {
+    let mut red: Vec<String> = Vec::new();
+    let mut check = |label: &str, accepted: Result<(), String>, want: &str| match accepted {
+        Ok(()) => red.push(format!("{label}: tamper accepted")),
+        Err(e) if e.contains(want) => {}
+        Err(e) => red.push(format!("{label}: wanted {want:?}, got {e}")),
+    };
+    for spec in D1_CONTROLS.lines() {
+        let f: Vec<_> = spec.split('|').collect();
+        check(spec, set_cell(f[0], f[1], f[2], f[3]).map(|_| ()), f[4]);
+    }
+    let want = "or a D1 oracle at a D1 sink";
+    let signature = "#[test]\nfn sb3_restriction_at_the_post_record_recheck() {";
+    assert!(D1_ORACLES.contains(signature), "the D1 oracle file");
+    let forms = [
+        (
+            "#[ignore] on a D1 oracle",
+            format!("#[ignore]\n{signature}"),
+        ),
+        (
+            "D1 oracle not a test",
+            signature.strip_prefix("#[test]\n").unwrap().to_owned(),
+        ),
+    ];
+    for (label, form) in forms {
+        let d1 = D1_ORACLES.replacen(signature, &form, 1);
+        let run = verify_with(&real(), evidence_sources(), d1).map(|_| ());
+        check(label, run, want);
+    }
+    let session = real().replace(
+        "x:sb3_restriction_at_the_post_record_recheck",
+        "c:sb3_restriction_at_the_post_record_recheck",
+    );
+    check(
+        "a D1 oracle is not a retained `c:`",
+        verify(&session).map(|_| ()),
+        "no such retained test",
+    );
+    assert!(
+        red.is_empty(),
+        "{} controls RED:\n{}",
+        red.len(),
+        red.join("\n")
+    );
+}
+/// SB3D-R3 (c): the audited disposition counts after D1.
+#[test]
+fn sb3d_r3_d1_cells_are_executed_or_owned() {
+    let summary = verify_supplement().unwrap();
+    let count = |key: &str| summary.by_disposition.get(key).copied().unwrap_or(0);
+    assert_eq!(
+        (
+            count("executed"),
+            count("open:D1"),
+            count("open:D2"),
+            count("open:F1")
+        ),
+        (33, 0, 690, 1),
+        "after D1: {summary:?}"
+    );
+    assert_eq!(count("cited"), 226, "no retained citation moved");
+}
+
 #[test]
 fn sb3c_ingress_block_tampering_fails() {
     let text = read(&session_file("model-bridge-cases.tsv")).unwrap();
