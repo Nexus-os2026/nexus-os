@@ -11,6 +11,7 @@ use crate::coordinator::{CoordinatorError, PreparedSessionEnd};
 use crate::evidence::BrokerClass;
 use crate::journal::Event;
 use crate::lane::{LaneContext, LaneOutput, ModelCallError, Verdict};
+use crate::state::MissionState;
 use nexus_governed_control::authority::evidence::EndStatus;
 use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::authority::AuthorityError;
@@ -379,11 +380,9 @@ fn seal_refused_after_cancel(f: &SFx, m: Mother, request: &SessionRequest, settl
 
 // -------------------------------------------------------------- H2-held
 
-/// H2-held: the peer holds metadata or chat open. While it does, the
-/// connection stands, `close_obligations()` exposes the unresolved slot and
-/// the Mother's close is Busy; Quit closes the request and it joins with a
-/// recorded failure. The broker's seal-at-the-deadline with the request held
-/// past Quit needs its private `model.call.polled` hook: B's H2-held evidence.
+/// H2-held: an open metadata or chat request is an unresolved slot and Busy;
+/// Quit closes it and it joins with a recorded failure. The connection held
+/// to the deadline stays B's evidence (its `model.call.polled` hook is private).
 #[test]
 fn sb3_mother_open_model_request_blocks_close() {
     watched(
@@ -444,10 +443,79 @@ fn open_request(arg: &str) {
 fn sb3_mother_post_seal_model_events_are_absent() {
     watched(
         "sb3_mother_post_seal_model_events_are_absent",
-        &["post-seal/late", "post-seal/completed"],
+        &[
+            "post-seal/late",
+            "post-seal/completed",
+            "post-seal/file",
+            "post-seal/refused-file",
+        ],
     );
 }
+/// A completed call with an accepted page pending at Quit closes clean (SB3D-R6
+/// (e)). A File the inert check refuses leaves an action with no receipt, so
+/// the seal's action branch (close.rs, `actions`) refuses: observed, conservative.
+fn file_at_quit(arg: &str) {
+    use crate::adapter::m3d_publication_oracles::BAKERY;
+    use crate::{adapter::c1b_coordinator_oracles::draft, contract::Note};
+    let f = SFx::canonical();
+    let page = arg == "file";
+    let m = f.mother(1, move |ctx| {
+        assert_eq!(outcome(&ask(ctx)), "ok");
+        draft(if page { BAKERY.trim_end() } else { "not inert" })
+    });
+    let mut c = f.contract();
+    c.page_facts = page.then(|| crate::page_inputs::PageFacts {
+        name: "Rosa's Bakery".into(),
+        hours: vec![
+            "Tuesday to Sunday, 7am to 3pm".into(),
+            "Closed on Mondays".into(),
+        ],
+        phone: "555-0142".into(),
+    });
+    if page {
+        c.pass_criteria = crate::page_inputs::page_criteria();
+        c.notes = vec![Note {
+            label: "notes".into(),
+            text: "Fresh bread every morning.".into(),
+        }];
+    }
+    let id = f.building(&m, c);
+    f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
+    m.advance(id).expect("the advance");
+    let want = [MissionState::Blocked, MissionState::AwaitingApproval][usize::from(page)];
+    assert_eq!(m.state(id).unwrap(), Some(want));
+    let request = quit(&f);
+    if page {
+        return close_clean(&f, m, &request, |_, _| {});
+    }
+    let _ending = sole(m).prepare_session_end().expect("prepared");
+    let s = &f.home.session;
+    s.settle_close_resources(&request).unwrap();
+    s.settle_close_authority(&request).unwrap();
+    let o = s.close_obligations().unwrap();
+    assert_eq!(
+        (o.producers_live, o.producers_lost, o.actions_unacknowledged),
+        (0, 0, 1)
+    );
+    assert!(
+        !o.model.active && !o.model.uncertain && o.authority_closed,
+        "{o:?}"
+    );
+    let (stop, held) = (
+        s.stop_obligations().unwrap(),
+        s.resource_obligations().unwrap(),
+    );
+    assert_eq!(
+        (stop.received, held.unresolved, held.uncertain),
+        (stop.recorded, 0, 0)
+    );
+    assert!(s.inventory().unwrap().entries.iter().all(|e| e.discharged));
+    assert!(s.seal_close(&request).is_err(), "the action branch refuses");
+}
 fn post_seal(arg: &str) {
+    if arg.ends_with("file") {
+        return file_at_quit(arg);
+    }
     let f = SFx::canonical();
     let (tx, rx) = channel();
     let m = f.mother(1, move |ctx| {
@@ -474,6 +542,15 @@ fn post_seal(arg: &str) {
     let run = f.home.port.inner_for_test().model_run(id).unwrap();
     let request = quit(&f);
     close_clean(&f, m, &request, move |f, _| late_attempt(f, id, run));
+    let calls = f
+        .home
+        .port
+        .inner_for_test()
+        .model_observer
+        .lock()
+        .unwrap()
+        .len();
+    assert_eq!(calls, 2, "the lane's call and the late attempt: it ran");
 }
 /// Counts every meter and deadline callback a late attempt makes.
 #[derive(Default)]
@@ -537,10 +614,8 @@ fn late_attempt(f: &SFx, id: crate::journal::MissionId, run: RunId) {
 
 // ------------------------------------------------------------------- H4
 
-/// H4: the first close deadline stands across repeated Quit, emergency and
-/// fatal triggers at each of Bootstrap, held metadata, held chat, held
-/// charge, held record and a late result. The three-second product deadline
-/// and the `<5 s` harness tolerance are the retained host controls.
+/// H4: the first deadline stands across repeated Quit, emergency and fatal at
+/// Bootstrap, held metadata, chat, charge, record and a held late result.
 #[test]
 fn sb3_shutdown_keeps_first_deadline() {
     watched(
@@ -748,10 +823,8 @@ impl crate::journal::JournalStore for Dying {
         self.file.poison()
     }
 }
-/// The child: a real session and Mother on the parent's peer. It announces
-/// its home, runs to its death point and aborts there (or the parent kills it
-/// with the chat held). `clean-*` runs a complete clean close and exits 0,
-/// leaving its home for the parent's restart.
+/// The child: a real session and Mother on the parent's peer. It dies at its
+/// point (or is killed with the chat held); `clean-*` closes clean and exits 0.
 fn die(point: &str) -> ! {
     let bound =
         std::env::var(PARENT).is_ok_and(|p| p == std::os::unix::process::parent_id().to_string());
@@ -945,12 +1018,9 @@ fn reopen(home: &std::path::Path) -> nexus_governed_control::host_session::HostS
     session
 }
 
-/// X1-D: a real child dies at the charge append (before and after its durable
-/// line), at charge success (parent kills it with the chat open), after the
-/// accepted result and after the Mother end. Two restarts each stay
-/// report-only: refused startup, the mission unresolved, no model operation,
-/// metadata/chat 0/0 from the restart. Native run/consent/meter restoration is
-/// X1-B's broker evidence; the startup refusal is why no Mother caller exists.
+/// X1-D: a real child dies at the charge append (either side of its durable
+/// line), at charge success, after the accepted result and after the Mother
+/// end. Two restarts stay report-only; native restoration is X1-B's evidence.
 #[test]
 fn sb3_mother_call_death_restarts_report_only() {
     if let Ok(point) = std::env::var(DEATH) {
@@ -996,8 +1066,8 @@ fn metadata(peer: &crate::adapter::c1b_fake_ollama::FakeOllama) -> usize {
     let at = ["/api/version", "/api/status", "/api/tags", "/api/show"];
     at.iter().map(|p| peer.count(p)).sum()
 }
-/// One report-only restart, in its own process: a real restart is a new
-/// process, and the broker's retained native storage is process-owned.
+/// One report-only restart, in its own process: the kernel Stop controller is
+/// claimed once per process, so a second front door fails closed by design.
 fn restart_child(point: &str, home: &std::path::Path) {
     let args = ["--exact", &format!("{MODULE}::{X1}"), "--nocapture"];
     let (status, out) = finished(
@@ -1041,10 +1111,8 @@ fn restart_body(spec: &str) {
     println!("{RESTARTED}");
 }
 
-/// X2: a missing call outcome stays unknown; only established facts remain,
-/// no success is inferred. The literal `unknown` is X1-B's broker surface
-/// (`historical_outcome` has no public surface, forecast Q4). A clean
-/// historical Home allows only a separately fresh, authorized startup.
+/// X2: a missing outcome infers no success (literal `unknown` is X1-B's, Q4);
+/// a clean Home allows only a fresh, authorized startup.
 #[test]
 fn sb3_missing_call_outcome_remains_unknown() {
     watched(
