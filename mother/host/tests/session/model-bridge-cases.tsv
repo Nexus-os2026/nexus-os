@@ -414,3 +414,18 @@ SB3C/ingress/fatal	sb3_matrix_r5_observer_before	SessionIngress::fail	host:fix1_
 SB3C/record/foreign_r	N/A:reachable-limited	one File port per session (file_session.rs:529)	SB3C-R6 (e): public foreign-R row not constructible; second-file-port refusal plus retained private citations stand	SB-3C
 SB3C/record/poison_session_port	OPEN:D2	no existing test seam reaches a broker hold from Mother	SB3C-R6 (f): poisoned-broker SessionPort case needs a production seam; not claimed	SB-3C
 SB3C/guard/lifecycle_states	sb3c_lifecycle_list_matches_the_session_states	SessionState (9 states; the forecast "10" was an estimate)	SB3C-R6 (b): guard test fails on divergence	SB-3C
+SB3D/charge_append	sb3_mother_call_death_restarts_report_only	Mother BorrowedMeter::charge ModelCallCharged append (coordinator/model_calls.rs)	real child dies before and after the durable charge line; each restart report-only	SB-3D
+SB3D/meter_settle	sb3_mother_unjoined_or_owed_prevents_clean_close	Mother BorrowedMeter::settle clears in_flight (coordinator/model_calls.rs)	a settled meter leaves record debt: Mother close refused as Recording (MP-SB-9-meter)	SB-3D
+SB3D/attempt_record	sb3_mother_completed_call_allows_clean_close	model::Attempt::record_return native model_call record	one completed call: the native record is recorded before the clean close	SB-3D
+SB3D/attempt_pin_release	OPEN:D2	run table settle_session_attempt exact model pin	no Mother-level oracle observes the pin release; broker A3 stands	SB-3D
+SB3D/operation_complete	sb3_mother_completed_call_allows_clean_close	Attempt::complete to Owner::complete slot release	owner and child complete after the joined call	SB-3D
+SB3D/record_first_classify	sb3_unrecorded_reply_is_unusable	Mother adapter::classify, record before reply (adapter/mod.rs)	D1 O1: an unrecorded reply is unusable	SB-3D
+SB3D/post_record_recheck	sb3_restriction_at_the_post_record_recheck	Mother Caller::call C1 recheck after the record (coordinator/model_calls.rs)	D1 O2: restriction at the recheck drops the reply	SB-3D
+SB3D/lane_result_admission	sb3_restriction_after_the_recheck_or_the_append	Mother Coordinator LaneReturned append (coordinator.rs)	D1 O2: restriction after the recheck or the append	SB-3D
+SB3D/close_obligations	sb3_mother_open_model_request_blocks_close	HostSession::close_obligations (host_session/close.rs)	an open metadata or chat request is an unresolved slot and Busy	SB-3D
+SB3D/close_report	OPEN:M2e-D	Runtime::close_report (mother/host/src/hands.rs)	Runtime::close_report is host wiring: M2e-D	SB-3D
+SB3D/producer_join	sb3_mother_completed_call_allows_clean_close	Producer::joined for the close operation (settle_close_resources)	producers joined: no live or lost producer after the clean close	SB-3D
+SB3D/seal	sb3_mother_unjoined_or_owed_prevents_clean_close	HostSession::seal_close (host_session/close.rs)	unjoined work refuses the seal; the joined call seals clean	SB-3D
+SB3D/mother_end	sb3_mother_post_seal_model_events_are_absent	CloseSeal::begin_mother_end / observe_mother_end	one Mother end, distinct from the primary end and delivery	SB-3D
+SB3D/primary_end	sb3_mother_post_seal_model_events_are_absent	HostSession::close_primary session_closed record	primary end recorded only at its own step	SB-3D
+SB3D/delivery	sb3_mother_post_seal_model_events_are_absent	CloseSeal::finish_delivery	delivery recorded only at its own step	SB-3D

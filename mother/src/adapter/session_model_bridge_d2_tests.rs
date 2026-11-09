@@ -205,6 +205,7 @@ fn clean(arg: &str) {
     };
     if completed {
         let id = f.building(&m, f.contract());
+        assert_eq!(f.home.session.state(), SessionState::Normal);
         m.advance(id).unwrap();
         assert_eq!(f.charges(), 1, "one charged call");
         assert_eq!(f.fake.count("/api/chat"), 1);
@@ -391,6 +392,11 @@ fn open_request(arg: &str) {
     assert_eq!(o.record, "pending", "{path}");
     assert_eq!(m.close(), Err(CoordinatorError::Busy), "{path}: Busy");
     let _ = quit(&f);
+    assert_eq!(
+        f.home.session.state(),
+        SessionState::ClosingNormal,
+        "{path}"
+    );
     assert!(f.fake.wait(Seen::Closed(path.clone())), "{path}: it closes");
     let got = within(&rx);
     assert!(
@@ -532,12 +538,16 @@ fn repeat_triggers(
         first,
         "{case}: the request's own deadline"
     );
+    let closing = |want: SessionState| assert_eq!(f_session.state(), want, "{case}");
+    closing(SessionState::ClosingNormal);
     let again = ingress
         .accept(CommandKind::Quit, base + 1)
         .expect("repeated Quit");
     assert_eq!(again.deadline(), first, "{case}: repeated Quit");
+    closing(SessionState::ClosingNormal);
     ingress.emergency().ok();
     ingress.fail();
+    closing(SessionState::ClosingRestricted);
     ingress.emergency().ok();
     let last = ingress.accept(CommandKind::Quit, base + 2);
     assert_eq!(ingress.close_deadline(), Some(first), "{case}: triggers");

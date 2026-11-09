@@ -136,8 +136,13 @@ ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_
 fault|none|c:sb3_matrix_r3_cas_before|attempt_ticket
 schedule|before|c:sb3_matrix_r3_cas_before|attempt_ticket
 schedule|after|c:sb3_matrix_r3_cas_after|attempt_ticket
-lifecycle|Normal,Emergency,Failed,ClosingNormal,ClosingRestricted|open:D2|charge_append,meter_settle,operation_complete
-fault|none,decline,record_unknown,poison,panic|open:D2|charge_append
+lifecycle|Emergency,Failed,ClosingRestricted|open:D2|charge_append,meter_settle,operation_complete
+lifecycle|Normal|open:D2|meter_settle,operation_complete
+lifecycle|Normal|x:sb3_mother_completed_call_allows_clean_close|charge_append
+lifecycle|ClosingNormal|open:D2|charge_append,meter_settle
+lifecycle|ClosingNormal|x:sb3_mother_open_model_request_blocks_close|operation_complete
+fault|decline,record_unknown,poison,panic|open:D2|charge_append
+fault|none|x:sb3_mother_completed_call_allows_clean_close|charge_append
 fault|record_failed|x:sb3_durable_charge_precedes_chat|charge_append
 schedule|before,after|open:D2|charge_append,meter_settle,cancel_run,door_halt,emergency_restrict,close_restrict,operation_complete,close_obligations,close_report,producer_join
 fault|none,record_failed,record_unknown,poison,panic|open:D2|meter_settle,close_report
@@ -158,7 +163,13 @@ fault|decline,panic|open:D2|call_version,call_status,call_tags
 schedule|before|c:sb3_matrix_r5_observer_before|call_version,call_status,call_tags,call_chat
 schedule|after|c:sb3_matrix_r5_cas_after|call_version,call_status,call_tags,call_chat
 fault|none,decline,record_failed,record_unknown,poison,panic|open:D2|cancel_run,door_halt
-lifecycle|Bootstrap,Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|emergency_restrict,close_restrict
+lifecycle|Emergency,Failed,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|emergency_restrict,close_restrict
+lifecycle|ClosingRestricted|x:sb3_shutdown_keeps_first_deadline|emergency_restrict
+lifecycle|ClosingRestricted|x:sb3_shutdown_keeps_first_deadline|close_restrict
+lifecycle|ClosingNormal|x:sb3_shutdown_keeps_first_deadline|emergency_restrict
+lifecycle|ClosingNormal|x:sb3_shutdown_keeps_first_deadline|close_restrict
+lifecycle|Bootstrap|open:D2|emergency_restrict
+lifecycle|Bootstrap|x:sb3_shutdown_keeps_first_deadline|close_restrict
 lifecycle|Normal|c:sb3_held_request_cancels_and_joins|emergency_restrict,close_restrict
 ingress|CR,LF,CRLF|c:sb3_held_request_cancels_and_joins|emergency_restrict
 ingress|original_cell_unscheduled,repeated,EOF,partial_Ctrl_D,master_close,read_failure,mission_stop,stop_all,door_fence,budget,grant_revocation,grant_expiry,quit,fatal|open:D2|emergency_restrict
@@ -178,7 +189,8 @@ ingress|CR,LF,CRLF,budget,grant_revocation,grant_expiry,quit,fatal|c:sb3_matrix_
 fault|none,poison|c:sb3_matrix_settle_before|attempt_pin_release
 fault|record_failed,record_unknown,panic|open:D2|attempt_pin_release
 schedule|before|c:sb3_matrix_settle_before|attempt_pin_release
-fault|none,record_failed,record_unknown,panic|open:D2|operation_complete
+fault|record_failed,record_unknown,panic|open:D2|operation_complete
+fault|none|x:sb3_mother_completed_call_allows_clean_close|operation_complete
 fault|poison|c:sb2_owner_completion_is_bounded_and_poison_fails_closed|operation_complete
 lifecycle|Normal|x:sb3_unrecorded_reply_is_unusable|record_first_classify
 lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted|x:sb3_restriction_before_the_record_is_classified|record_first_classify
@@ -202,7 +214,10 @@ fault|none|c:sb3_registered_session_executes_one_recorded_call|lane_result_admis
 fault|decline,record_failed,record_unknown,poison,panic|open:D2|lane_result_admission
 schedule|before|x:sb3_revocation_after_chat_entry_is_entered_only|lane_result_admission
 lifecycle|Normal|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
-lifecycle|Emergency,Failed,ClosingNormal,ClosingRestricted,SealedFinalizing,ClosedClean,ClosedUnclean|open:D2|close_obligations
+lifecycle|Emergency,Failed,ClosingRestricted,ClosedUnclean|open:D2|close_obligations
+lifecycle|ClosedClean|x:sb3_mother_post_seal_model_events_are_absent|close_obligations
+lifecycle|SealedFinalizing|x:sb3_mother_post_seal_model_events_are_absent|close_obligations
+lifecycle|ClosingNormal|x:sb3_mother_open_model_request_blocks_close|close_obligations
 ingress|quit|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 fault|none|c:sb3_open_model_request_at_deadline_blocks_seal|close_obligations
 fault|record_failed,poison|c:sb3_unjoined_or_owed_prevents_clean_close|close_obligations
@@ -259,6 +274,29 @@ const C2_ORACLES: &str = include_str!("../../src/adapter/session_model_compositi
 /// these sinks, and only on the cells the CELLS table lists.
 const D1_ORACLES: &str = include_str!("../../src/adapter/session_model_bridge_d_tests.rs");
 const D1_SINKS: &str = "record_first_classify post_record_recheck lane_result_admission";
+/// SB3D-R5: the D2 oracle file, and the sinks where its `x:` is accepted, only
+/// on the cells the CELLS table lists.
+const D2_ORACLES: &str = include_str!("../../src/adapter/session_model_bridge_d2_tests.rs");
+const D2_SINKS: &str =
+    "charge_append operation_complete emergency_restrict close_restrict close_obligations";
+/// Spec 8.4: every R4/R7/R8/R9 sink's Mother-level D oracle, or its open owner.
+const D_ROWS: &str = "\
+charge_append|sb3_mother_call_death_restarts_report_only
+meter_settle|sb3_mother_unjoined_or_owed_prevents_clean_close
+attempt_record|sb3_mother_completed_call_allows_clean_close
+attempt_pin_release|OPEN:D2
+operation_complete|sb3_mother_completed_call_allows_clean_close
+record_first_classify|sb3_unrecorded_reply_is_unusable
+post_record_recheck|sb3_restriction_at_the_post_record_recheck
+lane_result_admission|sb3_restriction_after_the_recheck_or_the_append
+close_obligations|sb3_mother_open_model_request_blocks_close
+close_report|OPEN:M2e-D
+producer_join|sb3_mother_completed_call_allows_clean_close
+seal|sb3_mother_unjoined_or_owed_prevents_clean_close
+mother_end|sb3_mother_post_seal_model_events_are_absent
+primary_end|sb3_mother_post_seal_model_events_are_absent
+delivery|sb3_mother_post_seal_model_events_are_absent
+";
 
 macro_rules! sources {
     ($($file:expr),+ $(,)?) => { [$(include_str!($file)),+].concat() };
@@ -410,9 +448,10 @@ fn check_disposition(
                 return Err(format!("{at}: historical receipt {rest} is not a test"));
             }
             let d1_oracle = words(D1_SINKS).contains(&sink) && is_test(rest, &c.d1_oracles);
-            if kind == "x" && !d1_oracle && !is_test(rest, C2_ORACLES) {
+            let d2_oracle = words(D2_SINKS).contains(&sink) && is_test(rest, D2_ORACLES);
+            if kind == "x" && !d1_oracle && !d2_oracle && !is_test(rest, C2_ORACLES) {
                 return Err(format!(
-                    "{at}: x: only a C2-new oracle, or a D1 oracle at a D1 sink, may claim execution"
+                    "{at}: x: only a C2-new oracle, or a D1 oracle at a D1 sink, or a D2 oracle at a D2 sink, may claim execution"
                 ));
             }
             if kind == "c" && !c.names_test(rest) {
@@ -625,9 +664,69 @@ fn verify_cases_in(cases: &str, sources: String) -> Result<usize, String> {
     Ok(block.len())
 }
 
+/// Spec 8.4 composition: the disjoint `SB-3D` block has one row per R4/R7/R8/R9
+/// sink, on that sink's frozen boundary, naming exactly its listed D oracle.
+pub fn verify_d_block(cases: &str) -> Result<usize, String> {
+    let frozen = frozen_sinks();
+    let receipts = include_str!("session/combination-receipts.tsv");
+    let is_receipt = |id: &str| receipts.lines().any(|l| l.split('\t').next() == Some(id));
+    let listed: BTreeMap<_, _> = D_ROWS.lines().filter_map(|l| l.split_once('|')).collect();
+    for (sink, row) in &frozen {
+        if ["R4", "R7", "R8", "R9"].contains(&row[0]) != listed.contains_key(sink) {
+            return Err(format!("{sink}: the D table and the routes disagree"));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    for line in cases.lines() {
+        let row: Vec<&str> = line.split('\t').collect();
+        if !row[0].starts_with("SB3D/") && !row.contains(&"SB-3D") {
+            continue;
+        }
+        if row.len() != 5 || row[4] != "SB-3D" {
+            return Err(format!("malformed SB-3D row: {line}"));
+        }
+        let sink = row[0].strip_prefix("SB3D/").unwrap_or(row[0]);
+        let want = listed
+            .get(sink)
+            .ok_or_else(|| format!("unknown SB-3D row {sink}"))?;
+        if !seen.insert(sink) {
+            return Err(format!("duplicate SB-3D row {sink}"));
+        }
+        let test = row[1];
+        if test.starts_with("N/A") {
+            return Err(format!("{sink}: N/A escape in the SB-3D block"));
+        }
+        if is_receipt(test) {
+            return Err(format!(
+                "{sink}: historical receipt {test} is not a D oracle"
+            ));
+        }
+        if row[2] != frozen[sink][2] {
+            return Err(format!("{sink}: not this sink's boundary"));
+        }
+        if test != *want {
+            return Err(format!("{sink}: unrelated oracle {test}"));
+        }
+        let defined = is_test(test, D1_ORACLES) || is_test(test, D2_ORACLES);
+        if !test.starts_with("OPEN:") && !defined {
+            return Err(format!("{sink}: no such D oracle {test}"));
+        }
+    }
+    if seen.len() != listed.len() {
+        return Err(format!(
+            "missing SB-3D rows: {} of {}",
+            seen.len(),
+            listed.len()
+        ));
+    }
+    Ok(seen.len())
+}
+
 /// Both supplement checks, on the checked-in files (`session_oracles.rs`).
 pub fn verify_supplement() -> Result<Summary, String> {
-    verify_cases(&read(&session_file("model-bridge-cases.tsv"))?)?;
+    let cases = read(&session_file("model-bridge-cases.tsv"))?;
+    verify_cases(&cases)?;
+    verify_d_block(&cases)?;
     verify(&read(&session_file("model-bridge-sinks.tsv"))?)
 }
 
@@ -1028,7 +1127,61 @@ fn sb3d_r3_d1_citation_controls_are_rejected() {
         red.join("\n")
     );
 }
-/// SB3D-R3 (c): the audited disposition counts after D1.
+/// MP-SB-R32-D (x4), and D2's `x:` bound cell by cell.
+#[test]
+fn sb3d_r32_composition_controls_are_rejected() {
+    let text = read(&session_file("model-bridge-cases.tsv")).unwrap();
+    assert_eq!(verify_d_block(&text).unwrap(), 15);
+    let receipts = include_str!("session/combination-receipts.tsv");
+    let receipt = receipts.lines().nth(1).unwrap().split('\t').next().unwrap();
+    let row = "SB3D/close_obligations\tsb3_mother_open_model_request_blocks_close";
+    assert!(text.contains(row));
+    let swap = |to: &str| text.replacen(row, &format!("SB3D/close_obligations\t{to}"), 1);
+    let kept: Vec<_> = text
+        .lines()
+        .filter(|l| !l.starts_with("SB3D/seal\t"))
+        .collect();
+    for (cases, want) in [
+        (kept.join("\n"), "missing SB-3D rows"),
+        (
+            swap("sb3_mother_completed_call_allows_clean_close"),
+            "unrelated oracle",
+        ),
+        (swap("N/A:reachable-limited"), "N/A escape"),
+        (swap(receipt), "historical receipt"),
+    ] {
+        let err = verify_d_block(&cases).expect_err(want);
+        assert!(err.contains(want), "{want}: got {err}");
+    }
+    let oracle = "x:sb3_mother_completed_call_allows_clean_close";
+    for (sink, dimension, value, to, want) in [
+        (
+            "charge_append",
+            "fault",
+            "poison",
+            oracle,
+            "not the audited",
+        ),
+        (
+            "close_obligations",
+            "lifecycle",
+            "Emergency",
+            oracle,
+            "not the audited",
+        ),
+        (
+            "call_chat",
+            "lifecycle",
+            "Normal",
+            oracle,
+            "or a D2 oracle at a D2 sink",
+        ),
+    ] {
+        let err = set_cell(sink, dimension, value, to).expect_err(want);
+        assert!(err.contains(want), "{sink}: {want}: got {err}");
+    }
+}
+/// SB3D-R3 (c), SB3D-R5: the audited disposition counts after D2.
 #[test]
 fn sb3d_r3_d1_cells_are_executed_or_owned() {
     let summary = verify_supplement().unwrap();
@@ -1040,8 +1193,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:D2"),
             count("open:F1")
         ),
-        (33, 0, 690, 1),
-        "after D1: {summary:?}"
+        (45, 0, 678, 1),
+        "after D2: {summary:?}"
     );
     assert_eq!(count("cited"), 226, "no retained citation moved");
 }
