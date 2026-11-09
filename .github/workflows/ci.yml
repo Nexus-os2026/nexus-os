@@ -388,12 +388,19 @@ jobs:
       - name: Install the desktop's build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev pkg-config
+          sudo apt-get install -y libgtk-4-dev pkg-config libc6-dev
+
+      - name: Build the route wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -static \
+            -o "$RUNNER_TEMP/route_rustc" tools/gatebox/route/route_rustc.c
 
       - name: Route lane (fresh target)
         shell: bash
         run: |
           set -euo pipefail
-          RUSTC_WORKSPACE_WRAPPER="$PWD/tools/gatebox/route/route_rustc" \
+          RUSTC_WORKSPACE_WRAPPER="$RUNNER_TEMP/route_rustc" \
           CARGO_TARGET_DIR="$RUNNER_TEMP/route-lane" \
             cargo test --release --locked -p nexus-mother-host -p nexus-mother-desktop --test route_cells
