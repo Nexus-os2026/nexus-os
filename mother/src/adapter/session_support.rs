@@ -281,3 +281,16 @@ fn leak_pid(home: &std::path::Path) -> u32 {
     let rest = name.strip_prefix("m2dd-stale-home-").unwrap();
     rest.split('-').next().unwrap().parse().unwrap()
 }
+
+impl Fixture {
+    /// SB-3 D2: `with_model`, with the production history inspector bound
+    /// (SessionHistoryInspector) so a model journal can pass the seal's history
+    /// check, as in `session_home.rs`.
+    pub fn with_model_canonical(
+        label: &str,
+        endpoint: &str,
+        spec: nexus_governed_control::inference::ModelPinSpec,
+    ) -> Self {
+        Self::build(label, true, Some((endpoint, spec)))
+    }
+}
