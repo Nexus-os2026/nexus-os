@@ -301,6 +301,408 @@ primary_end|sb3_mother_post_seal_model_events_are_absent
 delivery|sb3_mother_post_seal_model_events_are_absent
 ";
 
+/// SB-3E U2 (design 2.5): the per-cell expectations, authored separately from
+/// the manifest; neither is derived from the other, the verifier compares
+/// them. It shows consistency, not that a test ran (2.5, 14.13).
+const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
+const CELLS_RS: &str = include_str!("route_cells/cells.rs");
+const EXPECT_SHA256: &str = "2fb984cb17aff1c07c49fb60e1f55533f8dc5d7379b12b073318471dd05b0d79";
+const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
+const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
+const BYTES: &str = "CR LF CRLF EOF partial_Ctrl_D master_close read_failure";
+const AMEND_REASON: &str = "NO_SUCH_EVENT_AT_THIS_BOUNDARY";
+/// Composed applicability oracles (6.2). None exists yet: U11 lists them.
+const AMEND_ORACLES: &str = "";
+const DENIAL_ROW_ORACLE: &str = "sb3e_unresolved_lane_refuses_seal";
+/// Design 6.1, literal: `dimension|values|sinks` of the 25 candidates, which
+/// stay OPEN as `status=amend:` until a reviewed unit (U11) applies them.
+const AMEND_CELLS: &str = "\
+fault|decline|identity_view,inference_binding,call_slot_reserve,attempt_ticket,charge_append,call_version,call_status,call_tags,call_chat,door_halt,emergency_restrict,close_restrict,lane_result_admission
+fault|record_failed,record_unknown|registration_install,attempt_pin_release,operation_complete,post_record_recheck
+fault|poison|record_first_classify,emergency_restrict,close_restrict,post_record_recheck
+";
+/// Design 6.3, literal: the nine R8 lifecycle cells, OPEN until their oracle.
+const DENIAL_CELLS: &str = "lifecycle|SealedFinalizing,ClosedClean,ClosedUnclean|record_first_classify,post_record_recheck,lane_result_admission";
+/// Design 4.4, literal: sinks|driver|entry|check|exit.
+const SINK_POINTS: &str = "\
+registration_reserve|d_register|reg.reserve|m:126-141|model.reserved
+registration_record|d_register|model.record.before|m:292-299|m:300
+registration_install|d_register|model.install.before|m:304|model.install.after
+registration_readiness|d_bootstrap|reg.ready|h:838|h:841
+identity_view|d_identity|identity|m:571,575-579|m:580
+inference_binding|d_bind|bind.entry|model.bind.checked,CAS:r:2301|bind.done
+call_slot_reserve|d_call|attempt.slot|m:371-381|model.attempt.reserved
+attempt_ticket|d_call|model.attempt.reserved|model.attempt.granted,model.attempt.checked,CAS:r:2125|r:2127
+charge_append|d_call|mother.charge.entry|mc:205-250,mother.charge|mother.charge.ok
+meter_settle|d_call|mother.settle|mc:296-300|clear
+registration_version,registration_status,registration_tags,registration_show|d_register|model.gate.before|model.gate.checked,CAS:m:238|m:258
+call_version,call_status,call_tags,call_chat|d_call|call.gate|model.call.sampled,model.call.observed,CAS:m:774|model.call.admitted
+cancel_run|d_cancel|door.cancel_run|h:1382-1390|return
+door_halt|d_halt|door.halt|h:1409-1411|return
+emergency_restrict|d_stop|ingress.emergency|CAS:h:1630-1633|event
+close_restrict|d_quit|ingress.accept|h:1690-1712|request
+attempt_record|d_call|model.attempt.record.before|m:470|m:475
+attempt_pin_release|d_call|model.settle.before|r:2146-2153|return
+operation_complete|d_call|complete|m:478,settle:m:482|m:488
+record_first_classify|d_call|mother.classify|ad:549-558|ad:849
+post_record_recheck|d_call|mother.recheck|mc:471,mc:481|mc:482
+lane_result_admission|d_lane|mother.lane.prelock|mother.admit,co:712|mother.admit.ok,mother.lane.returned
+close_obligations|d_close|close.obligations|c:265-300|return
+close_report|host|host.close_report|note|string
+producer_join|d_close|producer.join|c:48-54|c:54
+seal|d_close|close.seal|c:372-429,CAS:c:446-452|c:456
+mother_end|d_close|close.mother_end|CAS:c:208,c:462-480|return
+primary_end|d_close|close.primary|c:490-505|return
+delivery|d_close|close.delivery|c:227-234|return
+";
+
+/// The parsed table: its rows, each cell's row, and the literal manifest.
+#[derive(Default)]
+struct Expect {
+    rows: Vec<Vec<String>>,
+    cells: BTreeMap<(String, String, String), usize>,
+    manifest: BTreeSet<String>,
+}
+fn parse_manifest(text: &str) -> Result<BTreeSet<String>, String> {
+    let (body, tail) = text
+        .split_once("cells! {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .ok_or("manifest: no cells! block")?;
+    if !tail.trim().is_empty() {
+        return Err("manifest: text after the cells! block".into());
+    }
+    let mut cells = BTreeSet::new();
+    for entry in body.split(';').map(str::trim).filter(|e| !e.is_empty()) {
+        let fields: Vec<_> = entry.split_whitespace().collect();
+        if fields.len() != 4 || !cells.insert(fields.join("/")) {
+            return Err(format!("manifest: malformed or repeated entry {entry:?}"));
+        }
+    }
+    Ok(cells)
+}
+fn parse_expect(text: &str, manifest: &str) -> Result<Expect, String> {
+    let mut lines = text.lines();
+    if lines.next() != Some(EXPECT_HEADER) {
+        return Err("expect: missing or altered header".into());
+    }
+    let mut expect = Expect {
+        manifest: parse_manifest(manifest)?,
+        ..Expect::default()
+    };
+    for line in lines {
+        let row: Vec<String> = line.split('\t').map(String::from).collect();
+        if row.len() != 18 || row.iter().any(String::is_empty) {
+            return Err(format!("expect: malformed row: {line}"));
+        }
+        for value in row[3].split(',') {
+            let cell = (row[1].clone(), row[2].clone(), value.to_owned());
+            if expect.cells.insert(cell, expect.rows.len()).is_some() {
+                let (sink, dim) = (&row[1], &row[2]);
+                return Err(format!("expect: duplicate cell {sink}/{dim}/{value}"));
+            }
+        }
+        expect.rows.push(row);
+    }
+    Ok(expect)
+}
+fn sha256_hex(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(text.as_bytes()))
+}
+/// A hash mismatch is reported apart, so it cannot mask a semantic check.
+pub fn verify_expect_hash(text: &str) -> Result<(), String> {
+    let actual = sha256_hex(text);
+    if actual == EXPECT_SHA256 {
+        Ok(())
+    } else {
+        Err(format!(
+            "EXPECT_SHA256 does not match the table: {actual} (changed without review?)"
+        ))
+    }
+}
+/// The mechanism a coordinate belongs to (design 2.2, 7).
+fn mech_of(sink: &str, dim: &str, value: &str) -> &'static str {
+    match (sink, dim, value) {
+        ("close_report", ..) => "close_report",
+        (_, "lifecycle", _) => "lifecycle",
+        (_, "schedule", _) => "schedule",
+        (_, "fault", "none") => "fault_none",
+        (_, "fault", "decline") => "decline",
+        (_, "fault", "poison") => "fault_lock",
+        (_, "fault", "panic") => "fault_panic",
+        (_, "fault", _) => "fault_record",
+        ("mother_end", _, "budget") => "finalize",
+        (_, _, "grant_revocation" | "grant_expiry") => "grant",
+        _ if words(BYTES).contains(&value) => "byte",
+        _ => "ingress",
+    }
+}
+/// Design 4.4 for a sink: [driver, entry, check, exit].
+fn sink_points(sink: &str) -> Option<[&'static str; 4]> {
+    let names = |l: &&str| {
+        l.split('|')
+            .next()
+            .is_some_and(|n| n.split(',').any(|m| m == sink))
+    };
+    let line = SINK_POINTS.lines().find(names)?;
+    let f: Vec<_> = line.split('|').collect();
+    Some([f[1], f[2], f[3], f[4]])
+}
+/// The row's driver and points are exactly the sink's in design 4.4.
+fn points_agree(row: &[String]) -> Result<(), String> {
+    let [driver, entry, check, exit] =
+        sink_points(&row[1]).ok_or_else(|| format!("expect: foreign sink {}", row[1]))?;
+    if row[6] != driver {
+        return Err(format!("{}: wrong driver {}", row[1], row[6]));
+    }
+    if (row[7].as_str(), row[8].as_str(), row[9].as_str()) != (entry, check, exit) {
+        let (e, c, x) = (&row[7], &row[8], &row[9]);
+        return Err(format!("{}: mislabelled point {e}|{c}|{x}", row[1]));
+    }
+    Ok(())
+}
+/// One row's closed vocabulary, once its driver and points agree with 4.4.
+fn check_expect_row(row: &[String], dim_values: &[&str]) -> Result<(), String> {
+    let (sink, dim) = (&row[1], row[2].as_str());
+    let at = format!("{sink}/{dim}/{}", row[3]);
+    points_agree(row)?;
+    for value in row[3].split(',') {
+        if !dim_values.contains(&value) {
+            return Err(format!("{at}: unknown value {value}"));
+        }
+        if row[4] != mech_of(sink, dim, value) {
+            return Err(format!("{at}: wrong mech {} for {value}", row[4]));
+        }
+    }
+    let lifecycle = dim == "lifecycle";
+    let setup_ok = match row[5].strip_prefix("state:") {
+        Some(state) => words(LIFECYCLE).contains(&state) && (!lifecycle || row[3] == state),
+        None => !lifecycle && matches!(row[5].as_str(), "canonical" | "awaiting"),
+    };
+    if !setup_ok {
+        return Err(format!("{at}: bad setup {}", row[5]));
+    }
+    let exec_ok = row[10] == "own"
+        || row[10].strip_prefix("g:").is_some_and(|g| {
+            !g.is_empty()
+                && !row[3].contains(',')
+                && g.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        });
+    if !exec_ok {
+        return Err(format!("{at}: bad exec {}", row[10]));
+    }
+    let apply = row[11].as_str();
+    let held = apply
+        .strip_prefix("paused@")
+        .or_else(|| apply.strip_prefix("before@"));
+    let points = [row[7].as_str(), row[8].as_str(), row[9].as_str()];
+    let apply_ok = match held {
+        Some(point) => points.iter().any(|p| p.split(',').any(|t| t == point)),
+        None => ["reader:", "shim:wal_fsync:", "s2:refuse:"]
+            .iter()
+            .any(|p| apply.strip_prefix(p).is_some_and(|tail| !tail.is_empty())),
+    };
+    if !apply_ok {
+        return Err(format!("{at}: bad apply {apply}"));
+    }
+    let expect = row[12].as_str();
+    let predicate = expect
+        .strip_prefix("refused:")
+        .or(expect.strip_prefix("closed:"));
+    let expect_ok = predicate.map_or(
+        matches!(
+            expect,
+            "passed"
+                | "recorded"
+                | "gate_refused"
+                | "owed"
+                | "uncertain"
+                | "retained"
+                | "not_entered"
+        ),
+        |p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'),
+    );
+    if !expect_ok {
+        return Err(format!("{at}: bad expect {expect}"));
+    }
+    let keys = "trace value out peer ledger next store deadline_fired";
+    let mut seen = BTreeMap::new();
+    for part in row[13].split(';') {
+        let (key, value) = part.split_once('=').unwrap_or((part, ""));
+        if !words(keys).contains(&key) || value.is_empty() || seen.insert(key, value).is_some() {
+            return Err(format!("{at}: bad witness field {part:?}"));
+        }
+    }
+    let required = ["trace", "value", "out", "deadline_fired"];
+    if !required.iter().all(|k| seen.contains_key(k)) {
+        return Err(format!("{at}: bad witness, a required field is missing"));
+    }
+    if !seen["out"].starts_with(expect) || !seen["trace"].starts_with(row[7].as_str()) {
+        return Err(format!("{at}: bad witness, out or trace disagrees"));
+    }
+    if row[14] != format!("ctl_{sink}") {
+        return Err(format!("{at}: bad control {}", row[14]));
+    }
+    let plant = row[15].strip_prefix("shared:").unwrap_or(&row[15]);
+    if !plant.starts_with("pl_") || row[16].contains(' ') {
+        return Err(format!("{at}: bad plant or refs"));
+    }
+    let status_ok = match row[17].split_once(':') {
+        None => row[17] == "open",
+        Some(("amend", reason)) => reason == AMEND_REASON,
+        Some(("denial", oracle)) => oracle == DENIAL_ROW_ORACLE,
+        _ => false,
+    };
+    if !status_ok {
+        return Err(format!("{at}: bad status {}", row[17]));
+    }
+    Ok(())
+}
+/// Expands one `dimension|values|sinks` literal.
+fn listed_cells(table: &str) -> BTreeSet<(String, String, String)> {
+    let mut cells = BTreeSet::new();
+    for line in table.lines() {
+        let f: Vec<_> = line.split('|').collect();
+        for sink in f[2].split(',') {
+            for value in f[1].split(',') {
+                cells.insert((sink.to_owned(), f[0].to_owned(), value.to_owned()));
+            }
+        }
+    }
+    cells
+}
+/// Design 2.5: the universe literal, and the table expands to exactly it.
+fn check_expect_table(c: &Context) -> Result<(), String> {
+    let universe: BTreeSet<_> = c
+        .cells
+        .keys()
+        .filter(|k| c.in_universe(k))
+        .cloned()
+        .collect();
+    let mut lines: Vec<String> = universe
+        .iter()
+        .map(|(s, d, v)| format!("{}/{s}/{d}/{v}", c.frozen[s.as_str()][0]))
+        .collect();
+    lines.sort();
+    let actual = sha256_hex(&(lines.join("\n") + "\n"));
+    if actual != UNIVERSE_SHA256 {
+        return Err(format!("universe: {actual} is not the frozen universe"));
+    }
+    if let Some((s, d, v)) = universe.iter().find(|k| !c.expect.cells.contains_key(*k)) {
+        return Err(format!("expect: missing cell {s}/{d}/{v}"));
+    }
+    if let Some((s, d, v)) = c.expect.cells.keys().find(|k| !universe.contains(*k)) {
+        return Err(format!("expect: extra cell {s}/{d}/{v}"));
+    }
+    let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
+    let mut groups: BTreeMap<&str, BTreeSet<(&str, &str)>> = BTreeMap::new();
+    for row in &c.expect.rows {
+        let frozen = c.frozen.get(row[1].as_str());
+        if frozen.is_none_or(|s| s[0] != row[0]) {
+            return Err(format!("expect: wrong route {} for {}", row[0], row[1]));
+        }
+        let values = DIMENSIONS
+            .iter()
+            .find(|(d, _)| *d == row[2])
+            .ok_or_else(|| format!("expect: unknown dimension {}", row[2]))?;
+        check_expect_row(row, &words(values.1))?;
+        for value in row[3].split(',') {
+            let cell = (row[1].clone(), row[2].clone(), value.to_owned());
+            let want = match (amend.contains(&cell), denial.contains(&cell)) {
+                (true, _) => format!("amend:{AMEND_REASON}"),
+                (_, true) => format!("denial:{DENIAL_ROW_ORACLE}"),
+                _ => "open".to_owned(),
+            };
+            if row[17] != want {
+                return Err(format!(
+                    "{}/{}/{value}: status is not {want}",
+                    row[1], row[2]
+                ));
+            }
+        }
+        if row[10] != "own" {
+            let field = |key: &str| {
+                let prefix = format!("{key}=");
+                let mut parts = row[13].split(';');
+                parts
+                    .find_map(|p| p.strip_prefix(prefix.as_str()))
+                    .unwrap_or("-")
+            };
+            let key = (field("trace"), field("ledger"));
+            if !groups.entry(row[10].as_str()).or_default().insert(key) {
+                return Err(format!(
+                    "{}: exec group {} repeats a trace and ledger",
+                    row[1], row[10]
+                ));
+            }
+        }
+    }
+    // Neither list is derived from the other: every manifest entry needs an
+    // open row of the same route.
+    for entry in &c.expect.manifest {
+        let f: Vec<_> = entry.split('/').collect();
+        let cell = (f[1].to_owned(), f[2].to_owned(), f[3].to_owned());
+        let row = c.expect.cells.get(&cell).map(|i| &c.expect.rows[*i]);
+        if !row.is_some_and(|r| r[0].to_lowercase() == f[0] && r[17] == "open") {
+            return Err(format!("manifest: {entry} has no open row"));
+        }
+    }
+    Ok(())
+}
+/// `x:rc_<slug>` (design 2.5): the row exists and is open, the slug is the
+/// computed one, the literal manifest lists the cell, and 4.4 holds.
+fn check_rc(
+    c: &Context,
+    (sink, dimension, value): (&str, &str, &str),
+    slug: &str,
+) -> Result<String, String> {
+    let at = format!("{sink}/{dimension}/{value}");
+    let row = c
+        .expect_row(sink, dimension, value)
+        .ok_or(format!("{at}: x:rc_ has no expectation row"))?;
+    if row[17] != "open" {
+        return Err(format!("{at}: x:rc_ on a non-open row ({})", row[17]));
+    }
+    let route = row[0].to_lowercase();
+    let computed = format!("rc_{route}_{sink}_{dimension}_{}", value.to_lowercase());
+    if slug != computed {
+        return Err(format!(
+            "{at}: x:{slug} is not the computed slug {computed}"
+        ));
+    }
+    if !c
+        .expect
+        .manifest
+        .contains(&format!("{route}/{sink}/{dimension}/{value}"))
+    {
+        return Err(format!("{at}: x:rc_ has no cell!() in the manifest"));
+    }
+    points_agree(row).map_err(|e| format!("x:rc_ row fails design 4.4: {e}"))?;
+    Ok("executed".to_owned())
+}
+/// A reviewed `na:` on a universe cell: only from its row's `amend:` or
+/// `denial:` status, with the oracle that row's list names. Anything else is
+/// `None` and falls to the audited path, which refuses it.
+fn reviewed_universe_na(
+    c: &Context,
+    (sink, dimension, value): (&str, &str, &str),
+    rest: &str,
+) -> Option<String> {
+    let row = c.expect_row(sink, dimension, value)?;
+    let (reason, oracle) = rest.strip_suffix(')')?.split_once('(')?;
+    let reviewed = match row[17].split_once(':')? {
+        ("amend", wanted) => reason == wanted && words(AMEND_ORACLES).contains(&oracle),
+        ("denial", wanted) => {
+            reason == "LIFECYCLE_DENIES_BEFORE_THIS_SINK"
+                && oracle == wanted
+                && words(DENIAL_ORACLES).contains(&oracle)
+                && c.names_test(oracle)
+        }
+        _ => false,
+    };
+    reviewed.then(|| format!("na:{reason}"))
+}
+
 macro_rules! sources {
     ($($file:expr),+ $(,)?) => { [$(include_str!($file)),+].concat() };
 }
@@ -399,8 +801,18 @@ struct Context {
     d1_oracles: String,
     receipts: BTreeSet<&'static str>,
     named_tests: RefCell<BTreeMap<String, bool>>,
+    expect: Expect,
 }
 impl Context {
+    /// The frozen 905 (design 2.1): audited `c:` or `open:` in the CELLS literal.
+    fn in_universe(&self, cell: &(String, String, String)) -> bool {
+        let audited = self.cells.get(cell);
+        audited.is_some_and(|d| d.starts_with("c:") || d.starts_with("open:"))
+    }
+    fn expect_row(&self, sink: &str, dim: &str, value: &str) -> Option<&Vec<String>> {
+        let cell = (sink.to_owned(), dim.to_owned(), value.to_owned());
+        self.expect.cells.get(&cell).map(|i| &self.expect.rows[*i])
+    }
     /// `is_test` once per name: the block walk re-reads the sources.
     fn names_test(&self, name: &str) -> bool {
         let mut seen = self.named_tests.borrow_mut();
@@ -408,7 +820,7 @@ impl Context {
         *entry.or_insert_with(|| is_test(name, &self.sources))
     }
 }
-fn context(sources: String, d1_oracles: String) -> Context {
+fn context(sources: String, d1_oracles: String, expect: Expect) -> Context {
     let mut cells = BTreeMap::new();
     for line in CELLS.lines() {
         let f: Vec<_> = line.split('|').collect();
@@ -433,6 +845,7 @@ fn context(sources: String, d1_oracles: String) -> Context {
         d1_oracles,
         receipts,
         named_tests: RefCell::default(),
+        expect,
     }
 }
 
@@ -445,6 +858,16 @@ fn check_disposition(
     let (kind, rest) = disposition
         .split_once(':')
         .ok_or_else(|| format!("{at}: no disposition in {disposition:?}"))?;
+    // SB-3E (design 2.5): a universe cell is `c:`, `open:`, `x:rc_` or a reviewed
+    // `na:`. Any other `x:` or `na:` on one still fails `listed` below.
+    if kind == "x" && rest.starts_with("rc_") {
+        return check_rc(c, (sink, dimension, value), rest);
+    }
+    if kind == "na" {
+        if let Some(key) = reviewed_universe_na(c, (sink, dimension, value), rest) {
+            return Ok(key);
+        }
+    }
     match kind {
         "c" | "x" => {
             if c.receipts.contains(rest) {
@@ -570,10 +993,26 @@ fn verify_in(tsv: &str, sources: String) -> Result<Summary, String> {
 }
 /// `verify_in` against a D1 oracle file other than the checked-in one.
 fn verify_with(tsv: &str, sources: String, d1: String) -> Result<Summary, String> {
+    verify_all(tsv, sources, d1, (EXPECT, CELLS_RS))
+}
+/// The whole check, against a given expectation table and manifest. Register
+/// cells are checked first, then the table's own rows: `x:rc_` is judged on
+/// its row as it stands. The table's hash is `verify_expect_hash`, apart.
+fn verify_all(
+    tsv: &str,
+    sources: String,
+    d1: String,
+    (expect, manifest): (&str, &str),
+) -> Result<Summary, String> {
     if sources.contains("#![cfg") {
         return Err("a file-level cfg in the evidence sources".into());
     }
-    let c = context(sources, d1);
+    let c = context(sources, d1, parse_expect(expect, manifest)?);
+    let summary = verify_register(tsv, &c)?;
+    check_expect_table(&c)?;
+    Ok(summary)
+}
+fn verify_register(tsv: &str, c: &Context) -> Result<Summary, String> {
     let mut lines = tsv.lines();
     if lines.next() != Some(HEADER) {
         return Err("missing or altered header".into());
@@ -592,7 +1031,7 @@ fn verify_with(tsv: &str, sources: String, d1: String) -> Result<Summary, String
         if !seen.insert(f[1]) {
             return Err(format!("duplicate sink {}", f[1]));
         }
-        check_row(&c, &f, &mut summary)?;
+        check_row(c, &f, &mut summary)?;
         summary.rows += 1;
     }
     let gates = |p: &str| c.frozen.values().filter(|s| s[1].starts_with(p)).count();
@@ -773,6 +1212,10 @@ fn must_fail(result: Result<Summary, String>, want: &str, spec: &str) {
 }
 /// Applies `f(columns)` to sink's row of the real file, and verifies it.
 fn tamper(sink: &str, f: impl FnOnce(&mut Vec<String>)) -> Result<Summary, String> {
+    verify(&tampered(sink, f))
+}
+/// The register text with `f(columns)` applied to sink's row.
+fn tampered(sink: &str, f: impl FnOnce(&mut Vec<String>)) -> String {
     let text = real();
     let mut f = Some(f);
     let mut out = Vec::new();
@@ -783,7 +1226,7 @@ fn tamper(sink: &str, f: impl FnOnce(&mut Vec<String>)) -> Result<Summary, Strin
         }
         out.push(c.join("\t"));
     }
-    verify(&(out.join("\n") + "\n"))
+    out.join("\n") + "\n"
 }
 /// Plants: sink|column|from|to|wanted error. `from` empty sets the column.
 const PLANTS: &str = "\
@@ -963,8 +1406,12 @@ const DISABLED: [(&str, &str); 12] = [
 ];
 /// Sets one cell, whichever clause holds it now.
 fn set_cell(sink: &str, dimension: &str, value: &str, to: &str) -> Result<Summary, String> {
+    verify(&cell_text(sink, dimension, value, to))
+}
+/// The register text with one cell set, whichever clause holds it now.
+fn cell_text(sink: &str, dimension: &str, value: &str, to: &str) -> String {
     let at = DIMENSIONS.iter().position(|d| d.0 == dimension).unwrap();
-    tamper(sink, |c: &mut Vec<String>| {
+    tampered(sink, |c: &mut Vec<String>| {
         let text = c[4 + at].clone();
         let mut cells = BTreeMap::new();
         for clause in text.split(';') {
@@ -1197,6 +1644,204 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
         "after D2: {summary:?}"
     );
     assert_eq!(count("cited"), 226, "no retained citation moved");
+}
+
+/// SB-3E U2 (design 2.1, 2.2, 7): the table expands to the frozen universe.
+#[test]
+fn sb3e_expect_table_is_complete() {
+    verify(&real()).unwrap();
+    let expect = parse_expect(EXPECT, CELLS_RS).unwrap();
+    assert!(
+        parse_manifest(CELLS_RS).unwrap().is_empty(),
+        "U2 credits no cell"
+    );
+    let mut by_status: BTreeMap<&str, usize> = BTreeMap::new();
+    for row in &expect.rows {
+        let status = row[17].split(':').next().unwrap();
+        *by_status.entry(status).or_default() += row[3].split(',').count();
+    }
+    let counted = |s: &str| by_status.get(s).copied().unwrap_or(0);
+    assert_eq!(expect.cells.len(), 905);
+    assert_eq!(
+        (counted("open"), counted("amend"), counted("denial")),
+        (871, 25, 9)
+    );
+}
+/// SB-3E U2 (design 2.5): a changed row needs a reviewed hash.
+#[test]
+fn sb3e_expect_hash_is_pinned() {
+    verify_expect_hash(EXPECT).unwrap();
+}
+/// A copy of the table with `f(columns)` applied to the row holding this cell.
+fn expect_edit(sink: &str, dim: &str, value: &str, f: impl FnOnce(&mut Vec<String>)) -> String {
+    let mut f = Some(f);
+    let mut out = Vec::new();
+    for line in EXPECT.lines() {
+        let mut c: Vec<String> = line.split('\t').map(String::from).collect();
+        if c[1] == sink && c[2] == dim && c[3].split(',').any(|v| v == value) {
+            f.take().expect("one row")(&mut c);
+        }
+        out.push(c.join("\t"));
+    }
+    assert!(f.is_none(), "{sink}/{dim}/{value}: no row");
+    out.join("\n") + "\n"
+}
+fn expect_row_line(sink: &str, dim: &str, value: &str) -> &'static str {
+    let found = EXPECT.lines().find(|l| {
+        let c: Vec<_> = l.split('\t').collect();
+        c[1] == sink && c[2] == dim && c[3].split(',').any(|v| v == value)
+    });
+    found.expect("row")
+}
+/// `column|to|wanted`: each set on call_chat/fault/panic, a table-only tamper.
+const EXPECT_EDITS: &str = "\
+6|d_register|wrong driver
+7|model.call.observed|mislabelled point
+8|m:738|mislabelled point
+9|m:786|mislabelled point
+4|fault_lock|wrong mech
+5|state:Paused|bad setup
+10|g:Bad-Name|bad exec
+11|paused@m:1|bad apply
+12|fine|bad expect
+13|trace=call.gate|bad witness
+14|ctl_seal|bad control
+15|mutant_1|bad plant
+17|closed|bad status
+";
+/// A manifest is compared with the table, never trusted over it.
+const MANIFEST_CONTROLS: [(&str, &str); 4] = [
+    (
+        "cells! {\n    r5 call_chat fault nope;\n}\n",
+        "has no open row",
+    ),
+    (
+        "cells! {\n    r5 call_chat fault decline;\n}\n",
+        "has no open row",
+    ),
+    (
+        "cells! {\n    r6 call_chat fault panic;\n}\n",
+        "has no open row",
+    ),
+    ("cells! {\n}\ncells! {\n}\n", "text after the cells! block"),
+];
+/// `sink|dim|value|disposition|manifest entry or -|wanted`: register tampers.
+const RC_CONTROLS: &str = "\
+call_chat|lifecycle|Normal|x:rc_r5_call_chat_lifecycle_normal|-|no cell!() in the manifest
+call_chat|lifecycle|Normal|x:rc_r5_call_chat_lifecycle_wrong|r5 call_chat lifecycle Normal|computed slug
+call_chat|fault|decline|x:rc_r5_call_chat_fault_decline|r5 call_chat fault decline|x:rc_ on a non-open row
+record_first_classify|lifecycle|ClosedClean|x:rc_r8_record_first_classify_lifecycle_closedclean|r8 record_first_classify lifecycle ClosedClean|x:rc_ on a non-open row
+emergency_restrict|lifecycle|Emergency|x:sb3_shutdown_keeps_first_deadline|-|not the audited
+seal|lifecycle|Normal|na:BOOTSTRAP_NO_MISSION|-|not the audited
+call_chat|fault|decline|na:BOOTSTRAP_NO_MISSION|-|not the audited
+call_chat|fault|decline|na:NO_SUCH_EVENT_AT_THIS_BOUNDARY(no_such_oracle)|-|not on the closed list
+record_first_classify|lifecycle|ClosedClean|na:LIFECYCLE_DENIES_BEFORE_THIS_SINK(sb2_unjoined_or_owed_prevents_clean_close)|-|not the audited
+";
+/// SB-3E U2 (design 2.5, 7): each must be refused by its own check.
+#[test]
+fn sb3e_expect_tamper_controls_are_rejected() {
+    let mut red: Vec<String> = Vec::new();
+    let mut check = |label: &str, accepted: Result<(), String>, want: &str| match accepted {
+        Ok(()) => red.push(format!("{label}: tamper accepted")),
+        Err(e) if e.contains(want) => {}
+        Err(e) => red.push(format!("{label}: wanted {want:?}, got {e}")),
+    };
+    let run = |tsv: &str, table: &str, manifest: &str| {
+        let d1 = D1_ORACLES.to_owned();
+        verify_all(tsv, evidence_sources(), d1, (table, manifest)).map(|_| ())
+    };
+    let table = |text: &str| run(&real(), text, CELLS_RS);
+    let panic_row = |f: &dyn Fn(&mut Vec<String>)| {
+        expect_edit("call_chat", "fault", "panic", |c: &mut Vec<String>| f(c))
+    };
+    // Design 2.5's list and section 7's; each row keeps the schema.
+    let row = expect_row_line("call_chat", "fault", "panic");
+    let removed = EXPECT.replacen(&format!("{row}\n"), "", 1);
+    check("row removed", table(&removed), "expect: missing cell");
+    let extra = row.replacen("call_chat\tfault\tpanic", "call_chat\tschedule\tmiddle", 1);
+    check(
+        "row added",
+        table(&format!("{EXPECT}{extra}\n")),
+        "expect: extra cell",
+    );
+    let doubled = format!("{EXPECT}{row}\n");
+    check("row repeated", table(&doubled), "expect: duplicate cell");
+    let wrong = panic_row(&|c| c[3] = "poison".into());
+    check("expands wrong", table(&wrong), "expect: duplicate cell");
+    let witness = panic_row(&|c| c[13] = c[13].replace("deadline_fired=none", "deadline_fired=q"));
+    check(
+        "witness without hash",
+        verify_expect_hash(&witness),
+        "EXPECT_SHA256",
+    );
+    assert_eq!(table(&witness), Ok(()), "the witness plant is data only");
+    for spec in EXPECT_EDITS.lines() {
+        let f: Vec<_> = spec.split('|').collect();
+        let edited = panic_row(&|c| c[f[0].parse::<usize>().unwrap()] = f[1].into());
+        check(spec, table(&edited), f[2]);
+    }
+    let out = panic_row(&|c| c[12] = "passed".into());
+    check("witness disagrees", table(&out), "out or trace disagrees");
+    let set_status = |s: &str, d: &str, v: &str, to: &str| {
+        expect_edit(s, d, v, |c: &mut Vec<String>| c[17] = to.into())
+    };
+    check(
+        "amend reopened",
+        table(&set_status("call_chat", "fault", "decline", "open")),
+        "status is not",
+    );
+    let denial = format!("denial:{DENIAL_ROW_ORACLE}");
+    check(
+        "denial elsewhere",
+        table(&set_status("seal", "lifecycle", "Normal", &denial)),
+        "status is not",
+    );
+    let repeat = expect_edit(
+        "call_status",
+        "lifecycle",
+        "Normal",
+        |c: &mut Vec<String>| {
+            c[13] = c[13].replace("[ord=2]", "[ord=1]");
+        },
+    );
+    check(
+        "group witness repeats",
+        table(&repeat),
+        "repeats a trace and ledger",
+    );
+    for (entry, want) in MANIFEST_CONTROLS {
+        check(entry, run(&real(), EXPECT, entry), want);
+    }
+    // `x:rc_` needs its row, slug and manifest entry; `na:` a reviewed row.
+    let (s, d, v) = ("call_chat", "lifecycle", "Normal");
+    let credited = cell_text(s, d, v, "x:rc_r5_call_chat_lifecycle_normal");
+    let listed = "cells! {\n    r5 call_chat lifecycle Normal;\n}\n";
+    assert_eq!(
+        run(&credited, EXPECT, listed),
+        Ok(()),
+        "an honest x:rc_ is accepted"
+    );
+    for (col, to) in [(8, "model.call.sampled"), (6, "d_register")] {
+        let moved = expect_edit(s, d, v, |c: &mut Vec<String>| c[col] = to.into());
+        check(
+            "x:rc_ fails 4.4",
+            run(&credited, &moved, listed),
+            "x:rc_ row fails design 4.4",
+        );
+    }
+    for spec in RC_CONTROLS.lines() {
+        let f: Vec<_> = spec.split('|').collect();
+        let tsv = cell_text(f[0], f[1], f[2], f[3]);
+        let entry = format!("cells! {{\n    {};\n}}\n", f[4]);
+        let manifest = if f[4] == "-" { CELLS_RS } else { &entry };
+        check(spec, run(&tsv, EXPECT, manifest), f[5]);
+    }
+    assert!(
+        red.is_empty(),
+        "{} controls RED:\n{}",
+        red.len(),
+        red.join("\n")
+    );
 }
 
 #[test]
