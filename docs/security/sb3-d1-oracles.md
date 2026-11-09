@@ -77,7 +77,8 @@ the emergency stop is not set and Mother's budget has lapsed, the time budget is
 - The reading is `FileLife::check_budget`: two atomics and the clock. The deadlines are written at consent and may stay
   armed after Approved to Revise; before the first consent they are `u64::MAX`, so no budget is running. They equal the
   Caller's: the only rebase is at coordinator open, before any File session exists, and approval waits do not pause.
-- Stop never waits: atomics and clock reads only, no lock across the latch. Q and the backstop are never read.
+- With production SessionPort/SystemClock, budget selection and halt engagement use atomics and clock reads without locks; subsequent settlement and recording may wait. Q and the backstop are never read.
+- No production changes from the earlier F1 branch remain: `note_lapse`, `latch_lapse`, `word_restricted`, pre-`live()` samples, the broker reorder and the exit call are absent. `model_calls.rs` differs from `a299c0d9` only by `#[cfg(test)]` hooks.
 - A mission already ended keeps its state and end; its cell may record the time budget, as any touch already does.
 
 Where else stop-owner can be published (read for R19, every site in `mother/src` and `mother/host/src`):
@@ -92,9 +93,9 @@ Where else stop-owner can be published (read for R19, every site in `mother/src`
   a source guard only: it fails on a new token in production code, and does not prove behaviour.
 
 Limits. A lapse left unnoticed and then a session close records `stop:owner`, because the Owner ended the session. The
-Hands Stop key is `ingress.emergency()` (`host/src/stop.rs`), so it records `stop:emergency_stop`, not this rule; no
-caller of `FileSession::stop` exists in `mother/host/src` or `mother/desktop/src`. The ordinary route is unchanged
-(`ordinary-lapse-then-stop`), and without a Stop an unobserved lapse gets no budget cause (`reply-lapse`). Ties inside
+Hands Stop key calls `ingress.emergency()`. With no earlier recorded cause it latches Emergency; a later plain mission end records `Stopped / stop:emergency_stop`. Earlier recorded causes survive. Neither `FileSession::stop` nor `stop_all` has a production caller in `mother/host/src` or `mother/desktop/src`, so this rule does not cover the physical Stop key.
+The ordinary route remains unchanged: an unobserved lapse still loses to Stop (`ordinary-lapse-then-stop`).
+Without a Stop an unobserved lapse gets no budget cause (`reply-lapse`). Ties inside
 one reading go either way; the cell is first-wins and the halt is unaffected. Narrowed scope limits stand in for Q.
 
 Expected values that change from `a299c0d9`, all from `stop:owner` / `Stopped`: `budget-then-stop` (was tagged OPEN),
