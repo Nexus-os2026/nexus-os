@@ -1160,12 +1160,18 @@ fn seam_sites(source: &str, seams: &[&str]) -> Vec<usize> {
     sites
 }
 fn leaks(source: &str, seams: &[&str]) -> usize {
+    leaks_under(source, seams, TEST)
+}
+/// Sites of `seams` not governed by the accepted attribute `attr` (G2).
+fn leaks_under(source: &str, seams: &[&str], attr: &str) -> usize {
     let code = mask(source);
     seam_sites(source, seams)
         .into_iter()
-        .filter(|&at| !test_only(&code, at))
+        .filter(|&at| !test_only(&code, at, attr))
         .count()
 }
+const TEST: &str = "#[cfg(test)]";
+const ROUTE: &str = "#[cfg(mother_route_seams)]";
 /// Comments (nested block comments included) and the contents of string
 /// and char literals become spaces; line structure is kept.
 fn mask(source: &str) -> String {
@@ -1239,9 +1245,10 @@ fn mask(source: &str) -> String {
     String::from_utf8(out).unwrap()
 }
 /// The statement or item holding `at`, or an item or block enclosing it,
-/// carries `#[cfg(test)]`. Statement starts are found at the same nesting;
+/// carries the accepted attribute `attr` (G2: `#[cfg(test)]` for the test
+/// seams, `#[cfg(mother_route_seams)]` for the route seams). Statement starts are found at the same nesting;
 /// an enclosing parenthesis never borrows a sibling statement's attribute.
-fn test_only(code: &str, at: usize) -> bool {
+fn test_only(code: &str, at: usize, attr: &str) -> bool {
     let b = code.as_bytes();
     let mut end = at;
     loop {
@@ -1259,7 +1266,7 @@ fn test_only(code: &str, at: usize) -> bool {
                 _ => {}
             }
         };
-        if code[start..].trim_start().starts_with("#[cfg(test)]") {
+        if code[start..].trim_start().starts_with(attr) {
             return true;
         }
         // Up to the block that encloses this statement.
@@ -1278,6 +1285,220 @@ fn test_only(code: &str, at: usize) -> bool {
         }
         end = i;
     }
+}
+
+/// Every `.rs` file of this crate, by path relative to `src/`.
+fn crate_sources() -> Vec<(String, String)> {
+    let root = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src"));
+    let (mut dirs, mut files) = (vec![root.clone()], Vec::new());
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let name = path.strip_prefix(&root).unwrap().to_string_lossy();
+                files.push((name.into_owned(), std::fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    files.sort();
+    files
+}
+/// G2 sibling (design 4.6): every SB-3E S1 name outside its own module is
+/// reachable only under exactly `#[cfg(mother_route_seams)]`, never under
+/// `#[cfg(test)]` or a broadened condition; the B1a/B1b guards keep
+/// `#[cfg(test)]` for their names.
+#[test]
+fn sb3e_route_seams_are_route_only() {
+    // A helper's uses sit inside writer arguments, which the G2 parser
+    // reads as separate statements; its gated definition is checked here and
+    // the standard build cannot name it elsewhere.
+    let names = ["route_seams", "owed_flush", "fn route_ctx"];
+    let seam = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
+    let test = "fn f() {\n    #[cfg(test)]\n    route_seams::at(\"p\", c);\n}\n";
+    assert_eq!(leaks_under(seam, &names, ROUTE), 0, "a route site");
+    assert_eq!(
+        leaks_under(test, &names, ROUTE),
+        1,
+        "cfg(test) never gates it"
+    );
+    assert_eq!(
+        leaks_under(seam, &["route_seams"], TEST),
+        1,
+        "nor the reverse"
+    );
+    assert_eq!(leaks_under(test, &["route_seams"], TEST), 0, "a test site");
+    for broad in ["any(test, mother_route_seams)", "not(mother_route_seams)"] {
+        let planted = seam.replace("mother_route_seams)", &format!("{broad})"));
+        assert_eq!(leaks_under(&planted, &names, ROUTE), 1, "{broad}");
+    }
+    let mut found = 0;
+    for (file, source) in crate_sources() {
+        if file == "broker/route_seams.rs" {
+            continue; // Wholly gated where `broker.rs` declares it.
+        }
+        found += seam_sites(&source, &names).len();
+        let leaked = leaks_under(&source, &names, ROUTE);
+        assert_eq!(
+            leaked, 0,
+            "{file}: an S1 name outside cfg(mother_route_seams)"
+        );
+    }
+    assert!(found >= 70, "the S1 names were scanned: {found}");
+}
+/// The audited S1 writer sites: the broker rows of design 4.4, the two
+/// store points of 4.2, and the refusal notes of 2.4 and 4.4 (seal).
+const ROUTE_SITES: &str = "\
+host_session/model.rs: reg.reserve model.gate.checked model.gate.before model.reserved \
+ model.record.before model.install.before model.install.after attempt.slot \
+ model.attempt.reserved model.attempt.record.before complete bind.entry identity \
+ model.call.sampled note:refused:hold note:refused:1.expired note:refused:1.judged \
+ note:refused:1.cancelled note:refused:2 note:refused:3 note:refused:4.ended \
+ note:refused:live note:refused:6 note:refused:7 model.call.observed \
+ note:refused:8.capacity note:refused:8.cas model.call.admitted call.gate
+host_session.rs: reg.ready door.cancel_run door.halt ingress.emergency ingress.accept
+host_session/close.rs: producer.join close.mother_end close.delivery close.obligations \
+ close.seal note:seal:restricted note:seal:producers note:seal:model note:seal:stop \
+ note:seal:resources note:seal:inventory note:seal:actions note:seal:halt \
+ note:seal:health note:seal:history note:seal:cas close.mother_end close.primary
+authority/run.rs: model.attempt.granted model.attempt.checked model.settle.before \
+ model.bind.checked bind.done
+evidence_store.rs: store.commit store.commit.result
+";
+/// The audited sites of `file`, in source order.
+fn audited(file: &str) -> Vec<&'static str> {
+    let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
+    let row = rows.into_iter().find(|(f, _)| *f == file);
+    row.map_or(vec![], |(_, sites)| sites.split_whitespace().collect())
+}
+const ROUTE_IMPORT: &str = "use crate::broker::route_seams::{self, Ctx};";
+/// Each S1 writer call, in source order: `note:<reason>` or the point, or
+/// an error naming the first form outside the exact statement shape
+/// `#[cfg(mother_route_seams)] route_seams::at("<point>", <ctx>);`.
+fn route_sites(source: &str) -> Result<Vec<String>, String> {
+    let code = mask(source);
+    let mut sites = Vec::new();
+    for at in seam_sites(source, &["route_seams"]) {
+        let rest = &code[at..];
+        let line = code[..at].rfind('\n').map_or(0, |n| n + 1);
+        let declared = [ROUTE_IMPORT, "pub mod route_seams;"];
+        if declared.iter().any(|d| code[line..].starts_with(d))
+            && code[..line].trim_end().ends_with(ROUTE)
+        {
+            continue;
+        }
+        let call = ["at(", "note("]
+            .into_iter()
+            .find(|w| rest[13..].starts_with(w));
+        let before = code[..at].trim_end();
+        let attributed = before.strip_suffix(ROUTE).map(str::trim_end);
+        let (Some(call), Some(prior)) = (call, attributed) else {
+            return Err(format!("unaudited use at byte {at}"));
+        };
+        if !prior.ends_with([';', '{', '}']) || !rest.starts_with("route_seams::") {
+            return Err(format!("not its own attributed statement at byte {at}"));
+        }
+        let open = at + 13 + call.len();
+        let lit = source[open..].trim_start();
+        let point = lit
+            .strip_prefix('"')
+            .and_then(|l| l.split_once('"'))
+            .map(|p| p.0);
+        let (mut depth, mut end) = (1usize, open);
+        for (i, c) in code[open..].char_indices() {
+            depth = match c {
+                '(' => depth + 1,
+                ')' => depth - 1,
+                _ => depth,
+            };
+            if depth == 0 {
+                end = open + i + 1;
+                break;
+            }
+        }
+        let shaped = code[end..].starts_with(';') && code[open..end].contains(',');
+        match point {
+            Some(point) if shaped => sites.push(if call == "note(" {
+                format!("note:{point}")
+            } else {
+                point.to_string()
+            }),
+            _ => return Err(format!("call shape at byte {at}")),
+        }
+    }
+    Ok(sites)
+}
+/// SB-3E site inventory (U3b): exactly the audited writer sites, each its
+/// own statement gated by exactly `#[cfg(mother_route_seams)]`, the writers'
+/// exact signatures (no value returns into the route) and `arm` and
+/// `drain_trace` the only public functions. Mother/host sites belong to
+/// their own units.
+#[test]
+fn sb3e_route_sites_are_exactly_the_inventory() {
+    let good = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
+    assert_eq!(route_sites(good), Ok(vec!["p".to_string()]));
+    for planted in [
+        good.replace("cfg(mother_route_seams)", "cfg(test)"),
+        good.replace(
+            "route_seams::at(\"p\", c);",
+            "let _v = route_seams::at(\"p\", c);",
+        ),
+        good.replace(
+            "route_seams::at(\"p\", c);",
+            "route_seams::at(\"p\", c).f();",
+        ),
+        good.replace("route_seams::at(\"p\", c);", "route_seams::at(P, c);"),
+        good.replace("route_seams::at", "route_seams::note2"),
+        good.replace("    #[cfg(mother_route_seams)]\n", ""),
+        format!("{good}use crate::broker::route_seams::at as w;\n"),
+    ] {
+        assert!(route_sites(&planted).is_err(), "planted: {planted}");
+    }
+    let sources = crate_sources();
+    for (file, source) in &sources {
+        if file == "broker/route_seams.rs" {
+            continue;
+        }
+        let found = route_sites(source).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let expected = audited(file);
+        assert_eq!(found, expected, "{file}: the audited S1 sites, in order");
+    }
+    let seams = &sources
+        .iter()
+        .find(|(f, _)| f == "broker/route_seams.rs")
+        .unwrap()
+        .1;
+    let declared = include_str!("../broker.rs");
+    assert!(declared.contains("\n#[cfg(mother_route_seams)]\npub mod route_seams;\n"));
+    for writer in ["at(point", "note(reason"] {
+        let body = format!(
+            "\npub(crate) fn {writer}: &'static str, ctx: Ctx<'_>) {{\n    \
+             std::hint::black_box(M.as_bytes());\n    \
+             if !ARMED.load(Ordering::Relaxed) {{\n        return;\n    }}\n    fire("
+        );
+        assert_eq!(seams.matches(&body).count(), 1, "exact writer {writer}");
+    }
+    let public: Vec<_> = seams.match_indices("pub fn ").map(|(i, _)| i).collect();
+    let public: Vec<&str> = public.iter().map(|i| &seams[i + 7..i + 10]).collect();
+    assert_eq!(
+        public,
+        ["arm", "dra"],
+        "only arm and drain_trace are public"
+    );
+    let fns = seams.matches("fn ").count();
+    assert_eq!(fns, 13, "no further writer or accessor");
+    assert!(!seams.contains("#[used]"), "SB3E-R9");
+    let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
+    let mut points: Vec<&str> = rows.flat_map(|(_, s)| s.split_whitespace()).collect();
+    points.retain(|p| !p.starts_with("note:"));
+    points.sort_unstable();
+    points.dedup();
+    let listed = seams.split("POINTS: [&str; 35] = [").nth(1).unwrap();
+    let listed = listed.split("];").next().unwrap().split('"');
+    let mut listed: Vec<&str> = listed.skip(1).step_by(2).collect();
+    listed.sort_unstable();
+    assert_eq!(points, listed, "every armable point has its audited site");
 }
 
 // SB-3B frozen oracles: the private R3-R7 call, its actual per-request
@@ -2709,7 +2930,7 @@ fn sb3_b1b_test_seams_are_test_only() {
         let path = entry.unwrap().path();
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         let at = code.find(&format!("mod {name};")).expect("declared module");
-        if !test_only(&code, at) {
+        if !test_only(&code, at, TEST) {
             let source = std::fs::read_to_string(&path).unwrap();
             assert_eq!(
                 leaks(&source, &seams),
@@ -3715,7 +3936,7 @@ fn sb3_thread_joins_run_in_watched_children() {
     let parent = mask(include_str!("../host_session.rs"));
     let mods = parent
         .match_indices("mod ")
-        .filter(|(at, _)| test_only(&parent, *at));
+        .filter(|(at, _)| test_only(&parent, *at, TEST));
     let scanned = [
         "model_call_tests",
         "model_tests",

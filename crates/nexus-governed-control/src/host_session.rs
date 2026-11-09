@@ -3,6 +3,8 @@
 //! A seed is issued before input or Home opening. It carries no raw broker,
 //! door or kernel object. Acceptance binds a request; it does not admit work.
 use crate::authority::file_session::HaltCell;
+#[cfg(mother_route_seams)]
+use crate::broker::route_seams::{self, Ctx};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -81,6 +83,13 @@ pub(crate) enum Lapse {
 }
 /// SB-3B1b: `Instant` and mission clocks read before any hold.
 pub(crate) type Sample = (Instant, Option<(u64, u64)>); // None: no limits were read.
+/// SB-3E S1: a request's identity at its route points.
+#[cfg(mother_route_seams)]
+impl RequestScope {
+    pub(crate) fn route_ctx(&self) -> Ctx<'static> {
+        Ctx::session(self.session).request(self.request)
+    }
+}
 impl RequestScope {
     pub(crate) fn fail(&self) {
         if let Some(core) = self.core.upgrade() {
@@ -835,6 +844,8 @@ impl HostSession {
             .producers
             .try_lock()
             .map_err(|_| SessionError::Unavailable)?;
+        #[cfg(mother_route_seams)]
+        route_seams::at("reg.ready", self.bootstrap.scope.route_ctx());
         if !self.core.model.ready()? {
             return Err(SessionError::Restricted);
         }
@@ -1379,6 +1390,8 @@ impl SessionDoor {
         &self,
         run: crate::authority::ids::RunId,
     ) -> Result<crate::governed::RecordBatch, SessionFailure> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("door.cancel_run", self.context.scope.route_ctx().run(run));
         let call = close::settlement(&self.core)?;
         {
             let pending = self.core.pending.lock().map_err(|_| {
@@ -1406,6 +1419,8 @@ impl SessionDoor {
         &self,
         reason: crate::governed::HaltReason,
     ) -> Result<crate::governed::RecordBatch, SessionFailure> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("door.halt", self.context.scope.route_ctx());
         let call = close::settlement(&self.core)?;
         let result = self.door.halt(reason);
         call.joined();
@@ -1613,6 +1628,8 @@ fn state(word: u64) -> SessionState {
 
 impl SessionIngress {
     pub fn emergency(&self) -> Result<IngressEvent, SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("ingress.emergency", Ctx::session(self.core.identity));
         loop {
             let old = self.core.cell.session_word();
             if old & SEALED != 0 {
@@ -1664,6 +1681,11 @@ impl SessionIngress {
     }
 
     pub fn accept(&self, kind: CommandKind, sequence: u64) -> Result<SessionRequest, SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "ingress.accept",
+            Ctx::session(self.core.identity).request(sequence),
+        );
         let accepted = Instant::now();
         let snapshot = self.core.cell.session_word();
         if snapshot & SEALED != 0 {

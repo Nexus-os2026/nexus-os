@@ -29,6 +29,8 @@ use super::file_session::{HaltCell, RecoveryCheck};
 use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, Digest, RunId};
 use super::AuthorityError;
+#[cfg(mother_route_seams)]
+use crate::broker::route_seams::{self, Ctx};
 use crate::inert_page::ApprovedFacts;
 use crate::inference::MAX_MODEL_ATTEMPTS;
 use nexus_kernel::inference::ModelError;
@@ -2103,6 +2105,11 @@ impl RunRegistry {
         let _grant_held = grant.live(files)?;
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.granted");
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "model.attempt.granted",
+            Ctx::default().run(run).attempt(ordinal),
+        );
         let ticket = SessionAttempt {
             run,
             agent: agent.clone(),
@@ -2122,6 +2129,11 @@ impl RunRegistry {
         }
         #[cfg(test)]
         super::file_session::probe(Some(&cell), "model.attempt.checked");
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "model.attempt.checked",
+            Ctx::default().run(run).attempt(ordinal),
+        );
         cell.admit()?; // Original retained Q's real same-word CAS; never refresh.
         entry.model_attempts = ordinal;
         entry.model_pins.insert(ordinal);
@@ -2138,6 +2150,11 @@ impl RunRegistry {
         }
         #[cfg(test)]
         super::file_session::probe(Some(&ticket.cell), "model.settle.before");
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "model.settle.before",
+            Ctx::default().run(ticket.run).attempt(ticket.ordinal),
+        );
         let mut table = settlement_hold(&self.runs, &ticket.cell, deadline)?;
         let entry = table
             .runs
@@ -2298,6 +2315,8 @@ impl RunRegistry {
         };
         #[cfg(test)]
         super::file_session::probe(Some(b.original), "model.bind.checked");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.bind.checked", Ctx::default().run(b.run));
         b.original.admit()?; // Q's real same-word CAS, idempotent success included.
         if fresh {
             let entry = table
@@ -2306,6 +2325,8 @@ impl RunRegistry {
                 .ok_or(AuthorityError::UnknownRun)?;
             entry.inference_admission = Some(admission);
         }
+        #[cfg(mother_route_seams)]
+        route_seams::at("bind.done", Ctx::default().run(b.run));
         Ok(())
     }
 }

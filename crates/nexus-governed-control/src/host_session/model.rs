@@ -118,6 +118,8 @@ pub(super) struct Owner {
 }
 pub(super) fn reserve(core: &Arc<Core>, scope: &Arc<RequestScope>) -> Result<Owner, SessionError> {
     // Same ordering as readiness and seal; never held across slow work.
+    #[cfg(mother_route_seams)]
+    route_seams::at("reg.reserve", scope.route_ctx());
     let _producers = core
         .producers
         .try_lock()
@@ -235,6 +237,8 @@ impl RegistrationGate<'_> {
         self.validate()?;
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&self.core.cell), "model.gate.checked");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.gate.checked", self.scope.route_ctx());
         self.scope
             .admit(&self.core.cell)
             .map_err(|_| ModelError::Cancelled)
@@ -250,6 +254,8 @@ impl CallCancel for RegistrationGate<'_> {
     fn admit_request(&self, kind: RequestKind) -> Result<(), ModelError> {
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&self.core.cell), "model.gate.before");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.gate.before", self.scope.route_ctx().kind(kind));
         if kind != RequestKind::Metadata {
             return Err(ModelError::ConfigMismatch);
         }
@@ -268,6 +274,8 @@ impl HostSession {
         let original_watch = self.control.kernel_stop_authority().admit();
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&self.core.cell), "model.reserved");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.reserved", self.bootstrap.scope.route_ctx());
         let mut record = "not_required";
         let result = (|| {
             self.startup_report().require_ready()?;
@@ -289,6 +297,8 @@ impl HostSession {
             record = "unknown";
             #[cfg(test)]
             crate::authority::file_session::probe(Some(&self.core.cell), "model.record.before");
+            #[cfg(mother_route_seams)]
+            route_seams::at("model.record.before", self.bootstrap.scope.route_ctx());
             let sequence = self
                 .control
                 .authority()
@@ -300,6 +310,8 @@ impl HostSession {
             record = "recorded";
             #[cfg(test)]
             crate::authority::file_session::probe(Some(&self.core.cell), "model.install.before");
+            #[cfg(mother_route_seams)]
+            route_seams::at("model.install.before", self.bootstrap.scope.route_ctx());
             let mut s = hold(&self.core)?;
             gate.admission(&s).map_err(model_error)?;
             s.registration = Some(RegistrationReceipt {
@@ -311,6 +323,8 @@ impl HostSession {
             });
             #[cfg(test)]
             crate::authority::file_session::probe(Some(&self.core.cell), "model.install.after");
+            #[cfg(mother_route_seams)]
+            route_seams::at("model.install.after", self.bootstrap.scope.route_ctx());
             #[cfg(test)]
             crate::authority::file_session::probe(Some(&self.core.cell), "model.completion.before");
             owner.complete_held(record, &mut s)?;
@@ -365,6 +379,8 @@ impl Attempt {
         invocation: &InvocationObserver,
     ) -> Result<Self, AuthorityError> {
         let busy = |_| AuthorityError::Unavailable("model slot unavailable");
+        #[cfg(mother_route_seams)]
+        route_seams::at("attempt.slot", Ctx::session(core.identity).run(run));
         let (mut owner, previous, model_digest) = {
             let _producers = core.producers.try_lock().map_err(|_| busy(()))?;
             let mut s = hold(core).map_err(|_| busy(()))?;
@@ -398,6 +414,11 @@ impl Attempt {
         }; // Release producer and slot holds BEFORE the run table.
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.attempt.reserved");
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "model.attempt.reserved",
+            Ctx::session(core.identity).run(run),
+        );
         let ticket = match authority.runs().admit_session_attempt(
             (run, agent, group, identity),
             original,
@@ -466,6 +487,8 @@ impl Attempt {
             Some(&self.owner.core.cell),
             "model.attempt.record.before",
         );
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.attempt.record.before", self.route_ctx());
         // No producer, model or run-table hold crosses the existing end writer.
         let record = authority.record_model_call(ticket.run, &ticket.agent, detail);
         self.record = Some(record);
@@ -475,6 +498,8 @@ impl Attempt {
         Ok(record)
     }
     pub(super) fn complete(mut self) -> Result<(), SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("complete", self.route_ctx());
         if !matches!(self.record, Some(EndStatus::Recorded { .. })) {
             return Err(SessionError::Unavailable);
         }
@@ -486,6 +511,15 @@ impl Attempt {
             )
             .map_err(|_| SessionError::Unavailable)?;
         self.owner.complete("recorded")
+    }
+}
+/// SB-3E S1: an attempt's identity at its route points.
+#[cfg(mother_route_seams)]
+impl Attempt {
+    fn route_ctx(&self) -> Ctx<'static> {
+        let ctx = Ctx::session(self.owner.core.identity);
+        let ticket = self.ticket.as_ref();
+        ticket.map_or(ctx, |t| ctx.run(t.run).attempt(t.ordinal))
     }
 }
 // Report-only classification; missing durable association can never imply success.
@@ -516,6 +550,8 @@ impl SessionDoor {
         let DoorKind::Original { file_grant } = self.kind else {
             return Err(E::Halted); // A continuation never binds.
         };
+        #[cfg(mother_route_seams)]
+        route_seams::at("bind.entry", self.context.scope.route_ctx().run(run));
         if !self.context.scope.live(self.core.cell.session_word()) {
             return Err(E::Halted);
         }
@@ -568,6 +604,8 @@ impl SessionDoor {
         let DoorKind::Original { .. } = self.kind else {
             return None; // A continuation sees no model.
         };
+        #[cfg(mother_route_seams)]
+        route_seams::at("identity", self.context.scope.route_ctx());
         if !self.context.scope.live(self.core.cell.session_word()) {
             return None;
         }
@@ -716,37 +754,55 @@ impl CallGate<'_> {
         let expired = self.lapsed(at);
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.sampled");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.call.sampled", self.route_ctx(kind));
         let runs = self.authority.runs();
         let hold = runs.try_request_hold().map_err(|poisoned| {
             if poisoned {
                 core.model.uncertain.store(true, Ordering::SeqCst);
                 self.door.context.fail();
             }
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:hold", self.route_ctx(kind));
             ("refused:hold", Cancelled) // Benign contention latches nothing.
         })?;
         if expired {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:1.expired", self.route_ctx(kind));
             return Err(("refused:1", Timeout));
         }
         // SB3B-R18/R20: one reading of Q and the mission limits against the
         // pre-hold sample; a lapse it finds (narrowing included) is expiry.
         let judged = scope.judge(Some(at));
         if judged == Err(crate::host_session::Lapse::Expired) {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:1.judged", self.route_ctx(kind));
             return Err(("refused:1", Timeout));
         }
         let word = core.cell.session_word();
         if core.model.uncertain.load(Ordering::SeqCst) || word != scope.snapshot || judged.is_err()
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:1.cancelled", self.route_ctx(kind));
             return Err(("refused:1", Cancelled));
         }
-        self.watch.check_now().map_err(|_| ("refused:2", Stopped))?;
+        self.watch.check_now().map_err(|_| {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:2", self.route_ctx(kind));
+            ("refused:2", Stopped)
+        })?;
         if !self
             .primary
             .try_health()
             .is_some_and(|h| !h.latched && h.owed == 0 && !h.recovery_required && h.unsettled == 0)
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:3", self.route_ctx(kind));
             return Err(("refused:3", Cancelled));
         }
         if self.ticket.ended() {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:4.ended", self.route_ctx(kind));
             return Err(("refused:4", Cancelled));
         }
         let _held = match hold.live(self.ticket, &grant) {
@@ -759,30 +815,44 @@ impl CallGate<'_> {
                     self.door.context.fail();
                 }
                 let grant = matches!(error, E::GrantNotLive | E::Unavailable(_));
+                #[cfg(mother_route_seams)]
+                route_seams::note("refused:live", self.route_ctx(kind));
                 return Err((if grant { "refused:5" } else { "refused:4" }, Cancelled));
             }
         };
         let unspent = self.charged.load(Ordering::SeqCst) && !self.spent.load(Ordering::SeqCst);
         if kind == RequestKind::Chat && !unspent {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:6", self.route_ctx(kind));
             return Err(("refused:6", Cancelled));
         }
         if self.invocation.is_revoked() {
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:7", self.route_ctx(kind));
             return Err(("refused:7", Cancelled));
         }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.observed");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.call.observed", self.route_ctx(kind));
         if let Err((error, lapse)) = scope.admit_judged(&self.door.context.cell, Some(at)) {
             drop((_held, hold)); // An exhausted counter fails the session after release.
             if matches!(error, E::Capacity) {
                 self.door.context.fail();
+                #[cfg(mother_route_seams)]
+                route_seams::note("refused:8.capacity", self.route_ctx(kind));
                 return Err(("refused:8", Cancelled));
             }
             // SB3B-R18/R20: the CAS's own eligibility reading found expiry.
             let expired = lapse == Some(crate::host_session::Lapse::Expired);
+            #[cfg(mother_route_seams)]
+            route_seams::note("refused:8.cas", self.route_ctx(kind));
             return Err(("refused:8", if expired { Timeout } else { Cancelled }));
         }
         #[cfg(test)]
         crate::authority::file_session::probe(Some(&core.cell), "model.call.admitted");
+        #[cfg(mother_route_seams)]
+        route_seams::at("model.call.admitted", self.route_ctx(kind));
         if kind == RequestKind::Chat {
             self.spent.store(true, Ordering::SeqCst);
         }
@@ -809,10 +879,24 @@ impl CallCancel for CallGate<'_> {
     fn admit_request(&self, kind: RequestKind) -> Result<(), ModelError> {
         #[cfg(test)]
         self.b1b_gate_entry(kind);
+        #[cfg(mother_route_seams)]
+        route_seams::at("call.gate", self.route_ctx(kind));
         let admitted = self.admission(kind);
         #[cfg(test)]
         self.b1b_gate_exit(kind, admitted.is_ok());
         admitted
+    }
+}
+/// SB-3E S1: a call gate's identity at its route points.
+#[cfg(mother_route_seams)]
+impl CallGate<'_> {
+    fn route_ctx(&self, kind: RequestKind) -> Ctx<'static> {
+        let (scope, ticket) = (&self.door.context.scope, self.ticket);
+        scope
+            .route_ctx()
+            .run(ticket.run)
+            .attempt(ticket.ordinal)
+            .kind(kind)
     }
 }
 /// Test seams around each call gate: the gate trace and the chat-latch probes.
