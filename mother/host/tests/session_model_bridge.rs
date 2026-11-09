@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "efb2bf8138095a6b2c6a0a3128f53b9f6857e8a114cbf0a935a3b113c2dca8bb";
+const EXPECT_SHA256: &str = "46f9cb2d82fd4833b4d8c4f780b3bc70d4f13ff6d21f680843bebcf5c36843d6";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -357,6 +357,9 @@ R7/attempt_pin_release/fault/poison
 R3/call_slot_reserve/fault/poison
 R9/seal/fault/poison
 R9/close_obligations/fault/poison
+R5/call_version/schedule/after
+R5/call_status/schedule/after
+R5/call_tags/schedule/after
 ";
 /// Design 4.4, literal: sinks|driver|entry|check|exit.
 const SINK_POINTS: &str = "\
@@ -1013,8 +1016,8 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
     }
     let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
     let cited: Vec<_> = HOLD_ON_CITED.lines().collect();
-    if cited.len() != 11 {
-        return Err(format!("HOLD_ON_CITED: {} entries, not 11", cited.len()));
+    if cited.len() != 14 {
+        return Err(format!("HOLD_ON_CITED: {} entries, not 14", cited.len()));
     }
     for entry in &cited {
         let f: Vec<_> = entry.split('/').collect();
@@ -2721,7 +2724,7 @@ fn sb3e_expect_table_is_complete() {
             by_status["denial"],
             by_status["hold"]
         ),
-        (769, 25, 9, 102)
+        (761, 25, 9, 110)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.
