@@ -305,6 +305,8 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// authored separately from the manifest; neither is derived from the other,
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
+const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
+const EXPECT_SHA256: &str = "46f9cb2d82fd4833b4d8c4f780b3bc70d4f13ff6d21f680843bebcf5c36843d6";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -341,6 +343,24 @@ fault|poison|record_first_classify,emergency_restrict,close_restrict,post_record
 ";
 /// Design 6.3, literal: the nine R8 lifecycle cells, OPEN until their oracle.
 const DENIAL_CELLS: &str = "lifecycle|SealedFinalizing,ClosedClean,ClosedUnclean|record_first_classify,post_record_recheck,lane_result_admission";
+/// SB3E-R7, literal: `route/sink/dim/value` where `hold:` may sit over a `c:`
+/// disposition. A `c:` citation never counts, so a held one stays unresolved.
+const HOLD_ON_CITED: &str = "\
+R2/inference_binding/ingress/grant_revocation
+R2/inference_binding/ingress/grant_expiry
+R2/inference_binding/lifecycle/Emergency
+R5/registration_version/lifecycle/Emergency
+R5/registration_status/lifecycle/Emergency
+R5/registration_tags/lifecycle/Emergency
+R5/registration_show/lifecycle/Emergency
+R7/attempt_pin_release/fault/poison
+R3/call_slot_reserve/fault/poison
+R9/seal/fault/poison
+R9/close_obligations/fault/poison
+R5/call_version/schedule/after
+R5/call_status/schedule/after
+R5/call_tags/schedule/after
+";
 /// Design 4.4, literal: sinks|driver|entry|check|exit.
 const SINK_POINTS: &str = "\
 registration_reserve|d_register|reg.reserve|m:126-141|model.reserved
@@ -806,6 +826,7 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
             "grant does not identify the original grant's event".into()
         ));
     }
+    // Design 4.5: each `+` entry is its own isolated execution poisoning only that lock.
     match (value == "poison" && status == "open", seen.get("locks")) {
         (false, None) => {}
         (true, Some(locks))
@@ -994,6 +1015,18 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
         return Err(format!("expect: extra cell {s}/{d}/{v}"));
     }
     let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
+    let cited: Vec<_> = HOLD_ON_CITED.lines().collect();
+    if cited.len() != 14 {
+        return Err(format!("HOLD_ON_CITED: {} entries, not 14", cited.len()));
+    }
+    for entry in &cited {
+        let f: Vec<_> = entry.split('/').collect();
+        let cell = (f[1].to_owned(), f[2].to_owned(), f[3].to_owned());
+        let audited = c.cells.get(&cell).is_some_and(|d| d.starts_with("c:"));
+        if !audited || c.frozen.get(f[1]).is_none_or(|s| s[0] != f[0]) {
+            return Err(format!("HOLD_ON_CITED: {entry} is not c: in the register"));
+        }
+    }
     type Key = (String, String, String, Vec<Delta>);
     let mut groups: BTreeMap<&str, BTreeSet<Key>> = BTreeMap::new();
     for row in &c.expect.rows {
@@ -1010,9 +1043,13 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
             let want = match (amend.contains(&cell), denial.contains(&cell)) {
                 (true, _) => format!("amend:{AMEND_REASON}"),
                 (_, true) => format!("denial:{DENIAL_ROW_ORACLE}"),
-                // A hold names no design list: it may sit only on an open cell.
+                // A hold sits only on an open cell, or a `c:` cell on the R7 list.
                 _ if row[17].starts_with("hold:")
-                    && c.cells.get(&cell).is_some_and(|d| d.starts_with("open:")) =>
+                    && c.cells.get(&cell).is_some_and(|d| {
+                        let coordinate = format!("{}/{}/{}/{value}", row[0], row[1], row[2]);
+                        d.starts_with("open:")
+                            || (d.starts_with("c:") && cited.contains(&coordinate.as_str()))
+                    }) =>
                 {
                     row[17].clone()
                 }
@@ -1269,11 +1306,7 @@ fn check_disposition(
         return check_rc(c, (sink, dimension, value), rest);
     }
     if kind == "na" {
-        // R5.2: a hold row is resolved only by a reviewed recipe or amendment.
-        let row = c.expect_row(sink, dimension, value);
-        if row.is_some_and(|r| r[17].starts_with("hold:")) {
-            return Err(format!("{at}: na: on a hold row"));
-        }
+        // R5.2: only an amend or denial row is reviewed; a hold row falls to `listed`.
         if let Some(key) = reviewed_universe_na(c, (sink, dimension, value), rest) {
             return Ok(key);
         }
@@ -1403,10 +1436,12 @@ fn verify_in(tsv: &str, sources: String) -> Result<Summary, String> {
 }
 /// `verify_in` against a D1 oracle file other than the checked-in one.
 fn verify_with(tsv: &str, sources: String, d1: String) -> Result<Summary, String> {
-    if sources.contains("#![cfg") {
-        return Err("a file-level cfg in the evidence sources".into());
-    }
-    verify_register(tsv, &context(sources, d1, Expect::default()))
+    let tables = Tables {
+        expect: EXPECT,
+        manifest: CELLS_RS,
+        sha256: EXPECT_SHA256,
+    };
+    verify_all(tsv, sources, d1, &tables)
 }
 /// The whole check against an expectation table, a manifest and a pin. The
 /// register's cells are checked first, so `x:rc_` is judged on its row as it
@@ -2634,7 +2669,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     check(
         "na: on hold",
         run(&excused, &held, CELLS_RS, &sha256_hex(&held)),
-        "na: on a hold row",
+        "not the audited disposition",
     );
     check(
         "a manifest entry on hold",
@@ -2669,6 +2704,135 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     );
 }
 
+/// SB-3E U2b (design 2.1, 2.2, R5): the real table expands to the frozen universe.
+#[test]
+fn sb3e_expect_table_is_complete() {
+    verify(&real()).unwrap();
+    let expect = parse_expect(EXPECT, CELLS_RS).unwrap();
+    assert!(expect.manifest.is_empty(), "no cell is credited");
+    let mut by_status: BTreeMap<&str, usize> = BTreeMap::new();
+    for row in &expect.rows {
+        *by_status
+            .entry(row[17].split(':').next().unwrap())
+            .or_default() += 1;
+    }
+    assert_eq!(expect.rows.len(), 905);
+    assert_eq!(
+        (
+            by_status["open"],
+            by_status["amend"],
+            by_status["denial"],
+            by_status["hold"]
+        ),
+        (761, 25, 9, 110)
+    );
+}
+/// Tampers with the checked-in table, through the verifier on the real files.
+#[test]
+fn sb3e_real_table_tampers_are_rejected() {
+    let run = |expect: &str, manifest: &str, register: &str| {
+        let tables = Tables {
+            expect,
+            manifest,
+            sha256: EXPECT_SHA256,
+        };
+        verify_all(register, evidence_sources(), D1_ORACLES.to_owned(), &tables).map(|_| ())
+    };
+    let tsv = real();
+    let table = |text: &str| run(text, CELLS_RS, &tsv);
+    let edit = |cell: &str, col: usize, to: &'static str| {
+        fixture_edit(EXPECT, cell, move |c: &mut Vec<String>| c[col] = to.into())
+    };
+    let panic = "call_chat/fault/panic";
+    let row = EXPECT
+        .lines()
+        .find(|l| l.contains("call_chat\tfault\tpanic\t"))
+        .unwrap();
+    let mut red: Vec<String> = Vec::new();
+    let mut check = |label: &str, got: Result<(), String>, want: &str| match got {
+        Ok(()) => red.push(format!("{label}: tamper accepted")),
+        Err(e) if e.contains(want) => {}
+        Err(e) => red.push(format!("{label}: wanted {want:?}, got {e}")),
+    };
+    check(
+        "row removed",
+        table(&EXPECT.replacen(&format!("{row}\n"), "", 1)),
+        "expect: missing cell",
+    );
+    let extra = row.replacen("call_chat\tfault\tpanic", "call_chat\tschedule\tmiddle", 1);
+    check(
+        "row added",
+        table(&format!("{EXPECT}{extra}\n")),
+        "expect: extra cell",
+    );
+    check(
+        "wrong driver",
+        table(&edit(panic, 6, "d_register")),
+        "wrong driver",
+    );
+    check(
+        "mislabelled point",
+        table(&edit(panic, 8, "m:738")),
+        "mislabelled point",
+    );
+    let held = edit("call_chat/ingress/mission_stop", 17, "hold:x");
+    check(
+        "a hold row keeping a recipe",
+        table(&held),
+        "carries no recipe",
+    );
+    check(
+        "expands wrong",
+        table(&edit(panic, 3, "poison")),
+        "expect: duplicate cell",
+    );
+    let witness = fixture_edit(
+        EXPECT,
+        "call_chat/lifecycle/Normal",
+        |c: &mut Vec<String>| {
+            c[13] = c[13].replace("model.call.sampled", "model.call.observed");
+        },
+    );
+    check(
+        "witness changed without hash",
+        table(&witness),
+        "EXPECT_SHA256",
+    );
+    let on_amend = cell_text(
+        "call_chat",
+        "fault",
+        "decline",
+        "x:rc_r5_call_chat_fault_decline",
+    );
+    check(
+        "x: on amend",
+        run(
+            EXPECT,
+            "cells! {\n    r5 call_chat fault decline;\n}\n",
+            &on_amend,
+        ),
+        "x:rc_ on a non-open row",
+    );
+    let cell = "call_chat/lifecycle/Normal";
+    let listed = "cells! {\n    r5 call_chat lifecycle Normal;\n}\n";
+    let credited = cell_text(
+        "call_chat",
+        "lifecycle",
+        "Normal",
+        "x:rc_r5_call_chat_lifecycle_normal",
+    );
+    check(
+        "x:rc_ with a mislabelled point",
+        run(&edit(cell, 8, "model.call.sampled"), listed, &credited),
+        "x:rc_ row fails design 4.4",
+    );
+    assert!(
+        red.is_empty(),
+        "{} controls RED:\n{}",
+        red.len(),
+        red.join("\n")
+    );
+}
 #[test]
 fn sb3c_ingress_block_tampering_fails() {
     let text = read(&session_file("model-bridge-cases.tsv")).unwrap();
