@@ -350,8 +350,21 @@ impl<P: EffectPort> FileSession<P> {
             Ok(result)
         })
     }
+    /// SB3C-R18: Owner Stop decides budget versus Stop. A session-scoped cell
+    /// reads engaged with nothing in its word once the budget lapses, so an
+    /// unobserved lapse would lose to Stop. If Mother's own budget has lapsed
+    /// and nothing earlier is recorded, the budget is latched first. Atomics
+    /// and clock reads only: Stop never waits, and the ordinary route is
+    /// unchanged.
+    fn engage_owner_stop(&self) {
+        let life = self.life();
+        if life.cell.scoped_unrestricted() && !self.coordinator.port.emergency_stopped() {
+            life.check_budget(&*self.coordinator.clock);
+        }
+        life.cell.engage_tagged(HaltTag::OwnerStop);
+    }
     pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        self.life().cell.engage_tagged(HaltTag::OwnerStop);
+        self.engage_owner_stop();
         #[cfg(test)]
         self.coordinator.hooks.file_engagement.fire("public-stop");
         #[cfg(test)]
@@ -359,7 +372,7 @@ impl<P: EffectPort> FileSession<P> {
         self.call(|c| c.stop(id))
     }
     pub fn stop_all(&self) -> Result<usize, CoordinatorError> {
-        self.life().cell.engage_tagged(HaltTag::OwnerStop);
+        self.engage_owner_stop();
         #[cfg(test)]
         self.coordinator
             .hooks
