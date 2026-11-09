@@ -1313,10 +1313,26 @@ impl SessionDoor {
             );
             slot
         };
-        let outcome = self
-            .door
-            .session_file_action(run, file, &self.context.cell)
-            .map_err(SessionFailure::from)?;
+        let nothing_staged = std::cell::Cell::new(false);
+        let outcome =
+            match self
+                .door
+                .session_file_action(run, file, &self.context.cell, &nothing_staged)
+            {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    // SB3D-F2: only the exact refusal the preparation itself
+                    // marked discharges this slot; the entry stays as the record.
+                    if nothing_staged.get() {
+                        self.core.actions.lock().map_err(|_| {
+                            self.context.fail();
+                            SessionFailure::from(crate::authority::AuthorityError::Halted)
+                        })?[slot]
+                            .refuse_before_staging(identity);
+                    }
+                    return Err(error.into());
+                }
+            };
         if let crate::governed::AgentOutcome::AwaitingApproval(view) = &outcome {
             self.core.actions.lock().map_err(|_| {
                 self.context.fail();

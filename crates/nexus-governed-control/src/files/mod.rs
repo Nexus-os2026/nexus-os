@@ -4249,7 +4249,7 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
-        self.prepare_bound(authority, run, create, stop, None, None)
+        self.prepare_bound(authority, run, create, stop, None, None, None)
     }
 
     pub(crate) fn prepare_control(
@@ -4259,7 +4259,15 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
     ) -> Result<Preparation, AuthorityError> {
-        self.prepare_bound(control.authority(), run, create, stop, Some(control), None)
+        self.prepare_bound(
+            control.authority(),
+            run,
+            create,
+            stop,
+            Some(control),
+            None,
+            None,
+        )
     }
 
     pub(crate) fn prepare_session(
@@ -4269,6 +4277,7 @@ impl Files {
         create: &FileCreate,
         stop: &Arc<StopAuthority>,
         cell: &HaltCell,
+        nothing_staged: &std::cell::Cell<bool>,
     ) -> Result<Preparation, AuthorityError> {
         self.prepare_bound(
             control.authority(),
@@ -4277,6 +4286,7 @@ impl Files {
             stop,
             Some(control),
             Some(cell),
+            Some(nothing_staged),
         )
     }
 
@@ -4289,7 +4299,18 @@ impl Files {
         stop: &Arc<StopAuthority>,
         control: Option<&Arc<crate::control::Control>>,
         request: Option<&HaltCell>,
+        nothing_staged: Option<&std::cell::Cell<bool>>,
     ) -> Result<Preparation, AuthorityError> {
+        // SB3D-F2: marks only a refusal of the request itself, each one
+        // returned here before `stage` reserves anything. The error class
+        // cannot say this: `stage` returns the same variants afterwards.
+        // Lifetime, authority and read failures are never marked.
+        let conclusive = |error: AuthorityError| {
+            if let Some(mark) = nothing_staged {
+                mark.set(true);
+            }
+            error
+        };
         if control.is_none()
             && authority
                 .runs()
@@ -4319,20 +4340,21 @@ impl Files {
         }
         let grant = covering_grant(authority, &admission.workspace)?;
         if !name_ok(&create.name) {
-            return Err(refused("the file name is not allowed"));
+            return Err(conclusive(refused("the file name is not allowed")));
         }
-        content_ok(&create.content)?;
+        content_ok(&create.content).map_err(conclusive)?;
         match std::fs::symlink_metadata(workspace.root.join(&create.name)) {
-            Ok(_) => return Err(AuthorityError::FileExists),
+            Ok(_) => return Err(conclusive(AuthorityError::FileExists)),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => return Err(AuthorityError::Unavailable("the workspace cannot be read")),
         }
-        let summary = display(&admission, &workspace.info, &create.name, &create.content)?;
+        let summary = display(&admission, &workspace.info, &create.name, &create.content)
+            .map_err(conclusive)?;
         // S1a-D (O4): only a page (checked) or plain text, decided before
         // any staging.
         let class = FileClass::of(&create.name);
         if class == FileClass::Refused {
-            return Err(AuthorityError::FileTypeNotAllowed);
+            return Err(conclusive(AuthorityError::FileTypeNotAllowed));
         }
         #[cfg(test)]
         self.hooks().fire("files.before_stage");

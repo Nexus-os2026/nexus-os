@@ -466,6 +466,7 @@ impl GovernedControl {
         run: RunId,
         file: &crate::files::FileCreate,
         cell: &crate::authority::file_session::HaltCell,
+        nothing_staged: &std::cell::Cell<bool>,
     ) -> Result<CommitmentView, AuthorityError> {
         if self.authority().runs().class(run) != Some(RunClass::Agent) {
             return Err(AuthorityError::WrongRun);
@@ -479,6 +480,7 @@ impl GovernedControl {
             file,
             self.kernel_stop.authority(),
             cell,
+            nothing_staged,
         )?;
         self.control
             .propose_reserved(agent, run, preparation, reservation)

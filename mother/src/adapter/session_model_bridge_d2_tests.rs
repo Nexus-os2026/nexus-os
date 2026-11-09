@@ -445,10 +445,13 @@ fn sb3_mother_post_seal_model_events_are_absent() {
             "post-seal/completed",
             "post-seal/file",
             "post-seal/refused-file",
+            "post-seal/staged-file",
         ],
     );
 }
-/// R6 (e): a pending page closes clean; a refused File stays unacknowledged.
+/// R6 (e), R7: a pending page closes clean; a File refused before anything was
+/// staged closes clean with its refusal still journaled; a File refused after
+/// staging stays unacknowledged and the seal refuses.
 fn file_at_quit(arg: &str) {
     use crate::adapter::c1b_coordinator_oracles::draft;
     use crate::adapter::m3d_publication_oracles::BAKERY;
@@ -475,6 +478,11 @@ fn file_at_quit(arg: &str) {
         }];
     }
     let id = f.building(&m, c);
+    let existing = f.home.workspace.join("index.html");
+    let exists = arg == "refused-file";
+    if exists {
+        std::fs::write(&existing, "already here\n").unwrap();
+    }
     f.fake.route(|p| (p == "/api/chat").then(|| chat(REPLY)));
     m.advance(id).expect("the advance");
     let want = [MissionState::Blocked, MissionState::AwaitingApproval][usize::from(page)];
@@ -483,6 +491,23 @@ fn file_at_quit(arg: &str) {
     if page {
         return close_clean(&f, m, &request, |_, _| {});
     }
+    if exists {
+        let o = f.home.session.close_obligations().unwrap();
+        assert_eq!((o.actions_unacknowledged, o.actions_refused), (0, 1));
+        close_clean(&f, m, &request, |_, _| {});
+        let lines = f.home.lines();
+        let refusal = lines
+            .iter()
+            .filter(|line| line.contains("effect_settled") && line.contains("refused:file_exists"));
+        assert_eq!(refusal.count(), 1, "the refusal stays in the record");
+        let kept = std::fs::read_to_string(&existing).unwrap();
+        return assert_eq!(kept, "already here\n", "nothing was written");
+    }
+    let staged = f.home.lines();
+    let staged = staged
+        .iter()
+        .filter(|line| line.contains("effect_settled") && line.contains("refused:page_not_inert"));
+    assert_eq!(staged.count(), 1, "refused only after it was staged");
     let _ending = sole(m).prepare_session_end().expect("prepared");
     let s = &f.home.session;
     s.settle_close_resources(&request).unwrap();

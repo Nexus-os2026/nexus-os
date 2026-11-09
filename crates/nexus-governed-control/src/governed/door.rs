@@ -297,10 +297,11 @@ impl AgentDoor {
         run: RunId,
         file: &crate::files::FileCreate,
         cell: &HaltCell,
+        nothing_staged: &std::cell::Cell<bool>,
     ) -> Result<AgentOutcome, AuthorityError> {
         self.admit_session_request(run, cell)?;
         self.control
-            .propose_session_file(&self.core.agent, run, file, cell)
+            .propose_session_file(&self.core.agent, run, file, cell, nothing_staged)
             .map(AgentOutcome::AwaitingApproval)
     }
 

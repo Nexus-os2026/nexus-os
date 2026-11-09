@@ -414,6 +414,8 @@ pub(super) struct Action {
     pub(super) commitment: Option<CommitmentId>,
     receipt: Option<Receipt>,
     ack_claimed: bool,
+    /// SB3D-F2: this preparation refused the request itself before staging.
+    refused_before_staging: bool,
 }
 impl Action {
     pub(super) fn observation(
@@ -452,6 +454,8 @@ impl Action {
             mother_hash: self.receipt.as_ref().map(|r| r.terminal.hash),
             acknowledgement: if self.acknowledged() {
                 Acknowledgement::Verified
+            } else if self.refused_before_staging() {
+                Acknowledgement::RefusedBeforeStaging
             } else {
                 Acknowledgement::Pending
             },
@@ -461,6 +465,20 @@ impl Action {
         self.receipt.as_ref().is_some_and(|receipt| {
             receipt.released && receipt.terminal.hash != [0; 32] && receipt.terminal.sequence > 0
         })
+    }
+    /// A proposal refused before anything was staged: it has no commitment
+    /// and can never have a receipt. Everything else must be acknowledged.
+    pub(super) fn refused_before_staging(&self) -> bool {
+        self.refused_before_staging && self.commitment.is_none() && self.receipt.is_none()
+    }
+    /// What keeps a clean seal from passing this action, if not discharged.
+    pub(super) fn discharged(&self) -> bool {
+        self.acknowledged() || self.refused_before_staging()
+    }
+    pub(super) fn refuse_before_staging(&mut self, preparation: u64) {
+        if self.preparation == preparation && self.commitment.is_none() && self.receipt.is_none() {
+            self.refused_before_staging = true;
+        }
     }
     #[allow(clippy::too_many_arguments)]
     pub(super) fn reserved(
@@ -490,6 +508,7 @@ impl Action {
             commitment: None,
             receipt: None,
             ack_claimed: false,
+            refused_before_staging: false,
         }
     }
 }
