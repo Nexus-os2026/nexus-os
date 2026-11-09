@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "e81203c86168fe4fbb63ff24986decf2171d9d4b1486bbc1d184851ae51e73bf";
+const EXPECT_SHA256: &str = "efb2bf8138095a6b2c6a0a3128f53b9f6857e8a114cbf0a935a3b113c2dca8bb";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -343,6 +343,21 @@ fault|poison|record_first_classify,emergency_restrict,close_restrict,post_record
 ";
 /// Design 6.3, literal: the nine R8 lifecycle cells, OPEN until their oracle.
 const DENIAL_CELLS: &str = "lifecycle|SealedFinalizing,ClosedClean,ClosedUnclean|record_first_classify,post_record_recheck,lane_result_admission";
+/// SB3E-R7, literal: `route/sink/dim/value` where `hold:` may sit over a `c:`
+/// disposition. A `c:` citation never counts, so a held one stays unresolved.
+const HOLD_ON_CITED: &str = "\
+R2/inference_binding/ingress/grant_revocation
+R2/inference_binding/ingress/grant_expiry
+R2/inference_binding/lifecycle/Emergency
+R5/registration_version/lifecycle/Emergency
+R5/registration_status/lifecycle/Emergency
+R5/registration_tags/lifecycle/Emergency
+R5/registration_show/lifecycle/Emergency
+R7/attempt_pin_release/fault/poison
+R3/call_slot_reserve/fault/poison
+R9/seal/fault/poison
+R9/close_obligations/fault/poison
+";
 /// Design 4.4, literal: sinks|driver|entry|check|exit.
 const SINK_POINTS: &str = "\
 registration_reserve|d_register|reg.reserve|m:126-141|model.reserved
@@ -994,6 +1009,18 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
         return Err(format!("expect: extra cell {s}/{d}/{v}"));
     }
     let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
+    let cited: Vec<_> = HOLD_ON_CITED.lines().collect();
+    if cited.len() != 11 {
+        return Err(format!("HOLD_ON_CITED: {} entries, not 11", cited.len()));
+    }
+    for entry in &cited {
+        let f: Vec<_> = entry.split('/').collect();
+        let cell = (f[1].to_owned(), f[2].to_owned(), f[3].to_owned());
+        let audited = c.cells.get(&cell).is_some_and(|d| d.starts_with("c:"));
+        if !audited || c.frozen.get(f[1]).is_none_or(|s| s[0] != f[0]) {
+            return Err(format!("HOLD_ON_CITED: {entry} is not c: in the register"));
+        }
+    }
     type Key = (String, String, String, Vec<Delta>);
     let mut groups: BTreeMap<&str, BTreeSet<Key>> = BTreeMap::new();
     for row in &c.expect.rows {
@@ -1010,9 +1037,13 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
             let want = match (amend.contains(&cell), denial.contains(&cell)) {
                 (true, _) => format!("amend:{AMEND_REASON}"),
                 (_, true) => format!("denial:{DENIAL_ROW_ORACLE}"),
-                // A hold names no design list: it may sit only on an open cell.
+                // A hold sits only on an open cell, or a `c:` cell on the R7 list.
                 _ if row[17].starts_with("hold:")
-                    && c.cells.get(&cell).is_some_and(|d| d.starts_with("open:")) =>
+                    && c.cells.get(&cell).is_some_and(|d| {
+                        let coordinate = format!("{}/{}/{}/{value}", row[0], row[1], row[2]);
+                        d.starts_with("open:")
+                            || (d.starts_with("c:") && cited.contains(&coordinate.as_str()))
+                    }) =>
                 {
                     row[17].clone()
                 }
@@ -2700,7 +2731,7 @@ fn sb3e_expect_table_is_complete() {
             by_status["denial"],
             by_status["hold"]
         ),
-        (780, 25, 9, 91)
+        (769, 25, 9, 102)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.
