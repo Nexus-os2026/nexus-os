@@ -545,7 +545,10 @@ fn repeat_triggers(
         .expect("repeated Quit");
     assert_eq!(again.deadline(), first, "{case}: repeated Quit");
     closing(SessionState::ClosingNormal);
+    assert!(!ingress.emergency_seen(), "{case}: no emergency yet");
     ingress.emergency().ok();
+    assert!(ingress.emergency_seen(), "{case}: the emergency restricts");
+    closing(SessionState::ClosingRestricted);
     ingress.fail();
     closing(SessionState::ClosingRestricted);
     ingress.emergency().ok();
@@ -996,6 +999,9 @@ fn restart_child(point: &str, home: &std::path::Path) {
 }
 fn restart_body(spec: &str) {
     let (point, home) = spec.split_once('|').unwrap();
+    let bound =
+        std::env::var(PARENT).is_ok_and(|p| p == std::os::unix::process::parent_id().to_string());
+    assert!(bound, "{point}: the watched marker is not this child's");
     let home = std::path::Path::new(home);
     let session = reopen(home);
     assert!(!session.startup_report().ready(), "{point}: report-only");
