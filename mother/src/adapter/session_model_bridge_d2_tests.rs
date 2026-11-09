@@ -434,8 +434,8 @@ fn open_request(arg: &str) {
 // ------------------------------------------------------------------- H5
 
 /// H5: a reply released after Quit has no successful seal (F1-b item, pinned in
-/// `seal_refused_after_cancel`). After a successful seal, a real late attempt
-/// is refused and moves no request, native record, callback or obligation.
+/// `seal_refused_after_cancel`). After sealing, retained calls return Halted with no callbacks;
+/// request counts, native-store model_call occurrences and model-obligation snapshots are unchanged.
 #[test]
 fn sb3_mother_post_seal_model_events_are_absent() {
     watched(
@@ -583,7 +583,7 @@ fn late_attempt(f: &SFx, id: crate::journal::MissionId, run: RunId) {
     };
     let before = facts(f);
     assert_eq!(before.0, 1, "one chat, no retry");
-    assert!(before.2 > 0, "the count sees the native record");
+    assert!(before.2 > 0, "the model_call occurrence count is nonzero");
     let (late, owner, body) = (Late::default(), InvocationOwner::new(), request());
     let invocation = owner.observer();
     let port = f.home.port.inner_for_test();
@@ -603,7 +603,7 @@ fn late_attempt(f: &SFx, id: crate::journal::MissionId, run: RunId) {
         0,
         "no callback"
     );
-    assert_eq!(facts(f), before, "post-seal requests, records, obligations");
+    assert_eq!(facts(f), before, "post-seal counts, occurrences, obligations");
     assert_eq!(f.home.session.state(), SessionState::SealedFinalizing);
 }
 
