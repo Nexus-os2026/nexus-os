@@ -16,6 +16,7 @@ use crate::journal::{verify, Event, MissionId};
 use crate::lane::{LaneContext, LaneOutput, ModelCallError, Verdict};
 use crate::state::{MissionState, Trigger};
 use nexus_governed_control::authority::evidence::EndStatus;
+use nexus_governed_control::authority::file_session::HaltCause;
 use nexus_governed_control::authority::ids::Digest;
 use nexus_governed_control::host_session::{CommandKind, SessionState};
 use nexus_governed_control::inference::{ModelReply, ModelRequest, ResponseSchema};
@@ -34,9 +35,6 @@ const ERROR: &str = "SB3D1_ERROR_CANARY";
 const METADATA: &str = "SB3D1_METADATA_CANARY";
 /// The fake peer's runtime version, which its `/api/version` must keep.
 const PEER_VERSION: &str = "0.40.13";
-/// SB3C-R5: the one known production defect, asserted exactly as it is
-/// today and fixed by unit SB3C-F1. Only this cell may carry the tag.
-const KNOWN_DEFECT: [(&str, &str); 1] = [("first/budget-then-stop", "OPEN:SB3C-F1")];
 
 fn children(test: &str, cases: &[&str]) {
     run_children(MODULE, CASE, test, cases, run);
@@ -162,6 +160,30 @@ fn i6_digest(text: &str) -> String {
 /// The private store, where only the approved contract and draft may rest.
 fn private(f: &SFx) -> String {
     walk(&f.home.dir.join("private"))
+}
+/// The lane stays held until its explicit release. Each case is one child
+/// process, so an expired hold fails the case here, whatever the mission does.
+fn hold(go: &Mutex<std::sync::mpsc::Receiver<()>>) {
+    if go.lock().unwrap().recv_timeout(PATIENCE).is_err() {
+        eprintln!("the lane hold expired without its release");
+        std::process::exit(97);
+    }
+}
+/// Arms `slot` to pause there until the returned sender releases it.
+fn pause_at(
+    slot: &crate::oracles::m2as_hooks::HookSlot,
+) -> (
+    std::sync::mpsc::Receiver<()>,
+    std::sync::mpsc::SyncSender<()>,
+) {
+    let (at_tx, at_rx) = signal();
+    let (resume_tx, resume_rx) = signal();
+    let resume_rx = Mutex::new(resume_rx);
+    slot.arm(0, move || {
+        let _ = at_tx.send(());
+        let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
+    });
+    (at_rx, resume_tx)
 }
 /// The peer holds `/api/chat` until released, then answers `content`.
 fn hold_chat(
@@ -376,6 +398,24 @@ fn sb3_first_terminal_cause_survives_model_failure() {
             "first/debt-then-stop",
             "first/stop-then-debt",
             "first/budget-then-stop",
+            "first/unnoticed-lapse-then-stop",
+            "first/unnoticed-lapse-then-stop-all",
+            "first/charge-lapse-then-stop",
+            "first/budget-entry-then-stop",
+            "first/stop-then-budget",
+            "first/failed-lapse-then-stop",
+            "first/closing-lapse-then-stop",
+            "first/revoked-lapse-then-stop",
+            "first/reply-lapse-then-stop",
+            "first/reply-lapse",
+            "first/poll-crossing-then-stop",
+            "first/admission-lapse-then-stop",
+            "first/admission-scope-only-then-stop",
+            "first/scope-only-then-stop",
+            "first/emergency-lapse-then-stop",
+            "first/lapse-stop-never-waits",
+            "first/no-budget-stop",
+            "first/terminal-lapse-stop",
             "first/budget",
             "first/emergency",
             "first/fail-then-stop",
@@ -393,7 +433,7 @@ fn first(arg: &str) {
     let m = f.mother(1, move |ctx| {
         if mode == "stop-then-fail" {
             let _ = ready_tx.send(());
-            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+            hold(&go_rx);
             return LaneOutput {
                 verdict: Verdict::Fail {
                     reason: ERROR.into(),
@@ -401,13 +441,28 @@ fn first(arg: &str) {
                 ..quiet()
             };
         }
+        if matches!(
+            mode.as_str(),
+            "budget-entry-then-stop"
+                | "stop-then-budget"
+                | "failed-lapse-then-stop"
+                | "closing-lapse-then-stop"
+                | "revoked-lapse-then-stop"
+                | "scope-only-then-stop"
+        ) {
+            let _ = ready_tx.send(());
+            hold(&go_rx);
+        }
         let first = outcome(&ask(ctx));
         tx.send((first, terminal(&fx, MissionId(1)))).unwrap();
-        if mode != "stop-then-debt" && mode != "emergency" {
-            let _ = go_rx.lock().unwrap().recv_timeout(PATIENCE);
+        if !matches!(
+            mode.as_str(),
+            "stop-then-debt" | "stop-then-budget" | "emergency" | "reply-lapse"
+        ) {
+            hold(&go_rx);
         }
         match mode.as_str() {
-            "fail-then-stop" => LaneOutput {
+            "fail-then-stop" | "reply-lapse" => LaneOutput {
                 verdict: Verdict::Fail {
                     reason: ERROR.into(),
                 },
@@ -416,6 +471,14 @@ fn first(arg: &str) {
             _ => draft("x"),
         }
     });
+    if arg == "no-budget-stop" {
+        // SB3C-R18: no consent, so no budget is running; Stop stays plain.
+        let id = m.draft(f.contract()).unwrap();
+        f.home.clock.advance(Duration::from_millis(61_000));
+        assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}");
+        assert_eq!(end(&f, id), "stop:owner", "{arg}");
+        return;
+    }
     let id = f.building(&m, f.contract());
     assert_eq!(id, MissionId(1));
     let want = match arg {
@@ -465,19 +528,219 @@ fn first(arg: &str) {
             assert!(!terminal, "denial before the generation moves");
             let engaged = m.cell_for_test().is_engaged();
             assert!(engaged, "the budget denial is engaged before Stop");
-            // OPEN:SB3C-F1 — today a later Stop replaces the budget cause on
-            // the session route (the ordinary route keeps Blocked). SB3C-F1
-            // flips this cell to Blocked / block:budget_time.
-            let open = KNOWN_DEFECT.contains(&("first/budget-then-stop", "OPEN:SB3C-F1"));
-            let (state, cause) = match open {
-                true => (MissionState::Stopped, "stop:owner"),
-                false => (MissionState::Blocked, "block:budget_time"),
-            };
-            assert_eq!(m.stop(id), Ok(state), "Stop arrives second");
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
             go_tx.send(()).unwrap();
             drop(release);
             assert!(adv.join().unwrap().is_err());
-            cause
+            "block:budget_time"
+        }
+        // SB3C-R18 (a): nothing observed the lapse before Stop, on either path.
+        "unnoticed-lapse-then-stop" | "unnoticed-lapse-then-stop-all" => {
+            f.home.clock.advance(Duration::from_millis(61_000));
+            if arg == "unnoticed-lapse-then-stop" {
+                assert_eq!(m.stop(id), Ok(MissionState::Blocked), "{arg}");
+            } else {
+                assert_eq!(m.stop_all(), Ok(1), "{arg}");
+            }
+            "block:budget_time"
+        }
+        // SB3C-R18 (a): the emergency stop is earlier, and stays the cause.
+        "emergency-lapse-then-stop" => {
+            f.home.session.ingress().emergency().unwrap();
+            f.home.clock.advance(Duration::from_millis(61_000));
+            assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}");
+            "stop:emergency_stop"
+        }
+        // SB3C-R18 (c): Stop's budget decision and engagement need no lock.
+        "lapse-stop-never-waits" => {
+            f.home.clock.advance(Duration::from_millis(61_000));
+            let (engaged_tx, engaged_rx) = signal();
+            m.hooks_for_test().file_after_halt.arm(0, move || {
+                let _ = engaged_tx.send(());
+            });
+            let held = m.hold_lock_for_test();
+            let stopper = {
+                let m = m.clone();
+                std::thread::spawn(move || m.stop(id))
+            };
+            within(&engaged_rx); // While the coordinator's lock is held.
+            let cause = m.cell_for_test().cause();
+            assert_eq!(cause, Some(HaltCause::TimeBudget), "{arg}");
+            drop(held);
+            assert_eq!(stopper.join().unwrap(), Ok(MissionState::Blocked), "{arg}");
+            "block:budget_time"
+        }
+        // SB3C-R18: a mission already ended has no budget running; Stop leaves
+        // its state and end alone.
+        "terminal-lapse-stop" => {
+            let reason = crate::evidence::BlockReason::PhaseInterrupted;
+            assert_eq!(m.end_for_test(id, reason), Ok(MissionState::Blocked));
+            f.home.clock.advance(Duration::from_millis(61_000));
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "{arg}");
+            "block:phase_interrupted"
+        }
+        // Review f1-5: a lapse at the charge boundary: the meter refuses Stale, no timeout is returned.
+        "charge-lapse-then-stop" => {
+            let clock = f.home.clock.clone();
+            m.hooks_for_test()
+                .model_charging
+                .arm(0, move || clock.advance(Duration::from_millis(61_000)));
+            let (returned_rx, resume_tx) = pause_at(&m.hooks_for_test().model_returned);
+            let adv = advance_in(&m, id);
+            within(&returned_rx);
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+            resume_tx.send(()).unwrap();
+            let (first, _) = within(&rx);
+            assert_eq!(first, "failed:model_over_budget");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            "block:budget_time"
+        }
+        // The lapse lands before the lane's first call; the broker never sees a chat.
+        "budget-entry-then-stop" => {
+            let adv = advance_in(&m, id);
+            within(&ready_rx);
+            f.home.clock.advance(Duration::from_millis(61_000));
+            go_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated");
+            assert!(!terminal, "denial before the generation moves");
+            assert_eq!(f.fake.count("/api/chat"), 0, "no chat after the lapse");
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+            go_tx.send(()).unwrap();
+            assert!(adv.join().unwrap().is_err());
+            "block:budget_time"
+        }
+        // Stop is engaged first and the budget lapses behind it; the caller
+        // observes the lapse only after both. Stop stays.
+        "stop-then-budget" => {
+            let adv = advance_in(&m, id);
+            within(&ready_rx);
+            let (paused_rx, resume_tx) = pause_at(&m.hooks_for_test().file_after_halt);
+            let stopper = {
+                let m = m.clone();
+                std::thread::spawn(move || m.stop(id))
+            };
+            within(&paused_rx); // The Owner's Stop is engaged, not yet recorded.
+            f.home.clock.advance(Duration::from_millis(61_000));
+            go_tx.send(()).unwrap(); // Only now does the lane ask.
+            let (first, _) = within(&rx);
+            assert_eq!(first, "invalidated", "the caller saw the lapse after Stop");
+            assert!(adv.join().unwrap().is_err());
+            resume_tx.send(()).unwrap();
+            assert_eq!(stopper.join().unwrap(), Ok(MissionState::Stopped));
+            "stop:owner"
+        }
+        // SB3C-R18 (a): an earlier restriction in the word is not a budget cause; revocation is not in the word.
+        "failed-lapse-then-stop" | "closing-lapse-then-stop" | "revoked-lapse-then-stop" => {
+            let adv = advance_in(&m, id);
+            within(&ready_rx);
+            match arg {
+                "failed-lapse-then-stop" => assert_eq!(restrict(&f, "fatal"), SessionState::Failed),
+                "closing-lapse-then-stop" => {
+                    assert_eq!(restrict(&f, "quit"), SessionState::ClosingNormal)
+                }
+                _ => m.revoke_model_for_test(id).unwrap(),
+            }
+            assert_eq!(m.cell_for_test().cause(), None, "{arg}: no latched cause");
+            f.home.clock.advance(Duration::from_millis(61_000));
+            go_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated", "{arg}: refused at entry");
+            assert!(!terminal, "{arg}: not yet ended");
+            let revoked = arg == "revoked-lapse-then-stop";
+            let state = [MissionState::Stopped, MissionState::Blocked][usize::from(revoked)];
+            assert_eq!(m.stop(id), Ok(state), "{arg}: Stop");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            ["stop:owner", "block:budget_time"][usize::from(revoked)]
+        }
+        // The lapse lands after the post-call read. With a Stop the rule
+        // decides; without one no budget cause is observed.
+        "reply-lapse-then-stop" | "reply-lapse" => {
+            let (entered, release) = hold_chat(&f, "{}");
+            let (replied_rx, resume_tx) = pause_at(&m.hooks_for_test().model_replied);
+            let adv = advance_in(&m, id);
+            within(&entered);
+            release.send(()).unwrap();
+            within(&replied_rx);
+            f.home.clock.advance(Duration::from_millis(61_000));
+            resume_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated", "{arg}: the Replied guard refused");
+            assert!(!terminal, "{arg}: not yet ended");
+            if arg == "reply-lapse-then-stop" {
+                assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+                go_tx.send(()).unwrap();
+            }
+            let _ = adv.join().unwrap();
+            ["fail:lane_fail:builder", "block:budget_time"][usize::from(arg != "reply-lapse")]
+        }
+        // The deadline crosses inside one poll; Stop lands as the attempt returns to Mother.
+        "poll-crossing-then-stop" => {
+            let (entered, release) = hold_chat(&f, "{}");
+            let adv = advance_in(&m, id);
+            within(&entered);
+            let (returned_rx, resume_tx) = pause_at(&m.hooks_for_test().model_returned);
+            let clock = f.home.clock.clone();
+            m.hooks_for_test()
+                .model_deadline_sampled
+                .arm(0, move || clock.advance(Duration::from_millis(61_000)));
+            within(&returned_rx); // Before Mother's post-call observation.
+            assert_eq!(m.stop(id), Ok(MissionState::Blocked), "Stop arrives second");
+            resume_tx.send(()).unwrap();
+            let (first, _) = within(&rx);
+            assert_eq!(first, "failed:model_timeout");
+            go_tx.send(()).unwrap();
+            drop(release);
+            assert!(adv.join().unwrap().is_err());
+            "block:budget_time"
+        }
+        // Review f1-4: the poll reads the budget unexpired and the final admission refuses Timeout.
+        // Scope-only: the same refusal with Mother's budget not lapsed (narrowed limits stand in for Q).
+        "admission-lapse-then-stop" | "admission-scope-only-then-stop" => {
+            let budget = arg == "admission-lapse-then-stop";
+            let (returned_rx, resume_tx) = pause_at(&m.hooks_for_test().model_returned);
+            let fx = f.clone();
+            // Past the exchange's own check, at its poll's sample.
+            m.hooks_for_test().model_deadline_sampled.arm(1, move || {
+                let clock = fx.home.clock.clone();
+                if budget {
+                    clock.advance(Duration::from_millis(61_000));
+                } else {
+                    let context = fx.home.port.context();
+                    context.narrow_mission_deadlines(clock, 1, 1).unwrap();
+                }
+            });
+            let adv = advance_in(&m, id);
+            within(&returned_rx);
+            let state = [MissionState::Stopped, MissionState::Blocked][usize::from(budget)];
+            assert_eq!(m.stop(id), Ok(state), "{arg}: Stop arrives second");
+            resume_tx.send(()).unwrap();
+            let (first, _) = within(&rx);
+            assert_eq!(first, "failed:model_timeout", "{arg}");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            ["stop:owner", "block:budget_time"][usize::from(budget)]
+        }
+        // SB3C-R18 (d): the scope refuses with Mother's budget not lapsed, the
+        // state a lapsed Q leaves. Stop stays plain.
+        "scope-only-then-stop" => {
+            let adv = advance_in(&m, id);
+            within(&ready_rx);
+            let clock: Arc<dyn nexus_governed_control::authority::clock::Clock> =
+                f.home.clock.clone();
+            let context = f.home.port.context();
+            context.narrow_mission_deadlines(clock, 1, 1).unwrap();
+            go_tx.send(()).unwrap();
+            let (first, terminal) = within(&rx);
+            assert_eq!(first, "invalidated", "{arg}: the scope refused");
+            assert!(!terminal, "{arg}: not yet ended");
+            assert_eq!(m.cell_for_test().cause(), None, "{arg}: nothing latched");
+            assert_eq!(m.stop(id), Ok(MissionState::Stopped), "{arg}: Stop");
+            go_tx.send(()).unwrap();
+            let _ = adv.join().unwrap();
+            "stop:owner"
         }
         "budget" => {
             let (entered, release) = hold_chat(&f, "{}");
@@ -992,22 +1255,17 @@ fn after_recheck(point: &str) {
 #[test]
 fn sb3_d1_schedules_run_in_child_processes() {
     let source = include_str!("session_model_bridge_d_tests.rs");
-    // The OPEN tag is bound to its one listed cell: the table and its use.
+    // SB3C-F1 is closed: no first-cause cell here tolerates a known defect.
     let cases = source.split("&[\n            \"first/").count() > 1;
-    assert!(cases && KNOWN_DEFECT.len() == 1, "one known-defect cell");
+    assert!(cases, "the first-cause cases are found");
     assert!(
         source.contains("\"first/budget-then-stop\",\n"),
         "the cell is executed"
     );
     assert_eq!(
-        source.matches(concat!("OPEN:", "SB3C-F1")).count(),
-        3,
-        "tag bound to its cell"
-    );
-    assert_eq!(
         source.matches(concat!("OPEN:", "SB3C")).count(),
-        3,
-        "no other OPEN cell"
+        0,
+        "no tolerated OPEN cell"
     );
     let tests: Vec<&str> = source.split("#[test]\nfn ").skip(1).collect();
     assert!(tests.len() >= 6, "the D1 tests are found");

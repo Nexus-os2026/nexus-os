@@ -336,6 +336,18 @@ impl HaltCell {
                         | EMERGENCY)
                     != 0)
     }
+    /// SB3C-R18, read-only and lock-free: a session-scoped cell whose word
+    /// records no cause and no Closing, Failed, Sealed or Emergency state.
+    pub fn scoped_unrestricted(&self) -> bool {
+        let word = self.0.load(Ordering::SeqCst);
+        let restricted = crate::host_session::CLOSING
+            | crate::host_session::FAILED
+            | crate::host_session::SEALED
+            | EMERGENCY;
+        matches!(self.mode(), CellMode::Host(Some(_)))
+            && HaltCause::of(word).is_none()
+            && word & restricted == 0
+    }
     pub fn cause(&self) -> Option<HaltCause> {
         self.reason().map(|(cause, _)| cause)
     }

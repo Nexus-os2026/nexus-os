@@ -37,7 +37,12 @@ Real C1 caller → SessionPort → session broker → fake peer.
   |---|---|
   | debt-then-stop | `block:broker_refused:evidence_unavailable` |
   | stop-then-debt | `stop:owner`, with recording debt kept as a separate fact |
-  | budget-then-stop | **OPEN:SB3C-F1**: today `Stopped` / `stop:owner` |
+  | budget-then-stop | `block:budget_time` (SB3C-F1) |
+  | unnoticed lapse then Stop or Stop-all, charge boundary, entry, reply arm, poll crossing, final admission | `block:budget_time` |
+  | revoked invocation, then lapse, then Stop | `block:budget_time` (revocation is not in the word) |
+  | Stop then lapse; Failed or Closing, then lapse, then Stop; scope-only (Q stand-in); no running budget | `stop:owner` |
+  | emergency, then lapse, then Stop | `stop:emergency_stop` |
+  | reply lapse, no Stop | `fail:lane_fail:builder` (no budget cause observed) |
   | budget (no Stop) | `block:budget_time` |
   | emergency | `stop:emergency_stop` |
   | fail-then-stop | `fail:lane_fail:builder` |
@@ -60,17 +65,59 @@ Real C1 caller → SessionPort → session broker → fake peer.
     is the existing SQLite mode, recorded here and not claimed.
   - Failed, unrecorded and late replies leave no deliverable on any path.
 
-## Known defect OPEN:SB3C-F1 (SB3C-R5)
+## SB3C-F1 (SB3C-R18, R19): Owner Stop decides budget versus Stop
 
-A held chat on the session route meets the budget deadline. The broker's own mission expiry is seen
-first, and the lane gets `failed:model_timeout` with the File cell already engaged. An Owner Stop that
-then arrives while the lane is still running ends the mission `Stopped` / `stop:owner`.
+Once Mother's budget lapses, a session-scoped File cell reads engaged with nothing in its word, so nothing records the
+lapse and a later Owner Stop used to win. Observing the lapse at each Caller and broker site left another site each time.
 
-The ordinary route keeps `Blocked` / `block:budget_time` for the same schedule. Without the Stop, the
-session mission also ends `block:budget_time`.
+The rule, `FileSession::engage_owner_stop`, covers the `FileSession` Stop and Stop-all routes, before `OwnerStop` is
+engaged: if the cell is session-scoped, its word records no cause and no Closing, Failed, Sealed or Emergency state,
+the emergency stop is not set and Mother's budget has lapsed, the time budget is latched first. Otherwise a plain Stop.
 
-The cell asserts today's behaviour exactly. The guard binds the tag to this one cell, and production
-unit SB3C-F1 flips it.
+- The reading is `FileLife::check_budget`: two atomics and the clock. The deadlines are written at consent and may stay
+  armed after Approved to Revise; before the first consent they are `u64::MAX`, so no budget is running. They equal the
+  Caller's: the only rebase is at coordinator open, before any File session exists, and approval waits do not pause.
+- With production SessionPort/SystemClock, budget selection and halt engagement use atomics and clock reads without locks; subsequent settlement and recording may wait. Q and the backstop are never read.
+- No production changes from the earlier F1 branch remain: `note_lapse`, `latch_lapse`, `word_restricted`, pre-`live()` samples, the broker reorder and the exit call are absent. `model_calls.rs` differs from `a299c0d9` only by `#[cfg(test)]` hooks.
+- A mission already ended keeps its state and end; its cell may record the time budget, as any touch already does.
+
+Where else stop-owner can be published (read for R19, every site in `mother/src` and `mother/host/src`):
+
+- `touch` and `file_boundary` run `check_budget` immediately before. `file_terminal`, the nonpublication, deadline and
+  non-File ends latch their terminal intent first. `Coordinator::stop` is reached only through the two routes above.
+- `prepare_session_end`'s nonterminal branch calls `file_stop` directly. Its only production caller, Hands `close`, runs
+  after `accept(Quit)` has set Closing in the word.
+- The `lifecycle_halt` clone (`session_port.rs`) only feeds the File selection; no production code engages it.
+- Neither of those two is enforced by the type system. A caller that ran `prepare_session_end` before Quit, or kept
+  the handle and engaged it, would publish stop-owner first. `scan_sb3c_stop_owner_publishers_are_the_reviewed_list` is
+  a source guard only: it fails on a new token in production code, and does not prove behaviour.
+
+Limits. A lapse left unnoticed and then a session close records `stop:owner`, because the Owner ended the session. The
+Hands Stop key calls `ingress.emergency()`. With no earlier recorded cause it latches Emergency; a later plain mission end records `Stopped / stop:emergency_stop`. Earlier recorded causes survive. Neither `FileSession::stop` nor `stop_all` has a production caller in `mother/host/src` or `mother/desktop/src`, so this rule does not cover the physical Stop key.
+The ordinary route remains unchanged: an unobserved lapse still loses to Stop (`ordinary-lapse-then-stop`).
+Without a Stop an unobserved lapse gets no budget cause (`reply-lapse`). Ties inside
+one reading go either way; the cell is first-wins and the halt is unaffected. Narrowed scope limits stand in for Q.
+
+Expected values that change from `a299c0d9`, all from `stop:owner` / `Stopped`: `budget-then-stop` (was tagged OPEN),
+and the schedules new here, whose `a299c0d9` result was also `stop:owner`: unnoticed lapse, charge, entry, reply arm,
+poll crossing, final admission, and revoked then lapse. Revocation is not recorded in the word, so R18 (a) does not
+withhold the budget. No other expected value in the suite changed.
+
+RED at `55cd9796` against `a299c0d9`: nine cases above with `Ok(Stopped)` or `stop:owner` for the budget, and
+`lapse-stop-never-waits` with `Some(Stop)` for `Some(TimeBudget)`. The rest passed there.
+
+Plants on the final code (real path, restored by sha256, not committed):
+
+| Plant | Mutation | Result |
+|---|---|---|
+| rule removed | no budget check at Stop | Behaviour kill on every budget case above |
+| Q reading | rule uses `is_engaged` (scope) instead of Mother's budget | Behaviour kill at `scope-only-` and `admission-scope-only-then-stop` |
+| word ignored | accessor checks only the scope | Behaviour kill at `failed-` and `closing-lapse-then-stop` |
+| ordinary route | accessor drops the scope check | Behaviour kill at `ordinary-lapse-then-stop` |
+| Stop made to wait | rule takes the coordinator's lock first | Behaviour kill at `lapse-stop-never-waits` (the engagement wait) |
+| Stop-all skips the rule | plain engagement | Behaviour kill at `unnoticed-lapse-then-stop-all` |
+| new stop-owner publisher (R19) | a production `StopReason::Owner`; the same inside `#[cfg(test)]` | Source guard only: the first fails it, the second passes |
+| emergency read removed | `emergency_stopped` dropped | Not killed. The session route sets the word's Emergency cause first, and the session fixture has no handle to the registry stop; kept because R18 (a) names it |
 
 ## The R8 acceptance sinks (SB3D-R3)
 
