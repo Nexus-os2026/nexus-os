@@ -1625,3 +1625,10 @@ three R8 sinks, on the cell its literal table lists, and only for a `#[test]` in
 file. Section 14.13 still governs: these citations are not proven by the verifier, and
 the exact-head receipt check runs them; the Architect adds the D1 file to
 `check-citations.py`'s pins.
+
+### 14.16 D2 (SB3D-R5)
+
+D2 executed 12 of the 690 `open:D2` cells and cites them as `x:` from
+`session_model_bridge_d2_tests.rs`; 678 stay `open:D2`. Oracles, plants and limits
+are in [`sb3-d2-oracles.md`](sb3-d2-oracles.md). The verifier accepts a D2 `x:` only
+at its five sinks, on the cell its literal table lists. Section 14.13 still governs.
