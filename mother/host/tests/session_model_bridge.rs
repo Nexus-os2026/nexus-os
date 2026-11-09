@@ -323,8 +323,10 @@ const DRIVER_KEYS: &str = "d_register=s,q d_bootstrap=s d_identity=s,run,inv d_b
     d_close=s host=s";
 /// Real S2/shim record selectors (design 4.2.1); `none` is not one.
 const RECORDS: &str = "model_registered model_call";
-const LEDGER_RECORDS: &str =
-    "ModelCallCharged LaneReturned model_call model_registered session_closed";
+/// R6.3: `record=keys` a delta must carry, of those the driver's identity has.
+/// Mother's `SessionClosed` is not native `session_closed`; `+0:all` is empty.
+const LEDGER_RECORDS: &str = "ModelCallCharged=inv LaneReturned=inv model_call=run,att \
+    model_registered=s,q session_closed=s SessionClosed=s all=s";
 const LOCKS: &str = "ModelState EvidenceInner RunTable Coordinator Pending Producers Actions";
 const AMEND_REASON: &str = "NO_SUCH_EVENT_AT_THIS_BOUNDARY";
 /// Composed applicability oracles (6.2). None exists yet: U11 lists them.
@@ -517,6 +519,15 @@ fn points_agree(row: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+/// The fake peer's requests, in order, for a gate sink's exchange (design 2.3).
+fn peer_order(sink: &str) -> [&'static str; 4] {
+    let last = if sink.starts_with("registration_") {
+        "/api/show"
+    } else {
+        "/api/chat"
+    };
+    ["/api/version", "/api/status", "/api/tags", last]
+}
 /// A gate sink's request kind and ordinal against the fake peer (design 2.3).
 fn gate_ordinal(sink: &str) -> Option<(&str, usize)> {
     let (route, kind) = sink.split_once('_')?;
@@ -559,8 +570,10 @@ struct Witness {
     point: String,
     identity: String,
     ordinal: String,
-    ledger: String,
+    ledger: Vec<Delta>,
 }
+/// One canonical ledger delta: (operation, record, sorted identity tokens).
+type Delta = (String, String, Vec<String>);
 /// One `point[identity]` observation, or None for `absent`.
 fn observation<'a>(
     text: &'a str,
@@ -582,26 +595,47 @@ fn observation<'a>(
     }
     Ok(Some(point))
 }
-fn ledger_ok(ledger: &str, identity: &str) -> bool {
-    let own: Vec<_> = identity.split(' ').collect();
-    ledger == "none"
-        || ledger.split(',').all(|delta| {
-            let Some((op, rest)) = delta.split_once(':') else {
-                return false;
-            };
-            let Some((record, id)) = rest.strip_suffix(']').and_then(|t| t.split_once('[')) else {
-                return false;
-            };
-            matches!(op, "+0" | "+1" | "owed" | "uncertain")
-                && words(LEDGER_RECORDS).contains(&record)
-                && !id.is_empty()
-                && id.split(' ').all(|t| own.contains(&t))
-        })
+/// R6.3: the canonical parsed ledger, or None. Each delta names exactly its
+/// record's identity keys from the driver's own identity.
+fn parse_ledger(ledger: &str, identity: &str) -> Option<Vec<Delta>> {
+    let mut deltas: Vec<Delta> = Vec::new();
+    for delta in ledger.split(',') {
+        let (op, rest) = delta.split_once(':')?;
+        let (record, id) = rest.strip_suffix(']')?.split_once('[')?;
+        let (_, keys) = words(LEDGER_RECORDS)
+            .into_iter()
+            .filter_map(|e| e.split_once('='))
+            .find(|(r, _)| *r == record)?;
+        let wanted = |t: &&str| {
+            t.split_once('=')
+                .is_some_and(|(k, _)| keys.split(',').any(|w| w == k))
+        };
+        let mut want: Vec<String> = identity
+            .split(' ')
+            .filter(wanted)
+            .map(String::from)
+            .collect();
+        let mut got: Vec<String> = id.split(' ').map(String::from).collect();
+        want.sort();
+        got.sort();
+        let op_ok = matches!(op, "+0" | "+1" | "owed" | "uncertain");
+        let repeated = deltas.iter().any(|d| d.1 == record && d.2 == got);
+        if !op_ok || want.is_empty() || got != want || repeated || (record == "all" && op != "+0") {
+            return None;
+        }
+        deltas.push((op.to_owned(), record.to_owned(), got));
+    }
+    if deltas.len() > 1 && deltas.iter().any(|d| d.1 == "all") {
+        return None;
+    }
+    deltas.sort();
+    Some(deltas)
 }
 /// R5.3: the witness is exact. Every mandatory field, exact values, no prefix.
 fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     let bad = |what: String| format!("{at}: bad witness: {what}");
-    let keys = "entry check value out branch peer ledger next store deadline_fired grant locks";
+    let keys =
+        "entry check value out branch peer ledger window next store deadline_fired grant locks";
     let mut seen = BTreeMap::new();
     for part in row[13].split(';') {
         let (key, value) = part.split_once('=').unwrap_or((part, ""));
@@ -616,6 +650,7 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
         "out",
         "branch",
         "ledger",
+        "window",
         "deadline_fired",
     ] {
         if !seen.contains_key(key) {
@@ -635,8 +670,11 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     if entry.is_none() && check.is_some() {
         return Err(bad("check without an entry".into()));
     }
-    if check.is_none() && !(expect == "not_entered" || value == "panic") {
-        return Err(bad("check observation is absent".into()));
+    let absent_check_allowed = value == "panic" || (unreached && expect == "not_entered");
+    if (check.is_none() || expect == "not_entered") && !absent_check_allowed {
+        return Err(bad(
+            "check observation is absent or improperly waived".into()
+        ));
     }
     let (applied, ack, won) = {
         let mut parts = seen["value"].split(' ');
@@ -719,8 +757,10 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     if !branch_ok {
         return Err(bad(format!("branch {}", seen["branch"])));
     }
-    if !ledger_ok(seen["ledger"], &identity) {
-        return Err(bad(format!("ledger {}", seen["ledger"])));
+    let ledger = parse_ledger(seen["ledger"], &identity)
+        .ok_or_else(|| bad(format!("ledger {}", seen["ledger"])))?;
+    if !matches!(seen["window"], "boundary" | "completed_attempt") {
+        return Err(bad(format!("window {}", seen["window"])));
     }
     let ordinal = gate_ordinal(&row[1]).map(|(_, n)| n);
     match (ordinal, seen.get("peer")) {
@@ -729,17 +769,25 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
             let (paths, chat) = peer
                 .split_once(" chat=")
                 .ok_or_else(|| bad("peer".into()))?;
-            let count = if paths == "none" {
-                0
+            let order = peer_order(&row[1]);
+            let sent: Vec<_> = if paths == "none" {
+                Vec::new()
             } else {
-                paths.split(',').count()
+                paths.split(',').collect()
             };
-            if !paths
-                .split(',')
-                .all(|p| paths == "none" || p.starts_with('/'))
-                || !(count == n || count + 1 == n)
-                || !matches!(chat, "0" | "1")
-            {
+            let count = sent.len();
+            let expected_chat = if sent.contains(&"/api/chat") {
+                "1"
+            } else {
+                "0"
+            };
+            // Over a completed attempt a passing gate sees the whole exchange.
+            let count_ok = if seen["window"] == "completed_attempt" && won == "route" {
+                count == order.len()
+            } else {
+                count == n || count + 1 == n
+            };
+            if !count_ok || sent.as_slice() != &order[..count] || chat != expected_chat {
                 return Err(bad(format!("peer {peer}")));
             }
         }
@@ -782,10 +830,10 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     {
         return Err(bad(format!("store {}", seen["store"])));
     }
-    let deadline_want = (value == "budget").then_some("budget");
-    let deadline_ok = match deadline_want {
-        Some(want) => seen["deadline_fired"] == want,
-        None => matches!(seen["deadline_fired"], "none" | "grant_expiry"),
+    let deadline_ok = match value.as_str() {
+        "budget" => seen["deadline_fired"] == "budget",
+        "grant_expiry" => matches!(seen["deadline_fired"], "none" | "grant_expiry"),
+        _ => seen["deadline_fired"] == "none",
     };
     if !deadline_ok {
         return Err(bad(format!("deadline_fired {}", seen["deadline_fired"])));
@@ -794,7 +842,7 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
         point: entry.unwrap_or("absent").to_owned(),
         identity,
         ordinal: ordinal.map_or("-".to_owned(), |n| n.to_string()),
-        ledger: seen["ledger"].to_owned(),
+        ledger,
     })
 }
 fn apply_ok(row: &[String]) -> bool {
@@ -826,9 +874,6 @@ fn check_expect_row(row: &[String], dim_values: &[&str]) -> Result<Option<Witnes
     let (sink, dim) = (&row[1], row[2].as_str());
     let at = format!("{sink}/{dim}/{}", row[3]);
     points_agree(row)?;
-    if row[3].contains(',') {
-        return Err(format!("{at}: a witness names one value; one row per cell"));
-    }
     let value = row[3].as_str();
     if !dim_values.contains(&value) {
         return Err(format!("{at}: unknown value {value}"));
@@ -878,6 +923,7 @@ fn check_expect_row(row: &[String], dim_values: &[&str]) -> Result<Option<Witnes
         || row[10].strip_prefix("g:").is_some_and(|g| {
             !g.is_empty()
                 && matches!(row[12].as_str(), "passed" | "recorded")
+                && matches!((dim, value), ("lifecycle", "Normal") | ("fault", "none"))
                 && g.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
         });
     if !exec_ok {
@@ -945,7 +991,7 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
         return Err(format!("expect: extra cell {s}/{d}/{v}"));
     }
     let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
-    type Key = (String, String, String, String);
+    type Key = (String, String, String, Vec<Delta>);
     let mut groups: BTreeMap<&str, BTreeSet<Key>> = BTreeMap::new();
     for row in &c.expect.rows {
         let frozen = c.frozen.get(row[1].as_str());
@@ -962,7 +1008,11 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
                 (true, _) => format!("amend:{AMEND_REASON}"),
                 (_, true) => format!("denial:{DENIAL_ROW_ORACLE}"),
                 // A hold names no design list: it may sit only on an open cell.
-                _ if row[17].starts_with("hold:") => row[17].clone(),
+                _ if row[17].starts_with("hold:")
+                    && c.cells.get(&cell).is_some_and(|d| d.starts_with("open:")) =>
+                {
+                    row[17].clone()
+                }
                 _ => "open".to_owned(),
             };
             if row[17] != want {
@@ -2013,6 +2063,10 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 fn sb3e_manifest_is_literal_and_empty() {
     assert_eq!(parse_manifest(CELLS_RS), Ok(BTreeSet::new()));
 }
+#[test]
+fn sb3e_no_amend_oracle_is_listed_yet() {
+    assert!(words("").is_empty() && words(AMEND_ORACLES).is_empty());
+}
 /// One synthetic row, valid by construction, for the fixture table below.
 fn fixture_row(route: &str, sink: &str, dim: &str, value: &str, status: &str) -> String {
     let [driver, entry, check, exit] = sink_points(sink).unwrap();
@@ -2039,6 +2093,7 @@ fn fixture_row(route: &str, sink: &str, dim: &str, value: &str, status: &str) ->
     (row[7], row[8], row[9]) = (entry.to_owned(), check.to_owned(), exit.to_owned());
     (row[10], row[11], row[12]) = ("own".to_owned(), apply.clone(), expect.to_owned());
     let id = expected_identity(&row).unwrap();
+    let session = id.split(' ').next().unwrap();
     let ack = match (value, apply.starts_with("reader:")) {
         ("none", _) => "none",
         (_, true) => "read",
@@ -2062,11 +2117,13 @@ fn fixture_row(route: &str, sink: &str, dim: &str, value: &str, status: &str) ->
     };
     let mut w = format!(
         "entry={seen};check={reached};value={value}@{applied_at} ack={ack} won={won};\
-         out={expect}@{out};branch=none;ledger=none;deadline_fired={deadline}"
+         out={expect}@{out};branch=none;ledger=+0:all[{session}];window=boundary;\
+         deadline_fired={deadline}"
     );
     if let Some((_, n)) = gate_ordinal(sink) {
-        let paths: Vec<_> = (0..n).map(|i| format!("/p{i}")).collect();
-        w += &format!(";peer={} chat=0", paths.join(","));
+        let paths = &peer_order(sink)[..n];
+        let chat = usize::from(paths.contains(&"/api/chat"));
+        w += &format!(";peer={} chat={chat}", paths.join(","));
     }
     match value {
         "grant_revocation" => w += ";grant=original[revoked]",
@@ -2117,7 +2174,6 @@ fn fixture_edit(table: &str, cell: &str, f: impl FnOnce(&mut Vec<String>)) -> St
 /// `column|from|to|wanted` on call_chat/lifecycle/Normal: `from` empty sets the
 /// column, otherwise the first `from` is replaced.
 const NORMAL_EDITS: &str = "\
-6||d_register|wrong driver
 7||model.call.observed|mislabelled point
 8||m:738|mislabelled point
 9||m:786|mislabelled point
@@ -2136,7 +2192,6 @@ const NORMAL_EDITS: &str = "\
 13|;check=model.call.sampled[s=S |;check=model.call.sampled[s=OTHER |check uncorrelated identity
 13|;check=model.call.sampled[|;check=m:738[|check wrong point
 13|entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4]|entry=absent|entry observation is absent
-13|;check=model.call.sampled[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4]|;check=absent|check observation is absent
 13|value=Normal@|value=Emergency@|is not the cell's
 13|ack=armed|ack=held|ack held, wanted armed
 13|won=route|won=value|won value, wanted route
@@ -2144,18 +2199,35 @@ const NORMAL_EDITS: &str = "\
 13|out=passed@model.call.sampled|out=passed@call.gate|bad witness: out
 13|out=passed@model.call.sampled|out=passed@model.call.sampledX|bad witness: out
 13|branch=none|branch=note:x@fixture|bad witness: branch
-13|ledger=none|ledger=+1:model_call|bad witness: ledger
-13|ledger=none|ledger=+1:model_call[run=OTHER]|bad witness: ledger
-13|ledger=none|ledger=+1:nope[run=RUN]|bad witness: ledger
-13|ledger=none|ledger=+9:model_call[run=RUN]|bad witness: ledger
-13|;peer=/p0,/p1,/p2,/p3 chat=0|;peer=/p0 chat=0|bad witness: peer
+13|ledger=+0:all[s=S]|ledger=none|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:model_call|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:model_call[run=OTHER att=ATT]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:nope[run=RUN att=ATT]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+9:model_call[run=RUN att=ATT]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:model_call[run=RUN]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:model_call[s=S]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:ModelCallCharged[s=S]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:model_call[run=RUN run=RUN att=ATT]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:model_call[run=RUN att=ATT],+0:model_call[run=RUN att=ATT]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+1:all[s=S]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+0:all[run=RUN]|bad witness: ledger
+13|ledger=+0:all[s=S]|ledger=+0:all[s=S],+1:model_call[run=RUN att=ATT]|bad witness: ledger
+13|;window=boundary|;window=someday|bad witness: window
+13|/api/tags,/api/chat chat=1|/api/chat,/api/tags chat=1|bad witness: peer
+13|/api/tags,/api/chat chat=1|/api/tags,/api/tags chat=1|bad witness: peer
+13|/api/tags,/api/chat chat=1|/api/tags,/api/show chat=1|bad witness: peer
+13|chat=1|chat=0|bad witness: peer
+13|;peer=/api/version,/api/status,/api/tags,/api/chat chat=1|;peer=/api/version chat=0|bad witness: peer
 13|;deadline_fired=none|;deadline_fired=budget|bad witness: deadline_fired
+13|;deadline_fired=none|;deadline_fired=grant_expiry|bad witness: deadline_fired
 13|;deadline_fired=none|;deadline_fired=none;store=zap|bad witness: store
 13|;deadline_fired=none|;deadline_fired=none;grant=original[revoked]|bad witness: grant
 13|;deadline_fired=none|;deadline_fired=none;locks=ModelState@fixture|bad witness: locks
 ";
 /// `sink/dim/value|column|from|to|wanted` on other rows.
 const CELL_EDITS: &str = "\
+emergency_restrict/lifecycle/Emergency|6||d_halt|wrong driver
+call_version/lifecycle/Normal|13|peer=/api/version chat=0|peer=/api/version,/api/status,/api/tags,/api/chat chat=1|bad witness: peer
 call_chat/ingress/CR|11||reader:0a|bad apply
 call_chat/ingress/CR|11||reader:Line::Eof|bad apply
 call_chat/ingress/master_close|11||reader:eof|bad apply
@@ -2174,50 +2246,29 @@ close_report/fault/panic|13|;deadline_fired=none|;deadline_fired=none;peer=none 
 call_chat/fault/decline|17||open|status is not
 seal/lifecycle/Normal|17||denial:sb3e_unresolved_lane_refuses_seal|status is not
 call_chat/fault/decline|17||hold:no_recipe|status is not
-call_chat/lifecycle/Normal|17||hold:Bad-Slug|bad status
+call_chat/ingress/mission_stop|17||hold:Bad-Slug|bad status
 ";
-/// Each manifest is refused through the verifier's own entry point, for its
-/// named reason.
-const BAD_MANIFESTS: [(&str, &str); 14] = [
-    (
-        "// cells! { r5 call_chat lifecycle Normal; }\n",
-        "no cells! block",
-    ),
-    ("#[cfg(any())]\ncells! {\n}\n", "comment prologue"),
-    ("use x::y;\ncells! {\n}\n", "comment prologue"),
-    (
-        "cells! { r5 call_chat lifecycle Normal; }\n",
-        "comment prologue",
-    ),
-    (
-        "cells! {\n    r5 call_chat lifecycle Normal\n}\n",
-        "no final semicolon",
-    ),
-    ("cells! {\n    ;\n}\n", "not a literal entry"),
-    (
-        "cells! {\n    // r5 call_chat lifecycle Normal;\n}\n",
-        "not a literal entry",
-    ),
-    (
-        "cells! {\n    r5 call_chat lifecycle \"Normal\";\n}\n",
-        "not a literal entry",
-    ),
-    (
-        "cells! {\n    include!(\"more.rs\");\n}\n",
-        "not a literal entry",
-    ),
-    (
-        "cells! {\n    r5 call_chat lifecycle $value;\n}\n",
-        "not a literal entry",
-    ),
-    ("cells! {\n}\nfn extra() {}\n", "text after"),
-    ("cells! {\n}\ncells! {\n}\n", "text after"),
-    (
-        "cells! {\n    r5 call_chat lifecycle Normal;\n    r5 call_chat lifecycle normal;\n}\n",
-        "repeated entry",
-    ),
-    ("cells! {\n", "not closed"),
-];
+/// `manifest|wanted`, `~` a newline: refused through the verifier, for that reason.
+const BAD_MANIFESTS: &str = "\
+// cells! { r5 call_chat lifecycle Normal; }~|no cells! block
+#[cfg(any())] cells! {~ r5 call_chat lifecycle Normal;~}~|comment prologue
+use x::y;~cells! {~}~|comment prologue
+cells! { r5 call_chat lifecycle Normal; }~|comment prologue
+cells! {~    r5 call_chat lifecycle Normal~}~|no final semicolon
+cells! {~    ;~}~|not a literal entry
+cells! {~    // r5 call_chat lifecycle Normal;~}~|not a literal entry
+cells! {~    r5 call_chat lifecycle \"Normal\";~}~|not a literal entry
+cells! {~    include!(\"more.rs\");~}~|not a literal entry
+cells! {~    r5 call_chat lifecycle $value;~}~|not a literal entry
+cells! {~}~fn extra() {}~|text after
+cells! {~}~cells! {~}~|text after
+cells! {~    r5 call_chat lifecycle Normal;~    r5 call_chat lifecycle Normal;~}~|repeated entry
+cells! {~    r5 call_chat lifecycle Normal extra;~}~|not a literal entry
+cells! {~|not closed
+cells! {~    r5 call_chat fault nope;~}~|has no open row
+cells! {~    r5 call_chat fault decline;~}~|has no open row
+cells! {~    r6 call_chat fault panic;~}~|has no open row
+";
 /// `sink|dim|value|disposition|manifest entry or -|wanted`: register tampers.
 const RC_CONTROLS: &str = "\
 call_chat|lifecycle|Normal|x:rc_r5_call_chat_lifecycle_normal|-|no cell!() in the manifest
@@ -2248,7 +2299,6 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     // Each tamper is pinned, so a missing rule shows as accepted, not as a hash.
     let table = |text: &str| run(&tsv, text, CELLS_RS, &sha256_hex(text));
     assert_eq!(table(&base), Ok(()), "the synthetic table is accepted");
-    assert!(words(AMEND_ORACLES).is_empty(), "no oracle is listed yet");
     let mut red: Vec<String> = Vec::new();
     let mut check = |label: &str, accepted: Result<(), String>, want: &str| match accepted {
         Ok(()) => red.push(format!("{label}: tamper accepted")),
@@ -2296,6 +2346,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         "out",
         "branch",
         "ledger",
+        "window",
         "deadline_fired",
     ] {
         let edited = fixture_edit(&base, NORMAL, |c: &mut Vec<String>| {
@@ -2341,14 +2392,11 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         "call_chat/fault/panic",
         |c: &mut Vec<String>| c[3] = "panic,poison".into(),
     );
-    check("two values, one row", table(&merged), "one row per cell");
+    check("two values, one row", table(&merged), "unknown value");
     // The pin is part of the verifier, after the semantic checks.
-    let witness = apply_spec(
-        NORMAL,
-        13,
-        "deadline_fired=none",
-        "deadline_fired=grant_expiry",
-    );
+    let witness = fixture_edit(&base, NORMAL, |c: &mut Vec<String>| {
+        c[13] = c[13].replace("model.call.sampled", "model.call.observed");
+    });
     check(
         "witness without hash",
         run(&tsv, &witness, CELLS_RS, &pin),
@@ -2425,56 +2473,62 @@ fn sb3e_expect_verifier_controls_are_rejected() {
             let plain = expected_identity(c).unwrap();
             c[10] = "g:x".into();
             let bound = expected_identity(c).unwrap();
-            c[13] = c[13].replace(&plain, &bound).replace("ledger=none", ledger);
+            c[13] = c[13]
+                .replace(&plain, &bound)
+                .replace("ledger=+0:all[s=S]", ledger);
         })
     };
-    let both = |second: &'static str| {
-        group(
-            &group(&base, NORMAL, "ledger=none"),
-            "call_chat/fault/none",
-            second,
-        )
+    let pair = |first: &'static str, second: &'static str| {
+        group(&group(&base, NORMAL, first), "call_chat/fault/none", second)
     };
+    const EMPTY: &str = "ledger=+0:all[s=S.x]";
     check(
         "one execution, same key",
-        table(&both("ledger=none")),
+        table(&pair(EMPTY, EMPTY)),
         "repeats a point",
     );
     accepts(
         "one execution, distinct ledger",
-        &both("ledger=+1:model_call[run=RUN.x]"),
+        &pair(EMPTY, "ledger=+1:model_call[run=RUN.x att=ATT.x]"),
     );
+    const TWO: &str = "ledger=+0:ModelCallCharged[inv=INV.x],+1:model_call[run=RUN.x att=ATT.x]";
+    for (label, second) in [
+        (
+            "reordered deltas",
+            "ledger=+1:model_call[run=RUN.x att=ATT.x],+0:ModelCallCharged[inv=INV.x]",
+        ),
+        (
+            "reordered identity fields",
+            "ledger=+0:ModelCallCharged[inv=INV.x],+1:model_call[att=ATT.x run=RUN.x]",
+        ),
+    ] {
+        check(label, table(&pair(TWO, second)), "repeats a point");
+    }
+    check(
+        "a value-applied row in a group",
+        table(&group(&base, "call_chat/ingress/CR", EMPTY)),
+        "bad exec",
+    );
+    for ledger in ["+1:SessionClosed[s=S]", "+1:session_closed[s=S]"] {
+        accepts(ledger, &apply_spec(NORMAL, 13, "+0:all[s=S]", ledger));
+    }
     let unbound = fixture_edit(&base, NORMAL, |c: &mut Vec<String>| c[10] = "g:x".into());
     check(
         "group with no binding",
         table(&unbound),
         "uncorrelated identity",
     );
-    let refused_group = group(&refused("branch=note:8@fixture"), NORMAL, "ledger=none");
+    let refused_group = group(&refused("branch=note:8@fixture"), NORMAL, EMPTY);
     check(
         "a refused row in a group",
         table(&refused_group),
         "bad exec",
     );
     // Manifests, through the same entry point.
-    for (manifest, want) in BAD_MANIFESTS {
-        check(manifest, run(&tsv, &base, manifest, &pin), want);
-    }
-    for (manifest, want) in [
-        (
-            "cells! {\n    r5 call_chat fault nope;\n}\n",
-            "has no open row",
-        ),
-        (
-            "cells! {\n    r5 call_chat fault decline;\n}\n",
-            "has no open row",
-        ),
-        (
-            "cells! {\n    r6 call_chat fault panic;\n}\n",
-            "has no open row",
-        ),
-    ] {
-        check(manifest, run(&tsv, &base, manifest, &pin), want);
+    for spec in BAD_MANIFESTS.lines() {
+        let (manifest, want) = spec.split_once('|').unwrap();
+        let manifest = manifest.replace('~', "\n");
+        check(spec, run(&tsv, &base, &manifest, &pin), want);
     }
     // `x:rc_` needs its row, slug, manifest entry and 4.4; `na:` a reviewed row.
     let credited = cell_text(
@@ -2488,6 +2542,44 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         run(&credited, &base, listed, &pin),
         Ok(()),
         "an honest x:rc_ is accepted"
+    );
+    const CHECKED: &str =
+        ";check=model.call.sampled[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4]";
+    let waive = |expect: &'static str| {
+        fixture_edit(&base, NORMAL, move |c: &mut Vec<String>| {
+            let won = if expect == "passed" { "route" } else { "value" };
+            c[12] = expect.into();
+            c[13] = c[13]
+                .replace(CHECKED, ";check=absent")
+                .replace(
+                    "out=passed@model.call.sampled",
+                    &format!("out={expect}@call.gate"),
+                )
+                .replace("won=route", &format!("won={won}"));
+        })
+    };
+    check(
+        "check absent, out moved",
+        table(&waive("passed")),
+        "check observation",
+    );
+    let not_entered = waive("not_entered");
+    check(
+        "not_entered, ordinary cell",
+        table(&not_entered),
+        "check observation",
+    );
+    let checked = fixture_edit(&base, NORMAL, |c: &mut Vec<String>| {
+        c[12] = "not_entered".into();
+        c[13] = c[13]
+            .replace("out=passed@", "out=not_entered@")
+            .replace("won=route", "won=value");
+    });
+    check("not_entered, checked", table(&checked), "improperly waived");
+    check(
+        "not_entered, credited",
+        run(&credited, &not_entered, listed, &sha256_hex(&not_entered)),
+        "check observation",
     );
     for (col, to) in [(8, "model.call.sampled"), (6, "d_register")] {
         let moved = apply_spec(NORMAL, col, "", to);
@@ -2505,17 +2597,23 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         check(spec, run(&register, &base, manifest, &pin), f[5]);
     }
     // R5.2: a hold row states no recipe and is never credited or excused.
-    let hold = |text: &str, slug: &'static str| {
-        fixture_edit(text, NORMAL, move |c: &mut Vec<String>| {
+    const STOP: &str = "call_chat/ingress/mission_stop";
+    let hold = |text: &str, cell: &str, slug: &'static str| {
+        fixture_edit(text, cell, move |c: &mut Vec<String>| {
             for col in [5, 11, 12, 13] {
                 c[col] = "hold".into();
             }
             c[17] = format!("hold:{slug}");
         })
     };
-    let held = hold(&base, "no_recipe");
+    let held = hold(&base, STOP, "no_recipe");
     accepts("a hold row", &held);
-    let half = fixture_edit(&held, NORMAL, |c: &mut Vec<String>| {
+    check(
+        "a hold row on an audited citation",
+        table(&hold(&base, NORMAL, "no_recipe")),
+        "status is not open",
+    );
+    let half = fixture_edit(&held, STOP, |c: &mut Vec<String>| {
         c[11] = "before@call.gate".into()
     });
     check(
@@ -2523,12 +2621,15 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         table(&half),
         "carries no recipe",
     );
-    let grouped = fixture_edit(&held, NORMAL, |c: &mut Vec<String>| c[10] = "g:x".into());
+    let grouped = fixture_edit(&held, STOP, |c: &mut Vec<String>| c[10] = "g:x".into());
     check(
         "a hold row in a group",
         table(&grouped),
         "carries no recipe",
     );
+    let on_stop = "x:rc_r5_call_chat_ingress_mission_stop";
+    let listed = "cells! {\n    r5 call_chat ingress mission_stop;\n}\n";
+    let credited = cell_text("call_chat", "ingress", "mission_stop", on_stop);
     check(
         "x:rc_ on hold",
         run(&credited, &held, listed, &sha256_hex(&held)),
@@ -2536,8 +2637,8 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     );
     let excused = cell_text(
         "call_chat",
-        "lifecycle",
-        "Normal",
+        "ingress",
+        "mission_stop",
         "na:BOOTSTRAP_NO_MISSION",
     );
     check(
@@ -2550,11 +2651,31 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         run(&tsv, &held, listed, &sha256_hex(&held)),
         "has no open row",
     );
+    let completed = |peer: &'static str| {
+        fixture_edit(
+            &base,
+            "call_version/lifecycle/Normal",
+            move |c: &mut Vec<String>| {
+                c[13] = c[13]
+                    .replace("window=boundary", "window=completed_attempt")
+                    .replace("peer=/api/version chat=0", peer);
+            },
+        )
+    };
+    check(
+        "completed attempt, partial exchange",
+        table(&completed("peer=/api/version chat=0")),
+        "bad witness: peer",
+    );
     assert!(
         red.is_empty(),
         "{} controls RED:\n{}",
         red.len(),
         red.join("\n")
+    );
+    accepts(
+        "completed attempt, whole exchange",
+        &completed("peer=/api/version,/api/status,/api/tags,/api/chat chat=1"),
     );
 }
 
