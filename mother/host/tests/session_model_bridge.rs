@@ -305,6 +305,8 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// authored separately from the manifest; neither is derived from the other,
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
+const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
+const EXPECT_SHA256: &str = "489898592fa481c300ed94b9bfdb2fb94cc26b701de2d6fa92b4626e49a607be";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -755,6 +757,7 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
             "grant does not identify the original grant's event".into()
         ));
     }
+    // Design 4.5: each `+` entry is its own isolated execution poisoning only that lock.
     match (value == "poison" && status == "open", seen.get("locks")) {
         (false, None) => {}
         (true, Some(locks))
@@ -1350,10 +1353,12 @@ fn verify_in(tsv: &str, sources: String) -> Result<Summary, String> {
 }
 /// `verify_in` against a D1 oracle file other than the checked-in one.
 fn verify_with(tsv: &str, sources: String, d1: String) -> Result<Summary, String> {
-    if sources.contains("#![cfg") {
-        return Err("a file-level cfg in the evidence sources".into());
-    }
-    verify_register(tsv, &context(sources, d1, Expect::default()))
+    let tables = Tables {
+        expect: EXPECT,
+        manifest: CELLS_RS,
+        sha256: EXPECT_SHA256,
+    };
+    verify_all(tsv, sources, d1, &tables)
 }
 /// The whole check against an expectation table, a manifest and a pin. The
 /// register's cells are checked first, so `x:rc_` is judged on its row as it
@@ -2558,6 +2563,131 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     );
 }
 
+/// SB-3E U2b (design 2.1, 2.2, R5): the real table expands to the frozen universe.
+#[test]
+fn sb3e_expect_table_is_complete() {
+    verify(&real()).unwrap();
+    let expect = parse_expect(EXPECT, CELLS_RS).unwrap();
+    assert!(expect.manifest.is_empty(), "no cell is credited");
+    let mut by_status: BTreeMap<&str, usize> = BTreeMap::new();
+    for row in &expect.rows {
+        *by_status
+            .entry(row[17].split(':').next().unwrap())
+            .or_default() += 1;
+    }
+    assert_eq!(expect.rows.len(), 905);
+    assert_eq!(
+        (
+            by_status["open"],
+            by_status["amend"],
+            by_status["denial"],
+            by_status["hold"]
+        ),
+        (838, 25, 9, 33)
+    );
+}
+/// Tampers with the checked-in table, through the verifier on the real files.
+#[test]
+fn sb3e_real_table_tampers_are_rejected() {
+    let run = |expect: &str, manifest: &str, register: &str| {
+        let tables = Tables {
+            expect,
+            manifest,
+            sha256: EXPECT_SHA256,
+        };
+        verify_all(register, evidence_sources(), D1_ORACLES.to_owned(), &tables).map(|_| ())
+    };
+    let tsv = real();
+    let table = |text: &str| run(text, CELLS_RS, &tsv);
+    let edit = |cell: &str, col: usize, to: &'static str| {
+        fixture_edit(EXPECT, cell, move |c: &mut Vec<String>| c[col] = to.into())
+    };
+    let panic = "call_chat/fault/panic";
+    let row = EXPECT
+        .lines()
+        .find(|l| l.contains("call_chat\tfault\tpanic\t"))
+        .unwrap();
+    let mut red: Vec<String> = Vec::new();
+    let mut check = |label: &str, got: Result<(), String>, want: &str| match got {
+        Ok(()) => red.push(format!("{label}: tamper accepted")),
+        Err(e) if e.contains(want) => {}
+        Err(e) => red.push(format!("{label}: wanted {want:?}, got {e}")),
+    };
+    check(
+        "row removed",
+        table(&EXPECT.replacen(&format!("{row}\n"), "", 1)),
+        "expect: missing cell",
+    );
+    let extra = row.replacen("call_chat\tfault\tpanic", "call_chat\tschedule\tmiddle", 1);
+    check(
+        "row added",
+        table(&format!("{EXPECT}{extra}\n")),
+        "expect: extra cell",
+    );
+    check(
+        "wrong driver",
+        table(&edit(panic, 6, "d_register")),
+        "wrong driver",
+    );
+    check(
+        "mislabelled point",
+        table(&edit(panic, 8, "m:738")),
+        "mislabelled point",
+    );
+    let held = edit("call_chat/lifecycle/Normal", 17, "hold:x");
+    check(
+        "a hold row keeping a recipe",
+        table(&held),
+        "carries no recipe",
+    );
+    check(
+        "expands wrong",
+        table(&edit(panic, 3, "poison")),
+        "expect: duplicate cell",
+    );
+    let witness = fixture_edit(EXPECT, panic, |c: &mut Vec<String>| {
+        c[13] = c[13].replace("deadline_fired=none", "deadline_fired=grant_expiry");
+    });
+    check(
+        "witness changed without hash",
+        table(&witness),
+        "EXPECT_SHA256",
+    );
+    let on_amend = cell_text(
+        "call_chat",
+        "fault",
+        "decline",
+        "x:rc_r5_call_chat_fault_decline",
+    );
+    check(
+        "x: on amend",
+        run(
+            EXPECT,
+            "cells! {\n    r5 call_chat fault decline;\n}\n",
+            &on_amend,
+        ),
+        "x:rc_ on a non-open row",
+    );
+    let cell = "call_chat/lifecycle/Normal";
+    let listed = "cells! {\n    r5 call_chat lifecycle Normal;\n}\n";
+    let credited = cell_text(
+        "call_chat",
+        "lifecycle",
+        "Normal",
+        "x:rc_r5_call_chat_lifecycle_normal",
+    );
+    check(
+        "x:rc_ with a mislabelled point",
+        run(&edit(cell, 8, "model.call.sampled"), listed, &credited),
+        "x:rc_ row fails design 4.4",
+    );
+    assert!(
+        red.is_empty(),
+        "{} controls RED:\n{}",
+        red.len(),
+        red.join("\n")
+    );
+}
 #[test]
 fn sb3c_ingress_block_tampering_fails() {
     let text = read(&session_file("model-bridge-cases.tsv")).unwrap();
