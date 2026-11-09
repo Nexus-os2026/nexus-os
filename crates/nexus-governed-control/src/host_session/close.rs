@@ -261,14 +261,20 @@ impl HostSession {
     /// Observations only, collected on the bounded close worker. Failure to
     /// acquire a consistent snapshot is unknown, never zero obligations.
     pub fn close_obligations(&self) -> Result<CloseObligations, SessionError> {
-        let actions_unacknowledged = self
-            .core
-            .actions
-            .try_lock()
-            .map_err(|_| SessionError::Unavailable)?
-            .iter()
-            .filter(|a| !a.acknowledged())
-            .count();
+        let (actions_unacknowledged, actions_refused) = {
+            let actions = self
+                .core
+                .actions
+                .try_lock()
+                .map_err(|_| SessionError::Unavailable)?;
+            (
+                actions.iter().filter(|a| !a.discharged()).count(),
+                actions
+                    .iter()
+                    .filter(|a| a.refused_before_staging())
+                    .count(),
+            )
+        };
         let (producers_live, producers_lost) = {
             let producers = self
                 .core
@@ -287,6 +293,7 @@ impl HostSession {
                 .snapshot()
                 .ok_or(SessionError::Unavailable)?,
             actions_unacknowledged,
+            actions_refused,
             producers_live,
             producers_lost,
             authority_closed: self.core.authority_closed.load(Ordering::SeqCst),
@@ -398,7 +405,7 @@ impl HostSession {
             .lock()
             .map_err(|_| SessionError::Restricted)?
             .iter()
-            .any(|a| !a.acknowledged())
+            .any(|a| !a.discharged())
         {
             return Err(SessionError::Unavailable);
         }
@@ -508,6 +515,8 @@ impl HostSession {
 pub struct CloseObligations {
     pub model: ModelObligations,
     pub actions_unacknowledged: usize,
+    /// Refused before staging: discharged, and retained as the record.
+    pub actions_refused: usize,
     pub producers_live: usize,
     pub producers_lost: usize,
     pub authority_closed: bool,

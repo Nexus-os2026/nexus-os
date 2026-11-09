@@ -2047,6 +2047,7 @@ fn session_continuation_native_preparation_uses_the_actual_approval_scope() {
                 content: "continued\n".into(),
             },
             &approval,
+            &std::cell::Cell::new(false),
         )
         .unwrap();
     assert_eq!(
@@ -2849,6 +2850,7 @@ fn session_reservation_transfer_releases_exactly_its_own_capacity() {
                     },
                     f.gov.kernel_stop.authority(),
                     &cell,
+                    &std::cell::Cell::new(false),
                 )
                 .unwrap();
             let view = f
@@ -2881,6 +2883,66 @@ fn session_reservation_transfer_releases_exactly_its_own_capacity() {
             f.gov.control.pending_held(f.run)
         );
     }
+}
+
+/// SB3D-F2: only the request's own refusals before staging are discharged.
+/// A failed read of the workspace and a refusal after staging stay owed, and
+/// every entry stays retained.
+#[test]
+fn sb3d_f2_only_a_refusal_before_staging_is_discharged() {
+    use crate::host_session::outcome::Acknowledgement::{Pending, RefusedBeforeStaging};
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    let workspace = f._dirs.0.path().join("selected/workspace");
+    std::fs::write(workspace.join("exists.txt"), "kept\n").unwrap();
+    let counts = || {
+        let o = f._session.close_obligations().unwrap();
+        (o.actions_unacknowledged, o.actions_refused)
+    };
+    let refused = |name: &str, content: &str| f.propose_content(name, content).unwrap_err().class();
+    assert_eq!(refused("exists.txt", "new\n"), "file_exists");
+    assert_eq!(counts(), (0, 1));
+    assert_eq!(refused("kept.bin", "new\n"), "file_type_not_allowed");
+    assert_eq!(counts(), (0, 2));
+    assert_eq!(refused("no/name.txt", "new\n"), "invalid_action");
+    assert_eq!(counts(), (0, 3));
+    assert_eq!(refused("large.txt", &"x".repeat(9000)), "invalid_action");
+    assert_eq!(counts(), (0, 4));
+    assert_eq!(
+        refused("wide.txt", &"\u{7f}".repeat(8000)),
+        "change_too_large_to_show"
+    );
+    assert_eq!(counts(), (0, 5));
+    let held = || f._session.inventory().unwrap().entries.len();
+    assert_eq!(held(), 0, "nothing was reserved or staged");
+    assert_ne!(crate::launcher::effective_uid(), 0, "root reads any dir");
+    let mode = |bits| std::fs::Permissions::from_mode(bits);
+    std::fs::set_permissions(&workspace, mode(0o000)).unwrap();
+    let unreadable = refused("session.txt", "new\n");
+    std::fs::set_permissions(&workspace, mode(0o700)).unwrap();
+    assert_eq!(unreadable, "unavailable");
+    assert_eq!(counts(), (1, 5), "an unread name is not a refusal");
+    assert_eq!(held(), 0);
+    assert_eq!(refused("page.html", "not inert\n"), "page_not_inert");
+    assert_eq!(counts(), (2, 5), "a staged refusal stays owed");
+    assert_eq!(held(), 1, "its resource is tracked");
+    let seen = f
+        ._session
+        .operation_observation(&f.request)
+        .unwrap()
+        .actions;
+    let acks: Vec<_> = seen.iter().map(|a| a.acknowledgement).collect();
+    let discharged = RefusedBeforeStaging;
+    assert_eq!(
+        acks,
+        [discharged, discharged, discharged, discharged, discharged, Pending, Pending],
+        "every refusal stays in the record"
+    );
+    assert!(seen.iter().all(|a| a.commitment.is_none()));
+    assert_eq!(
+        std::fs::read(workspace.join("exists.txt")).unwrap(),
+        b"kept\n"
+    );
 }
 
 #[path = "session_lifecycle_fix1_tests.rs"]

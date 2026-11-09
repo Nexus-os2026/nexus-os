@@ -152,6 +152,8 @@ pub enum RecordingStatus {
 pub enum Acknowledgement {
     Pending,
     Verified,
+    /// SB3D-F2: refused before staging; no commitment and no receipt exist.
+    RefusedBeforeStaging,
 }
 #[derive(Clone, Debug)]
 pub struct ActionObservation {
