@@ -433,12 +433,9 @@ fn open_request(arg: &str) {
 
 // ------------------------------------------------------------------- H5
 
-/// H5: a reply released after Quit loses to the close and the seal refuses
-/// (the F1-b item, pinned in `seal_refused_after_cancel`), so that schedule has
-/// no successful seal. After a successful seal, a real late attempt on the
-/// retained port and on the broker door is refused and moves no request,
-/// native record, callback or obligation; the three end facts stay distinct.
-/// A Mother caller cannot outlive the seal: `sole` needs every thread joined.
+/// H5: a reply released after Quit has no successful seal (F1-b item, pinned in
+/// `seal_refused_after_cancel`). After a successful seal, a real late attempt
+/// is refused and moves no request, native record, callback or obligation.
 #[test]
 fn sb3_mother_post_seal_model_events_are_absent() {
     watched(
@@ -451,12 +448,10 @@ fn sb3_mother_post_seal_model_events_are_absent() {
         ],
     );
 }
-/// A completed call with an accepted page pending at Quit closes clean (SB3D-R6
-/// (e)). A File the inert check refuses leaves an action with no receipt, so
-/// the seal's action branch (close.rs, `actions`) refuses: observed, conservative.
+/// R6 (e): a pending page closes clean; a refused File stays unacknowledged.
 fn file_at_quit(arg: &str) {
+    use crate::adapter::c1b_coordinator_oracles::draft;
     use crate::adapter::m3d_publication_oracles::BAKERY;
-    use crate::{adapter::c1b_coordinator_oracles::draft, contract::Note};
     let f = SFx::canonical();
     let page = arg == "file";
     let m = f.mother(1, move |ctx| {
@@ -474,9 +469,9 @@ fn file_at_quit(arg: &str) {
     });
     if page {
         c.pass_criteria = crate::page_inputs::page_criteria();
-        c.notes = vec![Note {
+        c.notes = vec![crate::contract::Note {
             label: "notes".into(),
-            text: "Fresh bread every morning.".into(),
+            text: "Fresh bread.".into(),
         }];
     }
     let id = f.building(&m, c);

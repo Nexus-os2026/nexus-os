@@ -716,11 +716,7 @@ pub fn verify_d_block(cases: &str) -> Result<usize, String> {
         }
     }
     if seen.len() != listed.len() {
-        return Err(format!(
-            "missing SB-3D rows: {} of {}",
-            seen.len(),
-            listed.len()
-        ));
+        return Err(format!("missing SB-3D rows: {}", listed.len() - seen.len()));
     }
     Ok(seen.len())
 }
