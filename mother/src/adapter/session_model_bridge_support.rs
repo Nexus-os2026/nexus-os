@@ -225,3 +225,13 @@ pub(crate) fn signal() -> (std::sync::mpsc::SyncSender<()>, Receiver<()>) {
 pub(crate) fn count(counter: &AtomicUsize) -> usize {
     counter.load(Ordering::SeqCst)
 }
+
+impl SFx {
+    /// SB-3 D2: registered like `new`, with the production history inspector
+    /// bound, so the model journal passes the seal's history check.
+    pub(crate) fn canonical() -> Self {
+        let fake = Arc::new(FakeOllama::start());
+        let home = Fixture::with_model_canonical("sb3d2", &fake.endpoint(), spec());
+        Self::of(home, fake)
+    }
+}
