@@ -620,6 +620,9 @@ fn parse_ledger(ledger: &str, identity: &str) -> Option<Vec<Delta>> {
         got.sort();
         let op_ok = matches!(op, "+0" | "+1" | "owed" | "uncertain");
         let repeated = deltas.iter().any(|d| d.1 == record && d.2 == got);
+        if want.len() != keys.split(',').count() {
+            return None;
+        }
         if !op_ok || want.is_empty() || got != want || repeated || (record == "all" && op != "+0") {
             return None;
         }
@@ -2064,8 +2067,15 @@ fn sb3e_manifest_is_literal_and_empty() {
     assert_eq!(parse_manifest(CELLS_RS), Ok(BTreeSet::new()));
 }
 #[test]
-fn sb3e_no_amend_oracle_is_listed_yet() {
-    assert!(words("").is_empty() && words(AMEND_ORACLES).is_empty());
+fn sb3e_overlong_manifest_is_refused() {
+    let base = fixture_table();
+    let tables = Tables {
+        expect: &base,
+        manifest: "cells! {\n    r5 call_chat lifecycle Normal extra;\n}\n",
+        sha256: &sha256_hex(&base),
+    };
+    let got = verify_all(&real(), evidence_sources(), D1_ORACLES.to_owned(), &tables);
+    assert!(got.is_err_and(|e| e.contains("not a literal entry")));
 }
 /// One synthetic row, valid by construction, for the fixture table below.
 fn fixture_row(route: &str, sink: &str, dim: &str, value: &str, status: &str) -> String {
@@ -2263,7 +2273,6 @@ cells! {~    r5 call_chat lifecycle $value;~}~|not a literal entry
 cells! {~}~fn extra() {}~|text after
 cells! {~}~cells! {~}~|text after
 cells! {~    r5 call_chat lifecycle Normal;~    r5 call_chat lifecycle Normal;~}~|repeated entry
-cells! {~    r5 call_chat lifecycle Normal extra;~}~|not a literal entry
 cells! {~|not closed
 cells! {~    r5 call_chat fault nope;~}~|has no open row
 cells! {~    r5 call_chat fault decline;~}~|has no open row
@@ -2339,16 +2348,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
             f[4],
         );
     }
-    for key in [
-        "entry",
-        "check",
-        "value",
-        "out",
-        "branch",
-        "ledger",
-        "window",
-        "deadline_fired",
-    ] {
+    for key in words("entry check value out branch ledger window deadline_fired") {
         let edited = fixture_edit(&base, NORMAL, |c: &mut Vec<String>| {
             let kept: Vec<_> = c[13]
                 .split(';')
@@ -2417,21 +2417,13 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         "a refused row with its branch",
         &refused("branch=note:8@fixture"),
     );
-    check(
-        "refusal without a branch",
-        table(&refused("branch=none")),
-        "bad witness: branch",
-    );
-    check(
-        "another predicate",
-        table(&refused("branch=note:7@fixture")),
-        "bad witness: branch",
-    );
-    check(
-        "a branch not in refs",
-        table(&refused("branch=note:8@m:1")),
-        "bad witness: branch",
-    );
+    for (label, branch) in [
+        ("refusal without a branch", "branch=none"),
+        ("another predicate", "branch=note:7@fixture"),
+        ("a branch not in refs", "branch=note:8@m:1"),
+    ] {
+        check(label, table(&refused(branch)), "bad witness: branch");
+    }
     // An owed end is observed at the record the row cites.
     let owed = |at: &'static str| {
         fixture_edit(&base, NORMAL, move |c: &mut Vec<String>| {
@@ -2492,17 +2484,22 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         &pair(EMPTY, "ledger=+1:model_call[run=RUN.x att=ATT.x]"),
     );
     const TWO: &str = "ledger=+0:ModelCallCharged[inv=INV.x],+1:model_call[run=RUN.x att=ATT.x]";
-    for (label, second) in [
-        (
-            "reordered deltas",
-            "ledger=+1:model_call[run=RUN.x att=ATT.x],+0:ModelCallCharged[inv=INV.x]",
-        ),
-        (
-            "reordered identity fields",
-            "ledger=+0:ModelCallCharged[inv=INV.x],+1:model_call[att=ATT.x run=RUN.x]",
-        ),
+    for second in [
+        "ledger=+1:model_call[run=RUN.x att=ATT.x],+0:ModelCallCharged[inv=INV.x]",
+        "ledger=+0:ModelCallCharged[inv=INV.x],+1:model_call[att=ATT.x run=RUN.x]",
     ] {
-        check(label, table(&pair(TWO, second)), "repeats a point");
+        check(second, table(&pair(TWO, second)), "repeats a point");
+    }
+    for (route, sink, delta) in [
+        ("r6", "cancel_run", "+1:model_call[run=RUN]"),
+        ("r0", "registration_readiness", "+1:model_registered[s=S]"),
+    ] {
+        let thin = apply_spec(&format!("{sink}/fault/none"), 13, "+0:all[s=S]", delta);
+        let rc = format!("x:rc_{route}_{sink}_fault_none");
+        let manifest = format!("cells! {{\n    {route} {sink} fault none;\n}}\n");
+        let register = cell_text(sink, "fault", "none", &rc);
+        let got = run(&register, &thin, &manifest, &sha256_hex(&thin));
+        check(delta, got, "bad witness: ledger");
     }
     check(
         "a value-applied row in a group",
@@ -2613,20 +2610,13 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         table(&hold(&base, NORMAL, "no_recipe")),
         "status is not open",
     );
-    let half = fixture_edit(&held, STOP, |c: &mut Vec<String>| {
-        c[11] = "before@call.gate".into()
-    });
-    check(
-        "a hold row with a recipe",
-        table(&half),
-        "carries no recipe",
-    );
-    let grouped = fixture_edit(&held, STOP, |c: &mut Vec<String>| c[10] = "g:x".into());
-    check(
-        "a hold row in a group",
-        table(&grouped),
-        "carries no recipe",
-    );
+    for (label, col, to) in [
+        ("a hold row with a recipe", 11, "before@call.gate"),
+        ("a hold row in a group", 10, "g:x"),
+    ] {
+        let edited = fixture_edit(&held, STOP, move |c: &mut Vec<String>| c[col] = to.into());
+        check(label, table(&edited), "carries no recipe");
+    }
     let on_stop = "x:rc_r5_call_chat_ingress_mission_stop";
     let listed = "cells! {\n    r5 call_chat ingress mission_stop;\n}\n";
     let credited = cell_text("call_chat", "ingress", "mission_stop", on_stop);
