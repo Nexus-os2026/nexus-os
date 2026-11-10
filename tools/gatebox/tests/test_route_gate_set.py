@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import re
 import struct
@@ -233,6 +234,27 @@ class HistoricalPolicyControls(unittest.TestCase):
             try: parsed = receipt.policy_set(digest)
             except ValueError: return  # a digest that no longer matches fails closed
         self.assertEqual(parsed,policy)
+    def staged(self):
+        staged = self.history.parent/'staged'; staged.mkdir(mode=0o755); (self.history/self.digest).rename(staged/self.digest)
+        self.stack.enter_context(patch.object(receipt,'STAGED_HISTORY',staged))
+        return staged/self.digest
+    def test_r22_absent_retained_entry_falls_back_to_staged(self):
+        self.staged(); receipt.validate_summary(self.summary)
+        self.history.rmdir(); receipt.validate_summary(self.summary)  # first upgrade: no history directory yet
+    def test_r22_ancestry_error_does_not_fall_back_to_staged(self):
+        entry = self.staged(); target = self.history/self.digest
+        relink = lambda: (self.history.unlink(),self.history.mkdir(mode=0o755))
+        plants = {'symlinked entry':(lambda: target.symlink_to(entry),target.unlink),'file entry':(lambda: target.write_bytes(b''),target.unlink),
+                  'dangling symlink':(lambda: target.symlink_to(self.history/'absent'),target.unlink),
+                  'symlinked history':(lambda: (self.history.rmdir(),self.history.symlink_to(entry.parent)),relink),
+                  'unsearchable history':(lambda: self.history.chmod(0),lambda: self.history.chmod(0o755))}  # ENOTDIR, EACCES
+        for name,(plant,undo) in plants.items():
+            with self.subTest(plant=name):
+                plant()
+                try:
+                    with self.assertRaisesRegex(ValueError,'unsafe receipt ancestry'): receipt.validate_summary(self.summary)
+                finally: undo()
+                receipt.validate_summary(self.summary)  # restored: the absent entry falls back again
     def test_current_digest_matches_installed_identity_formula(self):
         pairs = sorted((str(HERE/n),sha((HERE/n).read_bytes())) for n in receipt.GATE_POLICY)
         self.assertEqual(receipt.current_policy(),sha(json.dumps(pairs,separators=(',',':')).encode()))
@@ -448,9 +470,13 @@ class UpgradeControls(unittest.TestCase):
             state = dict(Id=unit,Job='',ActiveState='inactive',ControlGroup=''); state.update(states.get(unit,{}))
             return ''.join(f'{k}={v}\n' for k,v in state.items() if v is not None).encode()
         with patch.dict(self.scope,run=run,CGROUP=cgroup): self.scope['require_settled']()
-    def populated(self, unit, value):
-        path = self.root/'cgroup/system.slice'/unit; path.mkdir(parents=True,exist_ok=True)
-        (path/'cgroup.events').write_text(f'populated {value}\nfrozen 0\n')
+    # R22.1: this host's layout (systemctl show Slice/ControlGroup, /sys/fs/cgroup); see the conformance test below.
+    SLICE = {RUN_UNIT:'system-mothergate\\x2drun.slice',ROOT_UNIT:'system-mothergate\\x2droot.slice'}
+    def group(self, unit): return '/system.slice/'+(self.SLICE[unit]+'/' if unit in self.SLICE else '')+unit
+    def populated(self, group, value):
+        path = self.root/'cgroup'/group.lstrip('/'); path.mkdir(parents=True,exist_ok=True)
+        for level in [path]+[p for p in path.parents if self.root/'cgroup/system.slice' in p.parents]:  # recursive, as cgroupfs
+            (level/'cgroup.events').write_text(f'populated {value}\nfrozen 0\n')
     def test_services_stopped_and_settled(self):
         listed = self.RUN_UNIT+' loaded failed failed run\n'+self.ROOT_UNIT+' loaded inactive dead root\n'
         self.settled(listed)
@@ -468,13 +494,45 @@ class UpgradeControls(unittest.TestCase):
     def test_r21_every_instance_cgroup_empty(self):
         for unit in (self.RUN_UNIT,self.ROOT_UNIT):
             with self.subTest(unit=unit):
-                self.populated(unit,1)
-                with self.assertRaisesRegex(ValueError,'cgroup populated: '+unit):
-                    self.settled(unit+' loaded failed failed x\n',**{unit:dict(ControlGroup='/system.slice/'+unit)})
+                listed, nested = unit+' loaded failed failed x\n', {unit:dict(ControlGroup=self.group(unit))}
+                self.populated(self.group(unit),1)
+                with self.assertRaisesRegex(ValueError,'cgroup populated: '+unit): self.settled(listed,**nested)
                 with self.assertRaisesRegex(ValueError,'cgroup populated: '+unit): self.settled()  # an unlisted instance's cgroup
-                self.populated(unit,0); self.settled(unit+' loaded failed failed x\n',**{unit:dict(ControlGroup='/system.slice/'+unit)})
-        with self.assertRaisesRegex(ValueError,'unit not settled'):
-            self.settled(self.RUN_UNIT+' loaded failed failed x\n',**{self.RUN_UNIT:dict(ControlGroup='/system.slice/other.service')})
+                self.populated(self.group(unit),0); self.settled(listed,**nested)
+                self.populated('/system.slice/'+unit,1)  # a stray flat group of an instance's name is still scanned
+                with self.assertRaisesRegex(ValueError,'cgroup populated: '+unit): self.settled()
+                self.populated('/system.slice/'+unit,0)
+        for unit in ('mothergate.socket','mothergate.service'):
+            self.populated(self.group(unit),1)
+            with self.subTest(unit=unit), self.assertRaisesRegex(ValueError,'cgroup populated: '+unit): self.settled(**{unit:dict(ControlGroup=self.group(unit))})
+            self.populated(self.group(unit),0)
+        for group in ('/system.slice/other.service','/system.slice/'+self.RUN_UNIT,self.group(self.ROOT_UNIT)):
+            with self.subTest(group=group), self.assertRaisesRegex(ValueError,'unit not settled'):
+                self.settled(self.RUN_UNIT+' loaded failed failed x\n',**{self.RUN_UNIT:dict(ControlGroup=group)})
+    def test_r22_template_slice_trees_scanned(self):
+        for slice_ in self.SLICE.values():
+            for child in ('mothergate-run@'+'b'*32+'.service','stray.scope','unrelated'):  # unlisted or foreign groups
+                with self.subTest(slice_=slice_,child=child):
+                    self.populated('/system.slice/'+slice_+'/'+child,1)
+                    with self.assertRaisesRegex(ValueError,'cgroup populated: '+re.escape(child)): self.settled()
+                    self.populated('/system.slice/'+slice_+'/'+child,0)
+            with self.subTest(slice_=slice_):
+                self.settled()
+                self.populated('/system.slice/'+slice_,1)  # populated is recursive: any deeper group in the tree
+                with self.assertRaisesRegex(ValueError,'cgroup populated: '+re.escape(slice_)): self.settled()
+                (self.root/'cgroup/system.slice'/slice_/'cgroup.events').unlink()
+                with self.assertRaisesRegex(ValueError,'unresolved cgroup evidence: '+re.escape(slice_)): self.settled()
+                self.populated('/system.slice/'+slice_,0); self.settled()
+    def test_r22_fixture_is_this_hosts_layout(self):
+        # Read-only conformance of the fixture above with systemd on a host that has the Gate Box installed.
+        if not shutil.which('systemctl') or not all(Path('/sys/fs/cgroup/system.slice',s).is_dir() for s in self.SLICE.values()):
+            self.skipTest('no installed Gate Box')
+        show = lambda unit,prop: subprocess.run(['systemctl','show','-P',prop,unit],check=True,capture_output=True,text=True).stdout.strip()
+        for unit,slice_ in self.SLICE.items():
+            self.assertEqual(show(slice_,'ControlGroup'),'/system.slice/'+slice_)
+            self.assertEqual(show(unit,'Slice'),slice_)
+            self.assertEqual(self.group(unit).rpartition('/')[0],'/system.slice/'+slice_)
+        for unit in ('mothergate.service','mothergate.socket'): self.assertEqual(show(unit,'Slice'),'system.slice')
     def used(self, kind='file', mode=0o600):
         path = self.root/'control/sealed'/('.used-'+'a'*32)
         if kind == 'file': path.write_bytes(b''); path.chmod(mode)
@@ -701,6 +759,33 @@ class UpgradeComposition(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'retained historical policy differs'): self.upgrade()
         self.assertEqual((self.root/'dest/probe.py').read_bytes(),b'old probe')
         self.assertFalse((self.root/'config/history'/('install-'+self.OLD)).exists())
+    def unsafe_retained_entry(self, plant):
+        source, history = self.root/'oldhistory'/self.gates, self.root/'config/history'
+        shutil.rmtree(self.root/'state/receipts'/('a'*32))  # no receipt reads the entry: only the reuse validation sees it
+        history.mkdir(mode=0o755); entry = history/self.gates; shutil.copytree(source,entry)
+        plant(entry,source); security = Mock(return_value=[])  # identical bytes in every plant
+        with patch.dict(self.scope,stage_security=security), self.assertRaisesRegex(ValueError,'unsafe retained historical policy: '+self.gates):
+            self.upgrade()
+        security.assert_not_called()  # preflight: before staging and before any mutation
+        self.assertEqual(((self.root/'dest/probe.py').read_bytes(),(history/('install-'+self.OLD)).exists()),(b'old probe',False))
+        self.assertTrue(os.path.lexists(entry))  # never replaced or repaired
+    RETAINED_PLANTS = {  # R22.2 sweep: each class of unsafe retained entry, each a generated control
+        'symlinked_entry':lambda e,s: (shutil.rmtree(e),e.symlink_to(s)),
+        'file_entry':lambda e,s: (shutil.rmtree(e),e.write_bytes(b'')),
+        'symlinked_member':lambda e,s: ((e/'gates.json').unlink(),(e/'gates.json').symlink_to(s/'gates.json')),
+        'hardlinked_member':lambda e,s: ((e/'gates.json').unlink(),os.link(s/'gates.json',e/'gates.json')),
+        'fifo_member':lambda e,s: ((e/'gates.json').unlink(),os.mkfifo(e/'gates.json',0o444)),
+        'writable_member':lambda e,s: (e/'gates.json').chmod(0o644),
+        'writable_entry':lambda e,s: e.chmod(0o775)}
+    for _n in RETAINED_PLANTS: locals()['test_r22_unsafe_retained_entry_refused_at_preflight_'+_n] = lambda self,_n=_n: self.unsafe_retained_entry(self.RETAINED_PLANTS[_n])
+    del _n
+    def test_r22_symlinked_identical_referenced_entry_refused_at_preflight(self):
+        history = self.root/'config/history'; history.mkdir(mode=0o755)
+        (history/self.gates).symlink_to(self.root/'oldhistory'/self.gates); security = Mock(return_value=[])
+        with patch.dict(self.scope,stage_security=security), self.assertRaisesRegex(ValueError,'unsafe receipt ancestry'): self.upgrade()
+        security.assert_not_called()
+        self.assertEqual((self.root/'dest/probe.py').read_bytes(),b'old probe')
+        self.assertEqual(json.loads((self.root/'config/admission.json').read_text())['stage'],'normal')
     def test_receipt_failing_its_own_policy_refuses_before_mutation(self):
         (self.root/'dest/policy/exclusions.json').chmod(0o644)
         inventory = json.loads((self.root/'config/installed-files.json').read_text())

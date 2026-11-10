@@ -1,6 +1,7 @@
 """Receipt schema, atomic publication and integrity; host authentication is PR-2.
 A success receipt is validated against its own recorded gate policy (SB3E-R19.5)."""
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -75,13 +76,14 @@ def current_policy():
 
 def historical(digest):
     """A retained policy set, content-addressed by its digest, root-owned and read-only. Every retained
-    generation is in HISTORY; an upgrade's staged entry is consulted only when HISTORY has none.
-    An existing but invalid HISTORY entry fails; it never falls through to the staged one."""
+    generation is in HISTORY; an upgrade's staged entry is consulted only when HISTORY has none (SB3E-R22.2:
+    ENOENT). Any other ancestry error, or an existing but invalid HISTORY entry, fails; never the staged one."""
     for root in (HISTORY,)+((STAGED_HISTORY,) if STAGED_HISTORY is not None else ()):
         try:
             directory = open_directory(root/digest)
             break
-        except ValueError: continue
+        except ValueError as exc:
+            if getattr(exc.__cause__,'errno',None) != errno.ENOENT: raise
     else: raise ValueError('unknown receipt policy')
     try:
         check(os.fstat(directory),HISTORY_OWNER,True)
