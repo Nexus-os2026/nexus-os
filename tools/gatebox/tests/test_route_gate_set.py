@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -31,8 +32,8 @@ def route_request(**change):
 def route_success():
     """A complete PASS_ROUTE_CELLS summary and its artifacts, as GB1b's supervisor publishes them."""
     env = ROUTE['environment']
-    files = {'a7-'+rel.replace('/','-'):rel.encode() for rel in ROUTE['a7']['evidence']}
-    files.update({'a7-verdict.json':b'{"verdict": "pass"}\n','c1.log':b'a7\n','c3.log':b'cells\n'})
+    files = {'a7-'+rel.replace('/','-')+'.log':rel.encode() for rel in ROUTE['a7']['evidence']}
+    files.update({'a7-verdict.json.log':b'{"verdict": "pass"}\n','c1.log':b'a7\n','c3.log':b'cells\n'})
     logs = [dict(file=n,sha256=sha(d)) for n,d in files.items()]
     def done(i, gate, argv, cwd, log):
         return dict(id='c%d'%i,gate_id=gate,argv=argv,cwd=cwd,environment=dict(env),exit_code=0,signal=None,
@@ -55,8 +56,8 @@ def route_success():
                                failed=[],ignored=[],filtered=[],excluded=[],discovery=[listing],
                                artifacts=[dict(id='route_cells',adapter='libtest',executable=EXE,
                                                package='nexus-mother-host',target='route_cells')])
-    summary['lane'] = dict(a7='PASS',verdict_sha256=sha(files['a7-verdict.json']),rustc_vv='rustc 1.94.0',cargo_v='cargo 1.94.0',
-                           evidence={n:sha(d) for n,d in files.items() if n.startswith('a7-') and n != 'a7-verdict.json'},
+    summary['lane'] = dict(a7='PASS',verdict_sha256=sha(files['a7-verdict.json.log']),rustc_vv='rustc 1.94.0',cargo_v='cargo 1.94.0',
+                           evidence={n:sha(d) for n,d in files.items() if n.startswith('a7-') and n != 'a7-verdict.json.log'},
                            lockfile_sha256='3'*64,wrapper_sha256=WRAPPER,harness_sha256='7'*64,inventory_sha256=INVENTORY,
                            names=list(NAMES),trust=ROUTE['trust'])
     return summary, files
@@ -515,3 +516,173 @@ class UpgradeComposition(unittest.TestCase):
         self.assertEqual(json.loads((self.root/'config/admission.json').read_text())['stage'],'normal')
 
 if __name__ == '__main__': unittest.main()
+
+# ---- GB1b: the payload route sequence with real processes (SB3E-R18 P1, R19, R20) ----------------
+# Each scenario runs init's Runner.route in a fresh child Python made a child subreaper, so every
+# orphan is adopted by it exactly as by payload PID 1; A7 and the harness are scripted stand-ins.
+DETACH = r'''
+def detach(pidfile):
+    """setsid + double fork; the survivor closes the captured pipes, so the command itself ends."""
+    import os, time
+    r, w = os.pipe()
+    first = os.fork()
+    if first == 0:
+        os.setsid()
+        if os.fork() == 0:
+            null = os.open(os.devnull, os.O_RDWR)
+            for fd in (0, 1, 2): os.dup2(null, fd)
+            open(pidfile, 'w').write(str(os.getpid())); os.write(w, b'x')
+            time.sleep(60); os._exit(0)
+        os.read(r, 1); os._exit(0)
+    os.waitpid(first, 0); os.close(r); os.close(w)
+'''
+FAKE_A7 = DETACH + r'''
+import hashlib, json, os, shutil, sys
+cfg = json.load(open(sys.argv[1]))
+ev, exe = cfg['evidence_dir'], cfg['target'] + '/release/deps/route_cells-0123456789abcdef'
+os.makedirs(os.path.dirname(exe)); shutil.copyfile(cfg['harness'], exe); os.chmod(exe, 0o755)
+digest = '0'*64 if cfg['mode'] == 'wrong-hash' else hashlib.sha256(open(exe, 'rb').read()).hexdigest()
+for rel in cfg['evidence']:
+    os.makedirs(os.path.join(ev, os.path.dirname(rel)), exist_ok=True)
+    body = {'lane/inventory.json': json.dumps({'files': {'release/deps/route_cells-0123456789abcdef': digest}}),
+            'lane/meta.json': json.dumps({'rustc': 'rustc 1.94.0 -vV', 'cargo': 'cargo 1.94.0'})}.get(rel, rel)
+    open(os.path.join(ev, rel), 'w').write(body)
+if cfg['mode'] == 'symlink':
+    os.unlink(ev + '/lane/start'); os.symlink(ev + '/ship/start', ev + '/lane/start')
+if cfg['mode'] == 'extra': open(ev + '/lane/extra', 'w').write('x')
+open(cfg['verdict'], 'w').write(json.dumps({'verdict': 'fail' if cfg['mode'] == 'fail' else 'pass'}))
+if cfg['mode'] == 'stray': detach(cfg['pidfile'])
+sys.exit(1 if cfg['mode'] == 'fail' else 0)
+'''
+FAKE_HARNESS = DETACH + r'''
+import os, sys
+MODE, PIDFILE = %r, %r
+if sys.argv[1:] == ['--list', '--format', 'terse']:
+    print('cells::rc_r1_alpha_beta_one: test'); print('cells::rc_r2_alpha_beta_two: test')
+    if MODE == 'replace':  # R20 (i): a constructor that replaces its own pathname during --list
+        me = sys.argv[0]; text = open(me).read().replace("MODE, PIDFILE = 'replace'", "MODE, PIDFILE = 'replaced'")
+        open(me + '.new', 'w').write(text); os.chmod(me + '.new', 0o755); os.rename(me + '.new', me)
+    if MODE == 'spawn': detach(PIDFILE)  # R20 (ii): a process spawned during --list that survives
+    sys.exit(0)
+print('\nrunning 2 tests\ntest cells::rc_r1_alpha_beta_one ... ok\ntest cells::rc_r2_alpha_beta_two ... ok\n')
+print('test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s')
+'''
+DRIVER = r'''
+import ctypes, json, os, sys
+sys.path.insert(0, sys.argv[1]); import init
+cfg = json.loads(sys.argv[2])
+if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0: raise OSError('PR_SET_CHILD_SUBREAPER')
+init.ROUTE_CWD = cfg['cwd']
+log = os.open(cfg['log'], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+runner = init.Runner(log, os.open(os.devnull, os.O_WRONLY))
+try: runner.route(cfg['policy'], cfg['request']); out = {'error': None}
+except Exception as exc: out = {'error': str(exc)}
+out.update(quiescence=runner.quiescence, left=sorted(runner.descendants()))
+print(json.dumps(out))
+'''
+
+class RoutePayloadControls(unittest.TestCase):
+    """init.Runner.route: quiescence, sealing, harness identity (R20) and the inventory commitment."""
+    def scenario(self, a7='pass', harness='normal', inventory=INVENTORY):
+        tmp = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
+        self.addCleanup(lambda: subprocess.run(['rm','-rf',str(tmp)]))
+        (tmp/'src/mother/host').mkdir(parents=True); (tmp/'run').mkdir(); (tmp/'home').mkdir()
+        (tmp/'a7.py').write_text(FAKE_A7)
+        (tmp/'harness').write_text('#!/usr/bin/python3 -I\n'+FAKE_HARNESS % (harness,str(tmp/'harness.pid')))
+        a7cfg = dict(ROUTE['a7'],target=str(tmp/'target-route'),evidence_dir=str(tmp/'run/a7'),verdict=str(tmp/'run/a7-verdict.json'))
+        (tmp/'a7.json').write_text(json.dumps(dict(a7cfg,mode=a7,harness=str(tmp/'harness'),pidfile=str(tmp/'a7.pid'))))
+        env = dict(ROUTE['environment'],HOME=str(tmp/'home'),TMPDIR=str(tmp))
+        gates = [dict(id='a7',argv=[sys.executable,'-I','-B',str(tmp/'a7.py'),str(tmp/'a7.json')]),
+                 dict(ROUTE['gates'][1],executable=re.escape(a7cfg['target'])+'/release/deps/route_cells-[0-9a-f]{16}')]
+        cfg = dict(policy=dict(ROUTE,a7=a7cfg,environment=env,gates=gates),request=route_request(inventory_sha256=inventory),
+                   log=str(tmp/'log'),cwd={'a7':str(tmp/'src'),'route-cells':str(tmp/'src/mother/host')})
+        proc = subprocess.run([sys.executable,'-I','-B','-c',DRIVER,str(HERE),json.dumps(cfg)],capture_output=True,text=True,timeout=120)
+        self.assertEqual(proc.returncode,0,proc.stderr)
+        out = json.loads(proc.stdout)
+        out['outputs'] = outputs(tmp/'log')
+        for name in ('a7.pid','harness.pid'):
+            if (tmp/name).exists():
+                with self.assertRaises(ProcessLookupError,msg='stray survived quiescence'): os.kill(int((tmp/name).read_text()),0)
+        self.assertEqual(out['left'],[])
+        return out
+    def test_scripted_route_passes_and_seals_exact_evidence(self):
+        out = self.scenario()
+        self.assertIsNone(out['error'])
+        self.assertEqual(out['quiescence'],{'before-a7':True,'after-a7':True,'after-list':True})
+        sealed = {'a7-'+rel.replace('/','-') for rel in ROUTE['a7']['evidence']}|{'a7-verdict.json'}
+        self.assertLessEqual(sealed,set(out['outputs']))
+        lane = json.loads(out['outputs']['route-lane'])
+        self.assertEqual((lane['names'],lane['harness_sha256']),(NAMES,json.loads(out['outputs']['a7-lane-inventory.json'])['files']
+                                                               ['release/deps/route_cells-0123456789abcdef']))
+        self.assertEqual(json.loads(out['outputs']['c3-inventory'])['inventory']['passed'],NAMES)
+    def test_stray_that_detaches_and_closes_pipes_fails_quiescence(self):
+        out = self.scenario(a7='stray')
+        self.assertRegex(out['error'],'^QUIESCENCE: after-a7: process survived and was killed')
+        self.assertNotIn('a7-verdict.json',out['outputs'])  # nothing sealed after a stray
+    def test_r20_harness_replacing_its_pathname_fails_rehash(self):
+        out = self.scenario(harness='replace')
+        self.assertEqual(out['error'],'HARNESS: bytes differ from A7 lane inventory')
+        self.assertTrue(out['quiescence'].get('after-list'))  # killed at the re-hash, not by quiescence
+        self.assertNotIn('c3',out['outputs'])
+    def test_r20_process_surviving_list_fails_quiescence(self):
+        out = self.scenario(harness='spawn')
+        self.assertRegex(out['error'],'^QUIESCENCE: after-list: process survived and was killed')
+        self.assertNotIn('c3',out['outputs'])
+    def test_symlinked_evidence_refused(self):
+        self.assertRegex(self.scenario(a7='symlink')['error'],'^ROUTE_EVIDENCE: missing/linked .*/run/a7/lane/start$')
+    def test_unexpected_evidence_file_refused(self):
+        self.assertRegex(self.scenario(a7='extra')['error'],'^ROUTE_EVIDENCE: unexpected evidence set in .*/run/a7/lane$')
+    def test_harness_differing_from_a7_inventory_refused_before_listing(self):
+        out = self.scenario(a7='wrong-hash')
+        self.assertEqual(out['error'],'HARNESS: bytes differ from A7 lane inventory')
+        self.assertNotIn('c2',out['outputs'])  # never executed
+    def test_listed_names_must_match_submitted_inventory(self):
+        out = self.scenario(inventory=sha(b'cells::rc_r1_alpha_beta_one'))
+        self.assertEqual(out['error'],'INVENTORY: listed names differ from the submitted inventory_sha256')
+        self.assertNotIn('c3',out['outputs'])
+    def test_a7_fail_is_reported_as_itself(self):
+        out = self.scenario(a7='fail')
+        self.assertEqual(out['error'],'A7: run verdict is not pass')
+        self.assertEqual(json.loads(out['outputs']['a7-verdict.json'])['verdict'],'fail')
+
+def outputs(log):
+    data, named = Path(log).read_bytes(), {}
+    while data:
+        size = struct.unpack('!I',data[:4])[0]
+        frame, data = json.loads(data[4:4+size]), data[4+size:]
+        named[frame['id']] = named.get(frame['id'],b'')+__import__('base64').b64decode(frame['data'])
+    return named
+
+class RouteMainControls(unittest.TestCase):
+    def main(self, rust):
+        init = load('init')
+        runner = Mock(quiescence={'before-a7':True})
+        with ExitStack() as stack:
+            for name, value in (('Path',Mock()),('route_policy',lambda: ROUTE),('observations',lambda: {'rust':rust,'registry':'6'*64}),
+                                ('probe_payload',Mock(side_effect=AssertionError('probe ran'))),('packet',Mock()),('resources',lambda: {})):
+                stack.enter_context(patch.object(init,name,value))
+            stack.enter_context(patch.object(init.shutil,'copytree')); stack.enter_context(patch.object(init.os,'walk',return_value=[]))
+            init.route_main(runner,route_request())
+        return runner
+    def test_toolchain_pin_checked_before_a7(self):
+        with self.assertRaisesRegex(ValueError,'^TOOLCHAIN_PIN: /opt/rust differs from the reviewed manifest$'): self.main('0'*64)
+    def test_route_runs_no_probe(self):
+        runner = self.main(ROUTE['toolchain']['manifest_sha256'])
+        runner.route.assert_called_once()
+        self.assertIn('not run: route-cells',json.loads(runner.output.call_args_list[0].args[1])['probe'])
+
+class SupervisorRouteSummary(unittest.TestCase):
+    def test_route_summary_from_init_outputs_validates(self):
+        supervisor, (expected, files) = load('supervisor'), route_success()
+        start = lambda c: {k:c[k] for k in ('id','gate_id','argv','cwd','environment','exit_code','signal')}
+        commands = [start(expected['commands'][0]),expected['coverage']['discovery'][0],start(expected['commands'][1])]
+        logs = dict(files)
+        logs['c3-inventory.log'] = json.dumps(dict(artifact=expected['coverage']['artifacts'][0],
+                                                   inventory=expected['commands'][1]['inventory'])).encode()
+        logs['route-lane.log'] = json.dumps(dict(harness_sha256='7'*64,names=NAMES,rustc_vv='rustc 1.94.0',cargo_v='cargo 1.94.0')).encode()
+        logs['coverage.log'] = json.dumps(dict(artifacts=expected['coverage']['artifacts'],failures=[])).encode()
+        summary = {k:copy.deepcopy(v) for k,v in expected.items() if k not in ('commands','coverage','lane','environment')}
+        supervisor.route_summary(summary,Mock(commands=commands),logs,summary['installed'])
+        for key in ('commands','coverage','lane','environment'): self.assertEqual(summary[key],expected[key],key)
+        summary['logs'] = [dict(file=n,sha256=sha(d)) for n,d in logs.items()]
+        receipt.validate_summary(summary)

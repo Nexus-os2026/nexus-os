@@ -256,8 +256,8 @@ def validate_route(summary, policies):
     if lane['inventory_sha256'] != request['inventory_sha256']: raise ValueError('route inventory commitment')
     if hashlib.sha256('\n'.join(names).encode()).hexdigest() != request['inventory_sha256']: raise ValueError('route inventory names')
     logs = {log['file']:log['sha256'] for log in summary['logs']}
-    evidence = {'a7-'+rel.replace('/','-') for rel in route['a7']['evidence']}
-    if (logs.get('a7-verdict.json') != lane['verdict_sha256'] or not isinstance(lane['evidence'],dict)
+    evidence = {'a7-'+rel.replace('/','-')+'.log' for rel in route['a7']['evidence']}  # init log IDs plus '.log'
+    if (logs.get('a7-verdict.json.log') != lane['verdict_sha256'] or not isinstance(lane['evidence'],dict)
             or set(lane['evidence']) != evidence or any(logs.get(n) != h for n,h in lane['evidence'].items())):
         raise ValueError('route A7 evidence')
     gates = route['gates']

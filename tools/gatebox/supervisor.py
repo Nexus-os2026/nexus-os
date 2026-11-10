@@ -98,7 +98,7 @@ class Evidence:
             if event.get('gate_id') in ('host','whitespace'): fields.add('internal')
             if (set(event) != fields or self.active
                     or not isinstance(event['id'],str) or any(c['id']==event['id'] for c in self.commands)
-                    or not receipt.valid_invocation(event) or event['cwd'] != '/work/src'
+                    or not receipt.valid_invocation(event) or event['cwd'] not in ROUTE_CWDS
                     or not isinstance(event['environment'],dict)):
                 raise ValueError('invalid command start')
             self.active = {k:v for k,v in event.items() if k != 'event'}
@@ -123,6 +123,34 @@ class Evidence:
                 or any(c['exit_code'] != 0 for c in self.commands)):
             raise ValueError('missing/failed private lifecycle evidence')
         return self.commands
+
+ROUTE_CWDS = {'/work/src',*receipt.GATE_SETS['route-cells']['cwd'].values()}  # exact per set: receipt.validate_summary
+
+def route_summary(summary, evidence, logs, identity):
+    """SB3E-R18 P4: commands, coverage and the lane group from the sealed A7 evidence and harness run."""
+    route = receipt.policy_set(identity['gates_sha256'])['route-cells.json']
+    digest = lambda data: hashlib.sha256(data).hexdigest()
+    commands, discovery = [], []
+    for item in evidence.commands:
+        command = dict(item)
+        if command['gate_id'] == 'route-cells-list':
+            discovery.append(command)
+            continue
+        name = command['id']+'.log'
+        command.update(log=name,log_sha256=digest(logs[name]),timed_out=False,oom=False,status_complete=True,collector_complete=True)
+        if command['gate_id'] == 'route-cells':
+            inventory = json.loads(logs[command['id']+'-inventory.log'])
+            command.update(artifact_id=inventory['artifact']['id'],inventory=inventory['inventory'])
+        commands.append(command)
+    lane, verdict, ids = json.loads(logs['route-lane.log']), logs['a7-verdict.json.log'], [g['id'] for g in route['gates']]
+    summary['commands'], summary['environment'] = commands, route['environment']
+    summary['coverage'] = dict(expected=ids,executed=ids,passed=ids,failed=[],ignored=[],filtered=[],excluded=[],
+                               artifacts=json.loads(logs['coverage.log'])['artifacts'],discovery=discovery)
+    summary['lane'] = dict(a7='PASS' if json.loads(verdict).get('verdict') == 'pass' else 'FAIL',verdict_sha256=digest(verdict),
+                           evidence={n:digest(logs[n]) for n in ('a7-'+r.replace('/','-')+'.log' for r in route['a7']['evidence'])},
+                           rustc_vv=lane['rustc_vv'],cargo_v=lane['cargo_v'],lockfile_sha256=summary['snapshot']['lockfile_sha256'],
+                           wrapper_sha256=route['a7']['wrapper_sha256'],harness_sha256=lane['harness_sha256'],
+                           inventory_sha256=digest('\n'.join(lane['names']).encode()),names=lane['names'],trust=route['trust'])
 
 STATE = Path('/var/lib/mothergate')
 CONTROL = Path('/run/mothergate-control')
@@ -279,8 +307,10 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
         shim('start',run)
         handed_off = True
         _, logs = collect(run,listeners,evidence,captured)
-        summary['commands'], summary['coverage'] = coverage(evidence,logs)
-        summary['environment'] = sibling('init').ENV
+        if request['gate_set_id'] == 'route-cells': route_summary(summary,evidence,logs,identity)
+        else:
+            summary['commands'], summary['coverage'] = coverage(evidence,logs)
+            summary['environment'] = sibling('init').ENV
         summary['resources'] = dict(unit_state(run),scratch=json.loads(logs['resources.log']))
         summary['input_observations'] = json.loads(logs['inputs.log'])
         if summary['input_observations']['before'] != summary['input_observations']['after']:
@@ -289,7 +319,7 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
         summary['isolation'] = json.loads(logs['isolation.log'])
         summary['host_inputs'] = {'paths':[str(p) for p in HOST_INPUTS],'mutable':True}
         summary['versions'] = json.loads(logs['versions.log'])
-        summary['status'] = 'PASS_SCOPED'
+        summary['status'] = receipt.GATE_SETS[request['gate_set_id']]['status']
     except Exception as exc:
         summary['status'] = 'FAILED'
         summary['missing_evidence'].append(type(exc).__name__+': '+str(exc))

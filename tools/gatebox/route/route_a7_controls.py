@@ -100,6 +100,12 @@ PRE = {
     "pin_build_dependency": (lambda c: append(c["tree"], "kernel/Cargo.toml", '\n[build-dependencies]\nserde_json = "1.0"\n'), "build_time_pin"),
     "pin_links": (lambda c: edit(c["tree"], "kernel/Cargo.toml", "[package]\n", '[package]\nlinks = "route_plant"\n'), "build_time_pin"),
     "pin_cargo_lock": (lambda c: append(c["tree"], "Cargo.lock", "\n"), "build_time_pin"),
+    # SB3E-R19.1 (review-gb1-design P1): an excluded path dependency's build script is still local.
+    "pin_excluded_local_build_rs": (lambda c: edit(c["tree"], "Cargo.toml", '  "crates/nexus-crypto",\n', "")
+                                    or edit(c["tree"], "Cargo.toml", "members = [", 'exclude = ["crates/nexus-crypto"]\nmembers = [')
+                                    or append(c["tree"], "crates/nexus-crypto/build.rs", "fn main() {}\n"), "build_time_pin"),
+    "pin_local_package_moved": (lambda c: os.rename(c["tree"] + "/crates/nexus-typed-decision", c["tree"] + "/crates/typed-decision-moved")
+                                or edit(c["tree"], "Cargo.toml", '"crates/nexus-typed-decision"', '"crates/typed-decision-moved"'), "build_time_pin"),
 }
 
 

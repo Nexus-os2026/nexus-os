@@ -583,6 +583,7 @@ class OfflineServiceTests(unittest.TestCase):
                 patch.object(init.shutil,'copytree'), patch.object(init.os,'walk',return_value=[]), \
                 patch.object(init,'observations',return_value={'fixture':True}), patch.object(init,'resources',return_value={}), \
                 patch.object(init,'probe_payload',return_value=({},{})), \
+                patch.object(init,'requested',return_value={'gate_set_id':'full'}), \
                 patch.object(init.Runner,'gates',gates), patch.object(init.subprocess,'Popen',spawn):
             init.main()
 
