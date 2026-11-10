@@ -56,6 +56,8 @@ STATE_ROOT_OWNER = (0,0)
 USED = re.compile(r'\.used-[0-9a-f]{32}')
 INSTANCE = re.compile(r'mothergate-(run|root)@[0-9a-f]{32}\.service')
 CGROUP = Path('/sys/fs/cgroup')
+# SB3E-R22.1: template instances sit in their template slice ('-' escaped as \x2d); the manager in system.slice.
+SLICES = {'run':'system-mothergate\\x2drun.slice','root':'system-mothergate\\x2droot.slice'}
 LOCK_OWNER = CUSTODY_OWNER = (0,0)
 MAINTENANCE_TIMEOUT = 5
 SUPERSEDED = ('identity.json','qualification.json','admission.json','installed-files.json','bundle.json','probe-context.json')
@@ -299,17 +301,21 @@ def held(directory,name):
         yield
     finally: os.close(fd)
 
+def unit_cgroup(unit):
+    match = INSTANCE.fullmatch(unit)
+    return '/system.slice/'+(SLICES[match.group(1)]+'/' if match else '')+unit
+
 def settled_unit(unit):
-    # SB3E-R21.2: no queued job, not active, and an empty (or absent) cgroup of its own name, per unit.
+    # SB3E-R21.2: no queued job, not active, and an empty (or absent) cgroup of its own identity, per unit.
     state = {}
     for line in run(['/usr/bin/systemctl','show','--property=Id,Job,ActiveState,ControlGroup',unit]).decode().splitlines():
         key,sep,value = line.partition('=')
         if not sep or key in state: raise ValueError('unit not settled: '+unit)
         state[key] = value
     if (set(state) != {'Id','Job','ActiveState','ControlGroup'} or state['Id'] != unit or state['Job'] != ''
-            or state['ActiveState'] not in ('inactive','failed') or state['ControlGroup'] not in ('','/system.slice/'+unit)):
+            or state['ActiveState'] not in ('inactive','failed') or state['ControlGroup'] not in ('',unit_cgroup(unit))):
         raise ValueError('unit not settled: '+unit)
-    empty_cgroup(CGROUP/'system.slice'/unit,unit,bool(state['ControlGroup']))
+    empty_cgroup(CGROUP/unit_cgroup(unit)[1:],unit,bool(state['ControlGroup']))
 
 def empty_cgroup(path,unit,required):
     if not required and not os.path.lexists(path): return
@@ -328,6 +334,11 @@ def require_settled():
     for unit in units: settled_unit(unit)
     for path in sorted((CGROUP/'system.slice').glob('mothergate-*')):  # an unlisted instance's cgroup
         if path.name not in units: empty_cgroup(path,path.name,True)
+    for name in SLICES.values():  # R22.1: every group in the template slice trees, listed, unlisted or foreign
+        tree = CGROUP/'system.slice'/name
+        if os.path.lexists(tree):
+            for path in sorted(p for p in tree.iterdir() if p.is_dir()): empty_cgroup(path,path.name,True)
+        empty_cgroup(tree,name,False)  # populated is recursive: any deeper group
 
 def require_no_custody():
     # Custody and pending-state refusals are preserved: nothing is repaired, moved or removed.
@@ -388,15 +399,30 @@ def stage_history(identity,inventory,stage,module):
 def authenticate_retained(module,owner):
     for path in sorted((STATE/'receipts').iterdir()): module.verify_integrity(path,owner)
 
-def same_entry(retained,staged):
-    listing = lambda d: sorted(p.name for p in d.iterdir())
-    if listing(retained) != listing(staged): return False
-    for name in listing(staged):
-        info = (retained/name).lstat()
-        if not stat.S_ISREG(info.st_mode): return False
-        old, new = (retained/name).read_bytes(), (staged/name).read_bytes()
-        if (json.loads(old) != json.loads(new)) if name == 'manifest.json' else old != new: return False
-    return True
+def reusable(retained,staged):
+    """SB3E-R22.2: True for a valid identical retained entry, False when absent. Opened without following links,
+    a linked, foreign, writable or differing entry is refused, never followed."""
+    unsafe, differs = 'unsafe retained historical policy: '+retained.name, 'retained historical policy differs: '+retained.name
+    if os.path.lexists(retained.parent): protected(retained.parent)
+    try: fd = os.open(retained,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    except FileNotFoundError: return False
+    except OSError as exc: raise ValueError(unsafe) from exc
+    try:
+        info, owner = os.fstat(fd), os.geteuid()
+        if info.st_uid != owner or info.st_mode & 0o022 or any('acl' in n.lower() for n in os.listxattr(fd)): raise ValueError(unsafe)
+        names = sorted(os.listdir(fd))
+        if names != sorted(p.name for p in staged.iterdir()): raise ValueError(differs)
+        for name in names:
+            try: member = os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=fd)
+            except OSError as exc: raise ValueError(unsafe) from exc
+            with os.fdopen(member,'rb') as handle:
+                info = os.fstat(member)
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != owner or info.st_mode & 0o222
+                        or any('acl' in n.lower() for n in os.listxattr(member))): raise ValueError(unsafe)
+                old, new = handle.read(), (staged/name).read_bytes()
+            if (json.loads(old) != json.loads(new)) if name == 'manifest.json' else old != new: raise ValueError(differs)
+        return True
+    finally: os.close(fd)
 
 def upgrade(args):
     with maintenance(): return upgrade_locked(args)
@@ -430,12 +456,11 @@ def upgrade_locked(args):
         # R21.4: every retained generation, plus the staged old policy (root: main requires the host root namespace).
         new.HISTORY,new.STAGED_HISTORY,new.HISTORY_OWNER = HISTORY,stage/'history',os.geteuid()
         authenticate_retained(new,accounts[0])
+        reusable(HISTORY/entry.name,entry)  # R22.2: refused here, before staging and any mutation
         staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,stage)
         # Mutation starts here. Until the new identity is recorded, admission stays bound to the old one.
         HISTORY.mkdir(mode=0o755,exist_ok=True); protected(HISTORY)
-        if os.path.lexists(HISTORY/entry.name):  # content-addressed: an identical retained entry is reused
-            if not same_entry(HISTORY/entry.name,entry): raise ValueError('retained historical policy differs: '+entry.name)
-        else: os.rename(entry,HISTORY/entry.name)
+        if not reusable(HISTORY/entry.name,entry): os.rename(entry,HISTORY/entry.name)  # content-addressed reuse
         archive = HISTORY/('install-'+identity['bundle_sha256']); archive.mkdir(mode=0o755)
         for name in [n for n in SUPERSEDED if (CONFIG/n).exists()]+sorted(p.name for p in CONFIG.glob('acceptance-*.json')):
             os.rename(CONFIG/name,archive/name)  # kept for audit; never reused under the new identity
