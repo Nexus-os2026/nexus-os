@@ -46,13 +46,19 @@ assumption it falls under:
 - Compiler arguments: one parser for every spelling (`-L x`, `-Lx`,
   `-Lkind=x`, `-l`, `-C k=v`, `-Ck=v`, `--codegen[=]`, `--extern[=]`, ...);
   path arguments confined to Cargo's layout (`argument_outside_layout`), link
-  controls refused (`link_control`), `@` arguments refused; flags compared
+  controls refused (`link_control`), `@` arguments refused, only `--error-format`
+  and `--json` ignored (`--color`, `--diagnostic-width` refused); flags compared
   exactly; lane-only units' recipe settings validated (`lane_only_recipe`).
 - Source, registry and sysroot files a compiler reads: dep-info paths confined
   to them or to an inventoried OUT_DIR (`consumed_outside_inventory`,
   `consumed_input_missing`); no ctime change after build start
   (`source_or_sysroot_changed`); repository hash equal before and after both
   builds (`repository_changed`).
+- Evidence completeness: each build reconciled, before any comparison,
+  against Cargo's unit graph for its exact recipe and `cargo metadata`
+  (route_a7_graph: schema, every unit and run matched one to one, externs,
+  `-L`, `-l` and `--cfg` bound to recorded producers, dep-info structure,
+  every target file owned). Omissions made in both builds fail.
 - Generated and dependency artifacts: byte equality of every non-workspace
   rlib, rmeta, proc-macro `.so`, build-script executable, `output` and OUT_DIR
   file, every mandatory hash and run record required (`artifact_differs`,
@@ -76,6 +82,9 @@ import stat
 import subprocess
 import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import route_a7_graph as graph  # noqa: E402
 
 # Reviewed pins; under GB1 these move to installed policy outside the snapshot.
 BUILD_TIME_PINS = {"kernel/build.rs": "5dd672bf7812edfc0fe41be7f6002f973ae87adec0eebfb92ae1f17d33e88da2"}
@@ -128,7 +137,7 @@ VALUE_OPTS = {"--extern": "extern", "--out-dir": "out-dir", "-o": "o", "--cfg": 
               "--crate-type": "crate-type", "--edition": "edition", "--emit": "emit", "--sysroot": "sysroot",
               "--target": "target", "--remap-path-prefix": "remap", "--codegen": "C", "--print": "print",
               "--explain": "explain", "--env-set": "env-set", "--error-format": "ignored", "--json": "ignored",
-              "--diagnostic-width": "ignored", "--color": "ignored", "-L": "L", "-l": "l", "-C": "C", "-Z": "Z", **LINT_OPTS}
+              "--diagnostic-width": "diagnostic-width", "--color": "color", "-L": "L", "-l": "l", "-C": "C", "-Z": "Z", **LINT_OPTS}
 SHORT_JOINED = ("-L", "-l", "-C", "-Z", "-A", "-W", "-D", "-F")
 
 
@@ -323,6 +332,14 @@ def snapshot_inventory(target, evidence):
     write_json(os.path.join(evidence, "inventory.json"), inventory(target))
 
 
+def expected_command(kind, toolchain, wrapper, extra_config=()):
+    cargo = os.path.join(toolchain, "bin", "cargo")
+    if kind == "ship":
+        return [cargo, *SHIP_ARGS]
+    config = [f'build.rustc-workspace-wrapper="{wrapper}"', *extra_config]
+    return [cargo, *sum((["--config", c] for c in config), []), *LANE_TAIL[:3], "-vv", "--no-run", *LANE_TAIL[3:]]
+
+
 def capture(kind, repo, target, evidence, wrapper, toolchain, extra_args=(), extra_config=()):
     """One build from clean; the evidence is snapshotted, the target left for the caller."""
     if os.path.lexists(target) or os.path.lexists(target + ".route_rustc.log"):
@@ -332,13 +349,9 @@ def capture(kind, repo, target, evidence, wrapper, toolchain, extra_args=(), ext
     os.makedirs(evidence, exist_ok=True)
     block, _ = launch_block(toolchain, target)
     cargo = os.path.join(toolchain, "bin", "cargo")
-    if kind == "ship":
-        command = [cargo, *SHIP_ARGS, *extra_args]
-    else:
-        config = [f'build.rustc-workspace-wrapper="{wrapper}"', *extra_config]
-        command = [cargo, *sum((["--config", c] for c in config), []), *LANE_TAIL[:3], "-vv", "--no-run",
-                   *LANE_TAIL[3:], *extra_args]
+    command = expected_command(kind, toolchain, wrapper, extra_config) + list(extra_args)
     info = versions(toolchain, block)
+    graph.record(command, repo, block, evidence, target, re.search(r"^host: (\S+)$", info["rustc"], re.M).group(1))
     cargo_home = os.path.join(os.environ.get("HOME", "/"), ".cargo")
     start = wait_for_later_ctime(evidence)
     began = time.monotonic()
@@ -623,7 +636,7 @@ def check_args(units, kind):
                 bad = None if out_dir.fullmatch(value) else "argument_outside_layout"
             elif option == "emit":
                 bad = "argument_outside_layout" if "=" in value else None
-            elif option in ("o", "sysroot", "target", "remap", "Z", "print", "explain", "env-set"):
+            elif option in ("o", "sysroot", "target", "remap", "Z", "print", "explain", "env-set", "color", "diagnostic-width"):
                 bad = "unexpected_option"
             elif units.target in value and option not in ("source",):
                 bad = "argument_outside_layout"
@@ -824,6 +837,9 @@ def compare_artifacts(ship, lane):
 
 
 def compare(ship_dir, lane_dir, wrapper, wrapper_sha):
+    problems = graph.schema(ship_dir, "ship") + graph.schema(lane_dir, "lane")
+    if problems:
+        return {"verdict": "fail", "differences": problems}
     try:
         ship, lane = Units(ship_dir), Units(lane_dir)
     except (OSError, KeyError, ValueError) as error:
@@ -834,8 +850,12 @@ def compare(ship_dir, lane_dir, wrapper, wrapper_sha):
             out.append(d("launch_block_differs" if field == "launch_block" else f"{field}_differs"))
     if ship.meta.get("repo_hash_before") != lane.meta.get("repo_hash_after"):
         out.append(d("repository_changed"))
-    if ship.meta["kind"] != "ship" or lane.meta["kind"] != "lane":
-        out.append(d("evidence_kind_wrong"))
+    for units in (ship, lane):
+        if units.meta["command"] != expected_command(units.meta["kind"], units.meta["toolchain"], wrapper):
+            out.append(d("command_differs", build=units.meta["kind"]))
+    if graph.read(os.path.join(ship_dir, "metadata.json")) != graph.read(os.path.join(lane_dir, "metadata.json")):
+        out.append(d("metadata_differs"))
+    out += graph.reconcile(ship, "ship") + graph.reconcile(lane, "lane")
     for item in ship.meta.get("pre_build", []) + lane.meta.get("pre_build", []):
         out.append(item)
     out += compare_units(ship, lane, wrapper, wrapper_sha)
@@ -910,18 +930,12 @@ def main():
     com = sub.add_parser("compare")
     for name in ("--ship", "--lane", "--wrapper", "--wrapper-sha256", "--json"):
         com.add_argument(name, required=True)
-    inv = sub.add_parser("inventory")
-    inv.add_argument("--target", required=True)
-    inv.add_argument("--evidence", required=True)
     lane = sub.add_parser("lane")
     for name in ("--repo", "--target", "--wrapper", "--toolchain"):
         lane.add_argument(name, required=True)
     args = parser.parse_args()
     if args.command == "compare":
         return emit(compare(args.ship, args.lane, args.wrapper, args.wrapper_sha256), args.json)
-    if args.command == "inventory":
-        snapshot_inventory(args.target, args.evidence)
-        return 0
     repo, target, toolchain = map(os.path.abspath, (args.repo, args.target, args.toolchain))
     wrapper = os.path.abspath(args.wrapper)
     if args.command == "lane":

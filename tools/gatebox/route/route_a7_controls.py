@@ -78,10 +78,6 @@ def proxy_toolchain(root):
     return os.path.join(root, "proxy")
 
 
-def env_refusal(name, value="x"):
-    return lambda c: {"env": {name: value}}
-
-
 PRE = {
     "toolchain_file_legacy": (lambda c: append(c["tree"], "rust-toolchain", "1.94.0\n"), "toolchain_refused"),
     "toolchain_file_nested": (lambda c: append(c["tree"], "mother/rust-toolchain.toml", "[toolchain]\n"), "toolchain_refused"),
@@ -91,7 +87,7 @@ PRE = {
     "toolchain_not_pinned": (lambda c: {"toolchain": os.path.expanduser("~/.cargo")}, "toolchain_refused"),
     "toolchain_rustup_proxy": (lambda c: {"toolchain": proxy_toolchain(c["root"])}, "toolchain_refused"),
     "env_non_utf8": (lambda c: {"envb": {b"ROUTE_PLANT": b"\xff"}}, "toolchain_refused"),
-    **{f"env_{n.lower()}": (env_refusal(n), "toolchain_refused") for n in (
+    **{f"env_{n.lower()}": ((lambda n: lambda c: {"env": {n: "x"}})(n), "toolchain_refused") for n in (
         "RUSTUP_TOOLCHAIN", "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTDOC", "RUSTFLAGS",
         "CARGO_BUILD_RUSTFLAGS", "CARGO_HOME", "CARGO_ENCODED_RUSTFLAGS", "MAKEFLAGS", "MFLAGS", "CARGO_MAKEFLAGS")},
     "pin_build_rs_persistent": (lambda c: leak_build(c["tree"]), "build_time_pin"),
@@ -119,6 +115,8 @@ PAIR = {
     "build_script_keyed_on_cfg": (lambda c: plant_build(c["tree"], 'if cfg!(mother_route_seams) { println!("cargo:rustc-cfg=route_plant"); }')
                                   or {"continue": True, "wrapper": wrapper_with(c["root"], c["wsrc"], [a7.KERNEL_BUILD])},
                                   ["build_time_pin", "wrapper_hash_mismatch", "wrapper_log_mismatch", "build_output_differs"]),
+    "harness_extra_flag_real": (lambda c: append(c["tree"], "mother/host/build.rs", 'fn main() { println!("cargo::rustc-link-arg-tests=-Wl,-O1"); }\n')
+                                or {"continue": True}, ["build_time_pin", "lane_only_recipe"]),
     "primary_package_option_env": (lambda c: append(c["tree"], HOST_RS, '\npub const ROUTE_PLANT: Option<&str> = option_env!("CARGO_PRIMARY_PACKAGE");\n'),
                                    ["exempt_env_consumed"]),
     "primary_package_concat": (lambda c: append(c["tree"], HOST_RS, '\npub const ROUTE_PLANT: Option<&str> = option_env!(concat!("CARGO_", "PRIMARY_PACKAGE"));\n'),
@@ -260,8 +258,20 @@ def on_run(ev, fn):
     rewrite(ev, "lane", lambda c: c.rstrip().endswith("/build-script-build`") and "/kernel " not in c, fn)
 
 
-def drop_run(ev):
-    on_run(ev, lambda l: None)
+def drop_run(ev, kind="lane"):
+    rewrite(ev, kind, lambda c: c.rstrip().endswith("/build-script-build`") and "/kernel " not in c, lambda c: None)
+
+
+def native_dir(ev):
+    text = open(os.path.join(ev, "lane", "build.log"), encoding="utf-8", errors="surrogateescape").read()
+    return re.search(r"-L native=(\S+/out)\b", text).group(1)
+
+
+def omit_cfg_if(ev):
+    for kind in ("ship", "lane"):
+        lines(ev, kind, lambda t: (lambda drop: [x for j, x in enumerate(t) if j not in drop])(
+            {k for i0, i1, c in commands(t) if "--crate-name cfg_if " in c for k in range(i0, i1)}))
+        inv(ev, kind, lambda m: [m[f].pop(k) for f in ("files", "dep_info") for k in [k for k in m[f] if re.search(r"deps/(lib)?cfg_if-", k)]])
 
 
 TP = "cfg_if"  # a third-party unit present in both builds
@@ -277,7 +287,7 @@ EVIDENCE = {
         ("--extern=evil=/outside/libevil.rlib", "argument_outside_layout"), ("--extern evil=/outside/libevil.rlib", "argument_outside_layout"),
         ("--out-dir=/outside", "argument_outside_layout"), ("--emit=link=/outside/x", "argument_outside_layout"),
         ("@/outside/args", "response_file_argument"), ("-o /outside/x", "unexpected_option"), ("-Zunstable-options", "unexpected_option"),
-        ("--sysroot=/outside", "unexpected_option")])},
+        ("--sysroot=/outside", "unexpected_option"), ("--color=always", "unexpected_option"), ("--diagnostic-width=80", "unexpected_option")])},
     "rustc_env_with_corresponding_hashes": (lambda ev: [on_unit(ev, k, "nexus_mother_host", (lambda h: lambda l: l.replace(
         "Running `", f"Running `ROUTE_PLANT=lib-{h} ", 1))(seven_hash(ev, k))) for k in ("ship", "lane")],
         "unit_differs"),
@@ -292,7 +302,20 @@ EVIDENCE = {
     "build_output_missing": (lambda ev: inv(ev, "lane", lambda m: m["outputs"].pop(sorted(m["outputs"])[0])), "build_output_missing"),
     "dep_info_missing": (lambda ev: inv(ev, "lane", lambda m: m["dep_info"].pop(first_key(m["dep_info"], r"deps/cfg_if-"))), "missing_dep_info"),
     "ship_only_unit_missing": (lambda ev: rewrite(ev, "ship", lambda c: "--crate-name gtk4_macros " in c, lambda c: None), "ship_only_missing"),
-    "evidence_file_missing": (lambda ev: os.unlink(os.path.join(ev, "lane", "inventory.json")), "evidence_missing"),
+    "evidence_file_missing": (lambda ev: os.unlink(os.path.join(ev, "lane", "inventory.json")), "evidence_schema"),
+    # review-u3-batch findings 2 and 3: each probe Codex found, then neighbours of each.
+    "native_traversal": (lambda ev: add_flag(ev, "route_cells", f"-L native={native_dir(ev)}/../../..") , "path_unowned"),
+    "native_unknown_build_dir": (lambda ev: add_flag(ev, "route_cells", f"-L native={json.load(open(ev + '/lane/meta.json'))['target']}/release/build/evil-0123456789abcdef/out"), "path_unowned"),
+    "extern_no_producer": (lambda ev: add_flag(ev, "route_cells", f"--extern evil={json.load(open(ev + '/lane/meta.json'))['target']}/release/deps/libevil-0123456789abcdef.rlib"), "extern_unbound"),
+    "repo_hashes_removed_both": (lambda ev: [meta(ev, k, lambda m: [m.pop("repo_hash_before"), m.pop("repo_hash_after")]) for k in ("ship", "lane")], "evidence_schema"),
+    "pre_build_removed_both": (lambda ev: [meta(ev, k, lambda m: m.pop("pre_build")) for k in ("ship", "lane")], "evidence_schema"),
+    "run_record_removed_both": (lambda ev: [drop_run(ev, k) for k in ("ship", "lane")], "unit_missing_from_build"),
+    "dep_info_emptied_all": (lambda ev: [inv(ev, k, lambda m: m.update(dep_info={x: "" for x in m["dep_info"]})) for k in ("ship", "lane")], "dep_info_malformed"),
+    "cfg_if_omitted_both": (omit_cfg_if, "unit_missing_from_build"),
+    "unit_graph_removed_both": (lambda ev: [os.unlink(os.path.join(ev, k, "unit_graph.json")) for k in ("ship", "lane")], "evidence_schema"),
+    "unowned_target_file": (lambda ev: inv(ev, "lane", lambda m: m["files"].update({"release/deps/libevil-0123456789abcdef.rlib": "0" * 64})), "unowned_file"),
+    "cfg_unbound": (lambda ev: [add_flag(ev, TP, "--cfg evil", k) for k in ("ship", "lane")], "unit_not_in_graph"),
+    "dep_info_extra_rule": (lambda ev: inv(ev, "lane", lambda m: m["dep_info"].update({k: v + "\n/x/evil: " + v.split(": ", 1)[1].split("\n", 1)[0] + "\n" for k, v in m["dep_info"].items() if "/cfg_if-" in k})), "dep_info_malformed"),
     "harness_extra_flag": (lambda ev: add_flag(ev, "route_cells", "-C debug-assertions=on"), "lane_only_recipe"),
     "mother_hands_extra_flag": (lambda ev: add_flag(ev, "mother_hands", "-C overflow-checks=on"), "lane_only_recipe"),
     "fresh_unit": (lambda ev: lines(ev, "lane", lambda t: t + ["       Fresh cfg-if v1.0.4"]), "fresh_unit"),
@@ -342,7 +365,7 @@ def setup(name, args, base=None):
 
 def result(name, kind, expected, code, kinds, began, **extra):
     want = [] if expected is None else ([expected] if isinstance(expected, str) else expected)
-    ok = (code == 0 and not kinds) if expected is None else (code == 1 and all(k in kinds for k in want))
+    ok = (code == 0 and not kinds) if expected is None else (code == 1 and all(k in kinds for k in want) and "build_failed" not in kinds)
     return {"control": name, "kind": kind, "ok": ok, "exit": code, "expected": want or "pass", "kinds": kinds,
             "seconds": round(time.monotonic() - began, 1), **extra}
 
@@ -420,7 +443,7 @@ def capture_tampered(c, evidence):
     done, real_run = {}, subprocess.run
 
     def run(command, **kw):
-        if command[0].endswith("/cargo") and "test" in command:
+        if command[0].endswith("/cargo") and "test" in command and "--unit-graph" not in command:
             proc = subprocess.Popen(command, **kw)
             tamper_proc_macro(c["target"], proc, done)
             proc.wait()
