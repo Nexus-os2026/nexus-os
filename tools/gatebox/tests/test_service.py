@@ -229,7 +229,7 @@ class OfflineServiceTests(unittest.TestCase):
             self.assertEqual((HERE/'units'/name).read_text(),expected,name)
         self.assertEqual((HERE/'policy/sudoers').read_text(),
                          'Defaults:mothergate env_reset\nmothergate ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/lifecycle.py\n'
-                         'nexus ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/verify.py --run-id *\n')
+                         'nexus ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/verify.py --authenticate-stdin\n')
         self.assertIn('polkit.Result.NO',(HERE/'policy/deny-systemd.rules').read_text())
     def test_q1_qualifying_admission(self):
         identity = {'bundle':'a'*64,'policy':'b'*64,'gates':'c'*64}

@@ -28,6 +28,7 @@ GATE_SETS = {
 UNFINISHED = ('FAILED','BLOCKED','INTERRUPTED')
 GATE_POLICY = ('policy/exclusions.json','policy/gates.json','policy/route-cells.json')
 HISTORY, HISTORY_OWNER = Path('/etc/gatebox/history'), 0
+STAGED_HISTORY = None  # install.sh upgrade only: the old policy staged before it is retained (SB3E-R21.4)
 LANE = {'a7','verdict_sha256','evidence','rustc_vv','cargo_v','lockfile_sha256','wrapper_sha256','harness_sha256',
         'inventory_sha256','names','trust'}
 
@@ -64,13 +65,24 @@ def policy_digest(manifest):
     """probe.installed_identity's gates digest over {installed path: SHA-256}."""
     return hashlib.sha256(json.dumps(sorted(manifest.items()),separators=(',',':')).encode()).hexdigest()
 
+def current_policy_bytes():
+    """SB3E-R21.3: one read per file; the digest and any parse use these same bytes."""
+    data = {n:(HERE/n).read_bytes() for n in GATE_POLICY}
+    return policy_digest({str(HERE/n):hashlib.sha256(d).hexdigest() for n,d in data.items()}), data
+
 def current_policy():
-    return policy_digest({str(HERE/n):hashlib.sha256((HERE/n).read_bytes()).hexdigest() for n in GATE_POLICY})
+    return current_policy_bytes()[0]
 
 def historical(digest):
-    """A retained policy set, content-addressed by its digest, root-owned and read-only."""
-    try: directory = open_directory(HISTORY/digest)
-    except ValueError as exc: raise ValueError('unknown receipt policy') from exc
+    """A retained policy set, content-addressed by its digest, root-owned and read-only. Every retained
+    generation is in HISTORY; an upgrade's staged entry is consulted only when HISTORY has none.
+    An existing but invalid HISTORY entry fails; it never falls through to the staged one."""
+    for root in (HISTORY,)+((STAGED_HISTORY,) if STAGED_HISTORY is not None else ()):
+        try:
+            directory = open_directory(root/digest)
+            break
+        except ValueError: continue
+    else: raise ValueError('unknown receipt policy')
     try:
         check(os.fstat(directory),HISTORY_OWNER,True)
         no_acl(directory)
@@ -91,8 +103,9 @@ def historical(digest):
 def policy_set(digest):
     """The parsed gate policy a receipt recorded: the current install's, or its retained set. Never another's."""
     if not isinstance(digest,str) or not HEX.fullmatch(digest): raise ValueError('installed identity')
-    if digest == current_policy():
-        return {Path(n).name:json.loads((HERE/n).read_bytes(),object_pairs_hook=unique) for n in GATE_POLICY}
+    current, data = current_policy_bytes()
+    if digest == current:
+        return {Path(n).name:json.loads(d,object_pairs_hook=unique) for n,d in data.items()}
     return historical(digest)
 
 def completed(command, logs):
@@ -256,9 +269,12 @@ def validate_route(summary, policies):
     if lane['inventory_sha256'] != request['inventory_sha256']: raise ValueError('route inventory commitment')
     if hashlib.sha256('\n'.join(names).encode()).hexdigest() != request['inventory_sha256']: raise ValueError('route inventory names')
     logs = {log['file']:log['sha256'] for log in summary['logs']}
-    evidence = {'a7-'+rel.replace('/','-') for rel in route['a7']['evidence']}
-    if (logs.get('a7-verdict.json') != lane['verdict_sha256'] or not isinstance(lane['evidence'],dict)
-            or set(lane['evidence']) != evidence or any(logs.get(n) != h for n,h in lane['evidence'].items())):
+    evidence = {'a7-'+rel.replace('/','-')+'.log' for rel in route['a7']['evidence']}  # init log IDs plus '.log'
+    hashes = lane['evidence']
+    # SB3E-R21.1: every A7 hash is a sha256 string and every artifact an explicit published log; null never matches absence.
+    if (not isinstance(hashes,dict) or set(hashes) != evidence
+            or any(not isinstance(h,str) or not HEX.fullmatch(h) for h in [lane['verdict_sha256'],*hashes.values()])
+            or any(n not in logs or logs[n] != h for n,h in [('a7-verdict.json.log',lane['verdict_sha256']),*hashes.items()])):
         raise ValueError('route A7 evidence')
     gates = route['gates']
     ids, harness, artifacts = [g['id'] for g in gates], gates[1], coverage.get('artifacts')

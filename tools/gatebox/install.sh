@@ -4,6 +4,8 @@ set -euo pipefail
 umask 022
 exec /usr/bin/python3 -I -B - "$@" <<'PY'
 import argparse
+from contextlib import contextmanager
+import fcntl
 import hashlib
 import importlib.util
 import io
@@ -19,6 +21,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 
 DEST = Path('/usr/libexec/gatebox')
 CONFIG = Path('/etc/gatebox')
@@ -51,6 +54,10 @@ ETC = Path('/etc')
 RUN_UNIT = Path('/etc/systemd/system/mothergate-run@.service')
 STATE_ROOT_OWNER = (0,0)
 USED = re.compile(r'\.used-[0-9a-f]{32}')
+INSTANCE = re.compile(r'mothergate-(run|root)@[0-9a-f]{32}\.service')
+CGROUP = Path('/sys/fs/cgroup')
+LOCK_OWNER = CUSTODY_OWNER = (0,0)
+MAINTENANCE_TIMEOUT = 5
 SUPERSEDED = ('identity.json','qualification.json','admission.json','installed-files.json','bundle.json','probe-context.json')
 PLACEHOLDER = {'identity':None,'passed':[]}
 ENV = {'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','HOME':'/root'}
@@ -264,26 +271,77 @@ def verify_old_install(old_sha,identity_of):
     if identity_of() != identity: raise ValueError('installed identity is not its record')
     return identity,inventory
 
+@contextmanager
+def maintenance():
+    """SB3E-R21.2: lifecycle.py's custody lock (lifecycle.lock, same checks), held from the first check of an
+    upgrade or enable-qualified through its final re-check: no run starts, stops or settles meanwhile."""
+    protected(CONTROL)
+    control = os.open(CONTROL,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try: fd = os.open('lifecycle.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_CLOEXEC,0o600,dir_fd=control)
+    finally: os.close(control)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or (info.st_uid,info.st_gid) != LOCK_OWNER or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_nlink != 1 or any('acl' in n.lower() for n in os.listxattr(fd))): raise ValueError('unsafe lifecycle lock')
+        deadline = time.monotonic()+MAINTENANCE_TIMEOUT
+        while True:
+            try:
+                fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline: raise TimeoutError('maintenance lock held: a run or qualification is in progress')
+                time.sleep(.05)
+        yield
+    finally: os.close(fd)
+
+def settled_unit(unit):
+    # SB3E-R21.2: no queued job, not active, and an empty (or absent) cgroup of its own name, per unit.
+    state = {}
+    for line in run(['/usr/bin/systemctl','show','--property=Id,Job,ActiveState,ControlGroup',unit]).decode().splitlines():
+        key,sep,value = line.partition('=')
+        if not sep or key in state: raise ValueError('unit not settled: '+unit)
+        state[key] = value
+    if (set(state) != {'Id','Job','ActiveState','ControlGroup'} or state['Id'] != unit or state['Job'] != ''
+            or state['ActiveState'] not in ('inactive','failed') or state['ControlGroup'] not in ('','/system.slice/'+unit)):
+        raise ValueError('unit not settled: '+unit)
+    empty_cgroup(CGROUP/'system.slice'/unit,unit,bool(state['ControlGroup']))
+
+def empty_cgroup(path,unit,required):
+    if not required and not os.path.lexists(path): return
+    try: events = (path/'cgroup.events').read_text().splitlines()
+    except OSError as exc: raise ValueError('unresolved cgroup evidence: '+unit) from exc
+    if 'populated 0' not in events: raise ValueError('cgroup populated: '+unit)
+
 def require_settled():
     run(['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
-    shown = run(['/usr/bin/systemctl','show','--property=Id,ActiveState,Job','mothergate.socket','mothergate.service']).decode()
-    units = [dict(line.split('=',1) for line in block.splitlines() if '=' in line) for block in shown.strip().split('\n\n')]
-    if ([u.get('Id') for u in units] != ['mothergate.socket','mothergate.service']
-            or any(u.get('ActiveState') not in ('inactive','failed') or u.get('Job') != '' for u in units)):
-        raise ValueError('services not stopped and settled')
     listed = run(['/usr/bin/systemctl','list-units','--all','--plain','--no-legend','mothergate-run@*','mothergate-root@*']).decode()
+    units = ['mothergate.socket','mothergate.service']
     for line in listed.splitlines():
         fields = line.split()
-        if len(fields) < 4 or fields[2] not in ('inactive','failed'): raise ValueError('run unit not settled: '+line)
+        if not fields or not INSTANCE.fullmatch(fields[0]): raise ValueError('unexpected run unit: '+line)
+        units.append(fields[0])
+    for unit in units: settled_unit(unit)
+    for path in sorted((CGROUP/'system.slice').glob('mothergate-*')):  # an unlisted instance's cgroup
+        if path.name not in units: empty_cgroup(path,path.name,True)
 
 def require_no_custody():
     # Custody and pending-state refusals are preserved: nothing is repaired, moved or removed.
     for path in (STATE/'pending',STATE/'staging',CONTROL/'incoming',CONTROL/'sealed'):
         fd = os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
-        try: names = os.listdir(fd)
+        try:
+            names = os.listdir(fd)
+            if any(path.name != 'sealed' or not USED.fullmatch(n) for n in names):
+                raise ValueError('retained custody or pending state blocks upgrade: '+str(path))
+            for name in names:  # SB3E-R21.2: lifecycle.marker's exact form: a root 0600 single-link regular file
+                try: marker = os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,dir_fd=fd)
+                except OSError as exc: raise ValueError('unsafe custody marker: '+name) from exc
+                try:
+                    info = os.fstat(marker)
+                    if (not stat.S_ISREG(info.st_mode) or (info.st_uid,info.st_gid) != CUSTODY_OWNER or stat.S_IMODE(info.st_mode) != 0o600
+                            or info.st_nlink != 1 or any('acl' in n.lower() for n in os.listxattr(marker))):
+                        raise ValueError('unsafe custody marker: '+name)
+                finally: os.close(marker)
         finally: os.close(fd)
-        if any(path.name != 'sealed' or not USED.fullmatch(n) for n in names):
-            raise ValueError('retained custody or pending state blocks upgrade: '+str(path))
 
 def state_ownership():
     owner = pwd.getpwnam('mothergate')
@@ -325,7 +383,20 @@ def stage_history(identity,inventory,stage,module):
 def authenticate_retained(module,owner):
     for path in sorted((STATE/'receipts').iterdir()): module.verify_integrity(path,owner)
 
+def same_entry(retained,staged):
+    listing = lambda d: sorted(p.name for p in d.iterdir())
+    if listing(retained) != listing(staged): return False
+    for name in listing(staged):
+        info = (retained/name).lstat()
+        if not stat.S_ISREG(info.st_mode): return False
+        old, new = (retained/name).read_bytes(), (staged/name).read_bytes()
+        if (json.loads(old) != json.loads(new)) if name == 'manifest.json' else old != new: return False
+    return True
+
 def upgrade(args):
+    with maintenance(): return upgrade_locked(args)
+
+def upgrade_locked(args):
     # SB3E-R18 P3 / R19.5: a separate reviewed action; fresh installs keep the existing-output refusal.
     if not re.fullmatch('[0-9a-f]{64}',args.old_bundle_sha256 or ''): raise ValueError('old bundle SHA-256 required')
     protected(UPGRADE_BOOT); protected(UPGRADE_BOOT/'bundle.tar')
@@ -351,13 +422,15 @@ def upgrade(args):
     with tempfile.TemporaryDirectory(prefix='.gatebox-',dir=ETC) as temporary:
         stage = Path(temporary)
         entry = stage_history(identity,inventory,stage/'history',new)
-        new.HISTORY,new.HISTORY_OWNER = stage/'history',os.geteuid()  # root: main requires the host root namespace
+        # R21.4: every retained generation, plus the staged old policy (root: main requires the host root namespace).
+        new.HISTORY,new.STAGED_HISTORY,new.HISTORY_OWNER = HISTORY,stage/'history',os.geteuid()
         authenticate_retained(new,accounts[0])
         staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,stage)
         # Mutation starts here. Until the new identity is recorded, admission stays bound to the old one.
         HISTORY.mkdir(mode=0o755,exist_ok=True); protected(HISTORY)
-        if (HISTORY/entry.name).exists(): raise ValueError('historical policy already retained: '+entry.name)
-        os.rename(entry,HISTORY/entry.name)
+        if os.path.lexists(HISTORY/entry.name):  # content-addressed: an identical retained entry is reused
+            if not same_entry(HISTORY/entry.name,entry): raise ValueError('retained historical policy differs: '+entry.name)
+        else: os.rename(entry,HISTORY/entry.name)
         archive = HISTORY/('install-'+identity['bundle_sha256']); archive.mkdir(mode=0o755)
         for name in [n for n in SUPERSEDED if (CONFIG/n).exists()]+sorted(p.name for p in CONFIG.glob('acceptance-*.json')):
             os.rename(CONFIG/name,archive/name)  # kept for audit; never reused under the new identity
@@ -385,15 +458,8 @@ def upgrade(args):
     authenticate_retained(load_module(DEST/'receipt.py','gbx_installed_receipt'),accounts[0])
     print('Upgraded in qualifying stage; receipts retained; qualify, then enable-qualified.')
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('action',choices=['install','enable-qualified','upgrade'])
-    for name in ('bundle-sha256','old-bundle-sha256','repo-id','source-git','submit-user','fixture-sha'):
-        parser.add_argument('--'+name)
-    args = parser.parse_args()
-    if os.geteuid() or Path('/proc/self/uid_map').read_text().split() != ['0','0','4294967295']:
-        raise ValueError('host root namespace required')
-    if args.action == 'enable-qualified':
+def enable_qualified():
+    with maintenance():
         protected(DEST); protected(CONFIG)
         sys.path.insert(0,str(DEST))
         import probe
@@ -407,7 +473,16 @@ def main():
         fd = os.open(CONFIG,os.O_RDONLY|os.O_DIRECTORY)
         try: os.fsync(fd)
         finally: os.close(fd)
-        return
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action',choices=['install','enable-qualified','upgrade'])
+    for name in ('bundle-sha256','old-bundle-sha256','repo-id','source-git','submit-user','fixture-sha'):
+        parser.add_argument('--'+name)
+    args = parser.parse_args()
+    if os.geteuid() or Path('/proc/self/uid_map').read_text().split() != ['0','0','4294967295']:
+        raise ValueError('host root namespace required')
+    if args.action == 'enable-qualified': return enable_qualified()
     if args.action == 'upgrade': return upgrade(args)
     if (args.repo_id,args.source_git,args.submit_user,args.fixture_sha) != (
             'mother','/home/nexus/NEXUS/nexus-os/.git','nexus',FIXTURE):

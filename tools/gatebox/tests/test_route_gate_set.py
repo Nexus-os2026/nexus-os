@@ -1,6 +1,7 @@
 """GB1a controls (SB3E-R18, R19): the route-cells gate set's request, receipt identity, historical
 policy, client, verifier and install/upgrade. Each rejection is its own check; `full` is unchanged."""
 import copy
+import fcntl
 import hashlib
 import io
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -31,8 +33,8 @@ def route_request(**change):
 def route_success():
     """A complete PASS_ROUTE_CELLS summary and its artifacts, as GB1b's supervisor publishes them."""
     env = ROUTE['environment']
-    files = {'a7-'+rel.replace('/','-'):rel.encode() for rel in ROUTE['a7']['evidence']}
-    files.update({'a7-verdict.json':b'{"verdict": "pass"}\n','c1.log':b'a7\n','c3.log':b'cells\n'})
+    files = {'a7-'+rel.replace('/','-')+'.log':rel.encode() for rel in ROUTE['a7']['evidence']}
+    files.update({'a7-verdict.json.log':b'{"verdict": "pass"}\n','c1.log':b'a7\n','c3.log':b'cells\n'})
     logs = [dict(file=n,sha256=sha(d)) for n,d in files.items()]
     def done(i, gate, argv, cwd, log):
         return dict(id='c%d'%i,gate_id=gate,argv=argv,cwd=cwd,environment=dict(env),exit_code=0,signal=None,
@@ -55,8 +57,8 @@ def route_success():
                                failed=[],ignored=[],filtered=[],excluded=[],discovery=[listing],
                                artifacts=[dict(id='route_cells',adapter='libtest',executable=EXE,
                                                package='nexus-mother-host',target='route_cells')])
-    summary['lane'] = dict(a7='PASS',verdict_sha256=sha(files['a7-verdict.json']),rustc_vv='rustc 1.94.0',cargo_v='cargo 1.94.0',
-                           evidence={n:sha(d) for n,d in files.items() if n.startswith('a7-') and n != 'a7-verdict.json'},
+    summary['lane'] = dict(a7='PASS',verdict_sha256=sha(files['a7-verdict.json.log']),rustc_vv='rustc 1.94.0',cargo_v='cargo 1.94.0',
+                           evidence={n:sha(d) for n,d in files.items() if n.startswith('a7-') and n != 'a7-verdict.json.log'},
                            lockfile_sha256='3'*64,wrapper_sha256=WRAPPER,harness_sha256='7'*64,inventory_sha256=INVENTORY,
                            names=list(NAMES),trust=ROUTE['trust'])
     return summary, files
@@ -141,6 +143,21 @@ class RouteReceiptControls(unittest.TestCase):
     def test_evidence_bound_to_published_logs(self):
         name = sorted(self.summary['lane']['evidence'])[0]
         self.summary['lane']['evidence'][name] = 'c'*64; self.refuse('route A7 evidence')
+    def strip_logs(self, names):
+        self.summary['logs'] = [log for log in self.summary['logs'] if log['file'] not in names]
+    def test_r21_null_evidence_with_omitted_logs_refused(self):  # review-gb1a P1, exactly
+        names = set(self.summary['lane']['evidence'])
+        self.summary['lane']['evidence'] = dict.fromkeys(names); self.summary['lane']['verdict_sha256'] = None
+        self.strip_logs(names|{'a7-verdict.json.log'}); self.refuse('route A7 evidence')
+    def test_r21_null_evidence_hash_refused(self):
+        name = sorted(self.summary['lane']['evidence'])[0]
+        self.summary['lane']['evidence'][name] = None; self.strip_logs({name}); self.refuse('route A7 evidence')
+    def test_r21_null_verdict_hash_refused(self):
+        self.summary['lane']['verdict_sha256'] = None; self.strip_logs({'a7-verdict.json.log'}); self.refuse('route A7 evidence')
+    def test_r21_omitted_evidence_log_refused(self):
+        self.strip_logs({sorted(self.summary['lane']['evidence'])[0]}); self.refuse('route A7 evidence')
+    def test_r21_omitted_verdict_log_refused(self):
+        self.strip_logs({'a7-verdict.json.log'}); self.refuse('route A7 evidence')
     def test_evidence_set_is_policy(self):
         self.summary['lane']['evidence'].pop(sorted(self.summary['lane']['evidence'])[0]); self.refuse('route A7 evidence')
     def test_trust_statement_is_policy(self):
@@ -203,6 +220,18 @@ class HistoricalPolicyControls(unittest.TestCase):
     def test_old_route_receipt_needs_its_route_policy(self):
         summary, _ = route_success(); summary['installed']['gates_sha256'] = self.digest
         with self.assertRaisesRegex(ValueError,'route-cells policy missing'): receipt.validate_summary(summary)
+    def test_r21_current_policy_hashed_and_parsed_from_same_bytes(self):
+        original, reads = Path.read_bytes, {}
+        policy = {Path(n).name:json.loads((HERE/n).read_bytes()) for n in receipt.GATE_POLICY}
+        def replaced_after_first_read(path):
+            if path.parent != HERE/'policy' or 'policy/'+path.name not in receipt.GATE_POLICY: return original(path)
+            reads[path] = reads.get(path,0)+1
+            return original(path) if reads[path] == 1 else b'{"replaced": true}'
+        digest = receipt.current_policy()
+        with patch.object(Path,'read_bytes',replaced_after_first_read):
+            try: parsed = receipt.policy_set(digest)
+            except ValueError: return  # a digest that no longer matches fails closed
+        self.assertEqual(parsed,policy)
     def test_current_digest_matches_installed_identity_formula(self):
         pairs = sorted((str(HERE/n),sha((HERE/n).read_bytes())) for n in receipt.GATE_POLICY)
         self.assertEqual(receipt.current_policy(),sha(json.dumps(pairs,separators=(',',':')).encode()))
@@ -272,9 +301,49 @@ class ClientVerifyControls(unittest.TestCase):
             summary['installed']['bundle_sha256'] = '0'*64
             self.assertEqual(verify.authenticate('a'*32)['identity'],'historical')
     def test_verifier_is_the_least_privilege_authentication_path(self):
-        self.assertTrue((HERE/'verify.py').read_text().startswith('#!/usr/bin/python3 -I\n'))
-        self.assertIn('nexus ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/verify.py --run-id *\n',
-                      (HERE/'policy/sudoers').read_text())
+        self.assertTrue((HERE/'verify.py').read_text().startswith('#!/usr/bin/python3 -IB\n'))
+        rules = [l for l in (HERE/'policy/sudoers').read_text().splitlines() if 'verify.py' in l]
+        self.assertEqual(rules,['nexus ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/verify.py --authenticate-stdin'])
+    def test_r21_verifier_import_writes_no_bytecode(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as tmp:
+            for name in ('verify.py','receipt.py'): (Path(tmp)/name).write_bytes((HERE/name).read_bytes())
+            (Path(tmp)/'verify.py').chmod(0o755)
+            proc = subprocess.run([str(Path(tmp)/'verify.py'),'--unknown-option'],env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'},
+                                  stdin=subprocess.DEVNULL,capture_output=True,timeout=60)  # executed by its own shebang
+            self.assertNotEqual(proc.returncode,0)
+            self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()),['receipt.py','verify.py'])
+    def stdin_mode(self, argv, data):
+        verify, out = load('verify'), []
+        with patch.object(verify,'authenticate',side_effect=lambda run: {'authentication':'AUTHENTICATED','run':run}) as auth, \
+                patch.object(sys,'argv',['verify.py',*argv]), patch.object(sys,'stdin',Mock(buffer=io.BytesIO(data))), \
+                patch('builtins.print',side_effect=out.append):
+            verify.main()
+        return auth, out
+    def test_r21_authenticate_stdin_reads_one_run_id(self):
+        for data in (b'a'*32,b'a'*32+b'\n'):
+            auth, out = self.stdin_mode(['--authenticate-stdin'],data)
+            auth.assert_called_once_with('a'*32)
+            self.assertEqual([json.loads(o) for o in out],[{'authentication':'AUTHENTICATED','run':'a'*32}])
+    def test_r21_authenticate_stdin_refuses_other_arguments(self):
+        for argv in (['--authenticate-stdin','x'],['--authenticate-stdin','--run-id','a'*32],['--help','--authenticate-stdin'],
+                     ['--authenticate-stdin','--authenticate-stdin'],['--authenticate-stdin','--require-status','PASS_SCOPED']):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit) as raised:
+                self.stdin_mode(argv,b'a'*32)
+            self.assertNotIn(raised.exception.code,(0,None))
+    def test_r21_authenticate_stdin_refuses_malformed_oversized_or_multiple_ids(self):
+        for data in (b'',b'\n',b'A'*32,b'a'*31,b'a'*33,b'a'*32+b'\n\n',b'a'*32+b'\r\n',b'a'*32+b' ',b'a'*32+b'\n'+b'b'*32,
+                     b'a'*4096,b'../'+b'a'*29,b'../../etc/passwd',b'a'*16+b'/'+b'a'*15,b'\xff'*32):
+            with self.subTest(data=data[:40]), self.assertRaisesRegex(ValueError,'^invalid receipt ID$'):
+                self.stdin_mode(['--authenticate-stdin'],data)
+    def test_r21_symlinked_or_traversing_run_id_refused(self):
+        verify = load('verify')
+        with tempfile.TemporaryDirectory() as tmp, patch.object(verify,'host_context'), patch.object(verify,'host_ancestry'), \
+                patch.object(verify,'ROOT',Path(tmp)), patch.object(verify.pwd,'getpwnam',return_value=Mock(pw_uid=os.getuid())):
+            real = Path(tmp)/('b'*32); real.mkdir()
+            (Path(tmp)/('a'*32)).symlink_to(real)
+            with self.assertRaisesRegex(ValueError,'unsafe receipt directory'): verify.authenticate('a'*32)
+            for run in ('../'+'a'*29,'a'*32+'/..','.'):
+                with self.subTest(run=run), self.assertRaisesRegex(ValueError,'invalid receipt ID'): verify.authenticate(run)
 
 class InstallControls(unittest.TestCase):
     def test_files_are_the_tracked_tree(self):
@@ -367,20 +436,66 @@ class UpgradeControls(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'unrecorded installed file'): self.old()
     def test_identity_must_be_recomputed_record(self):
         with self.assertRaisesRegex(ValueError,'identity is not its record'): self.old(dict(self.identity,policy_sha256='0'*64))
-    def settled(self, show, units=''):
-        replies = iter([b'',show.encode(),units.encode()])
-        with patch.dict(self.scope,run=lambda argv: (self.calls.append(argv),next(replies))[1]):
-            self.scope['require_settled']()
+    RUN_UNIT, ROOT_UNIT = 'mothergate-run@'+'a'*32+'.service', 'mothergate-root@'+'a'*32+'.service'
+    def settled(self, units='', **states):
+        cgroup = self.root/'cgroup'; (cgroup/'system.slice').mkdir(parents=True,exist_ok=True)
+        def run(argv):
+            self.calls.append(argv)
+            if argv[1] == 'list-units': return units.encode()
+            if argv[1] != 'show': return b''
+            unit = argv[-1]
+            state = dict(Id=unit,Job='',ActiveState='inactive',ControlGroup=''); state.update(states.get(unit,{}))
+            return ''.join(f'{k}={v}\n' for k,v in state.items() if v is not None).encode()
+        with patch.dict(self.scope,run=run,CGROUP=cgroup): self.scope['require_settled']()
+    def populated(self, unit, value):
+        path = self.root/'cgroup/system.slice'/unit; path.mkdir(parents=True,exist_ok=True)
+        (path/'cgroup.events').write_text(f'populated {value}\nfrozen 0\n')
     def test_services_stopped_and_settled(self):
-        good = 'Id=mothergate.socket\nActiveState=inactive\nJob=\n\nId=mothergate.service\nActiveState=inactive\nJob=\n'
-        self.settled(good,'mothergate-run@x.service loaded failed failed run\n')
+        listed = self.RUN_UNIT+' loaded failed failed run\n'+self.ROOT_UNIT+' loaded inactive dead root\n'
+        self.settled(listed)
         self.assertEqual(self.calls[0],['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
-        for bad in (good.replace('inactive','active',1),good.replace('Job=\n','Job=12\n',1),good.split('\n\n')[0]):
-            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError,'services not stopped and settled'): self.settled(bad)
-        with self.assertRaisesRegex(ValueError,'run unit not settled'): self.settled(good,'mothergate-root@x.service loaded active running r\n')
+        self.assertEqual([c[-1] for c in self.calls if c[1] == 'show'],['mothergate.socket','mothergate.service',self.RUN_UNIT,self.ROOT_UNIT])
+        for unit in ('mothergate.socket','mothergate.service'):
+            for bad in (dict(ActiveState='active'),dict(Job='12'),dict(Id='other.service'),dict(ControlGroup=None)):
+                with self.subTest(unit=unit,bad=bad), self.assertRaisesRegex(ValueError,'unit not settled: '+unit): self.settled(**{unit:bad})
+        with self.assertRaisesRegex(ValueError,'unit not settled'): self.settled(self.ROOT_UNIT+' loaded active running r\n',**{self.ROOT_UNIT:dict(ActiveState='active')})
+        with self.assertRaisesRegex(ValueError,'unexpected run unit'): self.settled('mothergate-run@x.service loaded failed failed run\n')
+    def test_r21_every_instance_job_state_checked(self):
+        for unit in (self.RUN_UNIT,self.ROOT_UNIT):
+            with self.subTest(unit=unit), self.assertRaisesRegex(ValueError,'unit not settled: '+unit):
+                self.settled(unit+' loaded inactive dead x\n',**{unit:dict(Job='41')})
+    def test_r21_every_instance_cgroup_empty(self):
+        for unit in (self.RUN_UNIT,self.ROOT_UNIT):
+            with self.subTest(unit=unit):
+                self.populated(unit,1)
+                with self.assertRaisesRegex(ValueError,'cgroup populated: '+unit):
+                    self.settled(unit+' loaded failed failed x\n',**{unit:dict(ControlGroup='/system.slice/'+unit)})
+                with self.assertRaisesRegex(ValueError,'cgroup populated: '+unit): self.settled()  # an unlisted instance's cgroup
+                self.populated(unit,0); self.settled(unit+' loaded failed failed x\n',**{unit:dict(ControlGroup='/system.slice/'+unit)})
+        with self.assertRaisesRegex(ValueError,'unit not settled'):
+            self.settled(self.RUN_UNIT+' loaded failed failed x\n',**{self.RUN_UNIT:dict(ControlGroup='/system.slice/other.service')})
+    def used(self, kind='file', mode=0o600):
+        path = self.root/'control/sealed'/('.used-'+'a'*32)
+        if kind == 'file': path.write_bytes(b''); path.chmod(mode)
+        elif kind == 'directory': path.mkdir()
+        elif kind == 'symlink': (self.root/'target').write_bytes(b''); (self.root/'target').chmod(0o600); path.symlink_to(self.root/'target')
+        elif kind == 'fifo': os.mkfifo(path,0o600)
+        elif kind == 'hardlink': path.write_bytes(b''); path.chmod(0o600); os.link(path,self.root/'second')
+        return path
+    def test_r21_used_marker_is_a_strict_root_custody_file(self):
+        with patch.dict(self.scope,CUSTODY_OWNER=(os.getuid(),os.getgid())):
+            self.used(); self.scope['require_no_custody']()
+            for kind, mode in (('directory',0o600),('symlink',0o600),('fifo',0o600),('hardlink',0o600),('file',0o644),('file',0o400)):
+                with self.subTest(kind=kind,mode=oct(mode)):
+                    for p in (self.root/'control/sealed'/('.used-'+'a'*32),self.root/'second',self.root/'target'):
+                        if p.is_dir() and not p.is_symlink(): p.rmdir()
+                        elif p.exists() or p.is_symlink(): p.unlink()
+                    path = self.used(kind,mode)
+                    with self.assertRaisesRegex(ValueError,'unsafe custody marker'): self.scope['require_no_custody']()
+                    self.assertTrue(path.exists() or path.is_symlink())
+        (self.root/'control/sealed'/('.used-'+'a'*32)).unlink(); self.used()
+        with self.assertRaisesRegex(ValueError,'unsafe custody marker'): self.scope['require_no_custody']()  # owner must be root
     def test_pending_and_custody_state_refused_and_retained(self):
-        self.scope['require_no_custody']()
-        (self.root/'control/sealed'/('.used-'+'a'*32)).write_bytes(b'')
         self.scope['require_no_custody']()
         for rel in ('state/pending/.'+'a'*32,'state/staging/'+'a'*32,'control/incoming/'+'a'*32+'.log.sock',
                     'control/sealed/.pending-'+'a'*32,'control/sealed/'+'a'*32):
@@ -412,7 +527,7 @@ class UpgradeControls(unittest.TestCase):
         text = (HERE/'install.sh').read_text()
         self.assertIn("choices=['install','enable-qualified','upgrade']",text)
         self.assertIn("raise ValueError('existing output needs review: '+str(path))",text)
-        upgrade = text.split('def upgrade(',1)[1].split('\ndef ',1)[0]
+        upgrade = text.split('def upgrade_locked(',1)[1].split('\ndef ',1)[0]
         for step in ('verify_old_install(','require_settled()','require_no_custody()','state_ownership()','receipt_inventory(',
                      'authenticate_retained(','PLACEHOLDER',"'stage':'qualifying'"):
             self.assertIn(step,upgrade)
@@ -465,13 +580,15 @@ class UpgradeComposition(unittest.TestCase):
             loaded = load('receipt'); loaded.HERE = Path(path).parent; loaded.HISTORY_OWNER = uid
             if name == 'gbx_installed_receipt': loaded.HISTORY = config/'history'
             return loaded
-        self.run = Mock(side_effect=lambda argv: {'show':b'Id=mothergate.socket\nActiveState=inactive\nJob=\n\n'
-                                                          b'Id=mothergate.service\nActiveState=inactive\nJob=\n'}.get(argv[1],b''))
+        self.run = Mock(side_effect=lambda argv: f'Id={argv[-1]}\nJob=\nActiveState=inactive\nControlGroup=\n'.encode()
+                        if argv[1] == 'show' else b'')
         self.stack.enter_context(patch.dict(scope,DEST=dest,CONFIG=config,STATE=state,CONTROL=control,UPGRADE_BOOT=boot,
             HISTORY=config/'history',ETC=root/'etc',RUN_UNIT=root/'etc/run.service',CONTROL_POLICY=root/'tmpfiles/mothergate-control.conf',
             STATE_ROOT_OWNER=(uid,gid),protected=lambda p: None,run=self.run,pwd=accounts,toolchain_check=lambda f: None,
             bundle_files=lambda path,digest: self.files,plan_accounts=lambda: [(entry,False),(entry,False)],
-            stage_security=lambda *a: [],load_module=module))
+            stage_security=lambda *a: [],load_module=module,LOCK_OWNER=(uid,gid),CUSTODY_OWNER=(uid,gid),
+            MAINTENANCE_TIMEOUT=.2,CGROUP=root/'cgroup'))
+        (control/'sealed'/('.used-'+'c'*32)).chmod(0o600)
     def publish_old(self, reason):
         old = load('receipt'); old.HISTORY_OWNER = os.getuid()
         history = self.root/'oldhistory'; entry = history/self.gates; entry.mkdir(parents=True); entry.chmod(0o755)
@@ -483,6 +600,16 @@ class UpgradeComposition(unittest.TestCase):
         for item in summary['coverage']['excluded']: item['reason'] = reason
         pending = self.root/'oldpending'; pending.mkdir(mode=0o700)
         old.publish(pending,self.root/'state/receipts','a'*32,summary,{'run.log':b'failure\n'})
+    def held(self):
+        fd = os.open(self.root/'control/lifecycle.lock',os.O_RDWR|os.O_CREAT,0o600); self.addCleanup(os.close,fd)
+        os.chmod(self.root/'control/lifecycle.lock',0o600)
+        return fd
+    def lock_is_held(self):
+        fd = os.open(self.root/'control/lifecycle.lock',os.O_RDWR)
+        try: fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError: return True
+        finally: os.close(fd)
+        return False
     def upgrade(self):
         with patch('builtins.print'): self.scope['upgrade'](Mock(bundle_sha256=self.NEW,old_bundle_sha256=self.OLD))
     def test_upgrade_preserves_receipts_and_requires_requalification(self):
@@ -499,6 +626,69 @@ class UpgradeComposition(unittest.TestCase):
         self.assertIn(str(dest/'route/route_rustc'),installed); self.assertIn(str(config/'route-cells.json'),installed)
         self.assertEqual((dest/'route/route_a7.py').read_bytes(),(HERE/'route/route_a7.py').read_bytes())
         self.assertEqual(self.run.call_args_list[0].args[0],['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
+    def test_r21_upgrade_refused_while_lifecycle_or_qualification_holds_the_lock(self):
+        fcntl.flock(self.held(),fcntl.LOCK_EX)
+        with self.assertRaisesRegex(TimeoutError,'maintenance lock held'): self.upgrade()
+        self.run.assert_not_called()
+        self.assertEqual(json.loads((self.root/'config/bundle.json').read_text()),{'sha256':self.OLD})
+    def test_r21_lock_held_from_first_check_through_final_recheck(self):
+        seen, run, module = [], self.run.side_effect, self.scope['load_module']
+        def observed_run(argv): seen.append((argv[1],self.lock_is_held())); return run(argv)
+        def observed_module(path, name): seen.append((name,self.lock_is_held())); return module(path,name)
+        with patch.dict(self.scope,run=observed_run,load_module=observed_module): self.upgrade()
+        self.assertEqual(seen[0],('gbx_old_probe',True))  # verify_old_install: the first check
+        self.assertIn(('daemon-reload',True),seen); self.assertEqual(seen[-1],('gbx_installed_receipt',True))
+        self.assertTrue(all(held for _,held in seen),seen)
+        self.assertFalse(self.lock_is_held())
+    def test_r21_enable_qualified_takes_the_maintenance_lock(self):
+        fcntl.flock(self.held(),fcntl.LOCK_EX)
+        protected = Mock()
+        with patch.dict(self.scope,protected=protected), self.assertRaisesRegex(TimeoutError,'maintenance lock held'):
+            self.scope['enable_qualified']()
+        self.assertEqual(protected.call_args_list,[((self.root/'control',),)])  # nothing read before the lock
+    def test_r21_unsafe_lifecycle_lock_refused(self):
+        self.held(); (self.root/'control/lifecycle.lock').chmod(0o644)
+        with self.assertRaisesRegex(ValueError,'unsafe lifecycle lock'): self.upgrade()
+        self.run.assert_not_called()
+    def second_generation(self):
+        self.upgrade()
+        config = self.root/'config'
+        installed = json.loads((config/'installed-files.json').read_text())
+        policy = {str(self.root/'dest'/n) for n in receipt.GATE_POLICY}
+        gates = receipt.policy_digest({p:h for p,h in installed.items() if p in policy})
+        self.identity = dict(self.new_identity,gates_sha256=gates)
+        (config/'identity.json').write_text(json.dumps(self.identity))
+        self.new_identity = dict(bundle_sha256='c'*64,policy_sha256='e'*64,gates_sha256='0'*64)
+        return gates
+    def test_r21_receipts_from_two_installations_back_still_authenticate(self):
+        gates = self.second_generation()
+        with patch('builtins.print'): self.scope['upgrade'](Mock(bundle_sha256='c'*64,old_bundle_sha256=self.NEW))
+        history = self.root/'config/history'
+        self.assertEqual(sorted(p.name for p in history.iterdir()),sorted([self.gates,gates,'install-'+self.OLD,'install-'+self.NEW]))
+        self.assertEqual(self.scope['receipt_inventory'](self.root/'state/receipts'),self.receipts)
+        retained = load('receipt'); retained.HISTORY, retained.HISTORY_OWNER = history, os.getuid()
+        self.assertEqual(retained.verify_integrity(self.root/'state/receipts'/('a'*32),os.getuid())['summary']['installed']['gates_sha256'],self.gates)
+    def retained_copy(self):
+        history = self.root/'config/history'; history.mkdir(mode=0o755)
+        shutil.copytree(self.root/'oldhistory'/self.gates,history/self.gates)
+        return history/self.gates
+    def test_r21_identical_retained_history_entry_is_reused(self):
+        entry = self.retained_copy(); before = {p.name:(p.stat().st_ino,p.read_bytes()) for p in entry.iterdir()}
+        self.upgrade()
+        self.assertEqual({p.name:(p.stat().st_ino,p.read_bytes()) for p in entry.iterdir()},before)
+    def test_r21_differing_retained_history_entry_refused_before_mutation(self):
+        entry = self.retained_copy(); (entry/'exclusions.json').chmod(0o644)
+        (entry/'exclusions.json').write_text('{}'); (entry/'exclusions.json').chmod(0o444)
+        with self.assertRaisesRegex(ValueError,'historical policy bytes'): self.upgrade()
+        self.assertEqual((self.root/'dest/probe.py').read_bytes(),b'old probe')
+        self.assertEqual(json.loads((self.root/'config/admission.json').read_text())['stage'],'normal')
+    def test_r21_differing_unreferenced_history_entry_refused_before_mutation(self):
+        shutil.rmtree(self.root/'state/receipts'/('a'*32))  # no receipt reads the entry: only the reuse comparison sees it
+        entry = self.retained_copy(); (entry/'exclusions.json').chmod(0o644)
+        (entry/'exclusions.json').write_text('{}'); (entry/'exclusions.json').chmod(0o444)
+        with self.assertRaisesRegex(ValueError,'retained historical policy differs'): self.upgrade()
+        self.assertEqual((self.root/'dest/probe.py').read_bytes(),b'old probe')
+        self.assertFalse((self.root/'config/history'/('install-'+self.OLD)).exists())
     def test_receipt_failing_its_own_policy_refuses_before_mutation(self):
         (self.root/'dest/policy/exclusions.json').chmod(0o644)
         inventory = json.loads((self.root/'config/installed-files.json').read_text())

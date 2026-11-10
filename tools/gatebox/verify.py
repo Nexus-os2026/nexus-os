@@ -1,14 +1,17 @@
-#!/usr/bin/python3 -I
+#!/usr/bin/python3 -IB
 """Only protected host storage authenticates. Detached copies never do.
-SB3E-R19.4: the submitter runs this installed verifier through one fixed sudoers rule
-(`verify.py --run-id *`, read-only); `identity` says whether the receipt was produced by the
-current installed identity. Credit needs AUTHENTICATED and current, never a copied summary."""
+SB3E-R19.4/R21.6: the submitter runs this installed verifier through one exact sudoers rule,
+`verify.py --authenticate-stdin`, which takes no other argument and reads exactly one 32-hex run ID
+from stdin; `identity` says whether the receipt was produced by the current installed identity.
+Credit needs AUTHENTICATED and current, never a copied summary. -B: root writes no bytecode (R21.5)."""
 import argparse
 import json
 import os
 from pathlib import Path
 import pwd
+import re
 import stat
+import sys
 import importlib.util
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('gbx_receipt',HERE/'receipt.py')
@@ -52,7 +55,17 @@ def authenticate(run_id):
     result['identity'] = 'current' if {k:installed.get(k) for k in current} == current else 'historical'
     return result
 
+def stdin_run_id(argv, stream):
+    """The fixed sudo mode: no other argument, one bounded lowercase 32-hex ID and at most one LF."""
+    if argv != ['--authenticate-stdin']: raise SystemExit('--authenticate-stdin takes no other argument')
+    data = stream.read(34)
+    if not re.fullmatch(rb'[0-9a-f]{32}\n?',data): raise ValueError('invalid receipt ID')
+    return data[:32].decode()
+
 def main():
+    if '--authenticate-stdin' in sys.argv[1:]:
+        print(json.dumps(authenticate(stdin_run_id(sys.argv[1:],sys.stdin.buffer)),sort_keys=True))
+        return
     parser = argparse.ArgumentParser()
     select = parser.add_mutually_exclusive_group(required=True)
     select.add_argument('--run-id')
