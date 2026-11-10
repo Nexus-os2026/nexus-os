@@ -1322,18 +1322,16 @@ fn sb3e_route_seams_are_route_only() {
     let names = ["route_seams", "owed_flush", "fn route_ctx"];
     let seam = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
     let test = "fn f() {\n    #[cfg(test)]\n    route_seams::at(\"p\", c);\n}\n";
-    assert_eq!(leaks_under(seam, &names, ROUTE), 0, "a route site");
-    assert_eq!(
-        leaks_under(test, &names, ROUTE),
-        1,
-        "cfg(test) never gates it"
-    );
-    assert_eq!(
-        leaks_under(seam, &["route_seams"], TEST),
-        1,
-        "nor the reverse"
-    );
-    assert_eq!(leaks_under(test, &["route_seams"], TEST), 0, "a test site");
+    // A route site; cfg(test) never gates it, nor the reverse; a test site.
+    let (all, one) = (&names[..], &names[..1]);
+    for (source, names, attr, leaks) in [
+        (seam, all, ROUTE, 0),
+        (test, all, ROUTE, 1),
+        (seam, one, TEST, 1),
+        (test, one, TEST, 0),
+    ] {
+        assert_eq!(leaks_under(source, names, attr), leaks, "{source} {attr}");
+    }
     for broad in ["any(test, mother_route_seams)", "not(mother_route_seams)"] {
         let planted = seam.replace("mother_route_seams)", &format!("{broad})"));
         assert_eq!(leaks_under(&planted, &names, ROUTE), 1, "{broad}");
@@ -1355,68 +1353,126 @@ fn sb3e_route_seams_are_route_only() {
 /// The audited S1 writer sites: the broker rows of design 4.4, the two
 /// store points of 4.2, and the refusal notes of 2.4 and 4.4 (seal).
 const ROUTE_SITES: &str = "\
-host_session/model.rs: reg.reserve¦r,SessionError>{¦let_producers=co \
- model.gate.checked¦lf.core.cell),);¦self.scope.admit \
- model.gate.before¦lf.core.cell),);¦ifkind!=RequestK \
- model.reserved¦lf.core.cell),);¦letmutrecord=;le \
- model.record.before¦lf.core.cell),);¦letsequence=self \
- model.install.before¦lf.core.cell),);¦letmuts=hold(&se \
- model.install.after¦lf.core.cell),);¦#[cfg(test)]crat \
- attempt.slot¦::Unavailable();¦let(mutowner,pre \
- model.attempt.reserved¦e(&core.cell),);¦letticket=matcha \
- model.attempt.record.before¦r.core.cell),,);¦letrecord=author \
- complete¦),SessionError>{¦if!matches!(self bind.entry¦rr(E::Halted);};¦if!self.context. \
- identity¦se{returnNone;};¦if!self.context. model.call.sampled¦e(&core.cell),);¦letruns=self.aut \
- note:refused:hold¦context.fail();}¦(,Cancelled)})?; \
- note:refused:1.expired¦d)})?;ifexpired{¦returnErr((,Time \
- note:refused:1.judged¦Lapse::Expired){¦returnErr((,Time \
- note:refused:1.cancelled¦judged.is_err(){¦returnErr((,Canc \
- note:refused:2¦w().map_err(|_|{¦(,Stopped)})?;if \
- note:refused:3¦h.unsettled==0){¦returnErr((,Canc \
- note:refused:4.ended¦.ticket.ended(){¦returnErr((,Canc \
- note:refused:live¦Unavailable(_));¦returnErr((ifgra \
- note:refused:6¦:Chat&&!unspent{¦returnErr((,Canc \
- note:refused:7¦on.is_revoked(){¦returnErr((,Canc \
- model.call.observed¦e(&core.cell),);¦ifletErr((error, \
- note:refused:8.capacity¦.context.fail();¦returnErr((,Canc \
- note:refused:8.cas¦Lapse::Expired);¦returnErr((,ifex \
- model.call.admitted¦e(&core.cell),);¦ifkind==RequestK \
- call.gate¦ate_entry(kind);¦letadmitted=self
-host_session.rs: reg.ready¦::Unavailable)?;¦if!self.core.mod \
- door.cancel_run¦SessionFailure>{¦letcall=close::s door.halt¦SessionFailure>{¦letcall=close::s \
- ingress.emergency¦t,SessionError>{¦loop{letold=self \
- ingress.accept¦t,SessionError>{¦letaccepted=Inst
-host_session/close.rs: producer.join¦joined(mutself){¦matchself.core.p \
- close.mother_end¦),SessionError>{¦self.live()?;ifs \
- close.delivery¦(mutself)->bool{¦letsuccess=self. \
- close.obligations¦s,SessionError>{¦let(actions_unac \
- close.seal¦l,SessionError>{¦self.close_reque \
- note:seal:restricted¦dering::SeqCst){¦returnErr(Sessio \
- note:seal:producers¦s.live||s.lost){¦returnErr(Sessio \
- note:seal:model¦del.quiescent(){¦returnErr(Sessio \
- note:seal:stop¦ops.quiescent(){¦returnErr(Sessio \
- note:seal:resources¦es.uncertain!=0{¦returnErr(Sessio \
- note:seal:inventory¦t||e.uncertain){¦returnErr(Sessio \
- note:seal:actions¦a.discharged()){¦returnErr(Sessio \
- note:seal:halt¦0||halt.lost!=0{¦returnErr(Sessio \
- note:seal:health¦ean_sessions!=0{¦returnErr(Sessio \
- note:seal:history¦on_end_recorded{¦returnErr(Sessio \
- note:seal:cas¦READY).is_err(){¦returnErr(Sessio \
- close.mother_end¦),SessionError>{¦seal.live()?;if! \
- close.primary¦),SessionError>{¦seal.live()?;if!
-authority/run.rs: model.attempt.granted¦e(Some(&cell),);¦letticket=Sessio \
- model.attempt.checked¦e(Some(&cell),);¦cell.admit()?;en \
- model.settle.before¦&ticket.cell),);¦letmuttable=sett \
- model.bind.checked¦e(b.original),);¦b.original.admit \
- bind.done¦ome(admission);}¦Ok(())}}#[cfg(te
-evidence_store.rs: store.commit¦nd::Uncertain;}}¦ifself.commit(). \
- store.commit.result¦end::Uncertain;}¦self.known.take(
+host_session/model.rs: >fnreserve at(reg.reserve,scope.route_ctx());¦ionError>{¦let_produc >fna\
+dmission>implRegistrationGate at(model.gate.checked,self.scope.route_ctx());¦e.cell),);¦self.sc\
+ope >fnadmit_request>implCallCancelforRegistrationGate at(model.gate.before,self.scope.route_ct\
+x().kind(kind));¦e.cell),);¦ifkind!=Re >fnregister_model_private>implHostSession at(model.reser\
+ved,self.bootstrap.scope.route_ctx());¦e.cell),);¦letmutreco >letresult>fnregister_model_privat\
+e>implHostSession at(model.record.before,self.bootstrap.scope.route_ctx());¦e.cell),);¦letseque\
+nc at(model.install.before,self.bootstrap.scope.route_ctx());¦e.cell),);¦letmuts=ho at(model.in\
+stall.after,self.bootstrap.scope.route_ctx());¦e.cell),);¦#[cfg(test >fnacquire>implAttempt at(\
+attempt.slot,Ctx::session(core.identity).run(run));¦ailable();¦let(mutown at(model.attempt.rese\
+rved,Ctx::session(core.identity).run(run),);¦e.cell),);¦letticket= >fnrecord_return>implAttempt \
+at(model.attempt.record.before,self.route_ctx());¦.cell),,);¦letrecord= >fncomplete>implAttemp\
+t at(complete,self.route_ctx());¦ionError>{¦if!matches >fnbind_inference_private>implSessionDoo\
+r at(bind.entry,self.context.scope.route_ctx().run(run));¦Halted);};¦if!self.co >fnmodel_identi\
+ty_private>implSessionDoor at(identity,self.context.scope.route_ctx());¦urnNone;};¦if!self.co >\
+fnpredicates>implCallGate at(model.call.sampled,self.route_ctx(kind));¦e.cell),);¦letruns=se >l\
+ethold>fnpredicates>implCallGate note(refused:hold,self.route_ctx(kind));¦t.fail();}¦(,Cancelle \
+>ifexpired>fnpredicates>implCallGate note(refused:1.expired,self.route_ctx(kind));¦ifexpired{¦\
+returnErr( >ifjudged>fnpredicates>implCallGate note(refused:1.judged,self.route_ctx(kind));¦:Ex\
+pired){¦returnErr( >ifcore.model>fnpredicates>implCallGate note(refused:1.cancelled,self.route_\
+ctx(kind));¦.is_err(){¦returnErr( >self.watch.>fnpredicates>implCallGate note(refused:2,self.ro\
+ute_ctx(kind));¦p_err(|_|{¦(,Stopped) >if!self.>fnpredicates>implCallGate note(refused:3,self.r\
+oute_ctx(kind));¦ttled==0){¦returnErr( >ifself.ticket>fnpredicates>implCallGate note(refused:4.\
+ended,self.route_ctx(kind));¦t.ended(){¦returnErr( >Ok>let_held>fnpredicates>implCallGate note(\
+refused:live,self.route_ctx(kind));¦lable(_));¦returnErr( >ifkind>fnpredicates>implCallGate not\
+e(refused:6,self.route_ctx(kind));¦&!unspent{¦returnErr( >ifself.invocation>fnpredicates>implCa\
+llGate note(refused:7,self.route_ctx(kind));¦revoked(){¦returnErr( >fnpredicates>implCallGate a\
+t(model.call.observed,self.route_ctx(kind));¦e.cell),);¦ifletErr(( >ifmatches!>ifletErr>fnpredi\
+cates>implCallGate note(refused:8.capacity,self.route_ctx(kind));¦xt.fail();¦returnErr( >ifletE\
+rr>fnpredicates>implCallGate note(refused:8.cas,self.route_ctx(kind));¦:Expired);¦returnErr( >f\
+npredicates>implCallGate at(model.call.admitted,self.route_ctx(kind));¦e.cell),);¦ifkind==Re >f\
+nadmit_request>implCallCancelforCallGate at(call.gate,self.route_ctx(kind));¦try(kind);¦letadmi\
+tte
+host_session.rs: >pubfnfinish_bootstrap>implHostSession at(reg.ready,self.bootstrap.scope.route\
+_ctx());¦ailable)?;¦if!self.co >pubfncancel_run>implSessionDoor at(door.cancel_run,self.context\
+.scope.route_ctx().run(run));¦nFailure>{¦letcall=cl >pubfnhalt>implSessionDoor at(door.halt,sel\
+f.context.scope.route_ctx());¦nFailure>{¦letcall=cl >pubfnemergency>implSessionIngress at(ingre\
+ss.emergency,Ctx::session(self.core.identity));¦ionError>{¦loop{letol >pubfnaccept>implSessionI\
+ngress at(ingress.accept,Ctx::session(self.core.identity).request(sequence),);¦ionError>{¦letac\
+cepte
+host_session/close.rs: >pubfnjoined>implProducer at(producer.join,Ctx::session(self.core.identi\
+ty));¦(mutself){¦matchself. >pubfnbegin_mother_end>implCloseSeal at(close.mother_end,Ctx::sessi\
+on(self.core.identity));¦ionError>{¦self.live( >pubfnfinish_delivery>implCloseSeal at(close.del\
+ivery,Ctx::session(self.core.identity));¦lf)->bool{¦letsuccess >pubfnclose_obligations>implHost\
+Session at(close.obligations,Ctx::session(self.core.identity));¦ionError>{¦let(action >pubfnsea\
+l_close>implHostSession at(close.seal,Ctx::session(self.core.identity).request(request.sequence\
+),);¦ionError>{¦self.close >ifword&>pubfnseal_close>implHostSession note(seal:restricted,Ctx::s\
+ession(self.core.identity));¦::SeqCst){¦returnErr( >ifproducers.slots>pubfnseal_close>implHostS\
+ession note(seal:producers,Ctx::session(self.core.identity));¦||s.lost){¦returnErr( >if!self.>p\
+ubfnseal_close>implHostSession note(seal:model,Ctx::session(self.core.identity));¦iescent(){¦re\
+turnErr( >ifstop.received>pubfnseal_close>implHostSession note(seal:stop,Ctx::session(self.core\
+.identity));¦iescent(){¦returnErr( >ifresources.unresolved>pubfnseal_close>implHostSession note\
+(seal:resources,Ctx::session(self.core.identity));¦ertain!=0{¦returnErr( >ifself.inventory>pubf\
+nseal_close>implHostSession note(seal:inventory,Ctx::session(self.core.identity));¦ncertain){¦r\
+eturnErr( >ifself.core>pubfnseal_close>implHostSession note(seal:actions,Ctx::session(self.core\
+.identity));¦harged()){¦returnErr( >ifhalt.pending>pubfnseal_close>implHostSession note(seal:ha\
+lt,Ctx::session(self.core.identity));¦t.lost!=0{¦returnErr( >ifhealth.latched>pubfnseal_close>i\
+mplHostSession note(seal:health,Ctx::session(self.core.identity));¦ssions!=0{¦returnErr( >ifrep\
+ort.records>pubfnseal_close>implHostSession note(seal:history,Ctx::session(self.core.identity))\
+;¦_recorded{¦returnErr( >ifInstant::>pubfnseal_close>implHostSession note(seal:cas,Ctx::session\
+(self.core.identity));¦.is_err(){¦returnErr( >pubfnobserve_mother_end>implHostSession at(close.\
+mother_end,Ctx::session(self.core.identity));¦ionError>{¦seal.live( >pubfnclose_primary>implHos\
+tSession at(close.primary,Ctx::session(self.core.identity));¦ionError>{¦seal.live(
+authority/run.rs: >fnadmit_session_attempt>implRunRegistry at(model.attempt.granted,Ctx::defaul\
+t().run(run).attempt(ordinal),);¦(&cell),);¦letticket= at(model.attempt.checked,Ctx::default().\
+run(run).attempt(ordinal),);¦(&cell),);¦cell.admit >fnsettle_session_attempt>implRunRegistry at\
+(model.settle.before,Ctx::default().run(ticket.run).attempt(ticket.ordinal),);¦t.cell),);¦letmu\
+ttabl >fnadmit_session_inference>implRunRegistry at(model.bind.checked,Ctx::default().run(b.run\
+));¦iginal),);¦b.original at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
+evidence_store.rs: >fnappend>implInner at(store.commit,Ctx::store(kind,phase,commitment));¦cert\
+ain;}}¦ifself.com at(store.commit.result,Ctx::store(kind,phase,commitment));¦ncertain;}¦self.kn\
+own
 ";
+/// SB3E-R14.1: the reviewed `fire` (eligibility through selection, and all
+/// that can rebind its inputs) and `Ctx::store`, compared normalized.
+const FIRE_PIN: &str = r#"
+fn fire(point:&'static str,note:bool,ctx:Ctx<'_>){let(entry,pending)={let mut s=state();s.tick
++=1;let key=(ctx.session,ctx.request,ctx.run,ctx.attempt);let gate=u64::from(!note&&GATES.
+contains(&point));let request_ordinal=match s.ordinals.iter_mut().find(|(k,_)|*k==key){Some((_
+,n))=>{*n+=gate;Some(*n)}None if gate==1=>{s.ordinals.push((key,1));Some(1)}None=>None,};let
+entry=Entry{tick:s.tick,point,note,session:ctx.session,request:ctx.request,run:ctx.run,
+invocation:None,attempt:ctx.attempt,kind:ctx.kind,request_ordinal,phase:ctx.phase.map(str::
+to_owned),commitment:ctx.commitment.map(str::to_owned),};s.entries.push(entry.clone());let
+eligible=!note&&(point!="store.commit"||ctx.kind==Some("ordinary"));let found=s.pending.iter()
+.position(|p|eligible&&p.point==point);(entry,found.map(|i|s.pending.remove(i)))};let Some(
+pending)=pending else{return};let acknowledged=pending.ack.try_send(entry).is_ok();match
+pending.pause{None=>panic!("route seam: armed panic at {point}"),Some((released,cell,result))=
+>{if!acknowledged||released.recv_timeout(PATIENCE).is_err(){FAILED.store(true,Ordering::SeqCst
+);let _=writeln!(&*result,"TIMEOUT {cell} {point}");std::process::abort();}}}}
+"#;
+const STORE_PIN: &str = r#"
+pub(crate)fn store(kind:&'static str,phase:&'a str,commitment:Option<&'a str>)->Self{let(kind,
+phase)=(Some(kind),Some(phase));Self{kind,phase,commitment,..Self::default()}}
+"#;
+/// SB3E-R12.1 and R14.1: the owed-flush declaration, initialisation, set
+/// and take, each with its neighbours, compared normalized.
+const OWED_PINS: [&str; 4] = [
+    "#[cfg(mother_route_seams)] owed_flush: bool, }",
+    "#[cfg(mother_route_seams)] owed_flush: false, };",
+    "let commitment = owed.commitment.clone(); #[cfg(mother_route_seams)] { self.owed_flush = true; }
+     match self.append(phase, commitment.as_deref(), &body) {",
+    r#"fn append(&mut self, phase: &str, commitment: Option<&str>, body: &str) -> Append {
+     #[cfg(mother_route_seams)] let kind = if std::mem::take(&mut self.owed_flush) { "owed_flush" }
+     else { "ordinary" }; if self.latched {"#,
+];
 /// The audited sites of `file`, in source order.
-fn audited(file: &str) -> Vec<&'static str> {
+/// A `>chain` token gives the enclosing chain of the sites after it.
+fn audited(file: &str) -> Vec<String> {
     let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
-    let row = rows.into_iter().find(|(f, _)| *f == file);
-    row.map_or(vec![], |(_, sites)| sites.split_whitespace().collect())
+    let row = rows
+        .into_iter()
+        .find(|(f, _)| *f == file)
+        .map_or("", |r| r.1);
+    let (mut chain, mut sites) = ("", Vec::new());
+    for token in row.split_whitespace() {
+        match token.strip_prefix('>') {
+            Some(c) => chain = c,
+            None => sites.push(format!("{token}¦{chain}")),
+        }
+    }
+    sites
 }
 const ROUTE_IMPORT: &str = "use crate::broker::route_seams::{self, Ctx};";
 /// Each S1 writer call, in source order: `note:<reason>` or the point, or
@@ -1446,11 +1502,6 @@ fn route_sites(source: &str) -> Result<Vec<String>, String> {
             return Err(format!("not its own attributed statement at byte {at}"));
         }
         let open = at + 13 + call.len();
-        let lit = source[open..].trim_start();
-        let point = lit
-            .strip_prefix('"')
-            .and_then(|l| l.split_once('"'))
-            .map(|p| p.0);
         let (mut depth, mut end) = (1usize, open);
         for (i, c) in code[open..].char_indices() {
             depth = match c {
@@ -1463,58 +1514,132 @@ fn route_sites(source: &str) -> Result<Vec<String>, String> {
                 break;
             }
         }
-        let shaped = code[end..].starts_with(';') && code[open..end].contains(',');
-        let Some(point) = point.filter(|_| shaped) else {
+        let literal = source[open..].trim_start().starts_with('"');
+        if !literal || !code[end..].starts_with(';') || !code[open..end].contains(',') {
             return Err(format!("call shape at byte {at}"));
-        };
-        // No enclosing statement or item carries a cfg of its own.
-        let (own, enclosing) = starts(&code, at)
-            .split_first()
-            .map(|(o, e)| (*o, e.to_vec()))
-            .unwrap();
-        let cfg = |start: usize| {
-            attributes(&code, start)
-                .iter()
-                .any(|a| a.starts_with("#[cfg"))
-        };
-        if attributes(&code, own) != [ROUTE] || enclosing.into_iter().any(cfg) {
-            return Err(format!("{point}: an enclosing condition"));
+        }
+        let statement = flat(&lex(&source[at..=end])).replacen("route_seams::", "", 1);
+        // No enclosing statement or item carries a cfg of its own; each
+        // enclosing level is pinned as its attributes and header.
+        let own = header(&code, prior.len()..end + 1).0;
+        let (mut gated, mut chain) = (own != [ROUTE], Vec::new());
+        for (attrs, head) in enclosing(&code, at).into_iter().map(|r| header(&code, r)) {
+            gated |= attrs.iter().any(|a| a.contains("[cfg"));
+            chain.push(format!("{}{head}", attrs.concat()));
+        }
+        if gated {
+            return Err(format!("{statement}: an enclosing condition"));
         }
         // The audited anchors: the code just before and just after the site.
         let sig = |c: &char| !c.is_whitespace() && *c != '"';
-        let prev: String = code[..before.len() - ROUTE.len()]
-            .chars()
-            .rev()
-            .filter(sig)
-            .take(16)
-            .collect();
-        let next: String = code[end + 1..].chars().filter(sig).take(16).collect();
-        let name = if call == "note(" {
-            format!("note:{point}")
-        } else {
-            point.to_string()
-        };
-        sites.push(format!(
-            "{name}¦{}¦{next}",
-            prev.chars().rev().collect::<String>()
-        ));
+        let prev: Vec<char> = code[..prior.len()].chars().filter(sig).collect();
+        let prev: String = prev[prev.len().saturating_sub(10)..].iter().collect();
+        let next: String = code[end + 1..].chars().filter(sig).take(10).collect();
+        sites.push(format!("{statement}¦{prev}¦{next}¦{}", chain.join(">")));
     }
     Ok(sites)
 }
-/// The outer attributes at the start of a statement or item.
-fn attributes(code: &str, start: usize) -> Vec<&str> {
-    let (mut rest, mut found) = (code[start..].trim_start(), Vec::new());
-    while rest.starts_with("#[") {
-        let mut depth = 0i32;
-        let close = rest.char_indices().find(|&(_, c)| {
-            depth += i32::from(c == '[') - i32::from(c == ']');
-            c == ']' && depth == 0
-        });
-        let end = close.map_or(rest.len(), |(i, _)| i + 1);
-        found.push(&rest[..end]);
-        rest = rest[end..].trim_start();
+/// The normalization (SB3E-R14.1): the comment-masked source as tokens,
+/// each an identifier or number, a whole string or char literal, or one
+/// punctuation character. Whitespace and comments are not tokens.
+fn lex(source: &str) -> Vec<&str> {
+    let (code, mut tokens, mut i) = (mask(source), Vec::new(), 0);
+    let c = code.as_bytes();
+    let word = |b: &u8| b.is_ascii_alphanumeric() || *b == b'_';
+    while i < c.len() {
+        let start = i;
+        i += match c[i] {
+            b if b.is_ascii_whitespace() => {
+                i += 1;
+                continue;
+            }
+            b'"' => code[i + 1..].find('"').map_or(c.len() - i, |n| n + 2),
+            b'\'' if c.get(i + 2) == Some(&b'\'') => 3,
+            b if word(&b) => c[i..].iter().take_while(|b| word(b)).count(),
+            _ => source[i..].chars().next().map_or(1, char::len_utf8),
+        };
+        tokens.push(&source[start..i.min(c.len())]);
     }
-    found
+    tokens
+}
+/// Tokens as one reviewable word: no spaces, no quotes.
+fn flat(tokens: &[&str]) -> String {
+    tokens.concat().replace('"', "")
+}
+/// How often the reviewed `literal` occurs in `source`, both normalized.
+fn pinned(source: &str, literal: &str) -> usize {
+    let (source, literal) = (lex(source), lex(literal));
+    let windows = source.windows(literal.len());
+    windows.filter(|w| *w == literal).count()
+}
+/// The normalized attributes (outer or inner, whatever their spacing)
+/// anywhere in `range`, and its header: up to four tokens after its leading
+/// attributes and visibility, before its first `(`, `{`, `=`, `<` or `;`.
+fn header(code: &str, range: std::ops::Range<usize>) -> (Vec<String>, String) {
+    let tokens = lex(&code[range]);
+    let (mut attrs, mut lead, mut i) = (Vec::new(), 0, 0);
+    while i < tokens.len() {
+        let open = i + 1 + usize::from(tokens.get(i + 1) == Some(&"!"));
+        if tokens[i] != "#" || tokens.get(open) != Some(&"[") {
+            i += 1;
+            continue;
+        }
+        let mut depth = 0i32;
+        let close = (open..tokens.len()).find(|&j| {
+            depth += i32::from(tokens[j] == "[") - i32::from(tokens[j] == "]");
+            depth == 0
+        });
+        let close = close.unwrap_or(tokens.len() - 1);
+        attrs.push(tokens[i..=close].concat());
+        lead = if i == lead { close + 1 } else { lead };
+        i = close + 1;
+    }
+    let mut rest = &tokens[lead..];
+    if let ["pub", "(", _, ")", tail @ ..] = rest {
+        rest = tail;
+    }
+    let stop = ["(", "{", "=", "<", ";"];
+    let head = rest.iter().take_while(|t| !stop.contains(t)).take(4);
+    (attrs, flat(&head.copied().collect::<Vec<_>>()))
+}
+/// Each block enclosing `at`, innermost first, as the range from the start
+/// of the statement, item or arm that opens it to its `{`: back to a depth-0
+/// `;`, `{` or `}` (not a `}` before `else`). Commas and generics never end
+/// it, so an attribute on any enclosing level falls inside its range.
+fn enclosing(code: &str, mut at: usize) -> Vec<std::ops::Range<usize>> {
+    let (b, mut found) = (code.as_bytes(), Vec::new());
+    loop {
+        let (mut depth, mut i) = (0usize, at);
+        let open = loop {
+            if i == 0 {
+                return found;
+            }
+            i -= 1;
+            match b[i] {
+                b'}' => depth += 1,
+                b'{' if depth == 0 => break i,
+                b'{' => depth -= 1,
+                _ => {}
+            }
+        };
+        let (mut depth, mut i) = (0usize, open);
+        let start = loop {
+            if i == 0 {
+                break 0;
+            }
+            i -= 1;
+            let chained = || code[i + 1..].trim_start().starts_with("else");
+            match b[i] {
+                b'}' if depth == 0 && !chained() => break i + 1,
+                b')' | b']' | b'}' => depth += 1,
+                b'(' | b'[' | b'{' if depth > 0 => depth -= 1,
+                b'{' | b';' if depth == 0 => break i + 1,
+                _ => {}
+            }
+        };
+        found.push(start..open + 1);
+        at = start;
+    }
 }
 /// SB-3E site inventory (U3b): exactly the audited writer sites, each its
 /// own statement gated by exactly `#[cfg(mother_route_seams)]`, the writers'
@@ -1524,24 +1649,33 @@ fn attributes(code: &str, start: usize) -> Vec<&str> {
 #[test]
 fn sb3e_route_sites_are_exactly_the_inventory() {
     let good = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
-    assert_eq!(route_sites(good), Ok(vec!["p¦fnf(){¦}".to_string()]));
+    assert_eq!(
+        route_sites(good),
+        Ok(vec!["at(p,c);¦fnf(){¦}¦fnf".to_string()])
+    );
+    let (call, sub) = ("at(\"p\", c);", |a: &str, b: &str| good.replace(a, b));
+    // Enclosing conditions, however spelled (SB3E-R14.1).
+    let spelled = [
+        "#[cfg(all(unix, test))]",
+        "#[ cfg(test)]",
+        "#[/* r */cfg(test)]",
+        "# [cfg(test)]",
+    ];
+    let spelled = spelled.map(|attr| format!("{attr}\n{good}"));
     for planted in [
-        good.replace("cfg(mother_route_seams)", "cfg(test)"),
-        good.replace(
-            "route_seams::at(\"p\", c);",
-            "let _v = route_seams::at(\"p\", c);",
-        ),
-        good.replace(
-            "route_seams::at(\"p\", c);",
-            "route_seams::at(\"p\", c).f();",
-        ),
-        good.replace("route_seams::at(\"p\", c);", "route_seams::at(P, c);"),
-        good.replace("route_seams::at", "route_seams::note2"),
-        good.replace("    #[cfg(mother_route_seams)]\n", ""),
+        sub("cfg(mother_route_seams)", "cfg(test)"),
+        sub(call, &format!("let _v = {call}")),
+        sub(call, "at(\"p\", c).f();"),
+        sub(call, "at(P, c);"),
+        sub("route_seams::at", "route_seams::note2"),
+        sub("    #[cfg(mother_route_seams)]\n", ""),
         format!("{good}use crate::broker::route_seams::at as w;\n"),
-        good.replace("    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n", "    #[cfg(test)]\n    {\n        #[cfg(mother_route_seams)]\n        route_seams::at(\"p\", c);\n    }\n"),
-        good.replace("fn f()", "#[cfg(all(unix, test))]\nfn f()"),
-    ] {
+        sub("fn f() {", "fn f() { #[cfg(test)] {").replace(");\n}", ");\n} }"),
+        sub("fn f() {", "fn f() { #[ cfg(test)] {").replace(");\n}", ");\n} }"),
+    ]
+    .into_iter()
+    .chain(spelled)
+    {
         assert!(route_sites(&planted).is_err(), "planted: {planted}");
     }
     let sources = crate_sources();
@@ -1566,35 +1700,50 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
             let code = mask(&parent.unwrap().1);
             let decl = seam_sites(&code, &[&format!("mod {name}")]);
             let gated = |at: &usize| {
-                starts(&code, *at)
-                    .into_iter()
-                    .any(|s| attributes(&code, s).iter().any(|a| a.starts_with("#[cfg")))
+                let own = std::iter::once(starts(&code, *at)[0]..*at);
+                let mut levels = own.chain(enclosing(&code, *at)).map(|r| header(&code, r).0);
+                levels.any(|attrs| attrs.iter().any(|a| a.contains("[cfg")))
             };
+            for inner in [&code, &mask(source)] {
+                let inner = lex(inner);
+                let cfg = inner
+                    .windows(4)
+                    .any(|w| w[..3] == ["#", "!", "["] && w[3].starts_with("cfg"));
+                assert!(!cfg, "{file}: an inner cfg on its module path");
+            }
             assert!(
                 decl.len() == 1 && !gated(&decl[0]),
                 "{file}: module {name} declared without a cfg"
             );
         }
     }
-    // SB3E-R12.1: the owed-flush shape. Initialized false, set immediately
-    // before the owed-record append, taken at the start of every append,
-    // carried as the store points' kind; only `ordinary` fires a hold.
+    // SB3E-R12.1 and R14.1: the owed-flush statements, exactly; every flag
+    // use inside them; no `kind` rebinding before the store points.
     let store = include_str!("../evidence_store.rs");
-    for shape in [
-        "    #[cfg(mother_route_seams)]\n    owed_flush: bool,\n}",
-        "            #[cfg(mother_route_seams)]\n            owed_flush: false,\n        };",
-        "let commitment = owed.commitment.clone();\n            #[cfg(mother_route_seams)]\n            {\n                self.owed_flush = true;\n            }\n            match self.append(phase, commitment.as_deref(), &body) {",
-        "body: &str) -> Append {\n        #[cfg(mother_route_seams)]\n        let kind = if std::mem::take(&mut self.owed_flush) {\n            \"owed_flush\"\n        } else {\n            \"ordinary\"\n        };\n        if self.latched {",
-        "route_seams::at(\"store.commit\", Ctx::store(kind, phase, commitment));\n        if self.commit().is_err() {",
-        "route_seams::at(\"store.commit.result\", Ctx::store(kind, phase, commitment));",
-    ] {
-        assert_eq!(store.matches(shape).count(), 1, "owed-flush shape: {shape}");
+    for pin in OWED_PINS {
+        assert_eq!(pinned(store, pin), 1, "owed-flush pin: {pin}");
     }
-    assert_eq!(store.matches("owed_flush").count(), 5, "no other flag use");
+    let tokens = lex(store);
+    let uses = |t: &str| tokens.iter().filter(|x| **x == t).count();
     assert_eq!(
-        store.matches("fn append(&mut self").count(),
-        1,
-        "one store append"
+        (uses("owed_flush"), uses("\"owed_flush\"")),
+        (4, 1),
+        "no other flag use"
+    );
+    let append = tokens
+        .windows(5)
+        .position(|w| w == ["fn", "append", "(", "&", "mut"]);
+    let append = append.unwrap();
+    let open = append + tokens[append..].iter().position(|t| *t == "{").unwrap();
+    let mut depth = 0i32;
+    let body = tokens[open..].iter().take_while(|t| {
+        depth += i32::from(**t == "{") - i32::from(**t == "}");
+        depth > 0
+    });
+    assert_eq!(
+        body.filter(|t| **t == "kind").count(),
+        3,
+        "append's kind, unrebound"
     );
     let seams = &sources
         .iter()
@@ -1621,20 +1770,13 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     let fns = seams.matches("fn ").count();
     assert_eq!(fns, 13, "no further writer or accessor");
     assert!(!seams.contains("#[used]"), "SB3E-R9");
-    for shape in [
-        "let eligible = !note && (point != \"store.commit\" || ctx.kind == Some(\"ordinary\"));",
-        "let found = s.pending.iter().position(|p| eligible && p.point == point);",
-    ] {
-        assert_eq!(
-            seams.matches(shape).count(),
-            1,
-            "ordinary-only hold: {shape}"
-        );
+    for pin in [FIRE_PIN, STORE_PIN] {
+        assert_eq!(pinned(seams, pin), 1, "route seam pin: {pin}");
     }
     let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
     let sites = rows.flat_map(|(_, s)| s.split_whitespace());
-    let mut points: Vec<&str> = sites.filter_map(|s| s.split('¦').next()).collect();
-    points.retain(|p| !p.starts_with("note:"));
+    let points = sites.filter_map(|s| s.strip_prefix("at(")?.split(',').next());
+    let mut points: Vec<&str> = points.collect();
     points.sort_unstable();
     points.dedup();
     let listed = seams.split("POINTS: [&str; 35] = [").nth(1).unwrap();

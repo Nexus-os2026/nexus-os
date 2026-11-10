@@ -346,46 +346,38 @@ fn route_correlated_identity_is_recorded() {
         let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
         let call = ModelRequest::new("system".into(), "prompt".into(), schema).unwrap();
         let (owner, meter) = (InvocationOwner::new(), Meter(AtomicU32::new(0)));
-        drain_trace();
-        let served = peer.lock().unwrap().len();
-        for _ in 0..2 {
+        // Each call's own trace and peer requests: the attempt this call must
+        // carry (independent of the trace) and its ordinals 1..n.
+        for expected in [1, 2] {
+            drain_trace();
+            let served = peer.lock().unwrap().len();
             let outcome = door.model_call(run, &call, &meter, &Never, &owner.observer());
             let result = outcome.unwrap().into_result();
-            assert!(result.is_ok(), "the attempt succeeds: {:?}", result.err());
-        }
-        let trace = drain_trace();
-        let peer = peer.lock().unwrap()[served..].to_vec();
-        let gates: Vec<&Entry> = trace.iter().filter(|e| e.point == "call.gate").collect();
-        assert_eq!(
-            gates.len(),
-            peer.len(),
-            "one gate per request the peer served"
-        );
-        let (mut ordinal, mut attempt) = (0, None);
-        for (gate, path) in gates.iter().zip(&peer) {
-            if gate.attempt != attempt {
-                (ordinal, attempt) = (0, gate.attempt); // A new attempt restarts.
+            assert!(result.is_ok(), "attempt {expected}: {:?}", result.err());
+            let trace = drain_trace();
+            let paths = peer.lock().unwrap()[served..].to_vec();
+            let gates: Vec<&Entry> = trace.iter().filter(|e| e.point == "call.gate").collect();
+            assert_eq!(gates.len(), paths.len(), "one gate per request served");
+            for (n, (gate, path)) in (1..).zip(gates.iter().zip(&paths)) {
+                let kind = if path == "/api/chat" {
+                    "chat"
+                } else {
+                    "metadata"
+                };
+                let ids = (gate.session, gate.request, gate.run, gate.attempt);
+                assert_eq!(
+                    ids,
+                    (me, Some(request), Some(run), Some(expected)),
+                    "{path}"
+                );
+                assert_eq!(
+                    (gate.kind, gate.request_ordinal),
+                    (Some(kind), Some(n)),
+                    "{path}"
+                );
             }
-            ordinal += 1;
-            let kind = if path == "/api/chat" {
-                "chat"
-            } else {
-                "metadata"
-            };
-            assert_eq!(
-                (gate.session, gate.request, gate.run),
-                (me, Some(request), Some(run))
-            );
-            assert_eq!(
-                (gate.kind, gate.request_ordinal),
-                (Some(kind), Some(ordinal)),
-                "{path}"
-            );
+            assert_eq!(paths.last().map(String::as_str), Some("/api/chat"));
         }
-        let mut attempts: Vec<_> = gates.iter().map(|e| e.attempt).collect();
-        attempts.dedup();
-        assert_eq!(attempts, [Some(1), Some(2)], "each attempt's own identity");
-        assert_eq!(peer.iter().filter(|p| *p == "/api/chat").count(), 2);
         let _batch = door.cancel_run(run).unwrap();
         let trace = drain_trace();
         let cancel = trace.iter().find(|e| e.point == "door.cancel_run").unwrap();
