@@ -6,7 +6,10 @@ plants one difference and passes only if A7 exits nonzero and reports the
 control's own expected kind; a plant reported only by another kind is masked.
 Kinds: `pre` (refused before any build), `pair` (both builds on a planted
 copy), `lane`/`ship` (one rebuild beside the base copy's other build),
-`evidence` (one mutation of the base evidence, then the comparator).
+`evidence` (one mutation of the base evidence, then the comparator; dep-info
+and output texts re-digested so only the targeted check sees them),
+`capture` (the runner refuses before any verdict). The generated sweep over
+every schema key path is route_a7_sweep.
 The pin and refusal controls prove enforcement, not transient-input coverage.
 """
 import argparse
@@ -241,7 +244,18 @@ def inv(ev, kind, fn):
     path = os.path.join(ev, kind, "inventory.json")
     m = a7.read_json(path)
     fn(m)
+    for field in ("dep_info", "outputs"):
+        m["files"].update({k: a7.graph.sha256_text(v) for k, v in m[field].items() if k in m["files"]})
     a7.write_json(path, m)
+
+
+def native_declared(ev, path):
+    """Review-u3-batch2 D2: `path` declared by every script output that declares a native directory, and on the harness."""
+    path = path(json.load(open(ev + "/lane/meta.json"))["target"])
+    for kind in ("ship", "lane"):
+        inv(ev, kind, lambda m: m["outputs"].update({k: v + f"cargo:rustc-link-search=native={path}\n"
+                                                     for k, v in m["outputs"].items() if "rustc-link-search=native=" in v}))
+    add_flag(ev, "route_cells", f"-L native={path}")
 
 
 def first_key(mapping, pattern):
@@ -258,8 +272,20 @@ def on_run(ev, fn):
     rewrite(ev, "lane", lambda c: c.rstrip().endswith("/build-script-build`") and "/kernel " not in c, fn)
 
 
-def drop_run(ev):
-    on_run(ev, lambda l: None)
+def drop_run(ev, kind="lane"):
+    rewrite(ev, kind, lambda c: c.rstrip().endswith("/build-script-build`") and "/kernel " not in c, lambda c: None)
+
+
+def native_dir(ev):
+    text = open(os.path.join(ev, "lane", "build.log"), encoding="utf-8", errors="surrogateescape").read()
+    return re.search(r"-L native=(\S+/out)\b", text).group(1)
+
+
+def omit_cfg_if(ev):
+    for kind in ("ship", "lane"):
+        lines(ev, kind, lambda t: (lambda drop: [x for j, x in enumerate(t) if j not in drop])(
+            {k for i0, i1, c in commands(t) if "--crate-name cfg_if " in c for k in range(i0, i1)}))
+        inv(ev, kind, lambda m: [m[f].pop(k) for f in ("files", "dep_info") for k in [k for k in m[f] if re.search(r"deps/(lib)?cfg_if-", k)]])
 
 
 TP = "cfg_if"  # a third-party unit present in both builds
@@ -290,7 +316,23 @@ EVIDENCE = {
     "build_output_missing": (lambda ev: inv(ev, "lane", lambda m: m["outputs"].pop(sorted(m["outputs"])[0])), "build_output_missing"),
     "dep_info_missing": (lambda ev: inv(ev, "lane", lambda m: m["dep_info"].pop(first_key(m["dep_info"], r"deps/cfg_if-"))), "missing_dep_info"),
     "ship_only_unit_missing": (lambda ev: rewrite(ev, "ship", lambda c: "--crate-name gtk4_macros " in c, lambda c: None), "ship_only_missing"),
-    "evidence_file_missing": (lambda ev: os.unlink(os.path.join(ev, "lane", "inventory.json")), "evidence_missing"),
+    "evidence_file_missing": (lambda ev: os.unlink(os.path.join(ev, "lane", "inventory.json")), "evidence_schema"),
+    # review-u3-batch findings 2 and 3: each probe Codex found, then neighbours of each.
+    "native_traversal": (lambda ev: add_flag(ev, "route_cells", f"-L native={native_dir(ev)}/../../..") , "path_unowned"),
+    "native_unknown_build_dir": (lambda ev: add_flag(ev, "route_cells", f"-L native={json.load(open(ev + '/lane/meta.json'))['target']}/release/build/evil-0123456789abcdef/out"), "path_unowned"),
+    "extern_no_producer": (lambda ev: add_flag(ev, "route_cells", f"--extern evil={json.load(open(ev + '/lane/meta.json'))['target']}/release/deps/libevil-0123456789abcdef.rlib"), "extern_unbound"),
+    "repo_hashes_removed_both": (lambda ev: [meta(ev, k, lambda m: [m.pop("repo_hash_before"), m.pop("repo_hash_after")]) for k in ("ship", "lane")], "evidence_schema"),
+    "pre_build_removed_both": (lambda ev: [meta(ev, k, lambda m: m.pop("pre_build")) for k in ("ship", "lane")], "evidence_schema"),
+    "run_record_removed_both": (lambda ev: [drop_run(ev, k) for k in ("ship", "lane")], "unit_missing_from_build"),
+    "dep_info_emptied_all": (lambda ev: [inv(ev, k, lambda m: m.update(dep_info={x: "" for x in m["dep_info"]})) for k in ("ship", "lane")], "dep_info_malformed"),
+    "cfg_if_omitted_both": (omit_cfg_if, "unit_missing_from_build"),
+    "unit_graph_removed_both": (lambda ev: [os.unlink(os.path.join(ev, k, "unit_graph.json")) for k in ("ship", "lane")], "evidence_schema"),
+    "native_unknown_dir_declared": (lambda ev: native_declared(ev, lambda t: f"{t}/release/build/evil-0123456789abcdef/out"), "path_unowned"),
+    "native_other_run_dir_declared": (lambda ev: native_declared(ev, lambda t: t + "/" + os.path.dirname(first_key(
+        a7.read_json(ev + "/lane/inventory.json")["files"], r"^release/build/typenum-[0-9a-f]{16}/out/tests\.rs$"))), "path_unowned"),
+    "unowned_target_file": (lambda ev: inv(ev, "lane", lambda m: m["files"].update({"release/deps/libevil-0123456789abcdef.rlib": "0" * 64})), "unowned_file"),
+    "cfg_unbound": (lambda ev: [add_flag(ev, TP, "--cfg evil", k) for k in ("ship", "lane")], "unit_not_in_graph"),
+    "dep_info_extra_rule": (lambda ev: inv(ev, "lane", lambda m: m["dep_info"].update({k: v + "\n/x/evil: " + v.split(": ", 1)[1].split("\n", 1)[0] + "\n" for k, v in m["dep_info"].items() if "/cfg_if-" in k})), "dep_info_malformed"),
     "harness_extra_flag": (lambda ev: add_flag(ev, "route_cells", "-C debug-assertions=on"), "lane_only_recipe"),
     "mother_hands_extra_flag": (lambda ev: add_flag(ev, "mother_hands", "-C overflow-checks=on"), "lane_only_recipe"),
     "fresh_unit": (lambda ev: lines(ev, "lane", lambda t: t + ["       Fresh cfg-if v1.0.4"]), "fresh_unit"),
@@ -309,7 +351,7 @@ ev_wrapper = [None]
 
 # ---- runner -----------------------------------------------------------------------
 
-def a7_run(c, opts, evidence, verdict, keep=False):
+def a7_run(c, opts, evidence, verdict, keep=False, err=None):
     env = dict(os.environ, **opts.get("env", {}))
     for name in opts.get("unset", []):
         env.pop(name, None)
@@ -321,7 +363,10 @@ def a7_run(c, opts, evidence, verdict, keep=False):
     argv += [f"--ship-extra-arg={a}" for a in opts.get("ship_args", [])] + [f"--lane-extra-arg={a}" for a in opts.get("lane_args", [])]
     if "envb" in opts:
         env = {os.fsencode(k): os.fsencode(v) for k, v in env.items()} | opts["envb"]
-    return subprocess.run(argv, env=env, capture_output=True).returncode
+    proc = subprocess.run(argv, env=env, capture_output=True)
+    if err is not None:
+        err["stderr"] = proc.stderr.decode("utf-8", "replace")
+    return proc.returncode
 
 
 def kinds_of(verdict):
@@ -418,7 +463,7 @@ def capture_tampered(c, evidence):
     done, real_run = {}, subprocess.run
 
     def run(command, **kw):
-        if command[0].endswith("/cargo") and "test" in command:
+        if command[0].endswith("/cargo") and "test" in command and "--unit-graph" not in command:
             proc = subprocess.Popen(command, **kw)
             tamper_proc_macro(c["target"], proc, done)
             proc.wait()
@@ -431,6 +476,28 @@ def capture_tampered(c, evidence):
     finally:
         a7.subprocess.run = real_run
     return {"tamper": done}
+
+
+CAPTURE = {  # review-u3-batch2 D3: a failing graph query (an unknown Cargo flag), over stale evidence and alone
+    "stale_evidence_failed_query": (True, "must be absent or empty"),
+    "graph_query_failed": (False, "the graph query failed"),
+}
+
+
+def run_capture(name, args):
+    began, (stale, message) = time.monotonic(), CAPTURE[name]
+    c = setup(name, args)
+    evidence, verdict, err = os.path.join(c["root"], "evidence"), os.path.join(c["root"], "verdict.json"), {}
+    if stale:
+        shutil.copytree(os.path.join(args.work, "base", "evidence"), evidence)
+    digests = lambda: {p: a7.sha256_file(p) for p in sorted(glob.glob(evidence + "/*/*"))}
+    before = digests()
+    code = a7_run(c, {"ship_args": ["--route-plant-unknown-flag"]}, evidence, verdict, err=err)
+    written = [p for p in digests() if os.path.basename(p) in ("unit_graph.json", "build.log")]
+    ok = code != 0 and message in err["stderr"] and not os.path.exists(verdict) and (digests() == before if stale else not written)
+    shutil.rmtree(c["root"])
+    return {"control": name, "kind": "capture", "ok": ok, "exit": code, "expected": message, "kinds": [],
+            "seconds": round(time.monotonic() - began, 1), "stderr": err["stderr"][-200:]}
 
 
 def run_evidence(name, args):
@@ -482,6 +549,7 @@ def main():
         jobs = [pool.submit(run_evidence, n, args) for n in selected(EVIDENCE)]
         jobs += [pool.submit(run_pre, n, args) for n in selected(PRE)]
         jobs += [pool.submit(run_pair, n, args) for n in selected(PAIR)]
+        jobs += [pool.submit(run_capture, n, args) for n in selected(CAPTURE)]
         results += [j.result() for j in jobs]
     results += [run_one(n, args) for n in selected(ONE)]
     summary = {"ok": all(r["ok"] for r in results), "seconds": round(time.monotonic() - began, 1), "results": results}

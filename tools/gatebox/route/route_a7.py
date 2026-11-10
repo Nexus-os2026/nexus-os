@@ -54,6 +54,16 @@ assumption it falls under:
   `consumed_input_missing`); no ctime change after build start
   (`source_or_sysroot_changed`); repository hash equal before and after both
   builds (`repository_changed`).
+- Evidence completeness: each build reconciled, before any comparison,
+  against Cargo's unit graph for its exact recipe and `cargo metadata`
+  (route_a7_graph: closed schema, every unit, run and graph edge matched one
+  to one, externs, `-L native=`, `-l` and `--cfg` bound to recorded producers
+  and inventoried contents, dep-info structure, the inventory exactly Cargo's
+  layout of the recorded units). Omissions made in both builds fail. A failed
+  graph query is a hard error; a non-empty evidence directory is refused. In
+  `run`, each build's recorded environment, versions and repository hashes
+  equal the runner's own observation (`observation_differs`); `compare` on
+  stored evidence checks their required entries only.
 - Generated and dependency artifacts: byte equality of every non-workspace
   rlib, rmeta, proc-macro `.so`, build-script executable, `output` and OUT_DIR
   file, every mandatory hash and run record required (`artifact_differs`,
@@ -77,6 +87,9 @@ import stat
 import subprocess
 import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import route_a7_graph as graph  # noqa: E402
 
 # Reviewed pins; under GB1 these move to installed policy outside the snapshot.
 BUILD_TIME_PINS = {"kernel/build.rs": "5dd672bf7812edfc0fe41be7f6002f973ae87adec0eebfb92ae1f17d33e88da2"}
@@ -324,22 +337,39 @@ def snapshot_inventory(target, evidence):
     write_json(os.path.join(evidence, "inventory.json"), inventory(target))
 
 
+def expected_command(kind, toolchain, wrapper, extra_config=()):
+    cargo = os.path.join(toolchain, "bin", "cargo")
+    if kind == "ship":
+        return [cargo, *SHIP_ARGS]
+    config = [f'build.rustc-workspace-wrapper="{wrapper}"', *extra_config]
+    return [cargo, *sum((["--config", c] for c in config), []), *LANE_TAIL[:3], "-vv", "--no-run", *LANE_TAIL[3:]]
+
+
+def refuse_stale(evidence):
+    if os.path.islink(evidence) or (os.path.lexists(evidence) and (not os.path.isdir(evidence) or os.listdir(evidence))):
+        sys.exit(f"route_a7: the evidence directory must be absent or empty: {evidence}")
+
+
+def observe(repo, target, toolchain):
+    """What `run` itself sees of the fields each build recorded (checked by `compare`)."""
+    block, _ = launch_block(toolchain, target)
+    return {"repo": repo, "target": target, "toolchain": toolchain, "cargo_home": os.path.join(os.environ.get("HOME", "/"), ".cargo"),
+            "launch_block": sorted(f"{k}={v}" for k, v in block.items()), **versions(toolchain, block)}
+
+
 def capture(kind, repo, target, evidence, wrapper, toolchain, extra_args=(), extra_config=()):
     """One build from clean; the evidence is snapshotted, the target left for the caller."""
     if os.path.lexists(target) or os.path.lexists(target + ".route_rustc.log"):
         sys.exit(f"route_a7: the target must be fresh: {target}")
     if target == repo or target.startswith(repo + os.sep):
         sys.exit("route_a7: the target must be outside the repository")
+    refuse_stale(evidence)
     os.makedirs(evidence, exist_ok=True)
     block, _ = launch_block(toolchain, target)
     cargo = os.path.join(toolchain, "bin", "cargo")
-    if kind == "ship":
-        command = [cargo, *SHIP_ARGS, *extra_args]
-    else:
-        config = [f'build.rustc-workspace-wrapper="{wrapper}"', *extra_config]
-        command = [cargo, *sum((["--config", c] for c in config), []), *LANE_TAIL[:3], "-vv", "--no-run",
-                   *LANE_TAIL[3:], *extra_args]
+    command = expected_command(kind, toolchain, wrapper, extra_config) + list(extra_args)
     info = versions(toolchain, block)
+    graph.record(command, repo, block, evidence, target, re.search(r"^host: (\S+)$", info["rustc"], re.M).group(1))
     cargo_home = os.path.join(os.environ.get("HOME", "/"), ".cargo")
     start = wait_for_later_ctime(evidence)
     began = time.monotonic()
@@ -824,7 +854,29 @@ def compare_artifacts(ship, lane):
     return out
 
 
-def compare(ship_dir, lane_dir, wrapper, wrapper_sha):
+def recorded_fields(units, observed):
+    """Each build's recorded runner fields: equal to `run`'s observation, else their required entries."""
+    meta, kind, out = units.meta, units.meta["kind"], []
+    if observed is not None:
+        return [d("observation_differs", build=kind, field=k) for k, v in sorted(observed.items()) if meta[k] != v]
+    version = os.path.basename(meta["toolchain"]).split("-", 1)[0]
+    block = dict(e.partition("=")[::2] for e in meta["launch_block"])
+    required = {"CARGO_TARGET_DIR": meta["target"], "RUSTC": os.path.join(meta["toolchain"], "bin", "rustc"),
+                "HOME": os.path.dirname(meta["cargo_home"])}
+    if (any(block.get(k) != v for k, v in required.items()) or meta["launch_block"] != sorted(set(meta["launch_block"]))
+            or not block.get("PATH", "").startswith(os.path.join(meta["toolchain"], "bin") + os.pathsep)
+            or os.path.basename(meta["cargo_home"]) != ".cargo"):
+        out.append(d("launch_block_differs", build=kind))
+    if (meta["sysroot"] != meta["toolchain"] or f"\nrelease: {version}\n" not in meta["rustc"]
+            or not meta["cargo"].startswith(f"cargo {version} ")):
+        out.append(d("toolchain_refused", build=kind, reason="recorded versions"))
+    return out
+
+
+def compare(ship_dir, lane_dir, wrapper, wrapper_sha, observed=None):
+    problems = graph.schema(ship_dir, "ship") + graph.schema(lane_dir, "lane")
+    if problems:
+        return {"verdict": "fail", "differences": problems}
     try:
         ship, lane = Units(ship_dir), Units(lane_dir)
     except (OSError, KeyError, ValueError) as error:
@@ -835,8 +887,16 @@ def compare(ship_dir, lane_dir, wrapper, wrapper_sha):
             out.append(d("launch_block_differs" if field == "launch_block" else f"{field}_differs"))
     if ship.meta.get("repo_hash_before") != lane.meta.get("repo_hash_after"):
         out.append(d("repository_changed"))
-    if ship.meta["kind"] != "ship" or lane.meta["kind"] != "lane":
-        out.append(d("evidence_kind_wrong"))
+    for units in (ship, lane):
+        kind = units.meta["kind"]
+        if units.meta["command"] != expected_command(kind, units.meta["toolchain"], wrapper):
+            out.append(d("command_differs", build=kind))
+        if units.meta["wrapper"] != (wrapper if kind == "lane" else None):
+            out.append(d("command_differs", build=kind, field="wrapper"))
+        out += recorded_fields(units, None if observed is None else observed[kind])
+    if read_json(os.path.join(ship_dir, "metadata.json"))["sha256"] != read_json(os.path.join(lane_dir, "metadata.json"))["sha256"]:
+        out.append(d("metadata_differs"))
+    out += graph.reconcile(ship, "ship") + graph.reconcile(lane, "lane")
     for item in ship.meta.get("pre_build", []) + lane.meta.get("pre_build", []):
         out.append(item)
     out += compare_units(ship, lane, wrapper, wrapper_sha)
@@ -930,6 +990,7 @@ def main():
         command = [os.path.join(toolchain, "bin", "cargo"), "--config", f'build.rustc-workspace-wrapper="{wrapper}"', *LANE_TAIL]
         return subprocess.run(command, cwd=repo, env=block).returncode
     evidence = os.path.abspath(args.evidence)
+    refuse_stale(evidence)
     problems = pre_build(repo, target, toolchain)
     if problems and not args.continue_after_refusal:
         return emit({"verdict": "fail", "differences": problems}, args.json)
@@ -945,7 +1006,8 @@ def main():
         meta = read_json(os.path.join(path, "meta.json"))
         meta.update(repo_hash_before=before, repo_hash_after=after, pre_build=problems)
         write_json(os.path.join(path, "meta.json"), meta)
-    return emit(compare(ship, lane, wrapper, args.wrapper_sha256), args.json)
+    seen = dict(observe(repo, target, toolchain), repo_hash_before=before, repo_hash_after=after, pre_build=problems)
+    return emit(compare(ship, lane, wrapper, args.wrapper_sha256, {"ship": seen, "lane": seen}), args.json)
 
 
 if __name__ == "__main__":
