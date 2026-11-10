@@ -57,6 +57,8 @@
 use crate::authority::evidence::{
     EndStatus, EvidenceProjection, EvidenceRecord, EvidenceSink, EvidenceUnavailable,
 };
+#[cfg(mother_route_seams)]
+use crate::broker::route_seams::{self, Ctx};
 use rusqlite::{params, Connection, ErrorCode, OpenFlags};
 use sha2::{Digest as _, Sha256};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -416,6 +418,9 @@ struct Inner {
     /// The next insert alone fails before COMMIT (once), then inserts succeed.
     #[cfg(test)]
     refuse_next: bool,
+    /// SB-3E S1: the next append pays an owed record (design 4.2.1).
+    #[cfg(mother_route_seams)]
+    owed_flush: bool,
 }
 
 /// The evidence store: one file, one connection.
@@ -780,6 +785,8 @@ impl EvidenceStore {
             refusing: false,
             #[cfg(test)]
             refuse_next: false,
+            #[cfg(mother_route_seams)]
+            owed_flush: false,
         };
         // Only now, the whole chain verified: this session, then the
         // reconciliation, before anything is admitted.
@@ -1188,6 +1195,10 @@ impl Inner {
         while let Some(owed) = self.owed.front() {
             let (phase, body) = (owed.phase, owed.body.clone());
             let commitment = owed.commitment.clone();
+            #[cfg(mother_route_seams)]
+            {
+                self.owed_flush = true;
+            }
             match self.append(phase, commitment.as_deref(), &body) {
                 Append::Committed { .. } | Append::AlreadyPresent { .. } => {
                     if let Some(paid) = self.owed.pop_front() {
@@ -1224,6 +1235,12 @@ impl Inner {
     }
 
     fn append(&mut self, phase: &str, commitment: Option<&str>, body: &str) -> Append {
+        #[cfg(mother_route_seams)]
+        let kind = if std::mem::take(&mut self.owed_flush) {
+            "owed_flush"
+        } else {
+            "ordinary"
+        };
         if self.latched {
             return Append::Latched;
         }
@@ -1299,10 +1316,14 @@ impl Inner {
                 return Append::Uncertain;
             }
         }
+        #[cfg(mother_route_seams)]
+        route_seams::at("store.commit", Ctx::store(kind, phase, commitment));
         if self.commit().is_err() {
             self.latch();
             return Append::Uncertain;
         }
+        #[cfg(mother_route_seams)]
+        route_seams::at("store.commit.result", Ctx::store(kind, phase, commitment));
         self.known.take(&Row {
             seq,
             session: self.session.clone(),

@@ -1160,12 +1160,18 @@ fn seam_sites(source: &str, seams: &[&str]) -> Vec<usize> {
     sites
 }
 fn leaks(source: &str, seams: &[&str]) -> usize {
+    leaks_under(source, seams, TEST)
+}
+/// Sites of `seams` not governed by the accepted attribute `attr` (G2).
+fn leaks_under(source: &str, seams: &[&str], attr: &str) -> usize {
     let code = mask(source);
     seam_sites(source, seams)
         .into_iter()
-        .filter(|&at| !test_only(&code, at))
+        .filter(|&at| !test_only(&code, at, attr))
         .count()
 }
+const TEST: &str = "#[cfg(test)]";
+const ROUTE: &str = "#[cfg(mother_route_seams)]";
 /// Comments (nested block comments included) and the contents of string
 /// and char literals become spaces; line structure is kept.
 fn mask(source: &str) -> String {
@@ -1239,10 +1245,17 @@ fn mask(source: &str) -> String {
     String::from_utf8(out).unwrap()
 }
 /// The statement or item holding `at`, or an item or block enclosing it,
-/// carries `#[cfg(test)]`. Statement starts are found at the same nesting;
+/// carries the accepted attribute `attr` (G2: `#[cfg(test)]` for the test
+/// seams, `#[cfg(mother_route_seams)]` for the route seams). Statement starts are found at the same nesting;
 /// an enclosing parenthesis never borrows a sibling statement's attribute.
-fn test_only(code: &str, at: usize) -> bool {
-    let b = code.as_bytes();
+fn test_only(code: &str, at: usize, attr: &str) -> bool {
+    let mut starts = starts(code, at).into_iter();
+    starts.any(|start| code[start..].trim_start().starts_with(attr))
+}
+/// The start of the statement or item holding `at`, then of each statement
+/// or item enclosing it, innermost first.
+fn starts(code: &str, at: usize) -> Vec<usize> {
+    let (b, mut found) = (code.as_bytes(), Vec::new());
     let mut end = at;
     loop {
         let (mut depth, mut i) = (0usize, end);
@@ -1255,18 +1268,17 @@ fn test_only(code: &str, at: usize) -> bool {
                 b')' | b']' | b'}' if depth > 0 || b[i] != b'}' => depth += 1,
                 b'(' | b'[' | b'{' if depth > 0 => depth -= 1,
                 b'(' | b'[' => {}
+                b';' | b',' if depth > 0 => {}
                 b'}' | b'{' | b';' | b',' => break i + 1,
                 _ => {}
             }
         };
-        if code[start..].trim_start().starts_with("#[cfg(test)]") {
-            return true;
-        }
+        found.push(start);
         // Up to the block that encloses this statement.
         let (mut depth, mut i) = (0usize, start);
         loop {
             if i == 0 {
-                return false;
+                return found;
             }
             i -= 1;
             match b[i] {
@@ -1278,6 +1290,65 @@ fn test_only(code: &str, at: usize) -> bool {
         }
         end = i;
     }
+}
+
+/// Every `.rs` file of this crate, by path relative to `src/`.
+fn crate_sources() -> Vec<(String, String)> {
+    let root = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src"));
+    let (mut dirs, mut files) = (vec![root.clone()], Vec::new());
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let name = path.strip_prefix(&root).unwrap().to_string_lossy();
+                files.push((name.into_owned(), std::fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    files.sort();
+    files
+}
+/// G2 sibling (design 4.6): every SB-3E S1 name outside its own module is
+/// reachable only under exactly `#[cfg(mother_route_seams)]`, never under
+/// `#[cfg(test)]` or a broadened condition; the B1a/B1b guards keep
+/// `#[cfg(test)]` for their names.
+#[test]
+fn sb3e_route_seams_are_route_only() {
+    // A helper's uses sit inside writer arguments, which the G2 parser
+    // reads as separate statements; its gated definition is checked here and
+    // the standard build cannot name it elsewhere.
+    let names = ["route_seams", "owed_flush", "fn route_ctx"];
+    let seam = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
+    let test = "fn f() {\n    #[cfg(test)]\n    route_seams::at(\"p\", c);\n}\n";
+    // A route site; cfg(test) never gates it, nor the reverse; a test site.
+    let (all, one) = (&names[..], &names[..1]);
+    for (source, names, attr, leaks) in [
+        (seam, all, ROUTE, 0),
+        (test, all, ROUTE, 1),
+        (seam, one, TEST, 1),
+        (test, one, TEST, 0),
+    ] {
+        assert_eq!(leaks_under(source, names, attr), leaks, "{source} {attr}");
+    }
+    for broad in ["any(test, mother_route_seams)", "not(mother_route_seams)"] {
+        let planted = seam.replace("mother_route_seams)", &format!("{broad})"));
+        assert_eq!(leaks_under(&planted, &names, ROUTE), 1, "{broad}");
+    }
+    let mut found = 0;
+    for (file, source) in crate_sources() {
+        if file == "broker/route_seams.rs" {
+            continue; // Wholly gated where `broker.rs` declares it.
+        }
+        found += seam_sites(&source, &names).len();
+        let leaked = leaks_under(&source, &names, ROUTE);
+        assert_eq!(
+            leaked, 0,
+            "{file}: an S1 name outside cfg(mother_route_seams)"
+        );
+    }
+    assert!(found >= 70, "the S1 names were scanned: {found}");
 }
 
 // SB-3B frozen oracles: the private R3-R7 call, its actual per-request
@@ -2709,7 +2780,7 @@ fn sb3_b1b_test_seams_are_test_only() {
         let path = entry.unwrap().path();
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         let at = code.find(&format!("mod {name};")).expect("declared module");
-        if !test_only(&code, at) {
+        if !test_only(&code, at, TEST) {
             let source = std::fs::read_to_string(&path).unwrap();
             assert_eq!(
                 leaks(&source, &seams),
@@ -3715,7 +3786,7 @@ fn sb3_thread_joins_run_in_watched_children() {
     let parent = mask(include_str!("../host_session.rs"));
     let mods = parent
         .match_indices("mod ")
-        .filter(|(at, _)| test_only(&parent, *at));
+        .filter(|(at, _)| test_only(&parent, *at, TEST));
     let scanned = [
         "model_call_tests",
         "model_tests",

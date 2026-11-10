@@ -45,6 +45,8 @@ pub struct Producer {
 }
 impl Producer {
     pub fn joined(mut self) {
+        #[cfg(mother_route_seams)]
+        route_seams::at("producer.join", Ctx::session(self.core.identity));
         match self.core.producers.lock() {
             Ok(mut producers) => {
                 let slot = &mut producers.slots[self.index];
@@ -199,6 +201,8 @@ pub struct CloseSeal {
 }
 impl CloseSeal {
     pub fn begin_mother_end(&self, session: SessionIdentity) -> Result<(), SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("close.mother_end", Ctx::session(self.core.identity));
         self.live()?;
         if self.core.identity != session {
             return Err(SessionError::Restricted);
@@ -224,6 +228,8 @@ impl CloseSeal {
     /// Called only after the final frame was acknowledged, all terminal
     /// executors joined, and terminal modes restored before this same deadline.
     pub fn finish_delivery(mut self) -> bool {
+        #[cfg(mother_route_seams)]
+        route_seams::at("close.delivery", Ctx::session(self.core.identity));
         let success = self.live().is_ok()
             && self.finals().is_ok_and(|f| {
                 f.mother.load(Ordering::SeqCst) == RECORDED
@@ -261,6 +267,8 @@ impl HostSession {
     /// Observations only, collected on the bounded close worker. Failure to
     /// acquire a consistent snapshot is unknown, never zero obligations.
     pub fn close_obligations(&self) -> Result<CloseObligations, SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("close.obligations", Ctx::session(self.core.identity));
         let (actions_unacknowledged, actions_refused) = {
             let actions = self
                 .core
@@ -355,6 +363,11 @@ impl HostSession {
         result
     }
     pub fn seal_close(&self, request: &SessionRequest) -> Result<CloseSeal, SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "close.seal",
+            Ctx::session(self.core.identity).request(request.sequence),
+        );
         self.close_request(request)?;
         if !self
             .report
@@ -370,12 +383,18 @@ impl HostSession {
             .map_err(|_| SessionError::Restricted)?;
         let word = self.core.cell.session_word();
         if word & (FAILED | SEALED) != 0 || !self.core.authority_closed.load(Ordering::SeqCst) {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:restricted", Ctx::session(self.core.identity));
             return Err(SessionError::Restricted);
         }
         if producers.slots.iter().any(|s| s.live || s.lost) {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:producers", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         if !self.core.model.quiescent() {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:model", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         let stop = self.stop_obligations()?;
@@ -384,10 +403,14 @@ impl HostSession {
             || stop.overflowed
             || !self.core.stops.quiescent()
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:stop", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         let resources = self.resource_obligations()?;
         if resources.unresolved != 0 || resources.uncertain != 0 {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:resources", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         if self
@@ -397,6 +420,8 @@ impl HostSession {
             .iter()
             .any(|e| !e.discharged || e.in_flight || e.uncertain)
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:inventory", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         if self
@@ -407,10 +432,14 @@ impl HostSession {
             .iter()
             .any(|a| !a.discharged())
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:actions", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         let halt = self.control.authority().halt_records();
         if halt.pending != 0 || halt.owed != 0 || halt.uncertain != 0 || halt.lost != 0 {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:halt", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         let health = self.evidence.health();
@@ -420,11 +449,15 @@ impl HostSession {
             || health.unsettled != 0
             || health.unclean_sessions != 0
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:health", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         let history = self.core.history.get().ok_or(SessionError::Unavailable)?;
         let report = recovery::history(history).map_err(|_| SessionError::Unavailable)?;
         if report.records == 0 || report.unresolved_missions != 0 || report.session_end_recorded {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:history", Ctx::session(self.core.identity));
             return Err(SessionError::Unavailable);
         }
         let (_, lines) = history
@@ -450,6 +483,8 @@ impl HostSession {
                 .session_compare(word, (word | SEALED) & !READY)
                 .is_err()
         {
+            #[cfg(mother_route_seams)]
+            route_seams::note("seal:cas", Ctx::session(self.core.identity));
             return Err(SessionError::Restricted);
         }
         drop(producers);
@@ -460,6 +495,8 @@ impl HostSession {
         })
     }
     pub fn observe_mother_end(&self, seal: &CloseSeal) -> Result<(), SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("close.mother_end", Ctx::session(self.core.identity));
         seal.live()?;
         if !Arc::ptr_eq(&self.core, &seal.core) {
             return Err(SessionError::Restricted);
@@ -483,6 +520,8 @@ impl HostSession {
         Ok(())
     }
     pub fn close_primary(&self, seal: &CloseSeal) -> Result<(), SessionError> {
+        #[cfg(mother_route_seams)]
+        route_seams::at("close.primary", Ctx::session(self.core.identity));
         seal.live()?;
         if !Arc::ptr_eq(&self.core, &seal.core) {
             return Err(SessionError::Restricted);
