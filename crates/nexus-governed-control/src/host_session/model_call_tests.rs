@@ -1249,7 +1249,13 @@ fn mask(source: &str) -> String {
 /// seams, `#[cfg(mother_route_seams)]` for the route seams). Statement starts are found at the same nesting;
 /// an enclosing parenthesis never borrows a sibling statement's attribute.
 fn test_only(code: &str, at: usize, attr: &str) -> bool {
-    let b = code.as_bytes();
+    let mut starts = starts(code, at).into_iter();
+    starts.any(|start| code[start..].trim_start().starts_with(attr))
+}
+/// The start of the statement or item holding `at`, then of each statement
+/// or item enclosing it, innermost first.
+fn starts(code: &str, at: usize) -> Vec<usize> {
+    let (b, mut found) = (code.as_bytes(), Vec::new());
     let mut end = at;
     loop {
         let (mut depth, mut i) = (0usize, end);
@@ -1262,18 +1268,17 @@ fn test_only(code: &str, at: usize, attr: &str) -> bool {
                 b')' | b']' | b'}' if depth > 0 || b[i] != b'}' => depth += 1,
                 b'(' | b'[' | b'{' if depth > 0 => depth -= 1,
                 b'(' | b'[' => {}
+                b';' | b',' if depth > 0 => {}
                 b'}' | b'{' | b';' | b',' => break i + 1,
                 _ => {}
             }
         };
-        if code[start..].trim_start().starts_with(attr) {
-            return true;
-        }
+        found.push(start);
         // Up to the block that encloses this statement.
         let (mut depth, mut i) = (0usize, start);
         loop {
             if i == 0 {
-                return false;
+                return found;
             }
             i -= 1;
             match b[i] {
@@ -1350,21 +1355,62 @@ fn sb3e_route_seams_are_route_only() {
 /// The audited S1 writer sites: the broker rows of design 4.4, the two
 /// store points of 4.2, and the refusal notes of 2.4 and 4.4 (seal).
 const ROUTE_SITES: &str = "\
-host_session/model.rs: reg.reserve model.gate.checked model.gate.before model.reserved \
- model.record.before model.install.before model.install.after attempt.slot \
- model.attempt.reserved model.attempt.record.before complete bind.entry identity \
- model.call.sampled note:refused:hold note:refused:1.expired note:refused:1.judged \
- note:refused:1.cancelled note:refused:2 note:refused:3 note:refused:4.ended \
- note:refused:live note:refused:6 note:refused:7 model.call.observed \
- note:refused:8.capacity note:refused:8.cas model.call.admitted call.gate
-host_session.rs: reg.ready door.cancel_run door.halt ingress.emergency ingress.accept
-host_session/close.rs: producer.join close.mother_end close.delivery close.obligations \
- close.seal note:seal:restricted note:seal:producers note:seal:model note:seal:stop \
- note:seal:resources note:seal:inventory note:seal:actions note:seal:halt \
- note:seal:health note:seal:history note:seal:cas close.mother_end close.primary
-authority/run.rs: model.attempt.granted model.attempt.checked model.settle.before \
- model.bind.checked bind.done
-evidence_store.rs: store.commit store.commit.result
+host_session/model.rs: reg.reserve¦r,SessionError>{¦let_producers=co \
+ model.gate.checked¦lf.core.cell),);¦self.scope.admit \
+ model.gate.before¦lf.core.cell),);¦ifkind!=RequestK \
+ model.reserved¦lf.core.cell),);¦letmutrecord=;le \
+ model.record.before¦lf.core.cell),);¦letsequence=self \
+ model.install.before¦lf.core.cell),);¦letmuts=hold(&se \
+ model.install.after¦lf.core.cell),);¦#[cfg(test)]crat \
+ attempt.slot¦::Unavailable();¦let(mutowner,pre \
+ model.attempt.reserved¦e(&core.cell),);¦letticket=matcha \
+ model.attempt.record.before¦r.core.cell),,);¦letrecord=author \
+ complete¦),SessionError>{¦if!matches!(self bind.entry¦rr(E::Halted);};¦if!self.context. \
+ identity¦se{returnNone;};¦if!self.context. model.call.sampled¦e(&core.cell),);¦letruns=self.aut \
+ note:refused:hold¦context.fail();}¦(,Cancelled)})?; \
+ note:refused:1.expired¦d)})?;ifexpired{¦returnErr((,Time \
+ note:refused:1.judged¦Lapse::Expired){¦returnErr((,Time \
+ note:refused:1.cancelled¦judged.is_err(){¦returnErr((,Canc \
+ note:refused:2¦w().map_err(|_|{¦(,Stopped)})?;if \
+ note:refused:3¦h.unsettled==0){¦returnErr((,Canc \
+ note:refused:4.ended¦.ticket.ended(){¦returnErr((,Canc \
+ note:refused:live¦Unavailable(_));¦returnErr((ifgra \
+ note:refused:6¦:Chat&&!unspent{¦returnErr((,Canc \
+ note:refused:7¦on.is_revoked(){¦returnErr((,Canc \
+ model.call.observed¦e(&core.cell),);¦ifletErr((error, \
+ note:refused:8.capacity¦.context.fail();¦returnErr((,Canc \
+ note:refused:8.cas¦Lapse::Expired);¦returnErr((,ifex \
+ model.call.admitted¦e(&core.cell),);¦ifkind==RequestK \
+ call.gate¦ate_entry(kind);¦letadmitted=self
+host_session.rs: reg.ready¦::Unavailable)?;¦if!self.core.mod \
+ door.cancel_run¦SessionFailure>{¦letcall=close::s door.halt¦SessionFailure>{¦letcall=close::s \
+ ingress.emergency¦t,SessionError>{¦loop{letold=self \
+ ingress.accept¦t,SessionError>{¦letaccepted=Inst
+host_session/close.rs: producer.join¦joined(mutself){¦matchself.core.p \
+ close.mother_end¦),SessionError>{¦self.live()?;ifs \
+ close.delivery¦(mutself)->bool{¦letsuccess=self. \
+ close.obligations¦s,SessionError>{¦let(actions_unac \
+ close.seal¦l,SessionError>{¦self.close_reque \
+ note:seal:restricted¦dering::SeqCst){¦returnErr(Sessio \
+ note:seal:producers¦s.live||s.lost){¦returnErr(Sessio \
+ note:seal:model¦del.quiescent(){¦returnErr(Sessio \
+ note:seal:stop¦ops.quiescent(){¦returnErr(Sessio \
+ note:seal:resources¦es.uncertain!=0{¦returnErr(Sessio \
+ note:seal:inventory¦t||e.uncertain){¦returnErr(Sessio \
+ note:seal:actions¦a.discharged()){¦returnErr(Sessio \
+ note:seal:halt¦0||halt.lost!=0{¦returnErr(Sessio \
+ note:seal:health¦ean_sessions!=0{¦returnErr(Sessio \
+ note:seal:history¦on_end_recorded{¦returnErr(Sessio \
+ note:seal:cas¦READY).is_err(){¦returnErr(Sessio \
+ close.mother_end¦),SessionError>{¦seal.live()?;if! \
+ close.primary¦),SessionError>{¦seal.live()?;if!
+authority/run.rs: model.attempt.granted¦e(Some(&cell),);¦letticket=Sessio \
+ model.attempt.checked¦e(Some(&cell),);¦cell.admit()?;en \
+ model.settle.before¦&ticket.cell),);¦letmuttable=sett \
+ model.bind.checked¦e(b.original),);¦b.original.admit \
+ bind.done¦ome(admission);}¦Ok(())}}#[cfg(te
+evidence_store.rs: store.commit¦nd::Uncertain;}}¦ifself.commit(). \
+ store.commit.result¦end::Uncertain;}¦self.known.take(
 ";
 /// The audited sites of `file`, in source order.
 fn audited(file: &str) -> Vec<&'static str> {
@@ -1418,16 +1464,57 @@ fn route_sites(source: &str) -> Result<Vec<String>, String> {
             }
         }
         let shaped = code[end..].starts_with(';') && code[open..end].contains(',');
-        match point {
-            Some(point) if shaped => sites.push(if call == "note(" {
-                format!("note:{point}")
-            } else {
-                point.to_string()
-            }),
-            _ => return Err(format!("call shape at byte {at}")),
+        let Some(point) = point.filter(|_| shaped) else {
+            return Err(format!("call shape at byte {at}"));
+        };
+        // No enclosing statement or item carries a cfg of its own.
+        let (own, enclosing) = starts(&code, at)
+            .split_first()
+            .map(|(o, e)| (*o, e.to_vec()))
+            .unwrap();
+        let cfg = |start: usize| {
+            attributes(&code, start)
+                .iter()
+                .any(|a| a.starts_with("#[cfg"))
+        };
+        if attributes(&code, own) != [ROUTE] || enclosing.into_iter().any(cfg) {
+            return Err(format!("{point}: an enclosing condition"));
         }
+        // The audited anchors: the code just before and just after the site.
+        let sig = |c: &char| !c.is_whitespace() && *c != '"';
+        let prev: String = code[..before.len() - ROUTE.len()]
+            .chars()
+            .rev()
+            .filter(sig)
+            .take(16)
+            .collect();
+        let next: String = code[end + 1..].chars().filter(sig).take(16).collect();
+        let name = if call == "note(" {
+            format!("note:{point}")
+        } else {
+            point.to_string()
+        };
+        sites.push(format!(
+            "{name}¦{}¦{next}",
+            prev.chars().rev().collect::<String>()
+        ));
     }
     Ok(sites)
+}
+/// The outer attributes at the start of a statement or item.
+fn attributes(code: &str, start: usize) -> Vec<&str> {
+    let (mut rest, mut found) = (code[start..].trim_start(), Vec::new());
+    while rest.starts_with("#[") {
+        let mut depth = 0i32;
+        let close = rest.char_indices().find(|&(_, c)| {
+            depth += i32::from(c == '[') - i32::from(c == ']');
+            c == ']' && depth == 0
+        });
+        let end = close.map_or(rest.len(), |(i, _)| i + 1);
+        found.push(&rest[..end]);
+        rest = rest[end..].trim_start();
+    }
+    found
 }
 /// SB-3E site inventory (U3b): exactly the audited writer sites, each its
 /// own statement gated by exactly `#[cfg(mother_route_seams)]`, the writers'
@@ -1437,7 +1524,7 @@ fn route_sites(source: &str) -> Result<Vec<String>, String> {
 #[test]
 fn sb3e_route_sites_are_exactly_the_inventory() {
     let good = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
-    assert_eq!(route_sites(good), Ok(vec!["p".to_string()]));
+    assert_eq!(route_sites(good), Ok(vec!["p¦fnf(){¦}".to_string()]));
     for planted in [
         good.replace("cfg(mother_route_seams)", "cfg(test)"),
         good.replace(
@@ -1452,6 +1539,8 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
         good.replace("route_seams::at", "route_seams::note2"),
         good.replace("    #[cfg(mother_route_seams)]\n", ""),
         format!("{good}use crate::broker::route_seams::at as w;\n"),
+        good.replace("    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n", "    #[cfg(test)]\n    {\n        #[cfg(mother_route_seams)]\n        route_seams::at(\"p\", c);\n    }\n"),
+        good.replace("fn f()", "#[cfg(all(unix, test))]\nfn f()"),
     ] {
         assert!(route_sites(&planted).is_err(), "planted: {planted}");
     }
@@ -1463,7 +1552,50 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
         let found = route_sites(source).unwrap_or_else(|e| panic!("{file}: {e}"));
         let expected = audited(file);
         assert_eq!(found, expected, "{file}: the audited S1 sites, in order");
+        // The module holding them is itself declared without a condition.
+        let mut path = file.trim_end_matches(".rs").to_string();
+        while path != "lib" && !expected.is_empty() {
+            let name;
+            (path, name) = match path.rsplit_once('/') {
+                Some((parent, module)) => (parent.to_string(), module.to_string()),
+                None => ("lib".to_string(), path.clone()),
+            };
+            let parent = sources
+                .iter()
+                .find(|(f, _)| *f == format!("{path}.rs") || *f == format!("{path}/mod.rs"));
+            let code = mask(&parent.unwrap().1);
+            let decl = seam_sites(&code, &[&format!("mod {name}")]);
+            let gated = |at: &usize| {
+                starts(&code, *at)
+                    .into_iter()
+                    .any(|s| attributes(&code, s).iter().any(|a| a.starts_with("#[cfg")))
+            };
+            assert!(
+                decl.len() == 1 && !gated(&decl[0]),
+                "{file}: module {name} declared without a cfg"
+            );
+        }
     }
+    // SB3E-R12.1: the owed-flush shape. Initialized false, set immediately
+    // before the owed-record append, taken at the start of every append,
+    // carried as the store points' kind; only `ordinary` fires a hold.
+    let store = include_str!("../evidence_store.rs");
+    for shape in [
+        "    #[cfg(mother_route_seams)]\n    owed_flush: bool,\n}",
+        "            #[cfg(mother_route_seams)]\n            owed_flush: false,\n        };",
+        "let commitment = owed.commitment.clone();\n            #[cfg(mother_route_seams)]\n            {\n                self.owed_flush = true;\n            }\n            match self.append(phase, commitment.as_deref(), &body) {",
+        "body: &str) -> Append {\n        #[cfg(mother_route_seams)]\n        let kind = if std::mem::take(&mut self.owed_flush) {\n            \"owed_flush\"\n        } else {\n            \"ordinary\"\n        };\n        if self.latched {",
+        "route_seams::at(\"store.commit\", Ctx::store(kind, phase, commitment));\n        if self.commit().is_err() {",
+        "route_seams::at(\"store.commit.result\", Ctx::store(kind, phase, commitment));",
+    ] {
+        assert_eq!(store.matches(shape).count(), 1, "owed-flush shape: {shape}");
+    }
+    assert_eq!(store.matches("owed_flush").count(), 5, "no other flag use");
+    assert_eq!(
+        store.matches("fn append(&mut self").count(),
+        1,
+        "one store append"
+    );
     let seams = &sources
         .iter()
         .find(|(f, _)| f == "broker/route_seams.rs")
@@ -1489,8 +1621,19 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     let fns = seams.matches("fn ").count();
     assert_eq!(fns, 13, "no further writer or accessor");
     assert!(!seams.contains("#[used]"), "SB3E-R9");
+    for shape in [
+        "let eligible = !note && (point != \"store.commit\" || ctx.kind == Some(\"ordinary\"));",
+        "let found = s.pending.iter().position(|p| eligible && p.point == point);",
+    ] {
+        assert_eq!(
+            seams.matches(shape).count(),
+            1,
+            "ordinary-only hold: {shape}"
+        );
+    }
     let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
-    let mut points: Vec<&str> = rows.flat_map(|(_, s)| s.split_whitespace()).collect();
+    let sites = rows.flat_map(|(_, s)| s.split_whitespace());
+    let mut points: Vec<&str> = sites.filter_map(|s| s.split('¦').next()).collect();
     points.retain(|p| !p.starts_with("note:"));
     points.sort_unstable();
     points.dedup();

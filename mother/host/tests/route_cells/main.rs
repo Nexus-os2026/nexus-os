@@ -12,12 +12,15 @@ use nexus_governed_control::broker::route_seams::{arm, drain_trace, Action, Entr
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::host_session::{CommandKind, HostSession, SessionSeed, SessionState};
 use nexus_governed_control::host_session::{SessionDoor, SessionIngress};
-use nexus_governed_control::inference::{ModelPinSpec, RuntimeConfig, Think};
+use nexus_governed_control::inference::{CallDeadline, CallMeter, Charged, InvocationOwner};
+use nexus_governed_control::inference::{MeterRefusal, ModelIdentity, ModelPinSpec, ModelRequest};
+use nexus_governed_control::inference::{ResponseSchema, RuntimeConfig, Think};
 use std::io::{Read, Write};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -141,6 +144,20 @@ impl Opened {
         (door, run, request.sequence())
     }
 }
+struct Meter(AtomicU32);
+impl CallMeter for Meter {
+    fn charge(&self) -> Result<Charged, MeterRefusal> {
+        let call = self.0.fetch_add(1, Ordering::SeqCst) + 1;
+        Ok(Charged { call })
+    }
+    fn settle(&self, _: u32) {}
+}
+struct Never;
+impl CallDeadline for Never {
+    fn expired(&self) -> bool {
+        false
+    }
+}
 struct Owner;
 impl ControlConfirmer for Owner {
     fn confirm_action(&self, _: &ActionConfirmation) -> bool {
@@ -152,6 +169,9 @@ impl ControlConfirmer for Owner {
     fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
         true
     }
+    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+        true
+    }
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
         false
     }
@@ -161,10 +181,12 @@ impl ControlConfirmer for Owner {
 }
 
 /// A loopback runtime answering as the pinned healthy model, one request
-/// per connection (the registration's four metadata requests).
-fn fake_ollama() -> String {
+/// per connection; it logs each request path in the order it was served.
+fn fake_ollama() -> (String, Arc<Mutex<Vec<String>>>) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let served: Arc<Mutex<Vec<String>>> = Arc::default();
+    let peer = served.clone();
     std::thread::spawn(move || {
         for mut stream in listener.incoming().map_while(Result::ok) {
             let (mut head, mut byte) = (Vec::new(), [0u8; 1]);
@@ -175,14 +197,19 @@ fn fake_ollama() -> String {
             let length = head.split("content-length:").nth(1);
             let length = length.and_then(|l| l.lines().next()?.trim().parse().ok());
             let _ = stream.read_exact(&mut vec![0u8; length.unwrap_or(0)]);
-            let body = match head.split_whitespace().nth(1).unwrap_or_default() {
+            let path = head.split_whitespace().nth(1).unwrap_or_default();
+            let body = match path {
                 "/api/version" => r#"{"version":"0.40.13"}"#.to_string(),
                 "/api/status" => r#"{"cloud":{"disabled":true,"source":"env"}}"#.to_string(),
                 "/api/tags" => format!(
                     r#"{{"models":[{{"name":"{NAME}","model":"{NAME}","digest":"{DIGEST}"}}]}}"#
                 ),
+                "/api/chat" => format!(
+                    r#"{{"model":"{NAME}","message":{{"role":"assistant","content":"{{\"ok\":true}}"}},"done":true,"done_reason":"stop","prompt_eval_count":587,"eval_count":378}}"#
+                ),
                 _ => r#"{"capabilities":["completion","thinking"]}"#.to_string(),
             };
+            peer.lock().unwrap().push(path.to_string());
             let _ = write!(
                 stream,
                 "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
@@ -191,7 +218,7 @@ fn fake_ollama() -> String {
             );
         }
     });
-    endpoint
+    (endpoint, served)
 }
 fn spec() -> ModelPinSpec {
     ModelPinSpec {
@@ -217,7 +244,7 @@ fn route_unarmed_point_records_nothing_and_does_not_block() {
         |f| {
             let o = f.open();
             o.session
-                .register_local_model(&fake_ollama(), spec())
+                .register_local_model(&fake_ollama().0, spec())
                 .unwrap();
             let (door, run, _) = o.door(&f.0);
             let _batch = door.cancel_run(run).unwrap();
@@ -272,15 +299,15 @@ fn route_armed_pause_acknowledges_blocks_and_releases() {
 }
 
 /// The entries carry the driver's own identity: session, request, run, the
-/// request kind and its per-request ordinal, and the store's append kind.
+/// attempt, the request kind and its per-attempt ordinal checked against the
+/// peer's ordered requests, and the store's append kind.
 #[test]
 fn route_correlated_identity_is_recorded() {
     child("route_correlated_identity_is_recorded", |f| {
         let o = f.open();
         let _trace = arm("reg.reserve", Action::Trace);
-        o.session
-            .register_local_model(&fake_ollama(), spec())
-            .unwrap();
+        let (endpoint, peer) = fake_ollama();
+        o.session.register_local_model(&endpoint, spec()).unwrap();
         let trace = drain_trace();
         let me = Some(o.session.identity());
         let gates: Vec<&Entry> = trace
@@ -303,7 +330,62 @@ fn route_correlated_identity_is_recorded() {
         let commits: Vec<&Entry> = trace.iter().filter(|e| e.point == "store.commit").collect();
         assert!(!commits.is_empty() && commits.iter().all(|e| e.kind == Some("ordinary")));
         let (door, run, request) = o.door(&f.0);
+        // Two attempts of one bound run, through the public door.
+        let ask = MissionConfirmation {
+            contract_hash: "ab".repeat(32),
+            request: "msn-000001/1/1".into(),
+            summary: vec!["Route cell mission.".into()],
+            page_facts: None,
+        };
+        door.confirm_mission(&ask).unwrap();
+        door.admit_files(run, &ask.contract_hash, &ask.request)
+            .unwrap();
+        let identity = ModelIdentity::from_spec(&spec()).unwrap().digest();
+        let (hash, label) = (&ask.contract_hash, &ask.request);
+        door.admit_inference(run, hash, label, identity).unwrap();
+        let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
+        let call = ModelRequest::new("system".into(), "prompt".into(), schema).unwrap();
+        let (owner, meter) = (InvocationOwner::new(), Meter(AtomicU32::new(0)));
         drain_trace();
+        let served = peer.lock().unwrap().len();
+        for _ in 0..2 {
+            let outcome = door.model_call(run, &call, &meter, &Never, &owner.observer());
+            let result = outcome.unwrap().into_result();
+            assert!(result.is_ok(), "the attempt succeeds: {:?}", result.err());
+        }
+        let trace = drain_trace();
+        let peer = peer.lock().unwrap()[served..].to_vec();
+        let gates: Vec<&Entry> = trace.iter().filter(|e| e.point == "call.gate").collect();
+        assert_eq!(
+            gates.len(),
+            peer.len(),
+            "one gate per request the peer served"
+        );
+        let (mut ordinal, mut attempt) = (0, None);
+        for (gate, path) in gates.iter().zip(&peer) {
+            if gate.attempt != attempt {
+                (ordinal, attempt) = (0, gate.attempt); // A new attempt restarts.
+            }
+            ordinal += 1;
+            let kind = if path == "/api/chat" {
+                "chat"
+            } else {
+                "metadata"
+            };
+            assert_eq!(
+                (gate.session, gate.request, gate.run),
+                (me, Some(request), Some(run))
+            );
+            assert_eq!(
+                (gate.kind, gate.request_ordinal),
+                (Some(kind), Some(ordinal)),
+                "{path}"
+            );
+        }
+        let mut attempts: Vec<_> = gates.iter().map(|e| e.attempt).collect();
+        attempts.dedup();
+        assert_eq!(attempts, [Some(1), Some(2)], "each attempt's own identity");
+        assert_eq!(peer.iter().filter(|p| *p == "/api/chat").count(), 2);
         let _batch = door.cancel_run(run).unwrap();
         let trace = drain_trace();
         let cancel = trace.iter().find(|e| e.point == "door.cancel_run").unwrap();
@@ -381,7 +463,7 @@ fn route_at_cannot_return_into_the_route() {
 fn route_store_commit_hold_fires_on_an_ordinary_append() {
     child("route_store_commit_hold_fires_on_an_ordinary_append", |f| {
         let o = f.open();
-        let endpoint = fake_ollama();
+        let (endpoint, _) = fake_ollama();
         let held = f.pause("store.commit");
         let session = &o.session;
         std::thread::scope(|s| {
