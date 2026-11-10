@@ -21,7 +21,7 @@ def sibling(name):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-snapshot, receipt = sibling('snapshot'), sibling('receipt')
+snapshot, receipt, lifecycle = sibling('snapshot'), sibling('receipt'), sibling('lifecycle')
 ORACLES = {'B1','B2','B3','B4','A1','A5','A6','A8','E2E','CLIENTS','C1-SEALED','C2-CANARY','C3-RESTART'}
 # PR-2b install.sh must create /etc/gatebox/qualification.json with this value
 # before starting the service. It permits qualifying only; normal still fails closed.
@@ -184,7 +184,7 @@ def stop_and_confirm(run):
     if state.get('ActiveState') not in ('inactive','failed'): raise ValueError('unit still active after stop')
     group = state.get('ControlGroup')
     if group:
-        if group != '/system.slice/mothergate-run@'+run+'.service': raise ValueError('unexpected cgroup identity')
+        if group != lifecycle.unit_cgroup('mothergate-run@'+run+'.service'): raise ValueError('unexpected cgroup identity')
         path = Path('/sys/fs/cgroup')/group.lstrip('/')
         try:
             if 'populated 0' not in (path/'cgroup.events').read_text().splitlines():

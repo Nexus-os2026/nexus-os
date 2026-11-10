@@ -533,6 +533,17 @@ class UpgradeControls(unittest.TestCase):
             self.assertEqual(show(unit,'Slice'),slice_)
             self.assertEqual(self.group(unit).rpartition('/')[0],'/system.slice/'+slice_)
         for unit in ('mothergate.service','mothergate.socket'): self.assertEqual(show(unit,'Slice'),'system.slice')
+    def test_r22_one_cgroup_layout_for_install_lifecycle_and_supervisor(self):
+        # lifecycle.py owns the layout; supervisor.py imports it; install.sh (a bootstrap heredoc) is pinned to it here.
+        lifecycle = load('lifecycle'); supervisor = load('supervisor')
+        self.assertIs(type(supervisor.lifecycle.unit_cgroup),type(lifecycle.unit_cgroup))
+        units = [k+'@'+r+'.service' for k in ('mothergate-run','mothergate-root') for r in ('0'*32,'a'*32,'0123456789abcdef'*2)]
+        for unit in units+['mothergate.service','mothergate.socket']:
+            with self.subTest(unit=unit):
+                self.assertEqual(lifecycle.unit_cgroup(unit),self.scope['unit_cgroup'](unit))
+                self.assertEqual(supervisor.lifecycle.unit_cgroup(unit),self.group(unit) if unit in self.SLICE else self.scope['unit_cgroup'](unit))
+        self.assertEqual(lifecycle.SLICES,self.scope['SLICES'])
+        self.assertEqual(lifecycle.unit_cgroup(self.RUN_UNIT),self.group(self.RUN_UNIT))
     def used(self, kind='file', mode=0o600):
         path = self.root/'control/sealed'/('.used-'+'a'*32)
         if kind == 'file': path.write_bytes(b''); path.chmod(mode)

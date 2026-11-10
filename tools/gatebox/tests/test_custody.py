@@ -191,13 +191,16 @@ class CustodyTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.stop()
         self.assertTrue(self.sealed().exists())
     def test_populated_and_missing_cgroup_evidence_block_cleanup(self):
+        # SB3E-R22.1: this host's layout (systemctl show): the instance sits in its template slice.
         self.start()
         cgroups = self.root/'cgroups'
-        group = cgroups/'system.slice'/('mothergate-run@'+RUN+'.service')
-        cgroups.mkdir(mode=0o700)
-        (cgroups/'system.slice').mkdir(mode=0o700)
-        group.mkdir(mode=0o700)
-        self.state['ControlGroup'] = '/system.slice/mothergate-run@'+RUN+'.service'
+        nested = '/system.slice/system-mothergate\\x2drun.slice/mothergate-run@'+RUN+'.service'
+        group = cgroups/nested.lstrip('/')
+        for level in reversed([group,*group.parents][:4]): level.mkdir(mode=0o700)
+        self.state['ControlGroup'] = '/system.slice/mothergate-run@'+RUN+'.service'  # the pre-R22 flat identity
+        with self.assertRaisesRegex(ValueError,'unexpected cgroup identity'): self.stop()
+        self.assertTrue(self.sealed().exists())
+        self.state['ControlGroup'] = nested
         with patch.object(lifecycle,'CGROUP',cgroups):
             for data in ('populated 1\n','invalid\n',None):
                 events = group/'cgroup.events'
