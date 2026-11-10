@@ -46,7 +46,8 @@ assumption it falls under:
 - Compiler arguments: one parser for every spelling (`-L x`, `-Lx`,
   `-Lkind=x`, `-l`, `-C k=v`, `-Ck=v`, `--codegen[=]`, `--extern[=]`, ...);
   path arguments confined to Cargo's layout (`argument_outside_layout`), link
-  controls refused (`link_control`), `@` arguments refused; flags compared
+  controls refused (`link_control`), `@` arguments refused, only `--error-format`
+  and `--json` ignored (`--color`, `--diagnostic-width` refused); flags compared
   exactly; lane-only units' recipe settings validated (`lane_only_recipe`).
 - Source, registry and sysroot files a compiler reads: dep-info paths confined
   to them or to an inventoried OUT_DIR (`consumed_outside_inventory`,
@@ -128,7 +129,7 @@ VALUE_OPTS = {"--extern": "extern", "--out-dir": "out-dir", "-o": "o", "--cfg": 
               "--crate-type": "crate-type", "--edition": "edition", "--emit": "emit", "--sysroot": "sysroot",
               "--target": "target", "--remap-path-prefix": "remap", "--codegen": "C", "--print": "print",
               "--explain": "explain", "--env-set": "env-set", "--error-format": "ignored", "--json": "ignored",
-              "--diagnostic-width": "ignored", "--color": "ignored", "-L": "L", "-l": "l", "-C": "C", "-Z": "Z", **LINT_OPTS}
+              "--diagnostic-width": "diagnostic-width", "--color": "color", "-L": "L", "-l": "l", "-C": "C", "-Z": "Z", **LINT_OPTS}
 SHORT_JOINED = ("-L", "-l", "-C", "-Z", "-A", "-W", "-D", "-F")
 
 
@@ -623,7 +624,7 @@ def check_args(units, kind):
                 bad = None if out_dir.fullmatch(value) else "argument_outside_layout"
             elif option == "emit":
                 bad = "argument_outside_layout" if "=" in value else None
-            elif option in ("o", "sysroot", "target", "remap", "Z", "print", "explain", "env-set"):
+            elif option in ("o", "sysroot", "target", "remap", "Z", "print", "explain", "env-set", "color", "diagnostic-width"):
                 bad = "unexpected_option"
             elif units.target in value and option not in ("source",):
                 bad = "argument_outside_layout"
@@ -910,18 +911,12 @@ def main():
     com = sub.add_parser("compare")
     for name in ("--ship", "--lane", "--wrapper", "--wrapper-sha256", "--json"):
         com.add_argument(name, required=True)
-    inv = sub.add_parser("inventory")
-    inv.add_argument("--target", required=True)
-    inv.add_argument("--evidence", required=True)
     lane = sub.add_parser("lane")
     for name in ("--repo", "--target", "--wrapper", "--toolchain"):
         lane.add_argument(name, required=True)
     args = parser.parse_args()
     if args.command == "compare":
         return emit(compare(args.ship, args.lane, args.wrapper, args.wrapper_sha256), args.json)
-    if args.command == "inventory":
-        snapshot_inventory(args.target, args.evidence)
-        return 0
     repo, target, toolchain = map(os.path.abspath, (args.repo, args.target, args.toolchain))
     wrapper = os.path.abspath(args.wrapper)
     if args.command == "lane":

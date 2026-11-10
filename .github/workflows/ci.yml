@@ -387,6 +387,17 @@ jobs:
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
 
+      # The pin: the runner's installed 1.94.0, never a proxy or the checkout.
+      - name: Locate the pinned toolchain
+        id: toolchain
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          dir="${RUSTUP_HOME:-$HOME/.rustup}/toolchains/1.94.0-x86_64-unknown-linux-gnu"
+          "$dir/bin/rustc" -vV && "$dir/bin/cargo" -V
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
       - name: Install the desktop's build dependencies
         run: |
           sudo apt-get update
@@ -401,13 +412,14 @@ jobs:
 
       - name: A7 compile-input agreement (both builds, fresh target)
         shell: bash
+        env:
+          TOOLCHAIN: ${{ steps.toolchain.outputs.dir }}
         run: |
           set -euo pipefail
-          toolchain="$(rustc --print sysroot)"
           wrapper="$RUNNER_TEMP/route_rustc"
           env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
             /usr/bin/python3 -I tools/gatebox/route/route_a7.py run \
-            --repo "$PWD" --toolchain "$toolchain" \
+            --repo "$PWD" --toolchain "$TOOLCHAIN" \
             --target "$RUNNER_TEMP/route-a7/target" \
             --evidence "$RUNNER_TEMP/route-a7/evidence" \
             --wrapper "$wrapper" --wrapper-sha256 "$(sha256sum "$wrapper" | cut -d' ' -f1)" \
@@ -415,9 +427,11 @@ jobs:
 
       - name: Route lane (fresh target)
         shell: bash
+        env:
+          TOOLCHAIN: ${{ steps.toolchain.outputs.dir }}
         run: |
           set -euo pipefail
           env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
             /usr/bin/python3 -I tools/gatebox/route/route_a7.py lane \
-            --repo "$PWD" --toolchain "$(rustc --print sysroot)" \
+            --repo "$PWD" --toolchain "$TOOLCHAIN" \
             --target "$RUNNER_TEMP/route-lane" --wrapper "$RUNNER_TEMP/route_rustc"

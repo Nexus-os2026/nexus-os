@@ -78,10 +78,6 @@ def proxy_toolchain(root):
     return os.path.join(root, "proxy")
 
 
-def env_refusal(name, value="x"):
-    return lambda c: {"env": {name: value}}
-
-
 PRE = {
     "toolchain_file_legacy": (lambda c: append(c["tree"], "rust-toolchain", "1.94.0\n"), "toolchain_refused"),
     "toolchain_file_nested": (lambda c: append(c["tree"], "mother/rust-toolchain.toml", "[toolchain]\n"), "toolchain_refused"),
@@ -91,7 +87,7 @@ PRE = {
     "toolchain_not_pinned": (lambda c: {"toolchain": os.path.expanduser("~/.cargo")}, "toolchain_refused"),
     "toolchain_rustup_proxy": (lambda c: {"toolchain": proxy_toolchain(c["root"])}, "toolchain_refused"),
     "env_non_utf8": (lambda c: {"envb": {b"ROUTE_PLANT": b"\xff"}}, "toolchain_refused"),
-    **{f"env_{n.lower()}": (env_refusal(n), "toolchain_refused") for n in (
+    **{f"env_{n.lower()}": ((lambda n: lambda c: {"env": {n: "x"}})(n), "toolchain_refused") for n in (
         "RUSTUP_TOOLCHAIN", "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTDOC", "RUSTFLAGS",
         "CARGO_BUILD_RUSTFLAGS", "CARGO_HOME", "CARGO_ENCODED_RUSTFLAGS", "MAKEFLAGS", "MFLAGS", "CARGO_MAKEFLAGS")},
     "pin_build_rs_persistent": (lambda c: leak_build(c["tree"]), "build_time_pin"),
@@ -119,6 +115,8 @@ PAIR = {
     "build_script_keyed_on_cfg": (lambda c: plant_build(c["tree"], 'if cfg!(mother_route_seams) { println!("cargo:rustc-cfg=route_plant"); }')
                                   or {"continue": True, "wrapper": wrapper_with(c["root"], c["wsrc"], [a7.KERNEL_BUILD])},
                                   ["build_time_pin", "wrapper_hash_mismatch", "wrapper_log_mismatch", "build_output_differs"]),
+    "harness_extra_flag_real": (lambda c: append(c["tree"], "mother/host/build.rs", 'fn main() { println!("cargo::rustc-link-arg-tests=-Wl,-O1"); }\n')
+                                or {"continue": True}, ["build_time_pin", "lane_only_recipe"]),
     "primary_package_option_env": (lambda c: append(c["tree"], HOST_RS, '\npub const ROUTE_PLANT: Option<&str> = option_env!("CARGO_PRIMARY_PACKAGE");\n'),
                                    ["exempt_env_consumed"]),
     "primary_package_concat": (lambda c: append(c["tree"], HOST_RS, '\npub const ROUTE_PLANT: Option<&str> = option_env!(concat!("CARGO_", "PRIMARY_PACKAGE"));\n'),
@@ -277,7 +275,7 @@ EVIDENCE = {
         ("--extern=evil=/outside/libevil.rlib", "argument_outside_layout"), ("--extern evil=/outside/libevil.rlib", "argument_outside_layout"),
         ("--out-dir=/outside", "argument_outside_layout"), ("--emit=link=/outside/x", "argument_outside_layout"),
         ("@/outside/args", "response_file_argument"), ("-o /outside/x", "unexpected_option"), ("-Zunstable-options", "unexpected_option"),
-        ("--sysroot=/outside", "unexpected_option")])},
+        ("--sysroot=/outside", "unexpected_option"), ("--color=always", "unexpected_option"), ("--diagnostic-width=80", "unexpected_option")])},
     "rustc_env_with_corresponding_hashes": (lambda ev: [on_unit(ev, k, "nexus_mother_host", (lambda h: lambda l: l.replace(
         "Running `", f"Running `ROUTE_PLANT=lib-{h} ", 1))(seven_hash(ev, k))) for k in ("ship", "lane")],
         "unit_differs"),
@@ -342,7 +340,7 @@ def setup(name, args, base=None):
 
 def result(name, kind, expected, code, kinds, began, **extra):
     want = [] if expected is None else ([expected] if isinstance(expected, str) else expected)
-    ok = (code == 0 and not kinds) if expected is None else (code == 1 and all(k in kinds for k in want))
+    ok = (code == 0 and not kinds) if expected is None else (code == 1 and all(k in kinds for k in want) and "build_failed" not in kinds)
     return {"control": name, "kind": kind, "ok": ok, "exit": code, "expected": want or "pass", "kinds": kinds,
             "seconds": round(time.monotonic() - began, 1), **extra}
 
