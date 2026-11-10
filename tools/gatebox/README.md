@@ -73,15 +73,22 @@ names=subprocess.check_output(['git','--no-replace-objects','ls-tree','-r','--na
 body=blob('tools/gatebox/install.sh').decode().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
 values={n.targets[0].id:ast.literal_eval(n.value) for n in ast.parse(body).body
         if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
-        and n.targets[0].id in ('FILES','HARNESS')}
-if len(values['FILES'])!=29 or set(names)!={'tools/gatebox/'+n for n in values['FILES']}:
+        and n.targets[0].id in ('FILES','HARNESS','WRAPPER','WRAPPER_SHA256')}
+if len(values['FILES'])!=36 or set(names)!={'tools/gatebox/'+n for n in values['FILES']}:
     raise SystemExit('reviewed FILES inventory mismatch')
 names+=[values['HARNESS']]
+wrapper='tools/gatebox/'+values['WRAPPER']
 bundle=pathlib.Path('/home/nexus/NEXUS/gatebox-slice1.tar')
 with tempfile.TemporaryDirectory(prefix='gatebox-pin-') as temporary:
     for name in names:
         path=pathlib.Path(temporary)/name; path.parent.mkdir(parents=True,exist_ok=True)
         path.write_bytes(blob(name))
+    # SB3E-R18 P12: the wrapper is built here, unprivileged, from the verified blob; root only checks the literal.
+    subprocess.run(['/usr/bin/cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-static','-o',wrapper,
+                    'tools/gatebox/route/route_rustc.c'],cwd=temporary,env={'PATH':'/usr/bin:/bin','LANG':'C'},check=True)
+    built=(pathlib.Path(temporary)/wrapper).read_bytes()
+    if hashlib.sha256(built).hexdigest()!=values['WRAPPER_SHA256']: raise SystemExit('wrapper build is not the reviewed literal')
+    names+=[wrapper]
     # Keep the original explicit-member, no-recursion tar contract. Its source
     # is this private tree of verified blobs, never the mutable checkout.
     command=shlex.split("tar --exclude='__pycache__' --no-recursion --null --files-from=- -cf -")
@@ -93,7 +100,7 @@ with tarfile.open(bundle,'r:') as archive:
     if len(members)!=len(names) or {m.name for m in members}!=set(names):
         raise SystemExit('bundle members differ from final reviewed commit')
     for member in members:
-        if not member.isfile() or archive.extractfile(member).read()!=blob(member.name):
+        if not member.isfile() or archive.extractfile(member).read()!=(built if member.name==wrapper else blob(member.name)):
             raise SystemExit('bundle bytes differ: '+member.name)
 print('reviewed_sha='+sha+' bundle_sha256='+hashlib.sha256(bundle.read_bytes()).hexdigest())
 PIN
@@ -124,8 +131,8 @@ with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as archive:
     body = script.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
     values = {n.targets[0].id: ast.literal_eval(n.value) for n in ast.parse(body).body
               if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
-              and n.targets[0].id in ('FILES','HARNESS')}
-    expected = {'tools/gatebox/'+n for n in values['FILES']}|{values['HARNESS']}
+              and n.targets[0].id in ('FILES','HARNESS','WRAPPER')}
+    expected = {'tools/gatebox/'+n for n in values['FILES']+[values['WRAPPER']]}|{values['HARNESS']}
     directories = {str(parent) for path in map(pathlib.PurePosixPath,expected)
                    for parent in path.parents if str(parent)!='.'}
     members = archive.getmembers(); seen = set()
@@ -336,6 +343,35 @@ Deferred limitations (not qualified or protected by Slice 1):
 
 Live host canaries cover qualification only. Normal receipts reuse the recorded
 host namespace baseline; they do not claim a new independent host-canary run.
+
+## GB1 route-cells and the reviewed upgrade (SB3E-R18, R19)
+
+`route-cells` requests carry `inventory_sha256`; success is `PASS_ROUTE_CELLS`, a
+receipt with a `lane` group, validated by `receipt.validate_route` against
+`policy/route-cells.json`. `rc_` credit needs a host-authenticated receipt: the
+submitter runs `sudo -n /usr/libexec/gatebox/verify.py --run-id <id>` (one fixed,
+read-only sudoers rule) and requires `"authentication": "AUTHENTICATED"` and
+`"identity": "current"`. Public policy hashes and copied summaries never authenticate.
+
+Every receipt is validated against its own recorded gate policy: the current one,
+or a retained set under `/etc/gatebox/history/<gates_sha256>/`. An existing install
+is upgraded only by the separate action, never by `install` (which still refuses
+every existing output). After PIN and independent bundle review, with the new
+bundle extracted to `/root/gatebox-gb1` exactly as `/root/gatebox-slice1` above:
+
+```bash
+sudo /bin/bash /root/gatebox-gb1/tools/gatebox/install.sh upgrade \
+  --bundle-sha256 "$GBX_BUNDLE_SHA" --old-bundle-sha256 "$GBX_OLD_BUNDLE_SHA"
+```
+
+It refuses unless the installed bytes are exactly the recorded old bundle and
+identity, both services are stopped with no queued job and no run/root unit active,
+pending, staging, incoming and sealed custody hold nothing but `.used-` markers, the
+gate accounts and state ownership are unchanged and every retained receipt
+authenticates against its own policy. It then retains the old policy and the old
+identity, qualification and admission records under `/etc/gatebox/history`, never
+reusing them, and leaves admission `qualifying` for the new identity: full
+requalification (H1, C2, two reboots), then `enable-qualified`.
 
 ## Maintenance: retained custody and reboot-only reinstallation
 

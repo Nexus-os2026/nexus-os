@@ -254,7 +254,8 @@ def coverage(evidence, logs):
 
 def execute(run, request, peer, registration, identity, marker, stage_name):
     stage = STATE/'staging'/run
-    summary = {key:{} for key in receipt.GROUPS}
+    # A route-cells receipt always carries its `lane` group, so even its failure publishes (SB3E-R18 P4).
+    summary = {key:{} for key in receipt.GROUPS+receipt.GATE_SETS[request['gate_set_id']]['extra']}
     summary.update(schema_version=1,run_id=run,peer_uid=peer,request=request,attempts=[run],commands=[],logs=[],
                    missing_evidence=[],limitations=[receipt.MUTABLE,'codex: unsupported (runner denies AF_UNIX)'],
                    status='BLOCKED',installed=dict(identity,stage=stage_name),

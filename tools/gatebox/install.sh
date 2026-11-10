@@ -5,6 +5,7 @@ umask 022
 exec /usr/bin/python3 -I -B - "$@" <<'PY'
 import argparse
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -35,7 +36,22 @@ FILES = ['MISSION.md','snapshot.py','receipt.py','supervisor.py','init.py','clie
          'policy/custody.json','policy/mothergate-control.conf',
          'policy/gates.json','policy/exclusions.json','policy/registry.json','policy/sudoers',
          'policy/deny-systemd.rules','units/mothergate.socket','units/mothergate.service',
-         'units/mothergate-run@.service','units/mothergate-root@.service']
+         'units/mothergate-run@.service','units/mothergate-root@.service',
+         # GB1 (SB3E-R18 P10): every route lane file, its policy and controls.
+         'policy/route-cells.json','route/route_a7.py','route/route_a7_controls.py','route/route_a7_graph.py',
+         'route/route_a7_sweep.py','route/route_rustc.c','tests/test_route_gate_set.py']
+# SB3E-R18 P12: built unprivileged by the README PIN step (reproducible); root only verifies the literal.
+WRAPPER = 'route/route_rustc'
+WRAPPER_SHA256 = 'd23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762'
+EXECUTABLE = ('install.sh','lifecycle.py','verify.py')
+TOOLCHAIN = Path('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu')
+UPGRADE_BOOT = Path('/root/gatebox-gb1')
+HISTORY = CONFIG/'history'
+ETC = Path('/etc')
+RUN_UNIT = Path('/etc/systemd/system/mothergate-run@.service')
+STATE_ROOT_OWNER = (0,0)
+USED = re.compile(r'\.used-[0-9a-f]{32}')
+SUPERSEDED = ('identity.json','qualification.json','admission.json','installed-files.json','bundle.json','probe-context.json')
 PLACEHOLDER = {'identity':None,'passed':[]}
 ENV = {'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','HOME':'/root'}
 
@@ -58,7 +74,7 @@ def bundle_files(path,digest):
     data = path.read_bytes()
     if not re.fullmatch('[0-9a-f]{64}',digest) or hashlib.sha256(data).hexdigest() != digest:
         raise ValueError('bundle SHA-256 mismatch')
-    expected = {'tools/gatebox/'+n for n in FILES}|{HARNESS}
+    expected = {'tools/gatebox/'+n for n in FILES+[WRAPPER]}|{HARNESS}
     result = {}
     with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as archive:
         for item in archive:
@@ -74,10 +90,24 @@ def bundle_files(path,digest):
     raw = result[HARNESS]
     if hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest() != '6cf914ba5ae1eeffc1b61376ba6b768be8a0ffdb':
         raise ValueError('pinned harness blob mismatch')
+    if hashlib.sha256(result['tools/gatebox/'+WRAPPER]).hexdigest() != WRAPPER_SHA256:
+        raise ValueError('reviewed wrapper SHA-256 mismatch')
     return result
 
 def payload_policies(files):
-    return {name:files['tools/gatebox/policy/'+name] for name in ('gates.json','exclusions.json')}
+    return {name:files['tools/gatebox/policy/'+name] for name in ('gates.json','exclusions.json','route-cells.json')}
+
+def toolchain_check(files,path=TOOLCHAIN):
+    # SB3E-R18 P8: content at checking time only; init checks the same pin before A7.
+    scope = {'__name__':'gbx_manifest'}
+    exec(compile(files['tools/gatebox/snapshot.py'],'snapshot.py','exec'),scope)
+    pin = json.loads(files['tools/gatebox/policy/route-cells.json'])['toolchain']['manifest_sha256']
+    if scope['manifest'](path,None)[0] != pin: raise ValueError('toolchain differs from the reviewed /opt/rust pin')
+
+def load_module(path,name):
+    spec = importlib.util.spec_from_file_location(name,path)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    return module
 
 def run(argv):
     return subprocess.run(argv,env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
@@ -211,10 +241,154 @@ def stage_security(files,uid,gid,stage):
     run(['/usr/bin/systemd-analyze','verify',*[str(p) for p,t in outputs[:4]]])
     return outputs
 
+def replace(path,data,mode=0o644):
+    path.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
+    temporary = path.with_name('.'+path.name+'.next')
+    write(temporary,data,mode); os.replace(temporary,path)
+
+def verify_old_install(old_sha,identity_of):
+    # SB3E-R19.5: the existing install is exactly its own record before anything changes.
+    protected(DEST); protected(CONFIG)
+    if json.loads((CONFIG/'bundle.json').read_bytes()) != {'sha256':old_sha}:
+        raise ValueError('installed bundle is not the reviewed old bundle')
+    inventory = json.loads((CONFIG/'installed-files.json').read_bytes())
+    if not isinstance(inventory,dict) or not inventory: raise ValueError('installed file inventory missing')
+    for name,digest in inventory.items():
+        path = Path(name); protected(path)
+        if not stat.S_ISREG(path.lstat().st_mode) or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError('installed bytes changed: '+name)
+    for path in DEST.rglob('*'):
+        if not stat.S_ISDIR(path.lstat().st_mode) and str(path) not in inventory:
+            raise ValueError('unrecorded installed file: '+str(path))
+    identity = json.loads((CONFIG/'identity.json').read_bytes())
+    if identity_of() != identity: raise ValueError('installed identity is not its record')
+    return identity,inventory
+
+def require_settled():
+    run(['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
+    shown = run(['/usr/bin/systemctl','show','--property=Id,ActiveState,Job','mothergate.socket','mothergate.service']).decode()
+    units = [dict(line.split('=',1) for line in block.splitlines() if '=' in line) for block in shown.strip().split('\n\n')]
+    if ([u.get('Id') for u in units] != ['mothergate.socket','mothergate.service']
+            or any(u.get('ActiveState') not in ('inactive','failed') or u.get('Job') != '' for u in units)):
+        raise ValueError('services not stopped and settled')
+    listed = run(['/usr/bin/systemctl','list-units','--all','--plain','--no-legend','mothergate-run@*','mothergate-root@*']).decode()
+    for line in listed.splitlines():
+        fields = line.split()
+        if len(fields) < 4 or fields[2] not in ('inactive','failed'): raise ValueError('run unit not settled: '+line)
+
+def require_no_custody():
+    # Custody and pending-state refusals are preserved: nothing is repaired, moved or removed.
+    for path in (STATE/'pending',STATE/'staging',CONTROL/'incoming',CONTROL/'sealed'):
+        fd = os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try: names = os.listdir(fd)
+        finally: os.close(fd)
+        if any(path.name != 'sealed' or not USED.fullmatch(n) for n in names):
+            raise ValueError('retained custody or pending state blocks upgrade: '+str(path))
+
+def state_ownership():
+    owner = pwd.getpwnam('mothergate')
+    expected = {str(STATE):(*STATE_ROOT_OWNER,0o755)}
+    expected.update({str(STATE/n):(owner.pw_uid,owner.pw_gid,0o755 if n=='receipts' else 0o700) for n in ('staging','pending','receipts')})
+    actual = {}
+    for name in expected:
+        info = os.lstat(name)
+        actual[name] = (info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode)) if stat.S_ISDIR(info.st_mode) else None
+    if actual != expected: raise ValueError('state ownership changed')
+    payload = pwd.getpwnam('gaterun')
+    return actual,(owner.pw_uid,owner.pw_gid,payload.pw_uid,payload.pw_gid)
+
+def receipt_inventory(receipts):
+    result = {}
+    for path in sorted(receipts.iterdir()):
+        info = path.lstat()
+        if not stat.S_ISDIR(info.st_mode): raise ValueError('unexpected receipt entry: '+path.name)
+        files = {}
+        for item in sorted(path.iterdir()):
+            meta = item.lstat()
+            if not stat.S_ISREG(meta.st_mode): raise ValueError('unexpected receipt file: '+str(item))
+            files[item.name] = (meta.st_uid,meta.st_gid,stat.S_IMODE(meta.st_mode),hashlib.sha256(item.read_bytes()).hexdigest())
+        result[path.name] = (info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode),files)
+    return result
+
+def stage_history(identity,inventory,stage,module):
+    # The old gate policy, content-addressed by its recorded digest; receipts name it, never relabelled.
+    manifest = {p:h for p,h in inventory.items() if p in {str(DEST/n) for n in module.GATE_POLICY}}
+    if module.policy_digest(manifest) != identity['gates_sha256']: raise ValueError('old gate policy is not its recorded digest')
+    entry = stage/identity['gates_sha256']; entry.mkdir(parents=True,mode=0o755); entry.parent.chmod(0o755)
+    write(entry/'manifest.json',(json.dumps(manifest,sort_keys=True)+'\n').encode(),0o444)
+    for path,digest in manifest.items():
+        data = Path(path).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest: raise ValueError('old gate policy changed')
+        write(entry/Path(path).name,data,0o444)
+    return entry
+
+def authenticate_retained(module,owner):
+    for path in sorted((STATE/'receipts').iterdir()): module.verify_integrity(path,owner)
+
+def upgrade(args):
+    # SB3E-R18 P3 / R19.5: a separate reviewed action; fresh installs keep the existing-output refusal.
+    if not re.fullmatch('[0-9a-f]{64}',args.old_bundle_sha256 or ''): raise ValueError('old bundle SHA-256 required')
+    protected(UPGRADE_BOOT); protected(UPGRADE_BOOT/'bundle.tar')
+    files = bundle_files(UPGRADE_BOOT/'bundle.tar',args.bundle_sha256 or '')
+    for name in FILES+[WRAPPER]:
+        source = UPGRADE_BOOT/'tools/gatebox'/name; protected(source)
+        if source.read_bytes() != files['tools/gatebox/'+name]: raise ValueError('bootstrap bytes differ')
+    toolchain_check(files)
+    identity,inventory = verify_old_install(args.old_bundle_sha256,load_module(DEST/'probe.py','gbx_old_probe').installed_identity)
+    kept = set(FILES)|{WRAPPER,'policy/phase2_live_sandbox.rs'}
+    if any(p.startswith(str(DEST)+'/') and p[len(str(DEST))+1:] not in kept for p in inventory):
+        raise ValueError('old installed file absent from the new bundle')
+    require_settled()
+    require_no_custody()
+    state,accounts = state_ownership()
+    plan = plan_accounts(); manager,payload = [entry for entry,create in plan]
+    if any(create for entry,create in plan) or (manager.pw_uid,manager.pw_gid,payload.pw_uid,payload.pw_gid) != accounts:
+        raise ValueError('gate accounts changed')
+    if render((DEST/'units/mothergate-run@.service').read_text(),payload.pw_uid,payload.pw_gid) != RUN_UNIT.read_text():
+        raise ValueError('installed run unit is not rendered for the current gaterun account')
+    receipts = receipt_inventory(STATE/'receipts')
+    new = load_module(UPGRADE_BOOT/'tools/gatebox/receipt.py','gbx_new_receipt')
+    with tempfile.TemporaryDirectory(prefix='.gatebox-',dir=ETC) as temporary:
+        stage = Path(temporary)
+        entry = stage_history(identity,inventory,stage/'history',new)
+        new.HISTORY,new.HISTORY_OWNER = stage/'history',os.geteuid()  # root: main requires the host root namespace
+        authenticate_retained(new,accounts[0])
+        staged_security = stage_security(files,payload.pw_uid,payload.pw_gid,stage)
+        # Mutation starts here. Until the new identity is recorded, admission stays bound to the old one.
+        HISTORY.mkdir(mode=0o755,exist_ok=True); protected(HISTORY)
+        if (HISTORY/entry.name).exists(): raise ValueError('historical policy already retained: '+entry.name)
+        os.rename(entry,HISTORY/entry.name)
+        archive = HISTORY/('install-'+identity['bundle_sha256']); archive.mkdir(mode=0o755)
+        for name in [n for n in SUPERSEDED if (CONFIG/n).exists()]+sorted(p.name for p in CONFIG.glob('acceptance-*.json')):
+            os.rename(CONFIG/name,archive/name)  # kept for audit; never reused under the new identity
+        for name in FILES: replace(DEST/name,files['tools/gatebox/'+name],0o755 if name in EXECUTABLE else 0o644)
+        replace(DEST/WRAPPER,files['tools/gatebox/'+WRAPPER],0o755)
+        replace(DEST/'policy/phase2_live_sandbox.rs',files[HARNESS])
+        outputs = []
+        for staged,target in staged_security:
+            os.replace(staged,target); outputs.append(target)
+        run(['/usr/bin/systemctl','daemon-reload'])
+        replace(CONTROL_POLICY,files['tools/gatebox/policy/mothergate-control.conf']); outputs.append(CONTROL_POLICY)
+        for name,data in payload_policies(files).items():
+            replace(CONFIG/name,data); outputs.append(CONFIG/name)
+        record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
+        outputs += [DEST/n for n in FILES]+[DEST/WRAPPER,DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',
+                                            CONFIG/'registry.json',CONFIG/'created-accounts.json']
+        record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
+    current = load_module(DEST/'probe.py','gbx_new_probe').installed_identity()
+    record(CONFIG/'identity.json',current)
+    record(CONFIG/'qualification.json',PLACEHOLDER)
+    record(CONFIG/'admission.json',{'stage':'qualifying','identity':current})
+    if receipt_inventory(STATE/'receipts') != receipts or state_ownership() != (state,accounts):
+        raise ValueError('upgrade changed retained receipts or ownership')
+    require_no_custody()
+    authenticate_retained(load_module(DEST/'receipt.py','gbx_installed_receipt'),accounts[0])
+    print('Upgraded in qualifying stage; receipts retained; qualify, then enable-qualified.')
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action',choices=['install','enable-qualified'])
-    for name in ('bundle-sha256','repo-id','source-git','submit-user','fixture-sha'):
+    parser.add_argument('action',choices=['install','enable-qualified','upgrade'])
+    for name in ('bundle-sha256','old-bundle-sha256','repo-id','source-git','submit-user','fixture-sha'):
         parser.add_argument('--'+name)
     args = parser.parse_args()
     if os.geteuid() or Path('/proc/self/uid_map').read_text().split() != ['0','0','4294967295']:
@@ -234,12 +408,13 @@ def main():
         try: os.fsync(fd)
         finally: os.close(fd)
         return
+    if args.action == 'upgrade': return upgrade(args)
     if (args.repo_id,args.source_git,args.submit_user,args.fixture_sha) != (
             'mother','/home/nexus/NEXUS/nexus-os/.git','nexus',FIXTURE):
         raise ValueError('only frozen registration supported')
     protected(BOOT); protected(BOOT/'bundle.tar')
     files = bundle_files(BOOT/'bundle.tar',args.bundle_sha256 or '')
-    for name in FILES:
+    for name in FILES+[WRAPPER]:
         source = BOOT/'tools/gatebox'/name
         protected(source)
         if source.read_bytes() != files['tools/gatebox/'+name]: raise ValueError('bootstrap bytes differ')
@@ -262,6 +437,7 @@ def main():
     if submit.pw_uid == 0: raise ValueError('non-root submitter required')
     for path in ('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu','/home/nexus/.cargo/registry'):
         if not Path(path).is_dir() or not any(Path(path).iterdir()): raise ValueError('missing offline input: '+path)
+    toolchain_check(files)
     protected(Path('/opt/google/chrome/chrome'))
     for name in ('ld.so.cache','localtime','fonts','alternatives','dbus-1'):
         host = Path('/etc')/name
@@ -288,7 +464,8 @@ def main():
         record(CONFIG/'created-accounts.json',created)
         for name in FILES:
             target = DEST/name; target.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
-            write(target,files['tools/gatebox/'+name],0o755 if name in ('install.sh','lifecycle.py') else 0o644)
+            write(target,files['tools/gatebox/'+name],0o755 if name in EXECUTABLE else 0o644)
+        write(DEST/WRAPPER,files['tools/gatebox/'+WRAPPER],0o755)
         write(DEST/'policy/phase2_live_sandbox.rs',files[HARNESS])
         for name in ('staging','pending','receipts'):
             path = STATE/name; path.mkdir(mode=0o755 if name == 'receipts' else 0o700)
@@ -328,7 +505,7 @@ def main():
         for name,data in payload_policies(files).items():
             write(CONFIG/name,data); outputs.append(CONFIG/name)
         record(CONFIG/'bundle.json',{'sha256':args.bundle_sha256}); outputs.append(CONFIG/'bundle.json')
-        outputs += [DEST/n for n in FILES]+[DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json',CONFIG/'created-accounts.json']
+        outputs += [DEST/n for n in FILES]+[DEST/WRAPPER,DEST/'policy/phase2_live_sandbox.rs',CONFIG/'skeleton.json',CONFIG/'registry.json',CONFIG/'created-accounts.json']
         record(CONFIG/'installed-files.json',{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in outputs})
         sys.path.insert(0,str(DEST))
         import probe

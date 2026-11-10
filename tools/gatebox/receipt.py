@@ -1,4 +1,5 @@
-"""Receipt schema, atomic publication and integrity; host authentication is PR-2."""
+"""Receipt schema, atomic publication and integrity; host authentication is PR-2.
+A success receipt is validated against its own recorded gate policy (SB3E-R19.5)."""
 import ctypes
 import hashlib
 import json
@@ -18,6 +19,17 @@ NAME = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}')
 RUN = re.compile(r'[0-9a-f]{32}')
 HEX = re.compile(r'[0-9a-f]{64}')
 MAX_FILE = 64*1024**2
+# SB3E-R18 P2/P4/P11: one row per gate set; `full` keeps its exact request and receipt structure.
+GATE_SETS = {
+    'full': dict(policy='gates.json',status='PASS_SCOPED',request=('repo_id','full_sha','gate_set_id'),extra=(),cwd={}),
+    'route-cells': dict(policy='route-cells.json',status='PASS_ROUTE_CELLS',
+                        request=('repo_id','full_sha','gate_set_id','inventory_sha256'),extra=('lane',),
+                        cwd={'a7':'/work/src','route-cells':'/work/src/mother/host'})}
+UNFINISHED = ('FAILED','BLOCKED','INTERRUPTED')
+GATE_POLICY = ('policy/exclusions.json','policy/gates.json','policy/route-cells.json')
+HISTORY, HISTORY_OWNER = Path('/etc/gatebox/history'), 0
+LANE = {'a7','verdict_sha256','evidence','rustc_vv','cargo_v','lockfile_sha256','wrapper_sha256','harness_sha256',
+        'inventory_sha256','names','trust'}
 
 def unique(pairs):
     result = {}
@@ -32,6 +44,67 @@ def encode(value):
 def policy():
     return json.loads((HERE/'policy/gates.json').read_text()), json.loads((HERE/'policy/exclusions.json').read_text())
 
+def gate_set(request):
+    """The request's gate-set row after its exact fields, types and SHA checks."""
+    name = request.get('gate_set_id') if isinstance(request,dict) else None
+    if not isinstance(name,str) or name not in GATE_SETS: raise ValueError('unknown gate set')
+    entry = GATE_SETS[name]
+    if set(request) != set(entry['request']): raise ValueError('request fields')
+    if (any(type(v) is not str for v in request.values()) or not re.fullmatch('[0-9a-f]{40}',request['full_sha'])
+            or not HEX.fullmatch(request.get('inventory_sha256','0'*64))): raise ValueError('request types/SHA')
+    return entry
+
+def request_for(repo, sha, gate_set_id, inventory=None):
+    request = dict(repo_id=repo,full_sha=sha,gate_set_id=gate_set_id)
+    if inventory is not None: request['inventory_sha256'] = inventory
+    gate_set(request)
+    return request
+
+def policy_digest(manifest):
+    """probe.installed_identity's gates digest over {installed path: SHA-256}."""
+    return hashlib.sha256(json.dumps(sorted(manifest.items()),separators=(',',':')).encode()).hexdigest()
+
+def current_policy():
+    return policy_digest({str(HERE/n):hashlib.sha256((HERE/n).read_bytes()).hexdigest() for n in GATE_POLICY})
+
+def historical(digest):
+    """A retained policy set, content-addressed by its digest, root-owned and read-only."""
+    try: directory = open_directory(HISTORY/digest)
+    except ValueError as exc: raise ValueError('unknown receipt policy') from exc
+    try:
+        check(os.fstat(directory),HISTORY_OWNER,True)
+        no_acl(directory)
+        manifest = json.loads(read_file(directory,'manifest.json',HISTORY_OWNER),object_pairs_hook=unique)
+        names = {Path(p).name for p in manifest} if isinstance(manifest,dict) else set()
+        if (not names >= {'gates.json','exclusions.json'} or not names <= {Path(n).name for n in GATE_POLICY}
+                or len(names) != len(manifest) or any(not isinstance(p,str) or not Path(p).is_absolute() for p in manifest)
+                or policy_digest(manifest) != digest or set(os.listdir(directory)) != names|{'manifest.json'}):
+            raise ValueError('historical policy inventory')
+        files = {}
+        for path, expected in manifest.items():
+            data = read_file(directory,Path(path).name,HISTORY_OWNER)
+            if hashlib.sha256(data).hexdigest() != expected: raise ValueError('historical policy bytes')
+            files[Path(path).name] = json.loads(data,object_pairs_hook=unique)
+        return files
+    finally: os.close(directory)
+
+def policy_set(digest):
+    """The parsed gate policy a receipt recorded: the current install's, or its retained set. Never another's."""
+    if not isinstance(digest,str) or not HEX.fullmatch(digest): raise ValueError('installed identity')
+    if digest == current_policy():
+        return {Path(n).name:json.loads((HERE/n).read_bytes(),object_pairs_hook=unique) for n in GATE_POLICY}
+    return historical(digest)
+
+def completed(command, logs):
+    if (type(command.get('exit_code')) is not int or command['exit_code'] != 0
+            or command.get('signal') is not None
+            or any(command.get(k) is not False for k in ('timed_out','oom'))
+            or any(command.get(k) is not True for k in ('status_complete','collector_complete'))
+            or not isinstance(command.get('log'),str) or command['log'] not in logs
+            or not isinstance(command.get('log_sha256'),str) or not HEX.fullmatch(command['log_sha256'])
+            or command['log_sha256'] != logs[command['log']]):
+        raise ValueError('failed/incomplete command')
+
 def string_list(value):
     return isinstance(value,list) and all(isinstance(item,str) for item in value)
 
@@ -42,20 +115,25 @@ def valid_invocation(command):
             and bool(command['argv']))
 
 def validate_summary(summary):
-    if not isinstance(summary,dict) or set(summary) != REQUIRED: raise ValueError('receipt fields')
+    request = summary.get('request') if isinstance(summary,dict) else None
+    name = request.get('gate_set_id') if isinstance(request,dict) else None
+    entry = GATE_SETS.get(name) if isinstance(name,str) else None
+    extra = set(entry['extra']) if entry else set()
+    if not isinstance(summary,dict) or set(summary) != REQUIRED|extra: raise ValueError('receipt fields')
     if (type(summary['schema_version']) is not int or summary['schema_version'] != 1
             or not isinstance(summary['run_id'],str) or not RUN.fullmatch(summary['run_id'])
             or type(summary['peer_uid']) is not int or summary['peer_uid'] < 0): raise ValueError('receipt identity/schema')
-    if summary['status'] not in ('PASS_SCOPED','FAILED','BLOCKED','INTERRUPTED'): raise ValueError('receipt status')
-    if any(type(summary[k]) is not dict for k in GROUPS): raise ValueError('receipt evidence groups')
+    if summary['status'] not in UNFINISHED+tuple(g['status'] for g in GATE_SETS.values()): raise ValueError('receipt status')
+    if any(type(summary[k]) is not dict for k in GROUPS+tuple(extra)): raise ValueError('receipt evidence groups')
     if any(type(summary[k]) is not list for k in ('attempts','commands','logs','missing_evidence','limitations')):
         raise ValueError('receipt inventories')
     if MUTABLE not in summary['limitations']: raise ValueError('missing mutable-input limitation')
     if len(summary['commands']) > 512: raise ValueError('command bound')
+    cwds = {'/work/src',*(entry['cwd'].values() if entry else ())}
     for command in summary['commands']:
         if (not isinstance(command,dict) or not isinstance(command.get('id'),str)
                 or not valid_invocation(command)
-                or command.get('cwd') != '/work/src' or not isinstance(command.get('environment'),dict)
+                or command.get('cwd') not in cwds or not isinstance(command.get('environment'),dict)
                 or any(key in command and not isinstance(command[key],str) for key in ('gate_id','artifact_id'))
                 or ('artifact_ids' in command and not string_list(command['artifact_ids']))
                 or ('inventory' in command and not isinstance(command['inventory'],dict))):
@@ -65,8 +143,14 @@ def validate_summary(summary):
                 or not isinstance(log.get('sha256'),str) or not HEX.fullmatch(log['sha256'])):
             raise ValueError('log evidence')
     if len({log['file'] for log in summary['logs']}) != len(summary['logs']): raise ValueError('duplicate log')
-    if summary['status'] != 'PASS_SCOPED': return
-    gates, exclusions = policy()
+    if summary['status'] in UNFINISHED: return
+    if entry is None or summary['status'] != entry['status']: raise ValueError('success status/gate set mismatch')
+    gate_set(request)
+    for key in ('bundle_sha256','policy_sha256','gates_sha256'):
+        if not isinstance(summary['installed'].get(key),str) or not HEX.fullmatch(summary['installed'][key]): raise ValueError('installed identity')
+    policies = policy_set(summary['installed']['gates_sha256'])
+    if name == 'route-cells': return validate_route(summary,policies)
+    gates, exclusions = policies['gates.json'], policies['exclusions.json']
     if summary['environment'] != gates['environment']: raise ValueError('gate environment mismatch')
     expected = [g['id'] for g in gates['gates']]
     coverage = summary['coverage']
@@ -75,14 +159,9 @@ def validate_summary(summary):
             or summary['input_observations'].get('before') is None
             or summary['input_observations'].get('before') != summary['input_observations'].get('after')):
         raise ValueError('incomplete success evidence')
-    request = summary['request']
-    if (set(request) != {'repo_id','full_sha','gate_set_id'} or request['gate_set_id'] != 'full'
-            or any(not isinstance(value,str) for value in request.values()) or not re.fullmatch('[0-9a-f]{40}',request['full_sha'])
-            or summary['snapshot'].get('commit') != request['full_sha']): raise ValueError('success snapshot/request')
+    if summary['snapshot'].get('commit') != request['full_sha']: raise ValueError('success snapshot/request')
     for key in ('content_sha256','lockfile_sha256'):
         if not isinstance(summary['snapshot'].get(key),str) or not HEX.fullmatch(summary['snapshot'][key]): raise ValueError('snapshot identity')
-    for key in ('bundle_sha256','policy_sha256','gates_sha256'):
-        if not isinstance(summary['installed'].get(key),str) or not HEX.fullmatch(summary['installed'][key]): raise ValueError('installed identity')
     if (any(coverage.get(k) != expected for k in ('expected','executed','passed'))
             or any(coverage.get(k) != [] for k in ('failed','ignored','filtered'))
             or coverage.get('excluded') != [{'name':n,'status':'excluded','reason':exclusions['reason']} for n in exclusions['cases']]):
@@ -123,14 +202,7 @@ def validate_summary(summary):
                 raise ValueError('desktop artifact mismatch')
         elif gate['id'] == 'host' and command.get('artifact_ids') != sorted(host):
             raise ValueError('host reconciliation evidence')
-        if (type(command.get('exit_code')) is not int or command['exit_code'] != 0
-                or command.get('signal') is not None
-                or any(command.get(k) is not False for k in ('timed_out','oom'))
-                or any(command.get(k) is not True for k in ('status_complete','collector_complete'))
-                or not isinstance(command.get('log'),str) or command['log'] not in logs
-                or not isinstance(command.get('log_sha256'),str) or not HEX.fullmatch(command['log_sha256'])
-                or command['log_sha256'] != logs[command['log']]):
-            raise ValueError('failed/incomplete command')
+        completed(command,logs)
         if gate.get('adapter') in ('libtest','libtest-repeat','reconcile-all-artifacts'):
             inventory = command.get('inventory',{})
             names, ignored = inventory.get('expected'), inventory.get('ignored')
@@ -158,6 +230,59 @@ def validate_summary(summary):
             if (not host_names or set(inventory['expected']) != host_names
                     or set(inventory['passed']) != host_passed or set(inventory['ignored']) != host_ignored):
                 raise ValueError('host test inventory mismatch')
+
+def validate_route(summary, policies):
+    """PASS_ROUTE_CELLS: A7 `run` PASS, sealed evidence, the committed harness inventory (SB3E-R18, R19, R20)."""
+    route = policies.get('route-cells.json')
+    if not isinstance(route,dict): raise ValueError('route-cells policy missing')
+    request, lane, coverage, snapshot = summary['request'], summary['lane'], summary['coverage'], summary['snapshot']
+    observed = summary['input_observations']
+    if (summary['missing_evidence'] or summary['cleanup'].get('complete') is not True
+            or any(not summary[k] for k in GROUPS+('lane',)) or not summary['logs']
+            or snapshot.get('commit') != request['full_sha']
+            or any(not isinstance(snapshot.get(k),str) or not HEX.fullmatch(snapshot[k]) for k in ('content_sha256','lockfile_sha256'))):
+        raise ValueError('incomplete route success evidence')
+    if summary['environment'] != route['environment']: raise ValueError('route environment')
+    if (not isinstance(observed.get('before'),dict) or observed['before'] != observed.get('after')
+            or observed['before'].get('rust') != route['toolchain']['manifest_sha256']): raise ValueError('route toolchain pin')
+    if set(lane) != LANE: raise ValueError('route lane keys')
+    if lane['a7'] != 'PASS': raise ValueError('route A7 verdict')
+    if lane['wrapper_sha256'] != route['a7']['wrapper_sha256']: raise ValueError('route wrapper')
+    if lane['trust'] != route['trust']: raise ValueError('route trust')
+    names = lane['names']
+    if (lane['lockfile_sha256'] != snapshot['lockfile_sha256'] or not isinstance(lane['harness_sha256'],str)
+            or not HEX.fullmatch(lane['harness_sha256']) or any(not isinstance(lane[k],str) or not lane[k] for k in ('rustc_vv','cargo_v'))
+            or not string_list(names) or not names or len(set(names)) != len(names)): raise ValueError('route lane identity')
+    if lane['inventory_sha256'] != request['inventory_sha256']: raise ValueError('route inventory commitment')
+    if hashlib.sha256('\n'.join(names).encode()).hexdigest() != request['inventory_sha256']: raise ValueError('route inventory names')
+    logs = {log['file']:log['sha256'] for log in summary['logs']}
+    evidence = {'a7-'+rel.replace('/','-') for rel in route['a7']['evidence']}
+    if (logs.get('a7-verdict.json') != lane['verdict_sha256'] or not isinstance(lane['evidence'],dict)
+            or set(lane['evidence']) != evidence or any(logs.get(n) != h for n,h in lane['evidence'].items())):
+        raise ValueError('route A7 evidence')
+    gates = route['gates']
+    ids, harness, artifacts = [g['id'] for g in gates], gates[1], coverage.get('artifacts')
+    if (set(coverage) != {'expected','executed','passed','failed','ignored','filtered','excluded','artifacts','discovery'}
+            or any(coverage[k] != ids for k in ('expected','executed','passed'))
+            or any(coverage[k] != [] for k in ('failed','ignored','filtered','excluded'))
+            or not isinstance(artifacts,list) or len(artifacts) != 1 or not isinstance(artifacts[0],dict)
+            or artifacts[0] != dict(id=harness['target'],adapter='libtest',executable=artifacts[0].get('executable'),
+                                    package=harness['package'],target=harness['target'])
+            or not isinstance(artifacts[0]['executable'],str) or not re.fullmatch(harness['executable'],artifacts[0]['executable'])):
+        raise ValueError('route coverage')
+    executable, cwd = artifacts[0]['executable'], GATE_SETS['route-cells']['cwd']
+    listing = coverage['discovery']
+    if (not isinstance(listing,list) or len(listing) != 1 or listing[0] != dict(id=listing[0].get('id'),gate_id='route-cells-list',
+            argv=[executable,'--list','--format','terse'],cwd=cwd['route-cells'],environment=route['environment'],exit_code=0,signal=None)):
+        raise ValueError('route discovery')
+    commands = summary['commands']
+    if ([c.get('gate_id') for c in commands] != ids or len({c['id'] for c in commands}) != len(commands)
+            or any(c['argv'] != g.get('argv',[executable]) or c['cwd'] != cwd[g['id']] or c['environment'] != route['environment']
+                   for c,g in zip(commands,gates)) or commands[1].get('artifact_id') != harness['target']):
+        raise ValueError('route invocation')
+    for command in commands: completed(command,logs)
+    if commands[1].get('inventory') != dict(expected=names,executed=names,passed=names,failed=[],ignored=[],filtered=[]):
+        raise ValueError('route test inventory')
 
 def check(info, owner_uid, directory=False):
     if (info.st_uid != owner_uid or info.st_mode & 0o022

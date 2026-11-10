@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "gate_set_id": "route-cells",
+  "success_status": "PASS_ROUTE_CELLS",
+  "environment": {"HOME": "/work/home", "LANG": "C.UTF-8", "PATH": "/usr/bin:/bin", "TMPDIR": "/run/gate/tmp"},
+  "toolchain": {"path": "/opt/rust", "manifest_sha256": "09da50b02502ec93fa0d15cc59a713eb41a49b4106b40651429cc4d322f5648e"},
+  "a7": {
+    "target": "/work/target-route",
+    "evidence_dir": "/run/gate/a7",
+    "verdict": "/run/gate/a7-verdict.json",
+    "wrapper": "/gate/bin/route/route_rustc",
+    "wrapper_sha256": "d23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762",
+    "evidence": ["ship/build.log", "ship/inventory.json", "ship/meta.json", "ship/metadata.json", "ship/start",
+                 "ship/unit_graph.json", "lane/build.log", "lane/inventory.json", "lane/meta.json", "lane/metadata.json",
+                 "lane/start", "lane/unit_graph.json", "lane/wrapper.log"]
+  },
+  "gates": [
+    {"id": "a7", "argv": ["/usr/bin/python3", "-I", "-B", "/gate/bin/route/route_a7.py", "run", "--repo", "/work/src",
+                          "--target", "/work/target-route", "--evidence", "/run/gate/a7", "--wrapper", "/gate/bin/route/route_rustc",
+                          "--wrapper-sha256", "d23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762",
+                          "--toolchain", "/opt/rust", "--json", "/run/gate/a7-verdict.json", "--keep-lane-target"]},
+    {"id": "route-cells", "adapter": "libtest", "package": "nexus-mother-host", "target": "route_cells",
+     "executable": "/work/target-route/release/deps/route_cells-[0-9a-f]{16}"}
+  ],
+  "inventory": "sha256 of the harness's libtest --list --format terse names (': test' removed), in listed order, joined by LF, no trailing LF",
+  "trust": "No unpinned candidate code runs before A7's evidence is sealed; the only candidate-reachable code during A7 is pinned build-time code (Cargo.lock-pinned third party and the AM-1 item 3 list), which falls under assumption 6. Pinned build-time code (Cargo.lock-pinned third party and the AM-1 item 3 list) and its descendants are assumed not to alter A7's evidence, verdict path or the harness; quiescence and sealing protect only against later writers and cannot authenticate earlier writes. The inventory hash is a commitment, not execution attestation: trust includes the submitter (gatesubmit), review-record custody and reviewed harness behaviour, including that the running harness does not replace its own pathname, which would change the bytes its children execute (SB3E-R20).",
+  "limitations": ["The /opt/rust manifest pin fixes toolchain content at checking time only; the toolchain stays a mutable trusted host input."]
+}

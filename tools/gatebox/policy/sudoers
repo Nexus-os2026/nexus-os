@@ -1,2 +1,3 @@
 Defaults:mothergate env_reset
 mothergate ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/lifecycle.py
+nexus ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/verify.py --run-id *

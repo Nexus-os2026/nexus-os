@@ -48,7 +48,9 @@ UNITS = {
         # Q30 (review F6-1 B2): /root is its own tmpfs, never a self-bind of the root filesystem.
         ['TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n',
          'TemporaryFileSystem=/usr/local:ro,nodev,nosuid,noexec,mode=0755,uid=0,gid=0,size=1M,nr_inodes=16\n'
-         'TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n']]}
+         'TemporaryFileSystem=/root:ro,nodev,nosuid,noexec,mode=0700,uid=0,gid=0,size=1M,nr_inodes=16\n'],
+        # SB3E-R18 P6: one byte stops the apport pipe core handler; host hygiene, not containment.
+        ['LimitCORE=0\n','LimitCORE=1\n']]}
 
 class CustodyTests(unittest.TestCase):
     def setUp(self):

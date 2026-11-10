@@ -46,16 +46,18 @@ class OfflineInstallTests(unittest.TestCase):
     def test_verified_bundle_exact_bytes_and_harness(self):
         import io
         import tarfile
-        check = installer()['bundle_files']
+        scope = installer(); check = scope['bundle_files']
+        wrapper = b'built wrapper bytes'  # GB1: the reviewed literal is a separate control (test_route_gate_set)
+        scope['WRAPPER_SHA256'] = hashlib.sha256(wrapper).hexdigest()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             archive = root/'bundle.tar'
             harness = 'crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs'
-            names = installer()['FILES']
+            names = scope['FILES']+[scope['WRAPPER']]
             with tarfile.open(archive,'w') as tar:
                 for name in names+[harness]:
                     source = HARNESS if name == harness else HERE/name
-                    data = source.read_bytes()
+                    data = wrapper if name == scope['WRAPPER'] else source.read_bytes()
                     item = tarfile.TarInfo(name if name == harness else 'tools/gatebox/'+name)
                     item.size = len(data)
                     tar.addfile(item,io.BytesIO(data))
@@ -130,10 +132,9 @@ class InstallReviewOracles(unittest.TestCase):
         self.assertNotEqual(identify(first),identify('456 (host canary) '+' '.join(fields)))
     def test_payload_policy_outputs_match_readonly_bind(self):
         files = {'tools/gatebox/policy/'+n:(HERE/'policy'/n).read_bytes()
-                 for n in ('gates.json','exclusions.json')}
+                 for n in ('gates.json','exclusions.json','route-cells.json')}
         outputs = installer()['payload_policies'](files)
-        self.assertEqual(outputs,{'gates.json':files['tools/gatebox/policy/gates.json'],
-                                  'exclusions.json':files['tools/gatebox/policy/exclusions.json']})
+        self.assertEqual(outputs,{n:files['tools/gatebox/policy/'+n] for n in ('gates.json','exclusions.json','route-cells.json')})
     def test_enable_requires_bound_clients_provenance(self):
         identity = {k:'a'*64 for k in ('bundle_sha256','policy_sha256','gates_sha256')}
         summary = dict(status='PASS_SCOPED',request=dict(repo_id='mother',full_sha=load('probe').FIXTURE,gate_set_id='full'),
