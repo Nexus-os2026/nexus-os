@@ -740,6 +740,7 @@ for rel in cfg['evidence']:
 if cfg['mode'] == 'symlink':
     os.unlink(ev + '/lane/start'); os.symlink(ev + '/ship/start', ev + '/lane/start')
 if cfg['mode'] == 'extra': open(ev + '/lane/extra', 'w').write('x')
+if cfg['mode'] == 'fifo': os.unlink(ev + '/lane/start'); os.mkfifo(ev + '/lane/start')
 open(cfg['verdict'], 'w').write(json.dumps({'verdict': 'fail' if cfg['mode'] == 'fail' else 'pass'}))
 if cfg['mode'] == 'stray': detach(cfg['pidfile'])
 sys.exit(1 if cfg['mode'] == 'fail' else 0)
@@ -757,7 +758,7 @@ if sys.argv[1:] == ['--list', '--format', 'terse']:
 print('\nrunning 2 tests\ntest cells::rc_r1_alpha_beta_one ... ok\ntest cells::rc_r2_alpha_beta_two ... ok\n')
 print('test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s')
 '''
-DRIVER = r'''
+DRIVER = DETACH + r'''
 import ctypes, json, os, sys
 sys.path.insert(0, sys.argv[1]); import init
 cfg = json.loads(sys.argv[2])
@@ -765,6 +766,7 @@ if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0: raise OSError('
 init.ROUTE_CWD = cfg['cwd']
 log = os.open(cfg['log'], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 runner = init.Runner(log, os.open(os.devnull, os.O_WRONLY))
+if cfg['pre_stray']: detach(cfg['pre_stray'])  # a process alive before A7 starts
 try: runner.route(cfg['policy'], cfg['request']); out = {'error': None}
 except Exception as exc: out = {'error': str(exc)}
 out.update(quiescence=runner.quiescence, left=sorted(runner.descendants()))
@@ -773,7 +775,7 @@ print(json.dumps(out))
 
 class RoutePayloadControls(unittest.TestCase):
     """init.Runner.route: quiescence, sealing, harness identity (R20) and the inventory commitment."""
-    def scenario(self, a7='pass', harness='normal', inventory=INVENTORY):
+    def scenario(self, a7='pass', harness='normal', inventory=INVENTORY, pre_stray=False):
         tmp = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
         self.addCleanup(lambda: subprocess.run(['rm','-rf',str(tmp)]))
         (tmp/'src/mother/host').mkdir(parents=True); (tmp/'run').mkdir(); (tmp/'home').mkdir()
@@ -785,12 +787,13 @@ class RoutePayloadControls(unittest.TestCase):
         gates = [dict(id='a7',argv=[sys.executable,'-I','-B',str(tmp/'a7.py'),str(tmp/'a7.json')]),
                  dict(ROUTE['gates'][1],executable=re.escape(a7cfg['target'])+'/release/deps/route_cells-[0-9a-f]{16}')]
         cfg = dict(policy=dict(ROUTE,a7=a7cfg,environment=env,gates=gates),request=route_request(inventory_sha256=inventory),
-                   log=str(tmp/'log'),cwd={'a7':str(tmp/'src'),'route-cells':str(tmp/'src/mother/host')})
+                   log=str(tmp/'log'),cwd={'a7':str(tmp/'src'),'route-cells':str(tmp/'src/mother/host')},
+                   pre_stray=str(tmp/'pre.pid') if pre_stray else None)
         proc = subprocess.run([sys.executable,'-I','-B','-c',DRIVER,str(HERE),json.dumps(cfg)],capture_output=True,text=True,timeout=120)
         self.assertEqual(proc.returncode,0,proc.stderr)
         out = json.loads(proc.stdout)
         out['outputs'] = outputs(tmp/'log')
-        for name in ('a7.pid','harness.pid'):
+        for name in ('a7.pid','harness.pid','pre.pid'):
             if (tmp/name).exists():
                 with self.assertRaises(ProcessLookupError,msg='stray survived quiescence'): os.kill(int((tmp/name).read_text()),0)
         self.assertEqual(out['left'],[])
@@ -809,6 +812,10 @@ class RoutePayloadControls(unittest.TestCase):
         out = self.scenario(a7='stray')
         self.assertRegex(out['error'],'^QUIESCENCE: after-a7: process survived and was killed')
         self.assertNotIn('a7-verdict.json',out['outputs'])  # nothing sealed after a stray
+    def test_process_alive_before_a7_fails_quiescence(self):
+        out = self.scenario(pre_stray=True)
+        self.assertRegex(out['error'],'^QUIESCENCE: before-a7: process survived and was killed')
+        self.assertNotIn('c1',out['outputs'])  # A7 never started
     def test_r20_harness_replacing_its_pathname_fails_rehash(self):
         out = self.scenario(harness='replace')
         self.assertEqual(out['error'],'HARNESS: bytes differ from A7 lane inventory')
@@ -820,6 +827,8 @@ class RoutePayloadControls(unittest.TestCase):
         self.assertNotIn('c3',out['outputs'])
     def test_symlinked_evidence_refused(self):
         self.assertRegex(self.scenario(a7='symlink')['error'],'^ROUTE_EVIDENCE: missing/linked .*/run/a7/lane/start$')
+    def test_non_regular_evidence_refused(self):
+        self.assertRegex(self.scenario(a7='fifo')['error'],'^ROUTE_EVIDENCE: not a bounded regular file .*/run/a7/lane/start$')
     def test_unexpected_evidence_file_refused(self):
         self.assertRegex(self.scenario(a7='extra')['error'],'^ROUTE_EVIDENCE: unexpected evidence set in .*/run/a7/lane$')
     def test_harness_differing_from_a7_inventory_refused_before_listing(self):
@@ -862,6 +871,13 @@ class RouteMainControls(unittest.TestCase):
         self.assertIn('not run: route-cells',json.loads(runner.output.call_args_list[0].args[1])['probe'])
 
 class SupervisorRouteSummary(unittest.TestCase):
+    def test_command_cwd_is_a_gate_set_literal(self):
+        supervisor = load('supervisor')
+        start = dict(event='start',id='c1',gate_id='route-cells',argv=[EXE],environment=dict(ROUTE['environment']))
+        for cwd in ('/work/src','/work/src/mother/host'): supervisor.Evidence().accept(dict(start,cwd=cwd))
+        for cwd in ('/work/src/mother','/work/target-route','/run/gate'):
+            with self.subTest(cwd=cwd), self.assertRaisesRegex(ValueError,'invalid command start'):
+                supervisor.Evidence().accept(dict(start,cwd=cwd))
     def test_route_summary_from_init_outputs_validates(self):
         supervisor, (expected, files) = load('supervisor'), route_success()
         start = lambda c: {k:c[k] for k in ('id','gate_id','argv','cwd','environment','exit_code','signal')}

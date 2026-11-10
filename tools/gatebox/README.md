@@ -378,6 +378,21 @@ identity, qualification and admission records under `/etc/gatebox/history`, neve
 reusing them, and leaves admission `qualifying` for the new identity: full
 requalification (H1, C2, two reboots), then `enable-qualified`.
 
+### The route-cells payload (GB1b: SB3E-R18 P1, R19.1, R20)
+
+For a `route-cells` request `init.py` runs no probe. It checks the `/opt/rust`
+manifest against the policy pin, then: quiescence (no process but init; any survivor
+is killed by its own PID and the run fails), A7 `run` (`/work/src`, the policy
+environment, `HOME=/work/home`), quiescence again, and seals the A7 verdict and the
+exact evidence set into the private stream, read without following links. Only on a
+`pass` verdict does it take the harness named by A7's lane inventory: no-follow open,
+regular file, bytes equal to the inventory hash, then `--list --format terse` from
+`/work/src/mother/host`; the listed names must hash to the request's
+`inventory_sha256`; quiescence again; re-open, re-hash, and only then the run by
+pathname. A7 refuses before any build unless the resolved graph's local (path source)
+packages are exactly its reviewed list and every local build script is pinned
+(R19.1). The supervisor publishes the `lane` group from the sealed logs.
+
 ## Maintenance: retained custody and reboot-only reinstallation
 
 The installer never deletes or changes ownership of an existing
