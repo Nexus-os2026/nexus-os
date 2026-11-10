@@ -462,8 +462,11 @@ def installed_identity():
         return hashlib.sha256(json.dumps(pairs,separators=(',',':')).encode()).hexdigest()
     bundle = config('bundle.json')['sha256']
     require(re.fullmatch('[0-9a-f]{64}',bundle),'bundle digest')
-    return dict(bundle_sha256=bundle,policy_sha256=digest((str(HERE/'policy'),'/etc/gatebox/gates.json','/etc/gatebox/exclusions.json','/etc/systemd/','/etc/sudoers.d/','/etc/polkit-1/')),
-                gates_sha256=digest((str(HERE/'policy/gates.json'),str(HERE/'policy/exclusions.json'))))
+    # GB1 (SB3E-R18 P8/P10/P12): the route policy and lane code and wrapper are identity, like the full policy.
+    return dict(bundle_sha256=bundle,policy_sha256=digest((str(HERE/'policy'),str(HERE/'route'),'/etc/gatebox/gates.json',
+                                                           '/etc/gatebox/exclusions.json','/etc/gatebox/route-cells.json',
+                                                           '/etc/systemd/','/etc/sudoers.d/','/etc/polkit-1/')),
+                gates_sha256=digest((str(HERE/'policy/gates.json'),str(HERE/'policy/exclusions.json'),str(HERE/'policy/route-cells.json'))))
 
 def effective_units():
     observations = {}

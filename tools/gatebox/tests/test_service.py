@@ -228,7 +228,8 @@ class OfflineServiceTests(unittest.TestCase):
                 expected = expected.replace(old,new)
             self.assertEqual((HERE/'units'/name).read_text(),expected,name)
         self.assertEqual((HERE/'policy/sudoers').read_text(),
-                         'Defaults:mothergate env_reset\nmothergate ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/lifecycle.py\n')
+                         'Defaults:mothergate env_reset\nmothergate ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/lifecycle.py\n'
+                         'nexus ALL=(root) NOPASSWD: NOSETENV: /usr/libexec/gatebox/verify.py --authenticate-stdin\n')
         self.assertIn('polkit.Result.NO',(HERE/'policy/deny-systemd.rules').read_text())
     def test_q1_qualifying_admission(self):
         identity = {'bundle':'a'*64,'policy':'b'*64,'gates':'c'*64}
@@ -419,7 +420,8 @@ class OfflineServiceTests(unittest.TestCase):
                 stack.enter_context(patch.object(obj,name,value))
             stack.enter_context(patch.object(lifecycle,'check_start'))
             stack.enter_context(patch.object(supervisor,'sibling',side_effect=lambda name: lifecycle if name=='lifecycle' else init))
-            identity = {k:'c'*64 for k in ('bundle_sha256','policy_sha256','gates_sha256')}
+            identity = {k:'c'*64 for k in ('bundle_sha256','policy_sha256')}
+            identity['gates_sha256'] = supervisor.receipt.current_policy()  # SB3E-R19.5: validated against its own policy
             if invalid == 'TypeError':
                 validate = supervisor.receipt.validate_summary
                 def prevalidate(summary):

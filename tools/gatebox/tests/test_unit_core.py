@@ -202,7 +202,8 @@ class ReceiptTests(unittest.TestCase):
         summary.update(status='PASS_SCOPED', missing_evidence=[], cleanup={'complete':True})
         summary['request'] = {'repo_id':'mother','full_sha':'1'*40,'gate_set_id':'full'}
         summary['snapshot'] = dict(commit='1'*40, content_sha256='2'*64, lockfile_sha256='3'*64)
-        summary['installed'] = {key:'4'*64 for key in ('bundle_sha256','policy_sha256','gates_sha256')}
+        summary['installed'] = {key:'4'*64 for key in ('bundle_sha256','policy_sha256')}
+        summary['installed']['gates_sha256'] = receipt.current_policy()  # SB3E-R19.5: its own recorded policy
         summary['input_observations'] = {'before':{'rust':'5'*64},'after':{'rust':'5'*64}}
         summary['environment'] = {'PATH':'/opt/rust/bin:/usr/bin:/bin','HOME':'/work/home','PWD':'/work/src',
                                   'CARGO_HOME':'/work/cargo','CARGO_TARGET_DIR':'/work/target','CARGO_BUILD_JOBS':'4',

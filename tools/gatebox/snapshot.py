@@ -25,6 +25,14 @@ def unique(pairs):
         result[key] = value
     return result
 
+def gate_sets():
+    """The receipt module's gate-set table, loaded beside this file (never from sys.path)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('gbx_gate_sets',Path(__file__).with_name('receipt.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def parse_request(frame, registry, uid):
     if not isinstance(frame, bytes) or len(frame) < 4:
         raise ValueError('request framing')
@@ -35,13 +43,11 @@ def parse_request(frame, registry, uid):
         request = json.loads(frame[4:].decode('utf-8'), object_pairs_hook=unique)
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError('request encoding') from exc
-    if not isinstance(request, dict) or set(request) != {'repo_id','full_sha','gate_set_id'}:
+    if not isinstance(request, dict):
         raise ValueError('request fields')
-    if not all(type(v) is str for v in request.values()):
-        raise ValueError('request types')
+    gate_sets().gate_set(request)  # exact fields, types and SHA of the requested gate set
     registration = registry.get(request['repo_id'], {})
-    if (not SHA.fullmatch(request['full_sha']) or request['gate_set_id'] != 'full'
-            or type(uid) is not int or registration.get('uid') != uid
+    if (type(uid) is not int or registration.get('uid') != uid
             or registration.get('object_format') != 'sha1'):
         raise ValueError('unregistered request/peer or invalid SHA')
     return request
