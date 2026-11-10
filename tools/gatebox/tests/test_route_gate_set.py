@@ -747,6 +747,7 @@ for rel in cfg['evidence']:
     os.makedirs(os.path.join(ev, os.path.dirname(rel)), exist_ok=True)
     body = {'lane/inventory.json': json.dumps({'files': {'release/deps/route_cells-0123456789abcdef': digest}}),
             'lane/meta.json': json.dumps({'rustc': 'rustc 1.94.0 -vV', 'cargo': 'cargo 1.94.0'})}.get(rel, rel)
+    body = '' if rel.endswith('/start') else body  # A7's start markers are empty files
     open(os.path.join(ev, rel), 'w').write(body)
 if cfg['mode'] == 'symlink':
     os.unlink(ev + '/lane/start'); os.symlink(ev + '/ship/start', ev + '/lane/start')
@@ -814,7 +815,8 @@ class RoutePayloadControls(unittest.TestCase):
         self.assertIsNone(out['error'])
         self.assertEqual(out['quiescence'],{'before-a7':True,'after-a7':True,'after-list':True})
         sealed = {'a7-'+rel.replace('/','-') for rel in ROUTE['a7']['evidence']}|{'a7-verdict.json'}
-        self.assertLessEqual(sealed,set(out['outputs']))
+        self.assertLessEqual(sealed,set(out['outputs']))  # empty evidence (the start markers) is still a sealed log
+        self.assertEqual((out['outputs']['a7-ship-start'],out['outputs']['a7-lane-start']),(b'',b''))
         lane = json.loads(out['outputs']['route-lane'])
         self.assertEqual((lane['names'],lane['harness_sha256']),(NAMES,json.loads(out['outputs']['a7-lane-inventory.json'])['files']
                                                                ['release/deps/route_cells-0123456789abcdef']))

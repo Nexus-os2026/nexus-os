@@ -119,6 +119,9 @@ class Runner:
                 if pid in owned: continue
                 try: os.waitpid(pid,os.WNOHANG)
                 except ChildProcessError: pass  # Already reaped by an exiting thread's wait.
+    def sealed(self, name, block):
+        # An empty file still yields its log (as an empty command capture does): A7's start markers are empty.
+        self.output(name,block) if block else packet(self.log,{'id':name,'data':''})
     def output(self, name, block):
         self.total += len(block)
         if self.total > 64*1024**2: raise ValueError('run log bound')
@@ -214,7 +217,7 @@ class Runner:
         """Read A7's verdict, then on pass its exact evidence set, without following links, into the
         private stream. A failed verdict is reported as itself, not as missing evidence."""
         verdict = read_regular(a7['verdict'])
-        self.output('a7-verdict.json',verdict)
+        self.sealed('a7-verdict.json',verdict)
         sealed, expected = {'verdict':verdict}, {}
         try: passed = json.loads(verdict).get('verdict') == 'pass'
         except (ValueError, AttributeError): passed = False
@@ -228,7 +231,7 @@ class Runner:
             if names != want: raise ValueError('ROUTE_EVIDENCE: unexpected evidence set in '+directory)
         for rel in a7['evidence']:
             sealed[rel] = read_regular(a7['evidence_dir']+'/'+rel)
-            self.output('a7-'+rel.replace('/','-'),sealed[rel])
+            self.sealed('a7-'+rel.replace('/','-'),sealed[rel])
         return sealed
     def verify_harness(self, path, expected):
         try: fd = open_beneath(path)
