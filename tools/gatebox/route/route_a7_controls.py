@@ -258,8 +258,20 @@ def on_run(ev, fn):
     rewrite(ev, "lane", lambda c: c.rstrip().endswith("/build-script-build`") and "/kernel " not in c, fn)
 
 
-def drop_run(ev):
-    on_run(ev, lambda l: None)
+def drop_run(ev, kind="lane"):
+    rewrite(ev, kind, lambda c: c.rstrip().endswith("/build-script-build`") and "/kernel " not in c, lambda c: None)
+
+
+def native_dir(ev):
+    text = open(os.path.join(ev, "lane", "build.log"), encoding="utf-8", errors="surrogateescape").read()
+    return re.search(r"-L native=(\S+/out)\b", text).group(1)
+
+
+def omit_cfg_if(ev):
+    for kind in ("ship", "lane"):
+        lines(ev, kind, lambda t: (lambda drop: [x for j, x in enumerate(t) if j not in drop])(
+            {k for i0, i1, c in commands(t) if "--crate-name cfg_if " in c for k in range(i0, i1)}))
+        inv(ev, kind, lambda m: [m[f].pop(k) for f in ("files", "dep_info") for k in [k for k in m[f] if re.search(r"deps/(lib)?cfg_if-", k)]])
 
 
 TP = "cfg_if"  # a third-party unit present in both builds
@@ -290,7 +302,20 @@ EVIDENCE = {
     "build_output_missing": (lambda ev: inv(ev, "lane", lambda m: m["outputs"].pop(sorted(m["outputs"])[0])), "build_output_missing"),
     "dep_info_missing": (lambda ev: inv(ev, "lane", lambda m: m["dep_info"].pop(first_key(m["dep_info"], r"deps/cfg_if-"))), "missing_dep_info"),
     "ship_only_unit_missing": (lambda ev: rewrite(ev, "ship", lambda c: "--crate-name gtk4_macros " in c, lambda c: None), "ship_only_missing"),
-    "evidence_file_missing": (lambda ev: os.unlink(os.path.join(ev, "lane", "inventory.json")), "evidence_missing"),
+    "evidence_file_missing": (lambda ev: os.unlink(os.path.join(ev, "lane", "inventory.json")), "evidence_schema"),
+    # review-u3-batch findings 2 and 3: each probe Codex found, then neighbours of each.
+    "native_traversal": (lambda ev: add_flag(ev, "route_cells", f"-L native={native_dir(ev)}/../../..") , "path_unowned"),
+    "native_unknown_build_dir": (lambda ev: add_flag(ev, "route_cells", f"-L native={json.load(open(ev + '/lane/meta.json'))['target']}/release/build/evil-0123456789abcdef/out"), "path_unowned"),
+    "extern_no_producer": (lambda ev: add_flag(ev, "route_cells", f"--extern evil={json.load(open(ev + '/lane/meta.json'))['target']}/release/deps/libevil-0123456789abcdef.rlib"), "extern_unbound"),
+    "repo_hashes_removed_both": (lambda ev: [meta(ev, k, lambda m: [m.pop("repo_hash_before"), m.pop("repo_hash_after")]) for k in ("ship", "lane")], "evidence_schema"),
+    "pre_build_removed_both": (lambda ev: [meta(ev, k, lambda m: m.pop("pre_build")) for k in ("ship", "lane")], "evidence_schema"),
+    "run_record_removed_both": (lambda ev: [drop_run(ev, k) for k in ("ship", "lane")], "unit_missing_from_build"),
+    "dep_info_emptied_all": (lambda ev: [inv(ev, k, lambda m: m.update(dep_info={x: "" for x in m["dep_info"]})) for k in ("ship", "lane")], "dep_info_malformed"),
+    "cfg_if_omitted_both": (omit_cfg_if, "unit_missing_from_build"),
+    "unit_graph_removed_both": (lambda ev: [os.unlink(os.path.join(ev, k, "unit_graph.json")) for k in ("ship", "lane")], "evidence_schema"),
+    "unowned_target_file": (lambda ev: inv(ev, "lane", lambda m: m["files"].update({"release/deps/libevil-0123456789abcdef.rlib": "0" * 64})), "unowned_file"),
+    "cfg_unbound": (lambda ev: [add_flag(ev, TP, "--cfg evil", k) for k in ("ship", "lane")], "unit_not_in_graph"),
+    "dep_info_extra_rule": (lambda ev: inv(ev, "lane", lambda m: m["dep_info"].update({k: v + "\n/x/evil: " + v.split(": ", 1)[1].split("\n", 1)[0] + "\n" for k, v in m["dep_info"].items() if "/cfg_if-" in k})), "dep_info_malformed"),
     "harness_extra_flag": (lambda ev: add_flag(ev, "route_cells", "-C debug-assertions=on"), "lane_only_recipe"),
     "mother_hands_extra_flag": (lambda ev: add_flag(ev, "mother_hands", "-C overflow-checks=on"), "lane_only_recipe"),
     "fresh_unit": (lambda ev: lines(ev, "lane", lambda t: t + ["       Fresh cfg-if v1.0.4"]), "fresh_unit"),
@@ -418,7 +443,7 @@ def capture_tampered(c, evidence):
     done, real_run = {}, subprocess.run
 
     def run(command, **kw):
-        if command[0].endswith("/cargo") and "test" in command:
+        if command[0].endswith("/cargo") and "test" in command and "--unit-graph" not in command:
             proc = subprocess.Popen(command, **kw)
             tamper_proc_macro(c["target"], proc, done)
             proc.wait()
