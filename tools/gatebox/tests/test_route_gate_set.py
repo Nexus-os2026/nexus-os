@@ -601,16 +601,18 @@ class UpgradeComposition(unittest.TestCase):
         for item in summary['coverage']['excluded']: item['reason'] = reason
         pending = self.root/'oldpending'; pending.mkdir(mode=0o700)
         old.publish(pending,self.root/'state/receipts','a'*32,summary,{'run.log':b'failure\n'})
-    def held(self):
-        fd = os.open(self.root/'control/lifecycle.lock',os.O_RDWR|os.O_CREAT,0o600); self.addCleanup(os.close,fd)
-        os.chmod(self.root/'control/lifecycle.lock',0o600)
+    def held(self, lock='control/lifecycle.lock'):
+        fd = os.open(self.root/lock,os.O_RDWR|os.O_CREAT,0o600); self.addCleanup(os.close,fd)
+        os.chmod(self.root/lock,0o600)
         return fd
     def lock_is_held(self):
-        fd = os.open(self.root/'control/lifecycle.lock',os.O_RDWR)
-        try: fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError: return True
-        finally: os.close(fd)
-        return False
+        held = []
+        for lock in ('control/lifecycle.lock','config/qualification.lock'):
+            fd = os.open(self.root/lock,os.O_RDWR)
+            try: fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB); held.append(False)
+            except BlockingIOError: held.append(True)
+            finally: os.close(fd)
+        return all(held) if any(held) else False
     def upgrade(self):
         with patch('builtins.print'): self.scope['upgrade'](Mock(bundle_sha256=self.NEW,old_bundle_sha256=self.OLD))
     def test_upgrade_preserves_receipts_and_requires_requalification(self):
@@ -628,10 +630,13 @@ class UpgradeComposition(unittest.TestCase):
         self.assertEqual((dest/'route/route_a7.py').read_bytes(),(HERE/'route/route_a7.py').read_bytes())
         self.assertEqual(self.run.call_args_list[0].args[0],['/usr/bin/systemctl','stop','mothergate.socket','mothergate.service'])
     def test_r21_upgrade_refused_while_lifecycle_or_qualification_holds_the_lock(self):
-        fcntl.flock(self.held(),fcntl.LOCK_EX)
-        with self.assertRaisesRegex(TimeoutError,'maintenance lock held'): self.upgrade()
-        self.run.assert_not_called()
-        self.assertEqual(json.loads((self.root/'config/bundle.json').read_text()),{'sha256':self.OLD})
+        for lock in ('control/lifecycle.lock','config/qualification.lock'):
+            with self.subTest(lock=lock):
+                fd = self.held(lock); fcntl.flock(fd,fcntl.LOCK_EX)
+                with self.assertRaisesRegex(TimeoutError,'maintenance lock held: '+Path(lock).name): self.upgrade()
+                fcntl.flock(fd,fcntl.LOCK_UN)
+                self.run.assert_not_called()
+                self.assertEqual(json.loads((self.root/'config/bundle.json').read_text()),{'sha256':self.OLD})
     def test_r21_lock_held_from_first_check_through_final_recheck(self):
         seen, run, module = [], self.run.side_effect, self.scope['load_module']
         def observed_run(argv): seen.append((argv[1],self.lock_is_held())); return run(argv)
@@ -642,15 +647,21 @@ class UpgradeComposition(unittest.TestCase):
         self.assertTrue(all(held for _,held in seen),seen)
         self.assertFalse(self.lock_is_held())
     def test_r21_enable_qualified_takes_the_maintenance_lock(self):
-        fcntl.flock(self.held(),fcntl.LOCK_EX)
-        protected = Mock()
-        with patch.dict(self.scope,protected=protected), self.assertRaisesRegex(TimeoutError,'maintenance lock held'):
-            self.scope['enable_qualified']()
-        self.assertEqual(protected.call_args_list,[((self.root/'control',),)])  # nothing read before the lock
+        for lock, before in (('control/lifecycle.lock',['control']),('config/qualification.lock',['control','config'])):
+            with self.subTest(lock=lock):
+                fd = self.held(lock); fcntl.flock(fd,fcntl.LOCK_EX)
+                protected = Mock()
+                with patch.dict(self.scope,protected=protected), self.assertRaisesRegex(TimeoutError,'maintenance lock held: '+Path(lock).name):
+                    self.scope['enable_qualified']()
+                fcntl.flock(fd,fcntl.LOCK_UN)
+                self.assertEqual(protected.call_args_list,[((self.root/d,),) for d in before])  # nothing read before the locks
     def test_r21_unsafe_lifecycle_lock_refused(self):
-        self.held(); (self.root/'control/lifecycle.lock').chmod(0o644)
-        with self.assertRaisesRegex(ValueError,'unsafe lifecycle lock'): self.upgrade()
-        self.run.assert_not_called()
+        for lock in ('control/lifecycle.lock','config/qualification.lock'):
+            with self.subTest(lock=lock):
+                self.held(lock); (self.root/lock).chmod(0o644)
+                with self.assertRaisesRegex(ValueError,'unsafe maintenance lock: '+Path(lock).name): self.upgrade()
+                (self.root/lock).chmod(0o600)
+                self.run.assert_not_called()
     def second_generation(self):
         self.upgrade()
         config = self.root/'config'
