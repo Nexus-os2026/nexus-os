@@ -349,12 +349,17 @@ host namespace baseline; they do not claim a new independent host-canary run.
 `route-cells` requests carry `inventory_sha256`; success is `PASS_ROUTE_CELLS`, a
 receipt with a `lane` group, validated by `receipt.validate_route` against
 `policy/route-cells.json`. `rc_` credit needs a host-authenticated receipt: the
-submitter runs `sudo -n /usr/libexec/gatebox/verify.py --run-id <id>` (one fixed,
-read-only sudoers rule) and requires `"authentication": "AUTHENTICATED"` and
-`"identity": "current"`. Public policy hashes and copied summaries never authenticate.
+submitter runs `printf '%s\n' "$RUN_ID" | sudo -n /usr/libexec/gatebox/verify.py --authenticate-stdin`
+(one exact, read-only sudoers rule with no wildcard; the ID is one lowercase 32-hex line
+on stdin and any other argument is refused, SB3E-R21.6) and requires
+`"authentication": "AUTHENTICATED"` and `"identity": "current"`. Public policy hashes
+and copied summaries never authenticate.
 
 Every receipt is validated against its own recorded gate policy: the current one,
-or a retained set under `/etc/gatebox/history/<gates_sha256>/`. An existing install
+or a retained set under `/etc/gatebox/history/<gates_sha256>/`, which keeps every
+earlier installation's policy (SB3E-R21.4). Upgrade and `enable-qualified` hold the
+lifecycle custody lock from their first check through their final re-check, so no run
+starts or stops meanwhile (SB3E-R21.2). An existing install
 is upgraded only by the separate action, never by `install` (which still refuses
 every existing output). After PIN and independent bundle review, with the new
 bundle extracted to `/root/gatebox-gb1` exactly as `/root/gatebox-slice1` above:
