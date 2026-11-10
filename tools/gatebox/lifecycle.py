@@ -17,6 +17,14 @@ LOCK_TIMEOUT = 5
 CGROUP = Path('/sys/fs/cgroup')
 KINDS = ('log','status')
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+# SB3E-R22.1: systemd places each template instance in its template slice ('-' escaped as \x2d); the manager
+# units sit in system.slice. supervisor.py imports this; install.sh keeps a copy pinned equal by a test.
+INSTANCE = re.compile(r'mothergate-(run|root)@[0-9a-f]{32}\.service')
+SLICES = {'run':'system-mothergate\\x2drun.slice','root':'system-mothergate\\x2droot.slice'}
+
+def unit_cgroup(unit):
+    match = INSTANCE.fullmatch(unit)
+    return '/system.slice/'+(SLICES[match.group(1)]+'/' if match else '')+unit
 
 def command(args):
     if len(args) != 2 or args[0] not in ('start','stop') or not RUN.fullmatch(args[1]):
@@ -152,7 +160,7 @@ class Custody:
         if (set(state) != {'Job','ActiveState','ControlGroup'} or state['Job'] != ''
                 or state['ActiveState'] not in ('inactive','failed')):
             raise ValueError('manager not settled')
-        expected = '/system.slice/'+unit
+        expected = unit_cgroup(unit)
         if state['ControlGroup'] not in ('',expected): raise ValueError('unexpected cgroup identity')
         path = CGROUP/expected.lstrip('/')
         if state['ControlGroup'] or path.exists():

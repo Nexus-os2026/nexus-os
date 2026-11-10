@@ -583,13 +583,15 @@ class OfflineServiceTests(unittest.TestCase):
                 patch.object(init.shutil,'copytree'), patch.object(init.os,'walk',return_value=[]), \
                 patch.object(init,'observations',return_value={'fixture':True}), patch.object(init,'resources',return_value={}), \
                 patch.object(init,'probe_payload',return_value=({},{})), \
+                patch.object(init,'requested',return_value={'gate_set_id':'full'}), \
                 patch.object(init.Runner,'gates',gates), patch.object(init.subprocess,'Popen',spawn):
             init.main()
 
     def test_review7_stop_requires_empty_owned_cgroup(self):
-        group = '/system.slice/mothergate-run@'+RUN+'.service'
+        group = '/system.slice/system-mothergate\\x2drun.slice/mothergate-run@'+RUN+'.service'  # R22.1: this host's layout
         for state, events in [({'ActiveState':'active'},''),
                 ({'ActiveState':'inactive','ControlGroup':'/other'},''),
+                ({'ActiveState':'inactive','ControlGroup':'/system.slice/mothergate-run@'+RUN+'.service'},'populated 0\nfrozen 0\n'),  # flat: refused
                 ({'ActiveState':'inactive','ControlGroup':group},'populated 1\n'),
                 ({'ActiveState':'inactive','ControlGroup':group},'populated 0\n')]:
             with patch.object(supervisor,'shim') as shim, patch.object(supervisor,'unit_state',return_value=state), \

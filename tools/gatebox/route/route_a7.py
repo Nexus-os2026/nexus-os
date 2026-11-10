@@ -24,9 +24,12 @@ assumption it falls under:
   its rustc's sysroot; `.cargo/config*` anywhere refused unless byte-equal to
   CARGO_CONFIG_PINS (configuration outside the snapshot is the runner's).
   `rustc -vV`, `cargo -V` recorded and equal.
-- Candidate-authored build-time code (workspace build scripts, proc macros,
-  build-dependencies, `links`). Closed by `build_time_pin`: none but the pinned
-  build scripts, byte-equal to BUILD_TIME_PINS; Cargo.lock byte-equal to its
+- Candidate-authored build-time code (local build scripts, proc macros,
+  build-dependencies, `links`). Closed by `build_time_pin`: the local (path
+  source) packages of the resolved graph, members or not, are exactly
+  LOCAL_PACKAGES (SB3E-R19.1); none has a proc macro or `links`, every local
+  build script is byte-equal to BUILD_TIME_PINS, and no local package in the
+  route closure has a build-dependency; Cargo.lock byte-equal to its
   pin. The pin fixes bytes, not consumption: transient states and runtime
   behaviour of pinned code fall under assumption 6.
 - Third-party build scripts and proc macros (pinned by the Cargo.lock pin and
@@ -92,7 +95,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import route_a7_graph as graph  # noqa: E402
 
 # Reviewed pins; under GB1 these move to installed policy outside the snapshot.
-BUILD_TIME_PINS = {"kernel/build.rs": "5dd672bf7812edfc0fe41be7f6002f973ae87adec0eebfb92ae1f17d33e88da2"}
+BUILD_TIME_PINS = {"kernel/build.rs": "5dd672bf7812edfc0fe41be7f6002f973ae87adec0eebfb92ae1f17d33e88da2",
+                   # Outside the route closure (never built by either recipe); pinned because it is local (R19.1).
+                   "crates/nexus-verifier-sandbox/build.rs": "ab7831217f4b8e83f2e3dbb18cc745ad9ea8949249682c3be8b6f8ff7fb9edde"}
+# SB3E-R19.1: every candidate-controlled local package of the resolved graph, by name and manifest.
+LOCAL_PACKAGES = {
+    "nexus-crypto": "crates/nexus-crypto/Cargo.toml", "nexus-governed-control": "crates/nexus-governed-control/Cargo.toml",
+    "nexus-kernel": "kernel/Cargo.toml", "nexus-mother": "mother/Cargo.toml", "nexus-mother-desktop": "mother/desktop/Cargo.toml",
+    "nexus-mother-host": "mother/host/Cargo.toml", "nexus-persistence": "persistence/Cargo.toml",
+    "nexus-typed-decision": "crates/nexus-typed-decision/Cargo.toml",
+    "nexus-verifier-sandbox": "crates/nexus-verifier-sandbox/Cargo.toml",
+}
 LOCK_PIN = "a42d2d167fe3c01f4c61b4365dcdb0c64f2548ed3c52d16193b702f1d30b000e"
 TOOLCHAIN_FILE_PIN = "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
 # The snapshot's only Cargo configuration (build.jobs, [env]); any other or changed one is refused.
@@ -237,6 +250,11 @@ def build_time_problems(repo, toolchain, block):
     packages = {p["id"]: p for p in meta["packages"]}
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
     workspace = set(meta["workspace_members"])
+    # R19.1: classified independently of workspace membership (an excluded path dependency is local).
+    local = {i for i in nodes if packages[i]["source"] is None}
+    found = sorted((packages[i]["name"], os.path.relpath(packages[i]["manifest_path"], repo)) for i in local)
+    if found != sorted(LOCAL_PACKAGES.items()):
+        out.append(d("build_time_pin", reason=f"local packages differ from the reviewed list: {sorted(set(found) ^ set(LOCAL_PACKAGES.items()))}"))
     roots = [i for i in workspace if packages[i]["name"] in ROOT_PACKAGES]
     if len(roots) != len(ROOT_PACKAGES):
         out.append(d("build_time_pin", reason="route root packages not found"))
@@ -250,16 +268,16 @@ def build_time_problems(repo, toolchain, block):
             kinds = {k["kind"] for k in dep["dep_kinds"]}
             if kinds - {"dev"} or (root and "dev" in kinds):
                 pending.append((dep["pkg"], False))
-            if node in workspace and "build" in kinds:
+            if node in local and "build" in kinds:
                 out.append(d("build_time_pin", reason=f"build-dependency in {packages[node]['name']}"))
-    for node in sorted(closure & workspace):
+    for node in sorted(local):
         package = packages[node]
         if package.get("links"):
             out.append(d("build_time_pin", reason=f"links in {package['name']}"))
         for target in package["targets"]:
             rel = os.path.relpath(target["src_path"], repo)
             if "proc-macro" in target["kind"]:
-                out.append(d("build_time_pin", reason=f"workspace proc macro {rel}"))
+                out.append(d("build_time_pin", reason=f"local proc macro {rel}"))
             if "custom-build" in target["kind"]:
                 if BUILD_TIME_PINS.get(rel) != sha256_file(target["src_path"]):
                     out.append(d("build_time_pin", reason=f"build script {rel} is not a pinned entry"))
