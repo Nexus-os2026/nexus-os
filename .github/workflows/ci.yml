@@ -307,3 +307,100 @@ jobs:
 
       - name: Security gate (cargo-audit and cargo-deny)
         run: scripts/security-audit.sh --install
+
+  # SB-3E route cells (design 1.3): the lane in a fresh target. Candidate's
+  # own wrapper: not the authority.
+  route-cells:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
+          persist-credentials: false
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Validated candidate: $CANDIDATE_SHA"
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
+
+      - name: Install the desktop's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev pkg-config libc6-dev
+
+      - name: Build the route wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -static \
+            -o "$RUNNER_TEMP/route_rustc" tools/gatebox/route/route_rustc.c
+
+      - name: Route lane (fresh target)
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUSTC_WORKSPACE_WRAPPER="$RUNNER_TEMP/route_rustc" \
+          CARGO_TARGET_DIR="$RUNNER_TEMP/route-lane" \
+            cargo test --release --locked -p nexus-mother-host -p nexus-mother-desktop --test route_cells

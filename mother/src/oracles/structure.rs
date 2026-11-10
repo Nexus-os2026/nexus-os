@@ -9,6 +9,11 @@ const EFFECT: &str = include_str!("../effect.rs");
 const COORDINATOR: &str = include_str!("../coordinator.rs");
 const CONSENT: &str = include_str!("../consent.rs");
 
+/// The one reviewed `[lints.rust]` line (SB-3E design 4.6, G1): it declares
+/// the route lane's cfg name and sets no other lint.
+const ROUTE_LANE_LINT: &str =
+    "unexpected_cfgs = { level = \"warn\", check-cfg = ['cfg(mother_route_seams)'] }";
+
 /// A source without its comment lines.
 fn code(text: &str) -> String {
     text.lines()
@@ -21,17 +26,21 @@ fn code(text: &str) -> String {
 fn structure_the_manifest_pins_the_dependencies() {
     let mut section = String::new();
     let mut dependencies = Vec::new();
+    let mut lints = Vec::new();
     for line in MANIFEST.lines().map(str::trim) {
         if line.starts_with('[') {
             section = line.to_string();
             assert!(
                 matches!(
                     section.as_str(),
-                    "[package]" | "[dependencies]" | "[[example]]"
+                    "[package]" | "[dependencies]" | "[[example]]" | "[lints.rust]"
                 ),
                 "unexpected manifest section {section}"
             );
             continue;
+        }
+        if section == "[lints.rust]" && !line.is_empty() {
+            lints.push(line);
         }
         if section == "[dependencies]" && !line.is_empty() && !line.starts_with('#') {
             dependencies.push(line.split('=').next().unwrap().trim().to_string());
@@ -49,6 +58,7 @@ fn structure_the_manifest_pins_the_dependencies() {
             "nix"
         ]
     );
+    assert_eq!(lints, [ROUTE_LANE_LINT], "only the reviewed lint line");
 }
 
 #[test]
