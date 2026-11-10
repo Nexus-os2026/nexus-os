@@ -308,11 +308,13 @@ jobs:
       - name: Security gate (cargo-audit and cargo-deny)
         run: scripts/security-audit.sh --install
 
-  # SB-3E route cells (design 1.3): the lane in a fresh target. Candidate's
-  # own wrapper: not the authority.
+  # SB-3E route cells (design 1.3 and section 5 A7, as amended by AM-1): A7
+  # (both builds from clean at one path) then the lane in a fresh target, both
+  # with the pinned toolchain under a clean launch block. Candidate's own
+  # tools and pins: not the authority until GB1.
   route-cells:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Select and validate the candidate commit
         id: candidate
@@ -397,10 +399,25 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror -static \
             -o "$RUNNER_TEMP/route_rustc" tools/gatebox/route/route_rustc.c
 
+      - name: A7 compile-input agreement (both builds, fresh target)
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$(rustc --print sysroot)"
+          wrapper="$RUNNER_TEMP/route_rustc"
+          env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            /usr/bin/python3 -I tools/gatebox/route/route_a7.py run \
+            --repo "$PWD" --toolchain "$toolchain" \
+            --target "$RUNNER_TEMP/route-a7/target" \
+            --evidence "$RUNNER_TEMP/route-a7/evidence" \
+            --wrapper "$wrapper" --wrapper-sha256 "$(sha256sum "$wrapper" | cut -d' ' -f1)" \
+            --json "$RUNNER_TEMP/route-a7/verdict.json"
+
       - name: Route lane (fresh target)
         shell: bash
         run: |
           set -euo pipefail
-          RUSTC_WORKSPACE_WRAPPER="$RUNNER_TEMP/route_rustc" \
-          CARGO_TARGET_DIR="$RUNNER_TEMP/route-lane" \
-            cargo test --release --locked -p nexus-mother-host -p nexus-mother-desktop --test route_cells
+          env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            /usr/bin/python3 -I tools/gatebox/route/route_a7.py lane \
+            --repo "$PWD" --toolchain "$(rustc --print sysroot)" \
+            --target "$RUNNER_TEMP/route-lane" --wrapper "$RUNNER_TEMP/route_rustc"
