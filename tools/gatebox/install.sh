@@ -273,23 +273,28 @@ def verify_old_install(old_sha,identity_of):
 
 @contextmanager
 def maintenance():
-    """SB3E-R21.2: lifecycle.py's custody lock (lifecycle.lock, same checks), held from the first check of an
-    upgrade or enable-qualified through its final re-check: no run starts, stops or settles meanwhile."""
-    protected(CONTROL)
-    control = os.open(CONTROL,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
-    try: fd = os.open('lifecycle.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_CLOEXEC,0o600,dir_fd=control)
-    finally: os.close(control)
+    """SB3E-R21.2: lifecycle.py's custody lock, then probe.py's qualification lock, both held from the first
+    check of an upgrade or enable-qualified through its final re-check: no run starts, stops or settles
+    and no qualification evidence is written meanwhile."""
+    with held(CONTROL,'lifecycle.lock'), held(CONFIG,'qualification.lock'): yield
+
+@contextmanager
+def held(directory,name):
+    protected(directory)
+    parent = os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try: fd = os.open(name,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_CLOEXEC,0o600,dir_fd=parent)
+    finally: os.close(parent)
     try:
         info = os.fstat(fd)
         if (not stat.S_ISREG(info.st_mode) or (info.st_uid,info.st_gid) != LOCK_OWNER or stat.S_IMODE(info.st_mode) != 0o600
-                or info.st_nlink != 1 or any('acl' in n.lower() for n in os.listxattr(fd))): raise ValueError('unsafe lifecycle lock')
+                or info.st_nlink != 1 or any('acl' in n.lower() for n in os.listxattr(fd))): raise ValueError('unsafe maintenance lock: '+name)
         deadline = time.monotonic()+MAINTENANCE_TIMEOUT
         while True:
             try:
                 fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
                 break
             except BlockingIOError:
-                if time.monotonic() >= deadline: raise TimeoutError('maintenance lock held: a run or qualification is in progress')
+                if time.monotonic() >= deadline: raise TimeoutError('maintenance lock held: '+name+' (a run or qualification is in progress)')
                 time.sleep(.05)
         yield
     finally: os.close(fd)
