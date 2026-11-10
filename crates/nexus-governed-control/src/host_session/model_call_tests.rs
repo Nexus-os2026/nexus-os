@@ -1350,6 +1350,596 @@ fn sb3e_route_seams_are_route_only() {
     }
     assert!(found >= 70, "the S1 names were scanned: {found}");
 }
+/// The audited S1 writer sites: the broker rows of design 4.4, the two
+/// store points of 4.2, and the refusal notes of 2.4 and 4.4 (seal).
+const ROUTE_SITES: &str = "\
+host_session/model.rs: >pub(super)fnreserve(core:&Arc<Core>,scope:&Arc<RequestScope>)->Result<O\
+wner,SessionError>{ at(reg.reserve,scope.route_ctx());¦ionError>{¦let_produc >fnadmission(&self\
+,state:&State)->Result<(),ModelError>{>implRegistrationGate<'_>{ at(model.gate.checked,self.sco\
+pe.route_ctx());¦e.cell),);¦self.scope >fnadmit_request(&self,kind:RequestKind)->Result<(),Mode\
+lError>{>implCallCancelforRegistrationGate<'_>{ at(model.gate.before,self.scope.route_ctx().kin\
+d(kind));¦e.cell),);¦ifkind!=Re >pub(super)fnregister_model_private(&self,endpoint:&str,spec:&M\
+odelPinSpec,)->Result<ModelIdentityView,SessionError>{>implHostSession{ at(model.reserved,self.\
+bootstrap.scope.route_ctx());¦e.cell),);¦letmutreco +letresult=(||{ at(model.record.before,self\
+.bootstrap.scope.route_ctx());¦e.cell),);¦letsequenc at(model.install.before,self.bootstrap.sco\
+pe.route_ctx());¦e.cell),);¦letmuts=ho at(model.install.after,self.bootstrap.scope.route_ctx())\
+;¦e.cell),);¦#[cfg(test >pub(super)fnacquire(core:&Arc<Core>,authority:&Authority,(run,agent,gr\
+oup,identity):(RunId,&AgentId,GroupId,[u8;32]),original:&HaltCell,grant:&OriginalGrant<'_>,invo\
+cation:&InvocationObserver,)->Result<Self,AuthorityError>{>implAttempt{ at(attempt.slot,Ctx::se\
+ssion(core.identity).run(run));¦ailable();¦let(mutown at(model.attempt.reserved,Ctx::session(co\
+re.identity).run(run),);¦e.cell),);¦letticket= >pub(super)fnrecord_return(&mutself,authority:&A\
+uthority,result:Result<(),ModelError>,)->Result<EndStatus,SessionError>{>implAttempt{ at(model.\
+attempt.record.before,self.route_ctx());¦.cell),,);¦letrecord= >pub(super)fncomplete(mutself)->\
+Result<(),SessionError>{>implAttempt{ at(complete,self.route_ctx());¦ionError>{¦if!matches >pub\
+(super)fnbind_inference_private(&self,run:RunId,contract_hash:&str,request:&str,expected_identi\
+ty:[u8;32],)->Result<(),crate::authority::AuthorityError>{>implSessionDoor{ at(bind.entry,self.\
+context.scope.route_ctx().run(run));¦Halted);};¦if!self.co >pub(super)fnmodel_identity_private(\
+&self)->Option<ModelIdentityView>{>implSessionDoor{ at(identity,self.context.scope.route_ctx())\
+;¦urnNone;};¦if!self.co >fnpredicates(&self,kind:RequestKind)->Result<(),Refusal>{>implCallGate\
+<'_>{ at(model.call.sampled,self.route_ctx(kind));¦e.cell),);¦letruns=se +lethold=runs.try_requ\
+est_hold().map_err(|poisoned|{ note(refused:hold,self.route_ctx(kind));¦t.fail();}¦(,Cancelle +\
+ifexpired{ note(refused:1.expired,self.route_ctx(kind));¦ifexpired{¦returnErr( +ifjudged==Err(c\
+rate::host_session::Lapse::Expired){ note(refused:1.judged,self.route_ctx(kind));¦:Expired){¦re\
+turnErr( +ifcore.model.uncertain.load(Ordering::SeqCst)||word!=scope.snapshot||judged.is_err(){ \
+note(refused:1.cancelled,self.route_ctx(kind));¦.is_err(){¦returnErr( +self.watch.check_now().\
+map_err(|_|{ note(refused:2,self.route_ctx(kind));¦p_err(|_|{¦(,Stopped) +if!self.primary.try_h\
+ealth().is_some_and(|h|!h.latched&&h.owed==0&&!h.recovery_required&&h.unsettled==0){ note(refus\
+ed:3,self.route_ctx(kind));¦ttled==0){¦returnErr( +ifself.ticket.ended(){ note(refused:4.ended,\
+self.route_ctx(kind));¦t.ended(){¦returnErr( +Ok(held)=>held,Err(error)=>{>let_held=matchhold.l\
+ive(self.ticket,&grant){ note(refused:live,self.route_ctx(kind));¦lable(_));¦returnErr( +ifkind\
+==RequestKind::Chat&&!unspent{ note(refused:6,self.route_ctx(kind));¦&!unspent{¦returnErr( +ifs\
+elf.invocation.is_revoked(){ note(refused:7,self.route_ctx(kind));¦revoked(){¦returnErr( = at(m\
+odel.call.observed,self.route_ctx(kind));¦e.cell),);¦ifletErr(( +ifmatches!(error,E::Capacity){\
+>ifletErr((error,lapse))=scope.admit_judged(&self.door.context.cell,Some(at)){ note(refused:8.c\
+apacity,self.route_ctx(kind));¦xt.fail();¦returnErr( +ifletErr((error,lapse))=scope.admit_judge\
+d(&self.door.context.cell,Some(at)){ note(refused:8.cas,self.route_ctx(kind));¦:Expired);¦retur\
+nErr( = at(model.call.admitted,self.route_ctx(kind));¦e.cell),);¦ifkind==Re >fnadmit_request(&s\
+elf,kind:RequestKind)->Result<(),ModelError>{>implCallCancelforCallGate<'_>{ at(call.gate,self.\
+route_ctx(kind));¦try(kind);¦letadmitte
+host_session.rs: >pubfnfinish_bootstrap(&self)->Result<(),SessionError>{>implHostSession{ at(re\
+g.ready,self.bootstrap.scope.route_ctx());¦ailable)?;¦if!self.co >pubfncancel_run(&self,run:cra\
+te::authority::ids::RunId,)->Result<crate::governed::RecordBatch,SessionFailure>{>implSessionDo\
+or{ at(door.cancel_run,self.context.scope.route_ctx().run(run));¦nFailure>{¦letcall=cl >pubfnha\
+lt(&self,reason:crate::governed::HaltReason,)->Result<crate::governed::RecordBatch,SessionFailu\
+re>{>implSessionDoor{ at(door.halt,self.context.scope.route_ctx());¦nFailure>{¦letcall=cl >pubf\
+nemergency(&self)->Result<IngressEvent,SessionError>{>implSessionIngress{ at(ingress.emergency,\
+Ctx::session(self.core.identity));¦ionError>{¦loop{letol >pubfnaccept(&self,kind:CommandKind,se\
+quence:u64)->Result<SessionRequest,SessionError>{>implSessionIngress{ at(ingress.accept,Ctx::se\
+ssion(self.core.identity).request(sequence),);¦ionError>{¦letaccepte
+host_session/close.rs: >pubfnjoined(mutself){>implProducer{ at(producer.join,Ctx::session(self.\
+core.identity));¦(mutself){¦matchself. >pubfnbegin_mother_end(&self,session:SessionIdentity)->R\
+esult<(),SessionError>{>implCloseSeal{ at(close.mother_end,Ctx::session(self.core.identity));¦i\
+onError>{¦self.live( >pubfnfinish_delivery(mutself)->bool{>implCloseSeal{ at(close.delivery,Ctx\
+::session(self.core.identity));¦lf)->bool{¦letsuccess >pubfnclose_obligations(&self)->Result<Cl\
+oseObligations,SessionError>{>implHostSession{ at(close.obligations,Ctx::session(self.core.iden\
+tity));¦ionError>{¦let(action >pubfnseal_close(&self,request:&SessionRequest)->Result<CloseSeal\
+,SessionError>{>implHostSession{ at(close.seal,Ctx::session(self.core.identity).request(request\
+.sequence),);¦ionError>{¦self.close +ifword&(FAILED|SEALED)!=0||!self.core.authority_closed.loa\
+d(Ordering::SeqCst){ note(seal:restricted,Ctx::session(self.core.identity));¦::SeqCst){¦returnE\
+rr( +ifproducers.slots.iter().any(|s|s.live||s.lost){ note(seal:producers,Ctx::session(self.cor\
+e.identity));¦||s.lost){¦returnErr( +if!self.core.model.quiescent(){ note(seal:model,Ctx::sessi\
+on(self.core.identity));¦iescent(){¦returnErr( +ifstop.received!=stop.recorded||stop.receivedas\
+u64!=word/EPOCH_STEP||stop.overflowed||!self.core.stops.quiescent(){ note(seal:stop,Ctx::sessio\
+n(self.core.identity));¦iescent(){¦returnErr( +ifresources.unresolved!=0||resources.uncertain!=\
+0{ note(seal:resources,Ctx::session(self.core.identity));¦ertain!=0{¦returnErr( +ifself.invento\
+ry().map_err(|_|SessionError::Unavailable)?.entries.iter().any(|e|!e.discharged||e.in_flight||e\
+.uncertain){ note(seal:inventory,Ctx::session(self.core.identity));¦ncertain){¦returnErr( +ifse\
+lf.core.actions.lock().map_err(|_|SessionError::Restricted)?.iter().any(|a|!a.discharged()){ no\
+te(seal:actions,Ctx::session(self.core.identity));¦harged()){¦returnErr( +ifhalt.pending!=0||ha\
+lt.owed!=0||halt.uncertain!=0||halt.lost!=0{ note(seal:halt,Ctx::session(self.core.identity));¦\
+t.lost!=0{¦returnErr( +ifhealth.latched||health.owed!=0||health.recovery_required||health.unset\
+tled!=0||health.unclean_sessions!=0{ note(seal:health,Ctx::session(self.core.identity));¦ssions\
+!=0{¦returnErr( +ifreport.records==0||report.unresolved_missions!=0||report.session_end_recorde\
+d{ note(seal:history,Ctx::session(self.core.identity));¦_recorded{¦returnErr( +ifInstant::now()\
+>=request.deadline||self.core.cell.session_compare(word,(word|SEALED)&!READY).is_err(){ note(se\
+al:cas,Ctx::session(self.core.identity));¦.is_err(){¦returnErr( >pubfnobserve_mother_end(&self,\
+seal:&CloseSeal)->Result<(),SessionError>{>implHostSession{ at(close.mother_end,Ctx::session(se\
+lf.core.identity));¦ionError>{¦seal.live( >pubfnclose_primary(&self,seal:&CloseSeal)->Result<()\
+,SessionError>{>implHostSession{ at(close.primary,Ctx::session(self.core.identity));¦ionError>{\
+¦seal.live(
+authority/run.rs: >pub(crate)fnadmit_session_attempt(self:&Arc<Self>,(run,agent,group,identity)\
+:(RunId,&AgentId,GroupId,[u8;32]),original:&HaltCell,grant:&OriginalGrant<'_>,invocation:&crate\
+::inference::InvocationObserver,)->Result<SessionAttempt,AuthorityError>{>implRunRegistry{ at(m\
+odel.attempt.granted,Ctx::default().run(run).attempt(ordinal),);¦(&cell),);¦letticket= at(model\
+.attempt.checked,Ctx::default().run(run).attempt(ordinal),);¦(&cell),);¦cell.admit >pub(crate)f\
+nsettle_session_attempt(&self,ticket:SessionAttempt,deadline:Instant,)->Result<(),AuthorityErro\
+r>{>implRunRegistry{ at(model.settle.before,Ctx::default().run(ticket.run).attempt(ticket.ordin\
+al),);¦t.cell),);¦letmuttabl >pub(crate)fnadmit_session_inference(&self,b:SessionBinding<'_>,)-\
+>Result<(),AuthorityError>{>implRunRegistry{ at(model.bind.checked,Ctx::default().run(b.run));¦\
+iginal),);¦b.original at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
+evidence_store.rs: >fnappend(&mutself,phase:&str,commitment:Option<&str>,body:&str)->Append{>im\
+plInner{ at(store.commit,Ctx::store(kind,phase,commitment));¦certain;}}¦ifself.com at(store.com\
+mit.result,Ctx::store(kind,phase,commitment));¦ncertain;}¦self.known
+";
+/// SB3E-R14.1 and R15.1: every reviewed region on the path from a site to
+/// `fire`, whole (the writers, `fire`, `GATES`, `Ctx` and its builders, the
+/// `route_ctx` helpers), and the owed-flush statements with their
+/// neighbours, each compared normalized.
+const PINS: [(&str, &str); 10] = [
+    (
+        "broker/route_seams.rs",
+        r#"
+const GATES:[&str;2]=["model.gate.before","call.gate"];
+"#,
+    ),
+    (
+        "broker/route_seams.rs",
+        r#"
+#[derive(Clone,Copy,Default)]pub(crate)struct Ctx<'a>{session:Option<SessionIdentity>,request:
+Option<u64>,run:Option<RunId>,attempt:Option<u32>,kind:Option<&'static str>,phase:Option<&'a str
+>,commitment:Option<&'a str>,}impl<'a>Ctx<'a>{pub(crate)fn session(session:SessionIdentity)->
+Self{let session=Some(session);Self{session,..Self::default()}}pub(crate)fn request(self,request
+:u64)->Self{let request=Some(request);Self{request,..self}}pub(crate)fn run(self,run:RunId)->
+Self{Self{run:Some(run),..self}}pub(crate)fn attempt(self,attempt:u32)->Self{let attempt=Some(
+attempt);Self{attempt,..self}}pub(crate)fn kind(self,kind:RequestKind)->Self{let chat=kind==
+RequestKind::Chat;let kind=Some(if chat{"chat"}else{"metadata"});Self{kind,..self}}pub(crate)fn
+store(kind:&'static str,phase:&'a str,commitment:Option<&'a str>)->Self{let(kind,phase)=(Some(
+kind),Some(phase));Self{kind,phase,commitment,..Self::default()}}}
+"#,
+    ),
+    (
+        "broker/route_seams.rs",
+        r#"
+pub(crate)fn at(point:&'static str,ctx:Ctx<'_>){std::hint::black_box(M.as_bytes());if!ARMED.load
+(Ordering::Relaxed){return;}fire(point,false,ctx);}pub(crate)fn note(reason:&'static str,ctx:Ctx
+<'_>){std::hint::black_box(M.as_bytes());if!ARMED.load(Ordering::Relaxed){return;}fire(reason,
+true,ctx);}fn state()->MutexGuard<'static,State>{STATE.lock().unwrap_or_else(PoisonError::
+into_inner)}fn fire(point:&'static str,note:bool,ctx:Ctx<'_>){let(entry,pending)={let mut s=
+state();s.tick+=1;let key=(ctx.session,ctx.request,ctx.run,ctx.attempt);let gate=u64::from(!note
+&&GATES.contains(&point));let request_ordinal=match s.ordinals.iter_mut().find(|(k,_)|*k==key){
+Some((_,n))=>{*n+=gate;Some(*n)}None if gate==1=>{s.ordinals.push((key,1));Some(1)}None=>None,};
+let entry=Entry{tick:s.tick,point,note,session:ctx.session,request:ctx.request,run:ctx.run,
+invocation:None,attempt:ctx.attempt,kind:ctx.kind,request_ordinal,phase:ctx.phase.map(str::
+to_owned),commitment:ctx.commitment.map(str::to_owned),};s.entries.push(entry.clone());let
+eligible=!note&&(point!="store.commit"||ctx.kind==Some("ordinary"));let found=s.pending.iter().
+position(|p|eligible&&p.point==point);(entry,found.map(|i|s.pending.remove(i)))};let Some(
+pending)=pending else{return};let acknowledged=pending.ack.try_send(entry).is_ok();match pending
+.pause{None=>panic!("route seam: armed panic at {point}"),Some((released,cell,result))=>{if!
+acknowledged||released.recv_timeout(PATIENCE).is_err(){FAILED.store(true,Ordering::SeqCst);let _
+=writeln!(&*result,"TIMEOUT {cell} {point}");std::process::abort();}}}}
+"#,
+    ),
+    (
+        "host_session.rs",
+        r#"
+#[cfg(mother_route_seams)]impl RequestScope{pub(crate)fn route_ctx(&self)->Ctx<'static>{Ctx::
+session(self.session).request(self.request)}}
+"#,
+    ),
+    (
+        "host_session/model.rs",
+        r#"
+#[cfg(mother_route_seams)]impl Attempt{fn route_ctx(&self)->Ctx<'static>{let ctx=Ctx::session(
+self.owner.core.identity);let ticket=self.ticket.as_ref();ticket.map_or(ctx,|t|ctx.run(t.run).
+attempt(t.ordinal))}}
+"#,
+    ),
+    (
+        "host_session/model.rs",
+        r#"
+#[cfg(mother_route_seams)]impl CallGate<'_>{fn route_ctx(&self,kind:RequestKind)->Ctx<'static>{
+let(scope,ticket)=(&self.door.context.scope,self.ticket);scope.route_ctx().run(ticket.run).
+attempt(ticket.ordinal).kind(kind)}}
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] owed_flush: bool, }
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] owed_flush: false, };
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+let commitment = owed.commitment.clone(); #[cfg(mother_route_seams)] { self.owed_flush = true; }
+match self.append(phase, commitment.as_deref(), &body) {
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+fn append(&mut self, phase: &str, commitment: Option<&str>, body: &str) -> Append {
+#[cfg(mother_route_seams)] let kind = if std::mem::take(&mut self.owed_flush) { "owed_flush" }
+else { "ordinary" }; if self.latched {
+"#,
+    ),
+];
+/// The audited sites of `file`, in source order. `>chain` sets the chain
+/// (and base) of the sites after it, `+levels` the inner levels over the base,
+/// `=` the base again.
+fn audited(file: &str) -> Vec<String> {
+    let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
+    let row = rows
+        .into_iter()
+        .find(|(f, _)| *f == file)
+        .map_or("", |r| r.1);
+    let (mut base, mut chain, mut sites) = (String::new(), String::new(), Vec::new());
+    for token in row.split_whitespace() {
+        match token.split_at(1) {
+            (">", c) => (base, chain) = (c.to_string(), c.to_string()),
+            ("+", c) => chain = format!("{c}>{base}"),
+            ("=", _) => chain.clone_from(&base),
+            _ => sites.push(format!("{token}¦{chain}")),
+        }
+    }
+    sites
+}
+const ROUTE_IMPORT: &str = "use crate::broker::route_seams::{self, Ctx};";
+/// Each S1 writer call, in source order, with the byte regions it pins (its
+/// statement, anchors and enclosing headers), or an error naming the first
+/// form outside `#[cfg(mother_route_seams)] route_seams::at("<point>", <ctx>);`.
+type Regions = Vec<(std::ops::Range<usize>, i8)>; // -1/1: its left/right edge counts
+fn route_sites(source: &str) -> Result<(Vec<String>, Regions), String> {
+    let code = mask(source);
+    let (mut sites, mut regions) = (Vec::new(), Vec::new());
+    for at in seam_sites(source, &["route_seams"]) {
+        let rest = &code[at..];
+        let line = code[..at].rfind('\n').map_or(0, |n| n + 1);
+        let declared = [ROUTE_IMPORT, "pub mod route_seams;"];
+        if declared.iter().any(|d| code[line..].starts_with(d))
+            && code[..line].trim_end().ends_with(ROUTE)
+        {
+            continue;
+        }
+        let call = ["at(", "note("]
+            .into_iter()
+            .find(|w| rest[13..].starts_with(w));
+        let before = code[..at].trim_end();
+        let attributed = before.strip_suffix(ROUTE).map(str::trim_end);
+        let (Some(call), Some(prior)) = (call, attributed) else {
+            return Err(format!("unaudited use at byte {at}"));
+        };
+        if !prior.ends_with([';', '{', '}']) || !rest.starts_with("route_seams::") {
+            return Err(format!("not its own attributed statement at byte {at}"));
+        }
+        let open = at + 13 + call.len();
+        let (mut depth, mut end) = (1usize, open);
+        for (i, c) in code[open..].char_indices() {
+            depth = match c {
+                '(' => depth + 1,
+                ')' => depth - 1,
+                _ => depth,
+            };
+            if depth == 0 {
+                end = open + i + 1;
+                break;
+            }
+        }
+        let literal = source[open..].trim_start().starts_with('"');
+        if !literal || !code[end..].starts_with(';') || !code[open..end].contains(',') {
+            return Err(format!("call shape at byte {at}"));
+        }
+        let statement = flat(&lex(&source[at..=end])).replacen("route_seams::", "", 1);
+        // No enclosing statement or item carries a cfg of its own; each
+        // enclosing level is pinned as its attributes and header.
+        let own = header(&code, prior.len()..end + 1).0;
+        let (mut gated, mut chain) = (own != [ROUTE], Vec::new());
+        for range in enclosing(&code, at) {
+            let (attrs, head) = header(&code, range.clone());
+            gated |= attrs.iter().any(|a| a.contains("[cfg"));
+            chain.push(format!("{}{head}", attrs.concat()));
+            regions.push((range, 0));
+        }
+        if gated {
+            return Err(format!("{statement}: an enclosing condition"));
+        }
+        // The audited anchors: the code just before and just after the site.
+        let sig = |(_, c): &(usize, char)| !c.is_whitespace() && *c != '"';
+        let back = code[..prior.len()]
+            .char_indices()
+            .rev()
+            .filter(sig)
+            .take(10)
+            .last();
+        let fwd = code[end + 1..].char_indices().filter(sig).take(10).last();
+        let fwd = fwd.map_or(0, |(i, c)| i + c.len_utf8()) + end + 1;
+        let back = back.map_or(0, |b| b.0);
+        let near = |r: std::ops::Range<usize>| {
+            code[r].replace(|c: char| c.is_whitespace() || c == '"', "")
+        };
+        let (prev, next) = (near(back..prior.len()), near(end + 1..fwd));
+        sites.push(format!("{statement}¦{prev}¦{next}¦{}", chain.join(">")));
+        regions.extend([
+            (back..prior.len(), 1),
+            (prior.len()..end + 1, 0),
+            (end + 1..fwd, -1),
+        ]);
+    }
+    Ok((sites, regions))
+}
+/// The normalization (SB3E-R14.1): the comment-masked source as tokens,
+/// each an identifier or number, a whole string or char literal, or one
+/// punctuation character. Whitespace and comments are not tokens.
+fn lex(source: &str) -> Vec<&str> {
+    let (code, mut tokens, mut i) = (mask(source), Vec::new(), 0);
+    let c = code.as_bytes();
+    let word = |b: &u8| b.is_ascii_alphanumeric() || *b == b'_';
+    while i < c.len() {
+        let start = i;
+        i += match c[i] {
+            b if b.is_ascii_whitespace() => {
+                i += 1;
+                continue;
+            }
+            b'"' => code[i + 1..].find('"').map_or(c.len() - i, |n| n + 2),
+            b'\'' if c.get(i + 2) == Some(&b'\'') => 3,
+            b if word(&b) => c[i..].iter().take_while(|b| word(b)).count(),
+            _ => source[i..].chars().next().map_or(1, char::len_utf8),
+        };
+        tokens.push(&source[start..i.min(c.len())]);
+    }
+    tokens
+}
+/// Tokens as one reviewable word: no spaces, no quotes.
+fn flat(tokens: &[&str]) -> String {
+    tokens.concat().replace('"', "")
+}
+/// How often the reviewed `literal` occurs in `source`, both normalized.
+fn pinned(source: &str, literal: &str) -> usize {
+    let (source, literal) = (lex(source), lex(literal));
+    let windows = source.windows(literal.len());
+    windows.filter(|w| *w == literal).count()
+}
+/// The normalized attributes (outer or inner, whatever their spacing)
+/// anywhere in `range`, and its whole header after its leading attributes:
+/// the complete signature or controlling condition expression.
+fn header(code: &str, range: std::ops::Range<usize>) -> (Vec<String>, String) {
+    let tokens = lex(&code[range]);
+    let (mut attrs, mut lead, mut i) = (Vec::new(), 0, 0);
+    while i < tokens.len() {
+        let open = i + 1 + usize::from(tokens.get(i + 1) == Some(&"!"));
+        if tokens[i] != "#" || tokens.get(open) != Some(&"[") {
+            i += 1;
+            continue;
+        }
+        let mut depth = 0i32;
+        let close = (open..tokens.len()).find(|&j| {
+            depth += i32::from(tokens[j] == "[") - i32::from(tokens[j] == "]");
+            depth == 0
+        });
+        let close = close.unwrap_or(tokens.len() - 1);
+        attrs.push(tokens[i..=close].concat());
+        lead = if i == lead { close + 1 } else { lead };
+        i = close + 1;
+    }
+    (attrs, flat(&tokens[lead..]))
+}
+/// Each block enclosing `at`, innermost first, as the range from the start
+/// of the statement, item or arm that opens it to its `{`: back to a depth-0
+/// `;`, `{` or `}` (not a `}` before `else`). Commas and generics never end
+/// it, so an attribute on any enclosing level falls inside its range.
+fn enclosing(code: &str, mut at: usize) -> Vec<std::ops::Range<usize>> {
+    let (b, mut found) = (code.as_bytes(), Vec::new());
+    loop {
+        let (mut depth, mut i) = (0usize, at);
+        let open = loop {
+            if i == 0 {
+                return found;
+            }
+            i -= 1;
+            match b[i] {
+                b'}' => depth += 1,
+                b'{' if depth == 0 => break i,
+                b'{' => depth -= 1,
+                _ => {}
+            }
+        };
+        let (mut depth, mut i) = (0usize, open);
+        let start = loop {
+            if i == 0 {
+                break 0;
+            }
+            i -= 1;
+            let chained = || code[i + 1..].trim_start().starts_with("else");
+            match b[i] {
+                b'}' if depth == 0 && !chained() => break i + 1,
+                b')' | b']' | b'}' => depth += 1,
+                b'(' | b'[' | b'{' if depth > 0 => depth -= 1,
+                b'{' | b';' if depth == 0 => break i + 1,
+                _ => {}
+            }
+        };
+        found.push(start..open + 1);
+        at = start;
+    }
+}
+/// SB-3E site inventory (U3b): exactly the audited writer sites, each its
+/// own statement gated by exactly `#[cfg(mother_route_seams)]`, the writers'
+/// exact signatures (no value returns into the route) and `arm` and
+/// `drain_trace` the only public functions. Mother/host sites belong to
+/// their own units.
+#[test]
+fn sb3e_route_sites_are_exactly_the_inventory() {
+    let good = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
+    let found = route_sites(good).map(|r| r.0);
+    assert_eq!(found, Ok(vec!["at(p,c);¦fnf(){¦}¦fnf(){".to_string()]));
+    let (call, sub) = ("at(\"p\", c);", |a: &str, b: &str| good.replace(a, b));
+    // Enclosing conditions, however spelled (SB3E-R14.1).
+    let spelled = [
+        "#[cfg(all(unix, test))]",
+        "#[ cfg(test)]",
+        "#[/* r */cfg(test)]",
+        "# [cfg(test)]",
+    ];
+    let spelled = spelled.map(|attr| format!("{attr}\n{good}"));
+    for planted in [
+        sub("cfg(mother_route_seams)", "cfg(test)"),
+        sub(call, &format!("let _v = {call}")),
+        sub(call, "at(\"p\", c).f();"),
+        sub(call, "at(P, c);"),
+        sub("route_seams::at", "route_seams::note2"),
+        sub("    #[cfg(mother_route_seams)]\n", ""),
+        format!("{good}use crate::broker::route_seams::at as w;\n"),
+        sub("fn f() {", "fn f() { #[cfg(test)] {").replace(");\n}", ");\n} }"),
+        sub("fn f() {", "fn f() { #[ cfg(test)] {").replace(");\n}", ");\n} }"),
+    ]
+    .into_iter()
+    .chain(spelled)
+    {
+        assert!(route_sites(&planted).is_err(), "planted: {planted}");
+    }
+    let sources = crate_sources();
+    for (file, source) in &sources {
+        if file == "broker/route_seams.rs" {
+            continue;
+        }
+        let found = route_sites(source)
+            .unwrap_or_else(|e| panic!("{file}: {e}"))
+            .0;
+        let expected = audited(file);
+        assert_eq!(found, expected, "{file}: the audited S1 sites, in order");
+        // The module holding them is itself declared without a condition.
+        let mut path = file.trim_end_matches(".rs").to_string();
+        while path != "lib" && !expected.is_empty() {
+            let name;
+            (path, name) = match path.rsplit_once('/') {
+                Some((parent, module)) => (parent.to_string(), module.to_string()),
+                None => ("lib".to_string(), path.clone()),
+            };
+            let parent = sources
+                .iter()
+                .find(|(f, _)| *f == format!("{path}.rs") || *f == format!("{path}/mod.rs"));
+            let code = mask(&parent.unwrap().1);
+            let decl = seam_sites(&code, &[&format!("mod {name}")]);
+            let gated = |at: &usize| {
+                let own = std::iter::once(starts(&code, *at)[0]..*at);
+                let mut levels = own.chain(enclosing(&code, *at)).map(|r| header(&code, r).0);
+                levels.any(|attrs| attrs.iter().any(|a| a.contains("[cfg")))
+            };
+            for inner in [&code, &mask(source)] {
+                let inner = lex(inner);
+                let cfg = inner
+                    .windows(4)
+                    .any(|w| w[..3] == ["#", "!", "["] && w[3].starts_with("cfg"));
+                assert!(!cfg, "{file}: an inner cfg on its module path");
+            }
+            assert!(
+                decl.len() == 1 && !gated(&decl[0]),
+                "{file}: module {name} declared without a cfg"
+            );
+        }
+    }
+    // SB3E-R12.1 and R14.1: the owed-flush statements, exactly; every flag
+    // use inside them; no `kind` rebinding before the store points.
+    let text = |f: &str| &sources.iter().find(|(n, _)| n == f).unwrap().1;
+    for (file, pin) in PINS {
+        assert_eq!(pinned(text(file), pin), 1, "{file}: pin {pin}");
+    }
+    let store = text("evidence_store.rs");
+    let tokens = lex(store);
+    let uses = |t: &str| tokens.iter().filter(|x| **x == t).count();
+    assert_eq!(
+        (uses("owed_flush"), uses("\"owed_flush\"")),
+        (4, 1),
+        "no other flag use"
+    );
+    let append = tokens
+        .windows(5)
+        .position(|w| w == ["fn", "append", "(", "&", "mut"]);
+    let append = append.unwrap();
+    let open = append + tokens[append..].iter().position(|t| *t == "{").unwrap();
+    let mut depth = 0i32;
+    let body = tokens[open..].iter().take_while(|t| {
+        depth += i32::from(**t == "{") - i32::from(**t == "}");
+        depth > 0
+    });
+    assert_eq!(
+        body.filter(|t| **t == "kind").count(),
+        3,
+        "append's kind, unrebound"
+    );
+    let seams = &sources
+        .iter()
+        .find(|(f, _)| f == "broker/route_seams.rs")
+        .unwrap()
+        .1;
+    let declared = include_str!("../broker.rs");
+    assert!(declared.contains("\n#[cfg(mother_route_seams)]\npub mod route_seams;\n"));
+    let public: Vec<_> = seams.match_indices("pub fn ").map(|(i, _)| i).collect();
+    let public: Vec<&str> = public.iter().map(|i| &seams[i + 7..i + 10]).collect();
+    assert_eq!(
+        public,
+        ["arm", "dra"],
+        "only arm and drain_trace are public"
+    );
+    let fns = seams.matches("fn ").count();
+    assert_eq!(fns, 13, "no further writer or accessor");
+    assert!(!seams.contains("#[used]"), "SB3E-R9");
+    let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
+    let sites = rows.flat_map(|(_, s)| s.split_whitespace());
+    let points = sites.filter_map(|s| s.strip_prefix("at(")?.split(',').next());
+    let mut points: Vec<&str> = points.collect();
+    points.sort_unstable();
+    points.dedup();
+    let listed = seams.split("POINTS: [&str; 35] = [").nth(1).unwrap();
+    let listed = listed.split("];").next().unwrap().split('"');
+    let mut listed: Vec<&str> = listed.skip(1).step_by(2).collect();
+    listed.sort_unstable();
+    assert_eq!(points, listed, "every armable point has its audited site");
+}
+/// SB3E-R15.2, a generated sweep: into every pinned region, at each statement
+/// boundary (`{`, `}`, `;`, `,`) and before each `&&` or `||`, a no-op-looking
+/// insertion. Every mutant must fail that region's pin.
+#[test]
+fn sb3e_route_pins_reject_every_generated_mutant() {
+    let sources = crate_sources();
+    let text = |f: &str| &sources.iter().find(|(n, _)| n == f).unwrap().1;
+    let mut cases = Vec::new();
+    for (file, pin) in PINS {
+        let (tokens, literal, base) = (lex(text(file)), lex(pin), text(file).as_ptr() as usize);
+        let at = tokens
+            .windows(literal.len())
+            .position(|w| w == literal)
+            .unwrap();
+        let last = tokens[at + literal.len() - 1];
+        let (start, end) = (
+            tokens[at].as_ptr() as usize - base,
+            last.as_ptr() as usize - base,
+        );
+        cases.push((file, start..end + last.len(), Some(pin), 0));
+    }
+    let rows = ROUTE_SITES.lines().filter_map(|l| l.split_once(": "));
+    for (file, _) in rows {
+        let (sites, regions) = route_sites(text(file)).unwrap();
+        assert_eq!(sites, audited(file), "{file}: the unmutated baseline");
+        cases.extend(regions.into_iter().map(|(r, edge)| (file, r, None, edge)));
+    }
+    let (regions, mut mutants, mut survivors) = (cases.len(), 0, Vec::new());
+    for (file, range, pin, edge) in cases {
+        let (source, code) = (text(file), mask(text(file)));
+        let b = code.as_bytes();
+        for p in range.start..=range.end {
+            let after = p > 0 && b"{};,".contains(&b[p - 1]);
+            let edge = edge == -1 && p == range.start || edge == 1 && p == range.end;
+            let inside = range.start < p && p < range.end || edge;
+            let operator =
+                p < range.end && (b[p..].starts_with(b"&&") || b[p..].starts_with(b"||"));
+            let inserts = [(after && inside, " let _ = (); "), (operator, " && true ")];
+            for (_, insert) in inserts.into_iter().filter(|i| i.0) {
+                mutants += 1;
+                let mutant = format!("{}{insert}{}", &source[..p], &source[p..]);
+                let caught = match pin {
+                    Some(pin) => pinned(&mutant, pin) != 1,
+                    None => route_sites(&mutant).map(|r| r.0) != Ok(audited(file)),
+                };
+                if !caught {
+                    survivors.push(format!("{file}@{p}:{insert}"));
+                }
+            }
+        }
+    }
+    println!("SB3E-R15.2 sweep: {regions} regions, {mutants} mutants, {survivors:?} survived");
+    assert!(
+        mutants > regions && survivors.is_empty(),
+        "survivors: {survivors:?}"
+    );
+}
 
 // SB-3B frozen oracles: the private R3-R7 call, its actual per-request
 // gates (B1 of SB3B-R1). No public route, SessionPort or host wiring.
