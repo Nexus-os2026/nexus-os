@@ -419,8 +419,9 @@ fn route_armed_panic_begins_an_unwind() {
     });
 }
 
-/// `at` returns `()` and is called only as a statement; a released pause
-/// returns the route's own result, unchanged from the unarmed route's.
+/// `at` returns `()` and is called only as a statement (also guarded in the
+/// standard gate by the site inventory); a released pause returns the
+/// route's own result, unchanged from the unarmed route's.
 #[test]
 fn route_at_cannot_return_into_the_route() {
     let seams = include_str!("../../../../crates/nexus-governed-control/src/broker/route_seams.rs");
