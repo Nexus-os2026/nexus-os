@@ -26,7 +26,7 @@
   {"name": "S3-door", "marker": "nexus-mother-route-seam-S3-door", "source": "crates/nexus-governed-control/src/host_session/route_s3.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
   {"name": "S3-port", "marker": "nexus-mother-route-seam-S3-port", "source": "mother/src/adapter/session_port.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
   {"name": "S4b", "marker": "nexus-mother-route-seam-S4b", "source": "mother/src/coordinator/lite.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
-  {"name": "S5", "marker": "nexus-mother-route-seam-S5", "source": "mother/src/route_seams.rs", "binaries": {"nexus-mother": "reachable", "mother-hands": "reachable"}}
+  {"name": "S5", "marker": "nexus-mother-route-seam-S5", "source": "mother/src/route_seams.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "reachable"}}
  ],
  "ungates": {
   "S1": [
@@ -85,7 +85,7 @@
   {"name": "ungate_and_call_S3_door", "binary": "nexus-mother", "ungate": ["S3"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::SessionDoor>) {\n        s.route_revoke_original_grant();\n    }\n"}], "expect": ["S3-door"]},
   {"name": "ungate_and_call_S3_port", "binary": "mother-hands", "ungate": ["S3"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_mother::adapter::SessionPort>) {\n        s.route_revoke_original_grant();\n    }\n"}], "expect": ["S3-door", "S3-port"]},
   {"name": "ungate_and_call_S4b", "binary": "mother-hands", "ungate": ["S4b"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_mother::coordinator::FileSession<nexus_mother::adapter::SessionPort>>) {\n        s.route_poison_coordinator();\n    }\n"}], "expect": ["S4b"]},
-  {"name": "ungate_S5_sites", "binary": "nexus-mother", "ungate": ["S5"], "edits": [], "expect": ["S5"]},
+  {"name": "ungate_S5_sites", "binary": "mother-hands", "ungate": ["S5"], "edits": [], "expect": ["S5"]},
   {"name": "near_miss_marker_is_not_matched", "binary": "nexus-mother", "ungate": ["S2"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}, {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "const M: &str = \"nexus-mother-route-seam-S2\";", "new": "const M: &str = \"nexus-mother-route-seam-S4-sessiom\";"}], "expect": [], "expect_unknown": ["S4-sessiom"]}
  ]
 }
