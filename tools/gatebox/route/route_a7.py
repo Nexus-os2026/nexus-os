@@ -106,7 +106,7 @@ LOCAL_PACKAGES = {
     "nexus-typed-decision": "crates/nexus-typed-decision/Cargo.toml",
     "nexus-verifier-sandbox": "crates/nexus-verifier-sandbox/Cargo.toml",
 }
-LOCK_PIN = "a42d2d167fe3c01f4c61b4365dcdb0c64f2548ed3c52d16193b702f1d30b000e"
+LOCK_PIN = "333ffb7b9727991faa287b07296ce803be4210dd13ed59d9af1b80b6ca53f773"
 TOOLCHAIN_FILE_PIN = "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
 # The snapshot's only Cargo configuration (build.jobs, [env]); any other or changed one is refused.
 CARGO_CONFIG_PINS = {".cargo/config.toml": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"}
