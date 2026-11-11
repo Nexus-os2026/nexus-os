@@ -52,7 +52,8 @@ export CARGO_TARGET_DIR="$target"
 # a2_check RUSTC TARGET LOG: the compiler invocations that build ran, from
 # Cargo's -v lines, against the plain recipe. Every line of the log is
 # classified: a complete Running line, Compiling, Finished, one of Cargo's
-# download or lock status lines, a warning or rendered diagnostic, or blank;
+# download or lock status lines, a warning or rendered diagnostic (its
+# `-->`, gutter, `= note:`/`= help:` and `...` elision lines), or blank;
 # Fresh, any other line (a split Running line's continuation too), a
 # carriage return and any colour refuse. Each Running line is split into its
 # arguments as Cargo quotes them; quoting that does not close refuses (an
@@ -286,7 +287,7 @@ RECIPE
           /^ +Finished `release` profile \[optimized\] target\(s\) in [0-9][0-9.ms ]*$/ ||
           /^ +(Updating crates\.io index|Downloading crates \.\.\.)$/ || /^ +Downloaded [^ ]+ v[0-9][^ ]*$/ ||
           /^ +Downloaded [0-9]+ crates? \([^)]*\) in [0-9][0-9.ms ]*$/ || /^ +Blocking waiting for file lock on [a-z ]+$/ ||
-          /^warning: / || /^ *--> / || /^ *[0-9]* *\|/ || /^ *= (note|help): /))
+          /^warning: / || /^ *--> / || /^ *[0-9]* *\|/ || /^ *= (note|help): / || /^\.\.\.$/))
         fail("an unclassified line: " text)
     }
     {

@@ -148,9 +148,24 @@ def first(prefix, edit):
     return mutate
 
 
-# name: (mutation of the real clean log's lines, expected reasons); "synthetic_clean" must pass.
+# rustc's rendering of a dead-code warning, as a real build printed it (lines elided with "...").
+RENDERED_WARNING = """warning: function `planted` is never used
+   --> crates/nexus-governed-control/src/planted.rs:106:19
+    |
+105 | impl<'a> Planted<'a> {
+    | ---------------- associated items in this implementation
+...
+113 |     pub(crate) fn planted(self) -> Self {
+    |                   ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-governed-control` (lib) generated 1 warning""".split("\n")
+# name: (mutation of the real clean log's lines, expected reasons); "synthetic_clean" and
+# "synthetic_rendered_warning" (an accepted diagnostic form) must pass.
 SYNTHETIC = {
     "synthetic_clean": (lambda lines: lines, []),
+    "synthetic_rendered_warning": (first("Finished ", lambda x: RENDERED_WARNING + [x]), []),
     "synthetic_fresh": (first("Compiling ", lambda x: [x.replace("Compiling", "    Fresh", 1)]), ["a Fresh unit"]),
     "synthetic_colour": (first("Compiling ", lambda x: ["\x1b[1m" + x + "\x1b[0m"]), ["a colored line"]),
     "synthetic_carriage_return": (first("Finished ", lambda x: [x + "\r"]), ["a carriage return"]),
@@ -196,7 +211,7 @@ def run_synthetic(name, log_lines, rustc, target, work, repo):
     script = "set -uo pipefail\nexport LC_ALL=C\n" + checking_function(repo) + 'a2_check "$1" "$2" "$3"\n'
     run = subprocess.run(["bash", "-c", script, "a2", rustc, target, path], capture_output=True, text=True)
     result = {"control": name, "kind": "synthetic log", "exit": run.returncode, "refusals": run.stdout.splitlines()[:3]}
-    if name == "synthetic_clean":
+    if not expected:
         result["ok"] = run.returncode == 0 and run.stdout == ""
     else:
         result["missing"] = [e for e in expected if e not in run.stdout]
