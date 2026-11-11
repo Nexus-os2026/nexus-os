@@ -957,6 +957,12 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
     let sources = sources();
     let mut found = inventory_findings(&sources);
     found.extend(pins_findings(PIN_DATA));
+    // The plants below are built from the reviewed text; on a changed tree
+    // its findings are reported first, whole, so no plant's own anchor check
+    // can mask them (SB3E-R42.6).
+    if !found.is_empty() {
+        return fail_on(found);
+    }
     let mut misses = Vec::new();
     let seams = "src/route_seams.rs";
     let anchor = "pub use session_close::PreparedSessionEnd;\n";
@@ -1035,6 +1041,12 @@ fn sb3e_s5_module_makes_one_counted_call() {
     let sources = sources();
     let s5 = text(&sources, S5);
     let mut found = s5_findings(s5);
+    // The plants below are built from the reviewed text; on a changed tree
+    // its findings are reported first, whole, so no plant's own anchor check
+    // can mask them (SB3E-R42.6).
+    if !found.is_empty() {
+        return fail_on(found);
+    }
     let sub = |old: &str, new: &str| {
         assert_eq!(s5.matches(old).count(), 1, "{old}");
         s5.replace(old, new)
@@ -1138,6 +1150,12 @@ fn sb3e_mother_pins_reject_every_generated_mutant() {
     );
     if mutants != MUTANTS {
         found.push(format!("G-S2: {mutants} mutants, not {MUTANTS}"));
+    }
+    // The plants below are built from the reviewed text; on a changed tree
+    // its findings are reported first, whole, so no plant's own anchor check
+    // can mask them (SB3E-R42.6).
+    if !found.is_empty() {
+        return fail_on(found);
     }
     let (file, pin) = pins[0];
     let shrunk = pin.trim_end().rsplit_once('\n').map_or("", |s| s.0);
