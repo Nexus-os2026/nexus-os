@@ -928,15 +928,18 @@ fn route_s4b_poisons_the_coordinator_before_its_lock() {
 }
 
 /// SB3E-R39.3: a panicking model call is still counted (`drive_call` counts
-/// before the call). The unwind leaves the call; the driver's count is 1
-/// beside S5 entries, so A.2 item 4 never sees `driver_calls == 0`.
+/// before the call). `mother.recheck` runs inside `ModelCaller::call` on the
+/// lane's own thread (S1's `call.gate` runs on the broker's exchange thread
+/// and does not unwind through the call); armed to panic there, the unwind
+/// leaves the call, and the driver's count is 1 beside S5 entries, so A.2
+/// item 4 never sees `driver_calls == 0`.
 #[test]
 fn route_s5_panicking_call_is_counted() {
     child("s5::route_s5_panicking_call_is_counted", |f| {
         let o = f.open();
         let mother = mother(f, &o);
-        let _s5 = s5::arm("mother.charge", s5::Action::Trace);
-        let held = s1::arm("call.gate", s1::Action::Panic);
+        let _s1 = s1::arm("call.gate", s1::Action::Trace);
+        let held = s5::arm("mother.recheck", s5::Action::Panic);
         s1::drain_trace();
         s5::drain_trace();
         let mut advanced = Ok(());
@@ -947,7 +950,7 @@ fn route_s5_panicking_call_is_counted() {
             }
         }
         let fired = held.acknowledged.try_recv().map(|e| e.point);
-        assert_eq!(fired, Ok("call.gate"), "the call unwound");
+        assert_eq!(fired, Ok("mother.recheck"), "the call unwound");
         assert_eq!(format!("{advanced:?}"), "Err(Poisoned)", "out of the call");
         let (driver, broker, trace) = (mother.driver(&o), s1::drain_trace(), s5::drain_trace());
         assert_eq!(driver.calls, 1, "counted before the call");
