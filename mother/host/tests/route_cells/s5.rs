@@ -242,6 +242,10 @@ struct Expect {
     per_invocation: [(&'static str, usize); 4],
     /// Whether the cell credits a request-level property (A.4 item 5).
     request_level: bool,
+    /// Whether it credits an attempt-level property (never on `bound: no`).
+    attempt_level: bool,
+    /// The multiplicity of each attempt site the profile does not count.
+    multiplicity: [(&'static str, usize); 4],
     /// An S5 site and its S1 neighbours by instant, as (point, ordinal).
     position: Option<(&'static str, Neighbour, Neighbour)>,
 }
@@ -262,6 +266,13 @@ const RECORDED: Expect = Expect {
         ("mother.lane.returned", 1),
     ],
     request_level: true,
+    attempt_level: true,
+    multiplicity: [
+        ("mother.charge.entry", 1),
+        ("mother.charge", 1),
+        ("mother.charge.ok", 1),
+        ("mother.settle", 1),
+    ],
     position: Some((
         "mother.charge.entry",
         ("model.call.admitted", Some(3)),
@@ -305,6 +316,9 @@ type Site = (
 struct Witness {
     run: Option<RunId>,
     claim: Option<(RunId, u32)>,
+    profile: Profile,
+    /// The position site's S1 neighbours, as measured.
+    neighbours: Option<(Neighbour, Neighbour)>,
     sites: Vec<Site>,
 }
 
@@ -316,6 +330,17 @@ fn credit(
     broker: &[s1::Entry],
     mother: &[s5::Entry],
 ) -> Result<Witness, &'static str> {
+    // The expect row itself (SB3E-R40.2).
+    let p = e.profile;
+    if [p.opening, p.recheck, p.classify].iter().any(|n| *n > 1) {
+        return Err("row_counts");
+    }
+    if !p.bound && e.attempt_level {
+        return Err("attempt_level");
+    }
+    if p.call_gate == 0 && e.request_level {
+        return Err("request_level");
+    }
     if d.calls != 1 {
         return Err("driver_calls");
     }
@@ -324,6 +349,11 @@ fn credit(
     }
     if mother.iter().any(|m| m.request != Some(d.request)) {
         return Err("request");
+    }
+    // SB3E-R40.1: every site but `mother.classify` carries an invocation.
+    let bare = |m: &s5::Entry| m.point != "mother.classify" && m.invocation.is_none();
+    if mother.iter().any(bare) {
+        return Err("missing_invocation");
     }
     let both = || {
         broker
@@ -336,7 +366,8 @@ fn credit(
     // A.3: the run bound to the driver's session by broker-owned entries.
     let mine = |b: &&s1::Entry| b.session == Some(d.session);
     let runs = broker.iter().filter(mine).filter(|b| binding(b));
-    let mut runs: Vec<RunId> = runs.filter_map(|b| b.run).collect();
+    let runs: Option<Vec<RunId>> = runs.map(|b| b.run).collect();
+    let mut runs = runs.ok_or("binding_without_run")?;
     runs.sort_unstable();
     runs.dedup();
     if runs.len() > 1 {
@@ -363,9 +394,10 @@ fn credit(
     if openings.len() != e.attempts {
         return Err("attempts");
     }
-    let claim = openings
-        .first()
-        .map(|o| (o.run.unwrap(), o.attempt.unwrap()));
+    let claim = match openings.first() {
+        Some(o) => Some(o.run.zip(o.attempt).ok_or("opening_fields")?),
+        None => None,
+    };
     // A.2 item 5: the path profile, exactly.
     let gates: Vec<&s1::Entry> = broker
         .iter()
@@ -385,6 +417,9 @@ fn credit(
     };
     if profile != e.profile {
         return Err("profile");
+    }
+    if e.multiplicity.iter().any(|(site, n)| count(site) != *n) {
+        return Err("multiplicity");
     }
     // A.4 item 3: invocations, per invocation.
     let recorded = |i: &InvocationId| d.recorded.iter().any(|r| r.1 == *i);
@@ -413,9 +448,12 @@ fn credit(
         }
     }
     // A.3: classify bears no invocation; it is correlated by run alone.
-    let mut classify = mother.iter().filter(|m| m.point == "mother.classify");
-    if classify.any(|m| m.run != run || m.invocation.is_some()) {
+    let classify = || mother.iter().filter(|m| m.point == "mother.classify");
+    if classify().any(|m| m.run != run) {
         return Err("classify_run");
+    }
+    if classify().any(|m| m.invocation.is_some()) {
+        return Err("classify_invocation");
     }
     // A.3 claims; A.4 item 5: request_compared where `call.gate` is positive.
     let mut sites = Vec::new();
@@ -437,15 +475,18 @@ fn credit(
         };
         sites.push((m.point, m.invocation, claims, compared));
     }
-    if e.profile.call_gate == 0 && e.request_level {
-        return Err("request_level");
+    // SB3E-R40.2: a request-level credit needs a compared attempt entry.
+    if e.request_level && !sites.iter().any(|s| s.3 == Some(true)) {
+        return Err("no_compared");
     }
     // A.4 item 6: position, evidence only, through the run-to-session map.
+    let mut neighbours = None;
     if let Some((site, before, after)) = e.position {
-        let at = mother
-            .iter()
-            .find(|m| m.point == site)
-            .ok_or("position_site")?;
+        let mut named = mother.iter().filter(|m| m.point == site);
+        let at = named.next().ok_or("position_site")?;
+        if named.next().is_some() {
+            return Err("position_repeated");
+        }
         let ours =
             |b: &&s1::Entry| mine(b) || (b.session.is_none() && b.run.is_some() && b.run == run);
         let ours: Vec<&s1::Entry> = broker.iter().filter(ours).collect();
@@ -464,8 +505,15 @@ fn credit(
         if key(prev) != Some(before) || key(next) != Some(after) {
             return Err("neighbour");
         }
+        neighbours = Some((before, after));
     }
-    Ok(Witness { run, claim, sites })
+    Ok(Witness {
+        run,
+        claim,
+        profile,
+        neighbours,
+        sites,
+    })
 }
 
 /// The recorded path: the driver's facts and both traces, from Done.
@@ -502,7 +550,14 @@ fn route_s5_recorded_path_is_measured_and_credited() {
             let expected = match *site {
                 "mother.classify" => (None, Some((run, 1)), Some(true)),
                 _ if attempt => (model, Some((run, 1)), Some(true)),
-                _ => (*invocation, None, None),
+                _ => {
+                    let ours = |i: InvocationId| driver.recorded.iter().any(|r| r.1 == i);
+                    assert!(
+                        invocation.is_some_and(ours),
+                        "{site}: a recorded invocation"
+                    );
+                    (*invocation, None, None)
+                }
             };
             assert_eq!((*invocation, *claim, *compared), expected, "{site}");
             let domain = if attempt { "attempt" } else { "session" };
@@ -515,6 +570,14 @@ fn route_s5_recorded_path_is_measured_and_credited() {
             driver.calls,
             driver.recorded.len()
         );
+        let (p, claim) = (witness.profile, witness.claim);
+        println!(
+            "WITNESS profile {p:?} run={run} attempt={:?}",
+            claim.map(|c| c.1)
+        );
+        let (site, ..) = RECORDED.position.unwrap();
+        let neighbours = witness.neighbours;
+        println!("WITNESS position {site} between {neighbours:?}");
     });
 }
 
@@ -549,7 +612,7 @@ fn route_s5_join_plants_each_refuse() {
             scripted,
             unknown,
         };
-        let plants: [Plant; 26] = [
+        let plants: [Plant; 38] = [
             ("two calls", "driver_calls", |c| c.d.calls = 2),
             ("no call with S5 entries", "driver_calls", |c| c.d.calls = 0),
             ("wrong session", "session", |c| {
@@ -565,11 +628,13 @@ fn route_s5_join_plants_each_refuse() {
                 c.b("attempt.slot").run = Some(c.other)
             }),
             ("binding on bound: no", "binding_on_unbound", |c| {
-                c.e.profile.bound = false
+                c.e.profile.bound = false;
+                c.e.attempt_level = false;
             }),
             ("opening on bound: no", "opening_on_unbound", |c| {
                 c.b.retain(|x| !binding(x));
                 c.e.profile.bound = false;
+                c.e.attempt_level = false;
             }),
             ("opening off the run", "opening_run", |c| {
                 c.b("model.attempt.granted").run = Some(c.other)
@@ -601,13 +666,24 @@ fn route_s5_join_plants_each_refuse() {
             ("not the model lane's", "not_model_invocation", |c| {
                 c.m("mother.charge").invocation = Some(c.scripted)
             }),
-            ("session-only made to claim", "per_invocation", |c| {
+            ("session-only made to claim", "multiplicity", |c| {
                 let (point, builder) = ("mother.lane.prelock", Some(c.builder));
                 let at =
                     c.m.iter()
                         .position(|e| e.point == point && e.invocation == builder);
                 c.m[at.unwrap()].point = "mother.charge.ok";
             }),
+            (
+                "a session-only site's count per invocation",
+                "per_invocation",
+                |c| {
+                    let (point, builder) = ("mother.lane.prelock", Some(c.builder));
+                    let at =
+                        c.m.iter()
+                            .position(|e| e.point == point && e.invocation == builder);
+                    c.m[at.unwrap()].point = "mother.admit.ok";
+                },
+            ),
             ("classify on another run", "classify_run", |c| {
                 c.m("mother.classify").run = Some(c.other)
             }),
@@ -627,16 +703,61 @@ fn route_s5_join_plants_each_refuse() {
                 c.b("call.gate").attempt = Some(2)
             }),
             ("no position site", "position_site", |c| {
-                c.m.retain(|e| e.point != "mother.charge.entry")
+                c.m.retain(|e| e.point != "mother.charge.entry");
+                c.e.multiplicity[0].1 = 0;
             }),
             ("tie", "tie", |c| {
                 let instant = c.m("mother.charge.entry").instant;
                 let gate = c.b.iter().rposition(|e| e.point == "call.gate").unwrap();
                 c.b[gate].instant = instant;
             }),
-            ("wrong invocation, classify", "classify_run", |c| {
+            ("wrong invocation, classify", "classify_invocation", |c| {
                 c.m("mother.classify").invocation = Some(c.builder)
             }),
+            // SB3E-R40.1 and R40.2, R40.5: each new rule's own plant.
+            (
+                "invocation removed, attempt site",
+                "missing_invocation",
+                |c| c.m("mother.charge").invocation = None,
+            ),
+            (
+                "invocation removed, session-only",
+                "missing_invocation",
+                |c| c.m("mother.admit").invocation = None,
+            ),
+            ("row count 2", "row_counts", |c| c.e.profile.recheck = 2),
+            ("attempt-level on bound: no", "attempt_level", |c| {
+                c.e.profile.bound = false
+            }),
+            ("request-level, nothing compared", "no_compared", |c| {
+                c.m.retain(|e| !ATTEMPT.contains(&e.point));
+                (c.e.profile.recheck, c.e.profile.classify) = (0, 0);
+                c.e.multiplicity.iter_mut().for_each(|m| m.1 = 0);
+            }),
+            ("second charge", "multiplicity", |c| {
+                let again = c.m("mother.charge").clone();
+                c.m.push(again);
+            }),
+            ("position site repeated", "position_repeated", |c| {
+                let (_, before, after) = c.e.position.unwrap();
+                c.e.position = Some(("mother.lane.prelock", before, after));
+            }),
+            ("binding entry without a run", "binding_without_run", |c| {
+                c.b("attempt.slot").run = None
+            }),
+            ("opening without an attempt", "opening_fields", |c| {
+                c.b("model.attempt.granted").attempt = None
+            }),
+            (
+                "classify on another run, no invocation",
+                "classify_run",
+                |c| c.m("mother.classify").run = None,
+            ),
+            (
+                "request-level, call.gate 0 row only",
+                "request_level",
+                |c| c.e.profile.call_gate = 0,
+            ),
         ];
         for (name, reason, plant) in plants {
             let mut c = case.clone();
@@ -674,14 +795,41 @@ impl Case {
 
 /// S5's pause timeout (design 3.3): the harness writes the line to this
 /// child's result file and aborts; S5 itself touches no host resource.
+/// Without a child root it aborts without writing.
 fn timeout(line: &str) -> ! {
     use std::io::Write;
-    let root = PathBuf::from(std::env::var_os(CHILD).unwrap_or_default());
+    let Some(root) = std::env::var_os(CHILD).map(PathBuf::from) else {
+        std::process::abort() // SB3E-R40.5: never relative to the cwd.
+    };
     let mut open = std::fs::OpenOptions::new();
     if let Ok(mut result) = open.create(true).append(true).open(root.join("result")) {
         let _ = writeln!(result, "{line}");
     }
     std::process::abort()
+}
+
+/// SB3E-R40.5: without a child root, the harness `timeout` aborts and
+/// writes nothing, so no result file appears relative to the cwd.
+#[test]
+fn route_s5_timeout_without_a_child_root_writes_nothing() {
+    const NO_ROOT: &str = "SB3E_ROUTE_NO_ROOT";
+    if std::env::var_os(NO_ROOT).is_some() {
+        timeout("TIMEOUT u4a2 no-root");
+    }
+    let name = "s5::route_s5_timeout_without_a_child_root_writes_nothing";
+    let cwd = std::env::temp_dir().join(format!("sb3e-route-{}-no-root", std::process::id()));
+    std::fs::DirBuilder::new().mode(0o700).create(&cwd).unwrap();
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture", "--test-threads=1"])
+        .env_remove(CHILD)
+        .env(NO_ROOT, "1")
+        .current_dir(&cwd)
+        .output()
+        .unwrap();
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(out.status.signal(), Some(6), "aborted");
+    let written: Vec<_> = std::fs::read_dir(&cwd).unwrap().collect();
+    assert!(written.is_empty(), "nothing written: {written:?}");
 }
 
 /// One `mother.*` point, paused: acknowledged with the driver's session,
@@ -705,8 +853,12 @@ fn route_s5_pause_release_and_panic_at_one_point() {
             assert_eq!(entry.session, Some(o.session.identity()));
             assert_eq!(entry.request, Some(mother.request));
             assert_eq!(entry.invocation, recorded.last().map(|r| r.1));
+            // SB3E-R40.5: held, by readiness. The release is still unsent;
+            // the held point is the trace's last entry and no later route
+            // entry, nor its LaneReturned, exists.
             let held_at = journaled();
-            std::thread::sleep(Duration::from_millis(200)); // Must stay held.
+            let trace = s5::drain_trace();
+            assert_eq!(trace.last().map(|e| e.tick), Some(entry.tick), "{trace:?}");
             assert!(!advancing.is_finished(), "the route is held");
             assert_eq!(journaled(), held_at, "held before its LaneReturned");
             drop(held);
