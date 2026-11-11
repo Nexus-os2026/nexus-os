@@ -1658,7 +1658,7 @@ commitment)); self.known.take(&Row {
 #[cfg(mother_route_seams)] #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum RouteLock {
 ModelState, EvidenceInner, RunTable, Pending, Producers, Actions, }
 #[cfg(mother_route_seams)] impl HostSession { pub fn route_poison(&self, lock: RouteLock) {
-const M: &str = "nexus-mother-route-seam-S4"; std::hint::black_box(M.as_bytes()); fn poison<T>(
+const M: &str = "nexus-mother-route-seam-S4-session"; std::hint::black_box(M.as_bytes()); fn poison<T>(
 mutex: &std::sync::Mutex<T>) { let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
 { let _held = mutex.lock(); panic!("route seam S4: session lock poisoned"); })); } match lock {
 RouteLock::ModelState => poison(&self.core.model.state), RouteLock::EvidenceInner => self.
@@ -1697,6 +1697,15 @@ catch_unwind(std::panic::AssertUnwindSafe(|| { let _held = self.runs.lock(); pan
 /// AM-2 B.2: every S4 name, by file, as a definition (`fn`) or a call, with
 /// its enclosing items: the two `route_poison_inner` are told apart by type
 /// and file, and each function has exactly its one caller.
+/// Every route seam marker in the crate, each exactly once (SB3E-R32.5).
+const ROUTE_MARKERS: [&str; 6] = [
+    "nexus-mother-route-seam-S1",
+    "nexus-mother-route-seam-S2",
+    "nexus-mother-route-seam-S4-session",
+    "nexus-mother-route-seam-S4-evidence",
+    "nexus-mother-route-seam-S4-store",
+    "nexus-mother-route-seam-S4-runs",
+];
 const S4_SITES: [&str; 7] = [
     "authority/run.rs: fn route_poison_runs < implRunRegistry{",
     "evidence_store.rs: fn route_poison_inner < implEvidenceStore{",
@@ -1805,8 +1814,11 @@ fn route_sites(source: &str) -> Result<(Vec<String>, Regions), String> {
             return Err(format!("call shape at byte {at}"));
         }
         let statement = flat(&lex(&source[at..=end])).replacen("route_seams::", "", 1);
-        // No enclosing statement or item carries a cfg of its own; each
-        // enclosing level is pinned as its attributes and header.
+        // No enclosing statement or item carries a cfg of its own, except
+        // exactly `#[cfg(mother_route_seams)]` (SB3E-R32.4: the R30.4
+        // `store.refused` note sits inside the seam-only S2 block), admitted
+        // into the audited chain; the site still needs its own attribute.
+        // Each enclosing level is pinned as its attributes and header.
         let own = header(&code, prior.len()..end + 1).0;
         let (mut gated, mut chain) = (own != [ROUTE], Vec::new());
         for range in enclosing(&code, at) {
@@ -1983,6 +1995,10 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
             "fn f() { #[cfg(mother_route_seams)] #[cfg(test)] {",
         )
         .replace(");\n}", ");\n} }"),
+        // SB3E-R32.4: a site without its own attribute inside a ROUTE block.
+        sub("    #[cfg(mother_route_seams)]\n", "")
+            .replace("fn f() {", "fn f() { #[cfg(mother_route_seams)] if a {")
+            .replace(");\n}", ");\n} }"),
     ]
     .into_iter()
     .chain(spelled)
@@ -2058,6 +2074,20 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
         S4_SITES,
         "AM-2 B.2: the S4 functions and callers"
     );
+    // SB3E-R32.5: every route marker is its own; none is a substring of
+    // another, so a scan for one never reports another.
+    let markers: Vec<String> = sources
+        .iter()
+        .filter(|(file, _)| file != "host_session/model_call_tests.rs")
+        .flat_map(|(_, s)| s.split("\"nexus-mother-route-seam").skip(1))
+        .map(|rest| format!("nexus-mother-route-seam{}", rest.split('"').next().unwrap()))
+        .collect();
+    assert_eq!(markers.len(), ROUTE_MARKERS.len(), "{markers:?}");
+    for marker in &markers {
+        assert!(ROUTE_MARKERS.contains(&marker.as_str()), "{marker}");
+        let within = markers.iter().filter(|m| m.contains(marker.as_str()));
+        assert_eq!(within.count(), 1, "{marker}: within another marker");
+    }
     let append = tokens
         .windows(5)
         .position(|w| w == ["fn", "append", "(", "&", "mut"]);
