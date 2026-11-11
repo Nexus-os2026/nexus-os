@@ -774,3 +774,83 @@ fn route_s4b_poisons_the_coordinator_before_its_lock() {
         },
     );
 }
+
+/// SB3E-R39.3: a panicking model call is still counted (`drive_call` counts
+/// before the call). The unwind leaves the call; the driver's count is 1
+/// beside S5 entries, so A.2 item 4 never sees `driver_calls == 0`.
+#[test]
+fn route_s5_panicking_call_is_counted() {
+    child("s5::route_s5_panicking_call_is_counted", |f| {
+        let o = f.open();
+        let mother = mother(f, &o);
+        let _s5 = s5::arm("mother.charge", s5::Action::Trace);
+        let held = s1::arm("call.gate", s1::Action::Panic);
+        s1::drain_trace();
+        s5::drain_trace();
+        let mut advanced = Ok(());
+        for _ in 0..8 {
+            advanced = mother.m.advance(mother.id).map(|_| ());
+            if advanced.is_err() {
+                break;
+            }
+        }
+        let fired = held.acknowledged.try_recv().map(|e| e.point);
+        assert_eq!(fired, Ok("call.gate"), "the call unwound");
+        assert_eq!(format!("{advanced:?}"), "Err(Poisoned)", "out of the call");
+        let (driver, broker, trace) = (mother.driver(&o), s1::drain_trace(), s5::drain_trace());
+        assert_eq!(driver.calls, 1, "counted before the call");
+        let entry = trace.iter().any(|e| e.point == "mother.charge.entry");
+        assert!(entry, "S5 entries of the call");
+        let uncounted = Driver {
+            calls: 0,
+            ..driver.clone()
+        };
+        let refused = credit(&uncounted, &RECORDED, &broker, &trace).err();
+        assert_eq!(refused, Some("driver_calls"), "A.2 item 4");
+        let measured = credit(&driver, &RECORDED, &broker, &trace).err();
+        assert_ne!(measured, Some("driver_calls"));
+        println!(
+            "WITNESS panic driver_calls={} s5={}",
+            driver.calls,
+            trace.len()
+        );
+    });
+}
+
+/// SB3E-R39.1: an unreleased pause times out. After S5's 10 s patience the
+/// harness's `timeout` writes `TIMEOUT <cell> <point>` and aborts; the route
+/// never resumes.
+#[test]
+fn route_s5_unreleased_pause_times_out_and_aborts() {
+    let name = "s5::route_s5_unreleased_pause_times_out_and_aborts";
+    if let Some(root) = std::env::var_os(CHILD) {
+        let f = Fixture(PathBuf::from(root));
+        let o = f.open();
+        let mother = mother(&f, &o);
+        mother.m.advance(mother.id).unwrap(); // To Investigating: no lane yet.
+        let (cell, timeout) = ("u4a3", timeout as s5::Timeout);
+        let _held = s5::arm("mother.lane.prelock", s5::Action::Pause { cell, timeout });
+        let resumed = mother.m.advance(mother.id);
+        return println!("ROUTE CHILD RESUMED {name} {resumed:?}");
+    }
+    let root = std::env::temp_dir().join(format!("sb3e-route-{}-timeout", std::process::id()));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let started = Instant::now();
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture", "--test-threads=1"])
+        .env(CHILD, &root)
+        .output()
+        .unwrap();
+    let elapsed = started.elapsed();
+    let result = std::fs::read_to_string(root.join("result")).unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(out.status.signal(), Some(6), "aborted: {stdout}");
+    assert_eq!(result, "TIMEOUT u4a3 mother.lane.prelock\n");
+    assert!(!stdout.contains("ROUTE CHILD RESUMED"), "{stdout}");
+    assert!(elapsed >= PATIENCE, "after its patience: {elapsed:?}");
+    println!("WITNESS timeout {result:?} after {elapsed:?}");
+}
