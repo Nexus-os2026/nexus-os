@@ -127,6 +127,8 @@ def keys(value, prefix=""):
 
 def config_findings(repo):
     out = []
+    if not os.path.lexists(os.path.join(repo, ".cargo", "config.toml")):
+        out.append(f("config", path=os.path.join(".cargo", "config.toml"), reason="missing (it is pinned)"))
     for directory, dirs, names in os.walk(repo):
         dirs[:] = sorted(x for x in dirs if x != ".git")
         for name in sorted(names + dirs):
