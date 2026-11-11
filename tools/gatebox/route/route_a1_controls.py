@@ -6,7 +6,8 @@ tree's tracked files into its own directory, plants one difference and runs
 route_a1.py on that real repository copy. It passes only if A1 fails and
 reports each of the control's expected findings; the unplanted baseline must
 pass. Plants that need a new lock entry refresh the copy's Cargo.lock
-offline, so the specific findings are reported beside the lock's.
+offline, so the specific findings are reported beside the lock's. Each
+result names the git tree hash of its copy before the plant.
 """
 import argparse
 import json
@@ -70,6 +71,11 @@ CONTROLS = {
     "legacy_config_beside_config_toml": (
         lambda t: write(t, ".cargo/config", f"[build]\nrustflags = {CFG}\n"), False,
         [("config", "path", ".cargo/config"), ("config", "sets", "build.rustflags")]),
+    "legacy_config_setting_a_wrapper": (
+        lambda t: write(t, ".cargo/config", '[build]\nrustc-wrapper = "/usr/bin/env"\n'), False,
+        [("config", "path", ".cargo/config"), ("config", "sets", "build.rustc-wrapper")]),
+    "root_config_toml_deleted": (lambda t: os.remove(os.path.join(t, ".cargo", "config.toml")), False,
+                                 [("config", "reason", "missing (it is pinned)")]),
     "nested_rustc_wrapper": (lambda t: write(t, "mother/host/.cargo/config.toml", '[build]\nrustc-wrapper = "/usr/bin/env"\n'),
                              False, [("config", "sets", "build.rustc-wrapper")]),
     "nested_rustc_workspace_wrapper": (
@@ -100,10 +106,19 @@ def reported(findings, kind, field, substring):
     return False
 
 
+def tree_hash(tree, git_dir):
+    """The git tree hash of a copy, through its own git directory (never the shared one)."""
+    subprocess.run(["git", "init", "-q", "--bare", git_dir], check=True)
+    git = ["git", f"--git-dir={git_dir}", f"--work-tree={tree}"]
+    subprocess.run(git + ["add", "-A", "-f", "."], cwd=tree, check=True)
+    return subprocess.run(git + ["write-tree"], capture_output=True, text=True, check=True).stdout.strip()
+
+
 def run_control(name, source, files, work, toolchain, env):
     plant, relock, expected = CONTROLS[name]
     tree = os.path.join(work, name)
     copy(source, files, tree)
+    before = tree_hash(tree, os.path.join(work, name + ".git"))
     plant(tree)
     if relock:
         bin_dir = os.path.join(toolchain, "bin")
@@ -119,7 +134,8 @@ def run_control(name, source, files, work, toolchain, env):
     else:
         ok = run.returncode == 1 and result["verdict"] == "fail" and not missing
     shutil.rmtree(tree)
-    return {"control": name, "ok": ok, "exit": run.returncode, "missing": missing,
+    shutil.rmtree(os.path.join(work, name + ".git"))
+    return {"control": name, "ok": ok, "tree": before, "exit": run.returncode, "missing": missing,
             "reported": sorted({(x["kind"], x.get("reason", x.get("resolve", ""))) for x in result["findings"]})}
 
 
@@ -140,7 +156,10 @@ def main():
     for result in results:
         print(json.dumps(result, sort_keys=True))
     failed = [r["control"] for r in results if not r["ok"]]
-    print(json.dumps({"controls": len(results), "failed": failed}))
+    head_tree = subprocess.run(["git", "-C", source, "rev-parse", "HEAD^{tree}"], capture_output=True, text=True,
+                               check=True).stdout.strip()
+    print(json.dumps({"controls": len(results), "failed": failed, "head_tree": head_tree,
+                      "trees_match_head": all(r["tree"] == head_tree for r in results)}))
     return 1 if failed else 0
 
 
