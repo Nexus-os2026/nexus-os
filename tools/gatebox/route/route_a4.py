@@ -2,6 +2,8 @@
 """SB-3E A4 (design section 5 row A4; SB3E-R30.4, R33.3): the installed artifact.
 
 Runs beside `mother/desktop/install.sh`, never inside it (Step 0 section 9).
+The binary and its installing script are the one route_seams.json binary
+whose `shipped` names a script (today nexus-mother, mother/desktop/install.sh).
 
   run --repo R --toolchain T --work DIR
       `bash mother/desktop/install.sh`, the script's exact command, with a
@@ -38,7 +40,15 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BINARY = "nexus-mother"
+
+
+def shipped(repo):
+    """The one binary route_seams.json names as shipped, and its installing script."""
+    with open(os.path.join(repo, "tools/gatebox/route/route_seams.json"), encoding="utf-8") as handle:
+        found = [(n, b["shipped"]) for n, b in json.load(handle)["binaries"].items() if b["shipped"]]
+    if len(found) != 1:
+        sys.exit("route_a4: route_seams.json must name exactly one shipped binary")
+    return found[0]
 # The deliberate break: a match tested one byte past each stem.
 BREAK = ("blob.startswith(s[\"marker\"].encode(), at)", "blob.startswith(s[\"marker\"].encode(), at + 1)")
 
@@ -59,7 +69,7 @@ def env_block(toolchain, extra=None):
 
 
 def a2_function(repo):
-    lines = open(os.path.join(repo, "mother/desktop/install.sh"), encoding="utf-8").read().split("\n")
+    lines = open(os.path.join(repo, shipped(repo)[1]), encoding="utf-8").read().split("\n")
     start = lines.index("a2_check() {")
     return "\n".join(lines[start:lines.index("}", start) + 1]) + "\n"
 
@@ -92,7 +102,7 @@ def cfg_set(wrapper_log):
 
 
 def scan(tool, repo, path):
-    run = subprocess.run(["/usr/bin/python3", "-I", tool, "scan", "--repo", repo, "--binary", f"{BINARY}={path}"],
+    run = subprocess.run(["/usr/bin/python3", "-I", tool, "scan", "--repo", repo, "--binary", f"{shipped(repo)[0]}={path}"],
                          capture_output=True, text=True)
     return json.loads(run.stdout)
 
@@ -101,11 +111,12 @@ def run_a4(repo, toolchain, work):
     home, parent = os.path.join(work, "home"), os.path.join(work, "parent")
     os.makedirs(home)
     env = env_block(toolchain, {"HOME": home, "CARGO_TARGET_DIR": parent})
-    run = subprocess.run(["bash", os.path.join(repo, "mother/desktop/install.sh")], cwd=work, env=env,
+    binary, script = shipped(repo)
+    run = subprocess.run(["bash", os.path.join(repo, script)], cwd=work, env=env,
                          stdin=subprocess.DEVNULL, capture_output=True, text=True)
     printed = dict(x.split(":", 1) for x in run.stdout.splitlines() if ":" in x)
     printed = {k.strip(): v.strip() for k, v in printed.items()}
-    installed, log = os.path.join(home, ".local/bin", BINARY), os.path.join(parent, "nexus-mother-install.log")
+    installed, log = os.path.join(home, ".local/bin", binary), os.path.join(parent, "nexus-mother-install.log")
     findings, out = [], {"exit": run.returncode, "printed": printed}
     if run.returncode != 0 or printed.get("installed") != installed or printed.get("a2 log") != log:
         findings.append({"kind": "install_failed", "stderr_tail": run.stderr.strip().splitlines()[-5:]})
@@ -147,7 +158,7 @@ def planted_run(repo, toolchain, work):
     os.makedirs(work)
     tree, tree_id = scratch_copy(repo, work)
     data = json.load(open(os.path.join(tree, "tools/gatebox/route/route_seams.json"), encoding="utf-8"))
-    spec = next(c for c in data["controls"] if c["binary"] == BINARY and c["expect"])
+    spec = next(c for c in data["controls"] if c["binary"] == shipped(tree)[0] and c["expect"])
     for e in [e for g in spec["ungate"] for e in data["ungates"][g]] + spec["edits"]:
         path = os.path.join(tree, e["file"])
         text = open(path, encoding="utf-8").read()
@@ -165,7 +176,8 @@ def build_positive(repo, toolchain, work, wrapper):
     tree, tree_id = scratch_copy(repo, work)
     target = os.path.join(work, "target")
     census = subprocess.run(["/usr/bin/python3", "-I", os.path.join(HERE, "route_a3.py"), "build", "--repo", tree,
-                             "--toolchain", toolchain, "--target", target, "--wrapper", wrapper, "--only", BINARY],
+                             "--toolchain", toolchain, "--target", target, "--wrapper", wrapper,
+                             "--only", shipped(tree)[0]],
                             env=env_block(toolchain), capture_output=True, text=True)
     return tree, tree_id, target, json.loads(census.stdout)
 
@@ -173,15 +185,18 @@ def build_positive(repo, toolchain, work, wrapper):
 def controls(repo, toolchain, work, wrapper):
     os.makedirs(work)
     tree, tree_id, target, census = build_positive(repo, toolchain, work, wrapper)
-    binary = os.path.join(target, "release", BINARY)
+    name = shipped(tree)[0]
+    own = os.path.join(target, name)
+    binary = os.path.join(own, "release", name)
     findings, out = [], {"tree": tree_id}
-    log = open(f"{target}.a3-{BINARY}.log", encoding="utf-8").read() if os.path.isfile(binary) else ""
-    bin_line = [x for x in log.splitlines() if "--crate-name nexus_mother " in x and "mother/desktop/src/main.rs" in x]
+    log = open(f"{own}.a3.log", encoding="utf-8").read() if os.path.isfile(binary) else ""
+    crate = name.replace("-", "_")
+    bin_line = [x for x in log.splitlines() if f" --crate-name {crate} " in x and " --crate-type bin " in x]
     stripped = section_names(binary) if os.path.isfile(binary) else None
     out["release"] = {"bin_lines": len(bin_line), "thin_lto": bool(bin_line) and " -C lto=thin " in bin_line[0],
                       "strip_symbols": bool(bin_line) and " -C strip=symbols " in bin_line[0],
                       "symtab": stripped is None or ".symtab" in stripped,
-                      "cfg_set": cfg_set(f"{target}.route_rustc.log")}
+                      "cfg_set": cfg_set(f"{own}.route_rustc.log")}
     real = scan(os.path.join(HERE, "route_a3.py"), tree, binary) if os.path.isfile(binary) else {"results": []}
     rows = real["results"][0]["seams"] if real["results"] else []
     reachable = [r["seam"] for r in rows if r["disposition"] == "reachable"]

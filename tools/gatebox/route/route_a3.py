@@ -11,7 +11,8 @@ change. Subcommands:
       its seam's `const M: &str` line in the named source, exactly once; every
       stem token in route source is a listed marker; every seam names every
       binary as `reachable` or `unwired`; the binaries are exactly the route
-      packages' bin targets (cargo metadata).
+      packages' bin targets (cargo metadata); exactly one binary's `shipped`
+      names an existing file (the installing script), every other is null.
   scan --repo R --binary NAME=PATH ...
       The marker scan of real binaries. Matching is delimiter-safe: at every
       occurrence of the stem, at most one marker can begin (they are
@@ -20,7 +21,8 @@ change. Subcommands:
   build --repo R --toolchain T --target DIR [--wrapper W] [--only NAME]
       Each binary built from clean by its own plain recipe (`cargo build
       --release --locked -p PACKAGE --bin NAME`, the shipped release profile:
-      strip=symbols, ThinLTO), in a fresh target, then scanned. Without
+      strip=symbols, ThinLTO) in its own fresh target DIR/NAME (DIR must not
+      exist), then scanned. Without
       --wrapper (the shipped configuration) any marker or unknown stem fails.
       With --wrapper (the route lane's wrapper, which sets the cfg on the
       route units) it is the census: the markers present must be exactly the
@@ -98,6 +100,9 @@ def check_data(repo, toolchain):
                 for unlisted in sorted(found - set(markers.values())):
                     out.append({"kind": "source", "path": os.path.relpath(path, repo), "token": unlisted,
                                 "reason": "a stem token that is no listed marker"})
+    shipped = [b["shipped"] for b in binaries.values() if b["shipped"] is not None]
+    if len(shipped) != 1 or not os.path.isfile(os.path.join(repo, shipped[0])):
+        out.append({"kind": "data", "reason": "not exactly one binary shipped by an existing script"})
     have = bin_targets(repo, toolchain, {b["package"] for b in binaries.values()} | set(data["route_packages"]))
     want = {(name, b["package"]) for name, b in binaries.items()}
     if have is None:
@@ -155,14 +160,16 @@ def build(repo, toolchain, target, wrapper, only):
     data = load(repo)
     if os.path.lexists(target):
         return [{"kind": "target_not_fresh", "target": target}], []
-    extra = {"CARGO_TARGET_DIR": target}
-    if wrapper:
-        extra["RUSTC_WORKSPACE_WRAPPER"] = wrapper
+    os.makedirs(target)
     findings, results = [], []
     for name, spec in sorted(data["binaries"].items()):
         if only and name not in only:
             continue
-        log = f"{target}.a3-{name}.log"
+        own = os.path.join(target, name)
+        extra = {"CARGO_TARGET_DIR": own}
+        if wrapper:
+            extra["RUSTC_WORKSPACE_WRAPPER"] = wrapper
+        log = f"{own}.a3.log"
         with open(log, "w", encoding="utf-8") as handle:
             run = subprocess.run([os.path.join(toolchain, "bin", "cargo"), "build", "--release", "--locked", "-v",
                                   "--color", "never", "-p", spec["package"], "--bin", name], cwd=repo,
@@ -170,7 +177,7 @@ def build(repo, toolchain, target, wrapper, only):
         if run.returncode != 0:
             findings.append({"kind": "build_failed", "binary": name, "log": log})
             continue
-        result = scan(data, name, os.path.join(target, "release", name))
+        result = scan(data, name, os.path.join(own, "release", name))
         results.append(dict(result, log=log))
         findings += census_findings(result) if wrapper else absence_findings(result)
     return findings, results

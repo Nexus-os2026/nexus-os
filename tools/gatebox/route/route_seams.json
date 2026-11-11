@@ -6,7 +6,8 @@
   "Per binary, 'reachable' means the marker survives a real release build with the cfg set (census);",
   "'unwired' proves nothing and rests on A5/A6. U17 and later may only move a seam to 'reachable'.",
   "ungates: exact edits removing a seam's cfg gates. controls: an ungate set plus a call on a path",
-  "reachable from the binary's entry; a real link of that binary must report each `expect` seam."
+  "reachable from the binary's entry; a real link of that binary must report each `expect` seam.",
+    "binaries: `shipped` names the script that installs the binary (A4 scans that binary), or null."
  ],
  "stem": "nexus-mother-route-seam-",
  "route_packages": ["nexus-governed-control", "nexus-mother", "nexus-mother-host", "nexus-mother-desktop"],
@@ -53,6 +54,7 @@
   {"name": "ungate_and_call_S4_evidence", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::EvidenceInner);\n    }\n"}], "expect": ["S4-evidence"]},
   {"name": "ungate_and_call_S4_store", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::EvidenceInner);\n    }\n"}], "expect": ["S4-store"]},
   {"name": "ungate_and_call_S4_runs", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::RunTable);\n    }\n"}], "expect": ["S4-runs"]},
+  {"name": "ungate_and_call_S2_mother_hands", "binary": "mother-hands", "ungate": ["S2"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}], "expect": ["S2"]},
   {"name": "near_miss_marker_is_not_matched", "binary": "nexus-mother", "ungate": ["S2"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}, {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "const M: &str = \"nexus-mother-route-seam-S2\";", "new": "const M: &str = \"nexus-mother-route-seam-S4-sessiom\";"}], "expect": [], "expect_unknown": ["S4-sessiom"]}
  ]
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/python3 -I
 """SB-3E A3 controls (design section 5 row A3; SB3E-R28.1, R33.3).
 
-`--source TREE --work DIR --toolchain DIR [--wrapper PATH] [--jobs N]`. Each
+`--source TREE --work DIR --toolchain DIR --wrapper PATH [--jobs N]`. Each
 control copies the source tree's tracked files to its own directory and
 records that copy's git tree hash (through its own git directory) before any
 edit. Every edit is exact: its text must occur once, and each edited file's
@@ -9,16 +9,19 @@ sha256 is recorded before and after.
 
 - baseline: route_a3 `build` of every binary in the shipped configuration
   must pass (no marker, no unknown stem).
-- census (with --wrapper, the route lane's wrapper): the markers surviving a
-  real release build with the cfg set must be exactly each binary's
-  `reachable` seams, so every disposition in the data is measured.
+- census (--wrapper, the route lane's wrapper, is required: the census is
+  the only measurement of the dispositions): the markers surviving a real
+  release build with the cfg set must be exactly each binary's `reachable`
+  seams.
 - every control in route_seams.json: its ungate sets and edits (a call on a
   path reachable from the binary's entry), a real link of that binary, and
   the scan must report each `expect` seam (and, for `expect_unknown`, report
   no seam at all and an unknown stem beginning with each given text).
 - data controls (no build): `check-data` must pass on the copy as it is and
-  refuse a marker that is a substring of another, an unlisted marker in
-  route source, and an unlisted bin target in a route package.
+  refuse each planted defect: a duplicate seam name, a bad marker format, a
+  marker that is a substring of another, a binary named in no disposition, a
+  marker not defined exactly once in its source, an unlisted marker in route
+  source, an unlisted bin target in a route package, and no shipped binary.
 Adding a seam needs only data: its row, its ungate set and its control.
 """
 import argparse
@@ -133,12 +136,11 @@ def run_control(spec, ctx):
     return result
 
 
-def plant_seam_row(marker):
+def plant_data(mutate):
     def change(tree):
         path = os.path.join(tree, DATA)
         data = json.load(open(path, encoding="utf-8"))
-        row = dict(data["seams"][0], name="planted", marker=marker)
-        data["seams"].append(row)
+        mutate(data)
         before = sha256_file(path)
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(data, handle)
@@ -156,17 +158,40 @@ def append_to(rel, text):
     return change
 
 
-def controls(data, wrapper):
+def add_row(**fields):
+    return lambda data: data["seams"].append(dict(data["seams"][0], **fields))
+
+
+def drop_disposition(data):
+    data["seams"][0]["binaries"].pop(sorted(data["binaries"])[0])
+
+
+def unship(data):
+    for spec in data["binaries"].values():
+        spec["shipped"] = None
+
+
+def controls(data):
+    second = data["seams"][1]
     out = [{"name": "data_baseline", "kind": "data", "reason": None},
+           {"name": "data_duplicate_seam_name", "kind": "data", "reason": "duplicate seam name",
+            "plant": [plant_data(add_row())]},
+           {"name": "data_bad_marker_format", "kind": "data", "reason": "not the stem and a name",
+            "plant": [plant_data(add_row(name="planted", marker=data["stem"].rstrip("-") + "_S9"))]},
            {"name": "data_marker_substring_of_another", "kind": "data", "reason": "substring",
-            "plant": [plant_seam_row(data["stem"] + "S4")]},
+            "plant": [plant_data(add_row(name="planted", marker=data["stem"] + "S4"))]},
+           {"name": "data_binary_named_in_no_disposition", "kind": "data", "reason": "not every binary named",
+            "plant": [plant_data(drop_disposition)]},
+           {"name": "data_marker_defined_twice", "kind": "data", "reason": "marker not defined once",
+            "plant": [append_to(second["source"], f'\nconst M: &str = "{second["marker"]}";\n')]},
+           {"name": "data_no_shipped_binary", "kind": "data", "reason": "not exactly one binary shipped",
+            "plant": [plant_data(unship)]},
            {"name": "data_unlisted_marker_in_route_source", "kind": "data", "reason": "no listed marker",
             "plant": [append_to("mother/src/lib.rs", f'\n// "{data["stem"]}S9"\n')]},
            {"name": "data_unlisted_bin_target", "kind": "data", "reason": "bin targets",
             "plant": [append_to("mother/Cargo.toml", '\n[[bin]]\nname = "planted"\npath = "src/lib.rs"\n')]},
-           {"name": "baseline_shipped_build", "kind": "build", "baseline": True}]
-    if wrapper:
-        out.append({"name": "census_cfg_set", "kind": "build", "census": True})
+           {"name": "baseline_shipped_build", "kind": "build", "baseline": True},
+           {"name": "census_cfg_set", "kind": "build", "census": True}]
     return out + [dict(c, kind="build") for c in data["controls"]]
 
 
@@ -174,19 +199,21 @@ def main():
     parser = argparse.ArgumentParser()
     for name in ("--source", "--work", "--toolchain"):
         parser.add_argument(name, required=True)
-    parser.add_argument("--wrapper")
+    parser.add_argument("--wrapper", required=True, help="the route lane's wrapper; the census needs it")
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--only", action="append")
     args = parser.parse_args()
     source, work = os.path.abspath(args.source), os.path.abspath(args.work)
     if os.path.lexists(work):
         sys.exit(f"route_a3_controls: the work directory must be fresh: {work}")
+    if not os.access(os.path.abspath(args.wrapper), os.X_OK):
+        sys.exit(f"route_a3_controls: the wrapper is not an executable file: {args.wrapper}")
     os.makedirs(work)
     env = {"HOME": os.environ["HOME"], "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
     ctx = {"source": source, "work": work, "files": tracked(source), "toolchain": os.path.abspath(args.toolchain),
-           "wrapper": os.path.abspath(args.wrapper) if args.wrapper else None, "env": env}
+           "wrapper": os.path.abspath(args.wrapper), "env": env}
     data = json.load(open(os.path.join(source, DATA), encoding="utf-8"))
-    specs = [c for c in controls(data, ctx["wrapper"]) if not args.only or c["name"] in args.only]
+    specs = [c for c in controls(data) if not args.only or c["name"] in args.only]
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
         results = list(pool.map(lambda c: run_control(c, ctx), specs))
     for result in results:
