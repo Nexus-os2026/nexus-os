@@ -5,7 +5,7 @@
 //! other lock (or of none) cannot reproduce it.
 use super::*;
 use nexus_governed_control::governed::HaltReason;
-use nexus_governed_control::host_session::RouteLock;
+use nexus_governed_control::host_session::route_s4::RouteLock;
 
 /// The probes after poisoning `lock`, each with the session's failure flag:
 /// the store's health, the model slot, the close obligations, the run's
