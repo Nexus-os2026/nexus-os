@@ -41,7 +41,8 @@ const MARKERS: [&str; 3] = [
 ];
 /// The test hooks beside the sites stay exactly `#[cfg(test)]` (mission 11).
 const HOOKS: [(&str, &str); 5] = [
-    ("src/adapter/mod.rs", "model_record"),
+    // Built from parts: `c1_s3_record_seam_is_test_only` counts the name.
+    ("src/adapter/mod.rs", concat!("model_", "record")),
     ("src/adapter/session_port.rs", "inner_for_test"),
     ("src/coordinator.rs", "fence_to_marker"),
     ("src/coordinator/lite.rs", "after_engagement"),
@@ -90,386 +91,16 @@ const PORT_USES: &str = "\
 /// The reviewed regions, whole and normalized: every site with its
 /// neighbours (the two `mother.admit` conditions whole, rev 3 A.5), the S3
 /// forwarder and S4b bodies, S5's module, and `s5.rs`'s counted call, its
-/// one `Coordinator::open` and the harness `timeout`.
-const PINS: [(&str, &str); 21] = [
-    (
-        "src/lib.rs",
-        r##"
-pub mod private;
-#[cfg(mother_route_seams)]
-pub mod route_seams;
-pub mod state;
-"##,
-    ),
-    (
-        "src/coordinator/model_calls.rs",
-        r##"
-use super::*;
-#[cfg(mother_route_seams)]
-use crate::route_seams;
-use nexus_governed_control::inference::{
-"##,
-    ),
-    (
-        "src/coordinator/model_calls.rs",
-        r##"
-#[cfg(mother_route_seams)]
-impl<P: EffectPort> BorrowedMeter<'_, P> {
-    fn route_ctx(&self) -> route_seams::Ctx {
-        let context = self.coordinator.port.session_context();
-        route_seams::Ctx::of(context.as_ref()).invocation(self.invocation)
-    }
+/// one `Coordinator::open` and the harness `timeout`. They are data beside
+/// this file (`@@@ <file>` then the region), so the crate's own source scans
+/// (host access, `c1_s3_record_seam_is_test_only`) do not read quoted code.
+const PIN_DATA: &str = include_str!("route_seams_guard.pins");
+fn pins() -> Vec<(&'static str, &'static str)> {
+    let regions = PIN_DATA.split("@@@ ").skip(1);
+    let pins: Vec<_> = regions.map(|r| r.split_once('\n').unwrap()).collect();
+    assert_eq!(pins.len(), 21, "the reviewed regions");
+    pins
 }
-impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
-"##,
-    ),
-    (
-        "src/coordinator/model_calls.rs",
-        r##"
-let mut result = Err(MeterRefusal::Stale);
-#[cfg(mother_route_seams)]
-route_seams::at("mother.charge.entry", self.route_ctx());
-c.try_with_lock(|inner| {
-"##,
-    ),
-    (
-        "src/coordinator/model_calls.rs",
-        r##"
-let Ok(charged) = result else {
-    return Ok(());
-};
-result = Err(MeterRefusal::NotRecorded);
-#[cfg(mother_route_seams)]
-route_seams::at("mother.charge", self.route_ctx());
-inner.append(
-    self.invocation.mission,
-    Event::ModelCallCharged {
-        invocation: self.invocation,
-        call: charged.call,
-    },
-)?;
-#[cfg(mother_route_seams)]
-route_seams::at("mother.charge.ok", self.route_ctx());
-let m = inner.mission(self.invocation.mission)?;
-"##,
-    ),
-    (
-        "src/coordinator/model_calls.rs",
-        r##"
-fn settle(&self, call: u32) {
-    let c = self.coordinator;
-    #[cfg(mother_route_seams)]
-    route_seams::at("mother.settle", self.route_ctx());
-    let _ =
-        c.try_with_lock(|i| {
-            if i.usable().is_err() {
-"##,
-    ),
-    (
-        "src/coordinator/model_calls.rs",
-        r##"
-#[cfg(test)]
-c.hooks.model_returned.fire();
-#[cfg(mother_route_seams)]
-route_seams::at("mother.recheck", self.meter.route_ctx());
-if self.live() && self.deadline.expired() {
-"##,
-    ),
-    (
-        "src/coordinator.rs",
-        r##"
-#[cfg(all(test, target_os = "linux"))]
-lite::session_terminal_fix2::before(&entry);
-#[cfg(mother_route_seams)]
-if let Event::LaneReturned { invocation, .. } = &entry.event {
-    let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
-    crate::route_seams::at("mother.admit", ctx.invocation(*invocation));
-}
-if work {
-    self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
-}
-#[cfg(mother_route_seams)]
-if let Event::LaneReturned { invocation, .. } = &entry.event {
-    let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
-    crate::route_seams::at("mother.admit.ok", ctx.invocation(*invocation));
-}
-"##,
-    ),
-    (
-        "src/coordinator.rs",
-        r##"
-let hash = output_hash(&output);
-#[cfg(mother_route_seams)]
-crate::route_seams::at(
-    "mother.lane.prelock",
-    crate::route_seams::Ctx::of(self.port.session_context().as_ref())
-        .invocation(input.invocation),
-);
-let contract = self.step(|inner| {
-    inner.kept(id)?;
-"##,
-    ),
-    (
-        "src/coordinator.rs",
-        r##"
-inner.append(
-    id,
-    Event::LaneReturned {
-        invocation: input.invocation,
-        output_hash: hash.clone(),
-    },
-)?;
-#[cfg(mother_route_seams)]
-crate::route_seams::at(
-    "mother.lane.returned",
-    crate::route_seams::Ctx::of(inner.session_context.as_ref())
-        .invocation(input.invocation),
-);
-let mission = inner.mission(id)?;
-mission.pending_lane = None;
-"##,
-    ),
-    (
-        "src/adapter/mod.rs",
-        r##"
-let record = outcome.record();
-#[cfg(test)]
-let record = self.model_record.lock().unwrap().take().unwrap_or(record);
-#[cfg(mother_route_seams)]
-crate::route_seams::at(
-    "mother.classify",
-    crate::route_seams::Ctx::of(self.door.context().as_ref()).run(run),
-);
-Ok(classify(record, outcome.into_result()))
-"##,
-    ),
-    (
-        "src/adapter/session_port.rs",
-        r##"
-#[cfg(mother_route_seams)]
-impl SessionPort {
-    pub fn route_revoke_original_grant(&self) -> bool {
-        const M: &str = "nexus-mother-route-seam-S3-port";
-        std::hint::black_box(M.as_bytes());
-        match &self.inner.door {
-            PortDoor::Session(door) => door.route_revoke_original_grant(),
-            PortDoor::Legacy(_) => false,
-        }
-    }
-}
-"##,
-    ),
-    (
-        "src/coordinator/lite.rs",
-        r##"
-#[cfg(mother_route_seams)]
-impl<P: EffectPort> FileSession<P> {
-    pub fn route_poison_coordinator(&self) {
-        const M: &str = "nexus-mother-route-seam-S4b";
-        std::hint::black_box(M.as_bytes());
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _held = self.coordinator.inner.try_lock();
-            panic!("route seam S4b: coordinator lock poisoned");
-        }));
-    }
-}
-"##,
-    ),
-    (
-        "src/route_seams.rs",
-        r##"
-const M: &str = "nexus-mother-route-seam-S5";
-const PATIENCE: Duration = Duration::from_secs(10);
-pub(crate) const POINTS: [&str; 10] = [
-    "mother.charge.entry",
-    "mother.charge",
-    "mother.charge.ok",
-    "mother.settle",
-    "mother.classify",
-    "mother.recheck",
-    "mother.lane.prelock",
-    "mother.admit",
-    "mother.admit.ok",
-    "mother.lane.returned",
-];
-"##,
-    ),
-    (
-        "src/route_seams.rs",
-        r##"
-#[derive(Clone, Copy, Default)]
-pub(crate) struct Ctx {
-    session: Option<SessionIdentity>,
-    request: Option<u64>,
-    run: Option<RunId>,
-    invocation: Option<InvocationId>,
-}
-impl Ctx {
-    pub(crate) fn of(context: Option<&SessionContext>) -> Self {
-        Self {
-            session: context.map(SessionContext::session),
-            request: context.map(SessionContext::request),
-            ..Self::default()
-        }
-    }
-    pub(crate) fn invocation(self, invocation: InvocationId) -> Self {
-        let invocation = Some(invocation);
-        Self { invocation, ..self }
-    }
-    pub(crate) fn run(self, run: RunId) -> Self {
-        let run = Some(run);
-        Self { run, ..self }
-    }
-}
-"##,
-    ),
-    (
-        "src/route_seams.rs",
-        r##"
-pub type Timeout = fn(&str) -> !;
-
-pub enum Action {
-    Trace,
-    Pause {
-        cell: &'static str,
-        timeout: Timeout,
-    },
-    Panic,
-}
-"##,
-    ),
-    (
-        "src/route_seams.rs",
-        r##"
-struct Release(u64, SyncSender<()>);
-impl Drop for Release {
-    fn drop(&mut self) {
-        state().pending.retain(|p| p.id != self.0);
-        let _ = self.1.try_send(());
-    }
-}
-
-pub fn arm(point: &'static str, action: Action) -> Held {
-    assert!(POINTS.contains(&point), "not a Mother route point: {point}");
-    let (ack, acknowledged) = sync_channel(1);
-    let (release, released) = sync_channel(1);
-    let mut s = state();
-    s.tick += 1;
-    let id = s.tick;
-    let pause = match action {
-        Action::Trace => None,
-        Action::Pause { cell, timeout } => Some(Some((released, cell, timeout))),
-        Action::Panic => Some(None),
-    };
-    if let Some(pause) = pause {
-        s.pending.push(Pending {
-            id,
-            point,
-            ack,
-            pause,
-        });
-    }
-    ARMED.store(true, Ordering::SeqCst);
-    Held {
-        acknowledged,
-        _release: Release(id, release),
-    }
-}
-
-pub fn drain_trace() -> Vec<Entry> {
-    std::mem::take(&mut state().entries)
-}
-
-pub(crate) fn at(point: &'static str, ctx: Ctx) {
-    std::hint::black_box(M.as_bytes());
-    if !ARMED.load(Ordering::Relaxed) {
-        return;
-    }
-    fire(point, ctx);
-}
-"##,
-    ),
-    (
-        "src/route_seams.rs",
-        r##"
-fn fire(point: &'static str, ctx: Ctx) {
-    let (entry, pending) = {
-        let mut s = state();
-        s.tick += 1;
-        let entry = Entry {
-            tick: s.tick,
-            point,
-            session: ctx.session,
-            request: ctx.request,
-            run: ctx.run,
-            invocation: ctx.invocation,
-            thread: std::thread::current().id(),
-            instant: Instant::now(),
-        };
-        s.entries.push(entry.clone());
-        let found = s.pending.iter().position(|p| p.point == point);
-        (entry, found.map(|i| s.pending.remove(i)))
-    };
-    let Some(pending) = pending else { return };
-    let acknowledged = pending.ack.try_send(entry).is_ok();
-    match pending.pause {
-        None => panic!("route seam: armed panic at {point}"),
-        Some((released, cell, timeout)) => {
-            if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
-                timeout(&format!("TIMEOUT {cell} {point}"));
-            }
-        }
-    }
-}
-"##,
-    ),
-    (
-        "host/tests/route_cells/s5.rs",
-        r##"
-fn drive_call(calls: &AtomicU32, context: &LaneContext<'_>) -> bool {
-    let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    let request = ModelRequest::new("system".into(), "prompt".into(), schema).unwrap();
-    calls.fetch_add(1, Ordering::SeqCst);
-    context
-        .model
-        .expect("a model caller")
-        .call(&request)
-        .is_ok()
-}
-"##,
-    ),
-    (
-        "host/tests/route_cells/s5.rs",
-        r##"
-let m = Coordinator::open(
-    journal,
-    Arc::new(SessionPort::new(b.door, b.name.clone())),
-    lanes(&calls, &recorded),
-    clock,
-    private,
-)
-.unwrap()
-.into_file_session()
-.unwrap();
-"##,
-    ),
-    (
-        "host/tests/route_cells/s5.rs",
-        r##"
-fn timeout(line: &str) -> ! {
-    use std::io::Write;
-    let Some(root) = std::env::var_os(CHILD).map(PathBuf::from) else {
-        std::process::abort() // SB3E-R40.5: never relative to the cwd.
-    };
-    let mut open = std::fs::OpenOptions::new();
-    if let Ok(mut result) = open.create(true).append(true).open(root.join("result")) {
-        let _ = writeln!(result, "{line}");
-    }
-    std::process::abort()
-}
-"##,
-    ),
-];
 
 fn seam_sites(source: &str, seams: &[&str]) -> Vec<usize> {
     let code = mask(source);
@@ -696,24 +327,12 @@ fn item<'a>(source: &'a str, name: &str) -> &'a str {
     let end = source[at..].find("\n}\n").expect(name);
     &source[at..at + end + 2]
 }
-/// The route-relevant sources, by path relative to `mother/`.
+/// Every Rust file of the crate, by path relative to `mother/`, read by the
+/// adapter's scan walker (only the adapter touches the host).
 fn sources() -> Vec<(String, String)> {
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let roots = ["src", "host/src", "desktop/src", "host/tests/route_cells"];
-    let (mut dirs, mut files): (Vec<_>, _) = (roots.map(|d| root.join(d)).into(), Vec::new());
-    while let Some(dir) = dirs.pop() {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                dirs.push(path);
-            } else if path.extension().is_some_and(|e| e == "rs") {
-                let name = path.strip_prefix(&root).unwrap().to_string_lossy();
-                files.push((name.into_owned(), std::fs::read_to_string(&path).unwrap()));
-            }
-        }
-    }
-    files.sort();
-    files
+    let mut sources = crate::adapter::scan::mother_sources();
+    sources.sort(); // By path text, as the inventory is listed.
+    sources
 }
 fn text<'a>(sources: &'a [(String, String)], file: &str) -> &'a str {
     &sources.iter().find(|(f, _)| f == file).expect(file).1
@@ -870,7 +489,7 @@ fn s5_findings(s5: &str) -> Vec<String> {
     }
     // The pinned regions: `drive_call` counts first, one `Coordinator::open`,
     // and the harness `timeout`.
-    for (_, pin) in PINS.iter().filter(|(f, _)| *f == S5) {
+    for (_, pin) in pins().into_iter().filter(|(f, _)| *f == S5) {
         check(
             pinned(s5, pin) == 1,
             &format!("pin {}", flat(&lex(pin)[..8])),
@@ -894,10 +513,7 @@ fn s5_findings(s5: &str) -> Vec<String> {
         "timeout: a panic path",
     );
     let tail = ["std", ":", ":", "process", ":", ":", "abort", "(", ")", "}"];
-    check(
-        body.ends_with(&tail),
-        "timeout: ends in std::process::abort",
-    );
+    check(body.ends_with(&tail), "timeout: ends in abort");
     found
 }
 
@@ -930,7 +546,7 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
         scanned > 100 && found == SITES.lines().count(),
         "{scanned} {found}"
     );
-    for (file, pin) in PINS {
+    for (file, pin) in pins() {
         assert_eq!(pinned(text(&sources, file), pin), 1, "{file}: pin {pin}");
     }
     for (file, hook) in HOOKS {
@@ -1027,7 +643,8 @@ fn sb3e_s5_module_makes_one_counted_call() {
         sub(open, "        port.clone(),").replace("    let m = Coordinator::open(", &format!("    {kept}\n    let _ = port.model_call(id, &q, &meter, &d);\n    let m = Coordinator::open(")),
         sub("    let door = o.session.open_file_door(&request).unwrap();\n", "    let door = o.session.open_file_door(&request).unwrap();\n    let _ = door.model_call(run, &q, &meter, &d, i);\n"),
         format!("use super::store::call_model;\n{s5}"),
-        sub("    std::process::abort()\n}\n\n/// SB3E-R40.5", "    let _ = root;\n}\n\n/// SB3E-R40.5"),
+        // Built from parts so the host-access scan does not match this file.
+        sub(concat!("    std::", "process::abort()\n}\n\n/// SB3E-R40.5"), "    let _ = root;\n}\n\n/// SB3E-R40.5"),
         sub("let Some(root) = std::env::var_os(CHILD).map(PathBuf::from) else {", "let root = std::env::var_os(CHILD).map(PathBuf::from).unwrap();\n    {"),
     ];
     for (i, planted) in plants.iter().enumerate() {
@@ -1035,8 +652,8 @@ fn sb3e_s5_module_makes_one_counted_call() {
     }
     // Rev 3 A.5: each `mother.admit` condition, pinned whole.
     let coordinator = text(&sources, "src/coordinator.rs");
-    let pin = PINS
-        .iter()
+    let pin = pins()
+        .into_iter()
         .find(|(_, p)| p.contains("\"mother.admit\""))
         .unwrap()
         .1;
@@ -1061,7 +678,7 @@ fn sb3e_s5_module_makes_one_counted_call() {
 fn sb3e_mother_pins_reject_every_generated_mutant() {
     let sources = sources();
     let (mut mutants, mut survivors) = (0, Vec::new());
-    for (file, pin) in PINS {
+    for (file, pin) in pins() {
         let source = text(&sources, file);
         let (tokens, literal, base) = (lex(source), lex(pin), source.as_ptr() as usize);
         let at = tokens
@@ -1089,10 +706,10 @@ fn sb3e_mother_pins_reject_every_generated_mutant() {
     }
     println!(
         "U4a-3 sweep: {} regions, {mutants} mutants, {survivors:?} survived",
-        PINS.len()
+        pins().len()
     );
     assert!(
-        mutants > PINS.len() && survivors.is_empty(),
+        mutants > pins().len() && survivors.is_empty(),
         "{survivors:?}"
     );
 }

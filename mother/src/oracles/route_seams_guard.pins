@@ -1,0 +1,293 @@
+@@@ src/lib.rs
+pub mod private;
+#[cfg(mother_route_seams)]
+pub mod route_seams;
+pub mod state;
+@@@ src/coordinator/model_calls.rs
+use super::*;
+#[cfg(mother_route_seams)]
+use crate::route_seams;
+use nexus_governed_control::inference::{
+@@@ src/coordinator/model_calls.rs
+#[cfg(mother_route_seams)]
+impl<P: EffectPort> BorrowedMeter<'_, P> {
+    fn route_ctx(&self) -> route_seams::Ctx {
+        let context = self.coordinator.port.session_context();
+        route_seams::Ctx::of(context.as_ref()).invocation(self.invocation)
+    }
+}
+impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
+@@@ src/coordinator/model_calls.rs
+let mut result = Err(MeterRefusal::Stale);
+#[cfg(mother_route_seams)]
+route_seams::at("mother.charge.entry", self.route_ctx());
+c.try_with_lock(|inner| {
+@@@ src/coordinator/model_calls.rs
+let Ok(charged) = result else {
+    return Ok(());
+};
+result = Err(MeterRefusal::NotRecorded);
+#[cfg(mother_route_seams)]
+route_seams::at("mother.charge", self.route_ctx());
+inner.append(
+    self.invocation.mission,
+    Event::ModelCallCharged {
+        invocation: self.invocation,
+        call: charged.call,
+    },
+)?;
+#[cfg(mother_route_seams)]
+route_seams::at("mother.charge.ok", self.route_ctx());
+let m = inner.mission(self.invocation.mission)?;
+@@@ src/coordinator/model_calls.rs
+fn settle(&self, call: u32) {
+    let c = self.coordinator;
+    #[cfg(mother_route_seams)]
+    route_seams::at("mother.settle", self.route_ctx());
+    let _ =
+        c.try_with_lock(|i| {
+            if i.usable().is_err() {
+@@@ src/coordinator/model_calls.rs
+#[cfg(test)]
+c.hooks.model_returned.fire();
+#[cfg(mother_route_seams)]
+route_seams::at("mother.recheck", self.meter.route_ctx());
+if self.live() && self.deadline.expired() {
+@@@ src/coordinator.rs
+#[cfg(all(test, target_os = "linux"))]
+lite::session_terminal_fix2::before(&entry);
+#[cfg(mother_route_seams)]
+if let Event::LaneReturned { invocation, .. } = &entry.event {
+    let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
+    crate::route_seams::at("mother.admit", ctx.invocation(*invocation));
+}
+if work {
+    self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
+}
+#[cfg(mother_route_seams)]
+if let Event::LaneReturned { invocation, .. } = &entry.event {
+    let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
+    crate::route_seams::at("mother.admit.ok", ctx.invocation(*invocation));
+}
+@@@ src/coordinator.rs
+let hash = output_hash(&output);
+#[cfg(mother_route_seams)]
+crate::route_seams::at(
+    "mother.lane.prelock",
+    crate::route_seams::Ctx::of(self.port.session_context().as_ref())
+        .invocation(input.invocation),
+);
+let contract = self.step(|inner| {
+    inner.kept(id)?;
+@@@ src/coordinator.rs
+inner.append(
+    id,
+    Event::LaneReturned {
+        invocation: input.invocation,
+        output_hash: hash.clone(),
+    },
+)?;
+#[cfg(mother_route_seams)]
+crate::route_seams::at(
+    "mother.lane.returned",
+    crate::route_seams::Ctx::of(inner.session_context.as_ref())
+        .invocation(input.invocation),
+);
+let mission = inner.mission(id)?;
+mission.pending_lane = None;
+@@@ src/adapter/mod.rs
+let record = outcome.record();
+#[cfg(test)]
+let record = self.model_record.lock().unwrap().take().unwrap_or(record);
+#[cfg(mother_route_seams)]
+crate::route_seams::at(
+    "mother.classify",
+    crate::route_seams::Ctx::of(self.door.context().as_ref()).run(run),
+);
+Ok(classify(record, outcome.into_result()))
+@@@ src/adapter/session_port.rs
+#[cfg(mother_route_seams)]
+impl SessionPort {
+    pub fn route_revoke_original_grant(&self) -> bool {
+        const M: &str = "nexus-mother-route-seam-S3-port";
+        std::hint::black_box(M.as_bytes());
+        match &self.inner.door {
+            PortDoor::Session(door) => door.route_revoke_original_grant(),
+            PortDoor::Legacy(_) => false,
+        }
+    }
+}
+@@@ src/coordinator/lite.rs
+#[cfg(mother_route_seams)]
+impl<P: EffectPort> FileSession<P> {
+    pub fn route_poison_coordinator(&self) {
+        const M: &str = "nexus-mother-route-seam-S4b";
+        std::hint::black_box(M.as_bytes());
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = self.coordinator.inner.try_lock();
+            panic!("route seam S4b: coordinator lock poisoned");
+        }));
+    }
+}
+@@@ src/route_seams.rs
+const M: &str = "nexus-mother-route-seam-S5";
+const PATIENCE: Duration = Duration::from_secs(10);
+pub(crate) const POINTS: [&str; 10] = [
+    "mother.charge.entry",
+    "mother.charge",
+    "mother.charge.ok",
+    "mother.settle",
+    "mother.classify",
+    "mother.recheck",
+    "mother.lane.prelock",
+    "mother.admit",
+    "mother.admit.ok",
+    "mother.lane.returned",
+];
+@@@ src/route_seams.rs
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Ctx {
+    session: Option<SessionIdentity>,
+    request: Option<u64>,
+    run: Option<RunId>,
+    invocation: Option<InvocationId>,
+}
+impl Ctx {
+    pub(crate) fn of(context: Option<&SessionContext>) -> Self {
+        Self {
+            session: context.map(SessionContext::session),
+            request: context.map(SessionContext::request),
+            ..Self::default()
+        }
+    }
+    pub(crate) fn invocation(self, invocation: InvocationId) -> Self {
+        let invocation = Some(invocation);
+        Self { invocation, ..self }
+    }
+    pub(crate) fn run(self, run: RunId) -> Self {
+        let run = Some(run);
+        Self { run, ..self }
+    }
+}
+@@@ src/route_seams.rs
+pub type Timeout = fn(&str) -> !;
+
+pub enum Action {
+    Trace,
+    Pause {
+        cell: &'static str,
+        timeout: Timeout,
+    },
+    Panic,
+}
+@@@ src/route_seams.rs
+struct Release(u64, SyncSender<()>);
+impl Drop for Release {
+    fn drop(&mut self) {
+        state().pending.retain(|p| p.id != self.0);
+        let _ = self.1.try_send(());
+    }
+}
+
+pub fn arm(point: &'static str, action: Action) -> Held {
+    assert!(POINTS.contains(&point), "not a Mother route point: {point}");
+    let (ack, acknowledged) = sync_channel(1);
+    let (release, released) = sync_channel(1);
+    let mut s = state();
+    s.tick += 1;
+    let id = s.tick;
+    let pause = match action {
+        Action::Trace => None,
+        Action::Pause { cell, timeout } => Some(Some((released, cell, timeout))),
+        Action::Panic => Some(None),
+    };
+    if let Some(pause) = pause {
+        s.pending.push(Pending {
+            id,
+            point,
+            ack,
+            pause,
+        });
+    }
+    ARMED.store(true, Ordering::SeqCst);
+    Held {
+        acknowledged,
+        _release: Release(id, release),
+    }
+}
+
+pub fn drain_trace() -> Vec<Entry> {
+    std::mem::take(&mut state().entries)
+}
+
+pub(crate) fn at(point: &'static str, ctx: Ctx) {
+    std::hint::black_box(M.as_bytes());
+    if !ARMED.load(Ordering::Relaxed) {
+        return;
+    }
+    fire(point, ctx);
+}
+@@@ src/route_seams.rs
+fn fire(point: &'static str, ctx: Ctx) {
+    let (entry, pending) = {
+        let mut s = state();
+        s.tick += 1;
+        let entry = Entry {
+            tick: s.tick,
+            point,
+            session: ctx.session,
+            request: ctx.request,
+            run: ctx.run,
+            invocation: ctx.invocation,
+            thread: std::thread::current().id(),
+            instant: Instant::now(),
+        };
+        s.entries.push(entry.clone());
+        let found = s.pending.iter().position(|p| p.point == point);
+        (entry, found.map(|i| s.pending.remove(i)))
+    };
+    let Some(pending) = pending else { return };
+    let acknowledged = pending.ack.try_send(entry).is_ok();
+    match pending.pause {
+        None => panic!("route seam: armed panic at {point}"),
+        Some((released, cell, timeout)) => {
+            if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
+                timeout(&format!("TIMEOUT {cell} {point}"));
+            }
+        }
+    }
+}
+@@@ host/tests/route_cells/s5.rs
+fn drive_call(calls: &AtomicU32, context: &LaneContext<'_>) -> bool {
+    let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
+    let request = ModelRequest::new("system".into(), "prompt".into(), schema).unwrap();
+    calls.fetch_add(1, Ordering::SeqCst);
+    context
+        .model
+        .expect("a model caller")
+        .call(&request)
+        .is_ok()
+}
+@@@ host/tests/route_cells/s5.rs
+let m = Coordinator::open(
+    journal,
+    Arc::new(SessionPort::new(b.door, b.name.clone())),
+    lanes(&calls, &recorded),
+    clock,
+    private,
+)
+.unwrap()
+.into_file_session()
+.unwrap();
+@@@ host/tests/route_cells/s5.rs
+fn timeout(line: &str) -> ! {
+    use std::io::Write;
+    let Some(root) = std::env::var_os(CHILD).map(PathBuf::from) else {
+        std::process::abort() // SB3E-R40.5: never relative to the cwd.
+    };
+    let mut open = std::fs::OpenOptions::new();
+    if let Ok(mut result) = open.create(true).append(true).open(root.join("result")) {
+        let _ = writeln!(result, "{line}");
+    }
+    std::process::abort()
+}

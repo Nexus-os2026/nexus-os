@@ -120,7 +120,7 @@ pub(crate) mod p0_support;
 #[cfg(test)]
 mod real_broker;
 #[cfg(test)]
-mod scan;
+pub(crate) mod scan;
 
 /// The agent name Mother acts under in the broker.
 pub const MOTHER_AGENT: &str = "mother";

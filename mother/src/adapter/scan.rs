@@ -35,7 +35,7 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Every Rust file of the crate, as `(path relative to the crate, text)`.
-fn mother_sources() -> Vec<(String, String)> {
+pub(crate) fn mother_sources() -> Vec<(String, String)> {
     let root = crate_root();
     let mut files = Vec::new();
     rust_files(&root, &mut files);
