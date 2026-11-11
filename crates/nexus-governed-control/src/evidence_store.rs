@@ -418,6 +418,10 @@ struct Inner {
     /// The next insert alone fails before COMMIT (once), then inserts succeed.
     #[cfg(test)]
     refuse_next: bool,
+    /// SB-3E S2: the one record (phase, commitment) whose next ordinary
+    /// append is refused before its insert (design 4.2.1).
+    #[cfg(mother_route_seams)]
+    route_refuse: Option<(String, Option<String>)>,
     /// SB-3E S1: the next append pays an owed record (design 4.2.1).
     #[cfg(mother_route_seams)]
     owed_flush: bool,
@@ -786,6 +790,8 @@ impl EvidenceStore {
             #[cfg(test)]
             refuse_next: false,
             #[cfg(mother_route_seams)]
+            route_refuse: None,
+            #[cfg(mother_route_seams)]
             owed_flush: false,
         };
         // Only now, the whole chain verified: this session, then the
@@ -808,6 +814,18 @@ impl EvidenceStore {
                 inner
             }
         }
+    }
+
+    /// SB-3E S4 (AM-2 B.2): a panic while the store's mutex is held, caught;
+    /// it poisons that one lock and changes nothing else.
+    #[cfg(mother_route_seams)]
+    fn route_poison_inner(&self) {
+        const M: &str = "nexus-mother-route-seam-S4-store";
+        std::hint::black_box(M.as_bytes());
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = self.inner.lock();
+            panic!("route seam S4: evidence store poisoned");
+        }));
     }
 
     #[cfg(test)]
@@ -1033,9 +1051,28 @@ impl PrimaryEvidence {
         self.store.health()
     }
 
+    /// SB-3E S2 (design 4.2): the next ordinary append of exactly this
+    /// record is refused before its insert, rolled back and not committed.
+    /// One-shot. Armed at the record's point, before the mutex is held.
+    #[cfg(mother_route_seams)]
+    pub fn route_refuse_next(&self, phase: &str, commitment: Option<&str>) {
+        const M: &str = "nexus-mother-route-seam-S2";
+        std::hint::black_box(M.as_bytes());
+        let record = (phase.to_string(), commitment.map(str::to_string));
+        self.store.inner().route_refuse = Some(record);
+    }
+
     /// Observe memory only, without waiting; `None` must be treated as refusal.
     pub fn try_health(&self) -> Option<EvidenceHealth> {
         self.store.try_health()
+    }
+
+    /// SB-3E S4 (AM-2 B.2): the session's only path to the store's mutex.
+    #[cfg(mother_route_seams)]
+    pub(crate) fn route_poison_inner(&self) {
+        const M: &str = "nexus-mother-route-seam-S4-evidence";
+        std::hint::black_box(M.as_bytes());
+        self.store.route_poison_inner();
     }
 
     /// A clean shutdown: this session's `session_closed` (EL-1 §7).
@@ -1234,6 +1271,14 @@ impl Inner {
         EndStatus::Owed
     }
 
+    /// SB-3E S2: whether this append is the armed record's next ordinary
+    /// append; if so the arming is taken (one-shot).
+    #[cfg(mother_route_seams)]
+    fn route_refused(&mut self, kind: &str, phase: &str, commitment: Option<&str>) -> bool {
+        let armed = |r: &mut (String, Option<String>)| r.0 == phase && r.1.as_deref() == commitment;
+        kind == "ordinary" && self.route_refuse.take_if(armed).is_some()
+    }
+
     fn append(&mut self, phase: &str, commitment: Option<&str>, body: &str) -> Append {
         #[cfg(mother_route_seams)]
         let kind = if std::mem::take(&mut self.owed_flush) {
@@ -1263,6 +1308,16 @@ impl Inner {
             // No transaction began: nothing was written (unless the
             // connection is now somewhere it cannot tell).
             if self.conn.is_autocommit() {
+                return Append::NotCommitted;
+            }
+            self.latch();
+            return Append::Uncertain;
+        }
+        #[cfg(mother_route_seams)]
+        if self.route_refused(kind, phase, commitment) {
+            #[cfg(mother_route_seams)]
+            route_seams::note("store.refused", Ctx::store(kind, phase, commitment));
+            if rolled_back(&self.conn) {
                 return Append::NotCommitted;
             }
             self.latch();
@@ -1319,6 +1374,8 @@ impl Inner {
         #[cfg(mother_route_seams)]
         route_seams::at("store.commit", Ctx::store(kind, phase, commitment));
         if self.commit().is_err() {
+            #[cfg(mother_route_seams)]
+            route_seams::note("store.commit.result", Ctx::store(kind, phase, commitment));
             self.latch();
             return Append::Uncertain;
         }

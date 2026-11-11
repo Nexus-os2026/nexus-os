@@ -23,6 +23,9 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod locks;
+mod store;
+
 const PATIENCE: Duration = Duration::from_secs(10);
 const CHILD: &str = "SB3E_ROUTE_CHILD";
 const NAME: &str = "qwen3.6:35b-a3b";
@@ -38,11 +41,22 @@ fn route_lane_cfg_reached_the_harness() {
 /// Run `body` in a child of this test binary, under a 30 s deadline; the
 /// child's pause failures arrive as `TIMEOUT` lines in its result file.
 fn child(name: &str, body: fn(&Fixture)) {
+    child_with(name, |_| Vec::new(), body);
+}
+/// As `child`, with the extra environment `env` makes in the child's owned
+/// root (U4: the external shim's preload and its control and log paths).
+fn child_with(name: &str, env: fn(&std::path::Path) -> Vec<(&str, PathBuf)>, body: fn(&Fixture)) {
     if let Some(root) = std::env::var_os(CHILD) {
         body(&Fixture(PathBuf::from(root)));
         return println!("ROUTE CHILD PASSED {name}");
     }
-    let root = std::env::temp_dir().join(format!("sb3e-route-{}-{name}", std::process::id()));
+    // A path LD_PRELOAD can name: no `:` (its list separator).
+    let leaf = format!(
+        "sb3e-route-{}-{}",
+        std::process::id(),
+        name.replace("::", "-")
+    );
+    let root = std::env::temp_dir().join(leaf);
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&root)
@@ -51,6 +65,7 @@ fn child(name: &str, body: fn(&Fixture)) {
     let mut process = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name, "--nocapture", "--test-threads=1"])
         .env(CHILD, &fixture.0)
+        .envs(env(&fixture.0))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

@@ -2028,6 +2028,17 @@ impl RequestHold<'_> {
     }
 }
 impl RunRegistry {
+    /// SB-3E S4 (AM-2 B.2): a panic while the run table is held, caught; it
+    /// poisons that one lock and changes nothing else.
+    #[cfg(mother_route_seams)]
+    pub(crate) fn route_poison_runs(&self) {
+        const M: &str = "nexus-mother-route-seam-S4-runs";
+        std::hint::black_box(M.as_bytes());
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = self.runs.lock();
+            panic!("route seam S4: run table poisoned");
+        }));
+    }
     pub(crate) fn try_request_hold(&self) -> Result<RequestHold<'_>, bool> {
         match self.runs.try_lock() {
             Ok(table) => Ok(RequestHold(table, self)),
