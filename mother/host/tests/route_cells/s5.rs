@@ -870,7 +870,12 @@ fn route_s5_timeout_without_a_child_root_writes_nothing() {
     let cwd = Fixture(cwd); // Removed when the test ends.
     let mut command = std::process::Command::new(std::env::current_exe().unwrap());
     command.args(["--exact", name, "--nocapture", "--test-threads=1"]);
-    let out = bounded(command.env_remove(CHILD).env(NO_ROOT, "1").current_dir(&cwd.0));
+    let out = bounded(
+        command
+            .env_remove(CHILD)
+            .env(NO_ROOT, "1")
+            .current_dir(&cwd.0),
+    );
     use std::os::unix::process::ExitStatusExt;
     assert_eq!(out.status.signal(), Some(6), "aborted");
     let written: Vec<_> = std::fs::read_dir(&cwd.0).unwrap().collect();
