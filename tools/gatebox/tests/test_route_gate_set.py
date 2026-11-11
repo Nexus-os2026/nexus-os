@@ -901,6 +901,7 @@ class UpgradeComposition(unittest.TestCase):
         self.upgrade()
         new = json.loads((config/'registry.json').read_text())
         self.assertEqual(new,{'mother':self.gb2_row()})
+        self.assertTrue((config/'history'/('install-'+self.OLD)/'registry.json').is_file(),'old registry not archived')
         self.assertEqual((config/'history'/('install-'+self.OLD)/'registry.json').read_bytes(),old)  # the GB1 pin, kept for audit
         self.assertEqual(json.loads((config/'installed-files.json').read_text())[str(config/'registry.json')],
                          sha((config/'registry.json').read_bytes()))

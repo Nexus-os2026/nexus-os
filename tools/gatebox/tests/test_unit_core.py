@@ -2,6 +2,7 @@
 import hashlib
 import copy
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
@@ -86,6 +87,16 @@ def renumbered(inode, shift=0x100):
         return os.stat_result(fields)
     with patch('os.stat',lambda *a,**k: moved(real_stat(*a,**k))), patch('os.fstat',lambda *a,**k: moved(real_fstat(*a,**k))):
         yield
+
+def registered_source(path, row):
+    """supervisor.execute's construction from a registry row. GB1's GitSource took (device, inode), GB2's takes
+    (filesystem, inode): the parameter name selects the field, so this oracle runs unchanged against both."""
+    return snapshot.GitSource(path, row.get(list(inspect.signature(snapshot.GitSource).parameters)[1]), row.get('inode'))
+
+def boot_a_row(admin):
+    """A registry row recorded at boot A with both pins: GB1's st_dev and GB2's filesystem identity."""
+    info = os.stat(admin)
+    return dict(device=info.st_dev, inode=info.st_ino, filesystem=dict(REGISTERED))
 
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
@@ -214,14 +225,23 @@ class SnapshotTests(unittest.TestCase):
                     snapshot.GitSource(admin, REGISTERED, info.st_ino)
                 marker.unlink()
     # ---- GB2 (SB3E-R26): boot-stable source identity. st_dev follows kernel device naming; never a pass condition.
-    def test_gb2_same_filesystem_and_inode_pass_after_device_renumbering(self):
-        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+    def test_gb2_registry_row_admits_source_without_renumbering(self):
+        # Control for the oracle below: passes on GB1 and GB2 alike, so the oracle's RED is the renumbering alone.
+        admin = administration(self.root/'source.git'); row = boot_a_row(admin)
         with filesystem():
-            source = snapshot.GitSource(admin, REGISTERED, inode)  # boot A
-            with renumbered(inode):
+            source = registered_source(admin, row)
+            source.check(source.deadline)
+    def test_gb2_same_filesystem_and_inode_pass_after_device_renumbering(self):
+        # RED on GB1: `renumbered: source identity changed`. GREEN on GB2: st_dev is never a pass condition.
+        admin = administration(self.root/'source.git'); row = boot_a_row(admin)
+        with filesystem():
+            source = registered_source(admin, row)  # boot A
+            with renumbered(row['inode']):
                 self.assertNotEqual(os.stat(admin).st_dev, os.lstat(admin).st_dev)  # the renumbering is observable
-                source.check(source.deadline)  # boot B, the same source
-                snapshot.GitSource(admin, REGISTERED, inode)  # boot B, from the boot-A registration
+                try:
+                    source.check(source.deadline)  # boot B, the same source
+                    registered_source(admin, row)  # boot B, from the boot-A registry row
+                except ValueError as exc: self.fail('renumbered: '+str(exc))
     def test_gb2_other_filesystem_identity_refused(self):
         admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
         for fsid in (FSID ^ 1, FSID ^ (1 << 63), 0x29ed1b591aefb877):  # the last: this host's other ext4 filesystem
