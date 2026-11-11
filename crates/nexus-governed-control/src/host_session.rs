@@ -642,7 +642,7 @@ pub enum RouteLock {
 #[cfg(mother_route_seams)]
 impl HostSession {
     pub fn route_poison(&self, lock: RouteLock) {
-        const M: &str = "nexus-mother-route-seam-S4";
+        const M: &str = "nexus-mother-route-seam-S4-session";
         std::hint::black_box(M.as_bytes());
         fn poison<T>(mutex: &std::sync::Mutex<T>) {
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

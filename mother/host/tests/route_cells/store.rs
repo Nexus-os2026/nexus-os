@@ -15,6 +15,7 @@ use std::thread::ThreadId;
 const WAL: &str = "home/broker/p3-evidence/evidence.sqlite3-wal";
 const LOG: &str = "ROUTE_SHIM_LOG";
 const CONTROL: &str = "ROUTE_SHIM_CONTROL";
+pub(super) const SHIM_SHA256: &str = "ROUTE_SHIM_SHA256";
 
 /// The parent's half of a shim child: compile the shim at test time in the
 /// child's owned root (`/usr` gcc is a mutable host input, so the witness
@@ -31,11 +32,48 @@ fn shim_env(root: &Path) -> Vec<(&'static str, PathBuf)> {
         .unwrap();
     let stderr = String::from_utf8_lossy(&built.stderr);
     assert!(built.status.success(), "the shim builds: {stderr}");
-    let digest = Sha256::digest(std::fs::read(&library).unwrap());
-    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
-    println!("ROUTE SHIM SHA256 {hex}");
+    // SB3E-R32.1: the digest, taken before the child starts, which the child
+    // must report for the library it actually has mapped.
+    let digest = PathBuf::from(sha256_hex(&library));
     let (log, control) = (root.join("shim.log"), root.join("shim.control"));
-    vec![("LD_PRELOAD", library), (LOG, log), (CONTROL, control)]
+    vec![
+        ("LD_PRELOAD", library),
+        (LOG, log),
+        (CONTROL, control),
+        (SHIM_SHA256, digest),
+    ]
+}
+fn sha256_hex(path: &Path) -> String {
+    let digest = Sha256::digest(std::fs::read(path).unwrap());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+/// The child's half of the witness: the preloaded library is mapped here,
+/// and its digest is the parent's; reported on the stdout the parent asserts.
+pub(super) fn shim_witness() {
+    let library = std::env::var_os("LD_PRELOAD").map(PathBuf::from).unwrap();
+    let library = std::fs::canonicalize(library).unwrap();
+    let maps = std::fs::read_to_string("/proc/self/maps").unwrap();
+    let mut mapped = maps.lines().filter_map(|l| l.split_whitespace().nth(5));
+    assert!(
+        mapped.any(|p| Path::new(p) == library),
+        "the shim is not mapped"
+    );
+    let hex = sha256_hex(&library);
+    assert_eq!(std::env::var(SHIM_SHA256).ok(), Some(hex.clone()));
+    println!("ROUTE SHIM SHA256 {hex}");
+}
+/// The parent's check of the child's report: exactly one line naming the
+/// 64-hex digest it took itself; the parent records it in its own output.
+pub(super) fn shim_witnessed(want: &str, stdout: &str) {
+    let hex = want.len() == 64 && want.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    let line = format!("ROUTE SHIM SHA256 {want}\n");
+    assert!(
+        hex && stdout.matches(&line).count() == 1,
+        "shim witness {want}: {stdout}"
+    );
+    let reports = stdout.matches("ROUTE SHIM SHA256 ").count();
+    assert_eq!(reports, 1, "one shim witness: {stdout}");
+    println!("ROUTE SHIM SHA256 {want}");
 }
 /// This thread's OS id, as the shim sees it (`gettid`).
 fn os_tid() -> String {
@@ -424,60 +462,56 @@ fn route_shim_close_statement_is_uncertain_and_latched() {
         },
     );
 }
-/// SB3E-R12.1 owed flush, with the controls of 4.2.1. The shim's
-/// `store.commit` hold, offered to the owed flush of an end record, is
-/// passed by it and acknowledged by the next ordinary append. S2, offered to
-/// the owed flush of a close statement (the same phase and commitment), stays
-/// armed past it and refuses the next ordinary append of that record.
+/// SB3E-R12.1 owed flush, with the controls of 4.2.1, each half on one
+/// record (the close statement: the same phase and commitment). The
+/// `store.commit` hold, offered to that record's owed flush, is passed by
+/// it and acknowledged by the next ordinary append of the record. S2,
+/// offered to the owed flush, stays armed past it and refuses that append.
 #[test]
 fn route_owed_flush_leaves_the_ordinary_hold_and_s2_unconsumed() {
     child(
         "store::route_owed_flush_leaves_the_ordinary_hold_and_s2_unconsumed",
         |f| {
             let o = f.open();
-            let (door, run) = admitted(&o, &f.0);
-            let r = faulted(f, &o.evidence, (Mech::S2, END.0), END.1, || {
-                call_model(&door, run)
-            });
-            assert_eq!(
-                (r.out.record(), latched_owed(&o.evidence)),
-                (EndStatus::Owed, (false, 1))
-            );
+            let close = || o.evidence.close_session();
+            let owed = || {
+                let r = faulted(f, &o.evidence, (Mech::S2, CLOSE.0), CLOSE.1, close);
+                let owed = (r.out, latched_owed(&o.evidence));
+                assert_eq!(owed, (EndStatus::Owed, (false, 1)));
+                r
+            };
+            let commits = |trace: &[Entry]| -> Vec<(Option<&str>, Option<String>, Option<String>)> {
+                let commits = trace.iter().filter(|e| e.point == "store.commit");
+                commits
+                    .map(|e| (e.kind, e.phase.clone(), e.commitment.clone()))
+                    .collect()
+            };
+            let (flush, ordinary) = (Some("owed_flush"), Some("ordinary"));
+            let record = |kind| (kind, Some(CLOSE.1 .0.to_string()), None);
+            owed();
+            let _recording = arm("reg.reserve", Action::Trace);
+            drain_trace();
             let held = f.pause("store.commit");
             let closed = std::thread::scope(|s| {
-                let closing = s.spawn(|| o.evidence.close_session());
+                let closing = s.spawn(close);
                 let entry = held.acknowledged.recv_timeout(PATIENCE).unwrap();
-                let acknowledged = (entry.kind, entry.phase.as_deref());
-                assert_eq!(acknowledged, (Some("ordinary"), Some("session_closed")));
+                let acknowledged = (entry.kind, entry.phase.as_deref(), entry.commitment);
+                assert_eq!(
+                    acknowledged,
+                    (ordinary, Some(CLOSE.1 .0), CLOSE.1 .1.map(str::to_owned))
+                );
                 drop(held);
                 closing.join().unwrap()
             });
             assert!(matches!(closed, EndStatus::Recorded { .. }));
             assert_eq!(latched_owed(&o.evidence), (false, 0));
-            let commits = |trace: &[Entry]| -> Vec<(Option<&str>, Option<String>)> {
-                let commits = trace.iter().filter(|e| e.point == "store.commit");
-                commits.map(|e| (e.kind, e.phase.clone())).collect()
-            };
-            let (flush, ordinary) = (Some("owed_flush"), Some("ordinary"));
-            let closed = (ordinary, Some("session_closed".to_string()));
-            let end_flush = (flush, Some("model_call".to_string()));
-            assert_eq!(commits(&drain_trace()), [end_flush, closed.clone()]);
-            let close = || o.evidence.close_session();
-            let r = faulted(f, &o.evidence, (Mech::S2, CLOSE.0), CLOSE.1, close);
-            assert_eq!(
-                (r.out, latched_owed(&o.evidence)),
-                (EndStatus::Owed, (false, 1))
-            );
-            let r = faulted(f, &o.evidence, (Mech::S2, CLOSE.0), CLOSE.1, close);
-            assert_eq!(
-                (r.out, latched_owed(&o.evidence)),
-                (EndStatus::Owed, (false, 1))
-            );
+            assert_eq!(commits(&drain_trace()), [record(flush), record(ordinary)]);
+            owed();
+            let r = owed();
             assert_eq!(r.consumed(f), Ok(()), "unused by the flush, then consumed");
-            let close_flush = (flush, Some("session_closed".to_string()));
             assert_eq!(
                 commits(&r.trace),
-                [close_flush],
+                [record(flush)],
                 "the flush committed past S2"
             );
         },
