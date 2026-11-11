@@ -91,6 +91,8 @@ src/oracles/m3a_s_o4.rs|path|"../../../kernel/src/inert_page/tests/s_o4_round_tr
 src/oracles/m3a_verifier.rs|include_str|"m3a_bakery.html"
 src/oracles/m3a_verifier.rs|include_str|"../../../kernel/src/inert_page/fixtures/reference.html"
 src/oracles/m3a_verifier.rs|include_str|"../verifier.rs"
+src/oracles/route_seams_guard.rs|include_str|"../../Cargo.toml"
+src/oracles/route_seams_guard.rs|include_str|"../../../crates/nexus-governed-control/Cargo.toml"
 src/oracles/route_seams_guard.rs|include_str|"../../../crates/nexus-governed-control/src/host_session/model_call_tests.rs"
 src/oracles/route_seams_guard.rs|include_str|"route_seams_guard.pins"
 src/oracles/route_seams_guard.rs|include_str|"route_seams_guard.rs"
@@ -488,4 +490,243 @@ fn bounded(command: &mut std::process::Command) -> std::process::Output {
         std::thread::sleep(Duration::from_millis(5)); // Polls an exit only.
     }
     process.wait_with_output().unwrap()
+}
+@@@ host/tests/route_cells/main.rs
+const PATIENCE: Duration = Duration::from_secs(10);
+const CHILD: &str = "SB3E_ROUTE_CHILD";
+const NAME: &str = "qwen3.6:35b-a3b";
+const DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";
+@@@ host/tests/route_cells/main.rs
+fn child(name: &str, body: fn(&Fixture)) {
+    child_with(name, |_| Vec::new(), body);
+}
+fn child_with(name: &str, env: fn(&std::path::Path) -> Vec<(&str, PathBuf)>, body: fn(&Fixture)) {
+    if let Some(root) = std::env::var_os(CHILD) {
+        if std::env::var_os(store::SHIM_SHA256).is_some() {
+            store::shim_witness();
+        }
+        body(&Fixture(PathBuf::from(root)));
+        return println!("ROUTE CHILD PASSED {name}");
+    }
+    // A path LD_PRELOAD can name: no `:` (its list separator).
+    let leaf = format!(
+        "sb3e-route-{}-{}",
+        std::process::id(),
+        name.replace("::", "-")
+    );
+    let root = std::env::temp_dir().join(leaf);
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let fixture = Fixture(root);
+    let extra = env(&fixture.0);
+    let mut process = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture", "--test-threads=1"])
+        .env(CHILD, &fixture.0)
+        .envs(extra.iter().cloned())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while process.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            process.kill().unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(5)); // Polls an exit only.
+    }
+    let out = process.wait_with_output().unwrap();
+    let result = std::fs::read_to_string(fixture.0.join("result")).unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && result.is_empty(),
+        "{name}: {result}{stdout}{stderr}"
+    );
+    assert!(stdout.contains(&format!("ROUTE CHILD PASSED {name}\n")));
+    for line in stdout.lines().filter_map(|l| l.split_once("WITNESS ")) {
+        println!("{name}: {}", line.1); // U4a-2: measured evidence (--nocapture).
+    }
+    if let Some((_, digest)) = extra.iter().find(|(k, _)| *k == store::SHIM_SHA256) {
+        store::shim_witnessed(&digest.to_string_lossy(), &stdout);
+    }
+}
+@@@ host/tests/route_cells/main.rs
+struct Fixture(PathBuf);
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if std::env::var_os(CHILD).is_none() {
+            let _ = std::fs::remove_dir_all(&self.0); // Only this owned root.
+        }
+    }
+}
+struct Opened {
+    session: HostSession,
+    ingress: SessionIngress,
+    evidence: Arc<PrimaryEvidence>,
+}
+impl Fixture {
+    fn open(&self) -> Opened {
+        assert!(nexus_governed_control::files::make_non_dumpable());
+        let home = self.0.join("home");
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&home)
+            .unwrap();
+        let seed = SessionSeed::new().unwrap();
+        let ingress = seed.ingress();
+        let store = home.join("broker/p3-evidence/evidence.sqlite3");
+        let evidence = PrimaryEvidence::open(&store, vec![]).unwrap();
+        let clock = Arc::new(SystemClock::default());
+        let session = HostSession::open_with_history(
+            seed,
+            &home.join("broker"),
+            &home,
+            evidence.clone(),
+            clock,
+            Arc::new(Owner),
+        )
+        .unwrap();
+        assert!(session.startup_report().ready());
+        Opened {
+            session,
+            ingress,
+            evidence,
+        }
+    }
+    fn pause(&self, point: &'static str) -> Held {
+        let result = Arc::new(std::fs::File::create(self.0.join("result")).unwrap());
+        arm(
+            point,
+            Action::Pause {
+                cell: "u3b",
+                result,
+            },
+        )
+    }
+}
+impl Opened {
+    /// The public bootstrap, then one original door with its File run.
+    fn door(&self, root: &std::path::Path) -> (SessionDoor, RunId, u64) {
+        let workspace = root.join("workspace");
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&workspace)
+            .unwrap();
+        self.session.bootstrap_workspace(&workspace, &[]).unwrap();
+        self.session.finish_bootstrap().unwrap();
+        let request = self.ingress.accept(CommandKind::Run, 1).unwrap();
+        let door = self.session.open_file_door(&request).unwrap();
+        let attachment = door.file_port().unwrap().attach().unwrap();
+        door.claim_file_session(&attachment).unwrap();
+        let run = door.open_file_run(&attachment).unwrap();
+        (door, run, request.sequence())
+    }
+}
+@@@ host/tests/route_cells/main.rs
+struct Owner;
+impl ControlConfirmer for Owner {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        true
+    }
+    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
+        true
+    }
+    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+        true
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
+}
+@@@ host/tests/route_cells/main.rs
+fn fake_ollama() -> (String, Arc<Mutex<Vec<String>>>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let served: Arc<Mutex<Vec<String>>> = Arc::default();
+    let peer = served.clone();
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().map_while(Result::ok) {
+            let (mut head, mut byte) = (Vec::new(), [0u8; 1]);
+            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
+                head.push(byte[0]);
+            }
+            let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+            let length = head.split("content-length:").nth(1);
+            let length = length.and_then(|l| l.lines().next()?.trim().parse().ok());
+            let _ = stream.read_exact(&mut vec![0u8; length.unwrap_or(0)]);
+            let path = head.split_whitespace().nth(1).unwrap_or_default();
+            let body = match path {
+                "/api/version" => r#"{"version":"0.40.13"}"#.to_string(),
+                "/api/status" => r#"{"cloud":{"disabled":true,"source":"env"}}"#.to_string(),
+                "/api/tags" => format!(
+                    r#"{{"models":[{{"name":"{NAME}","model":"{NAME}","digest":"{DIGEST}"}}]}}"#
+                ),
+                "/api/chat" => format!(
+                    r#"{{"model":"{NAME}","message":{{"role":"assistant","content":"{{\"ok\":true}}"}},"done":true,"done_reason":"stop","prompt_eval_count":587,"eval_count":378}}"#
+                ),
+                _ => r#"{"capabilities":["completion","thinking"]}"#.to_string(),
+            };
+            peer.lock().unwrap().push(path.to_string());
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                 content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    (endpoint, served)
+}
+fn spec() -> ModelPinSpec {
+    ModelPinSpec {
+        name: NAME.into(),
+        digest: DIGEST.into(),
+        runtime_version: "0.40.13".into(),
+        config: RuntimeConfig {
+            num_ctx: 8192,
+            temperature_milli: 0,
+            seed: 7,
+            think: Think::Off,
+            truncate: false,
+        },
+    }
+}
+@@@ host/tests/route_cells/store.rs
+pub(super) const SHIM_SHA256: &str = "ROUTE_SHIM_SHA256";
+@@@ host/tests/route_cells/store.rs
+fn sha256_hex(path: &Path) -> String {
+    let digest = Sha256::digest(std::fs::read(path).unwrap());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+pub(super) fn shim_witness() {
+    let library = std::env::var_os("LD_PRELOAD").map(PathBuf::from).unwrap();
+    let library = std::fs::canonicalize(library).unwrap();
+    let maps = std::fs::read_to_string("/proc/self/maps").unwrap();
+    let mut mapped = maps.lines().filter_map(|l| l.split_whitespace().nth(5));
+    assert!(
+        mapped.any(|p| Path::new(p) == library),
+        "the shim is not mapped"
+    );
+    let hex = sha256_hex(&library);
+    assert_eq!(std::env::var(SHIM_SHA256).ok(), Some(hex.clone()));
+    println!("ROUTE SHIM SHA256 {hex}");
+}
+pub(super) fn shim_witnessed(want: &str, stdout: &str) {
+    let hex = want.len() == 64 && want.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    let line = format!("ROUTE SHIM SHA256 {want}\n");
+    assert!(
+        hex && stdout.matches(&line).count() == 1,
+        "shim witness {want}: {stdout}"
+    );
+    let reports = stdout.matches("ROUTE SHIM SHA256 ").count();
+    assert_eq!(reports, 1, "one shim witness: {stdout}");
+    println!("ROUTE SHIM SHA256 {want}");
 }

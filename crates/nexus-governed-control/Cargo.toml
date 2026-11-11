@@ -28,6 +28,7 @@ x11rb = { version = "0.13", features = ["xtest"] }
 
 [dev-dependencies]
 serde_json = "1.0"
+proc-macro2 = { version = "=1.0.106", default-features = false }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(mother_route_seams)'] }

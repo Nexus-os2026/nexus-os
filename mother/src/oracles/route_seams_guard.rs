@@ -17,13 +17,21 @@ const TEST: &str = "#[cfg(test)]";
 const ROUTE: &str = "#[cfg(mother_route_seams)]";
 const GC: &str =
     include_str!("../../../crates/nexus-governed-control/src/host_session/model_call_tests.rs");
-const LEXER: [&str; 10] = [
+const LEXER: [&str; 18] = [
     "seam_sites",
     "leaks_under",
     "mask",
+    "tokens",
+    "leaves",
+    "place",
+    "doc",
+    "comment",
+    "gap",
     "test_only",
     "starts",
     "lex",
+    "words",
+    "piece",
     "flat",
     "pinned",
     "header",
@@ -105,9 +113,83 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "5864c7617c1ec836fc9d23e5fba23173b58dbeea945e0f5c72d1544fc1179aee";
-const MUTANTS: usize = 387;
-const REGIONS: usize = 22;
+const PINS_SHA256: &str = "88064bcd652fb3ff878b3a455ae9dc7b0342a81ccba3a2f860c36307d9fc7359";
+const MUTANTS: usize = 617;
+const REGIONS: usize = 29;
+/// SB3E-R44.1: `s5.rs` byte for byte, the authority its credit rests on; a
+/// reviewed commit that changes `s5.rs` changes this digest.
+const S5_SHA256: &str = "54bc7c29fd123056eebed2f46b31d5fcfa8dde919c795992c58e7bac7f628319";
+/// SB3E-R44.3: the guards' lexer, a dev-dependency only, exactly this line
+/// in each manifest (no feature, no other version or table).
+const LEXER_DEP: &str = "proc-macro2 = { version = \"=1.0.106\", default-features = false }";
+const MANIFESTS: [(&str, &str); 2] = [
+    ("mother/Cargo.toml", include_str!("../../Cargo.toml")),
+    (
+        "crates/nexus-governed-control/Cargo.toml",
+        include_str!("../../../crates/nexus-governed-control/Cargo.toml"),
+    ),
+];
+/// SB3E-R44.2: `main.rs`'s top-level items (`items`), one per line (one
+/// `:` escaped, so the host-access scan does not match this file).
+const MAIN_ITEMS: &str = "\
+#![cfg(all(target_os=linux,mother_route_seams))]#![deny(unsafe_code)]usenexus_governed_control::authority::approval::*;\n\
+usenexus_governed_control::authority::clock::SystemClock;\n\
+usenexus_governed_control::authority::ids::RunId;\n\
+usenexus_governed_control::broker::route_seams::{arm,drain_trace,Action,Entry,Held};\n\
+usenexus_governed_control::evidence_store::PrimaryEvidence;\n\
+usenexus_governed_control::host_session::{CommandKind,HostSession,SessionSeed,SessionState};\n\
+usenexus_governed_control::host_session::{SessionDoor,SessionIngress};\n\
+usenexus_governed_control::inference::{CallDeadline,CallMeter,Charged,InvocationOwner};\n\
+usenexus_governed_control::inference::{MeterRefusal,ModelIdentity,ModelPinSpec,ModelRequest};\n\
+usenexus_governed_control::inference::{ResponseSchema,RuntimeConfig,Think};\n\
+usestd::io::{Read,Write};\n\
+usestd:\x3aos::unix::fs::DirBuilderExt;\n\
+usestd::path::PathBuf;\n\
+usestd::sync::atomic::{AtomicU32,Ordering};\n\
+usestd::sync::mpsc::RecvTimeoutError;\n\
+usestd::sync::{Arc,Mutex};\n\
+usestd::time::{Duration,Instant};\n\
+modgrant;\n\
+modlocks;\n\
+mods5;\n\
+modstore;\n\
+constPATIENCE:Duration=Duration::from_secs(10);\n\
+constCHILD:&str=SB3E_ROUTE_CHILD;\n\
+constNAME:&str=qwen3.6:35b-a3b;\n\
+constDIGEST:&str=a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c;\n\
+#[test]fnroute_lane_cfg_reached_the_harness()\n\
+fnchild(name:&str,body:fn(&Fixture))\n\
+fnchild_with(name:&str,env:fn(&std::path::Path)->Vec<(&str,PathBuf)>,body:fn(&Fixture))\n\
+structFixture(PathBuf);\n\
+implDropforFixture\n\
+structOpened\n\
+implFixture\n\
+implOpened\n\
+structMeter(AtomicU32);\n\
+implCallMeterforMeter\n\
+structNever;\n\
+implCallDeadlineforNever\n\
+structOwner;\n\
+implControlConfirmerforOwner\n\
+fnfake_ollama()->(String,Arc<Mutex<Vec<String>>>)\n\
+fnspec()->ModelPinSpec\n\
+#[test]fnroute_unarmed_point_records_nothing_and_does_not_block()\n\
+#[test]fnroute_armed_pause_acknowledges_blocks_and_releases()\n\
+#[test]fnroute_correlated_identity_is_recorded()\n\
+#[test]fnroute_armed_panic_begins_an_unwind()\n\
+#[test]fnroute_at_cannot_return_into_the_route()\n\
+#[test]fnroute_store_commit_hold_fires_on_an_ordinary_append()\n\
+";
+/// SB3E-R44.2 (S2): every `impl` in the harness but `s5.rs` (`impls`).
+const IMPLS: &str = "\
+host/tests/route_cells/main.rs|implDropforFixture\n\
+host/tests/route_cells/main.rs|implFixture\n\
+host/tests/route_cells/main.rs|implOpened\n\
+host/tests/route_cells/main.rs|implCallMeterforMeter\n\
+host/tests/route_cells/main.rs|implCallDeadlineforNever\n\
+host/tests/route_cells/main.rs|implControlConfirmerforOwner\n\
+host/tests/route_cells/store.rs|impl<T>Faulted<T>\n\
+";
 /// SB3E-R42.4 (G-S3): `s5.rs`'s one import from its parent, by name.
 const S5_SUPER: [&str; 9] = [
     "child",
@@ -202,75 +284,134 @@ fn leaks_under(source: &str, seams: &[&str], attr: &str) -> usize {
         .filter(|&at| !test_only(&code, at, attr))
         .count()
 }
+/// SB3E-R44.3: comments become spaces, and so does every literal's text
+/// between its first and last quote, whose quotes become `"` (so a masked
+/// char literal is still Rust). Byte offsets and lines are kept. The tokens
+/// are proc-macro2's; a source that does not tokenize panics here, and each
+/// guard reports it as a finding before it masks anything.
 fn mask(source: &str) -> String {
+    let found = tokens(source).unwrap_or_else(|e| panic!("does not tokenize: {e}"));
     let b = source.as_bytes();
-    let mut out = b.to_vec();
-    let mut i = 0;
-    let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
-        for c in &mut out[from..to.min(b.len())] {
-            if *c != b'\n' {
-                *c = b' ';
-            }
-        }
-    };
-    while i < b.len() {
-        if b[i..].starts_with(b"//") {
-            let end = b[i..]
-                .iter()
-                .position(|&c| c == b'\n')
-                .map_or(b.len(), |n| i + n);
-            blank(&mut out, i, end);
-            i = end;
-        } else if b[i..].starts_with(b"/*") {
-            let (mut depth, mut j) = (1, i + 2);
-            while j < b.len() && depth > 0 {
-                if b[j..].starts_with(b"/*") {
-                    (depth, j) = (depth + 1, j + 2);
-                } else if b[j..].starts_with(b"*/") {
-                    (depth, j) = (depth - 1, j + 2);
-                } else {
-                    j += 1;
+    let mut out: Vec<u8> = b
+        .iter()
+        .map(|&c| if c == b'\n' { c } else { b' ' })
+        .collect();
+    for (range, literal) in found {
+        out[range.clone()].copy_from_slice(&b[range.clone()]);
+        let text = &source[range.clone()];
+        let quotes = (text.find(['"', '\'']), text.rfind(['"', '\'']));
+        if let (true, Some(first), Some(last)) = (literal, quotes.0, quotes.1) {
+            for c in &mut out[range.start + first..=range.start + last] {
+                if *c != b'\n' {
+                    *c = b' ';
                 }
             }
-            blank(&mut out, i, j);
-            i = j;
-        } else if b[i] == b'r'
-            && (b[i + 1..].starts_with(b"#") || b[i + 1..].starts_with(b"\""))
-            && (i == 0 || !b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'b')
-        {
-            let hashes = b[i + 1..].iter().take_while(|&&c| c == b'#').count();
-            if b.get(i + 1 + hashes) != Some(&b'"') {
-                i += 1;
-                continue;
-            }
-            let close = format!("\"{}", "#".repeat(hashes));
-            let start = i + 2 + hashes;
-            let end = source[start..].find(&close).map_or(b.len(), |n| start + n);
-            blank(&mut out, start, end);
-            i = end + close.len();
-        } else if b[i] == b'"' {
-            let mut j = i + 1;
-            while j < b.len() && b[j] != b'"' {
-                j += if b[j] == b'\\' { 2 } else { 1 };
-            }
-            blank(&mut out, i + 1, j);
-            i = j + 1;
-        } else if b[i] == b'\'' && b.get(i + 1) == Some(&b'\\') && i + 3 <= b.len() {
-            // An escaped char literal ('\'', '\"', '\\', '\u{..}'; b'..' alike).
-            let end = b[i + 3..]
-                .iter()
-                .position(|&c| c == b'\'')
-                .map_or(b.len(), |n| i + 3 + n);
-            blank(&mut out, i + 1, end);
-            i = end + 1;
-        } else if b[i] == b'\'' && b.get(i + 2) == Some(&b'\'') {
-            blank(&mut out, i + 1, i + 2);
-            i += 3;
-        } else {
-            i += 1;
+            out[range.start + first] = b'"';
+            out[range.start + last] = b'"';
         }
     }
     String::from_utf8(out).unwrap()
+}
+/// SB3E-R44.3: every leaf token proc-macro2 reads in `source`, as its byte
+/// range and whether it is a literal. The tokens must line up with the text,
+/// apart only by whitespace and comments; a doc comment, which proc-macro2
+/// reads as a `#[doc]` attribute, is a comment here. Anything else is an error.
+fn tokens(source: &str) -> Result<Vec<(std::ops::Range<usize>, bool)>, String> {
+    let stream: proc_macro2::TokenStream = source.parse().map_err(|e| format!("{e:?}"))?;
+    let (mut found, mut at) = (Vec::new(), 0);
+    leaves(source, stream, &mut at, &mut found)?;
+    match gap(source, at) == source.len() {
+        true => Ok(found),
+        false => Err(format!("text after the last token at byte {at}")),
+    }
+}
+fn leaves(
+    source: &str,
+    stream: proc_macro2::TokenStream,
+    at: &mut usize,
+    found: &mut Vec<(std::ops::Range<usize>, bool)>,
+) -> Result<(), String> {
+    use proc_macro2::{Delimiter, TokenTree};
+    let mut trees = stream.into_iter();
+    while let Some(tree) = trees.next() {
+        *at = gap(source, *at);
+        let rest = &source[*at..];
+        match tree {
+            TokenTree::Punct(p) if p.as_char() == '#' && doc(rest) => {
+                // Its `!` (inner) and `[doc = ..]` group have no text of their own.
+                let inner = rest.starts_with("//!") || rest.starts_with("/*!");
+                *at += comment(rest).ok_or("an unclosed doc comment")?;
+                trees.nth(usize::from(inner));
+            }
+            TokenTree::Group(g) => {
+                let (open, close) = match g.delimiter() {
+                    Delimiter::Parenthesis => ("(", ")"),
+                    Delimiter::Brace => ("{", "}"),
+                    Delimiter::Bracket => ("[", "]"),
+                    Delimiter::None => return Err("an invisible group".into()),
+                };
+                place(source, at, found, open, false)?;
+                leaves(source, g.stream(), at, found)?;
+                *at = gap(source, *at);
+                place(source, at, found, close, false)?;
+            }
+            TokenTree::Ident(i) => place(source, at, found, &i.to_string(), false)?,
+            TokenTree::Punct(p) => place(source, at, found, &p.to_string(), false)?,
+            TokenTree::Literal(l) => place(source, at, found, &l.to_string(), true)?,
+        }
+    }
+    Ok(())
+}
+fn place(
+    source: &str,
+    at: &mut usize,
+    found: &mut Vec<(std::ops::Range<usize>, bool)>,
+    text: &str,
+    literal: bool,
+) -> Result<(), String> {
+    if !source[*at..].starts_with(text) {
+        return Err(format!("`{text}` is not at byte {at}"));
+    }
+    found.push((*at..*at + text.len(), literal));
+    *at += text.len();
+    Ok(())
+}
+/// A doc comment opens `rest` (proc-macro2's rule).
+fn doc(rest: &str) -> bool {
+    let line = rest.starts_with("///") && !rest.starts_with("////");
+    let block = rest.starts_with("/**") && !rest.starts_with("/***") && !rest.starts_with("/**/");
+    line || block || rest.starts_with("//!") || rest.starts_with("/*!")
+}
+/// The length of the comment (block comments nest) that opens `rest`.
+fn comment(rest: &str) -> Option<usize> {
+    if rest.starts_with("//") {
+        return Some(rest.find('\n').unwrap_or(rest.len()));
+    }
+    let (b, mut depth, mut i) = (rest.as_bytes(), 0usize, 0);
+    while rest.starts_with("/*") && i + 1 < b.len() {
+        match &b[i..i + 2] {
+            b"/*" => (depth, i) = (depth + 1, i + 2),
+            b"*/" => (depth, i) = (depth - 1, i + 2),
+            _ => i += 1,
+        }
+        if depth == 0 {
+            return Some(i);
+        }
+    }
+    None
+}
+/// The byte after the whitespace and comments (not doc comments) at `at`.
+fn gap(source: &str, mut at: usize) -> usize {
+    loop {
+        let rest = &source[at..];
+        match rest.chars().next() {
+            Some(c) if c.is_whitespace() => at += c.len_utf8(),
+            _ => match comment(rest).filter(|_| !doc(rest)) {
+                Some(n) => at += n,
+                None => return at,
+            },
+        }
+    }
 }
 fn test_only(code: &str, at: usize, attr: &str) -> bool {
     let mut starts = starts(code, at).into_iter();
@@ -313,9 +454,28 @@ fn starts(code: &str, at: usize) -> Vec<usize> {
         end = i;
     }
 }
+/// The normalization (SB3E-R14.1, R44.3): proc-macro2's tokens of `source`
+/// as text, each an identifier, a whole literal or one punctuation
+/// character; a raw identifier is its `r`, `#` and name. Comments and
+/// whitespace are not tokens.
 fn lex(source: &str) -> Vec<&str> {
-    let (code, mut tokens, mut i) = (mask(source), Vec::new(), 0);
-    let c = code.as_bytes();
+    let found = tokens(source).unwrap_or_else(|e| panic!("does not tokenize: {e}"));
+    let mut out = Vec::new();
+    for (r, literal) in found {
+        if !literal && source[r.clone()].starts_with("r#") {
+            let (a, b) = (r.start + 1, r.start + 2);
+            out.extend([&source[r.start..a], &source[a..b], &source[b..r.end]]);
+        } else {
+            out.push(&source[r]);
+        }
+    }
+    out
+}
+/// The words of text `mask` has masked (a header's range ends inside its
+/// block, so it is not Rust on its own): an identifier or number, a string
+/// of spaces, or one character.
+fn words(code: &str) -> Vec<&str> {
+    let (c, mut found, mut i) = (code.as_bytes(), Vec::new(), 0);
     let word = |b: &u8| b.is_ascii_alphanumeric() || *b == b'_';
     while i < c.len() {
         let start = i;
@@ -325,24 +485,88 @@ fn lex(source: &str) -> Vec<&str> {
                 continue;
             }
             b'"' => code[i + 1..].find('"').map_or(c.len() - i, |n| n + 2),
-            b'\'' if c.get(i + 2) == Some(&b'\'') => 3,
             b if word(&b) => c[i..].iter().take_while(|b| word(b)).count(),
-            _ => source[i..].chars().next().map_or(1, char::len_utf8),
+            _ => code[i..].chars().next().map_or(1, char::len_utf8),
         };
-        tokens.push(&source[start..i.min(c.len())]);
+        found.push(&code[start..i.min(c.len())]);
     }
-    tokens
+    found
+}
+/// A reviewed region's tokens (SB3E-R44.3). A region may close or open a
+/// block it does not hold, so the delimiters it lacks are put around it for
+/// proc-macro2 and left out again. Only that padding is guessed (from the
+/// region's own brackets outside its strings, chars and comments); a wrong
+/// guess does not tokenize, and the region is one token that pins nothing.
+fn piece(region: &str) -> Vec<&str> {
+    let (b, mut i, mut open, mut lead) = (region.as_bytes(), 0, Vec::new(), String::new());
+    let skip = |from: usize, end: u8| {
+        let mut j = from;
+        while j < b.len() && b[j] != end {
+            j += if b[j] == b'\\' { 2 } else { 1 };
+        }
+        j + 1
+    };
+    let raw = |i: usize| {
+        let hashes = b[i + 1..].iter().take_while(|&&c| c == b'#').count();
+        let word = |c: &u8| c.is_ascii_alphanumeric() || *c == b'_';
+        b.get(i + 1 + hashes) == Some(&b'"')
+            && (i == 0 || !word(&b[i - 1]) || b"bc".contains(&b[i - 1]))
+    };
+    while i < b.len() {
+        let rest = &region[i..];
+        let len = |r: &str| r.chars().next().map_or(1, char::len_utf8);
+        let char_end = i + 1 + len(rest.get(1..).unwrap_or(""));
+        i = match b[i] {
+            _ if comment(rest).is_some() => i + comment(rest).unwrap_or(1),
+            b'"' => skip(i + 1, b'"'),
+            b'r' if raw(i) => {
+                let hashes = rest[1..].bytes().take_while(|&c| c == b'#').count();
+                let close = format!("\"{}", "#".repeat(hashes));
+                let body = &rest[2 + hashes..];
+                i + 2 + hashes + body.find(&close).map_or(body.len(), |n| n + close.len())
+            }
+            b'\'' if b.get(i + 1) == Some(&b'\\') => skip(i + 2, b'\''),
+            b'\'' if b.get(char_end) == Some(&b'\'') => char_end + 1,
+            c => {
+                match c {
+                    b'(' | b'[' | b'{' => open.push(c),
+                    b')' | b']' | b'}' if open.pop().is_none() => lead.insert(0, c as char),
+                    _ => {}
+                }
+                i + len(rest)
+            }
+        };
+    }
+    let pair = |c: char| match c {
+        ')' => '(',
+        ']' => '[',
+        '}' => '{',
+        '(' => ')',
+        '[' => ']',
+        _ => '}',
+    };
+    let head: String = lead.chars().map(pair).collect();
+    let tail: String = open.iter().rev().map(|&c| pair(c as char)).collect();
+    let padded = format!("{head}{region}{tail}");
+    let Ok(found) = tokens(&padded) else {
+        return vec![region];
+    };
+    let (n, k) = (head.len(), found.len() - tail.len());
+    let ranges = found[n.min(k)..k]
+        .iter()
+        .map(|(r, _)| r.start - n..r.end - n);
+    ranges.map(|r| &region[r]).collect()
 }
 fn flat(tokens: &[&str]) -> String {
     tokens.concat().replace('"', "")
 }
 fn pinned(source: &str, literal: &str) -> usize {
-    let (source, literal) = (lex(source), lex(literal));
+    let (source, literal) = (lex(source), piece(literal));
     let windows = source.windows(literal.len());
     windows.filter(|w| *w == literal).count()
 }
 fn header(code: &str, range: std::ops::Range<usize>) -> (Vec<String>, String) {
-    let tokens = lex(&code[range]);
+    let tokens = words(&code[range]);
     let (mut attrs, mut lead, mut i) = (Vec::new(), 0, 0);
     while i < tokens.len() {
         let open = i + 1 + usize::from(tokens.get(i + 1) == Some(&"!"));
@@ -397,19 +621,31 @@ fn enclosing(code: &str, mut at: usize) -> Vec<std::ops::Range<usize>> {
         at = start;
     }
 }
-/// One item's text, from `fn name(` to its closing brace.
+/// SB3E-R44.3 (B5): the one `fn name` item's text, from `fn` to the close of
+/// its body's `{}` token tree (proc-macro2's); `None` unless exactly one.
 fn item<'a>(source: &'a str, name: &str) -> Option<&'a str> {
-    let at = source.find(&format!("\nfn {name}("))? + 1;
-    let end = source[at..].find("\n}\n")?;
-    Some(&source[at..at + end + 2])
+    let found = tokens(source).ok()?;
+    let t = |i: usize| &source[found[i].0.clone()];
+    let at: Vec<usize> = (1..found.len())
+        .filter(|&i| t(i - 1) == "fn" && t(i) == name)
+        .collect();
+    let [at] = at[..] else { return None };
+    let (open, mut depth) = ((at..found.len()).find(|&i| t(i) == "{")?, 0i32);
+    let close = (open..found.len()).find(|&i| {
+        depth += i32::from(t(i) == "{") - i32::from(t(i) == "}");
+        depth == 0
+    })?;
+    Some(&source[found[at - 1].0.start..found[close].0.end])
 }
 /// A region's first eight tokens, as its findings name it.
 fn label(pin: &str) -> String {
-    let tokens = lex(pin);
+    let tokens = piece(pin);
     flat(&tokens[..tokens.len().min(8)])
 }
 /// G-S1: a file's `include`, `include_str` and `include_bytes` tokens and
-/// its `path = ".."` attributes, as `file|kind|argument` (`?`: no literal).
+/// its `path = ..` keys, as `file|kind|argument` (`?`: no argument). The
+/// argument is the next token whatever it is (SB3E-R44.3: a raw or byte
+/// string as written; anything but a listed literal is a finding).
 fn includes(file: &str, source: &str) -> Vec<String> {
     let tokens = lex(source);
     let mut rows = Vec::new();
@@ -425,7 +661,7 @@ fn includes(file: &str, source: &str) -> Vec<String> {
         let opens = i
             .checked_sub(1)
             .is_some_and(|p| ["[", ",", "("].contains(&tokens[p]));
-        if *t == "path" && opens && next(1) == "=" && next(2).starts_with('"') {
+        if *t == "path" && opens && next(1) == "=" && ![">", "="].contains(&next(2)) {
             rows.push(format!("{file}|path|{}", next(2)));
         }
     }
@@ -433,6 +669,17 @@ fn includes(file: &str, source: &str) -> Vec<String> {
 }
 /// Step 0 item 8 and SB3E-R42.2 over Mother's sources, every finding.
 fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
+    // SB3E-R44.3: every source tokenizes (proc-macro2) and lines up with its
+    // text, or nothing below can scan it: each one that does not is a finding.
+    let lexed = sources
+        .iter()
+        .filter_map(|(f, s)| tokens(s).err().map(|e| (f, e)));
+    let lexed: Vec<String> = lexed
+        .map(|(f, e)| format!("lex: {f} does not tokenize: {e}"))
+        .collect();
+    if !lexed.is_empty() {
+        return lexed;
+    }
     let mut found = Vec::new();
     let mut check = |ok: bool, what: String| {
         if !ok {
@@ -582,7 +829,89 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     let declared = text(sources, "src/lib.rs");
     let declaration = "\n#[cfg(mother_route_seams)]\npub mod route_seams;\n";
     check(declared.contains(declaration), "S5: its declaration".into());
+    // SB3E-R44.2: `s5.rs`'s reach. Its parent's items are exactly these (the
+    // reached ones also pinned whole, above), and no `impl` in the harness
+    // is added (S2: no other `impl` of `Fixture` or `Opened`).
+    let main = items(text(sources, "host/tests/route_cells/main.rs"));
+    let harness = sources
+        .iter()
+        .filter(|(f, _)| f.starts_with("host/tests/route_cells/") && f != S5);
+    let harness = harness.flat_map(|(f, s)| impls(s).into_iter().map(move |r| format!("{f}|{r}")));
+    let harness: Vec<String> = harness.collect();
+    for (what, rows, listed) in [
+        ("main.rs items", main, MAIN_ITEMS),
+        ("harness impls", harness, IMPLS),
+    ] {
+        let listed: Vec<&str> = listed.lines().collect();
+        for row in rows.iter().filter(|r| !listed.contains(&r.as_str())) {
+            check(false, format!("R44.2 {what}: unlisted {row}"));
+        }
+        for row in listed.iter().filter(|l| !rows.iter().any(|r| r == *l)) {
+            check(false, format!("R44.2 {what}: missing {row}"));
+        }
+        check(
+            rows == listed,
+            format!("R44.2 {what}: not exactly the list"),
+        );
+    }
+    for finding in MANIFESTS.iter().flat_map(|(f, m)| manifest_findings(f, m)) {
+        check(false, finding);
+    }
     found
+}
+/// SB3E-R44.3: the manifest names proc-macro2 once, by exactly `LEXER_DEP`,
+/// in its one `[dev-dependencies]` table.
+fn manifest_findings(file: &str, manifest: &str) -> Vec<String> {
+    let named = manifest
+        .lines()
+        .filter(|l| l.contains("proc-macro2") || l.contains("proc_macro2"));
+    let named: Vec<&str> = named.collect();
+    let dev = manifest
+        .split("\n[dev-dependencies]\n")
+        .nth(1)
+        .unwrap_or("");
+    let dev = dev
+        .split("\n[")
+        .next()
+        .unwrap_or("")
+        .lines()
+        .any(|l| l == LEXER_DEP);
+    let once = manifest.matches("[dev-dependencies]").count() == 1;
+    match named == [LEXER_DEP] && dev && once {
+        true => Vec::new(),
+        false => vec![format!("R44.3: {file}: proc-macro2 {named:?}")],
+    }
+}
+/// SB3E-R44.2: each top-level item of `source` as one word, attributes
+/// included, to its body's `{` (an item that ends in `;`, whole).
+fn items(source: &str) -> Vec<String> {
+    let t = lex(source);
+    let (mut rows, mut start, mut open, mut depth) = (Vec::new(), 0, 0, 0i32);
+    for i in 0..t.len() {
+        open = if depth == 0 && t[i] == "{" { i } else { open };
+        depth +=
+            i32::from(["(", "[", "{"].contains(&t[i])) - i32::from([")", "]", "}"].contains(&t[i]));
+        let end = t[i] == ";" || t[i] == "}" && t.get(i + 1) != Some(&";");
+        if depth == 0 && end {
+            rows.push(flat(&t[start..if t[i] == "}" { open } else { i + 1 }]));
+            start = i + 1;
+        }
+    }
+    rows
+}
+/// SB3E-R44.2: every `impl` of `source`, wherever it stands, to its `{`; an
+/// `impl Trait` type (after `->`, `:`, `&`, `(`, `<`, `,` or `=`) is not one.
+fn impls(source: &str) -> Vec<String> {
+    let t = lex(source);
+    let item = |i: &usize| *i == 0 || [";", "{", "}", "]", "unsafe"].contains(&t[i - 1]);
+    let at = (0..t.len()).filter(|&i| t[i] == "impl").filter(item);
+    let head = |i: usize| {
+        t[i..]
+            .iter()
+            .position(|x| *x == "{")
+            .map_or(t.len(), |n| i + n)
+    };
+    at.map(|i| flat(&t[i..head(i)])).collect()
 }
 /// Every Rust file of the crate, by path relative to `mother/`, read by the
 /// adapter's scan walker (only the adapter touches the host).
@@ -693,6 +1022,18 @@ fn port_uses(s5: &str) -> Vec<String> {
 /// A.2 item 3 (a)-(d), SB3E-R42.1, R42.4 and R42.5, and the harness
 /// `timeout` (SB3E-R39.1, R40.6) over `s5.rs`, by identifier token.
 fn s5_findings(s5: &str) -> Vec<String> {
+    use sha2::Digest;
+    // SB3E-R44.1: the file is the reviewed file, byte for byte; the rules
+    // below are a second, advisory layer.
+    let digest = hex::encode(sha2::Sha256::digest(s5.as_bytes()));
+    let mut pre = Vec::new();
+    if digest != S5_SHA256 {
+        pre.push(format!("G-S5: {S5}'s sha256 is {digest}"));
+    }
+    if let Err(e) = tokens(s5) {
+        pre.push(format!("lex: {S5} does not tokenize: {e}"));
+        return pre;
+    }
     let tokens = lex(s5);
     let n = |pat: &[&str]| tokens.windows(pat.len()).filter(|w| *w == pat).count();
     let base = s5.as_ptr() as usize;
@@ -701,7 +1042,7 @@ fn s5_findings(s5: &str) -> Vec<String> {
     let (drive, bound) = (span("drive_call"), span("bounded"));
     let outside = |i: usize| !drive.contains(&at(tokens[i]));
     let code = mask(s5);
-    let mut found = Vec::new();
+    let mut found = pre;
     let mut check = |ok: bool, what: String| {
         if !ok {
             found.push(what);
@@ -854,8 +1195,12 @@ fn s5_findings(s5: &str) -> Vec<String> {
         ),
     ] {
         let body = item(s5, test).unwrap_or("");
+        let bounded = lex(body)
+            .windows(2)
+            .filter(|w| w == &["bounded", "("])
+            .count();
         check(
-            pinned(body, "bounded(") == 1,
+            bounded == 1,
             format!("G-S4: {test}: an unbounded child wait"),
         );
         check(
@@ -895,7 +1240,7 @@ fn sweep(sources: &[(String, String)], pins: &[(&str, &str)]) -> (Vec<usize>, Ve
     let (mut counts, mut survivors) = (Vec::new(), Vec::new());
     for (file, pin) in pins {
         let source = text(sources, file);
-        let (tokens, literal, base) = (lex(source), lex(pin), source.as_ptr() as usize);
+        let (tokens, literal, base) = (lex(source), piece(pin), source.as_ptr() as usize);
         let Some(at) = tokens.windows(literal.len()).position(|w| w == literal) else {
             survivors.push(format!("pin {file}: {} not found", label(pin)));
             counts.push(0);
@@ -1009,6 +1354,36 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
             ),
             "G-S1: src/coordinator.rs|path|\"../../kernel/src/more.rs\" is not allowed",
         ),
+        (
+            "G-S1 a #[path = r\"..\"] module (R44, B2)",
+            planted(
+                &sources,
+                "src/coordinator.rs",
+                anchor,
+                &format!("{anchor}#[path = r\"../../kernel/src/more.rs\"]\nmod more;\n"),
+            ),
+            "G-S1: src/coordinator.rs|path|r\"../../kernel/src/more.rs\" is not allowed",
+        ),
+        (
+            "R44.3 a source that does not tokenize",
+            planted(
+                &sources,
+                "src/coordinator.rs",
+                anchor,
+                &format!("{anchor}}}\n"),
+            ),
+            "lex: src/coordinator.rs does not tokenize",
+        ),
+        (
+            "R44.2 a new impl Fixture helper (S2)",
+            planted(
+                &sources,
+                "host/tests/route_cells/main.rs",
+                "struct Never;\n",
+                "impl Fixture {\n    fn again(&self) {}\n}\nstruct Never;\n",
+            ),
+            "R44.2 harness impls: not exactly the list",
+        ),
     ];
     for (plant, sources, expected) in plants {
         killed(
@@ -1029,6 +1404,14 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
         &pins_findings(&shrunk),
         &expected,
     );
+    // SB3E-R44.3: a feature added to, or the version changed in, its line.
+    let (file, manifest) = MANIFESTS[0];
+    let feature = LEXER_DEP.replace(" }", ", features = [\"span-locations\"] }");
+    for new in [feature, LEXER_DEP.replace("=1.0.106", "1.0.106")] {
+        let planted = manifest_findings(file, &manifest.replace(LEXER_DEP, &new));
+        let expected = ["R44.3: mother/Cargo.toml: proc-macro2"];
+        killed(&mut misses, &new, &planted, &expected);
+    }
     found.extend(misses);
     fail_on(found);
 }
