@@ -295,7 +295,7 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
         stage.mkdir(mode=0o700)
         (stage/'request.json').write_bytes(receipt.encode(request))
         (stage/'request.json').chmod(0o444)
-        source = snapshot.GitSource(Path('/var/lib/gatebox-source'),registration['device'],registration['inode'])
+        source = snapshot.GitSource(Path('/var/lib/gatebox-source'),registration.get('filesystem'),registration.get('inode'))
         summary['snapshot'] = snapshot.export(source,request['full_sha'],stage/'snapshot')
         for kind in ('log','status'):
             sock = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)

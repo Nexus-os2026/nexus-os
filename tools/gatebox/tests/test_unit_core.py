@@ -9,6 +9,7 @@ import shutil
 import stat
 import tempfile
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 import zlib
 
@@ -51,6 +52,40 @@ def fixture():
     sha = source.commit([('100644','.gitattributes',attr),('100644','Cargo.lock',lock),
                          ('100755','file',content),('120000','link',link)])
     return source, sha
+
+# SB3E-R26 (GB2): the source identity is the ext2/3/4 superblock's UUID-derived f_fsid plus the inode.
+EXT4, TMPFS, VFAT = 0xEF53, 0x01021994, 0x4D44
+FSID = 0x39847550afb00c35  # this host's root filesystem 9ac90fd2-...: le64(uuid[:8]) ^ le64(uuid[8:])
+REGISTERED = {'type':'ext4','fsid':'%016x' % FSID}
+
+def administration(admin):
+    """A minimal bare Git administration directory; Python writes it, no Git mutation command."""
+    (admin/'objects/info').mkdir(parents=True)
+    (admin/'refs').mkdir()
+    (admin/'HEAD').write_text('ref: refs/heads/main\n')
+    (admin/'config').write_text('[core]\nrepositoryformatversion = 0\nbare = true\n')
+    return admin
+
+@contextmanager
+def filesystem(module=snapshot, kind=EXT4, fsid=FSID, error=None):
+    """Stands in for fstatfs(2) only (TMPDIR may be tmpfs); descriptors, inodes and Git stay real."""
+    def statfs(fd):
+        os.fstat(fd)  # a real open descriptor is still required
+        if error is not None: raise error
+        return kind, fsid
+    with patch.object(module,'statfs',statfs,create=True): yield
+
+@contextmanager
+def renumbered(inode, shift=0x100):
+    """A reboot that renumbers block devices: st_dev of the same inode changes in os.stat and os.fstat."""
+    real_stat, real_fstat = os.stat, os.fstat
+    def moved(result):
+        if result.st_ino != inode: return result
+        fields = list(result)
+        fields[2] = result.st_dev+shift
+        return os.stat_result(fields)
+    with patch('os.stat',lambda *a,**k: moved(real_stat(*a,**k))), patch('os.fstat',lambda *a,**k: moved(real_fstat(*a,**k))):
+        yield
 
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
@@ -140,20 +175,18 @@ class SnapshotTests(unittest.TestCase):
     def test_git_administration_indirection(self):
         admin, common = self.root/'admin', self.root/'common'
         for directory in (admin,common):
-            (directory/'objects/info').mkdir(parents=True)
-            (directory/'refs').mkdir()
-            (directory/'HEAD').write_text('ref: refs/heads/main\n')
-            (directory/'config').write_text('[core]\nrepositoryformatversion = 0\nbare = true\n')
+            administration(directory)
         (common/'objects/info/alternates').write_text(str(admin/'objects')+'\n')
         info = admin.stat()
-        snapshot.GitSource(admin,info.st_dev,info.st_ino)
-        for name in ('commondir','gitdir'):
-            marker = admin/name
-            marker.write_text(str(common)+'\n')
-            try:
-                with self.subTest(name=name), self.assertRaisesRegex(ValueError,'indirection'):
-                    snapshot.GitSource(admin,info.st_dev,info.st_ino)
-            finally: marker.unlink()
+        with filesystem():
+            snapshot.GitSource(admin,REGISTERED,info.st_ino)
+            for name in ('commondir','gitdir'):
+                marker = admin/name
+                marker.write_text(str(common)+'\n')
+                try:
+                    with self.subTest(name=name), self.assertRaisesRegex(ValueError,'indirection'):
+                        snapshot.GitSource(admin,REGISTERED,info.st_ino)
+                finally: marker.unlink()
     def test_raw_git_source_and_administration(self):
         # Synthetic loose-object fixture: Python writes data; no Git mutation command.
         source, sha = fixture()
@@ -167,18 +200,87 @@ class SnapshotTests(unittest.TestCase):
             dest.parent.mkdir(exist_ok=True)
             dest.write_bytes(zlib.compress(kind.encode()+b' '+str(len(data)).encode()+b'\0'+data))
         info = admin.stat()
-        raw = snapshot.GitSource(admin, info.st_dev, info.st_ino)
-        snapshot.export(raw, sha, self.root/'real')
-        self.assertEqual((self.root/'real/file').read_bytes(), b'$Format:%H$\nexact\n')
-        with self.assertRaises(ValueError):
-            snapshot.GitSource(admin, info.st_dev, info.st_ino+1)
-        for path in ['objects/info/alternates','objects/pack/test.promisor','refs/replace/'+sha]:
-            marker = admin/path
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text(sha+'\n')
-            with self.subTest(path=path), self.assertRaises(ValueError):
-                snapshot.GitSource(admin, info.st_dev, info.st_ino)
-            marker.unlink()
+        with filesystem():
+            raw = snapshot.GitSource(admin, REGISTERED, info.st_ino)
+            snapshot.export(raw, sha, self.root/'real')
+            self.assertEqual((self.root/'real/file').read_bytes(), b'$Format:%H$\nexact\n')
+            with self.assertRaises(ValueError):
+                snapshot.GitSource(admin, REGISTERED, info.st_ino+1)
+            for path in ['objects/info/alternates','objects/pack/test.promisor','refs/replace/'+sha]:
+                marker = admin/path
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text(sha+'\n')
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    snapshot.GitSource(admin, REGISTERED, info.st_ino)
+                marker.unlink()
+    # ---- GB2 (SB3E-R26): boot-stable source identity. st_dev follows kernel device naming; never a pass condition.
+    def test_gb2_same_filesystem_and_inode_pass_after_device_renumbering(self):
+        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+        with filesystem():
+            source = snapshot.GitSource(admin, REGISTERED, inode)  # boot A
+            with renumbered(inode):
+                self.assertNotEqual(os.stat(admin).st_dev, os.lstat(admin).st_dev)  # the renumbering is observable
+                source.check(source.deadline)  # boot B, the same source
+                snapshot.GitSource(admin, REGISTERED, inode)  # boot B, from the boot-A registration
+    def test_gb2_other_filesystem_identity_refused(self):
+        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+        for fsid in (FSID ^ 1, FSID ^ (1 << 63), 0x29ed1b591aefb877):  # the last: this host's other ext4 filesystem
+            with self.subTest(fsid=hex(fsid)), filesystem(fsid=fsid), self.assertRaisesRegex(ValueError,'^source identity changed$'):
+                snapshot.GitSource(admin, REGISTERED, inode)
+    def test_gb2_other_inode_refused(self):
+        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+        other = administration(self.root/'other.git')
+        with filesystem():
+            for path, registered in ((admin, inode+1), (other, inode)):
+                with self.subTest(path=path.name), renumbered(inode, 0), self.assertRaisesRegex(ValueError,'^source identity changed$'):
+                    snapshot.GitSource(path, REGISTERED, registered)
+    def test_gb2_unavailable_or_unsupported_identity_refused(self):
+        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+        for change, message in ((dict(error=OSError(38,'fstatfs')),'^source filesystem identity unavailable$'),
+                                (dict(fsid=0),'^source filesystem identity unavailable$'),
+                                (dict(kind=TMPFS),'^unsupported source filesystem$'),
+                                (dict(kind=VFAT,fsid=0x10304),'^unsupported source filesystem$')):  # vfat: a device-derived f_fsid
+            with self.subTest(change=change), filesystem(**change):
+                with self.assertRaisesRegex(ValueError,message): snapshot.observe(admin)
+                with self.assertRaisesRegex(ValueError,message): snapshot.GitSource(admin, REGISTERED, inode)
+        with filesystem(), self.assertRaisesRegex(ValueError,'^source identity unavailable$'): snapshot.observe(self.root/'absent.git')
+    def test_gb2_layout_disagreement_is_unavailable(self):
+        fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, fd)
+        real = os.fstatvfs(fd)
+        for field in ('f_fsid','f_bsize','f_blocks'):
+            values = {k:getattr(real,k) for k in ('f_fsid','f_bsize','f_blocks')}
+            values[field] ^= 1
+            with self.subTest(field=field), patch.object(snapshot.os,'fstatvfs',lambda fd: type('V',(),values)):
+                with self.assertRaisesRegex(OSError,'fstatfs layout'): snapshot.statfs(fd)
+                with self.assertRaisesRegex(ValueError,'^source filesystem identity unavailable$'): snapshot.filesystem_identity(fd)
+    def test_gb2_registered_identity_missing_or_invalid_refused(self):
+        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+        bad_filesystems = (None, {}, {'type':'ext4'}, {'fsid':REGISTERED['fsid']}, dict(REGISTERED,type='xfs'),
+                           dict(REGISTERED,fsid='0'*16), dict(REGISTERED,fsid=REGISTERED['fsid'].upper()),
+                           dict(REGISTERED,fsid=REGISTERED['fsid'][1:]), dict(REGISTERED,fsid=FSID), dict(REGISTERED,device=1))
+        with filesystem():
+            for registered, number in [(f, inode) for f in bad_filesystems]+[(REGISTERED, n) for n in (None, 0, -1, True, str(inode), float(inode))]:
+                with self.subTest(registered=registered, inode=number), \
+                        self.assertRaisesRegex(ValueError,'^registered source identity missing or invalid$'):
+                    snapshot.GitSource(admin, registered, number)
+    def test_gb2_noncanonical_source_refused(self):
+        admin = administration(self.root/'source.git'); inode = admin.stat().st_ino
+        (self.root/'link.git').symlink_to(admin)
+        with filesystem():
+            with self.assertRaisesRegex(ValueError,'^noncanonical registered source$'): snapshot.observe(self.root/'link.git')
+            with self.assertRaisesRegex(ValueError,'^noncanonical registered source$'): snapshot.GitSource(self.root/'link.git', REGISTERED, inode)
+            with self.assertRaisesRegex(ValueError,'^noncanonical registered source$'): snapshot.observe(Path('source.git'))
+    def test_gb2_real_filesystem_identity(self):
+        # Unpatched: fstatfs(2) agrees with glibc fstatvfs; ext2/3/4 is identified, anything else refused.
+        fd = os.open(HERE, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, fd)
+        kind, fsid = snapshot.statfs(fd)
+        self.assertEqual(fsid, os.fstatvfs(fd).f_fsid)
+        if kind == EXT4:
+            self.assertEqual(snapshot.observe(HERE), {'filesystem':{'type':'ext4','fsid':'%016x' % fsid},'inode':HERE.stat().st_ino})
+        else:
+            with self.assertRaisesRegex(ValueError,'^unsupported source filesystem$'): snapshot.observe(HERE)
 
 class ReceiptTests(unittest.TestCase):
     def setUp(self):

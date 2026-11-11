@@ -48,7 +48,8 @@ WRAPPER = 'route/route_rustc'
 WRAPPER_SHA256 = 'd23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762'
 EXECUTABLE = ('install.sh','lifecycle.py','verify.py')
 TOOLCHAIN = Path('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu')
-UPGRADE_BOOT = Path('/root/gatebox-gb1')
+UPGRADE_BOOT = Path('/root/gatebox-gb2')  # GB2: a new bootstrap directory; the reviewed GB1 bundle stays where it is
+SOURCE_GIT = Path('/home/nexus/NEXUS/nexus-os/.git')
 HISTORY = CONFIG/'history'
 ETC = Path('/etc')
 RUN_UNIT = Path('/etc/systemd/system/mothergate-run@.service')
@@ -424,6 +425,29 @@ def reusable(retained,staged):
         return True
     finally: os.close(fd)
 
+def registry_row(uid,user,source,observed):
+    # SB3E-R26: the boot-stable source identity (filesystem f_fsid + inode); st_dev is not recorded.
+    return {'mother':dict(uid=uid,user=user,object_format='sha1',common_directory=str(source),filesystem=observed['filesystem'],
+                          inode=observed['inode'],fixture_sha=FIXTURE,qualification_gate_set='full')}
+
+def migrate_registry(snapshot,unique):
+    """SB3E-R26: GB1 pinned the source as (st_dev, st_ino), and st_dev follows kernel device naming, which differs
+    between boots, so the old device is never compared. The new identity is computed live by the new bundle's
+    snapshot code and bound to the installed row by its inode. Preflight only: a refusal changes nothing."""
+    old = json.loads((CONFIG/'registry.json').read_bytes(),object_pairs_hook=unique)  # bytes verified by verify_old_install
+    row = old.get('mother') if isinstance(old,dict) and set(old) == {'mother'} else None
+    fixed = dict(user='nexus',object_format='sha1',common_directory=str(SOURCE_GIT),fixture_sha=FIXTURE,qualification_gate_set='full')
+    try:
+        if (not isinstance(row,dict) or set(row) not in (set(fixed)|{'uid','inode','device'},set(fixed)|{'uid','inode','filesystem'})
+                or any(row[k] != v for k,v in fixed.items()) or any(type(row.get(k,1)) is not int or row.get(k,1) <= 0 for k in ('uid','inode','device'))):
+            raise ValueError('unreviewed registry row')
+        if 'filesystem' in row: snapshot.registered(row['filesystem'],row['inode'])  # a GB2 row's own identity is well formed
+    except ValueError as exc: raise ValueError('installed registry is not a reviewed form') from exc
+    live = snapshot.observe(SOURCE_GIT)
+    if live['inode'] != row['inode']: raise ValueError('source inode differs from the installed registry')
+    if 'filesystem' in row and row['filesystem'] != live['filesystem']: raise ValueError('source filesystem differs from the installed registry')
+    return registry_row(row['uid'],row['user'],SOURCE_GIT,live)
+
 def upgrade(args):
     with maintenance(): return upgrade_locked(args)
 
@@ -450,6 +474,7 @@ def upgrade_locked(args):
         raise ValueError('installed run unit is not rendered for the current gaterun account')
     receipts = receipt_inventory(STATE/'receipts')
     new = load_module(UPGRADE_BOOT/'tools/gatebox/receipt.py','gbx_new_receipt')
+    registry = migrate_registry(load_module(UPGRADE_BOOT/'tools/gatebox/snapshot.py','gbx_new_snapshot'),new.unique)
     with tempfile.TemporaryDirectory(prefix='.gatebox-',dir=ETC) as temporary:
         stage = Path(temporary)
         entry = stage_history(identity,inventory,stage/'history',new)
@@ -464,6 +489,8 @@ def upgrade_locked(args):
         archive = HISTORY/('install-'+identity['bundle_sha256']); archive.mkdir(mode=0o755)
         for name in [n for n in SUPERSEDED if (CONFIG/n).exists()]+sorted(p.name for p in CONFIG.glob('acceptance-*.json')):
             os.rename(CONFIG/name,archive/name)  # kept for audit; never reused under the new identity
+        os.rename(CONFIG/'registry.json',archive/'registry.json')  # SB3E-R26: the old pin, kept for audit
+        record(CONFIG/'registry.json',registry)
         for name in FILES: replace(DEST/name,files['tools/gatebox/'+name],0o755 if name in EXECUTABLE else 0o644)
         replace(DEST/WRAPPER,files['tools/gatebox/'+WRAPPER],0o755)
         replace(DEST/'policy/phase2_live_sandbox.rs',files[HARNESS])
@@ -515,7 +542,7 @@ def main():
     if args.action == 'enable-qualified': return enable_qualified()
     if args.action == 'upgrade': return upgrade(args)
     if (args.repo_id,args.source_git,args.submit_user,args.fixture_sha) != (
-            'mother','/home/nexus/NEXUS/nexus-os/.git','nexus',FIXTURE):
+            'mother',str(SOURCE_GIT),'nexus',FIXTURE):
         raise ValueError('only frozen registration supported')
     protected(BOOT); protected(BOOT/'bundle.tar')
     files = bundle_files(BOOT/'bundle.tar',args.bundle_sha256 or '')
@@ -538,7 +565,9 @@ def main():
         if Path(path).read_text().strip() != expected: raise ValueError('unexpected host policy: '+path)
     source = Path(args.source_git)
     if source.resolve() != source or not source.is_dir(): raise ValueError('canonical Git common directory required')
-    info = source.stat(); submit = pwd.getpwnam(args.submit_user)
+    submit = pwd.getpwnam(args.submit_user)
+    # SB3E-R26: the boot-stable identity, by the verified bootstrap copy of the bundle's snapshot code.
+    observed = load_module(BOOT/'tools/gatebox/snapshot.py','gbx_boot_snapshot').observe(source)
     if submit.pw_uid == 0: raise ValueError('non-root submitter required')
     for path in ('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu','/home/nexus/.cargo/registry'):
         if not Path(path).is_dir() or not any(Path(path).iterdir()): raise ValueError('missing offline input: '+path)
@@ -599,9 +628,7 @@ def main():
             elif stat.S_ISDIR(mode): inventory[key] = {'directory':True}
             else: raise ValueError('special skeleton entry: '+key)
         record(CONFIG/'skeleton.json',inventory)
-        registration = {'mother':dict(uid=submit.pw_uid,user=args.submit_user,object_format='sha1',common_directory=str(source),
-                                      device=info.st_dev,inode=info.st_ino,fixture_sha=FIXTURE,qualification_gate_set='full')}
-        record(CONFIG/'registry.json',registration)
+        record(CONFIG/'registry.json',registry_row(submit.pw_uid,args.submit_user,source,observed))
         for staged,target in staged_security[4:]:
             os.rename(staged,target); outputs.append(target)
         write(CONTROL_POLICY,files['tools/gatebox/policy/mothergate-control.conf'])
