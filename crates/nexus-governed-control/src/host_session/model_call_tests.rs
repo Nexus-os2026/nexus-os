@@ -1491,7 +1491,7 @@ kind,phase,commitment));¦ncertain;}¦self.known
 /// `fire`, whole (the writers, `fire`, `GATES`, `Ctx` and its builders, the
 /// `route_ctx` helpers), and the owed-flush statements with their
 /// neighbours, each compared normalized.
-const PINS: [(&str, &str); 21] = [
+const PINS: [(&str, &str); 22] = [
     (
         "broker/route_seams.rs",
         r#"
@@ -1651,10 +1651,19 @@ commitment)); self.known.take(&Row {
 "#,
     ),
     // AM-2 B.2 (S4): the lock names, the session's seam, its forwarder to the
-    // store and the two poisoning helpers, each whole with its marker.
+    // store and the two poisoning helpers, each whole with its marker. The
+    // session's seam is in its seam-only child module (SB3E-R32.7); the
+    // facade holds only its declaration.
     (
         "host_session.rs",
         r#"
+#[cfg(mother_route_seams)] pub mod route_s4; pub struct SessionDoor {
+"#,
+    ),
+    (
+        "host_session/route_s4.rs",
+        r#"
+use super::HostSession;
 #[cfg(mother_route_seams)] #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum RouteLock {
 ModelState, EvidenceInner, RunTable, Pending, Producers, Actions, }
 #[cfg(mother_route_seams)] impl HostSession { pub fn route_poison(&self, lock: RouteLock) {
@@ -1712,10 +1721,10 @@ const S4_SITES: [&str; 7] = [
     "evidence_store.rs: fn route_poison_inner < implPrimaryEvidence{",
     "evidence_store.rs: route_poison_inner < #[cfg(mother_route_seams)]pub(crate)fnroute_poison_inner\
      (&self){>implPrimaryEvidence{",
-    "host_session.rs: fn route_poison < #[cfg(mother_route_seams)]implHostSession{",
-    "host_session.rs: route_poison_inner < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cf\
+    "host_session/route_s4.rs: fn route_poison < #[cfg(mother_route_seams)]implHostSession{",
+    "host_session/route_s4.rs: route_poison_inner < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cf\
      g(mother_route_seams)]implHostSession{",
-    "host_session.rs: route_poison_runs < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cfg\
+    "host_session/route_s4.rs: route_poison_runs < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cfg\
      (mother_route_seams)]implHostSession{",
 ];
 fn s4_sites(sources: &[(String, String)]) -> Vec<String> {
@@ -3629,7 +3638,8 @@ fn sb3_b1b_test_seams_are_test_only() {
             scanned += 1;
         }
     }
-    assert_eq!(scanned, 7, "every production host_session module scanned");
+    // 8 since SB3E-R32.7: the seam-only `route_s4` is scanned as well.
+    assert_eq!(scanned, 8, "every production host_session module scanned");
     let run = include_str!("../authority/run.rs");
     for (name, source) in [("host_session.rs", parent), ("run.rs", run)] {
         assert_eq!(
