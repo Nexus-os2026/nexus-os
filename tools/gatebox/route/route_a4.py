@@ -2,8 +2,9 @@
 """SB-3E A4 (design section 5 row A4; SB3E-R30.4, R33.3): the installed artifact.
 
 Runs beside `mother/desktop/install.sh`, never inside it (Step 0 section 9).
-The binary and its installing script are the one route_seams.json binary
-whose `shipped` names a script (today nexus-mother, mother/desktop/install.sh).
+The binary and its installing script are pinned (SHIPPED: nexus-mother via
+mother/desktop/install.sh); route_seams.json must name exactly that, or A4
+refuses to run.
 
   run --repo R --toolchain T --work DIR
       `bash mother/desktop/install.sh`, the script's exact command, with a
@@ -40,15 +41,18 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# The shipped binary and its installer, pinned here, not taken from data (SB3E-R37).
+SHIPPED = ("nexus-mother", "mother/desktop/install.sh")
 
 
 def shipped(repo):
-    """The one binary route_seams.json names as shipped, and its installing script."""
+    """The pinned shipped binary and script, asserted against route_seams.json."""
     with open(os.path.join(repo, "tools/gatebox/route/route_seams.json"), encoding="utf-8") as handle:
-        found = [(n, b["shipped"]) for n, b in json.load(handle)["binaries"].items() if b["shipped"]]
-    if len(found) != 1:
-        sys.exit("route_a4: route_seams.json must name exactly one shipped binary")
-    return found[0]
+        binaries = json.load(handle)["binaries"]
+    found = [(n, b.get("shipped")) for n, b in binaries.items() if b.get("shipped") is not None]
+    if found != [SHIPPED] or any("shipped" not in b for b in binaries.values()):
+        sys.exit(f"route_a4: route_seams.json must ship exactly {SHIPPED}, with a shipped key on every binary")
+    return SHIPPED
 # The deliberate break: a match tested one byte past each stem.
 BREAK = ("blob.startswith(s[\"marker\"].encode(), at)", "blob.startswith(s[\"marker\"].encode(), at + 1)")
 

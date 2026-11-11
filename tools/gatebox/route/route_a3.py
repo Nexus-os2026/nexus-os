@@ -11,8 +11,9 @@ change. Subcommands:
       its seam's `const M: &str` line in the named source, exactly once; every
       stem token in route source is a listed marker; every seam names every
       binary as `reachable` or `unwired`; the binaries are exactly the route
-      packages' bin targets (cargo metadata); exactly one binary's `shipped`
-      names an existing file (the installing script), every other is null.
+      packages' bin targets (cargo metadata); every binary has a `shipped`
+      key, and exactly one is set: the pinned SHIPPED below (nexus-mother via
+      mother/desktop/install.sh, an existing file); the data cannot move it.
   scan --repo R --binary NAME=PATH ...
       The marker scan of real binaries. Matching is delimiter-safe: at every
       occurrence of the stem, at most one marker can begin (they are
@@ -39,6 +40,8 @@ import sys
 
 DATA = "tools/gatebox/route/route_seams.json"
 DISPOSITIONS = ("reachable", "unwired")
+# The shipped binary and its installer, pinned here, not taken from data (SB3E-R37).
+SHIPPED = ("nexus-mother", "mother/desktop/install.sh")
 
 
 def load(repo):
@@ -100,9 +103,16 @@ def check_data(repo, toolchain):
                 for unlisted in sorted(found - set(markers.values())):
                     out.append({"kind": "source", "path": os.path.relpath(path, repo), "token": unlisted,
                                 "reason": "a stem token that is no listed marker"})
-    shipped = [b["shipped"] for b in binaries.values() if b["shipped"] is not None]
-    if len(shipped) != 1 or not os.path.isfile(os.path.join(repo, shipped[0])):
-        out.append({"kind": "data", "reason": "not exactly one binary shipped by an existing script"})
+    for name in sorted(n for n, b in binaries.items() if "shipped" not in b):
+        out.append({"kind": "data", "binary": name, "reason": "a binary without a shipped key"})
+    shipped = sorted((n, b["shipped"]) for n, b in binaries.items() if b.get("shipped") is not None)
+    for name, script in shipped:
+        if not isinstance(script, str) or not os.path.isfile(os.path.join(repo, script)):
+            out.append({"kind": "data", "binary": name, "reason": "the shipped script does not exist"})
+    if len(shipped) != 1:
+        out.append({"kind": "data", "reason": "not exactly one shipped binary"})
+    elif shipped[0] != SHIPPED:
+        out.append({"kind": "data", "reason": "shipped is not the pinned nexus-mother via mother/desktop/install.sh"})
     have = bin_targets(repo, toolchain, {b["package"] for b in binaries.values()} | set(data["route_packages"]))
     want = {(name, b["package"]) for name, b in binaries.items()}
     if have is None:

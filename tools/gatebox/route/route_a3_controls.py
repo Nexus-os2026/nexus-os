@@ -21,7 +21,9 @@ sha256 is recorded before and after.
   refuse each planted defect: a duplicate seam name, a bad marker format, a
   marker that is a substring of another, a binary named in no disposition, a
   marker not defined exactly once in its source, an unlisted marker in route
-  source, an unlisted bin target in a route package, and no shipped binary.
+  source, an unlisted bin target in a route package; and for the pinned
+  shipped binary: none shipped, two shipped, a missing script, another
+  existing script, and a binary without a shipped key.
 Adding a seam needs only data: its row, its ungate set and its control.
 """
 import argparse
@@ -114,6 +116,7 @@ def run_control(spec, ctx):
         reasons = sorted({f.get("reason", f["kind"]) for f in verdict["findings"]})
         want = spec["reason"]
         ok = code == 0 and not reasons if want is None else code == 1 and any(want in r for r in reasons)
+        ok = ok and not any(x in r for x in spec.get("absent", []) for r in reasons)
         result.update(kind="data", exit=code, reported=reasons, ok=ok)
     else:
         argv = ["build", "--repo", tree, "--toolchain", ctx["toolchain"], "--target", os.path.join(root, "target")]
@@ -171,6 +174,22 @@ def unship(data):
         spec["shipped"] = None
 
 
+def ship_all(data):
+    script = next(b["shipped"] for b in data["binaries"].values() if b["shipped"])
+    for spec in data["binaries"].values():
+        spec["shipped"] = script
+
+
+def ship_script(script):
+    def mutate(data):
+        next(b for b in data["binaries"].values() if b["shipped"])["shipped"] = script
+    return mutate
+
+
+def drop_shipped_key(data):
+    del data["binaries"][sorted(data["binaries"])[0]]["shipped"]
+
+
 def controls(data):
     second = data["seams"][1]
     out = [{"name": "data_baseline", "kind": "data", "reason": None},
@@ -184,8 +203,16 @@ def controls(data):
             "plant": [plant_data(drop_disposition)]},
            {"name": "data_marker_defined_twice", "kind": "data", "reason": "marker not defined once",
             "plant": [append_to(second["source"], f'\nconst M: &str = "{second["marker"]}";\n')]},
-           {"name": "data_no_shipped_binary", "kind": "data", "reason": "not exactly one binary shipped",
+           {"name": "data_no_shipped_binary", "kind": "data", "reason": "not exactly one shipped binary",
             "plant": [plant_data(unship)]},
+           {"name": "data_two_shipped_binaries", "kind": "data", "reason": "not exactly one shipped binary",
+            "absent": ["does not exist", "shipped key"], "plant": [plant_data(ship_all)]},
+           {"name": "data_shipped_script_missing", "kind": "data", "reason": "the shipped script does not exist",
+            "plant": [plant_data(ship_script("mother/desktop/planted-install.sh"))]},
+           {"name": "data_shipped_other_existing_script", "kind": "data", "reason": "is not the pinned",
+            "absent": ["does not exist", "not exactly one", "shipped key"], "plant": [plant_data(ship_script("tools/gatebox/install.sh"))]},
+           {"name": "data_shipped_key_missing", "kind": "data", "reason": "a binary without a shipped key",
+            "absent": ["does not exist", "not exactly one", "is not the pinned"], "plant": [plant_data(drop_shipped_key)]},
            {"name": "data_unlisted_marker_in_route_source", "kind": "data", "reason": "no listed marker",
             "plant": [append_to("mother/src/lib.rs", f'\n// "{data["stem"]}S9"\n')]},
            {"name": "data_unlisted_bin_target", "kind": "data", "reason": "bin targets",
