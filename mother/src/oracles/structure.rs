@@ -27,17 +27,25 @@ fn structure_the_manifest_pins_the_dependencies() {
     let mut section = String::new();
     let mut dependencies = Vec::new();
     let mut lints = Vec::new();
+    let mut dev = Vec::new();
     for line in MANIFEST.lines().map(str::trim) {
         if line.starts_with('[') {
             section = line.to_string();
             assert!(
                 matches!(
                     section.as_str(),
-                    "[package]" | "[dependencies]" | "[[example]]" | "[lints.rust]"
+                    "[package]"
+                        | "[dependencies]"
+                        | "[dev-dependencies]"
+                        | "[[example]]"
+                        | "[lints.rust]"
                 ),
                 "unexpected manifest section {section}"
             );
             continue;
+        }
+        if section == "[dev-dependencies]" && !line.is_empty() {
+            dev.push(line);
         }
         if section == "[lints.rust]" && !line.is_empty() {
             lints.push(line);
@@ -59,6 +67,9 @@ fn structure_the_manifest_pins_the_dependencies() {
         ]
     );
     assert_eq!(lints, [ROUTE_LANE_LINT], "only the reviewed lint line");
+    // SB3E-R44.3: the route guards' lexer, exactly, and nothing else.
+    let lexer = "proc-macro2 = { version = \"=1.0.106\", default-features = false }";
+    assert_eq!(dev, [lexer], "only the reviewed dev-dependency");
 }
 
 #[test]
