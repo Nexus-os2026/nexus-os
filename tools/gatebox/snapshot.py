@@ -1,4 +1,5 @@
 """Bounded SHA-1 object import. Trusted registration is supplied by the supervisor."""
+import ctypes
 import hashlib
 import json
 import os
@@ -99,10 +100,57 @@ def manifest(root, deadline=None):
     records.sort(key=lambda row: row[0])
     return hashlib.sha256(json.dumps(records,ensure_ascii=True,separators=(',',':')).encode()).hexdigest(), records
 
+class _Statfs(ctypes.Structure):
+    """glibc's 64-bit Linux `struct statfs`; statfs() cross-checks it against os.fstatvfs."""
+    _fields_ = [('f_type',ctypes.c_long),('f_bsize',ctypes.c_long),('f_blocks',ctypes.c_ulong),('f_bfree',ctypes.c_ulong),
+                ('f_bavail',ctypes.c_ulong),('f_files',ctypes.c_ulong),('f_ffree',ctypes.c_ulong),('f_fsid',ctypes.c_uint*2),
+                ('f_namelen',ctypes.c_long),('f_frsize',ctypes.c_long),('f_flags',ctypes.c_long),('f_spare',ctypes.c_long*4)]
+
+# SB3E-R26: st_dev follows kernel block-device naming, which varies between boots, so it is never compared.
+# The source identity is the filesystem's f_fsid plus the inode. Only the ext2/3/4 superblock magic is
+# supported: there f_fsid is folded from the superblock UUID. Other types (vfat, xfs, proc) derive it from
+# the device number or (tmpfs) from a per-mount random value, so they are refused, never guessed.
+FILESYSTEMS = {0xEF53:'ext4'}
+FSID = re.compile(r'(?!0{16})[0-9a-f]{16}')
+
+def statfs(fd):
+    """(f_type, f_fsid) of an open descriptor: raw fstatfs(2), which alone reports f_type, agreeing with glibc."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.fstatfs.argtypes = (ctypes.c_int, ctypes.POINTER(_Statfs))
+    result = _Statfs()
+    if libc.fstatfs(fd, ctypes.byref(result)) != 0: raise OSError(ctypes.get_errno(), 'fstatfs')
+    fsid = result.f_fsid[0] | result.f_fsid[1] << 32
+    check = os.fstatvfs(fd)
+    if (check.f_fsid, check.f_bsize, check.f_blocks) != (fsid, result.f_bsize, result.f_blocks): raise OSError('fstatfs layout')
+    return result.f_type, fsid
+
+def filesystem_identity(fd):
+    try: kind, fsid = statfs(fd)
+    except OSError as exc: raise ValueError('source filesystem identity unavailable') from exc
+    if kind not in FILESYSTEMS: raise ValueError('unsupported source filesystem')
+    if not fsid: raise ValueError('source filesystem identity unavailable')
+    return {'type':FILESYSTEMS[kind],'fsid':'%016x' % fsid}
+
+def observe(path):
+    """The boot-stable identity of a canonical directory: {'filesystem': {...}, 'inode': n}, from one descriptor."""
+    path = Path(path)
+    if not path.is_absolute() or path.resolve() != path: raise ValueError('noncanonical registered source')
+    try: fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError as exc: raise ValueError('source identity unavailable') from exc
+    try: return {'filesystem':filesystem_identity(fd),'inode':os.fstat(fd).st_ino}
+    finally: os.close(fd)
+
+def registered(filesystem, inode):
+    if (not isinstance(filesystem, dict) or set(filesystem) != {'type','fsid'}
+            or filesystem['type'] not in FILESYSTEMS.values() or not isinstance(filesystem['fsid'], str)
+            or not FSID.fullmatch(filesystem['fsid']) or type(inode) is not int or inode <= 0):
+        raise ValueError('registered source identity missing or invalid')
+    return {'filesystem':dict(filesystem),'inode':inode}
+
 class GitSource:
     """Read-only Git plumbing; never uses caller environment or Git transports."""
-    def __init__(self, path, device, inode):
-        self.path, self.identity = Path(path), (device, inode)
+    def __init__(self, path, filesystem, inode):
+        self.path, self.identity = Path(path), registered(filesystem, inode)
         self.deadline = time.monotonic() + LIMITS['seconds']
         self.check(self.deadline)
     def command(self, args, deadline, cap, object_request=None):
@@ -155,8 +203,7 @@ class GitSource:
     def check(self, deadline):
         if not self.path.is_absolute() or self.path.resolve() != self.path or not self.path.is_dir():
             raise ValueError('noncanonical registered source')
-        info = self.path.stat()
-        if (info.st_dev,info.st_ino) != self.identity: raise ValueError('source identity changed')
+        if observe(self.path) != self.identity: raise ValueError('source identity changed')
         if any(os.path.lexists(self.path/name) for name in ('commondir','gitdir')):
             raise ValueError('Git administration indirection')
         for name in ('alternates','http-alternates'):

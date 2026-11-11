@@ -28,8 +28,11 @@ trusted registration and peer UID. It is a pure validation primitive, not a
 socket server. Admission, deadlines, BUSY and actual SO_PEERCRED belong to PR-2.
 Registration must declare sha1 and UID. No submitted paths or commands.
 
-snapshot.GitSource takes the trusted canonical common-directory path and
-registered device/inode. It uses bounded raw cat-file plumbing with no inherited
+snapshot.GitSource takes the trusted canonical common-directory path and the
+registered boot-stable identity: the ext2/3/4 filesystem's UUID-derived f_fsid
+plus the inode (SB3E-R26; st_dev follows kernel device naming and is never
+compared; other filesystem types and an unavailable identity are refused).
+It uses bounded raw cat-file plumbing with no inherited
 Git configuration/environment, hooks, replacements, lazy fetch or transport.
 snapshot.export independently hashes commit/tree/blob bytes, validates the
 complete tree/blob closure, and exports to a fresh private destination.

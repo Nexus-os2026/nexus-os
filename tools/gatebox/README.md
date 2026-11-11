@@ -363,10 +363,11 @@ final re-check, so no run starts or stops and no qualification evidence is writt
 meanwhile (SB3E-R21.2). An existing install
 is upgraded only by the separate action, never by `install` (which still refuses
 every existing output). After PIN and independent bundle review, with the new
-bundle extracted to `/root/gatebox-gb1` exactly as `/root/gatebox-slice1` above:
+bundle extracted to the installer's `UPGRADE_BOOT` (`/root/gatebox-gb2` since GB2;
+GB1 used `/root/gatebox-gb1`, which is left in place) exactly as `/root/gatebox-slice1` above:
 
 ```bash
-sudo /bin/bash /root/gatebox-gb1/tools/gatebox/install.sh upgrade \
+sudo /bin/bash /root/gatebox-gb2/tools/gatebox/install.sh upgrade \
   --bundle-sha256 "$GBX_BUNDLE_SHA" --old-bundle-sha256 "$GBX_OLD_BUNDLE_SHA"
 ```
 
@@ -378,6 +379,15 @@ authenticates against its own policy. It then retains the old policy and the old
 identity, qualification and admission records under `/etc/gatebox/history`, never
 reusing them, and leaves admission `qualifying` for the new identity: full
 requalification (H1, C2, two reboots), then `enable-qualified`.
+
+GB2 (SB3E-R26): the registry pins the mother `.git` by its boot-stable identity, the
+ext2/3/4 filesystem's UUID-derived `f_fsid` plus the inode, never by `st_dev` (which
+follows the NVMe enumeration order and differs between boots). Other filesystem types
+and an unavailable identity are refused. An upgrade from a GB1 install computes the
+identity live, requires the installed row's inode and frozen fields, never compares the
+old `device`, and moves the old `registry.json` into the same history archive. Leftover
+`acceptance-*.json` attempt records do not block requalification (nothing reads them);
+the upgrade archives them there too.
 
 ### The route-cells payload (GB1b: SB3E-R18 P1, R19.1, R20)
 

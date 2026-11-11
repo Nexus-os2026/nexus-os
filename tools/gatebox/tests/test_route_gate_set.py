@@ -275,6 +275,54 @@ class SupervisorRouteFailure(unittest.TestCase):
             summary = supervisor.receipt.verify_integrity(root/'receipts'/run,os.getuid())['summary']
         self.assertEqual((summary['status'],summary['lane']),('FAILED',{}))
 
+class SupervisorSourceIdentity(unittest.TestCase):
+    """GB2 (SB3E-R26) RED oracle at supervisor.execute: a registry row recorded at boot A still admits the source
+    after a reboot renumbers block devices. GB1 compared st_dev and failed `source identity changed`. Only the
+    source path (a fixture administration directory for /var/lib/gatebox-source) and fstatfs(2) are stood in."""
+    STOP = 'ValueError: stopped after the source check'
+    def run_source(self, row, renumber=True, **fs):
+        supervisor, run = load('supervisor'), 'c'*32
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp); admin = core.administration(root/'source.git'); inode = admin.stat().st_ino
+            for name in ('staging','pending','receipts'): (root/name).mkdir(mode=0o700)
+            marker = root/'pending'/('.'+run); marker.touch()
+            real, seen = supervisor.snapshot.GitSource, []
+            def exported(source, sha, path): seen.append(source.path); raise ValueError('stopped after the source check')
+            for obj, name, value in ((supervisor,'STATE',root),(supervisor,'shim',Mock()),(supervisor,'stop_and_confirm',lambda r: {'complete':True}),
+                                     (supervisor.snapshot,'GitSource',lambda path,*a: real(admin,*a)),(supervisor.snapshot,'export',exported)):
+                stack.enter_context(patch.object(obj,name,value))
+            stack.enter_context(core.filesystem(supervisor.snapshot,**fs))
+            registration = row(admin)  # recorded at boot A
+            if renumber: stack.enter_context(core.renumbered(inode))
+            supervisor.execute(run,dict(repo_id='mother',full_sha='8e0d6ae293df999eb6530e875df1206deac872a8',gate_set_id='full'),
+                               1234,registration,{},marker,'qualifying')
+            summary = supervisor.receipt.verify_integrity(root/'receipts'/run,os.getuid())['summary']
+            self.assertEqual(summary['source'],registration)  # the receipt records the row it ran under
+            return summary['missing_evidence'], [p == admin for p in seen]
+    @staticmethod
+    def row(admin, **change):
+        row = dict(uid=1000,user='nexus',object_format='sha1',common_directory=str(admin),device=os.stat(admin).st_dev,
+                   inode=os.stat(admin).st_ino,filesystem=dict(core.REGISTERED),fixture_sha='8e0d6ae293df999eb6530e875df1206deac872a8',
+                   qualification_gate_set='full')
+        row.update(change)
+        return {k:v for k,v in row.items() if v is not None}
+    def test_gb2_registry_row_survives_device_renumbering(self):
+        self.assertEqual(self.run_source(self.row),([self.STOP],[True]))
+        self.assertEqual(self.run_source(lambda a: self.row(a,device=None)),([self.STOP],[True]))  # the GB2 row has no device
+    def test_gb2_control_without_renumbering(self):
+        self.assertEqual(self.run_source(self.row,renumber=False),([self.STOP],[True]))
+    def test_gb2_other_filesystem_identity_fails(self):
+        self.assertEqual(self.run_source(self.row,fsid=core.FSID ^ 1),(['ValueError: source identity changed'],[]))
+    def test_gb2_other_inode_fails(self):
+        row = lambda a: self.row(a,inode=os.stat(a).st_ino+1)
+        self.assertEqual(self.run_source(row,renumber=False),(['ValueError: source identity changed'],[]))
+    def test_gb2_unavailable_identity_fails(self):
+        self.assertEqual(self.run_source(self.row,error=OSError(38,'fstatfs')),(['ValueError: source filesystem identity unavailable'],[]))
+        self.assertEqual(self.run_source(self.row,kind=core.TMPFS),(['ValueError: unsupported source filesystem'],[]))
+    def test_gb2_unmigrated_gb1_row_fails_closed(self):
+        self.assertEqual(self.run_source(lambda a: self.row(a,filesystem=None),renumber=False),
+                         (['ValueError: registered source identity missing or invalid'],[]))
+
 class ClientVerifyControls(unittest.TestCase):
     def client(self, argv, reply=None, summary=None):
         client = load('client'); sent = []
@@ -420,6 +468,16 @@ class InstallControls(unittest.TestCase):
         self.assertIn('\nLimitCORE=1\n',unit); self.assertNotIn('LimitCORE=0',unit)
         self.assertIn(['LimitCORE=0\n','LimitCORE=1\n'],json.loads((HERE/'policy/custody.json').read_text())['units']['mothergate-run@.service'])
         self.assertIn('\nLimitCORE=0\n',(HERE/'units/mothergate.service').read_text())
+    def test_gb2_install_registers_filesystem_identity_not_device(self):
+        observed = {'filesystem':dict(core.REGISTERED),'inode':49433695}
+        self.assertEqual(installer()['registry_row'](1000,'nexus',Path('/home/nexus/NEXUS/nexus-os/.git'),observed),
+                         {'mother':dict(uid=1000,user='nexus',object_format='sha1',common_directory='/home/nexus/NEXUS/nexus-os/.git',
+                                        filesystem=core.REGISTERED,inode=49433695,fixture_sha=installer()['FIXTURE'],qualification_gate_set='full')})
+        main = (HERE/'install.sh').read_text().split('\ndef main():',1)[1]
+        self.assertIn("load_module(BOOT/'tools/gatebox/snapshot.py','gbx_boot_snapshot').observe(source)",main)
+        self.assertIn('registry_row(submit.pw_uid,args.submit_user,source,observed)',main)
+        self.assertNotIn('st_dev,inode',main)
+        self.assertLess(main.index('.observe(source)'),main.index('with tempfile.TemporaryDirectory('))  # refused before any output
     def test_verify_installed_executable(self):
         self.assertIn('verify.py',installer()['EXECUTABLE'])
         self.assertIn("0o755 if name in EXECUTABLE else 0o644",(HERE/'install.sh').read_text().split('def main():',1)[1])
@@ -625,11 +683,16 @@ class UpgradeComposition(unittest.TestCase):
         render = scope['render']((dest/'units/mothergate-run@.service').read_text(),uid,gid)
         (root/'etc/run.service').write_text(render)
         inventory = {str(dest/n):sha(d) for n,d in old.items()}
+        # GB2: the installed GB1 registry, pinned at another boot (st_dev differs), same source inode.
+        self.source = core.administration(root/'source.git'); self.fs = {}
+        self.gb1_row = dict(uid=1000,user='nexus',object_format='sha1',common_directory=str(self.source),
+                            device=self.source.stat().st_dev+7,inode=self.source.stat().st_ino,
+                            fixture_sha=scope['FIXTURE'],qualification_gate_set='full')
         self.gates = receipt.policy_digest({p:h for p,h in inventory.items() if p.endswith(('gates.json','exclusions.json'))})
         self.identity = dict(bundle_sha256=self.OLD,policy_sha256='c'*64,gates_sha256=self.gates)
         for name,value in (('bundle.json',{'sha256':self.OLD}),('installed-files.json',inventory),('identity.json',self.identity),
                            ('qualification.json',{'identity':self.identity,'passed':['B1']}),('acceptance-'+'d'*32+'.json',{}),
-                           ('admission.json',{'stage':'normal','identity':self.identity}),('skeleton.json',{}),('registry.json',{}),
+                           ('admission.json',{'stage':'normal','identity':self.identity}),('skeleton.json',{}),('registry.json',{'mother':self.gb1_row}),
                            ('created-accounts.json',{})):
             (config/name).write_text(json.dumps(value))
         (root/'tmpfiles/mothergate-control.conf').write_bytes(b'old')
@@ -647,6 +710,14 @@ class UpgradeComposition(unittest.TestCase):
             if name.endswith('probe'):
                 value = self.identity if name == 'gbx_old_probe' else self.new_identity
                 return Mock(installed_identity=lambda: value)
+            if name == 'gbx_new_snapshot':  # the new bundle's snapshot code; fstatfs(2) only is stood in
+                loaded = load('snapshot')
+                def statfs(fd):
+                    os.fstat(fd)
+                    if 'error' in self.fs: raise self.fs['error']
+                    return self.fs.get('kind',core.EXT4), self.fs.get('fsid',core.FSID)
+                loaded.statfs = statfs
+                return loaded
             loaded = load('receipt'); loaded.HERE = Path(path).parent; loaded.HISTORY_OWNER = uid
             if name == 'gbx_installed_receipt': loaded.HISTORY = config/'history'
             return loaded
@@ -657,7 +728,7 @@ class UpgradeComposition(unittest.TestCase):
             STATE_ROOT_OWNER=(uid,gid),protected=lambda p: None,run=self.run,pwd=accounts,toolchain_check=lambda f: None,
             bundle_files=lambda path,digest: self.files,plan_accounts=lambda: [(entry,False),(entry,False)],
             stage_security=lambda *a: [],load_module=module,LOCK_OWNER=(uid,gid),CUSTODY_OWNER=(uid,gid),
-            MAINTENANCE_TIMEOUT=.2,CGROUP=root/'cgroup'))
+            MAINTENANCE_TIMEOUT=.2,CGROUP=root/'cgroup',SOURCE_GIT=self.source))
         (control/'sealed'/('.used-'+'c'*32)).chmod(0o600)
     def publish_old(self, reason):
         old = load('receipt'); old.HISTORY_OWNER = os.getuid()
@@ -811,6 +882,78 @@ class UpgradeComposition(unittest.TestCase):
         self.assertEqual((self.root/'dest/probe.py').read_bytes(),b'old probe')
         self.assertFalse((self.root/'config/history').exists())
         self.assertEqual(json.loads((self.root/'config/admission.json').read_text())['stage'],'normal')
+    # ---- GB2 (SB3E-R26): the registry migration from the installed GB1 bundle, on fake old registries ----
+    def gb2_row(self, **change):
+        row = {k:v for k,v in self.gb1_row.items() if k != 'device'}
+        return dict(row,**dict(dict(filesystem=dict(core.REGISTERED)),**change))
+    def refused(self, message, registry=None):
+        if registry is not None:
+            (self.root/'config/registry.json').write_text(registry if isinstance(registry,str) else json.dumps(registry))
+        before, security = (self.root/'config/registry.json').read_bytes(), Mock(return_value=[])
+        with patch.dict(self.scope,stage_security=security), self.assertRaisesRegex(ValueError,message): self.upgrade()
+        security.assert_not_called()  # preflight: before staging and before any mutation
+        self.assertEqual(((self.root/'dest/probe.py').read_bytes(),(self.root/'config/registry.json').read_bytes()),(b'old probe',before))
+        self.assertEqual(json.loads((self.root/'config/admission.json').read_text())['stage'],'normal')
+        self.assertFalse((self.root/'config/history'/('install-'+self.OLD)).exists())
+    def test_gb2_upgrade_migrates_gb1_registry_without_comparing_device(self):
+        config, old = self.root/'config', (self.root/'config/registry.json').read_bytes()
+        self.assertNotEqual(self.gb1_row['device'],self.source.stat().st_dev)  # pinned at another boot
+        self.upgrade()
+        new = json.loads((config/'registry.json').read_text())
+        self.assertEqual(new,{'mother':self.gb2_row()})
+        self.assertTrue((config/'history'/('install-'+self.OLD)/'registry.json').is_file(),'old registry not archived')
+        self.assertEqual((config/'history'/('install-'+self.OLD)/'registry.json').read_bytes(),old)  # the GB1 pin, kept for audit
+        self.assertEqual(json.loads((config/'installed-files.json').read_text())[str(config/'registry.json')],
+                         sha((config/'registry.json').read_bytes()))
+        with core.filesystem(), core.renumbered(self.source.stat().st_ino):  # the migrated row admits the source at any later boot
+            snapshot.GitSource(self.source,new['mother']['filesystem'],new['mother']['inode'])
+    def test_gb2_upgrade_refuses_another_source_inode(self):
+        self.refused('^source inode differs from the installed registry$',{'mother':dict(self.gb1_row,inode=self.gb1_row['inode']+1)})
+    def test_gb2_upgrade_refuses_unavailable_or_unsupported_identity(self):
+        for fs, message in ((dict(error=OSError(38,'fstatfs')),'^source filesystem identity unavailable$'),
+                            (dict(fsid=0),'^source filesystem identity unavailable$'),(dict(kind=core.TMPFS),'^unsupported source filesystem$')):
+            with self.subTest(fs=fs):
+                self.fs = fs
+                self.refused(message)
+        self.fs = {}
+        shutil.rmtree(self.source)
+        self.refused('^source identity unavailable$')
+    def test_gb2_upgrade_refuses_unreviewed_registry(self):
+        row = self.gb1_row
+        for case in ({'mother':dict(row,extra=1)},{'mother':{k:v for k,v in row.items() if k != 'inode'}},{'mother':dict(row,inode=True)},
+                     {'mother':dict(row,inode=str(row['inode']))},{'mother':dict(row,device=str(row['device']))},
+                     {'mother':dict(row,common_directory='/elsewhere/.git')},{'mother':dict(row,fixture_sha='0'*40)},
+                     {'mother':dict(row,object_format='sha256')},{'mother':dict(row,qualification_gate_set='route-cells')},
+                     {'mother':dict(row,uid=0)},{'mother':dict(row,user='root')},{'mother':dict(row,filesystem=core.REGISTERED)},
+                     {'mother':self.gb2_row(filesystem={'type':'ext4'})},{'mother':row,'other':row},[row],{}):
+            with self.subTest(case=case): self.refused('^installed registry is not a reviewed form$',case)
+        self.refused('^duplicate JSON key$',json.dumps({'mother':row})[:-1]+', "mother": {}}')
+    def test_gb2_upgrade_keeps_a_matching_gb2_registry(self):
+        (self.root/'config/registry.json').write_text(json.dumps({'mother':self.gb2_row()}))
+        self.upgrade()
+        self.assertEqual(json.loads((self.root/'config/registry.json').read_text()),{'mother':self.gb2_row()})
+    def test_gb2_upgrade_refuses_a_gb2_registry_on_another_filesystem(self):
+        other = dict(core.REGISTERED,fsid='%016x' % (core.FSID ^ 1))
+        self.refused('^source filesystem differs from the installed registry$',{'mother':self.gb2_row(filesystem=other)})
+    def test_gb2_attempt1_evidence_archived_and_failed_receipts_authenticate(self):
+        config, receipts = self.root/'config', self.root/'state/receipts'
+        (config/('acceptance-'+'d'*32+'.json')).unlink()
+        attempts = {'acceptance-%032x.json' % n:json.dumps(dict(state='receipt-published',status='FAILED',n=n)).encode() for n in range(12)}
+        for name,data in attempts.items(): (config/name).write_bytes(data)
+        failed = full_success()  # attempt 1: FAILED, `source` is the GB1 row with its st_dev pin
+        failed.update(status='FAILED',run_id='e'*32,attempts=['e'*32],missing_evidence=['ValueError: source identity changed'],
+                      source=dict(self.gb1_row),installed=dict(self.identity,stage='qualifying'))
+        load('receipt').publish(self.root/'oldpending',receipts,'e'*32,failed,{'run.log':b'failure\n'})
+        before = self.scope['receipt_inventory'](receipts)
+        self.upgrade()
+        archive = config/'history'/('install-'+self.OLD)
+        self.assertEqual(sorted(config.glob('acceptance-*.json')),[])
+        self.assertEqual({n:(archive/n).read_bytes() for n in attempts},attempts)  # moved by reviewed code, never deleted
+        self.assertEqual(self.scope['receipt_inventory'](receipts),before)
+        retained = load('receipt'); retained.HISTORY, retained.HISTORY_OWNER = config/'history', os.getuid()
+        summary = retained.verify_integrity(receipts/('e'*32),os.getuid())['summary']
+        self.assertEqual((summary['status'],summary['source']),('FAILED',self.gb1_row))  # never relabelled
+        self.assertEqual(retained.verify_integrity(receipts/('a'*32),os.getuid())['summary']['installed']['gates_sha256'],self.gates)
 
 if __name__ == '__main__': unittest.main()
 
