@@ -1,3 +1,108 @@
+# SB3E-R42.2 (G-S1): the include_str!, include_bytes! and #[path] sites
+# of Mother's sources, exactly, as file|kind|argument (include!: none).
+desktop/src/stop.rs|path|"stop_tests.rs"
+desktop/tests/check_page_cli.rs|include_str|"../../src/oracles/m3a_bakery.html"
+desktop/tests/install.rs|path|"live/harness.rs"
+desktop/tests/install.rs|path|"../../../kernel/tests/process_leader/mod.rs"
+desktop/tests/live.rs|path|"live/harness.rs"
+desktop/tests/live.rs|path|"../../../kernel/tests/process_leader/mod.rs"
+desktop/tests/live.rs|path|"live/support.rs"
+host/src/check_page.rs|include_str|"../../src/oracles/m3a_bakery.html"
+host/src/stop_tests.rs|path|"../tests/support/mod.rs"
+host/src/terminal_tests.rs|include_str|"../../README.md"
+host/tests/check_page.rs|include_str|"../../src/oracles/m3a_bakery.html"
+host/tests/check_page.rs|include_str|"../../../kernel/src/inert_page/fixtures/reference.html"
+host/tests/check_page.rs|include_str|"../../../kernel/tests/fixtures/local_business.html"
+host/tests/route_cells/main.rs|include_str|"../../../../crates/nexus-governed-control/src/broker/route_seams.rs"
+host/tests/route_cells/store.rs|include_str|"route_fsync.c"
+host/tests/session/coverage.rs|include_str|"sinks.tsv"
+host/tests/session/coverage.rs|include_str|"combination-receipts.tsv"
+host/tests/session/coverage.rs|include_str|"combination-rules.tsv"
+host/tests/session/coverage.rs|include_str|"combination-boundaries.tsv"
+host/tests/session/coverage.rs|include_str|"combination-dispositions.tsv"
+host/tests/session_model_bridge.rs|include_str|"../../src/adapter/session_model_composition_tests.rs"
+host/tests/session_model_bridge.rs|include_str|"../../src/adapter/session_model_bridge_d_tests.rs"
+host/tests/session_model_bridge.rs|include_str|"../../src/adapter/session_model_bridge_d2_tests.rs"
+host/tests/session_model_bridge.rs|include_str|"route_cells/cells.rs"
+host/tests/session_model_bridge.rs|include_str|"session/model-bridge-expect.tsv"
+host/tests/session_model_bridge.rs|include_str|$
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_lifecycle.rs|path|"session/model.rs"
+host/tests/session_oracles.rs|path|"session/model.rs"
+host/tests/session_oracles.rs|path|"session/coverage.rs"
+host/tests/session_oracles.rs|path|"session_model_bridge.rs"
+host/tests/session_oracles.rs|include_str|"session/sinks.tsv"
+host/tests/session_oracles.rs|include_str|"session/desktop-live.txt"
+host/tests/session_oracles.rs|include_str|"session/combination-dispositions.tsv"
+host/tests/session_oracles.rs|include_str|"session/combination-dispositions.tsv"
+host/tests/session_oracles.rs|include_str|"../src/hands.rs"
+host/tests/session_oracles.rs|include_str|"session/sinks.tsv"
+host/tests/session_oracles.rs|include_str|"session/sink-verification.tsv"
+host/tests/session_outcome_product.rs|path|"session/model.rs"
+host/tests/session_outcome_product.rs|path|"session/outcomes.rs"
+host/tests/session_sealing.rs|include_str|"session/exclusions.tsv"
+host/tests/session_sealing.rs|include_str|"../../README.md"
+src/adapter/lite.rs|path|"lite_settlement.rs"
+src/adapter/lite.rs|path|"lite_recognition.rs"
+src/adapter/lite.rs|path|"lite_review1_dispatch.rs"
+src/adapter/lite.rs|path|"lite_review1_sequential.rs"
+src/adapter/lite.rs|path|"lite_review1_recovery.rs"
+src/adapter/lite.rs|path|"lite_review2_mixed.rs"
+src/adapter/lite_review1_recovery.rs|include_str|"lite_review1_fsync.c"
+src/adapter/m2as_scan.rs|include_str|"../coordinator.rs"
+src/adapter/m2as_scan.rs|include_str|"../consent.rs"
+src/adapter/m2as_scan.rs|include_str|"../contract.rs"
+src/adapter/m2as_scan.rs|include_str|"../effect.rs"
+src/adapter/m2as_scan.rs|include_str|"../journal.rs"
+src/adapter/m2as_scan.rs|include_str|"../lane.rs"
+src/adapter/m2as_scan.rs|include_str|"../state.rs"
+src/adapter/m2as_scan.rs|include_str|"../lib.rs"
+src/adapter/m2as_scan.rs|include_str|"mod.rs"
+src/adapter/m3d_publication_oracles.rs|include_str|"../oracles/m3a_bakery.html"
+src/adapter/private_file.rs|path|"private_session_oracles_tests.rs"
+src/adapter/scan.rs|path|"../../../kernel/tests/desktop_tripwire/mod.rs"
+src/adapter/session_close_oracles_tests.rs|path|"session_lifecycle_fix1_tests.rs"
+src/adapter/session_close_oracles_tests.rs|path|"session_native_record_fix1_tests.rs"
+src/adapter/session_model_bridge_d_tests.rs|include_str|"../../../crates/nexus-governed-control/src/authority/evidence.rs"
+src/adapter/session_model_bridge_d_tests.rs|include_str|"session_model_bridge_d_tests.rs"
+src/adapter/session_port.rs|path|"session_projection_tests.rs"
+src/adapter/session_terminal_oracles_tests.rs|path|"../../host/tests/session/model.rs"
+src/coordinator.rs|path|"oracles/m2e_budget.rs"
+src/coordinator.rs|path|"adapter/session_journal_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review3.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review4.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review5.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review6.rs"
+src/coordinator/lite.rs|path|"../adapter/session_terminal_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_continuation_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_close_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_result_fix1_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_budget_fix1_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_terminal_fix2_tests.rs"
+src/coordinator/page_proof.rs|path|"../oracles/m3d_publication.rs"
+src/coordinator/page_proof.rs|path|"../oracles/m3d_verifier.rs"
+src/oracles/m2a_consent.rs|include_str|"../coordinator.rs"
+src/oracles/m2a_consent.rs|include_str|"../consent.rs"
+src/oracles/m2a_consent.rs|include_str|"../effect.rs"
+src/oracles/m3a_s_o4.rs|path|"../../../kernel/src/inert_page/tests/s_o4_round_trip.rs"
+src/oracles/m3a_verifier.rs|include_str|"m3a_bakery.html"
+src/oracles/m3a_verifier.rs|include_str|"../../../kernel/src/inert_page/fixtures/reference.html"
+src/oracles/m3a_verifier.rs|include_str|"../verifier.rs"
+src/oracles/route_seams_guard.rs|include_str|"../../../crates/nexus-governed-control/src/host_session/model_call_tests.rs"
+src/oracles/route_seams_guard.rs|include_str|"route_seams_guard.pins"
+src/oracles/route_seams_guard.rs|include_str|"route_seams_guard.rs"
+src/oracles/structure.rs|include_str|"../../Cargo.toml"
+src/oracles/structure.rs|include_str|"../adapter/mod.rs"
+src/oracles/structure.rs|include_str|"../effect.rs"
+src/oracles/structure.rs|include_str|"../coordinator.rs"
+src/oracles/structure.rs|include_str|"../consent.rs"
+src/page_builder/cb_oracles.rs|include_str|"lane.rs"
+src/page_builder/cb_oracles.rs|include_str|"lane.rs"
+src/page_builder/cb_oracles.rs|include_str|"lane.rs"
+src/page_inputs.rs|path|"oracles/m3d_inputs.rs"
 @@@ src/lib.rs
 pub mod private;
 #[cfg(mother_route_seams)]
@@ -130,6 +235,17 @@ impl<P: EffectPort> FileSession<P> {
     }
 }
 @@@ src/route_seams.rs
+#[cfg(not(target_os = "linux"))]
+compile_error!("mother_route_seams: the route seams are Linux-only");
+
+use crate::lane::InvocationId;
+use nexus_governed_control::authority::ids::RunId;
+use nexus_governed_control::host_session::{SessionContext, SessionIdentity};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
+
 const M: &str = "nexus-mother-route-seam-S5";
 const PATIENCE: Duration = Duration::from_secs(10);
 pub(crate) const POINTS: [&str; 10] = [
@@ -144,7 +260,26 @@ pub(crate) const POINTS: [&str; 10] = [
     "mother.admit.ok",
     "mother.lane.returned",
 ];
-@@@ src/route_seams.rs
+
+static ARMED: AtomicBool = AtomicBool::new(false);
+static STATE: Mutex<State> = Mutex::new(State {
+    tick: 0,
+    entries: Vec::new(),
+    pending: Vec::new(),
+});
+
+struct State {
+    tick: u64,
+    entries: Vec<Entry>,
+    pending: Vec<Pending>,
+}
+struct Pending {
+    id: u64,
+    point: &'static str,
+    ack: SyncSender<Entry>,
+    pause: Option<(Receiver<()>, &'static str, Timeout)>,
+}
+
 #[derive(Clone, Copy, Default)]
 pub(crate) struct Ctx {
     session: Option<SessionIdentity>,
@@ -169,7 +304,19 @@ impl Ctx {
         Self { run, ..self }
     }
 }
-@@@ src/route_seams.rs
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub tick: u64,
+    pub point: &'static str,
+    pub session: Option<SessionIdentity>,
+    pub request: Option<u64>,
+    pub run: Option<RunId>,
+    pub invocation: Option<InvocationId>,
+    pub thread: std::thread::ThreadId,
+    pub instant: Instant,
+}
+
 pub type Timeout = fn(&str) -> !;
 
 pub enum Action {
@@ -180,7 +327,11 @@ pub enum Action {
     },
     Panic,
 }
-@@@ src/route_seams.rs
+
+pub struct Held {
+    pub acknowledged: Receiver<Entry>,
+    _release: Release,
+}
 struct Release(u64, SyncSender<()>);
 impl Drop for Release {
     fn drop(&mut self) {
@@ -227,7 +378,11 @@ pub(crate) fn at(point: &'static str, ctx: Ctx) {
     }
     fire(point, ctx);
 }
-@@@ src/route_seams.rs
+
+fn state() -> MutexGuard<'static, State> {
+    STATE.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 fn fire(point: &'static str, ctx: Ctx) {
     let (entry, pending) = {
         let mut s = state();
@@ -290,4 +445,47 @@ fn timeout(line: &str) -> ! {
         let _ = writeln!(result, "{line}");
     }
     std::process::abort()
+}
+@@@ host/tests/route_cells/s5.rs
+fn driver(&self, o: &Opened) -> Driver {
+    Driver {
+        session: o.session.identity(),
+        request: self.request,
+        calls: self.calls.load(Ordering::SeqCst),
+        recorded: self.recorded.lock().unwrap().clone(),
+    }
+}
+@@@ host/tests/route_cells/s5.rs
+fn recorded(f: &Fixture) -> (Driver, Vec<s1::Entry>, Vec<s5::Entry>) {
+    let o = f.open();
+    let mother = mother(f, &o);
+    let _s1 = s1::arm("reg.reserve", s1::Action::Trace);
+    let _s5 = s5::arm("mother.charge", s5::Action::Trace);
+    s1::drain_trace();
+    s5::drain_trace();
+    mother.run();
+    let traces = (s1::drain_trace(), s5::drain_trace());
+    (mother.driver(&o), traces.0, traces.1)
+}
+@@@ host/tests/route_cells/s5.rs
+let (driver, broker, mother) = recorded(f);
+let witness = credit(&driver, &RECORDED, &broker, &mother).unwrap();
+@@@ host/tests/route_cells/s5.rs
+let (d, b, m) = recorded(f);
+assert!(credit(&d, &RECORDED, &b, &m).is_ok());
+@@@ host/tests/route_cells/s5.rs
+fn bounded(command: &mut std::process::Command) -> std::process::Output {
+    let mut process = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while process.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            process.kill().unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(5)); // Polls an exit only.
+    }
+    process.wait_with_output().unwrap()
 }
