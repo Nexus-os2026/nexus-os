@@ -410,6 +410,23 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror -static \
             -o "$RUNNER_TEMP/route_rustc" tools/gatebox/route/route_rustc.c
 
+      # SB-3E A2 (design section 5: "CI repeats it"): the real install.sh with
+      # a scratch HOME and an absolute CARGO_TARGET_DIR. It installs only after
+      # its own refusal checks pass on that build's compiler invocations.
+      - name: A2 install.sh compiler invocations (fresh private target)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+          rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+          home="$RUNNER_TEMP/a2-home"
+          mkdir "$home"
+          env HOME="$home" CARGO_HOME="$cargo_home" RUSTUP_HOME="$rustup_home" \
+            CARGO_TARGET_DIR="$RUNNER_TEMP/a2-target" bash mother/desktop/install.sh
+          test -f "$home/.local/bin/nexus-mother" && test -x "$home/.local/bin/nexus-mother"
+          test -f "$RUNNER_TEMP/a2-target/nexus-mother-install.log"
+          test ! -e "$RUNNER_TEMP/a2-target/nexus-mother-install"
+
       - name: A7 compile-input agreement (both builds, fresh target)
         shell: bash
         env:

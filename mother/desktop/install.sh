@@ -3,10 +3,6 @@
 # binary from this checkout with the locked dependencies, copy it to
 # ~/.local/bin/nexus-mother, and print its SHA-256 as the build's receipt.
 # It installs nothing else: no system package, no service, no desktop entry.
-#
-# SB-3E A2 (design section 5, SB3E-R9.1, R30.4): the build runs in a fresh
-# private target with -v, and before any copy the script refuses unless the
-# compiler invocations Cargo really ran are the plain recipe's (see a2_check).
 set -euo pipefail
 export LC_ALL=C
 
@@ -29,7 +25,10 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 if [[ -n "${CARGO_TARGET_DIR:-}" && "$CARGO_TARGET_DIR" != /* ]]; then
   fail "CARGO_TARGET_DIR must be an absolute path (it is: $CARGO_TARGET_DIR)"
 fi
-# SB-3E A2: the active toolchain's rustc, which every compiler line must name.
+# SB-3E A2 (design section 5, SB3E-R9.1, R30.4): the build runs in a fresh
+# private target with -v, and before any copy the script refuses unless the
+# compiler invocations Cargo really ran are the plain recipe's (a2_check).
+# The active toolchain's rustc, which every compiler line must name:
 rustc_path="$(cd "$repo" && rustc --print sysroot)/bin/rustc"
 [[ "$rustc_path" == /* && -f "$rustc_path" ]] || fail "no active toolchain rustc: $rustc_path"
 
@@ -110,7 +109,9 @@ a2_check() {
 (cd "$repo" && cargo build --release --locked -v --color never -p nexus-mother-desktop --bin nexus-mother) 2>&1 |
   tee "$log" >&2 || fail "the build failed; its log is $log (remove $target before retrying)"
 if ! refusals="$(a2_check "$rustc_path")"; then
-  echo "$refusals" | head -n 20 >&2
+  # sed reads all of its input, so no SIGPIPE can end the script before
+  # the refusal is reported (pipefail is set).
+  printf '%s\n' "$refusals" | sed -n '1,20p' >&2
   fail "SB-3E A2 refused this build before any copy; its log is $log (remove $target before retrying)"
 fi
 
