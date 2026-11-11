@@ -43,6 +43,22 @@ pub struct FileSession<P: EffectPort> {
     pub(super) coordinator: Coordinator<P>,
 }
 
+/// SB-3E S4b (design 4.2, 4.5): poisons `Coordinator.inner` by a caught
+/// panic while it is held (a prior panic under it); nothing else changes.
+/// It never waits for the lock: applied while the route holds it (after the
+/// lock is taken), it poisons nothing.
+#[cfg(mother_route_seams)]
+impl<P: EffectPort> FileSession<P> {
+    pub fn route_poison_coordinator(&self) {
+        const M: &str = "nexus-mother-route-seam-S4b";
+        std::hint::black_box(M.as_bytes());
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = self.coordinator.inner.try_lock();
+            panic!("route seam S4b: coordinator lock poisoned");
+        }));
+    }
+}
+
 #[path = "../adapter/lite_review3.rs"]
 #[cfg(target_os = "linux")]
 #[cfg(test)]

@@ -625,6 +625,10 @@ pub struct HostSession {
     report: OnceLock<recovery::StartupReport>,
 }
 
+/// SB-3E S3 (design 4.2): `SessionDoor::route_revoke_original_grant`, in a
+/// seam-only child module, as S4.
+#[cfg(mother_route_seams)]
+mod route_s3;
 /// SB-3E S4 (design 4.2, 4.5): `HostSession::route_poison` and the broker
 /// locks it names, in a seam-only child module (SB3E-R32.7: the facade
 /// holds no S4 line beyond this declaration, and re-exports nothing).

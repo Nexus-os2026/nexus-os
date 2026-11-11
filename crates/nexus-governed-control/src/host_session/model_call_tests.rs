@@ -1327,7 +1327,8 @@ fn sb3e_route_seams_are_route_only() {
         "route_poison_runs",
         "RouteLock",
     ];
-    let names = [&names[..], &s2, &s4].concat();
+    let s3 = ["route_s3", "route_revoke_original_grant"];
+    let names = [&names[..], &s2, &s4, &s3].concat();
     let seam = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
     let test = "fn f() {\n    #[cfg(test)]\n    route_seams::at(\"p\", c);\n}\n";
     // A route site; cfg(test) never gates it, nor the reverse; a test site.
@@ -1491,7 +1492,7 @@ kind,phase,commitment));¦ncertain;}¦self.known
 /// `fire`, whole (the writers, `fire`, `GATES`, `Ctx` and its builders, the
 /// `route_ctx` helpers), and the owed-flush statements with their
 /// neighbours, each compared normalized.
-const PINS: [(&str, &str); 22] = [
+const PINS: [(&str, &str); 24] = [
     (
         "broker/route_seams.rs",
         r#"
@@ -1660,6 +1661,26 @@ commitment)); self.known.take(&Row {
 #[cfg(mother_route_seams)] pub mod route_s4; pub struct SessionDoor {
 "#,
     ),
+    // U4a-2 S3 (design 4.2): its seam-only module's declaration, and the
+    // door's revocation whole: only its own original grant, by the
+    // production revocation, with its marker.
+    (
+        "host_session.rs",
+        r#"
+#[cfg(mother_route_seams)] mod route_s3; #[cfg(mother_route_seams)] pub mod route_s4;
+"#,
+    ),
+    (
+        "host_session/route_s3.rs",
+        r#"
+use super::{DoorKind, SessionDoor};
+#[cfg(mother_route_seams)] impl SessionDoor { pub fn route_revoke_original_grant(&self) -> bool {
+const M: &str = "nexus-mother-route-seam-S3-door"; std::hint::black_box(M.as_bytes()); let
+DoorKind::Original { file_grant } = self.kind else { return false; }; let Some(control) = self.
+door.session_backend().upgrade() else { return false; }; control.revoke_grant(file_grant).is_ok()
+} }
+"#,
+    ),
     (
         "host_session/route_s4.rs",
         r#"
@@ -1707,20 +1728,24 @@ catch_unwind(std::panic::AssertUnwindSafe(|| { let _held = self.runs.lock(); pan
 /// its enclosing items: the two `route_poison_inner` are told apart by type
 /// and file, and each function has exactly its one caller.
 /// Every route seam marker in the crate, each exactly once (SB3E-R32.5).
-const ROUTE_MARKERS: [&str; 6] = [
+const ROUTE_MARKERS: [&str; 7] = [
     "nexus-mother-route-seam-S1",
     "nexus-mother-route-seam-S2",
+    "nexus-mother-route-seam-S3-door",
     "nexus-mother-route-seam-S4-session",
     "nexus-mother-route-seam-S4-evidence",
     "nexus-mother-route-seam-S4-store",
     "nexus-mother-route-seam-S4-runs",
 ];
-const S4_SITES: [&str; 7] = [
+/// U4a-2: S3's door seam, with no caller in this crate (its forwarder is
+/// Mother's `SessionPort::route_revoke_original_grant`).
+const S4_SITES: [&str; 8] = [
     "authority/run.rs: fn route_poison_runs < implRunRegistry{",
     "evidence_store.rs: fn route_poison_inner < implEvidenceStore{",
     "evidence_store.rs: fn route_poison_inner < implPrimaryEvidence{",
     "evidence_store.rs: route_poison_inner < #[cfg(mother_route_seams)]pub(crate)fnroute_poison_inner\
      (&self){>implPrimaryEvidence{",
+    "host_session/route_s3.rs: fn route_revoke_original_grant < #[cfg(mother_route_seams)]implSessionDoor{",
     "host_session/route_s4.rs: fn route_poison < #[cfg(mother_route_seams)]implHostSession{",
     "host_session/route_s4.rs: route_poison_inner < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cf\
      g(mother_route_seams)]implHostSession{",
@@ -1728,7 +1753,12 @@ const S4_SITES: [&str; 7] = [
      (mother_route_seams)]implHostSession{",
 ];
 fn s4_sites(sources: &[(String, String)]) -> Vec<String> {
-    let names = ["route_poison", "route_poison_inner", "route_poison_runs"];
+    let names = [
+        "route_poison",
+        "route_poison_inner",
+        "route_poison_runs",
+        "route_revoke_original_grant",
+    ];
     let mut found = Vec::new();
     for (file, source) in sources {
         let code = mask(source);
@@ -3638,8 +3668,9 @@ fn sb3_b1b_test_seams_are_test_only() {
             scanned += 1;
         }
     }
-    // 8 since SB3E-R32.7: the seam-only `route_s4` is scanned as well.
-    assert_eq!(scanned, 8, "every production host_session module scanned");
+    // 8 since SB3E-R32.7: the seam-only `route_s4` is scanned as well; 9
+    // since U4a-2: and the seam-only `route_s3`.
+    assert_eq!(scanned, 9, "every production host_session module scanned");
     let run = include_str!("../authority/run.rs");
     for (name, source) in [("host_session.rs", parent), ("run.rs", run)] {
         assert_eq!(

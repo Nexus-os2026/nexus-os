@@ -1,5 +1,7 @@
 //! Replay accounting never restores the borrowed live caller or its deny latch.
 use super::*;
+#[cfg(mother_route_seams)]
+use crate::route_seams;
 use nexus_governed_control::inference::{
     CallMeter, Charged, InvocationObserver, InvocationOwner, MeterRefusal,
 };
@@ -194,6 +196,15 @@ pub(super) struct BorrowedMeter<'a, P: EffectPort> {
     invocation: InvocationId,
     generation: u64,
 }
+/// SB-3E S5 (AM-2 A.3): the session and request of the port's context, and
+/// this meter's invocation.
+#[cfg(mother_route_seams)]
+impl<P: EffectPort> BorrowedMeter<'_, P> {
+    fn route_ctx(&self) -> route_seams::Ctx {
+        let context = self.coordinator.port.session_context();
+        route_seams::Ctx::of(context.as_ref()).invocation(self.invocation)
+    }
+}
 impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
         let c = self.coordinator;
@@ -201,6 +212,8 @@ impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
             return Err(MeterRefusal::Stale);
         }
         let mut result = Err(MeterRefusal::Stale);
+        #[cfg(mother_route_seams)]
+        route_seams::at("mother.charge.entry", self.route_ctx());
         c.try_with_lock(|inner| {
             if inner.usable().is_err()
                 || inner
@@ -250,6 +263,8 @@ impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
                 return Ok(());
             };
             result = Err(MeterRefusal::NotRecorded);
+            #[cfg(mother_route_seams)]
+            route_seams::at("mother.charge", self.route_ctx());
             inner.append(
                 self.invocation.mission,
                 Event::ModelCallCharged {
@@ -257,6 +272,8 @@ impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
                     call: charged.call,
                 },
             )?;
+            #[cfg(mother_route_seams)]
+            route_seams::at("mother.charge.ok", self.route_ctx());
             let m = inner.mission(self.invocation.mission)?;
             m.call_accounting
                 .as_mut()
@@ -286,6 +303,8 @@ impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
     }
     fn settle(&self, call: u32) {
         let c = self.coordinator;
+        #[cfg(mother_route_seams)]
+        route_seams::at("mother.settle", self.route_ctx());
         let _ =
             c.try_with_lock(|i| {
                 if i.usable().is_err() {
@@ -468,6 +487,8 @@ impl<P: EffectPort> ModelCaller for Caller<'_, P> {
         }
         #[cfg(test)]
         c.hooks.model_returned.fire();
+        #[cfg(mother_route_seams)]
+        route_seams::at("mother.recheck", self.meter.route_ctx());
         if self.live() && self.deadline.expired() {
             self.deny(BlockReason::BudgetTime);
         }

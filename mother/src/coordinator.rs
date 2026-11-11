@@ -708,8 +708,18 @@ impl Inner {
         session_journal_oracles::at("before", &entry);
         #[cfg(all(test, target_os = "linux"))]
         lite::session_terminal_fix2::before(&entry);
+        #[cfg(mother_route_seams)]
+        if let Event::LaneReturned { invocation, .. } = &entry.event {
+            let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
+            crate::route_seams::at("mother.admit", ctx.invocation(*invocation));
+        }
         if work {
             self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
+        }
+        #[cfg(mother_route_seams)]
+        if let Event::LaneReturned { invocation, .. } = &entry.event {
+            let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
+            crate::route_seams::at("mother.admit.ok", ctx.invocation(*invocation));
         }
         // Deny memory-only observers before journal I/O/terminal intent,
         // while this boundary still owns the coordinator lock. A failed
@@ -1965,6 +1975,12 @@ impl<P: EffectPort> Coordinator<P> {
 
             // Keep the answer only if the reservation still holds.
             let hash = output_hash(&output);
+            #[cfg(mother_route_seams)]
+            crate::route_seams::at(
+                "mother.lane.prelock",
+                crate::route_seams::Ctx::of(self.port.session_context().as_ref())
+                    .invocation(input.invocation),
+            );
             let contract = self.step(|inner| {
                 inner.kept(id)?;
                 let m = inner.mission(id)?;
@@ -1990,6 +2006,12 @@ impl<P: EffectPort> Coordinator<P> {
                         output_hash: hash.clone(),
                     },
                 )?;
+                #[cfg(mother_route_seams)]
+                crate::route_seams::at(
+                    "mother.lane.returned",
+                    crate::route_seams::Ctx::of(inner.session_context.as_ref())
+                        .invocation(input.invocation),
+                );
                 let mission = inner.mission(id)?;
                 mission.pending_lane = None;
                 mission.invalidate_calls();

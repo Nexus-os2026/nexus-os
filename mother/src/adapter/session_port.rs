@@ -275,6 +275,19 @@ impl SessionPort {
         }
     }
 }
+/// SB-3E S3's forwarder (design 4.2): `SessionPort::new` consumes the door,
+/// so the original door's revocation is reached through its port.
+#[cfg(mother_route_seams)]
+impl SessionPort {
+    pub fn route_revoke_original_grant(&self) -> bool {
+        const M: &str = "nexus-mother-route-seam-S3-port";
+        std::hint::black_box(M.as_bytes());
+        match &self.inner.door {
+            PortDoor::Session(door) => door.route_revoke_original_grant(),
+            PortDoor::Legacy(_) => false,
+        }
+    }
+}
 /// SB-3 C (spec §4.4): an unconfigured session keeps its default
 /// denial; only an absent registration reads as no broker route.
 fn unconfigured(refusal: EffectRefusal) -> EffectRefusal {
