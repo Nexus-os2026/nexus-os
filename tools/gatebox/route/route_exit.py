@@ -61,6 +61,8 @@ class Gate:
         self.env = {"HOME": home, "PATH": bin_dir + ":/usr/bin:/bin", "LANG": "C.UTF-8",
                     "RUSTC": os.path.join(bin_dir, "rustc"), "CARGO_HOME": os.environ.get("CARGO_HOME", f"{home}/.cargo"),
                     "RUSTUP_HOME": os.environ.get("RUSTUP_HOME", f"{home}/.rustup"), "CARGO_NET_OFFLINE": "true"}
+        # A tool builds its own toolchain environment and refuses an inherited RUSTUP_*/RUSTC*/CARGO_* (A1, A7).
+        self.tool_env = {"HOME": home, "PATH": bin_dir + ":/usr/bin:/bin", "LANG": "C.UTF-8"}
         self.steps = []
 
     def run(self, step, argv, cwd=None, env=None, verdict_json=False, ok=None):
@@ -86,7 +88,8 @@ class Gate:
 
     def tool(self, step, name, *args, **kw):
         cache = "pycache_prefix=" + os.path.join(self.work, "pycache")
-        return self.run(step, PY + ["-X", cache, os.path.join(HERE, name)] + list(args), verdict_json=True, **kw)
+        return self.run(step, PY + ["-X", cache, os.path.join(HERE, name)] + list(args), env=self.tool_env,
+                        verdict_json=True, **kw)
 
     def cargo(self, step, target, *args, **kw):
         env = dict(self.env, CARGO_TARGET_DIR=os.path.join(self.work, target))
@@ -110,6 +113,17 @@ def status(repo):
     """The tree's changes, untracked and ignored files included, less IGNORED_OK; None on failure."""
     out = git(repo, "status", "--porcelain", "--ignored", "--untracked-files=all")
     return None if out is None else "\n".join(x for x in out.splitlines() if x[3:] not in IGNORED_OK)
+
+
+def controls_ok(run, parsed):
+    """A1/A2/A3 controls print a summary, not a verdict: exit 0, controls run, none failed, every tree HEAD's."""
+    return run.returncode == 0 and bool(parsed) and parsed.get("controls", 0) > 0 and parsed.get("failed") == [] \
+        and True in (parsed.get("trees_match_head"), parsed.get("tree_matches_head"))
+
+
+def a7_controls_ok(run, _):
+    """A7's controls print one line per control, then `all controls report` only when all report."""
+    return run.returncode == 0 and run.stdout.decode().strip().splitlines()[-1:] == ["all controls report"]
 
 
 def worktree_tree(repo, index):
@@ -192,15 +206,15 @@ def main():
     gate.cargo("fmt", "target-fmt", "fmt", "--all", "--", "--check")
     lane(gate, data)
     gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--json", w("a1.json"))
-    gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t)
-    gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs)
+    gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t, ok=controls_ok)
+    gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok)
     gate.drop("a1-work", "a2-work")
     _, ship = gate.tool("a3_ship", "route_a3.py", "build", "--repo", r, "--toolchain", t, "--target", w("a3-ship"))
     _, census = gate.tool("a3_census", "route_a3.py", "build", "--repo", r, "--toolchain", t, "--target",
                           w("a3-census"), "--wrapper", args.wrapper)
     gate.drop("a3-ship", "a3-census")
     gate.tool("a3_controls", "route_a3_controls.py", "--source", r, "--work", w("a3-work"), "--toolchain", t,
-              "--wrapper", args.wrapper, "--jobs", args.jobs)
+              "--wrapper", args.wrapper, "--jobs", args.jobs, ok=controls_ok)
     gate.drop("a3-work")
     _, a4 = gate.tool("a4", "route_a4.py", "run", "--repo", r, "--toolchain", t, "--work", w("a4-work"))
     gate.tool("a4_controls", "route_a4.py", "controls", "--repo", r, "--toolchain", t, "--work", w("a4-controls"),
@@ -220,7 +234,7 @@ def main():
     os.chmod(w("python_wrapper"), 0o755)
     gate.tool("a7_controls", "route_a7_controls.py", "--source", r, "--work", w("a7-controls"),
               "--wrapper-source", os.path.join(HERE, "route_rustc.c"), "--toolchain", t,
-              "--python-wrapper", w("python_wrapper"), "--jobs", args.jobs)
+              "--python-wrapper", w("python_wrapper"), "--jobs", args.jobs, ok=a7_controls_ok)
     gate.drop("a7-controls")
     _, ran = gate.tool("plants", "route_plants.py", "run", "--repo", r, "--toolchain", t, "--work", w("plants-work"),
                        "--wrapper", args.wrapper, "--log", w("plants.jsonl"))
