@@ -3,8 +3,9 @@
 
   run --repo R --toolchain T --work DIR --wrapper W [--only NAME ...] [--log FILE]
 
-route_plants.json lists each plant: an exact replacement (`old` once, `new`) or an
-`append` in one file, its mode, and what must kill it. In a scratch copy of the
+route_plants.json lists each plant: an exact replacement (`old` once, `new`), an
+`append`, a new file (`create`) or a new symlink (`symlink`, its target; SB3E-R55.2),
+its mode, and what must kill it. In a scratch copy of the
 tracked files each plant is applied, checked by sha256, run, restored, and the
 copy's git tree hash (its own git directory) must be unchanged after it.
 
@@ -137,25 +138,45 @@ def judge(plant, result):
 
 def run_one(runner, plant):
     path = os.path.join(runner.tree, plant["file"])
-    tree, before = runner.tree_hash(), sha(path)
-    text = open(path, encoding="utf-8").read()
-    if "append" in plant:
-        planted = text + plant["append"]
-    elif text.count(plant["old"]) == 1:
-        planted = text.replace(plant["old"], plant["new"])
+    added = "create" in plant or "symlink" in plant
+    if os.path.lexists(path) == added:
+        return {"name": plant["name"], "killed": False, "error": "file exists" if added else "no such file"}
+    tree, before = runner.tree_hash(), None if added else sha(path)
+    made, up = [], os.path.dirname(path)
+    while not os.path.lexists(up):
+        made.append(up)
+        up = os.path.dirname(up)
+    if "symlink" in plant:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.symlink(plant["symlink"], path)
+        text = None
     else:
-        return {"name": plant["name"], "killed": False, "error": "old text not found exactly once"}
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(planted)
+        text = "" if added else open(path, encoding="utf-8").read()
+        if "create" in plant:
+            planted = plant["create"]
+        elif "append" in plant:
+            planted = text + plant["append"]
+        elif text.count(plant["old"]) == 1:
+            planted = text.replace(plant["old"], plant["new"])
+        else:
+            return {"name": plant["name"], "killed": False, "error": "old text not found exactly once"}
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(planted)
     row = {"name": plant["name"], "mode": plant["mode"], "file": plant["file"], "tree_before": tree,
-           "sha_before": before, "sha_planted": sha(path)}
+           "sha_before": before, "sha_planted": os.readlink(path) if text is None else sha(path)}
     try:
         mode = plant["mode"]
         result = runner.run_mbin() if mode == "mbin" else getattr(runner, mode)()
     finally:
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(text)
-    row["restored"] = sha(path) == before and runner.tree_hash() == tree
+        if added:
+            os.unlink(path)
+            for folder in made:
+                os.rmdir(folder)
+        else:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+    row["restored"] = (not os.path.lexists(path) if added else sha(path) == before) and runner.tree_hash() == tree
     row["killed"], row["missing"] = judge(plant, result)
     row["killed"] = row["killed"] and row["restored"]
     row["result"] = result

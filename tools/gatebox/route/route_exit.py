@@ -4,7 +4,8 @@
   route_exit.py --repo R --sha SHA --toolchain T --wrapper W --wrapper-sha256 H --work DIR --out FILE
 
 One run on one clean commit, steps in order, each logged under DIR/logs:
-  preflight     HEAD is SHA, the tree is clean, the wrapper is the pinned one;
+  preflight     HEAD is SHA, the tree is clean (ignored files too, R55.5), the
+                wrapper is the pinned one;
   a3_check_data A3's data check, before any scan and before A4 (R36.3);
   std_tests     real builds and every existing guard: the route packages' tests
                 (desktop: lib, bins and the listed tests; `live` needs a desktop);
@@ -17,10 +18,13 @@ One run on one clean commit, steps in order, each logged under DIR/logs:
                 each tool on this tree; the real-link A3 controls and A4's
                 positive, broken-scanner and planted controls rerun here (R37);
   plants        every U4a plant (route_plants.py) with its listed killer; the
-                list and its names without `expect` equal the `plants` pin;
+                list, its names without `expect` and its whole file's sha256
+                (R55.6) equal the `plants` pin;
   postflight    HEAD and the tree unchanged.
 Each seam is listed with its data disposition per binary and what A3 and A4
-measured. One verdict JSON is written to FILE; exit 0 only if every step passes.
+measured. One verdict JSON is written to a fresh FILE; exit 0 only if every step passes.
+Each tool runs with `-X pycache_prefix` under DIR, so no cached bytecode in the
+tree is read (R55.5); a failed git command is never a clean tree (R55.5).
 """
 import argparse
 import hashlib
@@ -33,6 +37,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = ["/usr/bin/python3", "-I"]
+# SB3E-R55.5: ignored files the clean-tree check accepts (reviewed; none).
+IGNORED_OK = ()
 DATA = os.path.join(HERE, "route_exit.json")
 # A different wrapper for A7's hash-mismatch control (any other bytes serve).
 PY_WRAPPER = "#!/usr/bin/python3 -I\nimport os, sys\nos.execv(sys.argv[1], sys.argv[1:])\n"
@@ -77,7 +83,8 @@ class Gate:
         return run, parsed
 
     def tool(self, step, name, *args, **kw):
-        return self.run(step, PY + [os.path.join(HERE, name)] + list(args), verdict_json=True, **kw)
+        cache = "pycache_prefix=" + os.path.join(self.work, "pycache")
+        return self.run(step, PY + ["-X", cache, os.path.join(HERE, name)] + list(args), verdict_json=True, **kw)
 
     def cargo(self, step, target, *args, **kw):
         env = dict(self.env, CARGO_TARGET_DIR=os.path.join(self.work, target))
@@ -92,7 +99,15 @@ class Gate:
 
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True).stdout.strip()
+    """stdout, or None when git fails (SB3E-R55.5: never read as a clean tree)."""
+    run = subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True)
+    return run.stdout.rstrip("\n") if run.returncode == 0 else None
+
+
+def status(repo):
+    """The tree's changes, untracked and ignored files included, less IGNORED_OK; None on failure."""
+    out = git(repo, "status", "--porcelain", "--ignored", "--untracked-files=all")
+    return None if out is None else "\n".join(x for x in out.splitlines() if x[3:] not in IGNORED_OK)
 
 
 def lane(gate, data):
@@ -140,12 +155,12 @@ def main():
     args = parser.parse_args()
     for name in ("repo", "toolchain", "wrapper", "work", "out"):
         setattr(args, name, os.path.abspath(getattr(args, name)))
-    if os.path.lexists(args.work):
-        sys.exit(f"route_exit: the work directory must be fresh: {args.work}")
+    if os.path.lexists(args.work) or os.path.lexists(args.out):
+        sys.exit(f"route_exit: the work directory and the verdict file must be fresh: {args.work}, {args.out}")
     gate, w = Gate(args), lambda name: os.path.join(args.work, name)
     data = json.load(open(DATA, encoding="utf-8"))
     head, tree = git(args.repo, "rev-parse", "HEAD"), git(args.repo, "rev-parse", "HEAD^{tree}")
-    clean = git(args.repo, "status", "--porcelain", "--untracked-files=all") == ""
+    clean = status(args.repo) == ""
     wrapper_sha = sha256(open(args.wrapper, "rb").read())
     gate.fact("preflight", head == args.sha and clean and wrapper_sha == args.wrapper_sha256,
               head=head, tree=tree, clean=clean, wrapper_sha256=wrapper_sha)
@@ -194,14 +209,16 @@ def main():
     gate.drop("a7-controls")
     _, ran = gate.tool("plants", "route_plants.py", "run", "--repo", r, "--toolchain", t, "--work", w("plants-work"),
                        "--wrapper", args.wrapper, "--log", w("plants.jsonl"))
-    names = [p["name"] for p in json.load(open(os.path.join(HERE, "route_plants.json"), encoding="utf-8"))["plants"]]
+    plants_file = open(os.path.join(HERE, "route_plants.json"), "rb").read()
+    names = [p["name"] for p in json.loads(plants_file)["plants"]]
     pin, ran = data["plants"], ran or {}
     bare = ran.get("without_expect", [])
     gate.fact("plants_list", len(names) == pin["count"] == ran.get("plants") == ran.get("killed") and [
-        len(bare), sha256("\n".join(names).encode()), sha256("\n".join(bare).encode())] == [
-        pin["without_expect_count"], pin["names_sha256"], pin["without_expect_sha256"]], count=len(names))
+        len(bare), sha256("\n".join(names).encode()), sha256("\n".join(bare).encode()), sha256(plants_file)] == [
+        pin["without_expect_count"], pin["names_sha256"], pin["without_expect_sha256"], pin["file_sha256"]],
+        count=len(names))
     gate.drop("plants-work")
-    after = git(r, "rev-parse", "HEAD"), git(r, "status", "--porcelain", "--untracked-files=all")
+    after = git(r, "rev-parse", "HEAD"), status(r)
     gate.fact("postflight", after == (head, ""), head=after[0])
     return finish(args, gate, head, tree, seams(gate, ship, census, a4))
 

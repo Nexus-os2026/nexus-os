@@ -3,7 +3,7 @@
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U4a-3 reported them",
   "(SB3E-R41: 33 names) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
-  "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills)."
+  "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
  "desktop_tests": [
   "check_page_cli",
@@ -49,9 +49,10 @@
   ]
  },
  "plants": {
-  "count": 187,
-  "names_sha256": "3ba567e8b379a199b580df25df63f062542fe1ff056a7ee6968f6d77c733bc23",
+  "count": 191,
+  "names_sha256": "b6dc5c17bebc14a1f2ff5e1639fb67d870ea09af61f2f9832e1590d973a80a07",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
-  "without_expect_count": 2
+  "without_expect_count": 2,
+  "file_sha256": "2403026a201c601b12421af2d30e99f07fbe1c3cf36fb1ce09c787ee5e0bfa18"
  }
 }
