@@ -70,13 +70,14 @@ def main():
     select = parser.add_mutually_exclusive_group(required=True)
     select.add_argument('--run-id')
     select.add_argument('--latest',action='store_true')
-    for name in ('repo','sha','gateset','inventory-sha256','require-status'): parser.add_argument('--'+name)
+    for name in ('repo','sha','gateset','inventory-sha256','route-pins-sha256','require-status'): parser.add_argument('--'+name)
     args = parser.parse_args()
     host_context()
     host_ancestry(ROOT)
     if args.latest:
         if not all((args.repo,args.sha,args.gateset)): parser.error('latest needs repo, sha and gateset')
-        expected = receipt.request_for(args.repo,args.sha,args.gateset,args.inventory_sha256)
+        # GB3-3: a current request only; a v1 route receipt is found by --run-id or --authenticate-stdin.
+        expected = receipt.request_for(args.repo,args.sha,args.gateset,args.inventory_sha256,args.route_pins_sha256)
         matches = []
         for path in ROOT.iterdir():
             item = authenticate(path.name)

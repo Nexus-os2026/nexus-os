@@ -58,7 +58,8 @@ os.close(fd)
 os.execv(sys.argv[1], sys.argv[1:])
 """
 # SB3E-R64: the exact control counts each controls step must report; any other count fails the step.
-CONTROLS = {"a1_controls": 15, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109}
+# SB3E GB3: A1's 15 plus its 8 sentinel and 6 pins controls (mission 9 items 1a, 2).
+CONTROLS = {"a1_controls": 29, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109}
 
 
 def sha256(data):
@@ -223,7 +224,8 @@ def main():
     gate.drop("target-std")
     gate.cargo("fmt", "target-fmt", "fmt", "--all", "--", "--check")
     lane(gate, data)
-    gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--json", w("a1.json"))
+    pins = os.path.join(r, "tools", "route_pins.json")  # SB3E GB3: the checked tree's own pins file
+    gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--pins", pins, "--json", w("a1.json"))
     gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t, ok=controls_ok("a1_controls"))
     gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok("a2_controls"),
               env=dict(gate.tool_env, RUSTC=gate.env["RUSTC"]))
@@ -246,7 +248,7 @@ def main():
     gate.drop("a5-work", "a6-work", "a6-control")
     gate.tool("a7", "route_a7.py", "run", "--repo", r, "--target", w("a7-target"), "--evidence", w("a7"),
               "--wrapper", args.wrapper, "--wrapper-sha256", args.wrapper_sha256, "--toolchain", t,
-              "--json", w("a7.json"), ok=lambda run, parsed: run.returncode == 0)
+              "--json", w("a7.json"), "--pins", pins, ok=lambda run, parsed: run.returncode == 0)
     gate.drop("a7-target")
     with open(w("python_wrapper"), "w", encoding="utf-8") as handle:
         handle.write(PY_WRAPPER)

@@ -1,7 +1,8 @@
 """Trusted payload init: isolated child environment and libtest reconciliation.
 route-cells (SB3E-R18 P1, R19, R20): no probe; quiescence before and after A7 `run`; the evidence is
 sealed into the private stream before any unpinned candidate code; the harness runs only as the bytes
-A7 inventoried, re-verified after its listing with only init alive."""
+A7 inventoried, re-verified after its listing with only init alive. SB3E GB3: before A7, the snapshot's pins
+file is checked against the request and route A1 runs from the bundle; a refusal of either ends the run before A7."""
 import os
 import re
 import subprocess
@@ -28,7 +29,7 @@ def child_options(log_fd):
     return {'stdin':subprocess.DEVNULL,'stdout':log_fd,'stderr':subprocess.STDOUT,
             'close_fds':True,'env':dict(ENV),'cwd':'/work/src','start_new_session':True}
 
-ROUTE_CWD = {'a7':'/work/src','route-cells':'/work/src/mother/host'}  # receipt.GATE_SETS literal (P11)
+ROUTE_CWD = {'route_a1':'/work/src','a7':'/work/src','route-cells':'/work/src/mother/host'}  # receipt.GATE_SETS literal (P11)
 def requested():
     """The supervisor-validated request (snapshot.parse_request); it alone selects the gate set."""
     return json.loads(Path('/gate/request.json').read_bytes())
@@ -141,7 +142,6 @@ class Runner:
         proc = subprocess.Popen(argv,**options)
         self.children.add(proc)
         output = bytearray()
-        log_start = self.total
         selector = selectors.DefaultSelector()
         selector.register(proc.stdout,selectors.EVENT_READ)
         if proc.stderr is not None: selector.register(proc.stderr,selectors.EVENT_READ)
@@ -156,8 +156,7 @@ class Runner:
                         self.output(name,block)
                         if key.fileobj is proc.stdout: output.extend(block)
             code = proc.wait(timeout=max(.001,self.deadline-time.monotonic()))
-            if self.total == log_start:
-                packet(self.log,{'id':name,'data':''})
+            packet(self.log,{'id':name,'data':''})  # R57.5: every command's log terminator, after all its output
             packet(self.status,dict(event='end',id=name,exit_code=code,signal=-code if code < 0 else None))
             self.results[name] = (gate,argv,code)
             return name, code, output.decode('utf-8',errors='replace')
@@ -242,10 +241,26 @@ class Runner:
             while block := os.read(fd,1024*1024): digest.update(block)
         finally: os.close(fd)
         if digest.hexdigest() != expected: raise ValueError('HARNESS: bytes differ from A7 lane inventory')
+    def pins(self, pins, digest):
+        """SB3E-R48.1 B1: the snapshot's pins file, no link followed, regular, bounded, equal to the request.
+        One terminated record either way; a refusal ends the run before any Cargo process."""
+        try: found = hashlib.sha256(read_regular(pins['path'],pins['max_bytes'])).hexdigest()
+        except ValueError: found = None
+        self.output('route-pins',json.dumps(dict(accepted=found == digest,sha256=found)).encode())
+        packet(self.log,{'id':'route-pins','data':''})
+        if found is None: raise ValueError('PINS: missing, linked, irregular or oversized '+pins['path'])
+        if found != digest: raise ValueError('PINS: sha256 differs from the request route_pins_sha256')
     def route(self, policy, request):
-        """SB3E-R18 P1 sequence, R19.3 as replaced by R20. Any failure raises; nothing is retried."""
-        (a7, harness), env, self.quiescence = policy['gates'], policy['environment'], {}
-        self.quiet('before-a7')
+        """SB3E-R18 P1 sequence, R19.3 as replaced by R20, GB3 pins and route A1 first. Any failure raises;
+        nothing is retried."""
+        if [g['id'] for g in policy['gates']] != ['route_a1','a7','route-cells']: raise ValueError('ROUTE_POLICY: gates')
+        (a1, a7, harness), env, self.quiescence = policy['gates'], policy['environment'], {}
+        self.quiet('before-route-a1')
+        self.pins(policy['pins'],request['route_pins_sha256'])
+        _, code, output = self.command('route_a1',a1['argv'],env,ROUTE_CWD['route_a1'])
+        if not sibling('receipt').route_a1_passes(code,output):
+            raise ValueError('route A1: exited nonzero or did not print exactly one passing JSON verdict')
+        self.quiet('after-route-a1')
         _, code, _ = self.command('a7',a7['argv'],env,ROUTE_CWD['a7'])
         self.quiet('after-a7')
         sealed = self.seal(policy['a7'])
@@ -350,6 +365,12 @@ def observations():
         result[name] = module.manifest(path,time.monotonic()+300)[0]
     return result
 
+def sibling(name):
+    spec = importlib.util.spec_from_file_location('gbx_'+name,Path(__file__).with_name(name+'.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def probe_module():
     spec = importlib.util.spec_from_file_location('gbx_probe',os.path.join(os.path.dirname(__file__),'probe.py'))
     module = importlib.util.module_from_spec(spec)
@@ -393,6 +414,16 @@ def route_main(runner, request):
         runner.output('inputs',json.dumps({'before':before,'after':observations()}).encode())
     packet(runner.status,{'event':'complete'})
 
+def route_run(runner, request, run=route_main):
+    """GB3 (mission 9 item 3): a failed route run sends its own failure as one bounded, terminated record."""
+    try: return run(runner,request)
+    except BaseException as exc:
+        try:
+            runner.output('route-failure',(type(exc).__name__+': '+str(exc))[:2000].encode())
+            packet(runner.log,{'id':'route-failure','data':''})
+        except (ValueError,OSError): pass  # the original failure is the one that ends the run
+        raise
+
 def main():
     if os.getpid() != 1 or os.getuid() == 0: raise ValueError('trusted init requires unprivileged PID 1')
     if ctypes.CDLL(None,use_errno=True).prctl(4,0,0,0,0) != 0: raise OSError('cannot disable dumpability')
@@ -407,7 +438,7 @@ def main():
     signal.signal(signal.SIGTERM,terminate)
     request = requested()
     try:
-        if request.get('gate_set_id') == 'route-cells': return route_main(runner,request)
+        if request.get('gate_set_id') == 'route-cells': return route_run(runner,request)
         for directory in ('/work/home','/work/cargo','/work/target','/work/cache','/run/gate/tmp','/run/gate/xdg'):
             Path(directory).mkdir(mode=0o700)
         Path('/work/cargo/registry').symlink_to('/inputs/registry')

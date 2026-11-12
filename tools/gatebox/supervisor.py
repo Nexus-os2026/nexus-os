@@ -89,6 +89,7 @@ class Evidence:
     def __init__(self, log_limit=64*1024**2):
         self.commands, self.active, self.complete = [], None, False
         self.events, self.log, self.log_limit = 0, bytearray(), log_limit
+        self.terminated = set()  # R57.5: log ids whose terminator (an empty packet) arrived after all their bytes
     def accept(self, event):
         self.events += 1
         if self.events > 512 or self.complete or not isinstance(event,dict): raise ValueError('status bound/order')
@@ -126,10 +127,60 @@ class Evidence:
 
 ROUTE_CWDS = {'/work/src',*receipt.GATE_SETS['route-cells']['cwd'].values()}  # exact per set: receipt.validate_summary
 
+def digest(data): return hashlib.sha256(data).hexdigest()
+
+def route_a1(summary, evidence, logs):
+    """GB3 7.1 (GB3-4, R57.5): (route A1 lane keys, its start record or None, a missing-evidence line or None) from
+    init's pins record and route A1's own start, end and log only; never from A7, the harness or coverage. Each
+    line states an absence; a log without its terminator is never read as a verdict."""
+    ended = [c for c in evidence.commands if c['gate_id'] == 'route_a1']
+    active = evidence.active if evidence.active and evidence.active['gate_id'] == 'route_a1' else None
+    start, pins = (ended or [active])[0], None
+    if 'route-pins' in evidence.terminated:
+        try: pins = json.loads(logs['route-pins.log'])
+        except ValueError: pass
+    if not isinstance(pins,dict) or type(pins.get('accepted')) is not bool: pins = None
+    log = start and start['id']+'.log'
+    if pins is None and start is None: value, line = 'NOT_RUN', None
+    elif pins is None: value, line = 'PINS_UNRECEIVED', 'route A1: pins record not received'
+    elif not pins['accepted']: value, line = 'PINS_REFUSED', None
+    elif start is None: value, line = 'NO_START_RECORD', 'route A1: no start record after accepted pins'
+    elif not ended: value, line = 'START_WITHOUT_END', 'route A1: start without end'
+    elif start['id'] not in evidence.terminated:
+        value, line = 'LOG_INCOMPLETE', 'route A1: log partial' if log in logs else 'route A1: log missing'
+    else:
+        value, line = 'PASS' if receipt.route_a1_passes(start['exit_code'],logs[log].decode('utf-8','replace')) else 'FAIL', None
+    lane = dict(route_a1=value,route_pins_sha256=summary['request']['route_pins_sha256'])
+    if log in logs: lane['route_a1_sha256'] = digest(logs[log])
+    return lane, start, line
+
+def route_failure(summary, evidence, logs, identity):
+    """GB3 7.1 on a FAILED run with no lane yet: the route A1 lane, the commands as received (a route A1 start
+    without an end kept with its start fields only) and coverage from start and end records. Nothing invented."""
+    try: ids = [g['id'] for g in receipt.policy_set(identity['gates_sha256'])['route-cells.json']['gates']]
+    except Exception as exc:
+        summary['missing_evidence'].append('route A1 lane: '+type(exc).__name__+': '+str(exc))
+        return
+    lane, start, line = route_a1(summary,evidence,logs)
+    commands = [dict(c) for c in evidence.commands]+([dict(start,status_complete=False)] if start and start is evidence.active else [])
+    for command in commands:
+        if command['gate_id'] == 'route_a1' and command['id']+'.log' in logs:
+            command.update(log=command['id']+'.log',log_sha256=digest(logs[command['id']+'.log']))
+    ended = {c['gate_id']:c for c in evidence.commands}
+    started = set(ended)|({evidence.active['gate_id']} if evidence.active else set())
+    passed = [g for g in ids if g in ended and (lane['route_a1'] == 'PASS' if g == 'route_a1' else
+                                                ended[g]['exit_code'] == 0 and ended[g]['id'] in evidence.terminated)]
+    summary['coverage'] = dict(expected=ids,executed=[g for g in ids if g in ended],passed=passed,
+                               failed=[g for g in ids if g in started and g not in passed])
+    summary['commands'], summary['lane'] = commands, lane
+    if line: summary['missing_evidence'].append(line)
+    if 'route-failure' in evidence.terminated:
+        summary['missing_evidence'].append('init: '+logs['route-failure.log'].decode('utf-8','replace'))
+
 def route_summary(summary, evidence, logs, identity):
-    """SB3E-R18 P4: commands, coverage and the lane group from the sealed A7 evidence and harness run."""
+    """SB3E-R18 P4: commands, coverage and the lane group from route A1's own evidence (GB3 7.1), the sealed A7
+    evidence and the harness run."""
     route = receipt.policy_set(identity['gates_sha256'])['route-cells.json']
-    digest = lambda data: hashlib.sha256(data).hexdigest()
     commands, discovery = [], []
     for item in evidence.commands:
         command = dict(item)
@@ -146,7 +197,8 @@ def route_summary(summary, evidence, logs, identity):
     summary['commands'], summary['environment'] = commands, route['environment']
     summary['coverage'] = dict(expected=ids,executed=ids,passed=ids,failed=[],ignored=[],filtered=[],excluded=[],
                                artifacts=json.loads(logs['coverage.log'])['artifacts'],discovery=discovery)
-    summary['lane'] = dict(a7='PASS' if json.loads(verdict).get('verdict') == 'pass' else 'FAIL',verdict_sha256=digest(verdict),
+    summary['lane'] = dict(route_a1(summary,evidence,logs)[0],
+                           a7='PASS' if json.loads(verdict).get('verdict') == 'pass' else 'FAIL',verdict_sha256=digest(verdict),
                            evidence={n:digest(logs[n]) for n in ('a7-'+r.replace('/','-')+'.log' for r in route['a7']['evidence'])},
                            rustc_vv=lane['rustc_vv'],cargo_v=lane['cargo_v'],lockfile_sha256=summary['snapshot']['lockfile_sha256'],
                            wrapper_sha256=route['a7']['wrapper_sha256'],harness_sha256=lane['harness_sha256'],
@@ -193,6 +245,18 @@ def stop_and_confirm(run):
             if path.exists(): raise ValueError('cgroup disappeared ambiguously')
     return {'complete':True,'manager':state}
 
+def consume(kind, event, evidence, logs):
+    """One private frame: a status record through Evidence.accept, or a log packet; an empty packet is its log
+    id's terminator (R57.5) and adds no byte."""
+    if kind == 'status': return evidence.accept(event)
+    if set(event) != {'id','data'} or not isinstance(event['id'],str) or not receipt.NAME.fullmatch(event['id']):
+        raise ValueError('log identity')
+    data = base64.b64decode(event['data'],validate=True)
+    evidence.capture(data)
+    if event['id'] not in logs and len(logs) >= 512: raise ValueError('log count bound')
+    logs.setdefault(event['id'],bytearray()).extend(data)
+    if not data: evidence.terminated.add(event['id'])
+
 def collect(run, listeners, evidence, logs):
     selector = selectors.DefaultSelector()
     streams, buffers, ended = {}, {}, set()
@@ -235,14 +299,7 @@ def collect(run, listeners, evidence, logs):
                         if len(buffer) < 4+size: break
                         event = json.loads(buffer[4:4+size],object_pairs_hook=receipt.unique)
                         del buffer[:4+size]
-                        if kind == 'status': evidence.accept(event)
-                        else:
-                            if (set(event) != {'id','data'} or not isinstance(event['id'],str)
-                                    or not receipt.NAME.fullmatch(event['id'])): raise ValueError('log identity')
-                            data = base64.b64decode(event['data'],validate=True)
-                            evidence.capture(data)
-                            if event['id'] not in logs and len(logs) >= 512: raise ValueError('log count bound')
-                            logs.setdefault(event['id'],bytearray()).extend(data)
+                        consume(kind,event,evidence,logs)
         evidence.finish(True,False)
         return evidence, {name+'.log':bytes(data) for name,data in logs.items()}
     finally:
@@ -326,6 +383,7 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
     finally:
         # A failed collector still leaves bounded partial diagnostics to publish.
         if not logs: logs = {name+'.log':bytes(data) for name,data in captured.items()}
+        if request['gate_set_id'] == 'route-cells' and not summary['lane']: route_failure(summary,evidence,logs,identity)
         if not summary['commands']: summary['commands'] = evidence.commands
         try: summary['cleanup'] = stop_and_confirm(run)
         except Exception as exc:

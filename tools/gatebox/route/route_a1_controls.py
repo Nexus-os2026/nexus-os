@@ -7,7 +7,14 @@ route_a1.py on that real repository copy. It passes only if A1 fails and
 reports each of the control's expected findings; the unplanted baseline must
 pass. Plants that need a new lock entry refresh the copy's Cargo.lock
 offline, so the specific findings are reported beside the lock's. Each
-result names the git tree hash of its copy before the plant.
+result names the git tree hash of its copy before the plant. Every run passes
+the copy's own `tools/route_pins.json` (SB3E GB3).
+
+GB3-1 sentinel controls (mission 9 item 1a): a configuration plant runs with a
+scratch toolchain whose `cargo` records a marker before it executes the real
+cargo, or with a configured wrapper that records a marker; each passes only if
+A1 fails with the plant's findings and no marker exists. The pins controls
+(mission 9 item 2) refuse a bad or absent `--pins` the same way.
 """
 import argparse
 import json
@@ -47,6 +54,10 @@ def write(tree, rel, text):
     open(os.path.join(tree, rel), "w", encoding="utf-8").write(text)
 
 
+def wrapper_config(rel, key):
+    return lambda t, wrapper="/usr/bin/env": write(t, rel, f'[build]\n{key} = "{wrapper}"\n')
+
+
 def symlinked_cargo(tree):
     os.rename(os.path.join(tree, ".cargo"), os.path.join(tree, "cargo-real"))
     os.symlink("cargo-real", os.path.join(tree, ".cargo"))
@@ -72,15 +83,14 @@ CONTROLS = {
         lambda t: write(t, ".cargo/config", f"[build]\nrustflags = {CFG}\n"), False,
         [("config", "path", ".cargo/config"), ("config", "sets", "build.rustflags")]),
     "legacy_config_setting_a_wrapper": (
-        lambda t: write(t, ".cargo/config", '[build]\nrustc-wrapper = "/usr/bin/env"\n'), False,
+        wrapper_config(".cargo/config", "rustc-wrapper"), False,
         [("config", "path", ".cargo/config"), ("config", "sets", "build.rustc-wrapper")]),
     "root_config_toml_deleted": (lambda t: os.remove(os.path.join(t, ".cargo", "config.toml")), False,
                                  [("config", "reason", "missing (it is pinned)")]),
-    "nested_rustc_wrapper": (lambda t: write(t, "mother/host/.cargo/config.toml", '[build]\nrustc-wrapper = "/usr/bin/env"\n'),
+    "nested_rustc_wrapper": (wrapper_config("mother/host/.cargo/config.toml", "rustc-wrapper"),
                              False, [("config", "sets", "build.rustc-wrapper")]),
     "nested_rustc_workspace_wrapper": (
-        lambda t: write(t, "crates/nexus-governed-control/.cargo/config.toml",
-                        '[build]\nrustc-workspace-wrapper = "/usr/bin/env"\n'),
+        wrapper_config("crates/nexus-governed-control/.cargo/config.toml", "rustc-workspace-wrapper"),
         False, [("config", "sets", "build.rustc-workspace-wrapper")]),
     "symlinked_cargo_directory": (symlinked_cargo, False, [("config", "reason", "a symbolic link")]),
     "lock_changed": (lambda t: write(t, "Cargo.lock", open(os.path.join(t, "Cargo.lock")).read() + "# planted\n"), False,
@@ -95,6 +105,50 @@ CONTROLS = {
     "build_edge": (lambda t: write(t, MOTHER, open(os.path.join(t, MOTHER)).read() + '\n[build-dependencies]\nhex = "0.4"\n'),
                    True, [("route_package", "dependency", "hex||build|"), ("graph_differs", "resolve", "default")]),
 }
+PINS = "tools/route_pins.json"
+# name: (base control, sentinel). The base control's plant and expected findings; `cargo` runs A1 with the
+# marking cargo, `wrapper` names the marking wrapper in the plant's configuration.
+SENTINELS = {
+    "config_refused_no_metadata_legacy": ("legacy_config_beside_config_toml", "cargo"),
+    "config_refused_no_metadata_nested": ("nested_rustc_wrapper", "cargo"),
+    "config_refused_no_metadata_changed_root": ("rustflags_config", "cargo"),
+    "config_refused_no_metadata_deleted_root": ("root_config_toml_deleted", "cargo"),
+    "config_refused_no_metadata_symlinked": ("symlinked_cargo_directory", "cargo"),
+    "config_wrapper_sentinel_legacy": ("legacy_config_setting_a_wrapper", "wrapper"),
+    "config_wrapper_sentinel_nested": ("nested_rustc_wrapper", "wrapper"),
+    "config_wrapper_sentinel_nested_workspace": ("nested_rustc_workspace_wrapper", "wrapper"),
+}
+
+
+def relinked_pins(tree):
+    os.rename(os.path.join(tree, PINS), os.path.join(tree, PINS + ".real"))
+    os.symlink("route_pins.json.real", os.path.join(tree, PINS))
+
+
+# name: (plant, the --pins argument (None: absent), expected pins reason); each runs with the marking cargo.
+PINS_CONTROLS = {
+    "pins_missing": (lambda t: os.remove(os.path.join(t, PINS)), PINS, "missing or a symbolic link"),
+    "pins_symlink": (relinked_pins, PINS, "missing or a symbolic link"),
+    "pins_malformed": (lambda t: write(t, PINS, '{"lock_sha256": "' + "0" * 64 + '"}\n'), PINS, "pins schema"),
+    "pins_oversize": (lambda t: write(t, PINS, open(os.path.join(t, PINS)).read() + " " * 65536), PINS, "over 65536 bytes"),
+    "pins_other_path": (lambda t: shutil.copy(os.path.join(t, PINS), os.path.join(t, "route_pins.json")),
+                        "route_pins.json", "checked tree's own"),
+    "pins_absent": (lambda t: None, None, None),
+}
+MARKING = """#!/usr/bin/python3 -I
+import os, sys
+with open({marker!r}, "a") as handle:
+    handle.write(" ".join(sys.argv) + "\\n")
+argv = {argv}
+os.execv(argv[0], argv)
+"""
+
+
+def marking(path, marker, argv):
+    """A sentinel: it appends its argv to `marker`, then executes `argv`."""
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(MARKING.format(marker=marker, argv=argv))
+    os.chmod(path, 0o755)
 
 
 def reported(findings, kind, field, substring):
@@ -115,27 +169,54 @@ def tree_hash(tree, git_dir):
 
 
 def run_control(name, source, files, work, toolchain, env):
-    plant, relock, expected = CONTROLS[name]
-    tree = os.path.join(work, name)
+    sentinel, pins, reason = None, PINS, None
+    if name in SENTINELS:
+        base, sentinel = SENTINELS[name]
+        plant, relock, expected = CONTROLS[base]
+    elif name in PINS_CONTROLS:
+        plant, pins, reason = PINS_CONTROLS[name]
+        sentinel, relock, expected = "cargo", False, [("pins", "reason", reason)] if reason else []
+    else:
+        plant, relock, expected = CONTROLS[name]
+    tree, marker = os.path.join(work, name), os.path.join(work, name + ".marker")
     copy(source, files, tree)
     before = tree_hash(tree, os.path.join(work, name + ".git"))
-    plant(tree)
+    a1_toolchain = toolchain
+    if sentinel == "wrapper":
+        marking(os.path.join(work, name + ".wrapper"), marker, "sys.argv[1:]")
+        plant(tree, os.path.join(work, name + ".wrapper"))
+    else:
+        plant(tree)
+    if sentinel == "cargo":
+        a1_toolchain = os.path.join(work, name + ".toolchain")
+        os.makedirs(os.path.join(a1_toolchain, "bin"))
+        os.symlink(os.path.join(toolchain, "bin", "rustc"), os.path.join(a1_toolchain, "bin", "rustc"))
+        real = os.path.join(toolchain, "bin", "cargo")
+        marking(os.path.join(a1_toolchain, "bin", "cargo"), marker, f"[{real!r}] + sys.argv[1:]")
     if relock:
         bin_dir = os.path.join(toolchain, "bin")
         relock = dict(env, RUSTC=os.path.join(bin_dir, "rustc"), PATH=bin_dir + os.pathsep + env["PATH"])
         subprocess.run([os.path.join(bin_dir, "cargo"), "metadata", "--offline", "--format-version", "1"],
                        cwd=tree, env=relock, capture_output=True, check=True)
-    run = subprocess.run(["/usr/bin/python3", "-I", os.path.join(HERE, "route_a1.py"), "--repo", tree,
-                          "--toolchain", toolchain], env=env, capture_output=True, text=True)
-    result = json.loads(run.stdout)
+    argv = ["/usr/bin/python3", "-I", os.path.join(HERE, "route_a1.py"), "--repo", tree, "--toolchain", a1_toolchain]
+    run = subprocess.run(argv + (["--pins", os.path.join(tree, pins)] if pins else []), env=env, capture_output=True,
+                         text=True)
+    try:
+        result = json.loads(run.stdout)
+    except ValueError:
+        result = {"verdict": None, "findings": []}  # never a pass; argparse refusal, traceback or no output
     missing = [list(e) for e in expected if not reported(result["findings"], *e)]
+    marked = os.path.exists(marker)
     if name == "baseline":
         ok = run.returncode == 0 and result["verdict"] == "pass"
+    elif name == "pins_absent":
+        ok = run.returncode != 0 and result["verdict"] != "pass" and not marked
     else:
-        ok = run.returncode == 1 and result["verdict"] == "fail" and not missing
+        ok = run.returncode == 1 and result["verdict"] == "fail" and not missing and not marked
     shutil.rmtree(tree)
     shutil.rmtree(os.path.join(work, name + ".git"))
     return {"control": name, "ok": ok, "tree": before, "exit": run.returncode, "missing": missing,
+            "marker": marked if sentinel else None,
             "reported": sorted({(x["kind"], x.get("reason", x.get("resolve", ""))) for x in result["findings"]})}
 
 
@@ -151,7 +232,7 @@ def main():
     os.makedirs(work)
     env = {"HOME": os.environ["HOME"], "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
     files = tracked(source)
-    results = [run_control(name, source, files, work, toolchain, env) for name in CONTROLS
+    results = [run_control(name, source, files, work, toolchain, env) for name in [*CONTROLS, *SENTINELS, *PINS_CONTROLS]
                if not args.only or name in args.only]
     for result in results:
         print(json.dumps(result, sort_keys=True))

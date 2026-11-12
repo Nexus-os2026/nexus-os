@@ -1,5 +1,7 @@
 """Receipt schema, atomic publication and integrity; host authentication is PR-2.
-A success receipt is validated against its own recorded gate policy (SB3E-R19.5)."""
+A success receipt is validated against its own recorded gate policy (SB3E-R19.5). GB3-3: a new submission is
+checked against the current request schema (gate_set); a success receipt's route request, commands and lane are
+checked against the schema its own authenticated route policy's schema_version selects (ROUTE_SCHEMAS)."""
 import ctypes
 import errno
 import hashlib
@@ -21,17 +23,24 @@ RUN = re.compile(r'[0-9a-f]{32}')
 HEX = re.compile(r'[0-9a-f]{64}')
 MAX_FILE = 64*1024**2
 # SB3E-R18 P2/P4/P11: one row per gate set; `full` keeps its exact request and receipt structure.
+# `request` is the current submission schema (GB3: route-cells adds route_pins_sha256).
 GATE_SETS = {
     'full': dict(policy='gates.json',status='PASS_SCOPED',request=('repo_id','full_sha','gate_set_id'),extra=(),cwd={}),
     'route-cells': dict(policy='route-cells.json',status='PASS_ROUTE_CELLS',
-                        request=('repo_id','full_sha','gate_set_id','inventory_sha256'),extra=('lane',),
-                        cwd={'a7':'/work/src','route-cells':'/work/src/mother/host'})}
+                        request=('repo_id','full_sha','gate_set_id','inventory_sha256','route_pins_sha256'),extra=('lane',),
+                        cwd={'route_a1':'/work/src','a7':'/work/src','route-cells':'/work/src/mother/host'})}
 UNFINISHED = ('FAILED','BLOCKED','INTERRUPTED')
 GATE_POLICY = ('policy/exclusions.json','policy/gates.json','policy/route-cells.json')
 HISTORY, HISTORY_OWNER = Path('/etc/gatebox/history'), 0
 STAGED_HISTORY = None  # install.sh upgrade only: the old policy staged before it is retained (SB3E-R21.4)
 LANE = {'a7','verdict_sha256','evidence','rustc_vv','cargo_v','lockfile_sha256','wrapper_sha256','harness_sha256',
         'inventory_sha256','names','trust'}
+# GB3-3: by the recorded route policy's own schema_version, never by a receipt field (the top-level receipt
+# schema_version stays 1). Version 1: GB1/GB2 route receipts; version 2: GB3, route A1 before A7.
+ROUTE_SCHEMAS = {
+    1: dict(request=GATE_SETS['route-cells']['request'][:4],gates=['a7','route-cells'],lane=LANE),
+    2: dict(request=GATE_SETS['route-cells']['request'],gates=['route_a1','a7','route-cells'],
+            lane=LANE|{'route_a1','route_a1_sha256','route_pins_sha256'})}
 
 def unique(pairs):
     result = {}
@@ -46,19 +55,25 @@ def encode(value):
 def policy():
     return json.loads((HERE/'policy/gates.json').read_text()), json.loads((HERE/'policy/exclusions.json').read_text())
 
+def request_fields(request, fields):
+    if set(request) != set(fields): raise ValueError('request fields')
+    if (any(type(v) is not str for v in request.values()) or not re.fullmatch('[0-9a-f]{40}',request['full_sha'])
+            or any(not HEX.fullmatch(request.get(k,'0'*64)) for k in ('inventory_sha256','route_pins_sha256'))):
+        raise ValueError('request types/SHA')
+
 def gate_set(request):
-    """The request's gate-set row after its exact fields, types and SHA checks."""
+    """Current submission validation (snapshot.parse_request, request_for): the request's gate-set row after
+    its exact current fields, types and SHA checks."""
     name = request.get('gate_set_id') if isinstance(request,dict) else None
     if not isinstance(name,str) or name not in GATE_SETS: raise ValueError('unknown gate set')
     entry = GATE_SETS[name]
-    if set(request) != set(entry['request']): raise ValueError('request fields')
-    if (any(type(v) is not str for v in request.values()) or not re.fullmatch('[0-9a-f]{40}',request['full_sha'])
-            or not HEX.fullmatch(request.get('inventory_sha256','0'*64))): raise ValueError('request types/SHA')
+    request_fields(request,entry['request'])
     return entry
 
-def request_for(repo, sha, gate_set_id, inventory=None):
+def request_for(repo, sha, gate_set_id, inventory=None, pins=None):
     request = dict(repo_id=repo,full_sha=sha,gate_set_id=gate_set_id)
     if inventory is not None: request['inventory_sha256'] = inventory
+    if pins is not None: request['route_pins_sha256'] = pins
     gate_set(request)
     return request
 
@@ -120,6 +135,15 @@ def completed(command, logs):
             or command['log_sha256'] != logs[command['log']]):
         raise ValueError('failed/incomplete command')
 
+def route_a1_passes(code, text):
+    """GB3 7.1, one rule for init and the supervisor: route A1 passed only if it exited 0 and its whole output is
+    exactly one JSON verdict line `pass` with no findings. Anything else, malformed output included, fails."""
+    lines = text.split('\n')
+    try: verdict = json.loads(lines[0]) if len(lines) == 2 and not lines[1] and '\ufffd' not in text else None
+    except ValueError: verdict = None
+    return (code == 0 and isinstance(verdict,dict) and set(verdict) == {'verdict','findings'}
+            and verdict['verdict'] == 'pass' and verdict['findings'] == [])
+
 def string_list(value):
     return isinstance(value,list) and all(isinstance(item,str) for item in value)
 
@@ -160,11 +184,11 @@ def validate_summary(summary):
     if len({log['file'] for log in summary['logs']}) != len(summary['logs']): raise ValueError('duplicate log')
     if summary['status'] in UNFINISHED: return
     if entry is None or summary['status'] != entry['status']: raise ValueError('success status/gate set mismatch')
-    gate_set(request)
     for key in ('bundle_sha256','policy_sha256','gates_sha256'):
         if not isinstance(summary['installed'].get(key),str) or not HEX.fullmatch(summary['installed'][key]): raise ValueError('installed identity')
     policies = policy_set(summary['installed']['gates_sha256'])
-    if name == 'route-cells': return validate_route(summary,policies)
+    if name == 'route-cells': return validate_route(summary,policies)  # GB3-3: its request schema by its policy
+    gate_set(request)
     gates, exclusions = policies['gates.json'], policies['exclusions.json']
     if summary['environment'] != gates['environment']: raise ValueError('gate environment mismatch')
     expected = [g['id'] for g in gates['gates']]
@@ -250,7 +274,11 @@ def validate_route(summary, policies):
     """PASS_ROUTE_CELLS: A7 `run` PASS, sealed evidence, the committed harness inventory (SB3E-R18, R19, R20)."""
     route = policies.get('route-cells.json')
     if not isinstance(route,dict): raise ValueError('route-cells policy missing')
+    version = route.get('schema_version')
+    if type(version) is not int or version not in ROUTE_SCHEMAS: raise ValueError('route policy version')
+    schema = ROUTE_SCHEMAS[version]
     request, lane, coverage, snapshot = summary['request'], summary['lane'], summary['coverage'], summary['snapshot']
+    request_fields(request,schema['request'])
     observed = summary['input_observations']
     if (summary['missing_evidence'] or summary['cleanup'].get('complete') is not True
             or any(not summary[k] for k in GROUPS+('lane',)) or not summary['logs']
@@ -260,7 +288,7 @@ def validate_route(summary, policies):
     if summary['environment'] != route['environment']: raise ValueError('route environment')
     if (not isinstance(observed.get('before'),dict) or observed['before'] != observed.get('after')
             or observed['before'].get('rust') != route['toolchain']['manifest_sha256']): raise ValueError('route toolchain pin')
-    if set(lane) != LANE: raise ValueError('route lane keys')
+    if set(lane) != schema['lane']: raise ValueError('route lane keys')
     if lane['a7'] != 'PASS': raise ValueError('route A7 verdict')
     if lane['wrapper_sha256'] != route['a7']['wrapper_sha256']: raise ValueError('route wrapper')
     if lane['trust'] != route['trust']: raise ValueError('route trust')
@@ -279,7 +307,9 @@ def validate_route(summary, policies):
             or any(n not in logs or logs[n] != h for n,h in [('a7-verdict.json.log',lane['verdict_sha256']),*hashes.items()])):
         raise ValueError('route A7 evidence')
     gates = route['gates']
-    ids, harness, artifacts = [g['id'] for g in gates], gates[1], coverage.get('artifacts')
+    ids = [g['id'] for g in gates]
+    if ids != schema['gates']: raise ValueError('route policy gates')
+    harness, artifacts = gates[-1], coverage.get('artifacts')
     if (set(coverage) != {'expected','executed','passed','failed','ignored','filtered','excluded','artifacts','discovery'}
             or any(coverage[k] != ids for k in ('expected','executed','passed'))
             or any(coverage[k] != [] for k in ('failed','ignored','filtered','excluded'))
@@ -296,11 +326,15 @@ def validate_route(summary, policies):
     commands = summary['commands']
     if ([c.get('gate_id') for c in commands] != ids or len({c['id'] for c in commands}) != len(commands)
             or any(c['argv'] != g.get('argv',[executable]) or c['cwd'] != cwd[g['id']] or c['environment'] != route['environment']
-                   for c,g in zip(commands,gates)) or commands[1].get('artifact_id') != harness['target']):
+                   for c,g in zip(commands,gates)) or commands[-1].get('artifact_id') != harness['target']):
         raise ValueError('route invocation')
     for command in commands: completed(command,logs)
-    if commands[1].get('inventory') != dict(expected=names,executed=names,passed=names,failed=[],ignored=[],filtered=[]):
+    if commands[-1].get('inventory') != dict(expected=names,executed=names,passed=names,failed=[],ignored=[],filtered=[]):
         raise ValueError('route test inventory')
+    if version == 2:  # GB3: route A1 passed on its own log, and the pins commitment is the request's
+        if lane['route_a1'] != 'PASS': raise ValueError('route A1 verdict')
+        if lane['route_a1_sha256'] != commands[0]['log_sha256']: raise ValueError('route A1 log')
+        if lane['route_pins_sha256'] != request['route_pins_sha256']: raise ValueError('route pins commitment')
 
 def check(info, owner_uid, directory=False):
     if (info.st_uid != owner_uid or info.st_mode & 0o022

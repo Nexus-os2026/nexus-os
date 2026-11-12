@@ -29,8 +29,9 @@ assumption it falls under:
   source) packages of the resolved graph, members or not, are exactly
   LOCAL_PACKAGES (SB3E-R19.1); none has a proc macro or `links`, every local
   build script is byte-equal to BUILD_TIME_PINS, and no local package in the
-  route closure has a build-dependency; Cargo.lock byte-equal to its
-  pin. The pin fixes bytes, not consumption: transient states and runtime
+  route closure has a build-dependency; Cargo.lock byte-equal to the lock
+  digest of the checked tree's own `tools/route_pins.json` (`--pins`,
+  required in `run` and `lane`, read before any Cargo process; SB3E GB3). The pin fixes bytes, not consumption: transient states and runtime
   behaviour of pinned code fall under assumption 6.
 - Third-party build scripts and proc macros (pinned by the Cargo.lock pin and
   registry checksums): their file, environment, IPC and network reads,
@@ -92,6 +93,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import route_a1 as a1  # noqa: E402  (GB3: one pins loader for A1 and A7)
 import route_a7_graph as graph  # noqa: E402
 
 # Reviewed pins; under GB1 these move to installed policy outside the snapshot.
@@ -106,7 +108,6 @@ LOCAL_PACKAGES = {
     "nexus-typed-decision": "crates/nexus-typed-decision/Cargo.toml",
     "nexus-verifier-sandbox": "crates/nexus-verifier-sandbox/Cargo.toml",
 }
-LOCK_PIN = "333ffb7b9727991faa287b07296ce803be4210dd13ed59d9af1b80b6ca53f773"
 TOOLCHAIN_FILE_PIN = "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
 # The snapshot's only Cargo configuration (build.jobs, [env]); any other or changed one is refused.
 CARGO_CONFIG_PINS = {".cargo/config.toml": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"}
@@ -236,11 +237,11 @@ def versions(toolchain, block):
     }
 
 
-def build_time_problems(repo, toolchain, block):
+def build_time_problems(repo, toolchain, block, lock_pin):
     """AM-1 item 3: the route closure's candidate-authored build-time code is pinned."""
     out = []
     lock = os.path.join(repo, "Cargo.lock")
-    if not os.path.isfile(lock) or sha256_file(lock) != LOCK_PIN:
+    if not os.path.isfile(lock) or sha256_file(lock) != lock_pin:
         out.append(d("build_time_pin", reason="Cargo.lock differs from its pin"))
     run = subprocess.run([os.path.join(toolchain, "bin", "cargo"), "metadata", "--locked", "--offline", "--format-version", "1"],
                          cwd=repo, env=block, capture_output=True, text=True)
@@ -965,22 +966,25 @@ def emit(result, path):
     return 0 if result["verdict"] == "pass" else 1
 
 
-def pre_build(repo, target, toolchain):
-    """AM-1 items 2 and 3, before any metadata or build step's result is used."""
+def pre_build(repo, target, toolchain, pins_path):
+    """AM-1 items 2 and 3, before any metadata or build step's result is used; the pins file before any process."""
+    refused, pins = a1.load_pins(repo, pins_path)
+    if refused:
+        return refused
     block, refused = launch_block(toolchain, target)
     refused += toolchain_problems(repo, toolchain)
     if refused:
         return refused
     subprocess.run([os.path.join(toolchain, "bin", "cargo"), "fetch", "--locked"], cwd=repo, env=block,
                    check=True, capture_output=True)
-    return build_time_problems(repo, toolchain, block)
+    return build_time_problems(repo, toolchain, block, pins["lock_sha256"])
 
 
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run")
-    for name in ("--repo", "--target", "--evidence", "--wrapper", "--wrapper-sha256", "--toolchain", "--json"):
+    for name in ("--repo", "--target", "--evidence", "--wrapper", "--wrapper-sha256", "--toolchain", "--json", "--pins"):
         run.add_argument(name, required=True)
     run.add_argument("--keep-lane-target", action="store_true")
     run.add_argument("--continue-after-refusal", action="store_true", help="controls only; the verdict still fails")
@@ -990,7 +994,7 @@ def main():
     for name in ("--ship", "--lane", "--wrapper", "--wrapper-sha256", "--json"):
         com.add_argument(name, required=True)
     lane = sub.add_parser("lane")
-    for name in ("--repo", "--target", "--wrapper", "--toolchain"):
+    for name in ("--repo", "--target", "--wrapper", "--toolchain", "--pins"):
         lane.add_argument(name, required=True)
     args = parser.parse_args()
     if args.command == "compare":
@@ -1000,7 +1004,7 @@ def main():
     if args.command == "lane":
         if os.path.lexists(target) or os.path.lexists(target + ".route_rustc.log"):
             sys.exit(f"route_a7: the target must be fresh: {target}")
-        problems = pre_build(repo, target, toolchain)
+        problems = pre_build(repo, target, toolchain, args.pins)
         if problems:
             print(json.dumps(problems, sort_keys=True))
             return 1
@@ -1009,7 +1013,7 @@ def main():
         return subprocess.run(command, cwd=repo, env=block).returncode
     evidence = os.path.abspath(args.evidence)
     refuse_stale(evidence)
-    problems = pre_build(repo, target, toolchain)
+    problems = pre_build(repo, target, toolchain, args.pins)
     if problems and not args.continue_after_refusal:
         return emit({"verdict": "fail", "differences": problems}, args.json)
     ship, lane = os.path.join(evidence, "ship"), os.path.join(evidence, "lane")
