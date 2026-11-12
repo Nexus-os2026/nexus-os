@@ -361,7 +361,10 @@ def a7_run(c, opts, evidence, verdict, keep=False, err=None):
     env = dict(os.environ, **opts.get("env", {}))
     for name in opts.get("unset", []):
         env.pop(name, None)
-    argv = [sys.executable, "-I", a7.__file__, "run", "--repo", c["tree"], "--target", c["target"], "--evidence", evidence,
+    # SB3E-R60.7: `-X` is not inherited and `-I` ignores PYTHONPYCACHEPREFIX, so the nested run (which
+    # imports route_a7_graph) gets this process's cache prefix; it writes no bytecode into the tree.
+    cache = ["-X", "pycache_prefix=" + sys.pycache_prefix] if sys.pycache_prefix else []
+    argv = [sys.executable, "-I", *cache, a7.__file__, "run", "--repo", c["tree"], "--target", c["target"], "--evidence", evidence,
             "--wrapper", opts.get("wrapper", c["wrapper"]), "--wrapper-sha256", c["wrapper_sha"],
             "--toolchain", opts.get("toolchain", c["toolchain"]), "--json", verdict]
     argv += ["--keep-lane-target"] if keep else []
