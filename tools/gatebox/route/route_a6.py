@@ -65,12 +65,14 @@ def blank(tree, roots):
 
 
 def residue(tree, roots, before):
-    """Files whose line count changed, or that still name the cfg in an attribute."""
+    """Files whose line count changed, that still name the cfg in an attribute, or that hold a form
+    outside A5's closed subset (SB3E-R55.3: what A5 cannot see is not blanked, so it fails here)."""
     out = []
     for rel, text in route_a5.read_sources(tree, roots).items():
-        named = [a[0] for a in route_a5.Source(rel, text).attrs if route_a5.CFG in a[0]]
-        if named or text.count("\n") != before[rel].count("\n"):
-            out.append({"file": rel, "attributes": named})
+        src = route_a5.Source(rel, text)
+        named = [a[0] for a in src.attrs if route_a5.CFG in a[0]]
+        if named or src.refused or text.count("\n") != before[rel].count("\n"):
+            out.append({"file": rel, "attributes": named, "refused": src.refused})
     return out
 
 

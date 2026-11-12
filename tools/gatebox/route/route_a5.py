@@ -23,7 +23,13 @@ precedes, and a `mod` declaration's attributes apply to the module's file.
                 under a cfg that holds only in tests (none widened; R47.4:
                 `test`, `all` with one such, `any` of all such; never `not`);
       includes: no `#[path]` or `include!`-family path into a `tests`
-                directory, outside code under exactly `#[cfg(test)]`;
+                directory, outside code under exactly `#[cfg(test)]`; a `path`
+                key in any attribute or an include argument that is not a
+                plain, raw or byte string literal (R55.1);
+      subset:   a form outside the lexer's closed subset (Source.refused), or
+                a file two `mod` declarations name (R55.1);
+      gated:    each file's `#[cfg(mother_route_seams)]` spans, by the sha256
+                of the tokens each governs, exactly the reviewed list (R55.4);
       targets:  the route packages' Cargo targets equal the reviewed list.
   controls --repo R --toolchain T --work DIR
       The plants (mission U4b item 5), each applied to the source as read (or,
@@ -52,9 +58,9 @@ ITEMS = {"fn", "impl", "mod", "struct", "enum", "trait", "union", "unsafe", "ext
 ENDS_AT_SEMICOLON = {"const", "static", "use", "type", "let"}
 CONTINUE = {"else", "=", ".", "?", "as", "&&", "||", "+", "-", "*", "/", "%", "==", "!=", "<", ">", "<=", ">="}
 LEX = re.compile(r"""(?P<ws>\s+)|(?P<line>//[^\n]*)
-    |(?P<raw>b?r(?P<h>\#*)"(?:.|\n)*?"(?P=h))|(?P<str>b?"(?:\\.|[^"\\])*")
+    |(?P<raw>[bc]?r(?P<h>\#*)"(?:.|\n)*?"(?P=h))|(?P<str>[bc]?"(?:\\.|[^"\\])*")
     |(?P<chr>b?'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]+\}|.)|[^'\\\n])')|(?P<lt>'[A-Za-z_]\w*)
-    |(?P<id>(?:r\#)?[A-Za-z_]\w*)|(?P<num>\d[\w.]*)
+    |(?P<id>(?:r\#)?[A-Za-z_]\w*)|(?P<num>\d\w*(?:\.\d\w*)?)
     |(?P<p>::|->|=>|&&|\|\||==|!=|<=|>=|\.\.=|\.\.|.)""", re.X | re.S)
 
 
@@ -70,19 +76,35 @@ def lex(text):
             continue
         match = LEX.match(text, at)
         kind = match.lastgroup if match.lastgroup != "h" else "raw"
-        if kind not in ("ws", "line"):
-            out.append((match.group(), "str" if kind in ("raw", "str") else kind, at))
+        if kind not in ("ws", "line"):  # a raw identifier is its name (SB3E-R55.1)
+            tok = match.group()[2:] if kind == "id" and match.group().startswith("r#") else match.group()
+            out.append((tok, "str" if kind in ("raw", "str") else kind, at))
         at = match.end()
     return out
 
 
+KEYWORDS = {"if", "while", "match", "return", "in", "else", "let", "mut", "break", "for", "move", "as"}
+
+
 class Source:
-    """One file: tokens, attributes and the token span each attribute governs."""
+    """One file: tokens, attributes and the token span each attribute governs. SB3E-R55.1: a closed
+    subset; `refused` lists each form outside it (a byte order mark, a shebang, a `c`/`cr` literal, a cfg-bearing
+    attribute inside a macro invocation, which then gates nothing), each a finding."""
 
     def __init__(self, rel, text):
-        self.rel, self.text, self.toks = rel, text, lex(text)
+        self.rel, self.text, self.refused = rel, text, [("byte order mark", 0)] if text[:1] == "\ufeff" else []
+        if text.startswith("#!") and not re.match(r"#!\s*\[", text):
+            self.refused.append(("shebang", 0))
+            text = re.sub(r"[^\n]", " ", text.split("\n", 1)[0]) + text[len(text.split("\n", 1)[0]):]
+        self.toks = lex(text)
         self.t = [x[0] for x in self.toks]
+        self.refused += [("c literal", x[2]) for x in self.toks if x[1] == "str" and x[0][0] == "c"]
         self.match = self.brackets()
+        macros = [(i + 2, self.match.get(i + 2, len(self.t))) for i in range(len(self.t) - 2)
+                  if self.toks[i][1] == "id" and self.t[i] not in KEYWORDS and self.t[i + 1] == "!"
+                  and self.t[i + 2] in "([{"]
+        macros += [(i + 3, self.match.get(i + 3, len(self.t))) for i in range(len(self.t) - 3)
+                   if self.t[i:i + 2] == ["macro_rules", "!"] and self.t[i + 3] == "{"]
         self.attrs = []  # (normalized, first token, attribute end, governed span start, end)
         i = 0
         while i < len(self.t):
@@ -91,7 +113,10 @@ class Source:
                 close = self.match.get(open_at, open_at)
                 norm = "".join(self.t[i:close + 1])
                 span = (0, len(self.t)) if self.t[i + 1] == "!" else (close + 1, self.extent(close + 1))
-                self.attrs.append((norm, i, close + 1) + span)
+                if re.match(r"#!?\[cfg(_attr)?\(", norm) and any(a < i < z for a, z in macros):
+                    self.refused.append(("cfg in a macro", self.toks[i][2]))
+                else:
+                    self.attrs.append((norm, i, close + 1) + span)
                 i = close + 1
                 continue
             i += 1
@@ -168,25 +193,33 @@ def read_sources(repo, roots):
     return files
 
 
-def module_file(rel, name, files, path_attr=None):
+def module_file(rel, name, files, path_attr=None, inline=()):
+    """The file of `mod name;` in rel, inside the inline modules `inline` (outermost first)."""
     folder = os.path.dirname(rel)
+    if os.path.basename(rel) not in ("lib.rs", "main.rs", "mod.rs") and (inline or not path_attr):
+        folder = os.path.join(folder, os.path.basename(rel)[:-3])
+    folder = os.path.join(folder, *inline)
     if path_attr:
         return os.path.normpath(os.path.join(folder, path_attr))
-    if os.path.basename(rel) not in ("lib.rs", "main.rs", "mod.rs"):
-        folder = os.path.join(folder, os.path.basename(rel)[:-3])
     first = os.path.join(folder, name + ".rs")
     return first if first in files else os.path.join(folder, name, "mod.rs")
 
 
-def file_gates(parsed):
-    """Each file's inherited gates: the normalized attributes on its `mod` declaration chain."""
+def file_gates(parsed, out=None):
+    """Each file's inherited gates: the normalized attributes on its `mod` declaration chain. A
+    `mod x;` inside inline `mod y { }` is y/x.rs; a file declared twice is a finding (R55.1)."""
     parent = {}
     for rel, src in parsed.items():
+        blocks = [(i, src.match.get(i + 2, i)) for i in range(len(src.t) - 2)
+                  if src.t[i] == "mod" and src.toks[i + 1][1] == "id" and src.t[i + 2] == "{"]
         for i, tok in enumerate(src.t[:-2]):
             if tok == "mod" and src.toks[i + 1][1] == "id" and src.t[i + 2] == ";":
                 own = [a for a in src.attrs if a[3] <= i < a[4]]
-                path = next((src.t[a[1] + 4][1:-1] for a in own if src.t[a[1] + 2] == "path"), None)
-                child = module_file(rel, src.t[i + 1], parsed, path)
+                path = next((unquote(src.toks[a[1] + 4]) for a in own if src.t[a[1] + 2:a[1] + 4] == ["path", "="]), None)
+                inline = [src.t[b + 1] for b, z in blocks if b < i < z]
+                child = module_file(rel, src.t[i + 1], parsed, path, inline)
+                if child in parent and out is not None:
+                    out.append({"check": "subset", "file": child, "form": "two parents"})
                 parent[child] = (rel, {a[0] for a in own})
     gates = {}
     for rel in parsed:
@@ -197,6 +230,12 @@ def file_gates(parsed):
             acc |= own
         gates[rel] = acc
     return gates
+
+
+def unquote(tok):
+    """A plain, raw or byte string literal's text; None for anything else or an escape."""
+    m = re.fullmatch(r'b?(?:r(#*)"(.*)"\1|"([^"\\]*)")', tok[0], re.S) if tok[1] == "str" else None
+    return None if m is None else m.group(2) if m.group(2) is not None else m.group(3)
 
 
 def under(src, gates, i, norm):
@@ -273,7 +312,15 @@ def check(repo, toolchain, files=None, cargo_meta=None):
     seams = json.load(open(os.path.join(repo, SEAMS), encoding="utf-8"))
     files = files if files is not None else read_sources(repo, seams["route_sources"])
     parsed = {rel: Source(rel, text) for rel, text in files.items()}
-    gates, out = file_gates(parsed), []
+    out = [{"check": "subset", "file": rel, "form": f, "offset": at} for rel, src in parsed.items()
+           for f, at in src.refused]
+    gates = file_gates(parsed, out)
+    gated = {rel: [sha(" ".join(src.t[a[3]:a[4]])) for a in src.attrs if a[0] == ROUTE] for rel, src in parsed.items()}
+    for rel in sorted(set(gated) | set(data["gated"])):  # SB3E-R55.4: every gated span, exactly
+        have, want = gated.get(rel, []), data["gated"].get(rel, [])
+        if have != want:
+            out.append({"check": "gated", "file": rel, "extra": [x for x in have if x not in want],
+                        "missing": [x for x in want if x not in have]})
     allowed = {tuple(x.split("|")) for x in data["broad_allowlist"]}
     for rel, src in parsed.items():
         for norm, first, end, start, stop in src.attrs:
@@ -338,16 +385,20 @@ def check(repo, toolchain, files=None, cargo_meta=None):
             hook = tok in data["test_hooks"] or f"{rel}|{tok}" in data["test_hooks"]
             if hook and src.toks[i][1] == "id" and not test_only(src, gates, i):
                 out.append({"check": "hooks", "file": rel, "hook": tok, "offset": src.toks[i][2]})
-        for i, tok in enumerate(src.t[:-3]):
-            target = None
-            if tok == "path" and src.t[i - 2:i] == ["#", "["] and src.t[i + 1] == "=":
-                target = src.t[i + 2]
-            elif tok in ("include", "include_str", "include_bytes") and src.t[i + 1] == "!":
-                target = src.t[i + 3]
-            if target and target.startswith('"'):
-                path = os.path.normpath(os.path.join(os.path.dirname(rel), target[1:-1]))
-                if {"tests", "route_cells"} & set(path.split(os.sep)) and not under(src, gates, i, TEST):
-                    out.append({"check": "includes", "file": rel, "path": path})
+        # R55.1: every `path` key in any attribute at any depth, every include-family argument.
+        sites = [(j, src.toks[j + 2] if j + 2 < a[2] else ("", "", 0)) for a in src.attrs
+                 for j in range(a[1], a[2] - 1) if src.t[j:j + 2] == ["path", "="]]
+        sites += [(i, src.toks[i + 3] if src.t[i + 4:i + 5] == [")"] else ("", "", 0))
+                  for i, tok in enumerate(src.t[:-4]) if tok in ("include", "include_str", "include_bytes")
+                  and src.t[i + 1:i + 3] == ["!", "("]]
+        for i, tok in sites:
+            if unquote(tok) is None:
+                out.append({"check": "includes", "file": rel, "reason": "not a plain string literal",
+                            "offset": src.toks[i][2]})
+                continue
+            path = os.path.normpath(os.path.join(os.path.dirname(rel), unquote(tok)))
+            if {"tests", "route_cells"} & set(path.split(os.sep)) and not under(src, gates, i, TEST):
+                out.append({"check": "includes", "file": rel, "path": path})
     targets = cargo_meta if cargo_meta is not None else cargo_targets(repo, toolchain, seams["route_packages"])
     if targets != data["targets"]:
         out.append({"check": "targets", "found": targets,
@@ -398,10 +449,12 @@ def controls(repo, toolchain, work):
             open(path, "w", encoding="utf-8").write(text.replace(plant["old"], plant["new"]))
             meta_planted = cargo_targets(tree, toolchain, seams["route_packages"])
             shutil.rmtree(tree)
-        else:
-            text = planted.get(plant["file"], "")
-            row["unique"] = text.count(plant["old"]) == 1
-            planted[plant["file"]] = text.replace(plant["old"], plant["new"])
+        else:  # the plant's edit, then each of its `also` edits (SB3E-R55.3)
+            row["unique"] = True
+            for e in [plant] + plant.get("also", []):
+                text = planted.get(e["file"], "")
+                row["unique"] &= text.count(e["old"]) == 1
+                planted[e["file"]] = text.replace(e["old"], e["new"])
             row["sha_planted"] = sha(planted[plant["file"]])
         got = check(repo, toolchain, planted, meta_planted)
         row["reported_by"] = sorted({f["check"] for f in got})
