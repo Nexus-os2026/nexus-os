@@ -42,8 +42,23 @@ PY = ["/usr/bin/python3", "-I"]
 # SB3E-R55.5: ignored files the clean-tree check accepts (reviewed; none).
 IGNORED_OK = ()
 DATA = os.path.join(HERE, "route_exit.json")
-# A different wrapper for A7's hash-mismatch control (any other bytes serve).
-PY_WRAPPER = "#!/usr/bin/python3 -I\nimport os, sys\nos.execv(sys.argv[1], sys.argv[1:])\n"
+# SB3E-R64: a different wrapper for A7's hash-mismatch control. It logs as route_rustc.c does (adding no cfg, `added`
+# is false), then execs the compiler with argv unchanged; no CARGO_TARGET_DIR or a failed log write exits nonzero.
+PY_WRAPPER = r"""#!/usr/bin/python3 -I
+import json, os, sys
+args = sys.argv[2:]
+names = [args[i + 1] for i in range(len(args) - 1) if args[i] == "--crate-name"]
+line = json.dumps({"added": False, "crate": names[0] if len(names) == 1 else None,
+                   "source": [a for a in args if a.endswith(".rs") and not a.startswith("-")]}, sort_keys=True)
+data = (line + "\n").encode("ascii")
+fd = os.open(os.environ["CARGO_TARGET_DIR"] + ".route_rustc.log", os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o644)
+if os.write(fd, data) != len(data):
+    sys.exit("route_exit python wrapper: short log write")
+os.close(fd)
+os.execv(sys.argv[1], sys.argv[1:])
+"""
+# SB3E-R64: the exact control counts each controls step must report; any other count fails the step.
+CONTROLS = {"a1_controls": 15, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109}
 
 
 def sha256(data):
@@ -116,15 +131,17 @@ def status(repo):
     return None if out is None else "\n".join(x for x in out.splitlines() if x[3:] not in IGNORED_OK)
 
 
-def controls_ok(run, parsed):
-    """A1/A2/A3 controls print a summary, not a verdict: exit 0, controls run, none failed, every tree HEAD's."""
-    return run.returncode == 0 and bool(parsed) and parsed.get("controls", 0) > 0 and parsed.get("failed") == [] \
-        and True in (parsed.get("trees_match_head"), parsed.get("tree_matches_head"))
+def controls_ok(step):
+    """A1/A2/A3 controls print a summary, not a verdict: exit 0, the pinned count run, none failed, every tree HEAD's."""
+    return lambda run, parsed: run.returncode == 0 and bool(parsed) and parsed.get("controls") == CONTROLS[step] \
+        and parsed.get("failed") == [] and True in (parsed.get("trees_match_head"), parsed.get("tree_matches_head"))
 
 
 def a7_controls_ok(run, _):
-    """A7's controls print one line per control, then `all controls report` only when all report."""
-    return run.returncode == 0 and run.stdout.decode().strip().splitlines()[-1:] == ["all controls report"]
+    """A7's controls print one line per control: the pinned count of `PASS `, no `FAIL `, `all controls report` last."""
+    lines = run.stdout.decode().strip().splitlines()
+    return run.returncode == 0 and lines[-1:] == ["all controls report"] \
+        and sum(x.startswith("PASS ") for x in lines) == CONTROLS["a7_controls"] and not any(x.startswith("FAIL ") for x in lines)
 
 
 def worktree_tree(repo, index):
@@ -207,8 +224,8 @@ def main():
     gate.cargo("fmt", "target-fmt", "fmt", "--all", "--", "--check")
     lane(gate, data)
     gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--json", w("a1.json"))
-    gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t, ok=controls_ok)
-    gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok,
+    gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t, ok=controls_ok("a1_controls"))
+    gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok("a2_controls"),
               env=dict(gate.tool_env, RUSTC=gate.env["RUSTC"]))
     gate.drop("a1-work", "a2-work")
     _, ship = gate.tool("a3_ship", "route_a3.py", "build", "--repo", r, "--toolchain", t, "--target", w("a3-ship"))
@@ -216,7 +233,7 @@ def main():
                           w("a3-census"), "--wrapper", args.wrapper)
     gate.drop("a3-ship", "a3-census")
     gate.tool("a3_controls", "route_a3_controls.py", "--source", r, "--work", w("a3-work"), "--toolchain", t,
-              "--wrapper", args.wrapper, "--jobs", args.jobs, ok=controls_ok)
+              "--wrapper", args.wrapper, "--jobs", args.jobs, ok=controls_ok("a3_controls"))
     gate.drop("a3-work")
     _, a4 = gate.tool("a4", "route_a4.py", "run", "--repo", r, "--toolchain", t, "--work", w("a4-work"))
     gate.tool("a4_controls", "route_a4.py", "controls", "--repo", r, "--toolchain", t, "--work", w("a4-controls"),
