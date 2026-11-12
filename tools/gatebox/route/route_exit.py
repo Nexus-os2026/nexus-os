@@ -61,7 +61,8 @@ class Gate:
         self.env = {"HOME": home, "PATH": bin_dir + ":/usr/bin:/bin", "LANG": "C.UTF-8",
                     "RUSTC": os.path.join(bin_dir, "rustc"), "CARGO_HOME": os.environ.get("CARGO_HOME", f"{home}/.cargo"),
                     "RUSTUP_HOME": os.environ.get("RUSTUP_HOME", f"{home}/.rustup"), "CARGO_NET_OFFLINE": "true"}
-        # A tool builds its own toolchain environment and refuses an inherited RUSTUP_*/RUSTC*/CARGO_* (A1, A7).
+        # A tool builds its own toolchain environment and refuses an inherited RUSTUP_*/RUSTC*/CARGO_* (A1, A7);
+        # A2's controls take the caller's RUSTC (CI's A2 step), given to that step alone.
         self.tool_env = {"HOME": home, "PATH": bin_dir + ":/usr/bin:/bin", "LANG": "C.UTF-8"}
         self.steps = []
 
@@ -88,8 +89,8 @@ class Gate:
 
     def tool(self, step, name, *args, **kw):
         cache = "pycache_prefix=" + os.path.join(self.work, "pycache")
-        return self.run(step, PY + ["-X", cache, os.path.join(HERE, name)] + list(args), env=self.tool_env,
-                        verdict_json=True, **kw)
+        kw.setdefault("env", self.tool_env)
+        return self.run(step, PY + ["-X", cache, os.path.join(HERE, name)] + list(args), verdict_json=True, **kw)
 
     def cargo(self, step, target, *args, **kw):
         env = dict(self.env, CARGO_TARGET_DIR=os.path.join(self.work, target))
@@ -207,7 +208,8 @@ def main():
     lane(gate, data)
     gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--json", w("a1.json"))
     gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t, ok=controls_ok)
-    gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok)
+    gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok,
+              env=dict(gate.tool_env, RUSTC=gate.env["RUSTC"]))
     gate.drop("a1-work", "a2-work")
     _, ship = gate.tool("a3_ship", "route_a3.py", "build", "--repo", r, "--toolchain", t, "--target", w("a3-ship"))
     _, census = gate.tool("a3_census", "route_a3.py", "build", "--repo", r, "--toolchain", t, "--target",
