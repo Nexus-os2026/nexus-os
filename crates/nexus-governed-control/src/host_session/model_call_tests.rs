@@ -1172,6 +1172,8 @@ fn leaks_under(source: &str, seams: &[&str], attr: &str) -> usize {
 }
 const TEST: &str = "#[cfg(test)]";
 const ROUTE: &str = "#[cfg(mother_route_seams)]";
+/// SB3E-R51.2: a source whose first line is a shebang (`tokens`).
+const SHEBANG: &str = "starts with a shebang";
 /// SB3E-R44.3: comments become spaces, and so does every literal's text
 /// between its first and last quote, whose quotes become `"` (so a masked
 /// char literal is still Rust). Byte offsets and lines are kept. The tokens
@@ -1203,8 +1205,13 @@ fn mask(source: &str) -> String {
 /// SB3E-R44.3: every leaf token proc-macro2 reads in `source`, as its byte
 /// range and whether it is a literal. The tokens must line up with the text,
 /// apart only by whitespace and comments; a doc comment, which proc-macro2
-/// reads as a `#[doc]` attribute, is a comment here. Anything else is an error.
+/// reads as a `#[doc]` attribute, is a comment here. Anything else is an error,
+/// and so is a first line `#!` that is not `#![` (SB3E-R51.2: rustc drops a
+/// shebang line, proc-macro2 lexes it).
 fn tokens(source: &str) -> Result<Vec<(std::ops::Range<usize>, bool)>, String> {
+    if source.starts_with("#!") && !source.starts_with("#![") {
+        return Err(SHEBANG.into());
+    }
     let stream: proc_macro2::TokenStream = source.parse().map_err(|e| format!("{e:?}"))?;
     let (mut found, mut at) = (Vec::new(), 0);
     leaves(source, stream, &mut at, &mut found)?;
@@ -2211,6 +2218,13 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
             "R44.3: {hide} hides a site"
         );
     }
+    // SB3E-R51.2 (Fable B1): a shebang line fails closed; an inner attribute does not.
+    let hidden = format!("#! /*\n{good}// */\n");
+    assert_eq!(tokens(&hidden).err().as_deref(), Some(SHEBANG), "R51.2");
+    assert!(
+        tokens(&format!("#![allow(unused)]\n{good}")).is_ok(),
+        "R51.2: #!["
+    );
     let sources = crate_sources();
     for (file, source) in &sources {
         if file == "broker/route_seams.rs" {

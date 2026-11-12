@@ -15,6 +15,8 @@
 
 const TEST: &str = "#[cfg(test)]";
 const ROUTE: &str = "#[cfg(mother_route_seams)]";
+/// SB3E-R51.2: a source whose first line is a shebang (`tokens`).
+const SHEBANG: &str = "starts with a shebang";
 const GC: &str =
     include_str!("../../../crates/nexus-governed-control/src/host_session/model_call_tests.rs");
 const LEXER: [&str; 18] = [
@@ -116,9 +118,24 @@ const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 const PINS_SHA256: &str = "88064bcd652fb3ff878b3a455ae9dc7b0342a81ccba3a2f860c36307d9fc7359";
 const MUTANTS: usize = 617;
 const REGIONS: usize = 29;
-/// SB3E-R44.1: `s5.rs` byte for byte, the authority its credit rests on; a
-/// reviewed commit that changes `s5.rs` changes this digest.
-const S5_SHA256: &str = "54bc7c29fd123056eebed2f46b31d5fcfa8dde919c795992c58e7bac7f628319";
+/// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
+/// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
+/// included (R44.1). A reviewed commit that changes a file changes its row.
+/// The `MAIN_ITEMS`, `IMPLS` and `main.rs`/`store.rs` region pins stay as an
+/// advisory layer.
+const CELLS: &str = "host/tests/route_cells/";
+const ROUTE_CELLS: &str = "\
+cells.rs 0535a325de11a0121e89443e81001f0c83273b86a2b90328784d1b2c46d8d4f6
+grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
+locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
+main.rs 8cdb6029434f3121d8844bf8ec1ca8ecaf3d8d236e827f6f44f1c840147c8694
+route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
+s5.rs 54bc7c29fd123056eebed2f46b31d5fcfa8dde919c795992c58e7bac7f628319
+store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
+";
+fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
+    ROUTE_CELLS.lines().filter_map(|l| l.split_once(' '))
+}
 /// SB3E-R44.3: the guards' lexer, a dev-dependency only, exactly this line
 /// in each manifest (no feature, no other version or table).
 const LEXER_DEP: &str = "proc-macro2 = { version = \"=1.0.106\", default-features = false }";
@@ -315,8 +332,13 @@ fn mask(source: &str) -> String {
 /// SB3E-R44.3: every leaf token proc-macro2 reads in `source`, as its byte
 /// range and whether it is a literal. The tokens must line up with the text,
 /// apart only by whitespace and comments; a doc comment, which proc-macro2
-/// reads as a `#[doc]` attribute, is a comment here. Anything else is an error.
+/// reads as a `#[doc]` attribute, is a comment here. Anything else is an error,
+/// and so is a first line `#!` that is not `#![` (SB3E-R51.2: rustc drops a
+/// shebang line, proc-macro2 lexes it).
 fn tokens(source: &str) -> Result<Vec<(std::ops::Range<usize>, bool)>, String> {
+    if source.starts_with("#!") && !source.starts_with("#![") {
+        return Err(SHEBANG.into());
+    }
     let stream: proc_macro2::TokenStream = source.parse().map_err(|e| format!("{e:?}"))?;
     let (mut found, mut at) = (Vec::new(), 0);
     leaves(source, stream, &mut at, &mut found)?;
@@ -674,9 +696,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     let lexed = sources
         .iter()
         .filter_map(|(f, s)| tokens(s).err().map(|e| (f, e)));
-    let lexed: Vec<String> = lexed
-        .map(|(f, e)| format!("lex: {f} does not tokenize: {e}"))
-        .collect();
+    let lexed: Vec<String> = lexed.map(|(f, e)| lex_finding(f, &e)).collect();
     if !lexed.is_empty() {
         return lexed;
     }
@@ -859,6 +879,38 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     }
     found
 }
+/// SB3E-R51.1: each harness file not listed, missing, or not its digest.
+fn cells_findings(files: &[(String, Vec<u8>)]) -> Vec<String> {
+    use sha2::Digest;
+    let pin = |f: &str| route_cells().find(|r| Some(r.0) == f.strip_prefix(CELLS));
+    let mut found = Vec::new();
+    for (file, bytes) in files {
+        let digest = hex::encode(sha2::Sha256::digest(bytes));
+        match pin(file) {
+            None => found.push(format!("R51.1: {file} is not listed")),
+            Some(row) if row.1 != digest => {
+                found.push(format!("R51.1: {file}'s sha256 is {digest}"))
+            }
+            Some(_) => {}
+        }
+    }
+    for (name, _) in route_cells() {
+        if !files
+            .iter()
+            .any(|(f, _)| f.strip_prefix(CELLS) == Some(name))
+        {
+            found.push(format!("R51.1: {CELLS}{name} is missing"));
+        }
+    }
+    found
+}
+/// SB3E-R44.3, R51.2: a source `tokens` refuses, as its finding.
+fn lex_finding(file: &str, e: &str) -> String {
+    match e == SHEBANG {
+        true => format!("lex: {file} {SHEBANG}"),
+        false => format!("lex: {file} does not tokenize: {e}"),
+    }
+}
 /// SB3E-R44.3: the manifest names proc-macro2 once, by exactly `LEXER_DEP`,
 /// in its one `[dev-dependencies]` table.
 fn manifest_findings(file: &str, manifest: &str) -> Vec<String> {
@@ -1027,11 +1079,11 @@ fn s5_findings(s5: &str) -> Vec<String> {
     // below are a second, advisory layer.
     let digest = hex::encode(sha2::Sha256::digest(s5.as_bytes()));
     let mut pre = Vec::new();
-    if digest != S5_SHA256 {
+    if route_cells().all(|r| r != ("s5.rs", &*digest)) {
         pre.push(format!("G-S5: {S5}'s sha256 is {digest}"));
     }
     if let Err(e) = tokens(s5) {
-        pre.push(format!("lex: {S5} does not tokenize: {e}"));
+        pre.push(lex_finding(S5, &e));
         return pre;
     }
     let tokens = lex(s5);
@@ -1299,9 +1351,10 @@ fn sb3e_mother_lexer_is_governed_controls() {
 /// its own finding.
 #[test]
 fn sb3e_mother_route_sites_are_exactly_the_inventory() {
-    let sources = sources();
+    let (sources, cells) = (sources(), crate::adapter::scan::route_cells_files());
     let mut found = inventory_findings(&sources);
     found.extend(pins_findings(PIN_DATA));
+    found.extend(cells_findings(&cells));
     // The plants below are built from the reviewed text; on a changed tree
     // its findings are reported first, whole, so no plant's own anchor check
     // can mask them (SB3E-R42.6).
@@ -1393,6 +1446,54 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
             &[expected],
         );
     }
+    // SB3E-R51.1: a file added, a file removed, one byte changed.
+    let mut added = cells.clone();
+    added.push((format!("{CELLS}extra.rs"), b"fn extra() {}\n".to_vec()));
+    let removed: Vec<_> = cells
+        .iter()
+        .filter(|c| !c.0.ends_with("/grant.rs"))
+        .cloned()
+        .collect();
+    let mut changed = cells.clone();
+    let c = changed
+        .iter_mut()
+        .find(|c| c.0.ends_with("/route_fsync.c"))
+        .unwrap();
+    c.1[0] ^= 1;
+    for (plant, files, expected) in [
+        (
+            "R51.1 an added extra.rs",
+            added,
+            "R51.1: host/tests/route_cells/extra.rs is not listed",
+        ),
+        (
+            "R51.1 a removed grant.rs",
+            removed,
+            "R51.1: host/tests/route_cells/grant.rs is missing",
+        ),
+        (
+            "R51.1 one byte of route_fsync.c",
+            changed,
+            "R51.1: host/tests/route_cells/route_fsync.c's sha256",
+        ),
+    ] {
+        killed(&mut misses, plant, &cells_findings(&files), &[expected]);
+    }
+    // SB3E-R51.2: a shebang line hiding a site from the lexer (Fable B1).
+    let mut shebang = sources.clone();
+    let at = shebang
+        .iter()
+        .position(|(f, _)| f == "src/coordinator.rs")
+        .unwrap();
+    let hidden = "#! /*\n#[cfg(mother_route_seams)] pub fn extra() {}\n// */\n";
+    shebang[at].1 = format!("{hidden}{}", shebang[at].1.replace("//!", "//"));
+    let expected = ["lex: src/coordinator.rs starts with a shebang"];
+    killed(
+        &mut misses,
+        "R51.2 a shebang",
+        &inventory_findings(&shebang),
+        &expected,
+    );
     // G-S2: one region shrunk by its last line.
     let second = PIN_DATA.match_indices("\n@@@ ").nth(1).unwrap().0;
     let cut = PIN_DATA[..second].rfind('\n').unwrap();
