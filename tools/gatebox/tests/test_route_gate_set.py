@@ -1281,22 +1281,35 @@ class RoutePinsCallers(unittest.TestCase):
         argv = [sys.executable,'-I','-B',str(HERE/'route'/args[0])]+[str(a) for a in args[1:]]+(['--pins',str(pins(repo))] if pins else [])
         env = {k:v for k,v in os.environ.items() if not k.startswith(('CARGO','RUST'))}
         run = subprocess.run(argv,capture_output=True,text=True,env=env,timeout=60)
-        self.assertFalse((tmp/'marker').exists(),run.stdout+run.stderr)
-        return run
+        self.assertFalse((tmp/'marker').exists(),run.stdout+run.stderr)  # the sentinel toolchain never ran
+        findings = None
+        if pins and tool == 'a1': findings = json.loads(run.stdout)['findings']
+        if pins and tool == 'a7 lane': findings = json.loads(run.stdout)
+        if pins and tool == 'a7 run': findings = json.loads((tmp/'v.json').read_text())['differences']
+        return run, findings
     @unittest.skipIf(INSTALLED,'route A1 controls cover the installed copy')
     def test_pins_absent_or_refused_before_any_toolchain_process(self):
         own = lambda repo: repo/'tools/route_pins.json'
-        cases = {'absent':(None,None),'missing':(own,lambda p: p.unlink()),'other path':(lambda r: r/'pins.json',lambda p: shutil.copyfile(p,p.parent.parent/'pins.json')),
-                 'symlink':(own,lambda p: (p.rename(p.with_name('real')),p.symlink_to('real'))),
-                 'malformed':(own,lambda p: p.write_text('{}')),'oversize':(own,lambda p: p.write_text(p.read_text()+' '*65536)),
-                 'duplicate key':(own,lambda p: p.write_text(p.read_text()[:-2]+', "graph": {}}\n'))}
+        cases = {'absent':(None,None,None),'missing':(own,lambda p: p.unlink(),'missing or a symbolic link: '),
+                 'other path':(lambda r: r/'pins.json',lambda p: shutil.copyfile(p,p.parent.parent/'pins.json'),
+                               "--pins must be the checked tree's own tools/route_pins.json"),
+                 'symlink':(own,lambda p: (p.rename(p.with_name('real')),p.symlink_to('real')),'missing or a symbolic link: '),
+                 'malformed':(own,lambda p: p.write_text('{}'),'keys or values differ from the pins schema'),
+                 'oversize':(own,lambda p: p.write_text(p.read_text()+' '*65536),'over 65536 bytes'),
+                 'duplicate key':(own,lambda p: p.write_text(p.read_text()[:-2]+', "graph": {}}\n'),'not JSON')}
         for tool in ('a1','a7 run','a7 lane'):
-            for name, (pins, plant) in cases.items():
+            for name, (pins, plant, reason) in cases.items():
                 with self.subTest(tool=tool,case=name):
-                    run = self.call(tool,pins,plant)
-                    self.assertNotEqual(run.returncode,0)
-                    if pins: self.assertIn('pins',run.stdout)
-                    else: self.assertIn('--pins',run.stderr)
+                    run, findings = self.call(tool,pins,plant)
+                    if pins is None:  # argparse: the required argument, before any check or process
+                        self.assertEqual(run.returncode,2)
+                        self.assertIn('the following arguments are required: --pins',run.stderr)
+                        continue
+                    self.assertEqual(run.returncode,1,run.stderr)
+                    refusals = [x for x in findings if x['kind'] == 'pins']
+                    self.assertEqual(len(refusals),1,findings)
+                    self.assertTrue(refusals[0]['reason'].startswith(reason),refusals[0])
+                    if tool != 'a1': self.assertEqual(findings,refusals)  # A7: the pins refusal alone, before anything else
 
 class RouteEarlyFailureControls(unittest.TestCase):
     """GB3 mission 9 item 3 (GB3-4, R57.5): early route-cells failures end to end. Real init (driver) where the fault
