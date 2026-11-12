@@ -343,6 +343,13 @@ class HistoricalPolicyControls(unittest.TestCase):
 
 class SupervisorRouteFailure(unittest.TestCase):
     def test_route_failure_publishes_with_lane_group(self):
+        summary = self.failed(receipt.current_policy())
+        self.assertEqual((summary['status'],summary['lane']),('FAILED',dict(route_a1='NOT_RUN',route_pins_sha256=PINS)))  # GB3 7.1
+    def test_unresolvable_policy_still_publishes(self):  # GB3: an early-lane error never blocks publication
+        summary = self.failed('0'*64)
+        self.assertEqual((summary['status'],summary['lane']),('FAILED',{}))
+        self.assertIn('route A1 lane: ValueError: unknown receipt policy',summary['missing_evidence'])
+    def failed(self, gates):
         supervisor = load('supervisor'); run = 'b'*32
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
@@ -352,9 +359,8 @@ class SupervisorRouteFailure(unittest.TestCase):
                 stack.enter_context(patch.object(supervisor,name,value))
             stack.enter_context(patch.object(supervisor.snapshot,'GitSource'))
             stack.enter_context(patch.object(supervisor.snapshot,'export',side_effect=ValueError('fixture export failure')))
-            supervisor.execute(run,route_request(),1234,{'device':1,'inode':2},{'gates_sha256':receipt.current_policy()},marker,'normal')
-            summary = supervisor.receipt.verify_integrity(root/'receipts'/run,os.getuid())['summary']
-        self.assertEqual((summary['status'],summary['lane']),('FAILED',dict(route_a1='NOT_RUN',route_pins_sha256=PINS)))  # GB3 7.1
+            supervisor.execute(run,route_request(),1234,{'device':1,'inode':2},{'gates_sha256':gates},marker,'normal')
+            return supervisor.receipt.verify_integrity(root/'receipts'/run,os.getuid())['summary']
 
 class SupervisorSourceIdentity(unittest.TestCase):
     """GB2 (SB3E-R26) RED oracle at supervisor.execute: a registry row recorded at boot A still admits the source

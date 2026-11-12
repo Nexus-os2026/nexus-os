@@ -157,10 +157,7 @@ def route_a1(summary, evidence, logs):
 def route_failure(summary, evidence, logs, identity):
     """GB3 7.1 on a FAILED run with no lane yet: the route A1 lane, the commands as received (a route A1 start
     without an end kept with its start fields only) and coverage from start and end records. Nothing invented."""
-    try: ids = [g['id'] for g in receipt.policy_set(identity['gates_sha256'])['route-cells.json']['gates']]
-    except Exception as exc:
-        summary['missing_evidence'].append('route A1 lane: '+type(exc).__name__+': '+str(exc))
-        return
+    ids = [g['id'] for g in receipt.policy_set(identity['gates_sha256'])['route-cells.json']['gates']]
     lane, start, line = route_a1(summary,evidence,logs)
     commands = [dict(c) for c in evidence.commands]+([dict(start,status_complete=False)] if start and start is evidence.active else [])
     for command in commands:
@@ -383,7 +380,10 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
     finally:
         # A failed collector still leaves bounded partial diagnostics to publish.
         if not logs: logs = {name+'.log':bytes(data) for name,data in captured.items()}
-        if request['gate_set_id'] == 'route-cells' and not summary['lane']: route_failure(summary,evidence,logs,identity)
+        if request['gate_set_id'] == 'route-cells' and not summary['lane']:
+            try: route_failure(summary,evidence,logs,identity)
+            except Exception as exc:  # publication still happens; the lane stays empty and says why
+                summary['missing_evidence'].append('route A1 lane: '+type(exc).__name__+': '+str(exc))
         if not summary['commands']: summary['commands'] = evidence.commands
         try: summary['cleanup'] = stop_and_confirm(run)
         except Exception as exc:
