@@ -20,7 +20,7 @@ copy's git tree hash (its own git directory) must be unchanged after it.
           `tests` name must fail (each failed test's own child reason kept).
 
 Each `expect` finding (R44.4) must appear in the plant's own failure text (lane: its
-child reasons) and a refused build then never kills; pre-R44 plants carry none.
+child reasons) and a refused build then never kills; R53: all plants but two carry one.
 
 Exit 0 when every plant is killed as listed; one JSON verdict on stdout.
 """
