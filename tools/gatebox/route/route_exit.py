@@ -5,6 +5,7 @@
 
 One run on one clean commit, steps in order, each logged under DIR/logs:
   preflight     HEAD is SHA, the tree is clean (ignored files too, R55.5), the
+                working files' tree (a private index, R60.8) is HEAD's, the
                 wrapper is the pinned one;
   a3_check_data A3's data check, before any scan and before A4 (R36.3);
   std_tests     real builds and every existing guard: the route packages' tests
@@ -20,7 +21,8 @@ One run on one clean commit, steps in order, each logged under DIR/logs:
   plants        every U4a plant (route_plants.py) with its listed killer; the
                 list, its names without `expect` and its whole file's sha256
                 (R55.6) equal the `plants` pin;
-  postflight    HEAD and the tree unchanged.
+  no_pycache    no `__pycache__` under tools/ (R60.7);
+  postflight    HEAD, the status and the working files' tree unchanged.
 Each seam is listed with its data disposition per binary and what A3 and A4
 measured. One verdict JSON is written to a fresh FILE; exit 0 only if every step passes.
 Each tool runs with `-X pycache_prefix` under DIR, so no cached bytecode in the
@@ -110,6 +112,17 @@ def status(repo):
     return None if out is None else "\n".join(x for x in out.splitlines() if x[3:] not in IGNORED_OK)
 
 
+def worktree_tree(repo, index):
+    """SB3E-R60.8: the tree of the working files, from a fresh private index (no assume-unchanged or
+    skip-worktree flag hides an edit); None on failure."""
+    env = {"PATH": "/usr/bin:/bin", "HOME": os.environ["HOME"], "LANG": "C.UTF-8", "GIT_INDEX_FILE": index}
+    for args in (["add", "-A", "-f", "."], ["write-tree"]):
+        run = subprocess.run(["git", "-C", repo] + args, env=env, capture_output=True, text=True)
+        if run.returncode != 0:
+            return None
+    return run.stdout.strip()
+
+
 def lane(gate, data):
     run, _ = gate.cargo("lane_build", "target-lane", "--config", f'build.rustc-workspace-wrapper="{gate.wrapper}"',
                         "test", "--release", "--locked", "--offline", "-p", "nexus-mother-host", "-p", "nexus-mother-desktop",
@@ -161,9 +174,11 @@ def main():
     data = json.load(open(DATA, encoding="utf-8"))
     head, tree = git(args.repo, "rev-parse", "HEAD"), git(args.repo, "rev-parse", "HEAD^{tree}")
     clean = status(args.repo) == ""
+    files_tree = worktree_tree(args.repo, w("index-preflight"))
     wrapper_sha = sha256(open(args.wrapper, "rb").read())
-    gate.fact("preflight", head == args.sha and clean and wrapper_sha == args.wrapper_sha256,
-              head=head, tree=tree, clean=clean, wrapper_sha256=wrapper_sha)
+    gate.fact("preflight", head == args.sha and clean and tree is not None and files_tree == tree
+              and wrapper_sha == args.wrapper_sha256, head=head, tree=tree, clean=clean, files_tree=files_tree,
+              wrapper_sha256=wrapper_sha)
     if not gate.steps[-1]["pass"]:
         return finish(args, gate, head, tree, [])
     t, r = args.toolchain, args.repo
@@ -218,8 +233,10 @@ def main():
         pin["without_expect_count"], pin["names_sha256"], pin["without_expect_sha256"], pin["file_sha256"]],
         count=len(names))
     gate.drop("plants-work")
-    after = git(r, "rev-parse", "HEAD"), status(r)
-    gate.fact("postflight", after == (head, ""), head=after[0])
+    caches = [os.path.relpath(d, r) for d, _, _ in os.walk(os.path.join(r, "tools")) if os.path.basename(d) == "__pycache__"]
+    gate.fact("no_pycache", not caches, found=caches[:5])
+    after = git(r, "rev-parse", "HEAD"), status(r), worktree_tree(r, w("index-postflight"))
+    gate.fact("postflight", after == (head, "", tree), head=after[0], files_tree=after[2])
     return finish(args, gate, head, tree, seams(gate, ship, census, a4))
 
 
