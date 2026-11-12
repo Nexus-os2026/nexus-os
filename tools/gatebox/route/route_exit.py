@@ -52,7 +52,7 @@ class Gate:
         home = os.environ["HOME"]
         self.env = {"HOME": home, "PATH": bin_dir + ":/usr/bin:/bin", "LANG": "C.UTF-8",
                     "RUSTC": os.path.join(bin_dir, "rustc"), "CARGO_HOME": os.environ.get("CARGO_HOME", f"{home}/.cargo"),
-                    "RUSTUP_HOME": os.environ.get("RUSTUP_HOME", f"{home}/.rustup")}
+                    "RUSTUP_HOME": os.environ.get("RUSTUP_HOME", f"{home}/.rustup"), "CARGO_NET_OFFLINE": "true"}
         self.steps = []
 
     def run(self, step, argv, cwd=None, env=None, verdict_json=False, ok=None):
@@ -97,7 +97,7 @@ def git(repo, *args):
 
 def lane(gate, data):
     run, _ = gate.cargo("lane_build", "target-lane", "--config", f'build.rustc-workspace-wrapper="{gate.wrapper}"',
-                        "test", "--release", "--locked", "-p", "nexus-mother-host", "-p", "nexus-mother-desktop",
+                        "test", "--release", "--locked", "--offline", "-p", "nexus-mother-host", "-p", "nexus-mother-desktop",
                         "--test", "route_cells", "--no-run", "--message-format=json")
     exe = None
     for line in run.stdout.decode().splitlines():
@@ -153,10 +153,10 @@ def main():
         return finish(args, gate, head, tree, [])
     t, r = args.toolchain, args.repo
     gate.tool("a3_check_data", "route_a3.py", "check-data", "--repo", r, "--toolchain", t)
-    gate.cargo("std_tests", "target-std", "test", "--locked", "--no-fail-fast", "-p", "nexus-governed-control",
+    gate.cargo("std_tests", "target-std", "test", "--locked", "--offline", "--no-fail-fast", "-p", "nexus-governed-control",
                "-p", "nexus-mother", "-p", "nexus-mother-host")
     desktop = [x for test in data["desktop_tests"] for x in ("--test", test)]
-    gate.cargo("std_tests_desktop", "target-std", "test", "--locked", "--no-fail-fast", "-p", "nexus-mother-desktop",
+    gate.cargo("std_tests_desktop", "target-std", "test", "--locked", "--offline", "--no-fail-fast", "-p", "nexus-mother-desktop",
                "--lib", "--bins", *desktop)
     gate.drop("target-std")
     gate.cargo("fmt", "target-fmt", "fmt", "--all", "--", "--check")

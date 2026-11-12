@@ -60,7 +60,7 @@ class Runner:
         return subprocess.run(self.git + ["write-tree"], check=True, capture_output=True, text=True).stdout.strip()
 
     def cargo_test(self, args):
-        run = subprocess.run([self.cargo, "test", "--locked"] + args, cwd=self.tree, env=self.env,
+        run = subprocess.run([self.cargo, "test", "--locked", "--offline"] + args, cwd=self.tree, env=self.env,
                              capture_output=True, text=True)
         out = run.stdout + run.stderr
         if "error[" in out or "could not compile" in out:
@@ -77,7 +77,7 @@ class Runner:
         return self.cargo_test(["-p", "nexus-mother", "--lib", "route_seams_guard"])
 
     def build_mbin(self):
-        run = subprocess.run([self.cargo, "test", "--locked", "-p", "nexus-mother", "--lib", "--no-run",
+        run = subprocess.run([self.cargo, "test", "--locked", "--offline", "-p", "nexus-mother", "--lib", "--no-run",
                               "--message-format=json"], cwd=self.tree, env=self.env, capture_output=True, text=True)
         for line in run.stdout.splitlines():
             row = json.loads(line) if line.startswith("{") else {}
@@ -94,7 +94,7 @@ class Runner:
 
     def lane(self):
         run = subprocess.run([self.cargo, "--config", f'build.rustc-workspace-wrapper="{self.wrapper}"', "test",
-                              "--release", "--locked", "-p", "nexus-mother-host", "-p", "nexus-mother-desktop",
+                              "--release", "--locked", "--offline", "-p", "nexus-mother-host", "-p", "nexus-mother-desktop",
                               "--test", "route_cells", "--no-run", "--message-format=json"],
                              cwd=self.tree, env=self.env, capture_output=True, text=True)
         exe = None
