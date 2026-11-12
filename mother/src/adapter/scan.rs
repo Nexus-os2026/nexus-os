@@ -53,6 +53,26 @@ pub(crate) fn mother_sources() -> Vec<(String, String)> {
         .collect()
 }
 
+/// SB3E-R51.1: every file under `host/tests/route_cells/` (subdirectories
+/// too; a symlink is a file), as `(path relative to the crate, bytes)`; a
+/// file that cannot be read has no bytes, so its digest differs.
+pub(crate) fn route_cells_files() -> Vec<(String, Vec<u8>)> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            match entry.file_type().is_ok_and(|k| k.is_dir()) {
+                true => walk(&entry.path(), out),
+                false => out.push(entry.path()),
+            }
+        }
+    }
+    let (root, mut files) = (crate_root(), Vec::new());
+    walk(&root.join("host/tests/route_cells"), &mut files);
+    files.sort();
+    let rel = |p: &Path| p.strip_prefix(&root).unwrap().to_string_lossy().to_string();
+    let read = |p: &Path| std::fs::read(p).unwrap_or_default();
+    files.iter().map(|p| (rel(p), read(p))).collect()
+}
+
 fn code(text: &str) -> String {
     text.lines()
         .filter(|line| !line.trim_start().starts_with("//"))
