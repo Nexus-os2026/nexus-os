@@ -1,0 +1,57 @@
+{
+ "about": [
+  "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U4a-3 reported them",
+  "(SB3E-R41: 33 names) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
+  "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the pre-R44 names without `expect` (sorted)."
+ ],
+ "desktop_tests": [
+  "check_page_cli",
+  "guards",
+  "install"
+ ],
+ "inventory": {
+  "sha256": "1e3d893b2dea3f073ec1f6986da232ce576458b792a0d765010e99c98e9e3623",
+  "names": [
+   "grant::route_s3_revokes_the_original_grant_through_its_port",
+   "locks::route_s4_poisons_the_actions_lock",
+   "locks::route_s4_poisons_the_evidence_lock",
+   "locks::route_s4_poisons_the_model_state_lock",
+   "locks::route_s4_poisons_the_pending_lock",
+   "locks::route_s4_poisons_the_producers_lock",
+   "locks::route_s4_poisons_the_run_table_lock",
+   "route_armed_panic_begins_an_unwind",
+   "route_armed_pause_acknowledges_blocks_and_releases",
+   "route_at_cannot_return_into_the_route",
+   "route_correlated_identity_is_recorded",
+   "route_lane_cfg_reached_the_harness",
+   "route_store_commit_hold_fires_on_an_ordinary_append",
+   "route_unarmed_point_records_nothing_and_does_not_block",
+   "s5::route_s4b_poisons_the_coordinator_before_its_lock",
+   "s5::route_s5_join_plants_each_refuse",
+   "s5::route_s5_panicking_call_is_counted",
+   "s5::route_s5_pause_release_and_panic_at_one_point",
+   "s5::route_s5_recorded_path_is_measured_and_credited",
+   "s5::route_s5_timeout_without_a_child_root_writes_nothing",
+   "s5::route_s5_unreleased_pause_times_out_and_aborts",
+   "store::route_owed_flush_leaves_the_ordinary_hold_and_s2_unconsumed",
+   "store::route_s2_armed_after_its_branch_goes_unused",
+   "store::route_s2_close_statement_is_owed_and_unlatched",
+   "store::route_s2_end_is_owed_and_unlatched",
+   "store::route_s2_gate_is_refused_unlatched_and_owes_nothing",
+   "store::route_shim_close_statement_is_uncertain_and_latched",
+   "store::route_shim_end_is_uncertain_and_latched",
+   "store::route_shim_fault_during_a_checkpoint_is_not_a_commit",
+   "store::route_shim_fires_once",
+   "store::route_shim_fires_only_on_its_named_file",
+   "store::route_shim_fires_only_on_its_named_thread",
+   "store::route_shim_gate_is_refused_and_latched"
+  ]
+ },
+ "plants": {
+  "count": 176,
+  "names_sha256": "08aac1ade327597edde6f97680c91bd8b0c7543d190ed4cfb0fc8f29485046a3",
+  "without_expect_sha256": "3ecc73c00a6715a99f354a85c676d8dae5881b55f9df903589f677987c3bfe13",
+  "without_expect_count": 73
+ }
+}
