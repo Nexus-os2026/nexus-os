@@ -19,15 +19,16 @@ precedes, and a `mod` declaration's attributes apply to the module's file.
       signature: each writer's `fn` is exactly its reviewed signature, once;
       markers:  each seam body named in the data begins with its marker
                 (`const M` and `std::hint::black_box(M.as_bytes())`);
-      hooks:    each reviewed test hook occurs only under exactly
-                `#[cfg(test)]` (none widened);
+      hooks:    each reviewed test hook (a name, or `file|name`) occurs only
+                under a cfg that holds only in tests (none widened; R47.4:
+                `test`, `all` with one such, `any` of all such; never `not`);
       includes: no `#[path]` or `include!`-family path into a `tests`
                 directory, outside code under exactly `#[cfg(test)]`;
       targets:  the route packages' Cargo targets equal the reviewed list.
   controls --repo R --toolchain T --work DIR
       The plants (mission U4b item 5), each applied to the source as read (or,
       for the Cargo target, to a scratch copy) and restored by hash; every
-      plant must be reported by its own check.
+      plant must be reported by its own check, in a finding with its `expect`.
   list --repo R
       Review aid: the writer sites and seam-declared names this tree has.
 
@@ -139,7 +140,7 @@ class Source:
         return any(a[0] == norm and a[3] <= i < a[4] for a in self.attrs)
 
     def fns(self):
-        """(name, body open, body close) for every fn with a body."""
+        """(name, body open, body close, `fn` token) for every fn with a body."""
         out = []
         for i, tok in enumerate(self.t[:-1]):
             if tok == "fn" and self.toks[i + 1][1] == "id":
@@ -147,7 +148,7 @@ class Source:
                 while j < len(self.t) and self.t[j] not in ("{", ";"):
                     j = self.match.get(j, j) + 1 if self.t[j] in "([" else j + 1
                 if j < len(self.t) and self.t[j] == "{":
-                    out.append((self.t[i + 1], j, self.match.get(j, len(self.t))))
+                    out.append((self.t[i + 1], j, self.match.get(j, len(self.t)), i))
         return out
 
     def enclosing_fn(self, i):
@@ -200,6 +201,36 @@ def file_gates(parsed):
 
 def under(src, gates, i, norm):
     return norm in gates[src.rel] or src.governed(i, norm)
+
+
+def implies_test(norm):
+    """Whether a normalized `#[cfg(..)]` holds only under `test` (SB3E-R47.4, recursive): `test`,
+    an `all` with at least one such argument, or an `any` whose every argument is such; `not(..)`
+    and anything else never (fail closed). `#[cfg_attr(..)]` and inner `#![..]` are not gates."""
+    if not (norm.startswith("#[cfg(") and norm.endswith(")]")):
+        return False
+    def holds(pred):
+        if pred == "test":
+            return True
+        for op, need in (("all(", any), ("any(", all)):
+            if pred.startswith(op) and pred.endswith(")"):
+                args, depth, cur = [], 0, ""
+                for ch in pred[len(op):-1]:
+                    depth += (ch == "(") - (ch == ")")
+                    if ch == "," and depth == 0:
+                        args.append(cur)
+                        cur = ""
+                    else:
+                        cur += ch
+                args = [a for a in args + [cur] if a]
+                return bool(args) and need(holds(a) for a in args)
+        return False
+    return holds(norm[len("#[cfg("):-2])
+
+
+def test_only(src, gates, i):
+    return any(implies_test(g) for g in gates[src.rel]) or any(
+        implies_test(a[0]) and a[3] <= i < a[4] for a in src.attrs)
 
 
 def seam_names(parsed, gates):
@@ -288,7 +319,7 @@ def check(repo, toolchain, files=None, cargo_meta=None):
         for sig in sigs:
             name = sig.split("fn", 1)[1].split("(", 1)[0]
             found = [f for f in (src.fns() if src else []) if f[0] == name]
-            heads = ["".join(src.t[src.t.index("fn", max(0, f[1] - 40)) - 3:f[1] + 1]) for f in found] if found else []
+            heads = ["".join(src.t[max(0, f[3] - 6):f[1] + 1]) for f in found]
             if len(found) != 1 or not any(h.endswith(sig) for h in heads):
                 out.append({"check": "signature", "file": rel, "expected": sig, "found": heads})
     markers = {s["name"]: s["marker"] for s in seams["seams"]}
@@ -304,7 +335,8 @@ def check(repo, toolchain, files=None, cargo_meta=None):
             out.append({"check": "markers", "seam": seam, "file": rel, "fn": fn})
     for rel, src in parsed.items():
         for i, tok in enumerate(src.t):
-            if tok in data["test_hooks"] and src.toks[i][1] == "id" and not under(src, gates, i, TEST):
+            hook = tok in data["test_hooks"] or f"{rel}|{tok}" in data["test_hooks"]
+            if hook and src.toks[i][1] == "id" and not test_only(src, gates, i):
                 out.append({"check": "hooks", "file": rel, "hook": tok, "offset": src.toks[i][2]})
         for i, tok in enumerate(src.t[:-3]):
             target = None
@@ -318,7 +350,9 @@ def check(repo, toolchain, files=None, cargo_meta=None):
                     out.append({"check": "includes", "file": rel, "path": path})
     targets = cargo_meta if cargo_meta is not None else cargo_targets(repo, toolchain, seams["route_packages"])
     if targets != data["targets"]:
-        out.append({"check": "targets", "found": targets})
+        out.append({"check": "targets", "found": targets,
+                    "extra": sorted(set(targets) - set(data["targets"])),
+                    "missing": sorted(set(data["targets"]) - set(targets))})
     return out
 
 
@@ -357,7 +391,6 @@ def controls(repo, toolchain, work):
         if plant["file"].endswith("Cargo.toml"):
             os.makedirs(work, exist_ok=True)
             tree = os.path.join(work, plant["name"])
-            subprocess.run(["git", "-C", repo, "worktree", "list"], capture_output=True)
             shutil.copytree(repo, tree, ignore=shutil.ignore_patterns("target", ".git"))
             path = os.path.join(tree, plant["file"])
             text = open(path, encoding="utf-8").read()
@@ -372,8 +405,13 @@ def controls(repo, toolchain, work):
             row["sha_planted"] = sha(planted[plant["file"]])
         got = check(repo, toolchain, planted, meta_planted)
         row["reported_by"] = sorted({f["check"] for f in got})
+        expect = plant.get("expect") or {}
+        row["matched"] = bool(expect) and any(all(f.get(k) == v for k, v in expect.items()) for f in got)
+        if not row["matched"]:
+            row["got"] = [f for f in got if f["check"] == plant["check"]][:5]
         row["restored"] = {rel: sha(text) for rel, text in files.items()} == before
-        row["killed"] = row["unique"] and row["restored"] and plant["check"] in row["reported_by"]
+        row["killed"] = (row["unique"] and row["restored"] and plant["check"] in row["reported_by"]
+                         and row["matched"] and expect.get("check") == plant["check"])
         results.append(row)
         if not row["killed"]:
             findings.append({"kind": "plant_not_reported_by_its_check", "plant": plant["name"], "row": row})
