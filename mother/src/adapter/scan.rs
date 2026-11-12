@@ -73,6 +73,67 @@ pub(crate) fn route_cells_files() -> Vec<(String, Vec<u8>)> {
     files.iter().map(|p| (rel(p), read(p))).collect()
 }
 
+/// SB3E-R55.2 (Fable A-1): the route guard's source set, failing closed:
+/// every `.rs` file under `root` as `(path relative to it, text)`, sorted,
+/// with a finding for a symlink anywhere, an entry that cannot be read, a
+/// `.rs` entry that is not a regular file, and a directory `rust_files`
+/// skips when it sits below `src/` or `tests/`.
+/// Only `root/target` and `root/.git` are skipped. Other scans are unchanged.
+pub(crate) fn route_guard_sources(root: &Path) -> (Vec<(String, String)>, Vec<String>) {
+    type Out = (Vec<(String, String)>, Vec<String>);
+    fn walk(root: &Path, dir: &Path, out: &mut Out) {
+        let rel = |p: &Path| p.strip_prefix(root).unwrap().to_string_lossy().to_string();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return out.1.push(format!("A-1: {} cannot be read", rel(dir)));
+        };
+        for entry in entries {
+            let Ok((path, kind)) = entry.and_then(|e| Ok((e.path(), e.file_type()?))) else {
+                out.1
+                    .push(format!("A-1: an entry of {} cannot be read", rel(dir)));
+                continue;
+            };
+            let (at, name) = (rel(&path), path.file_name().unwrap().to_string_lossy());
+            let skipped = [
+                "target",
+                ".git",
+                "node_modules",
+                "dist",
+                ".cargo",
+                ".claude",
+            ];
+            let below = || {
+                Path::new(&at)
+                    .ancestors()
+                    .skip(1)
+                    .any(|a| a.ends_with("src") || a.ends_with("tests"))
+            };
+            if kind.is_symlink() {
+                out.1.push(format!("A-1: {at} is a symlink"));
+            } else if kind.is_dir() && dir == root && matches!(&*name, "target" | ".git") {
+                continue;
+            } else if kind.is_dir() {
+                if skipped.contains(&&*name) && below() {
+                    out.1.push(format!(
+                        "A-1: {at} is a skipped directory below src/ or tests/"
+                    ));
+                }
+                walk(root, &path, out);
+            } else if name.ends_with(".rs") && !kind.is_file() {
+                out.1.push(format!("A-1: {at} is not a regular file"));
+            } else if name.ends_with(".rs") {
+                match std::fs::read_to_string(&path) {
+                    Ok(text) => out.0.push((at, text)),
+                    Err(e) => out.1.push(format!("A-1: {at} cannot be read: {e}")),
+                }
+            }
+        }
+    }
+    let mut out = (Vec::new(), Vec::new());
+    walk(root, root, &mut out);
+    out.0.sort();
+    out
+}
+
 fn code(text: &str) -> String {
     text.lines()
         .filter(|line| !line.trim_start().starts_with("//"))

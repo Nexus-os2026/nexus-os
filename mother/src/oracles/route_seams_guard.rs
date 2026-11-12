@@ -136,6 +136,17 @@ store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
     ROUTE_CELLS.lines().filter_map(|l| l.split_once(' '))
 }
+/// SB3E-R55.6 (Fable A-N2): a row that is not `name sha256` is a finding.
+fn rows_findings(rows: &str) -> Vec<String> {
+    let hex = |d: &str| d.len() == 64 && d.bytes().all(|b| b"0123456789abcdef".contains(&b));
+    rows.lines()
+        .filter(|l| {
+            !l.split_once(' ')
+                .is_some_and(|(n, d)| !n.is_empty() && hex(d))
+        })
+        .map(|l| format!("R51.1: a malformed ROUTE_CELLS row {l:?}"))
+        .collect()
+}
 /// SB3E-R44.3: the guards' lexer, a dev-dependency only, exactly this line
 /// in each manifest (no feature, no other version or table).
 const LEXER_DEP: &str = "proc-macro2 = { version = \"=1.0.106\", default-features = false }";
@@ -883,7 +894,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
 fn cells_findings(files: &[(String, Vec<u8>)]) -> Vec<String> {
     use sha2::Digest;
     let pin = |f: &str| route_cells().find(|r| Some(r.0) == f.strip_prefix(CELLS));
-    let mut found = Vec::new();
+    let mut found = rows_findings(ROUTE_CELLS);
     for (file, bytes) in files {
         let digest = hex::encode(sha2::Sha256::digest(bytes));
         match pin(file) {
@@ -968,9 +979,12 @@ fn impls(source: &str) -> Vec<String> {
 /// Every Rust file of the crate, by path relative to `mother/`, read by the
 /// adapter's scan walker (only the adapter touches the host).
 fn sources() -> Vec<(String, String)> {
-    let mut sources = crate::adapter::scan::mother_sources();
-    sources.sort(); // By path text, as the inventory is listed.
-    sources
+    walked().0
+}
+/// SB3E-R55.2: the sources by path text, as the inventory is listed, and the
+/// walk's own findings (A-1).
+fn walked() -> (Vec<(String, String)>, Vec<String>) {
+    crate::adapter::scan::route_guard_sources(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
 }
 fn text<'a>(sources: &'a [(String, String)], file: &str) -> &'a str {
     &sources.iter().find(|(f, _)| f == file).expect(file).1
@@ -1351,8 +1365,8 @@ fn sb3e_mother_lexer_is_governed_controls() {
 /// its own finding.
 #[test]
 fn sb3e_mother_route_sites_are_exactly_the_inventory() {
-    let (sources, cells) = (sources(), crate::adapter::scan::route_cells_files());
-    let mut found = inventory_findings(&sources);
+    let ((sources, mut found), cells) = (walked(), crate::adapter::scan::route_cells_files());
+    found.extend(inventory_findings(&sources));
     found.extend(pins_findings(PIN_DATA));
     found.extend(cells_findings(&cells));
     // The plants below are built from the reviewed text; on a changed tree
@@ -1478,6 +1492,33 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
         ),
     ] {
         killed(&mut misses, plant, &cells_findings(&files), &[expected]);
+    }
+    let row = format!("{ROUTE_CELLS}cells.rs\n");
+    let expected = ["R51.1: a malformed ROUTE_CELLS row \"cells.rs\""];
+    killed(
+        &mut misses,
+        "R55.6 a malformed row",
+        &rows_findings(&row),
+        &expected,
+    );
+    // SB3E-R55.2 (A-1): a skipped directory below src/, a symlinked file and
+    // a symlinked directory, each its own finding; the skipped one is read.
+    let tmp = std::env::temp_dir().join(format!("sb3e-r55-walk-{}", std::process::id()));
+    let src = tmp.join("src");
+    std::fs::create_dir_all(src.join("dist")).unwrap();
+    std::fs::write(src.join("dist/mod.rs"), "fn tidy() {}\n").unwrap();
+    std::os::unix::fs::symlink("dist/mod.rs", src.join("linked.rs")).unwrap();
+    std::os::unix::fs::symlink("dist", src.join("linkdir")).unwrap();
+    let (files, mut walk) = crate::adapter::scan::route_guard_sources(&tmp);
+    std::fs::remove_dir_all(&tmp).unwrap();
+    walk.extend(files.into_iter().map(|(f, _)| format!("read {f}")));
+    for e in [
+        "A-1: src/dist is a skipped directory below src/ or tests/",
+        "A-1: src/linked.rs is a symlink",
+        "A-1: src/linkdir is a symlink",
+        "read src/dist/mod.rs",
+    ] {
+        killed(&mut misses, e, &walk, &[e]);
     }
     // SB3E-R51.2: a shebang line hiding a site from the lexer (Fable B1).
     let mut shebang = sources.clone();
