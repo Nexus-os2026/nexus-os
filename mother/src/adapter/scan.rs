@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[path = "../../../kernel/tests/desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
 
-fn crate_root() -> PathBuf {
+pub(crate) fn crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
@@ -132,6 +132,21 @@ pub(crate) fn route_guard_sources(root: &Path) -> (Vec<(String, String)>, Vec<St
     walk(root, root, &mut out);
     out.0.sort();
     out
+}
+
+/// SB3E-R55.2: the guard's walk over a scratch tree holding a skipped
+/// directory below `src/` (with a file), a symlinked file and a symlinked
+/// directory (the guard's in-test plant; only the adapter touches the host).
+pub(crate) fn route_guard_walk_plant() -> (Vec<(String, String)>, Vec<String>) {
+    let tmp = std::env::temp_dir().join(format!("sb3e-r55-walk-{}", std::process::id()));
+    let src = tmp.join("src");
+    std::fs::create_dir_all(src.join("dist")).unwrap();
+    std::fs::write(src.join("dist/mod.rs"), "fn tidy() {}\n").unwrap();
+    std::os::unix::fs::symlink("dist/mod.rs", src.join("linked.rs")).unwrap();
+    std::os::unix::fs::symlink("dist", src.join("linkdir")).unwrap();
+    let walked = route_guard_sources(&tmp);
+    std::fs::remove_dir_all(&tmp).unwrap();
+    walked
 }
 
 fn code(text: &str) -> String {
