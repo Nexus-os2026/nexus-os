@@ -984,7 +984,7 @@ fn sources() -> Vec<(String, String)> {
 /// SB3E-R55.2: the sources by path text, as the inventory is listed, and the
 /// walk's own findings (A-1).
 fn walked() -> (Vec<(String, String)>, Vec<String>) {
-    crate::adapter::scan::route_guard_sources(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+    crate::adapter::scan::route_guard_sources(&crate::adapter::scan::crate_root())
 }
 fn text<'a>(sources: &'a [(String, String)], file: &str) -> &'a str {
     &sources.iter().find(|(f, _)| f == file).expect(file).1
@@ -1503,14 +1503,7 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
     );
     // SB3E-R55.2 (A-1): a skipped directory below src/, a symlinked file and
     // a symlinked directory, each its own finding; the skipped one is read.
-    let tmp = std::env::temp_dir().join(format!("sb3e-r55-walk-{}", std::process::id()));
-    let src = tmp.join("src");
-    std::fs::create_dir_all(src.join("dist")).unwrap();
-    std::fs::write(src.join("dist/mod.rs"), "fn tidy() {}\n").unwrap();
-    std::os::unix::fs::symlink("dist/mod.rs", src.join("linked.rs")).unwrap();
-    std::os::unix::fs::symlink("dist", src.join("linkdir")).unwrap();
-    let (files, mut walk) = crate::adapter::scan::route_guard_sources(&tmp);
-    std::fs::remove_dir_all(&tmp).unwrap();
+    let (files, mut walk) = crate::adapter::scan::route_guard_walk_plant();
     walk.extend(files.into_iter().map(|(f, _)| format!("read {f}")));
     for e in [
         "A-1: src/dist is a skipped directory below src/ or tests/",
