@@ -212,7 +212,7 @@
   "nexus-mother-host|walk|example|bin|mother/host/examples/walk.rs||False|False|2021",
   "nexus-mother|nexus_mother|lib|lib|mother/src/lib.rs||True|True|2021"
  ],
- "includes_allow": ["crates/nexus-governed-control/src/governed/files_exec_s1a_d_tests.rs|kernel/src/inert_page/fixtures/reference.html"],
+ "includes_allow": ["crates/nexus-governed-control/src/governed/files_exec_s1a_d_tests.rs|include_str|kernel/src/inert_page/fixtures/reference.html"],
  "subset_allow": {
   "crates/nexus-governed-control/src/authority/ids.rs": ["7069252b79c281629467d75524ef3feaebc5430444c8cecf71226ace1f38a2ea", "16980408904d671666046090a8caf2a9af49b028c115905a2a505ddff8f01fd5", "49da6563c19ed4ce5e6b506001ab3e85e12855f0802a6de005d417cf4039272b"],
   "crates/nexus-governed-control/src/authority/tests.rs": ["66d4c0119a27c74fa0e59f37a266aa4a17ac68bc114b609755c934253411cccf", "320147ddee4dd8d2af6b4610ee2b13b4dec607709e3cd53e7c30f8c7d4650c37"],
@@ -370,5 +370,6 @@
   {"name": "r72_b2_seam_fn_reads_bootstrap", "class": "control", "covers": ["Codex r3 #2", "R72 B2"], "recipes": ["ship"], "edits": [{"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "        if self.latched {\n            return Append::Latched;\n        }\n        let Some(seq) = self.last_seq.checked_add(1) else {\n", "new": "        if self.latched {\n            return Append::Latched;\n        }\n        if option_env!(\"RUSTC_BOOTSTRAP\").is_some() {\n            return Append::Latched;\n        }\n        let Some(seq) = self.last_seq.checked_add(1) else {\n"}], "expect": {"check": "capture", "recipe": "ship", "reason": "RUSTC_BOOTSTRAP differential differs", "unit": ["nexus_governed_control", "crates/nexus-governed-control/src/lib.rs"]}},
   {"name": "r72_b3_raw_string_braces", "class": "control", "covers": ["Codex r3 #3", "R72 B3"], "recipes": ["ship", "lane"], "edits": [{"file": "crates/nexus-governed-control/src/host_session/model.rs", "old": "        let mut record = \"not_required\";\n", "new": "        let mut record = \"not_required\";\n        let _decoy = r#\"\n    }\n}\nfn decoy() {\n\"#;\n"}], "expect": {"check": "C2", "unit": "nexus_governed_control", "change": "unpinned", "side": "lane", "item": "pub ( super ) fn register_model_private ( & self , endpoint : & str , spec : & ModelPinSpec ) -> Result < ModelIdentityView , SessionError >"}},
   {"name": "fable_s7_link_dotdot", "class": "bypass", "covers": ["Fable S7"], "recipes": [], "edits": [{"file": "crates/nexus-governed-control/src/lib.rs", "old": "pub mod authority;\n", "new": "include!(\"link/../more.rs\");\n#[cfg(test)]\nmod more;\npub mod authority;\n"}], "create": {"crates/nexus-governed-control/src/more.rs": "#[allow(dead_code)]\nfn decoy() {}\n", "crates/nexus-governed-control/more.rs": "#[allow(dead_code)]\nfn kept_for_test() {}\n", "crates/nexus-governed-control/extra/keep.txt": ""}, "symlink": {"crates/nexus-governed-control/src/link": "../extra"}, "expect": {"check": "subset", "file": "crates/nexus-governed-control/src/link", "form": "symlink"}}
- ]
+ ],
+ "placeholders": []
 }

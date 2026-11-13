@@ -6,7 +6,7 @@ stdlib only, with its reviewed data in route_a5.json. Comments and literals
 are lexed out; an attribute applies to the item, statement, field or arm it
 precedes, and a `mod` declaration's attributes apply to the module's file.
 
-  check --repo R --toolchain T
+  check --repo R --toolchain T --wrapper W --work DIR
       cfg:      every cfg naming the route cfg (attribute, cfg_attr, cfg!) is
                 exactly `#[cfg(mother_route_seams)]`, or the allowlisted
                 `#[cfg(any(test, mother_route_seams))]` at a listed item;
@@ -35,16 +35,44 @@ precedes, and a `mod` declaration's attributes apply to the module's file.
       gated:    each file's `#[cfg(mother_route_seams)]` spans, by the sha256
                 of each with its context (R60.6), exactly the reviewed list;
       targets:  the route packages' Cargo targets equal the reviewed list.
-  controls --repo R --toolchain T --work DIR
+    These lexical checks (C3) stay as defense in depth (R72: plus a lone CR, a
+    symlink, and `includes_allow` rows `file|macro|target` each matched exactly
+    once). The claims rest on rustc's own `-Zunpretty=expanded` text of every
+    workspace unit, captured by route_a5_expand on the real recipes (design rev
+    3.1, SB3E-R71/R72; ship and lane twice, ship at the dev profile, the owners'
+    lib tests), under `--wrapper` (the lane's route_rustc) in a fresh `--work`:
+      C1:       no reviewed hook name is an identifier in any non-test unit of
+                the shipped recipe (release and dev) or the lane recipe; a
+                `file|name` row only in the unit owning that file; each row
+                occurs in its scope's unit under the test configuration;
+      C2:       per unit both recipes compile, the line difference widened to
+                its enclosing items (token-aware, B3; the whole unit when any
+                line lies in no item) equals tools/gatebox/route/a5_expanded/
+                <crate>.pin, with each text's occurrence count;
+      placeholder: no include-family invocation left in any expansion (S5);
+      capture:  fresh, nonempty, each workspace unit once and equal to Cargo's
+                unit graph; first-compile outputs unchanged (B1); environment
+                plus RUSTC_BOOTSTRAP only and both RUSTC_BOOTSTRAP values equal
+                (B2); argv equal to the plain recipe's (B2); deterministic.
+    Not claimed: shipped-binary completeness (A3/A4, A6), third-party macro and
+    build-script behaviour (A1/A7), hygiene-level binding identity (printed text
+    loses it), ordinary code that adds neither a hook nor lane divergence.
+    `--write-pins` writes the current pins (a review aid), then judges them.
+  controls --repo R --toolchain T --wrapper W --work DIR
       The plants (mission U4b item 5), each applied to the source as read (or,
       for the Cargo target, to a scratch copy) and restored by hash; every
       plant must be reported by its own check, in a finding with its `expect`.
+      SB3E-R72: then the `expanded_plants`, each on a scratch copy built by the
+      recipes it names, and the capture controls (mutated healthy captures).
   list --repo R
       Review aid: the writer sites and seam-declared names this tree has.
 
 Exit 0 on pass, 1 on a finding; one JSON verdict on stdout.
 """
 import argparse
+import bisect
+import difflib
+import functools
 import hashlib
 import json
 import os
@@ -52,6 +80,9 @@ import re
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import route_a5_expand as E  # noqa: E402  (SB3E-R72: the shadow-expansion captures)
 
 DATA = "tools/gatebox/route/route_a5.json"
 SEAMS = "tools/gatebox/route/route_seams.json"
@@ -73,16 +104,19 @@ LEX = re.compile(r"""(?P<ws>[ \t\n\r]+)|(?P<line>//[^\n]*)
     "BESC", BESC).replace("ESC", ESC), re.X)
 
 
-def lex(text):
+def lex(text, keep=False):
     """(tokens as (text, kind, offset), refused forms as (form, offset)); comments (nested blocks too)
-    and whitespace dropped. A raw identifier keeps its `r#` (SB3E-R60.2)."""
+    and whitespace dropped, or with `keep` (SB3E-R72 B3) comments kept as kind `comment`. A raw identifier keeps
+    its `r#` (SB3E-R60.2)."""
     out, bad, at = [], [], 0
     while at < len(text):
         if text.startswith("/*", at):
-            depth, at = 1, at + 2
+            start, depth, at = at, 1, at + 2
             while depth and at < len(text):
                 depth += text.startswith("/*", at) - text.startswith("*/", at)
                 at += 2 if text.startswith(("/*", "*/"), at) else 1
+            bad += [("unclosed comment", start)] if depth else []
+            out += [(text[start:at], "comment", start)] if keep else []
             continue
         match = LEX.match(text, at)
         if match is None:
@@ -93,8 +127,8 @@ def lex(text):
         if kind in ("raw", "str", "chr") and (re.match(r"\w", text[match.end():match.end() + 1])
                                              or tok.startswith("br") and not tok.isascii()):
             bad.append(("literal suffix or non-ASCII byte literal", at))
-        if kind not in ("ws", "line"):
-            out.append((tok, "str" if kind in ("raw", "str") else kind, at))
+        if kind not in ("ws", "line") or keep and kind == "line":
+            out.append((tok, {"raw": "str", "str": "str", "line": "comment"}.get(kind, kind), at))
         at = match.end()
     return out, bad
 
@@ -325,15 +359,20 @@ class Source:
         return min(inner, key=lambda f: f[2] - f[1])[0] if inner else "-"
 
 
-def read_sources(repo, roots):
+def read_sources(repo, roots, links=None):
+    """The `.rs` files under roots, read as written (D4: no newline translation); each symlink met is appended
+    to `links` (SB3E-R72 C3: a `subset` finding)."""
     files = {}
     for root in roots:
         for base, dirs, names in os.walk(os.path.join(repo, root)):
             dirs.sort()
-            for name in sorted(names):
-                if name.endswith(".rs"):
-                    path = os.path.join(base, name)
-                    files[os.path.relpath(path, repo)] = open(path, encoding="utf-8").read()
+            for name in sorted(names + dirs):
+                path = os.path.join(base, name)
+                if os.path.islink(path) and links is not None:
+                    links.append(os.path.relpath(path, repo))
+                elif name.endswith(".rs") and name in names:
+                    with open(path, encoding="utf-8", newline="") as handle:
+                        files[os.path.relpath(path, repo)] = handle.read()
     return files
 
 
@@ -479,13 +518,19 @@ def writer_calls(src):
     return out
 
 
-def check(repo, toolchain, files=None, cargo_meta=None):
+def check(repo, toolchain, files=None, cargo_meta=None, links=None):
     data = json.load(open(os.path.join(repo, DATA), encoding="utf-8"))
     seams = json.load(open(os.path.join(repo, SEAMS), encoding="utf-8"))
-    files = files if files is not None else read_sources(repo, seams["route_sources"])
+    if files is None:
+        links = []
+        files = read_sources(repo, seams["route_sources"], links)
     parsed = {rel: Source(rel, text) for rel, text in files.items()}
     out = [{"check": "subset", "file": rel, "form": f, "offset": at} for rel, src in parsed.items()
            for f, at in src.refused]
+    # SB3E-R72 C3: a lone CR (rustc ends a line comment only at LF) and a symlink among the route sources.
+    out += [{"check": "subset", "file": rel, "form": "lone CR", "offset": m.start()} for rel, text in files.items()
+            for m in re.finditer(r"\r(?!\n)", text)]
+    out += [{"check": "subset", "file": rel, "form": "symlink"} for rel in links or ()]
     targets = cargo_meta if cargo_meta is not None else cargo_targets(repo, toolchain, seams["route_packages"])
     gates = file_gates(parsed, out, {row.split("|")[4] for row in targets if row.count("|") >= 4})
     gated = {rel: gated_rows(src, parsed) for rel, src in parsed.items()}
@@ -553,7 +598,7 @@ def check(repo, toolchain, files=None, cargo_meta=None):
         module_ok = scope == "local" or (src and "".join(src.t).count(f"constM:&str={lit};") == 1)
         if len(good) != 1 or not module_ok:
             out.append({"check": "markers", "seam": seam, "file": rel, "fn": fn})
-    hits = {}
+    hits, used = {}, {}
     for rel, src in parsed.items():
         hooked = {h.split("|")[-1] for h in data["test_hooks"] if "|" not in h or h.startswith(rel + "|")}
         for i, tok in enumerate(src.n):
@@ -575,7 +620,7 @@ def check(repo, toolchain, files=None, cargo_meta=None):
                 o = i + 2
                 if src.t[i + 1:o] == ["!"] and src.t[o:o + 1] in (["("], ["["], ["{"]) and src.match.get(o) == o + 2 \
                         and unquote(src.toks[o + 1]) is not None:
-                    sites.append((i, os.path.normpath(os.path.join(os.path.dirname(rel), unquote(src.toks[o + 1])))))
+                    sites.append((i, os.path.normpath(os.path.join(os.path.dirname(rel), unquote(src.toks[o + 1]))), tok))
                 else:
                     out.append({"check": "includes", "file": rel, "reason": "not a plain string literal",
                                 "offset": src.toks[i][2]})
@@ -584,16 +629,20 @@ def check(repo, toolchain, files=None, cargo_meta=None):
                 k = src.after_vis(a[2])
                 if j == a[1] + 2 and a[2] == a[1] + 6 and src.t[j + 1] == "=" and unquote(src.toks[j + 2]) is not None \
                         and src.t[k:k + 1] == ["mod"] and src.toks[k + 1][1] == "id" and src.t[k + 2:k + 3] == [";"]:
-                    sites.append((j, mod_child(src, k, parsed)[0]))
+                    sites.append((j, mod_child(src, k, parsed)[0], "path"))
                 else:
                     lit = unquote(src.toks[j + 2]) if src.t[j + 1:j + 2] == ["="] and j + 2 < a[2] else None
                     out.append(dict({"check": "includes", "file": rel, "reason": "not `#[path]` on a `mod x;`",
                                      "offset": src.toks[j][2]}, **({"path": os.path.normpath(os.path.join(
                                          os.path.dirname(rel), lit))} if lit is not None else {})))
-        for i, path in sites:
+        for i, path, macro in sites:
+            row = f"{rel}|{macro}|{path}"
+            used[row] = used.get(row, 0) + 1
             if (path not in parsed or {"tests", "route_cells"} & set(path.split(os.sep))) and not under(src, gates, i, TEST) \
-                    and f"{rel}|{path}" not in data["includes_allow"]:
+                    and row not in data["includes_allow"]:
                 out.append({"check": "includes", "file": rel, "path": path})
+    out += [{"check": "includes", "row": row, "reason": "allow row matched %d times" % used.get(row, 0)}
+            for row in data["includes_allow"] if used.get(row, 0) != 1]
     allow = data["subset_allow"]
     for rel in sorted(set(hits) | set(allow)):
         have = [h[0] for h in hits.get(rel, [])]
@@ -632,7 +681,302 @@ def sha(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def controls(repo, toolchain, work):
+# ---- SB3E-R72 (design rev 3.1): C1 and C2 over rustc's own expanded text, captured by route_a5_expand ----------
+PINS = "tools/gatebox/route/a5_expanded"
+RECIPES = (("ship", "ship"), ("ship2", "ship"), ("lane", "lane"), ("lane2", "lane"), ("ship-dev", "ship-dev"),
+           ("test", "test"))
+QUALIFIERS = ("const", "async", "unsafe", "safe", "default", "extern")
+STARTERS = {"pub", "fn", "const", "static", "struct", "enum", "union", "trait", "impl", "mod", "use", "type", "extern",
+            "unsafe", "async", "macro_rules", "default", "safe", "#"}
+
+
+class Items:
+    """B3: each item of one expansion, (start, end, container path, header), from tokens (strings, raw strings, byte
+    and C strings, char vs lifetime, nested comments) by bracket depth and `;`, never indentation. The attributes and
+    comments directly above an item are its own; a span takes whole lines when only blanks lie outside it. `mod`,
+    `impl`, `trait` and `extern` blocks are descended. `uncertain` names any form not classified (fail closed)."""
+
+    def __init__(self, text):
+        self.text, (self.all, bad) = text, lex(text, keep=True)
+        self.code = [i for i, x in enumerate(self.all) if x[1] != "comment"]
+        self.t, self.k = [self.all[i][0] for i in self.code], [self.all[i][1] for i in self.code]
+        self.uncertain, self.match, self.spans, stack = [f"lexer: {f} at {at}" for f, at in bad], {}, [], []
+        for i, (tok, kind) in enumerate(zip(self.t, self.k)):
+            if kind == "p" and tok in "([{":
+                stack.append(i)
+            elif kind == "p" and tok in ")]}":
+                if not stack or "([{"[")]}".index(tok)] != self.t[stack[-1]]:
+                    stack = [self.uncertain.append(f"unbalanced {tok} at {self.all[self.code[i]][2]}")]
+                    break
+                self.match[stack.pop()] = i
+        self.uncertain += ["unclosed bracket"] * bool(stack)
+        if not self.uncertain:
+            self.container(0, len(self.t), ())
+
+    def add(self, start, end, path, header):
+        j = self.code[start]
+        while j > 0 and self.all[j - 1][1] == "comment":
+            j -= 1
+        a, z, text = self.all[j][2], self.all[self.code[end - 1]][2] + len(self.t[end - 1]), self.text
+        b, e = text.rfind("\n", 0, a) + 1, text.find("\n", z)
+        e = len(text) if e < 0 else e + 1
+        self.spans.append((b if not text[b:a].strip(" \t") else a, e if not text[z:e].strip(" \t\n") else z, path,
+                           header.replace("\t", "\\t").replace("\n", "\\n")))
+
+    def container(self, i, close, path):
+        t, k = self.t, self.k
+        while i < close:
+            start = i
+            if t[i:i + 3] == ["#", "!", "["]:
+                self.add(start, self.match[i + 2] + 1, path, "#!")
+                i = self.match[i + 2] + 1
+                continue
+            while i + 1 < close and t[i:i + 2] == ["#", "["]:
+                i = self.match[i + 1] + 1
+            q = i + (t[i:i + 1] == ["pub"])
+            q = self.match[q] + 1 if t[i:i + 1] == ["pub"] and t[q:q + 1] == ["("] else q
+            while q + 1 < close and t[q] in QUALIFIERS and t[q:q + 2] != ["extern", "crate"] and not (
+                    t[q] == "const" and k[q + 1] == "id" and t[q + 1] not in QUALIFIERS + ("fn",)):
+                q += 2 if t[q] == "extern" and k[q + 1] == "str" else 1
+            kw, body, end = t[q] if q < close else "", None, None
+            if kw in ("use", "static", "type", "const") or t[q:q + 2] == ["extern", "crate"]:
+                end = self.scan(q, close, ";")
+            elif kw in ("fn", "struct", "enum", "union", "impl", "trait", "mod") or kw == "{" and "extern" in t[i:q]:
+                end = self.scan(q, close, ";{")
+                if end is not None and t[end - 1] == "{":
+                    body = end - 1
+                    end = self.match[body] + 1
+                    body = body if kw not in ("fn", "struct", "enum", "union") else None
+            elif t[q:q + 2] == ["macro_rules", "!"] and q + 3 < close and t[q + 3] in "([{":
+                end = self.match[q + 3] + 1
+                end += t[q + 3] != "{" and end < close and t[end] == ";"
+            if end is None or end > close or end < close and t[end] not in STARTERS and k[end] != "id":
+                return self.uncertain.append(f"unclassified item at {self.all[self.code[start]][2]}: {' '.join(t[start:start + 6])}")
+            stop = self.scan(q, end, ";{") or end
+            self.add(start, end, path, " ".join(t[i:min(stop - (t[stop - 1] in ";{"), i + 40)]))
+            if body is not None:
+                self.container(body + 1, self.match[body], path + (self.spans[-1][3],))
+            i = end
+
+    def scan(self, i, close, stop):
+        """Past the first token in `stop` at depth 0 (brackets skipped); None if none before close."""
+        while i < close:
+            if self.k[i] == "p" and self.t[i] in stop:
+                return i + 1
+            i = self.match[i] + 1 if self.k[i] == "p" and self.t[i] in "([{" else i + 1
+        return None
+
+    def chosen(self, lines):
+        """B3: the innermost item holding each differing line (0-based); None when a line lies in no item (then
+        the caller pins the whole unit). Chosen items inside other chosen items are dropped."""
+        starts = [0] + [m.end() for m in re.finditer("\n", self.text)]
+        owner = {}
+        for n, (a, z, _, _) in sorted(enumerate(self.spans), key=lambda s: s[1][0] - s[1][1]):
+            if (a == 0 or self.text[a - 1] == "\n") and (z == len(self.text) or self.text[z - 1] == "\n"):
+                for line in range(bisect.bisect_right(starts, a) - 1, bisect.bisect_left(starts, z)):
+                    owner[line] = n
+        if any(line not in owner for line in lines):
+            return None
+        picked = {self.spans[owner[line]] for line in lines}
+        return sorted(s for s in picked if not any(o != s and o[0] <= s[0] and s[1] <= o[1] for o in picked))
+
+
+def pin_blocks(a, b):
+    """C2: per differing enclosing item, (side, module path, item, occurrences of its exact text in that side's unit,
+    text); both whole units when either side is uncertain or a differing line lies in no item (B3)."""
+    if a == b:
+        return []
+    la, lb, sides = a.split("\n"), b.split("\n"), ([], [])
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, la, lb, autojunk=False).get_opcodes():
+        if op != "equal":
+            sides[0].extend(range(i1, i2))
+            sides[1].extend(range(j1, j2))
+    out = []
+    for side, text, lines in (("ship", a, sides[0]), ("lane", b, sides[1])):
+        items = Items(text)
+        spans = None if items.uncertain else items.chosen(lines)
+        if spans is None:
+            return [("whole-ship", "", "", 1, a), ("whole-lane", "", "", 1, b)]
+        out += [(side, " > ".join(s[2]), s[3], text.count(text[s[0]:s[1]]), text[s[0]:s[1]]) for s in spans]
+    return out
+
+
+def render_pin(crate, source, blocks):
+    head = [f"# SB-3E A5 C2 pin (SB3E-R72): {crate} ({source}), rustc -Zunpretty=expanded, shipped vs lane recipe.\n",
+            "# Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's"
+            " unit, bytes (tab-separated); then exactly that many bytes of text.\n"]
+    return "".join(head + [f"=== {s}\t{p}\t{h}\tcount {n}\tbytes {len(t.encode())}\n{t}" for s, p, h, n, t in blocks])
+
+
+def parse_pin(text):
+    """The blocks of a pin file (its byte counts frame each text); None if it does not parse."""
+    data, out, at = text.encode(), [], 0
+    while at < len(data):
+        end = data.find(b"\n", at)
+        line = data[at:end].decode()
+        if line.startswith("#"):
+            at = end + 1
+            continue
+        m = re.fullmatch(r"=== ([^\t]*)\t([^\t]*)\t([^\t]*)\tcount (\d+)\tbytes (\d+)", line)
+        if end < 0 or not m or end + 1 + int(m[5]) > len(data):
+            return None
+        out.append((m[1], m[2], m[3], int(m[4]), data[end + 1:end + 1 + int(m[5])].decode()))
+        at = end + 1 + int(m[5])
+    return out
+
+
+@functools.lru_cache(maxsize=16)
+def idents(text):
+    """(identifier set, include-family invocations as (macro, literal)) of one expansion; comments and literals out."""
+    toks = lex(text)[0]
+    found = {x[0][2:] if x[0].startswith("r#") else x[0] for x in toks if x[1] == "id"}
+    calls = [(x[0], unquote(toks[i + 3]) if i + 3 < len(toks) else None) for i, x in enumerate(toks[:-1])
+             if x[1] == "id" and x[0] in INCLUDES and toks[i + 1][0] == "!"]
+    return frozenset(found), tuple(calls)
+
+
+def units(cap, test=None):
+    return {(r["crate"], r["source"], r["test"]): cap["text"].get(r.get("file"), "") for r in cap["rows"]
+            if "passthrough" not in r and (test is None or r["test"] == test)}
+
+
+def owners(data, meta):
+    """Each scoped hook row's owning unit key (crate, root, False): the lib, else the one bin, of the route targets whose
+    root's directory is the longest holding the file (design rev 3 C1); None when unresolvable."""
+    found = {}
+    for row in (h for h in data["test_hooks"] if "|" in h):
+        rel = row.split("|")[0]
+        cands = [x.split("|") for x in meta if x.split("|")[2] in ("lib", "bin")
+                 and rel.startswith(os.path.dirname(x.split("|")[4]) + "/")]
+        if not cands:
+            found[row] = None
+            continue
+        best = [c for c in cands if len(c[4]) - len(os.path.basename(c[4])) == max(len(x[4]) - len(os.path.basename(x[4])) for x in cands)]
+        pick = [c for c in best if c[2] == "lib"] or best
+        found[row] = (pick[0][1].replace("-", "_"), pick[0][4], False) if len(pick) == 1 else None
+    return found
+
+
+def capture_rules(name, cap, graph, plain):
+    """Fresh, nonempty, each workspace unit once and equal to Cargo's unit graph; each first compile exit 0 with its
+    outputs unchanged (B1); env difference exactly RUSTC_BOOTSTRAP and the differential equal (B2); every expansion
+    nonempty; the argv equal to the plain recipe's modulo R72 B2's list (B2)."""
+    out, rows = [], [r for r in cap["rows"] if "passthrough" not in r]
+    f = lambda reason, **kw: out.append(dict({"check": "capture", "recipe": name, "reason": reason}, **kw))
+    if cap["rc"] != 0 or not rows:
+        f("recipe failed or captured nothing", exit=cap["rc"], units=len(rows))
+    for r in cap["rows"]:
+        if "passthrough" in r and r["passthrough"] != ["-vV"] and "___" not in values_of(r["passthrough"], "--crate-name"):
+            f("unexpected passthrough", argv=r["passthrough"][:8])
+    keys = [(r["crate"], r["source"], r["test"]) for r in rows]
+    for r in rows:
+        unit, sh = [r["crate"], r["source"]], r.get("shadow", [])
+        reasons = [why for bad, why in (
+            (r["rc"] != 0, "compile failed"), (not r.get("unchanged"), "first compile's outputs changed"),
+            (not r.get("env_ok"), "environment differs beyond RUSTC_BOOTSTRAP"),
+            (len(sh) != 2 or any(s["rc"] or not s["bytes"] for s in sh), "expansion failed"),
+            (len({s["sha256"] for s in sh}) > 1, "RUSTC_BOOTSTRAP differential differs"),
+            (any(s["wrote"] for s in sh), "shadow wrote outputs"),
+            (not cap["text"].get(r.get("file")) or sh and sha(cap["text"].get(r.get("file"), "")) != sh[0]["sha256"],
+             "capture missing or empty")) if bad]
+        for why in reasons:
+            f(why, unit=unit)
+    if len(set(keys)) != len(keys):
+        f("a unit captured more than once")
+    if graph is not None and sorted(keys) != graph[1]:
+        f("units differ from Cargo's unit graph", only_capture=sorted(set(keys) - set(graph[1] or [])),
+          only_graph=sorted(set(graph[1] or []) - set(keys)))
+    if plain is not None:
+        found = {k: v for k, v in plain[0].items() if k[1] and not k[1].startswith("/")}
+        if plain[1] != 0 or sorted(found) != sorted(keys):
+            f("plain recipe units differ", exit=plain[1])
+        for r in rows:
+            mine = E.normalized(r["argv"], cap["target"], r["extra"])
+            if found.get((r["crate"], r["source"], r["test"])) != [mine]:
+                f("argv differs from the plain recipe", unit=[r["crate"], r["source"]])
+    return out
+
+
+def values_of(args, opt):
+    return [b for a, b in zip(args, args[1:]) if a == opt]
+
+
+def expanded(repo, data, caps, meta, graph=None, plain=None):
+    """C1, C2, placeholders and the capture rules over whichever recipes `caps` holds."""
+    graph, plain, out = graph or {}, plain or {}, []
+    for name, cap in caps.items():
+        kind = dict(RECIPES)[name]
+        out += capture_rules(name, cap, (kind, graph[kind]) if kind in graph else None,
+                             plain.get(kind) if name in ("ship", "lane") else None)
+        for (crate, source, test), text in units(cap).items():  # S5: every expansion scanned
+            for macro, lit in idents(text)[1]:
+                path = os.path.normpath(os.path.join(os.path.dirname(source), lit or ""))
+                ok = lit and os.path.isfile(os.path.join(repo, path)) and \
+                    f"{crate}|{path}|{hashlib.sha256(open(os.path.join(repo, path), 'rb').read()).hexdigest()}" in data["placeholders"]
+                out += [] if ok else [{"check": "placeholder", "recipe": name, "unit": crate, "macro": macro, "literal": lit}]
+    for a in ("ship", "lane"):  # determinism: each real recipe captured twice, byte-equal
+        if a in caps and a + "2" in caps and units(caps[a]) != units(caps[a + "2"]):
+            out.append({"check": "capture", "recipe": a, "reason": "nondeterministic expansion",
+                        "units": sorted(k[0] for k in set(units(caps[a])) | set(units(caps[a + "2"]))
+                                        if units(caps[a]).get(k) != units(caps[a + "2"]).get(k))})
+    own = owners(data, meta)
+    out += [{"check": "C1", "reason": "owner unresolved", "row": row} for row, key in own.items() if key is None]
+    for name in ("ship", "ship-dev", "lane"):  # C1 (B4: every non-test unit of both recipes and the dev profile)
+        for key, text in units(caps.get(name, {"rows": [], "text": {}}), False).items():
+            ids = idents(text)[0]
+            out += [{"check": "C1", "recipe": name, "unit": key[0], "source": key[1], "hook": row.split("|")[-1]}
+                    for row in data["test_hooks"] if row.split("|")[-1] in ids and ("|" not in row or own[row] == key)]
+    if "test" in caps:  # positive control: each row occurs in its scope's unit under the test configuration
+        tests = units(caps["test"], True)
+        for row in data["test_hooks"]:
+            scope = [t for k, t in tests.items() if "|" not in row or own[row] and k[:2] == own[row][:2]]
+            if not any(row.split("|")[-1] in idents(t)[0] for t in scope):
+                out.append({"check": "C1", "reason": "stale row", "row": row})
+    if "ship" in caps and "lane" in caps:
+        out += c2(repo, units(caps["ship"], False), units(caps["lane"], False))
+    return out
+
+
+def c2(repo, ship, lane):
+    """C2: per unit both recipes compile (non-test), the item-level difference equals its committed pin."""
+    out, common = [], sorted(k for k in set(ship) & set(lane))
+    folder = os.path.join(repo, PINS)
+    have = sorted(n[:-4] for n in os.listdir(folder) if n.endswith(".pin")) if os.path.isdir(folder) else []
+    if have != sorted(k[0] for k in common) or len({k[0] for k in common}) != len(common):
+        out.append({"check": "C2", "reason": "pin files differ from the common units", "have": have,
+                    "common": sorted(k[0] for k in common)})
+    for crate, source, _ in common:
+        blocks = pin_blocks(ship[(crate, source, False)], lane[(crate, source, False)])
+        path = os.path.join(folder, crate + ".pin")
+        want_text = open(path, encoding="utf-8", newline="").read() if os.path.isfile(path) else ""
+        if render_pin(crate, source, blocks) != want_text:
+            want = parse_pin(want_text) or []
+            out += [{"check": "C2", "unit": crate, "change": change, "side": b[0], "path": b[1], "item": b[2], "count": b[3]}
+                    for change, have_, other in (("unpinned", blocks, want), ("stale", want, blocks)) for b in have_ if b not in other]
+            out += [{"check": "C2", "unit": crate, "reason": "pin text differs"}] if blocks == want else []
+    return out
+
+
+def collect(repo, toolchain, wrapper, work):
+    """Every A5 capture (ship and lane twice, ship-dev, test), Cargo's unit graphs and the plain ship and lane runs."""
+    os.makedirs(work)
+    caps = {name: load(*E.capture(repo, toolchain, kind, work, name, wrapper), os.path.join(work, "t-" + name))
+            for name, kind in RECIPES}
+    graph = {kind: E.graph(repo, toolchain, kind, work) for kind in ("ship", "lane", "ship-dev", "test")}
+    plain = {kind: E.plain(repo, toolchain, kind, work, wrapper) for kind in ("ship", "lane")}
+    return caps, graph, plain
+
+
+def load(rows, capdir, rc, target, keep=False):
+    """One capture's rows and texts in memory; its target is removed unless kept warm (controls)."""
+    if not keep:
+        shutil.rmtree(target, ignore_errors=True)
+    text = {r["file"]: open(os.path.join(capdir, r["file"]), encoding="utf-8", newline="").read() for r in rows
+            if r.get("file") and os.path.isfile(os.path.join(capdir, r["file"]))}
+    return {"rows": rows, "text": text, "rc": rc, "target": target}
+
+
+def controls(repo, toolchain, work, wrapper):
     data = json.load(open(os.path.join(repo, DATA), encoding="utf-8"))
     seams = json.load(open(os.path.join(repo, SEAMS), encoding="utf-8"))
     files = read_sources(repo, seams["route_sources"])
@@ -673,7 +1017,100 @@ def controls(repo, toolchain, work):
         results.append(row)
         if not row["killed"]:
             findings.append({"kind": "plant_not_reported_by_its_check", "plant": plant["name"], "row": row})
-    return findings, {"plants": results}
+    more, rows = expanded_controls(repo, toolchain, wrapper, os.path.join(work, "expanded"), data, seams, meta)
+    return findings + more, {"plants": results, "expanded": rows}
+
+
+def expanded_controls(repo, toolchain, wrapper, work, data, seams, meta):
+    """SB3E-R72 plants on a scratch copy, each built by the recipes it names with the shadow wrapper (warm targets,
+    every workspace unit rebuilt) and judged by the new checks on the planted tree; then the capture controls,
+    each a mutation of the healthy captures or of the data. Each must give a finding carrying its `expect`."""
+    import route_a4  # noqa: E402  (scratch_copy)
+    os.makedirs(work)
+    tree = route_a4.scratch_copy(repo, work)[0]
+    rows, findings, targets = [], [], {}
+
+    def run(name, kinds, keep_emit=False):
+        caps = {}
+        for kind in kinds:
+            target = targets.setdefault(kind, os.path.join(work, "t-" + kind))
+            caps[kind] = load(*E.capture(tree, toolchain, kind, work, f"{name}-{kind}", wrapper, target, keep_emit), target, True)
+        return caps
+
+    def judge(name, cls, expect, got, **extra):
+        row = dict(extra, name=name, **{"class": cls, "expect": expect})
+        row["killed"] = any(all(f.get(k) == v for k, v in expect.items()) for f in got)
+        row["got"] = [] if row["killed"] else got[:5]
+        rows.append(row)
+        findings.extend([] if row["killed"] else [{"kind": "expanded_plant_not_killed", "plant": name, "got": got[:5]}])
+
+    healthy = run("healthy", ("ship", "lane", "test"))
+    graph = {"ship": E.graph(tree, toolchain, "ship", work)}
+    base = expanded(repo, data, healthy, meta, graph)
+    findings += [{"kind": "unplanted_captures_have_findings", "findings": base[:5]}] if base else []
+    for plant in data["expanded_plants"]:
+        made, before, unique = [], {}, True
+        for rel, text in list(plant.get("create", {}).items()) + list(plant.get("symlink", {}).items()):
+            path = os.path.join(tree, rel)
+            up = os.path.dirname(path)
+            while not os.path.isdir(up):
+                made.insert(0, up)
+                up = os.path.dirname(up)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            unique &= not os.path.lexists(path)
+            os.symlink(text, path) if rel in plant.get("symlink", {}) else open(path, "w", encoding="utf-8", newline="").write(text)
+        for e in plant.get("edits", []):
+            path = os.path.join(tree, e["file"])
+            text = before.setdefault(path, open(path, encoding="utf-8", newline="").read())
+            now = open(path, encoding="utf-8", newline="").read()
+            unique &= now.count(e["old"]) == 1
+            open(path, "w", encoding="utf-8", newline="").write(now.replace(e["old"], e["new"]))
+        try:
+            caps = run(plant["name"], plant["recipes"], plant.get("keep_emit", False))
+            links = []
+            got = expanded(repo, data, caps, meta) + check(repo, toolchain, read_sources(tree, seams["route_sources"], links), meta, links)
+        finally:
+            for path, text in before.items():
+                open(path, "w", encoding="utf-8", newline="").write(text)
+            for rel in list(plant.get("create", {})) + list(plant.get("symlink", {})):
+                os.unlink(os.path.join(tree, rel))
+            for up in reversed(made):
+                os.rmdir(up)
+        restored = all(open(p, encoding="utf-8", newline="").read() == t for p, t in before.items())
+        judge(plant["name"], plant["class"], plant["expect"], got if unique and restored else [], unique=unique, restored=restored)
+    # Capture controls: mutations of the healthy captures and data (design rev 3: preservation; R72 B1, B2, S5).
+    ship, lane = healthy["ship"], healthy["lane"]
+    first = lambda cap, crate: next(r for r in cap["rows"] if r.get("crate") == crate)
+    variant = lambda cap, **kw: dict(cap, **kw)
+    hands = first(lane, "mother_hands")["file"]
+    cases = [
+        ("missing_unit", {"ship": variant(ship, rows=[r for r in ship["rows"] if r.get("crate") != "nexus_crypto"])}, data,
+         {"check": "capture", "recipe": "ship", "reason": "units differ from Cargo's unit graph"}),
+        ("empty_capture", {"ship": variant(ship, text=dict(ship["text"], **{first(ship, "nexus_crypto")["file"]: ""}))}, data,
+         {"check": "capture", "recipe": "ship", "reason": "capture missing or empty"}),
+        ("nondeterministic", {"lane": lane, "lane2": variant(lane, text=dict(lane["text"], **{hands: lane["text"][hands] + "\n"}))},
+         data, {"check": "capture", "recipe": "lane", "reason": "nondeterministic expansion"}),
+        ("environment", {"ship": variant(ship, rows=[dict(r, env_ok=False) for r in ship["rows"]])}, data,
+         {"check": "capture", "recipe": "ship", "reason": "environment differs beyond RUSTC_BOOTSTRAP"}),
+        ("placeholder_lane_only", {"lane": variant(lane, text=dict(lane["text"], **{hands: lane["text"][hands] + 'const P: &str = include_str!("x");\n'}))},
+         data, {"check": "placeholder", "recipe": "lane", "unit": "mother_hands", "macro": "include_str"}),
+        ("stale_row", healthy, dict(data, test_hooks=data["test_hooks"] + ["never_written_for_test"]),
+         {"check": "C1", "reason": "stale row", "row": "never_written_for_test"}),
+        ("owner_unresolved", healthy, dict(data, test_hooks=data["test_hooks"] + ["elsewhere/x.rs|kept_for_test"]),
+         {"check": "C1", "reason": "owner unresolved", "row": "elsewhere/x.rs|kept_for_test"}),
+        ("scope_dropped_model_record", {"ship": ship}, dict(data, test_hooks=data["test_hooks"] + ["model_record"]),
+         {"check": "C1", "recipe": "ship", "unit": "nexus_governed_control", "hook": "model_record"})]
+    for name, caps, rows_data, expect in cases:
+        judge(name, "capture", expect, expanded(repo, rows_data, caps, meta, graph if "ship" in caps else None))
+    wrong = {k: [v[0] + ["--cfg", "planted"]] for k, v in ((r_key(r), [E.normalized(r["argv"], ship["target"], r["extra"])])
+                                                         for r in ship["rows"] if "passthrough" not in r)}
+    judge("argv_reconcile", "capture", {"check": "capture", "recipe": "ship", "reason": "argv differs from the plain recipe"},
+          expanded(repo, data, {"ship": ship}, meta, None, {"ship": (wrong, 0)}))
+    return findings, rows
+
+
+def r_key(r):
+    return r["crate"], r["source"], r["test"]
 
 
 def main():
@@ -682,6 +1119,8 @@ def main():
     parser.add_argument("--repo", required=True)
     parser.add_argument("--toolchain")
     parser.add_argument("--work")
+    parser.add_argument("--wrapper", help="route_rustc, the lane's own wrapper (SB3E-R72)")
+    parser.add_argument("--write-pins", action="store_true")
     args = parser.parse_args()
     repo = os.path.abspath(args.repo)
     if args.command == "list":
@@ -693,13 +1132,24 @@ def main():
     if not args.toolchain:
         sys.exit("route_a5: --toolchain is required")
     toolchain = os.path.abspath(args.toolchain)
+    work = os.path.abspath(args.work or "")
+    if not args.work or os.path.lexists(work) or not args.wrapper:
+        sys.exit("route_a5: check and controls need --wrapper and a fresh --work directory")
+    wrapper = os.path.abspath(args.wrapper)
     if args.command == "check":
-        findings, out = check(repo, toolchain), {}
+        seams = json.load(open(os.path.join(repo, SEAMS), encoding="utf-8"))
+        meta = cargo_targets(repo, toolchain, seams["route_packages"])
+        findings, (caps, graph, plain) = check(repo, toolchain, None, meta), collect(repo, toolchain, wrapper, work)
+        if args.write_pins:  # review aid: the current pins, then judged like any other
+            os.makedirs(os.path.join(repo, PINS), exist_ok=True)
+            ship, lane = units(caps["ship"], False), units(caps["lane"], False)
+            for k in sorted(set(ship) & set(lane)):
+                with open(os.path.join(repo, PINS, k[0] + ".pin"), "w", encoding="utf-8", newline="") as handle:
+                    handle.write(render_pin(k[0], k[1], pin_blocks(ship[k], lane[k])))
+        findings += expanded(repo, json.load(open(os.path.join(repo, DATA), encoding="utf-8")), caps, meta, graph, plain)
+        out = {"units": {name: sorted(k[0] + ("/test" if k[2] else "") for k in units(cap)) for name, cap in caps.items()}}
     else:
-        work = os.path.abspath(args.work or "")
-        if not args.work or os.path.lexists(work):
-            sys.exit("route_a5: controls need a fresh --work directory")
-        findings, out = controls(repo, toolchain, work)
+        findings, out = controls(repo, toolchain, work, wrapper)
     print(json.dumps(dict(out, verdict="fail" if findings else "pass", findings=findings), sort_keys=True))
     return 1 if findings else 0
 

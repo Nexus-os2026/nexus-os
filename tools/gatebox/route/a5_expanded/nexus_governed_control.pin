@@ -1,0 +1,2085 @@
+# SB-3E A5 C2 pin (SB3E-R72): nexus_governed_control (crates/nexus-governed-control/src/lib.rs), rustc -Zunpretty=expanded, shipped vs lane recipe.
+# Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's unit, bytes (tab-separated); then exactly that many bytes of text.
+=== ship	pub mod host_session > mod model > impl CallGate < '_ >	fn predicates ( & self , kind : RequestKind ) -> Result < ( ) , Refusal >	count 1	bytes 4807
+            fn predicates(&self, kind: RequestKind) -> Result<(), Refusal> {
+                use {
+                    AuthorityError as E,
+                    ModelError::{Cancelled, Stopped, Timeout},
+                };
+                let (core, scope) =
+                    (&self.door.core, &self.door.context.scope);
+                let clock = self.authority.clock();
+                let grant =
+                    OriginalGrant {
+                        grants: self.authority.grants(),
+                        grant: self.grant,
+                        clock: (clock.monotonic_ms(), clock.wall_ms()),
+                    };
+                let at = self.sample();
+                let expired = self.lapsed(at);
+                let runs = self.authority.runs();
+                let hold =
+                    runs.try_request_hold().map_err(|poisoned|
+                                {
+                                    if poisoned {
+                                        core.model.uncertain.store(true, Ordering::SeqCst);
+                                        self.door.context.fail();
+                                    }
+                                    ("refused:hold", Cancelled)
+                                })?;
+                if expired { return Err(("refused:1", Timeout)); }
+                let judged = scope.judge(Some(at));
+                if judged == Err(crate::host_session::Lapse::Expired) {
+                    return Err(("refused:1", Timeout));
+                }
+                let word = core.cell.session_word();
+                if core.model.uncertain.load(Ordering::SeqCst) ||
+                            word != scope.snapshot || judged.is_err() {
+                    return Err(("refused:1", Cancelled));
+                }
+                self.watch.check_now().map_err(|_|
+                            { ("refused:2", Stopped) })?;
+                if !self.primary.try_health().is_some_and(|h|
+                                !h.latched && h.owed == 0 && !h.recovery_required &&
+                                    h.unsettled == 0) {
+                    return Err(("refused:3", Cancelled));
+                }
+                if self.ticket.ended() {
+                    return Err(("refused:4", Cancelled));
+                }
+                let _held =
+                    match hold.live(self.ticket, &grant) {
+                        Ok(held) => held,
+                        Err(error) => {
+                            drop(hold);
+                            let poisoned = crate::authority::run::GRANT_POISONED;
+                            if #[allow(non_exhaustive_omitted_patterns)] match error {
+                                    AuthorityError::Unavailable(w) if w == poisoned => true,
+                                    _ => false,
+                                } {
+                                core.model.uncertain.store(true, Ordering::SeqCst);
+                                self.door.context.fail();
+                            }
+                            let grant =
+                                #[allow(non_exhaustive_omitted_patterns)] match error {
+                                    E::GrantNotLive | E::Unavailable(_) => true,
+                                    _ => false,
+                                };
+                            return Err((if grant { "refused:5" } else { "refused:4" },
+                                        Cancelled));
+                        }
+                    };
+                let unspent =
+                    self.charged.load(Ordering::SeqCst) &&
+                        !self.spent.load(Ordering::SeqCst);
+                if kind == RequestKind::Chat && !unspent {
+                    return Err(("refused:6", Cancelled));
+                }
+                if self.invocation.is_revoked() {
+                    return Err(("refused:7", Cancelled));
+                }
+                if let Err((error, lapse)) =
+                        scope.admit_judged(&self.door.context.cell, Some(at)) {
+                    drop((_held, hold));
+                    if #[allow(non_exhaustive_omitted_patterns)] match error {
+                            E::Capacity => true,
+                            _ => false,
+                        } {
+                        self.door.context.fail();
+                        return Err(("refused:8", Cancelled));
+                    }
+                    let expired =
+                        lapse == Some(crate::host_session::Lapse::Expired);
+                    return Err(("refused:8",
+                                if expired { Timeout } else { Cancelled }));
+                }
+                if kind == RequestKind::Chat {
+                    self.spent.store(true, Ordering::SeqCst);
+                }
+                Ok(())
+            }
+=== lane	pub mod authority > pub mod run	use crate :: broker :: route_seams ::	count 1	bytes 53
+        use crate::broker::route_seams::{self, Ctx};
+=== lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn route_poison_runs ( & self )	count 1	bytes 771
+            /// SB-3E S4 (AM-2 B.2): a panic while the run table is held, caught; it
+            /// poisons that one lock and changes nothing else.
+            pub(crate) fn route_poison_runs(&self) {
+                const M: &str = "nexus-mother-route-seam-S4-runs";
+                std::hint::black_box(M.as_bytes());
+                let _ =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+                                {
+                                    let _held = self.runs.lock();
+                                    {
+                                        ::core::panicking::panic_fmt(format_args!("route seam S4: run table poisoned"));
+                                    };
+                                }));
+            }
+=== lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn admit_session_attempt ( self : & Arc < Self > , ( run , agent , group , identity ) : ( RunId , & AgentId , GroupId , [ u8 ; 32 ] ) ,	count 1	bytes 4683
+            pub(crate) fn admit_session_attempt(self: &Arc<Self>,
+                (run, agent, group, identity):
+                    (RunId, &AgentId, GroupId, [u8; 32]), original: &HaltCell,
+                grant: &OriginalGrant<'_>,
+                invocation: &crate::inference::InvocationObserver)
+                -> Result<SessionAttempt, AuthorityError> {
+                let mut table =
+                    self.runs.try_lock().map_err(|error|
+                                {
+                                    if #[allow(non_exhaustive_omitted_patterns)] match error {
+                                            TryLockError::Poisoned(_) => true,
+                                            _ => false,
+                                        } {
+                                        original.fail_session();
+                                    }
+                                    AuthorityError::Unavailable("model run hold unavailable")
+                                })?;
+                if self.stopped.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::EmergencyStopped);
+                }
+                if self.closed.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::Closed("the desktop is quitting"));
+                }
+                let door =
+                    crate::governed::AgentDoor::retained_identity(&live_door(&mut table.doors,
+                                                group, agent)?.life, group, agent,
+                                original).ok_or(AuthorityError::NotMember)?;
+                let door_halted =
+                    live_door(&mut table.doors, group,
+                                    agent)?.halt_flag.clone();
+                let entry =
+                    table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+                live_member(&table, entry, agent, group)?;
+                host_prerequisites(&table, entry,
+                        self.stop_number.load(Ordering::SeqCst))?;
+                let cell =
+                    entry.file_cell.as_ref().filter(|c|
+                                        c.host() &&
+                                            c.same(original)).ok_or(AuthorityError::NotMember)?.clone();
+                if entry.opened_by != Some(group) {
+                    return Err(AuthorityError::NotMember);
+                }
+                let files =
+                    entry.files_admission.as_ref().ok_or(AuthorityError::NotAdmitted)?;
+                let admission =
+                    entry.inference_admission.as_ref().ok_or(AuthorityError::NotAdmitted)?;
+                if admission.identity != identity {
+                    return Err(AuthorityError::ModelIdentityMismatch);
+                }
+                if admission.contract_hash != files.contract_hash ||
+                                    admission.request != files.request ||
+                                admission.evidence_seq != files.evidence_seq ||
+                            admission.kind != files.kind ||
+                        admission.consented_wall_ms != files.consented_wall_ms {
+                    return Err(AuthorityError::NoConsent);
+                }
+                if entry.model_attempts >= MAX_MODEL_ATTEMPTS {
+                    return Err(AuthorityError::ModelCall(ModelError::OverBudget));
+                }
+                let ordinal =
+                    entry.model_attempts.checked_add(1).ok_or(AuthorityError::Capacity)?;
+                let _grant_held = grant.live(files)?;
+                route_seams::at("model.attempt.granted",
+                    Ctx::default().run(run).attempt(ordinal));
+                let ticket =
+                    SessionAttempt {
+                        run,
+                        agent: agent.clone(),
+                        group,
+                        admission: admission.clone(),
+                        ordinal,
+                        door,
+                        registry: Arc::downgrade(self),
+                        cell: cell.clone(),
+                        cancelled: entry.cancelled.clone(),
+                        door_halted,
+                    };
+                let entry =
+                    table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+                if invocation.is_revoked() {
+                    return Err(AuthorityError::Halted);
+                }
+                route_seams::at("model.attempt.checked",
+                    Ctx::default().run(run).attempt(ordinal));
+                cell.admit()?;
+                entry.model_attempts = ordinal;
+                entry.model_pins.insert(ordinal);
+                Ok(ticket)
+            }
+=== lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn settle_session_attempt ( & self , ticket : SessionAttempt , deadline : Instant ) -> Result < ( ) , AuthorityError >	count 1	bytes 1241
+            pub(crate) fn settle_session_attempt(&self,
+                ticket: SessionAttempt, deadline: Instant)
+                -> Result<(), AuthorityError> {
+                if !std::ptr::eq(self, ticket.registry.as_ptr()) {
+                    return Err(AuthorityError::WrongRun);
+                }
+                route_seams::at("model.settle.before",
+                    Ctx::default().run(ticket.run).attempt(ticket.ordinal));
+                let mut table =
+                    settlement_hold(&self.runs, &ticket.cell, deadline)?;
+                let entry =
+                    table.runs.get_mut(&ticket.run).ok_or(AuthorityError::UnknownRun)?;
+                if entry.view.agent != ticket.agent ||
+                                    entry.opened_by != Some(ticket.group) ||
+                                entry.inference_admission.as_ref() !=
+                                    Some(&ticket.admission) ||
+                            !entry.file_cell.as_ref().is_some_and(|c|
+                                        c.same(&ticket.cell)) ||
+                        !entry.model_pins.remove(&ticket.ordinal) {
+                    return Err(AuthorityError::WrongRun);
+                }
+                Ok(())
+            }
+=== lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn admit_session_inference ( & self , b : SessionBinding < '_ > ) -> Result < ( ) , AuthorityError >	count 1	bytes 6881
+            pub(crate) fn admit_session_inference(&self,
+                b: SessionBinding<'_>) -> Result<(), AuthorityError> {
+                let mut table =
+                    self.runs.try_lock().map_err(|error|
+                                {
+                                    if #[allow(non_exhaustive_omitted_patterns)] match error {
+                                            TryLockError::Poisoned(_) => true,
+                                            _ => false,
+                                        } {
+                                        b.original.fail_session();
+                                    }
+                                    AuthorityError::Unavailable("model run hold unavailable")
+                                })?;
+                if self.stopped.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::EmergencyStopped);
+                }
+                if self.closed.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::Closed("the desktop is quitting"));
+                }
+                let now =
+                    Life {
+                        stop_epoch: self.stop_number.load(Ordering::SeqCst),
+                        halted: false,
+                        closed: false,
+                    };
+                let door = live_door(&mut table.doors, b.group, b.agent)?;
+                let listed = door.members.contains(&b.run);
+                let door_cell = door.file_cell.clone();
+                let mut matching =
+                    door.consents.iter().filter(|c|
+                            {
+                                c.life == now && c.contract_hash == b.contract_hash &&
+                                    c.request == b.request
+                            });
+                let consent = matching.next().cloned();
+                let agreed =
+                    consent.as_ref().is_some_and(|first|
+                            matching.all(|c| c.page_facts == first.page_facts));
+                let entry =
+                    table.runs.get(&b.run).ok_or(AuthorityError::UnknownRun)?;
+                if &entry.view.agent != b.agent {
+                    return Err(AuthorityError::WrongAgent);
+                }
+                if entry.class != RunClass::Agent {
+                    return Err(AuthorityError::WrongRun);
+                }
+                if entry.file_cell.as_ref().is_some_and(HaltCell::is_engaged)
+                        || table.in_halted_group(entry) {
+                    return Err(AuthorityError::Halted);
+                }
+                if entry.view.finished {
+                    return Err(AuthorityError::RunNotActive);
+                }
+                if entry.view.cancelled ||
+                        entry.cancelled.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::RunCancelled);
+                }
+                let s =
+                    entry.file_cell.as_ref().is_some_and(|c|
+                            c.host() && c.same(b.original));
+                let d = listed && entry.groups.contains(&b.group);
+                let r = entry.opened_by == Some(b.group);
+                let cell =
+                    door_cell.as_ref().is_none_or(|door|
+                            entry.file_cell.as_ref().is_some_and(|c| c.same(door)));
+                let id = entry.view.id == b.run;
+                if !s || !d || !r || !cell || !id {
+                    return Err(AuthorityError::NotMember);
+                }
+                let files =
+                    entry.files_admission.as_ref().ok_or(AuthorityError::NotAdmitted)?;
+                if b.q_run != Some(b.run) {
+                    return Err(AuthorityError::NotMember);
+                }
+                let (grant, _grant_held) =
+                    b.grants.try_live_at(b.grant, b.clock.0,
+                                b.clock.1).map_err(|error|
+                                {
+                                    if error == super::policy::GrantObservation::Poisoned {
+                                        return AuthorityError::Unavailable(GRANT_POISONED);
+                                    }
+                                    AuthorityError::Unavailable("model grant hold unavailable")
+                                })?;
+                if !#[allow(non_exhaustive_omitted_patterns)] match grant {
+                            Some(super::policy::GrantScope::Files { workspace, identity,
+                                .. }) if
+                                workspace == files.workspace.id &&
+                                    identity == files.workspace.identity => true,
+                            _ => false,
+                        } {
+                    return Err(AuthorityError::GrantNotLive);
+                }
+                let consent =
+                    consent.filter(|_|
+                                    agreed).ok_or(AuthorityError::NoConsent)?;
+                let fresh =
+                    match &entry.inference_admission {
+                        Some(bound) if
+                            bound.contract_hash == consent.contract_hash &&
+                                    bound.request == consent.request &&
+                                bound.identity == b.identity => {
+                            false
+                        }
+                        Some(_) => return Err(AuthorityError::AlreadyAdmitted),
+                        None => true,
+                    };
+                if consent.contract_hash != files.contract_hash ||
+                                        consent.request != files.request ||
+                                    consent.evidence_seq != files.evidence_seq ||
+                                consent.kind != files.kind ||
+                            consent.at_wall_ms != files.consented_wall_ms ||
+                        consent.page_facts != files.page_facts {
+                    return Err(AuthorityError::NoConsent);
+                }
+                let admission =
+                    InferenceAdmission {
+                        contract_hash: consent.contract_hash,
+                        request: consent.request,
+                        evidence_seq: consent.evidence_seq,
+                        kind: consent.kind,
+                        consented_wall_ms: consent.at_wall_ms,
+                        identity: b.identity,
+                    };
+                route_seams::at("model.bind.checked",
+                    Ctx::default().run(b.run));
+                b.original.admit()?;
+                if fresh {
+                    let entry =
+                        table.runs.get_mut(&b.run).ok_or(AuthorityError::UnknownRun)?;
+                    entry.inference_admission = Some(admission);
+                }
+                route_seams::at("bind.done", Ctx::default().run(b.run));
+                Ok(())
+            }
+=== lane	pub mod broker	impl ReleaseCredential for CredentialBroker	count 1	bytes 3894
+    impl ReleaseCredential for CredentialBroker {
+        fn release(&self, lease_id: LeaseId, guard: &ExecutionGuard,
+            destination: &Destination)
+            -> Result<SecretHeader, AuthorityError> {
+            let prepared =
+                self.commitments.prepared_for(guard).ok_or(AuthorityError::NotAuthorized)?;
+            if !prepared.leases.contains(&lease_id) {
+                return Err(AuthorityError::Closed("the lease is not bound to this commitment"));
+            }
+            let view =
+                self.commitments.view(guard.commitment()).ok_or(AuthorityError::UnknownCommitment)?;
+            let now = self.clock.monotonic_ms();
+            let (spec, privacy) =
+                {
+                    let mut leases = self.table.leases.lock().expect("leases");
+                    let lease =
+                        leases.map.get_mut(&lease_id).ok_or(AuthorityError::UnknownLease)?;
+                    if lease.agent != view.agent {
+                        return Err(AuthorityError::WrongAgent);
+                    }
+                    if lease.run != view.run {
+                        return Err(AuthorityError::WrongRun);
+                    }
+                    if lease.state != LeaseState::Issued {
+                        return Err(AuthorityError::NotPending);
+                    }
+                    if now >= lease.deadline_ms {
+                        lease.state = LeaseState::Ended;
+                        return Err(AuthorityError::Expired);
+                    }
+                    if destination.origin_text() != lease.origin {
+                        return Err(AuthorityError::TargetChanged);
+                    }
+                    lease.state = LeaseState::Released;
+                    (lease.spec, lease.privacy)
+                };
+            let mut record =
+                EvidenceRecord::new(EvidencePhase::CredentialReleased,
+                    self.clock.wall_ms(), self.generation.current(), privacy);
+            record.commitment = Some(guard.commitment().to_string());
+            record.agent = Some(view.agent.to_string());
+            record.run = Some(view.run.to_string());
+            record.target = Some(destination.origin_text());
+            record.detail.push(("lease".into(), lease_id.to_string()));
+            record.detail.push(("service".into(), spec.service.into()));
+            self.record(record)?;
+            self.still_releasing(lease_id, guard, &view)?;
+            let secret = self.source.read(spec.scope, spec.name);
+            self.still_releasing(lease_id, guard, &view)?;
+            let secret =
+                secret.map_err(|_|
+                            AuthorityError::Unavailable("the credential is not available"))?;
+            if secret.is_empty() ||
+                    !secret.bytes().all(|b| (0x21..0x7f).contains(&b)) {
+                return Err(AuthorityError::Unavailable("the credential is not a plain token"));
+            }
+            let (name, value) =
+                match spec.placement {
+                    Placement::Authorization(scheme) =>
+                        (AUTHORIZATION,
+                            Zeroizing::new(::alloc::__export::must_use({
+                                        ::alloc::fmt::format(format_args!("{1} {0}", *secret,
+                                                scheme))
+                                    }))),
+                    Placement::Header(header) =>
+                        (HeaderName::from_bytes(header.as_bytes()).map_err(|_|
+                                        AuthorityError::Unavailable("credential header is not valid"))?,
+                            Zeroizing::new(secret.to_string())),
+                };
+            Ok(SecretHeader {
+                    name,
+                    value,
+                    token: Zeroizing::new(secret.to_string()),
+                })
+        }
+    }
+=== lane	pub mod broker	pub mod route_seams	count 1	bytes 17798
+    pub mod route_seams {
+        //! SB-3E S1 (design 4.2): the broker's route seams. Compiled only with
+        //! `--cfg mother_route_seams`, which only the route lane's wrapper sets; the
+        //! shipped build has none. The writers `at` and `note` are crate-private and
+        //! called only at the audited sites of design 4.4 and the two store sites;
+        //! the harness may only `arm` and `drain_trace`. `at` returns nothing: it
+        //! records, may pause, or begins an unwind, and never returns into the route.
+        use crate::authority::ids::RunId;
+        use crate::host_session::SessionIdentity;
+        use nexus_kernel::inference::RequestKind;
+        use std::fs::File;
+        use std::io::Write;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+        use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+        use std::time::{Duration, Instant};
+        /// S1's marker (SB3E-R9): the first statement of each writer's real body.
+        const M: &str = "nexus-mother-route-seam-S1";
+        /// The bounded wait of every pause (design 3.5).
+        const PATIENCE: Duration = Duration::from_secs(10);
+        /// Every point a harness may arm: the broker rows of design 4.4 and S1's
+        /// two store points.
+        pub(crate) const POINTS: [&str; 35] =
+            ["reg.reserve", "model.reserved", "model.record.before",
+                    "model.install.before", "model.install.after", "reg.ready",
+                    "identity", "bind.entry", "model.bind.checked", "bind.done",
+                    "attempt.slot", "model.attempt.reserved",
+                    "model.attempt.granted", "model.attempt.checked",
+                    "model.gate.before", "model.gate.checked", "call.gate",
+                    "model.call.sampled", "model.call.observed",
+                    "model.call.admitted", "door.cancel_run", "door.halt",
+                    "ingress.emergency", "ingress.accept",
+                    "model.attempt.record.before", "model.settle.before",
+                    "complete", "close.obligations", "producer.join",
+                    "close.seal", "close.mother_end", "close.primary",
+                    "close.delivery", "store.commit", "store.commit.result"];
+        /// The per-request gate entries; each one advances `request_ordinal`.
+        const GATES: [&str; 2] = ["model.gate.before", "call.gate"];
+        static ARMED: AtomicBool = AtomicBool::new(false);
+        static FAILED: AtomicBool = AtomicBool::new(false);
+        static STATE: Mutex<State> =
+            Mutex::new(State {
+                    tick: 0,
+                    entries: Vec::new(),
+                    pending: Vec::new(),
+                    ordinals: Vec::new(),
+                });
+        type Key =
+            (Option<SessionIdentity>, Option<u64>, Option<RunId>,
+            Option<u32>);
+        struct State {
+            tick: u64,
+            entries: Vec<Entry>,
+            pending: Vec<Pending>,
+            ordinals: Vec<(Key, u64)>,
+        }
+        struct Pending {
+            id: u64,
+            point: &'static str,
+            ack: SyncSender<Entry>,
+            pause: Option<(Receiver<()>, &'static str, Arc<File>)>,
+        }
+        /// The identity a site knows (design 2.3); unknown fields stay `None`.
+        pub(crate) struct Ctx<'a> {
+            session: Option<SessionIdentity>,
+            request: Option<u64>,
+            run: Option<RunId>,
+            attempt: Option<u32>,
+            kind: Option<&'static str>,
+            phase: Option<&'a str>,
+            commitment: Option<&'a str>,
+        }
+        #[automatically_derived]
+        #[doc(hidden)]
+        unsafe impl<'a> ::core::clone::TrivialClone for Ctx<'a> { }
+        #[automatically_derived]
+        impl<'a> ::core::clone::Clone for Ctx<'a> {
+            #[inline]
+            fn clone(&self) -> Ctx<'a> {
+                let _:
+                        ::core::clone::AssertParamIsClone<Option<SessionIdentity>>;
+                let _: ::core::clone::AssertParamIsClone<Option<u64>>;
+                let _: ::core::clone::AssertParamIsClone<Option<RunId>>;
+                let _: ::core::clone::AssertParamIsClone<Option<u32>>;
+                let _:
+                        ::core::clone::AssertParamIsClone<Option<&'static str>>;
+                let _: ::core::clone::AssertParamIsClone<Option<&'a str>>;
+                let _: ::core::clone::AssertParamIsClone<Option<&'a str>>;
+                *self
+            }
+        }
+        #[automatically_derived]
+        impl<'a> ::core::marker::Copy for Ctx<'a> { }
+        #[automatically_derived]
+        impl<'a> ::core::default::Default for Ctx<'a> {
+            #[inline]
+            fn default() -> Ctx<'a> {
+                Ctx {
+                    session: ::core::default::Default::default(),
+                    request: ::core::default::Default::default(),
+                    run: ::core::default::Default::default(),
+                    attempt: ::core::default::Default::default(),
+                    kind: ::core::default::Default::default(),
+                    phase: ::core::default::Default::default(),
+                    commitment: ::core::default::Default::default(),
+                }
+            }
+        }
+        impl<'a> Ctx<'a> {
+            pub(crate) fn session(session: SessionIdentity) -> Self {
+                let session = Some(session);
+                Self { session, ..Self::default() }
+            }
+            pub(crate) fn request(self, request: u64) -> Self {
+                let request = Some(request);
+                Self { request, ..self }
+            }
+            pub(crate) fn run(self, run: RunId) -> Self {
+                Self { run: Some(run), ..self }
+            }
+            pub(crate) fn attempt(self, attempt: u32) -> Self {
+                let attempt = Some(attempt);
+                Self { attempt, ..self }
+            }
+            pub(crate) fn kind(self, kind: RequestKind) -> Self {
+                let chat = kind == RequestKind::Chat;
+                let kind = Some(if chat { "chat" } else { "metadata" });
+                Self { kind, ..self }
+            }
+            /// A store append: its kind (`ordinary` or `owed_flush`) and record.
+            pub(crate) fn store(kind: &'static str, phase: &'a str,
+                commitment: Option<&'a str>) -> Self {
+                let (kind, phase) = (Some(kind), Some(phase));
+                Self { kind, phase, commitment, ..Self::default() }
+            }
+        }
+        /// One trace entry (design 2.3). `note` marks a refusing branch's reason.
+        pub struct Entry {
+            pub tick: u64,
+            pub point: &'static str,
+            pub note: bool,
+            pub session: Option<SessionIdentity>,
+            pub request: Option<u64>,
+            pub run: Option<RunId>,
+            /// The broker sees no invocation identity (only its revocation).
+            pub invocation: Option<u64>,
+            pub attempt: Option<u32>,
+            pub kind: Option<&'static str>,
+            pub request_ordinal: Option<u64>,
+            pub phase: Option<String>,
+            pub commitment: Option<String>,
+            /// The recording thread (AM-2 B.1: 4.2.1 consumption checks).
+            pub thread: std::thread::ThreadId,
+            /// When it was recorded (AM-2 B.1: position evidence only).
+            pub instant: Instant,
+        }
+        #[automatically_derived]
+        impl ::core::clone::Clone for Entry {
+            #[inline]
+            fn clone(&self) -> Entry {
+                Entry {
+                    tick: ::core::clone::Clone::clone(&self.tick),
+                    point: ::core::clone::Clone::clone(&self.point),
+                    note: ::core::clone::Clone::clone(&self.note),
+                    session: ::core::clone::Clone::clone(&self.session),
+                    request: ::core::clone::Clone::clone(&self.request),
+                    run: ::core::clone::Clone::clone(&self.run),
+                    invocation: ::core::clone::Clone::clone(&self.invocation),
+                    attempt: ::core::clone::Clone::clone(&self.attempt),
+                    kind: ::core::clone::Clone::clone(&self.kind),
+                    request_ordinal: ::core::clone::Clone::clone(&self.request_ordinal),
+                    phase: ::core::clone::Clone::clone(&self.phase),
+                    commitment: ::core::clone::Clone::clone(&self.commitment),
+                    thread: ::core::clone::Clone::clone(&self.thread),
+                    instant: ::core::clone::Clone::clone(&self.instant),
+                }
+            }
+        }
+        #[automatically_derived]
+        impl ::core::fmt::Debug for Entry {
+            #[inline]
+            fn fmt(&self, f: &mut ::core::fmt::Formatter)
+                -> ::core::fmt::Result {
+                let names: &'static _ =
+                    &["tick", "point", "note", "session", "request", "run",
+                                "invocation", "attempt", "kind", "request_ordinal", "phase",
+                                "commitment", "thread", "instant"];
+                let values: &[&dyn ::core::fmt::Debug] =
+                    &[&self.tick, &self.point, &self.note, &self.session,
+                                &self.request, &self.run, &self.invocation, &self.attempt,
+                                &self.kind, &self.request_ordinal, &self.phase,
+                                &self.commitment, &self.thread, &&self.instant];
+                ::core::fmt::Formatter::debug_struct_fields_finish(f, "Entry",
+                    names, values)
+            }
+        }
+        #[automatically_derived]
+        impl ::core::marker::StructuralPartialEq for Entry { }
+        #[automatically_derived]
+        impl ::core::cmp::PartialEq for Entry {
+            #[inline]
+            fn eq(&self, other: &Entry) -> bool {
+                self.tick == other.tick && self.note == other.note &&
+                                                                self.point == other.point && self.session == other.session
+                                                        && self.request == other.request && self.run == other.run &&
+                                                self.invocation == other.invocation &&
+                                            self.attempt == other.attempt && self.kind == other.kind &&
+                                    self.request_ordinal == other.request_ordinal &&
+                                self.phase == other.phase &&
+                            self.commitment == other.commitment &&
+                        self.thread == other.thread && self.instant == other.instant
+            }
+        }
+        #[automatically_derived]
+        impl ::core::cmp::Eq for Entry {
+            #[inline]
+            #[doc(hidden)]
+            #[coverage(off)]
+            fn assert_receiver_is_total_eq(&self) -> () {
+                let _: ::core::cmp::AssertParamIsEq<u64>;
+                let _: ::core::cmp::AssertParamIsEq<&'static str>;
+                let _: ::core::cmp::AssertParamIsEq<bool>;
+                let _: ::core::cmp::AssertParamIsEq<Option<SessionIdentity>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<u64>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<RunId>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<u64>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<u32>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<&'static str>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<u64>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<String>>;
+                let _: ::core::cmp::AssertParamIsEq<Option<String>>;
+                let _: ::core::cmp::AssertParamIsEq<std::thread::ThreadId>;
+                let _: ::core::cmp::AssertParamIsEq<Instant>;
+            }
+        }
+        /// What an armed point does. Every arming turns recording on for all points.
+        pub enum Action {
+
+            /// Record only.
+            Trace,
+
+            /// At the first arrival: acknowledge, then block until the [`Held`] is
+            /// dropped. A pause not released within 10 s, or whose harness is gone,
+            /// is an irrevocable harness failure: `TIMEOUT <cell> <point>` is written
+            /// to `result`, then the process aborts (design 3.3).
+            Pause {
+                cell: &'static str,
+                result: Arc<File>,
+            },
+
+            /// At the first arrival: acknowledge, then begin an unwind.
+            Panic,
+        }
+        /// One arming. Dropping it releases its pause, or disarms it if it has not
+        /// fired; that never panics.
+        pub struct Held {
+            pub acknowledged: Receiver<Entry>,
+            _release: Release,
+        }
+        struct Release(u64, SyncSender<()>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                state().pending.retain(|p| p.id != self.0);
+                let _ = self.1.try_send(());
+            }
+        }
+        /// Arm `point` (one of [`POINTS`]) with `action`.
+        pub fn arm(point: &'static str, action: Action) -> Held {
+            if !POINTS.contains(&point) {
+                {
+                    ::core::panicking::panic_fmt(format_args!("not a broker route point: {0}",
+                            point));
+                }
+            };
+            let (ack, acknowledged) = sync_channel(1);
+            let (release, released) = sync_channel(1);
+            let mut s = state();
+            s.tick += 1;
+            let id = s.tick;
+            let pause =
+                match action {
+                    Action::Trace => None,
+                    Action::Pause { cell, result } =>
+                        Some(Some((released, cell, result))),
+                    Action::Panic => Some(None),
+                };
+            if let Some(pause) = pause {
+                s.pending.push(Pending { id, point, ack, pause });
+            }
+            ARMED.store(true, Ordering::SeqCst);
+            Held { acknowledged, _release: Release(id, release) }
+        }
+        /// Every entry recorded so far, in tick order; the trace is emptied.
+        pub fn drain_trace() -> Vec<Entry> {
+            std::mem::take(&mut state().entries)
+        }
+        /// A route point. Unarmed, this is the marker and one relaxed load.
+        pub(crate) fn at(point: &'static str, ctx: Ctx<'_>) {
+            std::hint::black_box(M.as_bytes());
+            if !ARMED.load(Ordering::Relaxed) { return; }
+            fire(point, false, ctx);
+        }
+        /// A refusing branch's own reason (design 2.4); never pauses.
+        pub(crate) fn note(reason: &'static str, ctx: Ctx<'_>) {
+            std::hint::black_box(M.as_bytes());
+            if !ARMED.load(Ordering::Relaxed) { return; }
+            fire(reason, true, ctx);
+        }
+        fn state() -> MutexGuard<'static, State> {
+            STATE.lock().unwrap_or_else(PoisonError::into_inner)
+        }
+        fn fire(point: &'static str, note: bool, ctx: Ctx<'_>) {
+            let (entry, pending) =
+                {
+                    let mut s = state();
+                    s.tick += 1;
+                    let key = (ctx.session, ctx.request, ctx.run, ctx.attempt);
+                    let gate = u64::from(!note && GATES.contains(&point));
+                    let request_ordinal =
+                        match s.ordinals.iter_mut().find(|(k, _)| *k == key) {
+                            Some((_, n)) => { *n += gate; Some(*n) }
+                            None if gate == 1 => { s.ordinals.push((key, 1)); Some(1) }
+                            None => None,
+                        };
+                    let entry =
+                        Entry {
+                            tick: s.tick,
+                            point,
+                            note,
+                            session: ctx.session,
+                            request: ctx.request,
+                            run: ctx.run,
+                            invocation: None,
+                            attempt: ctx.attempt,
+                            kind: ctx.kind,
+                            request_ordinal,
+                            phase: ctx.phase.map(str::to_owned),
+                            commitment: ctx.commitment.map(str::to_owned),
+                            thread: std::thread::current().id(),
+                            instant: Instant::now(),
+                        };
+                    s.entries.push(entry.clone());
+                    let eligible =
+                        !note &&
+                            (point != "store.commit" || ctx.kind == Some("ordinary"));
+                    let found =
+                        s.pending.iter().position(|p| eligible && p.point == point);
+                    (entry, found.map(|i| s.pending.remove(i)))
+                };
+            let Some(pending) = pending else { return };
+            let acknowledged = pending.ack.try_send(entry).is_ok();
+            match pending.pause {
+                None => {
+                    ::core::panicking::panic_fmt(format_args!("route seam: armed panic at {0}",
+                            point));
+                }
+                Some((released, cell, result)) => {
+                    if !acknowledged || released.recv_timeout(PATIENCE).is_err()
+                        {
+                        FAILED.store(true, Ordering::SeqCst);
+                        let _ =
+                            (&*result).write_fmt(format_args!("TIMEOUT {0} {1}\n", cell,
+                                    point));
+                        std::process::abort();
+                    }
+                }
+            }
+        }
+    }
+=== lane	pub mod evidence_store	use crate :: broker :: route_seams ::	count 3	bytes 49
+    use crate::broker::route_seams::{self, Ctx};
+=== lane	pub mod evidence_store	struct Inner	count 1	bytes 619
+    struct Inner {
+        conn: Connection,
+        store: String,
+        session: String,
+        last_seq: u64,
+        last_tag: String,
+        latched: bool,
+        /// Sessions and statements (EL-1 §7).
+        known: Known,
+        /// End records not yet written, in order.
+        owed: VecDeque<Owed>,
+        /// SB-3E S2: the one record (phase, commitment) whose next ordinary
+        /// append is refused before its insert (design 4.2.1).
+        route_refuse: Option<(String, Option<String>)>,
+        /// SB-3E S1: the next append pays an owed record (design 4.2.1).
+        owed_flush: bool,
+    }
+=== lane	pub mod evidence_store > impl EvidenceStore	fn qualify ( conn : Connection ) -> Result < Self , Unqualified >	count 1	bytes 1939
+        /// §3, in order: the settings were read back by `connect`; then
+        /// `integrity_check`, the schema and identity row, the whole chain.
+        fn qualify(conn: Connection) -> Result<Self, Unqualified> {
+            let application_id: i64 =
+                conn.query_row("PRAGMA application_id", [],
+                            |row| row.get(0)).map_err(|_| Unqualified::Sqlite)?;
+            if application_id != i64::from(APPLICATION_ID) {
+                return Err(Unqualified::NotAStore);
+            }
+            if !integrity_ok(&conn) { return Err(Unqualified::Integrity); }
+            if !schema_exact(&conn)? { return Err(Unqualified::Schema); }
+            let store = identity(&conn)?;
+            let rows =
+                read_rows(&conn,
+                            &::alloc::__export::must_use({
+                                        ::alloc::fmt::format(format_args!("SELECT {0} FROM record ORDER BY seq",
+                                                ROW_COLUMNS))
+                                    }), &[]).ok_or(Unqualified::Chain)?;
+            let (last_seq, last_tag) =
+                verify_chain(&store, &rows).ok_or(Unqualified::Chain)?;
+            if !acknowledgements_precede(&rows) {
+                return Err(Unqualified::Chain);
+            }
+            let mut known = Known::default();
+            for row in &rows { known.take(row); }
+            let mut inner =
+                Inner {
+                    conn,
+                    store,
+                    session: random_hex()?,
+                    last_seq,
+                    last_tag,
+                    latched: false,
+                    known,
+                    owed: VecDeque::new(),
+                    route_refuse: None,
+                    owed_flush: false,
+                };
+            inner.open_session()?;
+            inner.reconcile()?;
+            Ok(Self { inner: Mutex::new(inner) })
+        }
+=== lane	pub mod evidence_store > impl EvidenceStore	fn inner ( & self ) -> MutexGuard < '_ , Inner >	count 1	bytes 483
+        /// The store's state, under its mutex. A panic while it was held (it
+        /// was poisoned) latches it: what that append did cannot be known.
+        fn inner(&self) -> MutexGuard<'_, Inner> {
+            match self.inner.lock() {
+                Ok(inner) => inner,
+                Err(poisoned) => {
+                    let mut inner = poisoned.into_inner();
+                    inner.latched = true;
+                    inner
+                }
+            }
+        }
+=== lane	pub mod evidence_store > impl EvidenceStore	fn route_poison_inner ( & self )	count 1	bytes 716
+        /// SB-3E S4 (AM-2 B.2): a panic while the store's mutex is held, caught;
+        /// it poisons that one lock and changes nothing else.
+        fn route_poison_inner(&self) {
+            const M: &str = "nexus-mother-route-seam-S4-store";
+            std::hint::black_box(M.as_bytes());
+            let _ =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+                            {
+                                let _held = self.inner.lock();
+                                {
+                                    ::core::panicking::panic_fmt(format_args!("route seam S4: evidence store poisoned"));
+                                };
+                            }));
+        }
+=== lane	pub mod evidence_store > impl PrimaryEvidence	pub fn route_refuse_next ( & self , phase : & str , commitment : Option < & str > )	count 1	bytes 580
+        /// SB-3E S2 (design 4.2): the next ordinary append of exactly this
+        /// record is refused before its insert, rolled back and not committed.
+        /// One-shot. Armed at the record's point, before the mutex is held.
+        pub fn route_refuse_next(&self, phase: &str,
+            commitment: Option<&str>) {
+            const M: &str = "nexus-mother-route-seam-S2";
+            std::hint::black_box(M.as_bytes());
+            let record = (phase.to_string(), commitment.map(str::to_string));
+            self.store.inner().route_refuse = Some(record);
+        }
+=== lane	pub mod evidence_store > impl PrimaryEvidence	pub fn try_health ( & self ) -> Option < EvidenceHealth >	count 1	bytes 192
+        /// Observe memory only, without waiting; `None` must be treated as refusal.
+        pub fn try_health(&self) -> Option<EvidenceHealth> {
+            self.store.try_health()
+        }
+=== lane	pub mod evidence_store > impl PrimaryEvidence	pub ( crate ) fn route_poison_inner ( & self )	count 1	bytes 299
+        /// SB-3E S4 (AM-2 B.2): the session's only path to the store's mutex.
+        pub(crate) fn route_poison_inner(&self) {
+            const M: &str = "nexus-mother-route-seam-S4-evidence";
+            std::hint::black_box(M.as_bytes());
+            self.store.route_poison_inner();
+        }
+=== lane	pub mod evidence_store > impl Inner	fn pay_owed ( & mut self , written : & mut Vec < EvidenceRecord > ) -> bool	count 1	bytes 886
+        /// Write every owed record, in order. False when one is still owed (it
+        /// was not committed, or the store latched).
+        fn pay_owed(&mut self, written: &mut Vec<EvidenceRecord>) -> bool {
+            while let Some(owed) = self.owed.front() {
+                let (phase, body) = (owed.phase, owed.body.clone());
+                let commitment = owed.commitment.clone();
+                { self.owed_flush = true; }
+                match self.append(phase, commitment.as_deref(), &body) {
+                    Append::Committed { .. } | Append::AlreadyPresent { .. } =>
+                        {
+                        if let Some(paid) = self.owed.pop_front() {
+                            written.extend(paid.record);
+                        }
+                    }
+                    _ => return false,
+                }
+            }
+            true
+        }
+=== lane	pub mod evidence_store > impl Inner	fn route_refused ( & mut self , kind : & str , phase : & str , commitment : Option < & str > ) -> bool	count 1	bytes 473
+        /// SB-3E S2: whether this append is the armed record's next ordinary
+        /// append; if so the arming is taken (one-shot).
+        fn route_refused(&mut self, kind: &str, phase: &str,
+            commitment: Option<&str>) -> bool {
+            let armed =
+                |r: &mut (String, Option<String>)|
+                    r.0 == phase && r.1.as_deref() == commitment;
+            kind == "ordinary" && self.route_refuse.take_if(armed).is_some()
+        }
+=== lane	pub mod evidence_store > impl Inner	fn append ( & mut self , phase : & str , commitment : Option < & str > , body : & str ) -> Append	count 1	bytes 3967
+        fn append(&mut self, phase: &str, commitment: Option<&str>,
+            body: &str) -> Append {
+            let kind =
+                if std::mem::take(&mut self.owed_flush) {
+                    "owed_flush"
+                } else { "ordinary" };
+            if self.latched { return Append::Latched; }
+            let Some(seq) =
+                self.last_seq.checked_add(1) else {
+                    self.latch();
+                    return Append::Uncertain;
+                };
+            let stored_ms = wall_ms();
+            let tag =
+                tag_of(&self.store, &self.last_tag, seq, &self.session,
+                    stored_ms, phase, commitment, body);
+            if self.conn.execute_batch("BEGIN IMMEDIATE").is_err() {
+                if self.conn.is_autocommit() { return Append::NotCommitted; }
+                self.latch();
+                return Append::Uncertain;
+            }
+            if self.route_refused(kind, phase, commitment) {
+                route_seams::note("store.refused",
+                    Ctx::store(kind, phase, commitment));
+                if rolled_back(&self.conn) { return Append::NotCommitted; }
+                self.latch();
+                return Append::Uncertain;
+            }
+            let inserted =
+                self.conn.execute("INSERT INTO record (seq, session, stored_ms, phase, commitment, body, prev, tag) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    &[&i64::try_from(seq).unwrap_or(i64::MAX) as
+                                        &dyn ::rusqlite::ToSql,
+                                    &self.session as &dyn ::rusqlite::ToSql,
+                                    &i64::try_from(stored_ms).unwrap_or(i64::MAX) as
+                                        &dyn ::rusqlite::ToSql, &phase as &dyn ::rusqlite::ToSql,
+                                    &commitment as &dyn ::rusqlite::ToSql,
+                                    &body as &dyn ::rusqlite::ToSql,
+                                    &self.last_tag as &dyn ::rusqlite::ToSql,
+                                    &tag as &dyn ::rusqlite::ToSql] as
+                        &[&dyn ::rusqlite::ToSql]);
+            match inserted {
+                Ok(1) => {}
+                Err(error) if is_unique_violation(&error) => {
+                    if !rolled_back(&self.conn) {
+                        self.latch();
+                        return Append::Uncertain;
+                    }
+                    return self.already(phase, commitment, body);
+                }
+                Err(error) if is_constraint_violation(&error) => {
+                    rolled_back(&self.conn);
+                    self.latch();
+                    return Append::Uncertain;
+                }
+                _ => {
+                    if rolled_back(&self.conn) { return Append::NotCommitted; }
+                    self.latch();
+                    return Append::Uncertain;
+                }
+            }
+            route_seams::at("store.commit",
+                Ctx::store(kind, phase, commitment));
+            if self.commit().is_err() {
+                route_seams::note("store.commit.result",
+                    Ctx::store(kind, phase, commitment));
+                self.latch();
+                return Append::Uncertain;
+            }
+            route_seams::at("store.commit.result",
+                Ctx::store(kind, phase, commitment));
+            self.known.take(&Row {
+                        seq,
+                        session: self.session.clone(),
+                        stored_ms,
+                        phase: phase.to_string(),
+                        commitment: commitment.map(str::to_string),
+                        body: body.to_string(),
+                        prev: self.last_tag.clone(),
+                        tag: tag.clone(),
+                    });
+            self.last_seq = seq;
+            self.last_tag = tag;
+            Append::Committed { seq }
+        }
+=== lane	pub mod host_session	use crate :: broker :: route_seams ::	count 3	bytes 49
+    use crate::broker::route_seams::{self, Ctx};
+=== lane	pub mod host_session > pub mod close > impl Producer	pub fn joined ( mut self )	count 1	bytes 684
+            pub fn joined(mut self) {
+                route_seams::at("producer.join",
+                    Ctx::session(self.core.identity));
+                match self.core.producers.lock() {
+                    Ok(mut producers) => {
+                        let slot = &mut producers.slots[self.index];
+                        if slot.live && !slot.lost &&
+                                slot.generation == self.generation {
+                            slot.live = false;
+                            self.joined = true;
+                        }
+                    }
+                    Err(_) => SessionIngress { core: self.core.clone() }.fail(),
+                }
+            }
+=== lane	pub mod host_session > pub mod close > impl CloseSeal	pub fn begin_mother_end ( & self , session : SessionIdentity ) -> Result < ( ) , SessionError >	count 1	bytes 636
+            pub fn begin_mother_end(&self, session: SessionIdentity)
+                -> Result<(), SessionError> {
+                route_seams::at("close.mother_end",
+                    Ctx::session(self.core.identity));
+                self.live()?;
+                if self.core.identity != session {
+                    return Err(SessionError::Restricted);
+                }
+                self.finals()?.mother.compare_exchange(PENDING, UNKNOWN,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst).map(|_|
+                            ()).map_err(|_| SessionError::Restricted)
+            }
+=== lane	pub mod host_session > pub mod close > impl CloseSeal	pub fn finish_delivery ( mut self ) -> bool	count 1	bytes 1032
+            /// Called only after the final frame was acknowledged, all terminal
+            /// executors joined, and terminal modes restored before this same deadline.
+            pub fn finish_delivery(mut self) -> bool {
+                route_seams::at("close.delivery",
+                    Ctx::session(self.core.identity));
+                let success =
+                    self.live().is_ok() &&
+                        self.finals().is_ok_and(|f|
+                                {
+                                    f.mother.load(Ordering::SeqCst) == RECORDED &&
+                                        f.primary.load(Ordering::SeqCst) == RECORDED
+                                });
+                if let Ok(f) = self.finals() {
+                    f.delivery.store(if success {
+                            RECORDED
+                        } else { FAILED_END }, Ordering::SeqCst);
+                }
+                finish(&self.core, success);
+                self.finished = true;
+                success
+            }
+=== lane	pub mod host_session > pub mod close > impl HostSession	pub fn close_obligations ( & self ) -> Result < CloseObligations , SessionError >	count 1	bytes 1808
+            /// Observations only, collected on the bounded close worker. Failure to
+            /// acquire a consistent snapshot is unknown, never zero obligations.
+            pub fn close_obligations(&self)
+                -> Result<CloseObligations, SessionError> {
+                route_seams::at("close.obligations",
+                    Ctx::session(self.core.identity));
+                let (actions_unacknowledged, actions_refused) =
+                    {
+                        let actions =
+                            self.core.actions.try_lock().map_err(|_|
+                                        SessionError::Unavailable)?;
+                        (actions.iter().filter(|a| !a.discharged()).count(),
+                            actions.iter().filter(|a|
+                                        a.refused_before_staging()).count())
+                    };
+                let (producers_live, producers_lost) =
+                    {
+                        let producers =
+                            self.core.producers.try_lock().map_err(|_|
+                                        SessionError::Unavailable)?;
+                        (producers.slots.iter().filter(|p| p.live).count(),
+                            producers.slots.iter().filter(|p| p.lost).count())
+                    };
+                Ok(CloseObligations {
+                        model: self.core.model.snapshot().ok_or(SessionError::Unavailable)?,
+                        actions_unacknowledged,
+                        actions_refused,
+                        producers_live,
+                        producers_lost,
+                        authority_closed: self.core.authority_closed.load(Ordering::SeqCst),
+                        halt: self.control.authority().halt_records(),
+                    })
+            }
+=== lane	pub mod host_session > pub mod close > impl HostSession	pub fn seal_close ( & self , request : & SessionRequest ) -> Result < CloseSeal , SessionError >	count 1	bytes 5816
+            pub fn seal_close(&self, request: &SessionRequest)
+                -> Result<CloseSeal, SessionError> {
+                route_seams::at("close.seal",
+                    Ctx::session(self.core.identity).request(request.sequence));
+                self.close_request(request)?;
+                if !self.report.get().is_some_and(recovery::StartupReport::ready)
+                    {
+                    return Err(SessionError::Unavailable);
+                }
+                let producers =
+                    self.core.producers.lock().map_err(|_|
+                                SessionError::Restricted)?;
+                let word = self.core.cell.session_word();
+                if word & (FAILED | SEALED) != 0 ||
+                        !self.core.authority_closed.load(Ordering::SeqCst) {
+                    route_seams::note("seal:restricted",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Restricted);
+                }
+                if producers.slots.iter().any(|s| s.live || s.lost) {
+                    route_seams::note("seal:producers",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                if !self.core.model.quiescent() {
+                    route_seams::note("seal:model",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                let stop = self.stop_obligations()?;
+                if stop.received != stop.recorded ||
+                                stop.received as u64 != word / EPOCH_STEP || stop.overflowed
+                        || !self.core.stops.quiescent() {
+                    route_seams::note("seal:stop",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                let resources = self.resource_obligations()?;
+                if resources.unresolved != 0 || resources.uncertain != 0 {
+                    route_seams::note("seal:resources",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                if self.inventory().map_err(|_|
+                                            SessionError::Unavailable)?.entries.iter().any(|e|
+                            !e.discharged || e.in_flight || e.uncertain) {
+                    route_seams::note("seal:inventory",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                if self.core.actions.lock().map_err(|_|
+                                        SessionError::Restricted)?.iter().any(|a| !a.discharged()) {
+                    route_seams::note("seal:actions",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                let halt = self.control.authority().halt_records();
+                if halt.pending != 0 || halt.owed != 0 || halt.uncertain != 0
+                        || halt.lost != 0 {
+                    route_seams::note("seal:halt",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                let health = self.evidence.health();
+                if health.latched || health.owed != 0 ||
+                                health.recovery_required || health.unsettled != 0 ||
+                        health.unclean_sessions != 0 {
+                    route_seams::note("seal:health",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                let history =
+                    self.core.history.get().ok_or(SessionError::Unavailable)?;
+                let report =
+                    recovery::history(history).map_err(|_|
+                                SessionError::Unavailable)?;
+                if report.records == 0 || report.unresolved_missions != 0 ||
+                        report.session_end_recorded {
+                    route_seams::note("seal:history",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Unavailable);
+                }
+                let (_, lines) =
+                    history.report_lines().map_err(|_|
+                                SessionError::Unavailable)?;
+                let head = lines.last().ok_or(SessionError::Unavailable)?;
+                let finals =
+                    self.core.finals.get_or_init(||
+                            Finals {
+                                mother: AtomicU8::new(PENDING),
+                                primary: AtomicU8::new(PENDING),
+                                delivery: AtomicU8::new(PENDING),
+                                history: Mutex::new((0, String::new())),
+                            });
+                *finals.history.lock().map_err(|_| SessionError::Restricted)?
+                    = (lines.len(), head.hash.clone());
+                if Instant::now() >= request.deadline ||
+                        self.core.cell.session_compare(word,
+                                (word | SEALED) & !READY).is_err() {
+                    route_seams::note("seal:cas",
+                        Ctx::session(self.core.identity));
+                    return Err(SessionError::Restricted);
+                }
+                drop(producers);
+                Ok(CloseSeal {
+                        core: self.core.clone(),
+                        deadline: request.deadline,
+                        finished: false,
+                    })
+            }
+=== lane	pub mod host_session > pub mod close > impl HostSession	pub fn observe_mother_end ( & self , seal : & CloseSeal ) -> Result < ( ) , SessionError >	count 1	bytes 1006
+            pub fn observe_mother_end(&self, seal: &CloseSeal)
+                -> Result<(), SessionError> {
+                route_seams::at("close.mother_end",
+                    Ctx::session(self.core.identity));
+                seal.live()?;
+                if !Arc::ptr_eq(&self.core, &seal.core) {
+                    return Err(SessionError::Restricted);
+                }
+                let finals = seal.finals()?;
+                if finals.mother.load(Ordering::SeqCst) != UNKNOWN {
+                    return Err(SessionError::Restricted);
+                }
+                let (records, head) =
+                    finals.history.lock().map_err(|_|
+                                    SessionError::Restricted)?.clone();
+                self.core.history.get().ok_or(SessionError::Unavailable)?.verify_end(records,
+                            &head).map_err(|_| SessionError::Unavailable)?;
+                finals.mother.store(RECORDED, Ordering::SeqCst);
+                Ok(())
+            }
+=== lane	pub mod host_session > pub mod close > impl HostSession	pub fn close_primary ( & self , seal : & CloseSeal ) -> Result < ( ) , SessionError >	count 1	bytes 1355
+            pub fn close_primary(&self, seal: &CloseSeal)
+                -> Result<(), SessionError> {
+                route_seams::at("close.primary",
+                    Ctx::session(self.core.identity));
+                seal.live()?;
+                if !Arc::ptr_eq(&self.core, &seal.core) {
+                    return Err(SessionError::Restricted);
+                }
+                let finals = seal.finals()?;
+                if finals.mother.load(Ordering::SeqCst) != RECORDED {
+                    return Err(SessionError::Restricted);
+                }
+                finals.primary.compare_exchange(PENDING, UNKNOWN,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst).map_err(|_| SessionError::Restricted)?;
+                use crate::authority::evidence::EndStatus;
+                match self.evidence.close_session() {
+                    EndStatus::Recorded { .. } => {
+                        finals.primary.store(RECORDED, Ordering::SeqCst);
+                        Ok(())
+                    }
+                    EndStatus::Owed => {
+                        finals.primary.store(FAILED_END, Ordering::SeqCst);
+                        Err(SessionError::Unavailable)
+                    }
+                    EndStatus::Uncertain => Err(SessionError::Unavailable),
+                }
+            }
+=== lane	pub mod host_session > mod model	pub ( super ) fn reserve ( core : & Arc < Core > , scope : & Arc < RequestScope > ) -> Result < Owner , SessionError >	count 1	bytes 1339
+        pub(super) fn reserve(core: &Arc<Core>, scope: &Arc<RequestScope>)
+            -> Result<Owner, SessionError> {
+            route_seams::at("reg.reserve", scope.route_ctx());
+            let _producers =
+                core.producers.try_lock().map_err(|_|
+                            SessionError::Unavailable)?;
+            let mut s = hold(core)?;
+            if core.cell.session_word() & SEALED != 0 || s.attempted ||
+                    core.model.uncertain.load(Ordering::SeqCst) {
+                return Err(SessionError::Restricted);
+            }
+            s.attempted = true;
+            s.owner_complete = true;
+            s.child_complete = true;
+            if !#[allow(non_exhaustive_omitted_patterns)] match scope.kind {
+                                    ScopeKind::Bootstrap => true,
+                                    _ => false,
+                                } || scope.session != core.identity ||
+                        !scope.core.ptr_eq(&Arc::downgrade(core)) ||
+                    scope.admit(&core.cell).is_err() {
+                return Err(SessionError::Restricted);
+            }
+            s.active = true;
+            s.owner_complete = false;
+            s.child_complete = false;
+            s.record = Some("pending");
+            Ok(Owner { core: core.clone(), done: false })
+        }
+=== lane	pub mod host_session > mod model > impl RegistrationGate < '_ >	fn admission ( & self , state : & State ) -> Result < ( ) , ModelError >	count 1	bytes 443
+            fn admission(&self, state: &State) -> Result<(), ModelError> {
+                if !state.active || state.owner_complete {
+                    return Err(ModelError::Cancelled);
+                }
+                self.validate()?;
+                route_seams::at("model.gate.checked", self.scope.route_ctx());
+                self.scope.admit(&self.core.cell).map_err(|_|
+                        ModelError::Cancelled)
+            }
+=== lane	pub mod host_session > mod model > impl CallCancel for RegistrationGate < '_ >	fn admit_request ( & self , kind : RequestKind ) -> Result < ( ) , ModelError >	count 1	bytes 491
+            fn admit_request(&self, kind: RequestKind)
+                -> Result<(), ModelError> {
+                route_seams::at("model.gate.before",
+                    self.scope.route_ctx().kind(kind));
+                if kind != RequestKind::Metadata {
+                    return Err(ModelError::ConfigMismatch);
+                }
+                let state =
+                    hold(self.core).map_err(|_| ModelError::Cancelled)?;
+                self.admission(&state)
+            }
+=== lane	pub mod host_session > mod model > impl HostSession	pub ( super ) fn register_model_private ( & self , endpoint : & str , spec : & ModelPinSpec ) -> Result < ModelIdentityView , SessionError >	count 1	bytes 4391
+            pub(super) fn register_model_private(&self, endpoint: &str,
+                spec: &ModelPinSpec)
+                -> Result<ModelIdentityView, SessionError> {
+                let deadline =
+                    AbsoluteDeadline::within(SystemClocks,
+                        Duration::from_secs(30));
+                let mut owner = reserve(&self.core, &self.bootstrap.scope)?;
+                let original_watch =
+                    self.control.kernel_stop_authority().admit();
+                route_seams::at("model.reserved",
+                    self.bootstrap.scope.route_ctx());
+                let mut record = "not_required";
+                let result =
+                    (||
+                                {
+                                    self.startup_report().require_ready()?;
+                                    let watch =
+                                        original_watch.map_err(|_| SessionError::Restricted)?;
+                                    let gate =
+                                        RegistrationGate {
+                                            core: &self.core,
+                                            scope: &self.bootstrap.scope,
+                                            primary: &self.evidence,
+                                            watch: &watch,
+                                            deadline: &deadline,
+                                        };
+                                    let endpoint =
+                                        LoopbackEndpoint::parse(endpoint).map_err(model_error)?;
+                                    let transport =
+                                        VerifiedOllama::verify(endpoint, spec, &gate, &deadline,
+                                                    &watch).map_err(model_error)?;
+                                    let model =
+                                        crate::inference::RegisteredModel::verified(transport);
+                                    let (identity, view) = (model.identity, model.view.clone());
+                                    hold(&self.core)?.child_complete = true;
+                                    record = "unknown";
+                                    route_seams::at("model.record.before",
+                                        self.bootstrap.scope.route_ctx());
+                                    let sequence =
+                                        self.control.authority().record_session_model_registered(<[_]>::into_vec(::alloc::boxed::box_new([("model_digest".into(),
+                                                                        view.digest.clone()),
+                                                                    ("identity".into(),
+                                                                        view.identity.clone())]))).map_err(|_|
+                                                    SessionError::Backend("evidence_unavailable"))?;
+                                    record = "recorded";
+                                    route_seams::at("model.install.before",
+                                        self.bootstrap.scope.route_ctx());
+                                    let mut s = hold(&self.core)?;
+                                    gate.admission(&s).map_err(model_error)?;
+                                    s.registration =
+                                        Some(RegistrationReceipt {
+                                                sequence,
+                                                digest: identity,
+                                                model: Arc::new(model),
+                                                watch: watch.clone(),
+                                                primary: self.evidence.clone(),
+                                            });
+                                    route_seams::at("model.install.after",
+                                        self.bootstrap.scope.route_ctx());
+                                    owner.complete_held(record, &mut s)?;
+                                    Ok(view)
+                                })();
+                let completion =
+                    if owner.done { Ok(()) } else { owner.complete(record) };
+                match result {
+                    Ok(view) => { completion?; Ok(view) }
+                    Err(error) => Err(error),
+                }
+            }
+=== lane	pub mod host_session > mod model	impl Attempt	count 1	bytes 6518
+        impl Attempt {
+            pub(super) fn acquire(core: &Arc<Core>, authority: &Authority,
+                (run, agent, group, identity):
+                    (RunId, &AgentId, GroupId, [u8; 32]), original: &HaltCell,
+                grant: &OriginalGrant<'_>, invocation: &InvocationObserver)
+                -> Result<Self, AuthorityError> {
+                let busy =
+                    |_| AuthorityError::Unavailable("model slot unavailable");
+                route_seams::at("attempt.slot",
+                    Ctx::session(core.identity).run(run));
+                let (mut owner, previous, model_digest) =
+                    {
+                        let _producers =
+                            core.producers.try_lock().map_err(|_| busy(()))?;
+                        let mut s = hold(core).map_err(|_| busy(()))?;
+                        if core.cell.session_word() & (SEALED | FAILED) != 0 ||
+                                                s.active || core.model.uncertain.load(Ordering::SeqCst) ||
+                                        s.record.is_some_and(|r|
+                                                !#[allow(non_exhaustive_omitted_patterns)] match r {
+                                                        "recorded" | "not_required" => true,
+                                                        _ => false,
+                                                    }) || (s.attempted && s.registration.is_none()) ||
+                                s.registration.as_ref().is_some_and(|r|
+                                        r.digest != identity || r.watch.check_now().is_err()) {
+                            return Err(AuthorityError::Halted);
+                        }
+                        let previous =
+                            (s.attempt, s.owner_complete, s.child_complete, s.record);
+                        let digest =
+                            s.registration.as_ref().map(|r|
+                                    r.model.view.digest.clone());
+                        s.attempt = true;
+                        s.active = true;
+                        s.owner_complete = false;
+                        s.child_complete = false;
+                        s.record = Some("pending");
+                        (Owner { core: core.clone(), done: false }, previous,
+                            digest)
+                    };
+                route_seams::at("model.attempt.reserved",
+                    Ctx::session(core.identity).run(run));
+                let ticket =
+                    match authority.runs().admit_session_attempt((run, agent,
+                                group, identity), original, grant, invocation) {
+                        Ok(ticket) => ticket,
+                        Err(error) => {
+                            poisoned_grant(&error, original);
+                            let mut s = completion_hold(core).map_err(|_| busy(()))?;
+                            (s.attempt, s.owner_complete, s.child_complete, s.record) =
+                                previous;
+                            s.active = false;
+                            owner.done = true;
+                            return Err(error);
+                        }
+                    };
+                Ok(Self {
+                        owner,
+                        runs: authority.runs().clone(),
+                        ticket: Some(ticket),
+                        record_started: false,
+                        record: None,
+                        result: None,
+                        model_digest,
+                    })
+            }
+            pub(super) fn record_return(&mut self, authority: &Authority,
+                result: Result<(), ModelError>)
+                -> Result<EndStatus, SessionError> {
+                if self.record_started ||
+                        !Arc::ptr_eq(&self.runs, authority.runs()) {
+                    return Err(SessionError::Restricted);
+                }
+                self.record_started = true;
+                self.result = Some(result);
+                let ticket =
+                    self.ticket.as_ref().ok_or(SessionError::Restricted)?;
+                let mut detail =
+                    <[_]>::into_vec(::alloc::boxed::box_new([("op".into(),
+                                        "model_call".into()),
+                                    ("call".into(), ticket.ordinal.to_string()),
+                                    ("door".into(), ticket.door.clone()),
+                                    ("contract_hash".into(),
+                                        ticket.admission.contract_hash.clone()),
+                                    ("request".into(), ticket.admission.request.clone()),
+                                    ("identity".into(), hex::encode(ticket.admission.identity)),
+                                    ("outcome".into(),
+                                        match self.result.as_ref().unwrap() {
+                                                Ok(()) => "ok",
+                                                Err(e) => e.code(),
+                                            }.into())]));
+                if let Some(digest) = &self.model_digest {
+                    detail.push(("model_digest".into(), digest.clone()));
+                }
+                route_seams::at("model.attempt.record.before",
+                    self.route_ctx());
+                let record =
+                    authority.record_model_call(ticket.run, &ticket.agent,
+                        detail);
+                self.record = Some(record);
+                let mut s = completion_hold(&self.owner.core)?;
+                s.child_complete = true;
+                s.record = Some(record.as_str());
+                Ok(record)
+            }
+            pub(super) fn complete(mut self) -> Result<(), SessionError> {
+                route_seams::at("complete", self.route_ctx());
+                if !#[allow(non_exhaustive_omitted_patterns)] match self.record
+                            {
+                            Some(EndStatus::Recorded { .. }) => true,
+                            _ => false,
+                        } {
+                    return Err(SessionError::Unavailable);
+                }
+                self.runs.settle_session_attempt(self.ticket.take().ok_or(SessionError::Restricted)?,
+                            completion_deadline(&self.owner.core)).map_err(|_|
+                            SessionError::Unavailable)?;
+                self.owner.complete("recorded")
+            }
+        }
+=== lane	pub mod host_session > mod model	impl Attempt	count 1	bytes 353
+        /// SB-3E S1: an attempt's identity at its route points.
+        impl Attempt {
+            fn route_ctx(&self) -> Ctx<'static> {
+                let ctx = Ctx::session(self.owner.core.identity);
+                let ticket = self.ticket.as_ref();
+                ticket.map_or(ctx, |t| ctx.run(t.run).attempt(t.ordinal))
+            }
+        }
+=== lane	pub mod host_session > mod model > impl SessionDoor	pub ( super ) fn bind_inference_private ( & self , run : RunId , contract_hash : & str , request : & str , expected_identity : [ u8 ; 32 ] ) -> Result < ( ) , crate ::	count 1	bytes 2732
+            pub(super) fn bind_inference_private(&self, run: RunId,
+                contract_hash: &str, request: &str,
+                expected_identity: [u8; 32])
+                -> Result<(), crate::authority::AuthorityError> {
+                use crate::authority::AuthorityError as E;
+                let DoorKind::Original { file_grant } =
+                    self.kind else { return Err(E::Halted); };
+                route_seams::at("bind.entry",
+                    self.context.scope.route_ctx().run(run));
+                if !self.context.scope.live(self.core.cell.session_word()) {
+                    return Err(E::Halted);
+                }
+                let identity =
+                    {
+                        let s =
+                            hold(&self.core).map_err(|_|
+                                        E::Unavailable("model slot unavailable"))?;
+                        let r =
+                            s.registration.as_ref().ok_or(E::ModelNotRegistered)?;
+                        if self.core.model.uncertain.load(Ordering::SeqCst) ||
+                                r.watch.check_now().is_err() {
+                            return Err(E::Halted);
+                        }
+                        r.digest
+                    };
+                if identity != expected_identity {
+                    return Err(E::ModelIdentityMismatch);
+                }
+                let backend = self.door.session_backend();
+                let q_run =
+                    match self.context.scope.mother_run.get() {
+                        Some((control, known)) if control.ptr_eq(&backend) =>
+                            Some(*known),
+                        Some(_) => return Err(E::NotMember),
+                        None => None,
+                    };
+                let control = backend.upgrade().ok_or(E::Halted)?;
+                let authority = control.authority();
+                let clock =
+                    (authority.clock().monotonic_ms(),
+                        authority.clock().wall_ms());
+                authority.runs().admit_session_inference(crate::authority::run::SessionBinding {
+                            run,
+                            agent: self.door.agent(),
+                            group: self.door.origin(),
+                            contract_hash,
+                            request,
+                            identity,
+                            original: &self.context.cell,
+                            q_run,
+                            grants: authority.grants(),
+                            grant: file_grant,
+                            clock,
+                        }).inspect_err(|e| poisoned_grant(e, &self.context.cell))
+            }
+=== lane	pub mod host_session > mod model > impl SessionDoor	pub ( super ) fn model_identity_private ( & self ) -> Option < ModelIdentityView >	count 1	bytes 741
+            pub(super) fn model_identity_private(&self)
+                -> Option<ModelIdentityView> {
+                let DoorKind::Original { .. } =
+                    self.kind else { return None; };
+                route_seams::at("identity", self.context.scope.route_ctx());
+                if !self.context.scope.live(self.core.cell.session_word()) {
+                    return None;
+                }
+                let s = hold(&self.core).ok()?;
+                let r = s.registration.as_ref()?;
+                if self.core.model.uncertain.load(Ordering::SeqCst) ||
+                        r.watch.check_now().is_err() {
+                    return None;
+                }
+                Some(r.model.view.clone())
+            }
+=== lane	pub mod host_session > mod model > impl CallGate < '_ >	fn predicates ( & self , kind : RequestKind ) -> Result < ( ) , Refusal >	count 1	bytes 6190
+            fn predicates(&self, kind: RequestKind) -> Result<(), Refusal> {
+                use {
+                    AuthorityError as E,
+                    ModelError::{Cancelled, Stopped, Timeout},
+                };
+                let (core, scope) =
+                    (&self.door.core, &self.door.context.scope);
+                let clock = self.authority.clock();
+                let grant =
+                    OriginalGrant {
+                        grants: self.authority.grants(),
+                        grant: self.grant,
+                        clock: (clock.monotonic_ms(), clock.wall_ms()),
+                    };
+                let at = self.sample();
+                let expired = self.lapsed(at);
+                route_seams::at("model.call.sampled", self.route_ctx(kind));
+                let runs = self.authority.runs();
+                let hold =
+                    runs.try_request_hold().map_err(|poisoned|
+                                {
+                                    if poisoned {
+                                        core.model.uncertain.store(true, Ordering::SeqCst);
+                                        self.door.context.fail();
+                                    }
+                                    route_seams::note("refused:hold", self.route_ctx(kind));
+                                    ("refused:hold", Cancelled)
+                                })?;
+                if expired {
+                    route_seams::note("refused:1.expired",
+                        self.route_ctx(kind));
+                    return Err(("refused:1", Timeout));
+                }
+                let judged = scope.judge(Some(at));
+                if judged == Err(crate::host_session::Lapse::Expired) {
+                    route_seams::note("refused:1.judged", self.route_ctx(kind));
+                    return Err(("refused:1", Timeout));
+                }
+                let word = core.cell.session_word();
+                if core.model.uncertain.load(Ordering::SeqCst) ||
+                            word != scope.snapshot || judged.is_err() {
+                    route_seams::note("refused:1.cancelled",
+                        self.route_ctx(kind));
+                    return Err(("refused:1", Cancelled));
+                }
+                self.watch.check_now().map_err(|_|
+                            {
+                                route_seams::note("refused:2", self.route_ctx(kind));
+                                ("refused:2", Stopped)
+                            })?;
+                if !self.primary.try_health().is_some_and(|h|
+                                !h.latched && h.owed == 0 && !h.recovery_required &&
+                                    h.unsettled == 0) {
+                    route_seams::note("refused:3", self.route_ctx(kind));
+                    return Err(("refused:3", Cancelled));
+                }
+                if self.ticket.ended() {
+                    route_seams::note("refused:4.ended", self.route_ctx(kind));
+                    return Err(("refused:4", Cancelled));
+                }
+                let _held =
+                    match hold.live(self.ticket, &grant) {
+                        Ok(held) => held,
+                        Err(error) => {
+                            drop(hold);
+                            let poisoned = crate::authority::run::GRANT_POISONED;
+                            if #[allow(non_exhaustive_omitted_patterns)] match error {
+                                    AuthorityError::Unavailable(w) if w == poisoned => true,
+                                    _ => false,
+                                } {
+                                core.model.uncertain.store(true, Ordering::SeqCst);
+                                self.door.context.fail();
+                            }
+                            let grant =
+                                #[allow(non_exhaustive_omitted_patterns)] match error {
+                                    E::GrantNotLive | E::Unavailable(_) => true,
+                                    _ => false,
+                                };
+                            route_seams::note("refused:live", self.route_ctx(kind));
+                            return Err((if grant { "refused:5" } else { "refused:4" },
+                                        Cancelled));
+                        }
+                    };
+                let unspent =
+                    self.charged.load(Ordering::SeqCst) &&
+                        !self.spent.load(Ordering::SeqCst);
+                if kind == RequestKind::Chat && !unspent {
+                    route_seams::note("refused:6", self.route_ctx(kind));
+                    return Err(("refused:6", Cancelled));
+                }
+                if self.invocation.is_revoked() {
+                    route_seams::note("refused:7", self.route_ctx(kind));
+                    return Err(("refused:7", Cancelled));
+                }
+                route_seams::at("model.call.observed", self.route_ctx(kind));
+                if let Err((error, lapse)) =
+                        scope.admit_judged(&self.door.context.cell, Some(at)) {
+                    drop((_held, hold));
+                    if #[allow(non_exhaustive_omitted_patterns)] match error {
+                            E::Capacity => true,
+                            _ => false,
+                        } {
+                        self.door.context.fail();
+                        route_seams::note("refused:8.capacity",
+                            self.route_ctx(kind));
+                        return Err(("refused:8", Cancelled));
+                    }
+                    let expired =
+                        lapse == Some(crate::host_session::Lapse::Expired);
+                    route_seams::note("refused:8.cas", self.route_ctx(kind));
+                    return Err(("refused:8",
+                                if expired { Timeout } else { Cancelled }));
+                }
+                route_seams::at("model.call.admitted", self.route_ctx(kind));
+                if kind == RequestKind::Chat {
+                    self.spent.store(true, Ordering::SeqCst);
+                }
+                Ok(())
+            }
+=== lane	pub mod host_session > mod model	impl CallCancel for CallGate < '_ >	count 1	bytes 947
+        impl CallCancel for CallGate<'_> {
+            fn cancelled(&self) -> Option<CancelCause> {
+                let core = &self.door.core;
+                let (at, scope) = (self.sample(), &self.door.context.scope);
+                let cancelled =
+                    (!self.lapsed(at) &&
+                                (core.model.uncertain.load(Ordering::SeqCst) ||
+                                                core.cell.session_word() != scope.snapshot ||
+                                            !scope.eligible(Some(at)) ||
+                                        self.ticket.ended())).then_some(CancelCause::Cancelled);
+                cancelled
+            }
+            fn admit_request(&self, kind: RequestKind)
+                -> Result<(), ModelError> {
+                route_seams::at("call.gate", self.route_ctx(kind));
+                let admitted = self.admission(kind);
+                admitted
+            }
+        }
+=== lane	pub mod host_session > mod model	impl CallGate < '_ >	count 1	bytes 351
+        /// SB-3E S1: a call gate's identity at its route points.
+        impl CallGate<'_> {
+            fn route_ctx(&self, kind: RequestKind) -> Ctx<'static> {
+                let (scope, ticket) = (&self.door.context.scope, self.ticket);
+                scope.route_ctx().run(ticket.run).attempt(ticket.ordinal).kind(kind)
+            }
+        }
+=== lane	pub mod host_session	impl RequestScope	count 1	bytes 218
+    /// SB-3E S1: a request's identity at its route points.
+    impl RequestScope {
+        pub(crate) fn route_ctx(&self) -> Ctx<'static> {
+            Ctx::session(self.session).request(self.request)
+        }
+    }
+=== lane	pub mod host_session	mod route_s3	count 1	bytes 1132
+    /// SB-3E S3 (design 4.2): `SessionDoor::route_revoke_original_grant`, in a
+    /// seam-only child module, as S4.
+    mod route_s3 {
+        //! SB-3E S3 (design 4.2), seam builds only: a route cell revokes the
+        //! original door's own File grant by the production revocation.
+        use super::{DoorKind, SessionDoor};
+        /// SB-3E S3: `GovernedControl::revoke_grant` on this original door's File
+        /// grant: the revocation, its `GrantRevoked` record, then `settle()`. A
+        /// continuation door holds no grant and revokes nothing.
+        impl SessionDoor {
+            pub fn route_revoke_original_grant(&self) -> bool {
+                const M: &str = "nexus-mother-route-seam-S3-door";
+                std::hint::black_box(M.as_bytes());
+                let DoorKind::Original { file_grant } =
+                    self.kind else { return false; };
+                let Some(control) =
+                    self.door.session_backend().upgrade() else {
+                        return false;
+                    };
+                control.revoke_grant(file_grant).is_ok()
+            }
+        }
+    }
+=== lane	pub mod host_session	pub mod route_s4	count 1	bytes 4109
+    /// SB-3E S4 (design 4.2, 4.5): `HostSession::route_poison` and the broker
+    /// locks it names, in a seam-only child module (SB3E-R32.7: the facade
+    /// holds no S4 line beyond this declaration, and re-exports nothing).
+    pub mod route_s4 {
+        //! SB-3E S4 (design 4.2, 4.5; AM-2 B.2), seam builds only: a route cell
+        //! poisons exactly one broker lock. Moved out of the `host_session` facade
+        //! (SB3E-R32.7), whose lines the Mother C1-S1 guard restricts.
+        use super::HostSession;
+        /// SB-3E S4 (design 4.2, 4.5): the broker lock a route cell poisons.
+        pub enum RouteLock {
+            ModelState,
+            EvidenceInner,
+            RunTable,
+            Pending,
+            Producers,
+            Actions,
+        }
+        #[automatically_derived]
+        #[doc(hidden)]
+        unsafe impl ::core::clone::TrivialClone for RouteLock { }
+        #[automatically_derived]
+        impl ::core::clone::Clone for RouteLock {
+            #[inline]
+            fn clone(&self) -> RouteLock { *self }
+        }
+        #[automatically_derived]
+        impl ::core::marker::Copy for RouteLock { }
+        #[automatically_derived]
+        impl ::core::fmt::Debug for RouteLock {
+            #[inline]
+            fn fmt(&self, f: &mut ::core::fmt::Formatter)
+                -> ::core::fmt::Result {
+                ::core::fmt::Formatter::write_str(f,
+                    match self {
+                        RouteLock::ModelState => "ModelState",
+                        RouteLock::EvidenceInner => "EvidenceInner",
+                        RouteLock::RunTable => "RunTable",
+                        RouteLock::Pending => "Pending",
+                        RouteLock::Producers => "Producers",
+                        RouteLock::Actions => "Actions",
+                    })
+            }
+        }
+        #[automatically_derived]
+        impl ::core::marker::StructuralPartialEq for RouteLock { }
+        #[automatically_derived]
+        impl ::core::cmp::PartialEq for RouteLock {
+            #[inline]
+            fn eq(&self, other: &RouteLock) -> bool {
+                let __self_discr =
+                    ::core::intrinsics::discriminant_value(self);
+                let __arg1_discr =
+                    ::core::intrinsics::discriminant_value(other);
+                __self_discr == __arg1_discr
+            }
+        }
+        #[automatically_derived]
+        impl ::core::cmp::Eq for RouteLock {
+            #[inline]
+            #[doc(hidden)]
+            #[coverage(off)]
+            fn assert_receiver_is_total_eq(&self) -> () {}
+        }
+        /// SB-3E S4: exactly the named lock is poisoned by a caught panic while it
+        /// is held (a prior panic under it); nothing else changes.
+        impl HostSession {
+            pub fn route_poison(&self, lock: RouteLock) {
+                const M: &str = "nexus-mother-route-seam-S4-session";
+                std::hint::black_box(M.as_bytes());
+                fn poison<T>(mutex: &std::sync::Mutex<T>) {
+                    let _ =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+                                    {
+                                        let _held = mutex.lock();
+                                        {
+                                            ::core::panicking::panic_fmt(format_args!("route seam S4: session lock poisoned"));
+                                        };
+                                    }));
+                }
+                match lock {
+                    RouteLock::ModelState => poison(&self.core.model.state),
+                    RouteLock::EvidenceInner =>
+                        self.evidence.route_poison_inner(),
+                    RouteLock::RunTable =>
+                        self.control.authority().runs().route_poison_runs(),
+                    RouteLock::Pending => poison(&self.core.pending),
+                    RouteLock::Producers => poison(&self.core.producers),
+                    RouteLock::Actions => poison(&self.core.actions),
+                }
+            }
+        }
+    }
+=== lane	pub mod host_session > impl HostSession	pub fn finish_bootstrap ( & self ) -> Result < ( ) , SessionError >	count 1	bytes 990
+        /// Last bootstrap transition, invoked by the trusted host only after its
+        /// three-source report has succeeded. A late result never installs ready.
+        pub fn finish_bootstrap(&self) -> Result<(), SessionError> {
+            self.startup_report().require_ready()?;
+            if self.control.authority().recovery_required() ||
+                        !self.recovery_report()?.is_empty() ||
+                    self.control.workspace().is_none() {
+                return Err(SessionError::Restricted);
+            }
+            let _producers =
+                self.core.producers.try_lock().map_err(|_|
+                            SessionError::Unavailable)?;
+            route_seams::at("reg.ready", self.bootstrap.scope.route_ctx());
+            if !self.core.model.ready()? {
+                return Err(SessionError::Restricted);
+            }
+            self.core.cell.session_compare(0,
+                    READY).map_err(|_| SessionError::Restricted)
+        }
+=== lane	pub mod host_session > impl SessionDoor	pub fn cancel_run ( & self , run : crate :: authority :: ids :: RunId ) -> Result < crate :: governed :: RecordBatch , SessionFailure >	count 1	bytes 938
+        pub fn cancel_run(&self, run: crate::authority::ids::RunId)
+            -> Result<crate::governed::RecordBatch, SessionFailure> {
+            route_seams::at("door.cancel_run",
+                self.context.scope.route_ctx().run(run));
+            let call = close::settlement(&self.core)?;
+            {
+                let pending =
+                    self.core.pending.lock().map_err(|_|
+                                {
+                                    self.context.fail();
+                                    crate::authority::AuthorityError::Halted
+                                })?;
+                if pending.as_ref().is_some_and(|pending| pending.run == run)
+                    {
+                    self.core.pending_context.store(0, Ordering::SeqCst);
+                }
+            }
+            let result = self.door.cancel_run(run).map_err(Into::into);
+            call.joined();
+            result
+        }
+=== lane	pub mod host_session > impl SessionDoor	pub fn halt ( & self , reason : crate :: governed :: HaltReason ) -> Result < crate :: governed :: RecordBatch , SessionFailure >	count 1	bytes 372
+        pub fn halt(&self, reason: crate::governed::HaltReason)
+            -> Result<crate::governed::RecordBatch, SessionFailure> {
+            route_seams::at("door.halt", self.context.scope.route_ctx());
+            let call = close::settlement(&self.core)?;
+            let result = self.door.halt(reason);
+            call.joined();
+            Ok(result)
+        }
+=== lane	pub mod host_session > impl SessionIngress	pub fn emergency ( & self ) -> Result < IngressEvent , SessionError >	count 1	bytes 976
+        pub fn emergency(&self) -> Result<IngressEvent, SessionError> {
+            route_seams::at("ingress.emergency",
+                Ctx::session(self.core.identity));
+            loop {
+                let old = self.core.cell.session_word();
+                if old & SEALED != 0 {
+                    return Err(SessionError::SessionEnded);
+                }
+                if old & EPOCH_MASK == EPOCH_MASK {
+                    self.fail();
+                    return Err(SessionError::Exhausted);
+                }
+                let cause =
+                    if old & 7 == 0 {
+                        2 | (u64::from(u16::MAX - 1) << 8)
+                    } else { 0 };
+                let next = (old + EPOCH_STEP) | EMERGENCY | cause;
+                if self.core.cell.session_compare(old, next).is_ok() {
+                    return self.core.stops.register(&self.core,
+                            next / EPOCH_STEP);
+                }
+            }
+        }
+=== lane	pub mod host_session > impl SessionIngress	pub fn accept ( & self , kind : CommandKind , sequence : u64 ) -> Result < SessionRequest , SessionError >	count 1	bytes 5800
+        pub fn accept(&self, kind: CommandKind, sequence: u64)
+            -> Result<SessionRequest, SessionError> {
+            route_seams::at("ingress.accept",
+                Ctx::session(self.core.identity).request(sequence));
+            let accepted = Instant::now();
+            let snapshot = self.core.cell.session_word();
+            if snapshot & SEALED != 0 {
+                return Err(SessionError::SessionEnded);
+            }
+            if sequence == u64::MAX {
+                self.fail();
+                return Err(SessionError::Exhausted);
+            }
+            self.core.sequence.fetch_update(Ordering::SeqCst,
+                        Ordering::SeqCst,
+                        |old|
+                            {
+                                (sequence > old).then_some(sequence)
+                            }).map_err(|_| SessionError::Sequence)?;
+            if kind == CommandKind::Lift {
+                return Err(SessionError::Unavailable);
+            }
+            let target =
+                match kind {
+                    CommandKind::Approve =>
+                        self.core.pending_context.load(Ordering::SeqCst),
+                    CommandKind::Undo =>
+                        self.core.undo_context.load(Ordering::SeqCst),
+                    _ => 0,
+                };
+            if kind == CommandKind::Quit {
+                let deadline = self.begin_shutdown(accepted);
+                let close =
+                    self.core.close.get_or_init(||
+                            CloseIdentity {
+                                sequence,
+                                generation: snapshot / EPOCH_STEP,
+                                deadline,
+                            });
+                let mut current = snapshot;
+                loop {
+                    if current & SEALED != 0 {
+                        return Err(SessionError::SessionEnded);
+                    }
+                    if current & CLOSING != 0 { break; }
+                    match self.core.cell.session_compare(current,
+                            current | CLOSING) {
+                        Ok(()) => break,
+                        Err(now) => current = now,
+                    }
+                }
+                return Ok(SessionRequest {
+                            core: self.core.clone(),
+                            kind,
+                            sequence,
+                            snapshot,
+                            target: 0,
+                            deadline: close.deadline,
+                            close: Some(close.sequence),
+                            scope: Arc::new(RequestScope {
+                                    core: Arc::downgrade(&self.core),
+                                    session: self.core.identity,
+                                    request: sequence,
+                                    snapshot: snapshot | CLOSING,
+                                    deadline: close.deadline,
+                                    kind: ScopeKind::CloseCleanup,
+                                    next_step: AtomicU64::new(0),
+                                    facts: outcome::RequestFacts::default(),
+                                    restore: outcome::RestoreFacts::default(),
+                                    mission_deadlines: OnceLock::new(),
+                                    mother_run: OnceLock::new(),
+                                }),
+                        });
+            }
+            if !#[allow(non_exhaustive_omitted_patterns)] match kind {
+                            CommandKind::Status | CommandKind::Evidence => true,
+                            _ => false,
+                        } && snapshot & (CLOSING | FAILED | EMERGENCY) != 0 {
+                return Err(SessionError::Restricted);
+            }
+            if #[allow(non_exhaustive_omitted_patterns)] match kind {
+                        CommandKind::Approve | CommandKind::Undo => true,
+                        _ => false,
+                    } && target == 0 {
+                return Err(SessionError::NoTarget);
+            }
+            let seconds =
+                if #[allow(non_exhaustive_omitted_patterns)] match kind {
+                        CommandKind::Run | CommandKind::Approve => true,
+                        _ => false,
+                    } {
+                    300
+                } else { 120 };
+            Ok(SessionRequest {
+                    core: self.core.clone(),
+                    kind,
+                    sequence,
+                    snapshot,
+                    target,
+                    deadline: accepted + Duration::from_secs(seconds),
+                    close: None,
+                    scope: Arc::new(RequestScope {
+                            core: Arc::downgrade(&self.core),
+                            session: self.core.identity,
+                            request: sequence,
+                            snapshot,
+                            deadline: accepted + Duration::from_secs(seconds),
+                            kind: if #[allow(non_exhaustive_omitted_patterns)] match kind
+                                    {
+                                    CommandKind::Undo | CommandKind::Cleanup => true,
+                                    _ => false,
+                                } {
+                                ScopeKind::Restoration
+                            } else { ScopeKind::Work },
+                            next_step: AtomicU64::new(0),
+                            facts: outcome::RequestFacts::default(),
+                            restore: outcome::RestoreFacts::default(),
+                            mission_deadlines: OnceLock::new(),
+                            mother_run: OnceLock::new(),
+                        }),
+                })
+        }
