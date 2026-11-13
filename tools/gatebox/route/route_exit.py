@@ -62,8 +62,9 @@ os.execv(sys.argv[1], sys.argv[1:])
 """
 # SB3E-R64: the exact control counts each controls step must report; any other count fails the step.
 CONTROLS = {"a1_controls": 15, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109,
-            # SB3E-R72: A5's 46 lexical plants + 4 new (lone CR, three include rows) + 21 expanded plants + 9 capture controls.
-            "a5_controls": 80}
+            # SB3E-R72: A5's 46 lexical plants + 4 new (lone CR, three include rows) + 21 expanded plants + 9 capture controls;
+            # R75: + 3 expanded plants (C string before a hook, twice; `..` after a link) + 2 (pin order, whole-unit fallback).
+            "a5_controls": 85}
 
 
 def sha256(data):

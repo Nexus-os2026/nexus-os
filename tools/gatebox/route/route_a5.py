@@ -635,7 +635,11 @@ def check(repo, toolchain, files=None, cargo_meta=None, links=None):
                     out.append(dict({"check": "includes", "file": rel, "reason": "not `#[path]` on a `mod x;`",
                                      "offset": src.toks[j][2]}, **({"path": os.path.normpath(os.path.join(
                                          os.path.dirname(rel), lit))} if lit is not None else {})))
-        for i, path, macro in sites:
+        for i, path, macro in sites:  # SB3E-R75.2 (Fable SHOULD 7): no `..` after a normal component
+            lit = [unquote(src.toks[k]) for k in range(i + 1, min(i + 4, len(src.toks))) if src.toks[k][1] == "str"][:1]
+            parts = (lit[0] if lit else "").split("/")
+            if any(x == ".." and any(y not in ("..", ".") for y in parts[:j]) for j, x in enumerate(parts)):
+                out.append({"check": "includes", "file": rel, "reason": "`..` after a normal component", "literal": lit[0]})
             row = f"{rel}|{macro}|{path}"
             used[row] = used.get(row, 0) + 1
             if (path not in parsed or {"tests", "route_cells"} & set(path.split(os.sep))) and not under(src, gates, i, TEST) \
@@ -683,6 +687,7 @@ def sha(text):
 
 # ---- SB3E-R72 (design rev 3.1): C1 and C2 over rustc's own expanded text, captured by route_a5_expand ----------
 PINS = "tools/gatebox/route/a5_expanded"
+GC, GC_ROOT = "nexus_governed_control", "crates/nexus-governed-control/src/lib.rs"
 RECIPES = (("ship", "ship"), ("ship2", "ship"), ("lane", "lane"), ("lane2", "lane"), ("ship-dev", "ship-dev"),
            ("test", "test"))
 QUALIFIERS = ("const", "async", "unsafe", "safe", "default", "extern")
@@ -827,12 +832,13 @@ def parse_pin(text):
 
 @functools.lru_cache(maxsize=16)
 def idents(text):
-    """(identifier set, include-family invocations as (macro, literal)) of one expansion; comments and literals out."""
-    toks = lex(text)[0]
+    """(identifier set, include-family invocations as (macro, literal), lexer refusals) of one expansion; comments and
+    literals out. SB3E-R75.1: a refusal desynchronizes the tokens after it, so the caller fails closed on any."""
+    toks, bad = lex(text)
     found = {x[0][2:] if x[0].startswith("r#") else x[0] for x in toks if x[1] == "id"}
     calls = [(x[0], unquote(toks[i + 3]) if i + 3 < len(toks) else None) for i, x in enumerate(toks[:-1])
              if x[1] == "id" and x[0] in INCLUDES and toks[i + 1][0] == "!"]
-    return frozenset(found), tuple(calls)
+    return frozenset(found), tuple(calls), tuple(bad)
 
 
 def units(cap, test=None):
@@ -909,6 +915,8 @@ def expanded(repo, data, caps, meta, graph=None, plain=None):
         out += capture_rules(name, cap, (kind, graph[kind]) if kind in graph else None,
                              plain.get(kind) if name in ("ship", "lane") else None)
         for (crate, source, test), text in units(cap).items():  # S5: every expansion scanned
+            out += [{"check": "capture", "recipe": name, "reason": "expansion not lexed", "unit": [crate, source],
+                     "refused": idents(text)[2][:3]}] if idents(text)[2] else []
             for macro, lit in idents(text)[1]:
                 path = os.path.normpath(os.path.join(os.path.dirname(source), lit or ""))
                 ok = lit and os.path.isfile(os.path.join(repo, path)) and \
@@ -950,10 +958,10 @@ def c2(repo, ship, lane):
         path = os.path.join(folder, crate + ".pin")
         want_text = open(path, encoding="utf-8", newline="").read() if os.path.isfile(path) else ""
         if render_pin(crate, source, blocks) != want_text:
-            want = parse_pin(want_text) or []
+            want, before = parse_pin(want_text) or [], len(out)
             out += [{"check": "C2", "unit": crate, "change": change, "side": b[0], "path": b[1], "item": b[2], "count": b[3]}
                     for change, have_, other in (("unpinned", blocks, want), ("stale", want, blocks)) for b in have_ if b not in other]
-            out += [{"check": "C2", "unit": crate, "reason": "pin text differs"}] if blocks == want else []
+            out += [{"check": "C2", "unit": crate, "reason": "pin text differs"}] if len(out) == before else []  # R75.2: order too
     return out
 
 
@@ -1037,9 +1045,9 @@ def expanded_controls(repo, toolchain, wrapper, work, data, seams, meta):
             caps[kind] = load(*E.capture(tree, toolchain, kind, work, f"{name}-{kind}", wrapper, target, keep_emit), target, True)
         return caps
 
-    def judge(name, cls, expect, got, **extra):
+    def judge(name, cls, expect, got, also=(), **extra):
         row = dict(extra, name=name, **{"class": cls, "expect": expect})
-        row["killed"] = any(all(f.get(k) == v for k, v in expect.items()) for f in got)
+        row["killed"] = all(any(all(f.get(k) == v for k, v in e.items()) for f in got) for e in [expect, *also])
         row["got"] = [] if row["killed"] else got[:5]
         rows.append(row)
         findings.extend([] if row["killed"] else [{"kind": "expanded_plant_not_killed", "plant": name, "got": got[:5]}])
@@ -1074,15 +1082,19 @@ def expanded_controls(repo, toolchain, wrapper, work, data, seams, meta):
                 open(path, "w", encoding="utf-8", newline="").write(text)
             for rel in list(plant.get("create", {})) + list(plant.get("symlink", {})):
                 os.unlink(os.path.join(tree, rel))
-            for up in reversed(made):
+            for up in sorted(made, key=len, reverse=True):
                 os.rmdir(up)
         restored = all(open(p, encoding="utf-8", newline="").read() == t for p, t in before.items())
-        judge(plant["name"], plant["class"], plant["expect"], got if unique and restored else [], unique=unique, restored=restored)
+        judge(plant["name"], plant["class"], plant["expect"], got if unique and restored else [], plant.get("expect_also", ()),
+              unique=unique, restored=restored)
     # Capture controls: mutations of the healthy captures and data (design rev 3: preservation; R72 B1, B2, S5).
     ship, lane = healthy["ship"], healthy["lane"]
     first = lambda cap, crate: next(r for r in cap["rows"] if r.get("crate") == crate)
     variant = lambda cap, **kw: dict(cap, **kw)
-    hands = first(lane, "mother_hands")["file"]
+    hands, gc = first(lane, "mother_hands")["file"], first(lane, "nexus_governed_control")["file"]
+    blocks = [b[4] for b in pin_blocks(units(ship, False)[(GC, GC_ROOT, False)], lane["text"][gc]) if " route_refuse_next " in b[2]
+              or " route_poison_inner " in b[2] and "pub ( crate )" in b[2]]
+    swapped = lane["text"][gc].replace(blocks[0], "\0").replace(blocks[1], blocks[0]).replace("\0", blocks[1]) if len(blocks) == 2 else ""
     cases = [
         ("missing_unit", {"ship": variant(ship, rows=[r for r in ship["rows"] if r.get("crate") != "nexus_crypto"])}, data,
          {"check": "capture", "recipe": "ship", "reason": "units differ from Cargo's unit graph"}),
@@ -1094,6 +1106,10 @@ def expanded_controls(repo, toolchain, wrapper, work, data, seams, meta):
          {"check": "capture", "recipe": "ship", "reason": "environment differs beyond RUSTC_BOOTSTRAP"}),
         ("placeholder_lane_only", {"lane": variant(lane, text=dict(lane["text"], **{hands: lane["text"][hands] + 'const P: &str = include_str!("x");\n'}))},
          data, {"check": "placeholder", "recipe": "lane", "unit": "mother_hands", "macro": "include_str"}),
+        ("pin_order_swapped", {"ship": ship, "lane": variant(lane, text=dict(lane["text"], **{gc: swapped}))}, data,
+         {"check": "C2", "unit": GC, "reason": "pin text differs"}),
+        ("whole_unit_fallback", {"ship": ship, "lane": variant(lane, text=dict(lane["text"], **{gc: lane["text"][gc] + "fn probe() -> P<{ 1 }> {}\n"}))},
+         data, {"check": "C2", "unit": GC, "change": "unpinned", "side": "whole-lane"}),
         ("stale_row", healthy, dict(data, test_hooks=data["test_hooks"] + ["never_written_for_test"]),
          {"check": "C1", "reason": "stale row", "row": "never_written_for_test"}),
         ("owner_unresolved", healthy, dict(data, test_hooks=data["test_hooks"] + ["elsewhere/x.rs|kept_for_test"]),
