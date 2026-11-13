@@ -75,7 +75,7 @@ values={n.targets[0].id:ast.literal_eval(n.value) for n in ast.parse(body).body
         if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
         and n.targets[0].id in ('FILES','NOT_INSTALLED','HARNESS','WRAPPER','WRAPPER_SHA256')}
 files,excluded=values['FILES'],values['NOT_INSTALLED']
-if (len(values['FILES'])!=38 or len(excluded)!=12 or len(set(files))!=len(files) or len(set(excluded))!=len(excluded)
+if (len(values['FILES'])!=38 or len(excluded)!=22 or len(set(files))!=len(files) or len(set(excluded))!=len(excluded)
         or set(files)&set(excluded) or set(names)!={'tools/gatebox/'+n for n in files+excluded}):
     raise SystemExit('reviewed FILES/NOT_INSTALLED partition mismatch')
 names=['tools/gatebox/'+n for n in files]+[values['HARNESS']]

@@ -87,14 +87,24 @@ def unique(pairs):
 def load_pins(repo, path):
     """([findings], pins): the checked tree's own pins file, opened without following a link (A1 and A7)."""
     refused = lambda reason: ([f("pins", reason=reason)], None)
-    if path is None or os.path.abspath(path) != os.path.join(repo, PINS):
+    # GB3 Codex 1: the argument must be spelled exactly as the tree's own path (no `..` or alias spelling), and
+    # the file is reached from the repo directory through non-following descriptors, never by the pathname.
+    if path is None or not os.path.isabs(repo) or os.path.normpath(repo) != repo or path != os.path.join(repo, PINS):
         return refused(f"--pins must be the checked tree's own {PINS}")
     if os.path.islink(os.path.join(repo, "tools")):
         return refused("tools is a symbolic link")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    root = tools = None
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+        root = os.open(repo, flags | os.O_DIRECTORY)
+        tools = os.open("tools", flags | os.O_DIRECTORY, dir_fd=root)
+        fd = os.open(os.path.basename(PINS), flags | os.O_NONBLOCK, dir_fd=tools)
     except OSError as error:
         return refused(f"missing or a symbolic link: {error.strerror}")
+    finally:
+        for handle in (tools, root):
+            if handle is not None:
+                os.close(handle)
     if not stat.S_ISREG(os.fstat(fd).st_mode):
         os.close(fd)
         return refused("not a regular file")

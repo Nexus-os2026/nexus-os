@@ -133,6 +133,8 @@ PINS_CONTROLS = {
     "pins_oversize": (lambda t: write(t, PINS, open(os.path.join(t, PINS)).read() + " " * 65536), PINS, "over 65536 bytes"),
     "pins_other_path": (lambda t: shutil.copy(os.path.join(t, PINS), os.path.join(t, "route_pins.json")),
                         "route_pins.json", "checked tree's own"),
+    "pins_alias_dotdot": (lambda t: os.symlink(os.path.join(t, "tools"), os.path.join(t, "pins-alias")),
+                          "pins-alias/../" + PINS, "checked tree's own"),  # GB3 Codex 1: an alias spelling
     "pins_absent": (lambda t: None, None, None),
 }
 MARKING = """#!/usr/bin/python3 -I

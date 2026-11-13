@@ -159,7 +159,8 @@ class RouteReceiptControls(unittest.TestCase):
     def test_harness_cwd_is_set_literal(self):
         self.summary['commands'][-1]['cwd'] = '/work/src'; self.refuse('route invocation')
     def test_a7_argv_is_policy(self):
-        self.summary['commands'][0]['argv'] = self.summary['commands'][0]['argv'][:-1]; self.refuse('route invocation')
+        a7 = next(c for c in self.summary['commands'] if c['gate_id'] == 'a7')  # GB3 Codex 3: A7, not commands[0] (A1)
+        a7['argv'] = a7['argv'][:-1]; self.refuse('route invocation')
     def test_harness_inventory_is_lane_names(self):
         self.summary['commands'][-1]['inventory']['ignored'] = [NAMES[0]]; self.refuse('route test inventory')
     def test_listing_is_recorded(self):
@@ -527,6 +528,8 @@ class InstallControls(unittest.TestCase):
             self.assertEqual((len(set(files)),len(set(excluded)),set(files)&set(excluded)),(len(files),len(excluded),set()))
             self.assertEqual(sorted(files+excluded),sorted(tracked))
             self.assertTrue({'route/route_a1.py','route/route_a1_controls.py'} <= set(files))
+            readme = (HERE/'README.md').read_text()  # GB3 Codex 2: the README PIN predicate counts this partition
+            self.assertIn(f"len(values['FILES'])!={len(files)} or len(excluded)!={len(excluded)} ",readme)
     def bundle(self, root, wrapper):
         scope = installer(); archive = root/'bundle.tar'
         harness = scope['HARNESS']; source = core.HERE.parents[1]/harness if not INSTALLED else HERE/'policy/phase2_live_sandbox.rs'

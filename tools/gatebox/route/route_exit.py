@@ -61,8 +61,8 @@ os.close(fd)
 os.execv(sys.argv[1], sys.argv[1:])
 """
 # SB3E-R64: the exact control counts each controls step must report; any other count fails the step.
-# SB3E GB3: A1's 15 plus its 8 sentinel and 6 pins controls (mission 9 items 1a, 2).
-CONTROLS = {"a1_controls": 29, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109,
+# SB3E GB3: A1's 15 plus its 8 sentinel and 7 pins controls (mission 9 items 1a, 2; Codex GB3 1 adds pins_alias_dotdot).
+CONTROLS = {"a1_controls": 30, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109,
             # SB3E-R72: A5's 46 lexical plants + 4 new (lone CR, three include rows) + 21 expanded plants + 9 capture controls;
             # R75: + 3 expanded plants (C string before a hook, twice; `..` after a link) + 2 (pin order, whole-unit fallback).
             "a5_controls": 85}
