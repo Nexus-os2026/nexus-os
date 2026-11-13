@@ -1,0 +1,824 @@
+# SB-3E A5 C2 pin (SB3E-R72): nexus_mother (mother/src/lib.rs), rustc -Zunpretty=expanded, shipped vs lane recipe.
+# Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's unit, bytes (tab-separated); then exactly that many bytes of text.
+=== lane	pub mod adapter > mod session_port	impl SessionPort	count 1	bytes 2556
+        impl SessionPort {
+            pub fn new(door: SessionDoor, workspace: String) -> Self {
+                Self {
+                    inner: GovernedPort::from_door(PortDoor::Session(door)).with_workspace(workspace),
+                }
+            }
+            pub(crate) fn continue_approval(&self,
+                continuation:
+                    nexus_governed_control::host_session::approval::ApprovalContinuation,
+                mission: MissionId, generation: u64, effect: u64)
+                -> Result<(Self, HaltCell), EffectRefusal> {
+                let PortDoor::Session(door) =
+                    &self.inner.door else {
+                        return Err(refused(BrokerClass::Halted));
+                    };
+                let door =
+                    door.continue_approval(continuation, mission.0, generation,
+                                effect).map_err(|e| refused_by(e.class()))?;
+                let cell = door.lifecycle_halt();
+                let (attachment, _) =
+                    self.inner.file_session.get().ok_or_else(||
+                                refused(BrokerClass::NotAdmitted))?;
+                let mut inner =
+                    GovernedPort::from_registered_door(PortDoor::Session(door),
+                        self.inner.file_port.clone());
+                inner.runs = self.inner.runs.clone();
+                inner.performed = self.inner.performed.clone();
+                inner.cancel_failures = self.inner.cancel_failures.clone();
+                inner.workspace = self.inner.workspace.clone();
+                inner.admission_gate = self.inner.admission_gate.clone();
+                if inner.file_session.set((attachment.clone(),
+                                cell.clone())).is_err() {
+                    return Err(refused(BrokerClass::Halted));
+                }
+                Ok((Self { inner }, cell))
+            }
+            pub fn performed(&self) -> usize { self.inner.performed() }
+            pub fn file_binding_count(&self) -> usize {
+                self.inner.file_binding_count()
+            }
+            pub fn context(&self) -> SessionContext {
+                match &self.inner.door {
+                    PortDoor::Session(door) => door.context(),
+                    PortDoor::Legacy(_) => {
+                        ::core::panicking::panic_fmt(format_args!("internal error: entered unreachable code: {0}",
+                                format_args!("SessionPort construction is mandatory")));
+                    }
+                }
+            }
+        }
+=== lane	pub mod adapter > mod session_port	impl SessionPort	count 1	bytes 610
+        /// SB-3E S3's forwarder (design 4.2): `SessionPort::new` consumes the door,
+        /// so the original door's revocation is reached through its port.
+        impl SessionPort {
+            pub fn route_revoke_original_grant(&self) -> bool {
+                const M: &str = "nexus-mother-route-seam-S3-port";
+                std::hint::black_box(M.as_bytes());
+                match &self.inner.door {
+                    PortDoor::Session(door) =>
+                        door.route_revoke_original_grant(),
+                    PortDoor::Legacy(_) => false,
+                }
+            }
+        }
+=== lane	pub mod adapter > impl EffectPort for GovernedPort	fn model_call ( & self , mission : MissionId , request : & ModelRequest , meter : & dyn CallMeter , deadline : & dyn CallDeadline , invocation : & InvocationObserver ) -> Result < ModelAttempt , EffectRefusal >	count 1	bytes 813
+        /// No port lock is held across the broker's call or its record write.
+        fn model_call(&self, mission: MissionId, request: &ModelRequest,
+            meter: &dyn CallMeter, deadline: &dyn CallDeadline,
+            invocation: &InvocationObserver)
+            -> Result<ModelAttempt, EffectRefusal> {
+            let run = self.model_run(mission)?;
+            self.admit_host()?;
+            let outcome =
+                self.door.model_call(run, request, meter, deadline,
+                            invocation).map_err(|e| refused_by(e.class()))?;
+            let record = outcome.record();
+            crate::route_seams::at("mother.classify",
+                crate::route_seams::Ctx::of(self.door.context().as_ref()).run(run));
+            Ok(classify(record, outcome.into_result()))
+        }
+=== lane	pub mod coordinator > mod model_calls	use crate :: route_seams	count 1	bytes 32
+        use crate::route_seams;
+=== lane	pub mod coordinator > mod model_calls	impl < P : EffectPort > BorrowedMeter < '_ , P >	count 1	bytes 404
+        /// SB-3E S5 (AM-2 A.3): the session and request of the port's context, and
+        /// this meter's invocation.
+        impl<P: EffectPort> BorrowedMeter<'_, P> {
+            fn route_ctx(&self) -> route_seams::Ctx {
+                let context = self.coordinator.port.session_context();
+                route_seams::Ctx::of(context.as_ref()).invocation(self.invocation)
+            }
+        }
+=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > CallMeter for BorrowedMeter < '_ , P >	fn charge ( & self ) -> Result < Charged , MeterRefusal >	count 1	bytes 4858
+            fn charge(&self) -> Result<Charged, MeterRefusal> {
+                let c = self.coordinator;
+                if c.port.emergency_stopped() {
+                    return Err(MeterRefusal::Stale);
+                }
+                let mut result = Err(MeterRefusal::Stale);
+                route_seams::at("mother.charge.entry", self.route_ctx());
+                c.try_with_lock(|inner|
+                                {
+                                    if inner.usable().is_err() ||
+                                            inner.file_cell.as_ref().is_some_and(|cell|
+                                                    cell.is_engaged()) {
+                                        return Ok(());
+                                    }
+                                    let m = inner.mission(self.invocation.mission)?;
+                                    if m.generation != self.generation ||
+                                                                m.pending_lane != Some(self.invocation) ||
+                                                            !m.state.is_working() || m.held.is_some() || !m.consented()
+                                                || m.settlement.is_some() || m.terminal_record.is_some() {
+                                        return Ok(());
+                                    }
+                                    let Some(live) =
+                                        m.lane_calls.as_ref().filter(|l|
+                                                {
+                                                    l.invocation == self.invocation &&
+                                                            l.generation == self.generation && !l.liveness.is_revoked()
+                                                }) else { return Ok(()); };
+                                    let Some(a) =
+                                        m.call_accounting.as_ref() else { return Ok(()); };
+                                    result =
+                                        if live.in_flight {
+                                            Err(MeterRefusal::InFlight)
+                                        } else if a.next > a.cap || (a.next == 1 && !a.prepaid) ||
+                                                (a.next > 1 && m.model_calls >= a.budget) {
+                                            Err(MeterRefusal::Exhausted)
+                                        } else if m.out_of_time(&*c.clock) ||
+                                                    c.clock.monotonic_ms() >= live.at_mono_ms ||
+                                                c.clock.wall_ms() >= live.at_wall_ms {
+                                            Err(MeterRefusal::OutOfTime)
+                                        } else { Ok(Charged { call: a.next }) };
+                                    let Ok(charged) = result else { return Ok(()); };
+                                    result = Err(MeterRefusal::NotRecorded);
+                                    route_seams::at("mother.charge", self.route_ctx());
+                                    inner.append(self.invocation.mission,
+                                            Event::ModelCallCharged {
+                                                invocation: self.invocation,
+                                                call: charged.call,
+                                            })?;
+                                    route_seams::at("mother.charge.ok", self.route_ctx());
+                                    let m = inner.mission(self.invocation.mission)?;
+                                    m.call_accounting.as_mut().expect("checked accounting").charge(self.invocation,
+                                                charged.call,
+                                                &mut m.model_calls).map_err(|code|
+                                                {
+                                                    CoordinatorError::Journal(JournalError::Inconsistent {
+                                                            line: self.invocation.seq as usize + 1,
+                                                            code,
+                                                        })
+                                                })?;
+                                    m.lane_calls.as_mut().expect("checked live invocation").in_flight
+                                        = true;
+                                    result = Ok(charged);
+                                    Ok(())
+                                }).map_err(|_|
+                            {
+                                if result == Err(MeterRefusal::NotRecorded) {
+                                    MeterRefusal::NotRecorded
+                                } else { MeterRefusal::Stale }
+                            })?;
+                result
+            }
+=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > CallMeter for BorrowedMeter < '_ , P >	fn settle ( & self , call : u32 )	count 1	bytes 1363
+            fn settle(&self, call: u32) {
+                let c = self.coordinator;
+                route_seams::at("mother.settle", self.route_ctx());
+                let _ =
+                    c.try_with_lock(|i|
+                            {
+                                if i.usable().is_err() { return Ok(()); }
+                                let m = i.mission(self.invocation.mission)?;
+                                if m.generation == self.generation &&
+                                            m.pending_lane == Some(self.invocation) &&
+                                        m.call_accounting.as_ref().is_some_and(|a|
+                                                a.next == call.saturating_add(1)) {
+                                    if let Some(l) =
+                                            m.lane_calls.as_mut().filter(|l|
+                                                    {
+                                                        l.invocation == self.invocation &&
+                                                            l.generation == self.generation
+                                                    }) {
+                                        l.in_flight = false;
+                                    }
+                                }
+                                Ok(())
+                            });
+            }
+=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > ModelCaller for Caller < '_ , P >	fn call ( & self , request : & ModelRequest ) -> Result < ModelReply , ModelCallError >	count 1	bytes 1534
+            fn call(&self, request: &ModelRequest)
+                -> Result<ModelReply, ModelCallError> {
+                if !self.live() { return Err(ModelCallError::Invalidated); }
+                let c = self.meter.coordinator;
+                let attempt =
+                    c.port.model_call(self.meter.invocation.mission, request,
+                        self, self, &self.liveness.0);
+                if #[allow(non_exhaustive_omitted_patterns)] match attempt {
+                        Ok(ModelAttempt::Unrecorded(_)) => true,
+                        _ => false,
+                    } {
+                    c.file.as_ref().expect("File caller").model_debt.store(true,
+                        Ordering::Release);
+                    self.deny(BlockReason::BrokerRefused(BrokerClass::EvidenceUnavailable));
+                    return Err(ModelCallError::RecordUnavailable);
+                }
+                route_seams::at("mother.recheck", self.meter.route_ctx());
+                if self.live() && self.deadline.expired() {
+                    self.deny(BlockReason::BudgetTime);
+                }
+                match attempt {
+                    Ok(ModelAttempt::Failed(class)) =>
+                        Err(ModelCallError::Failed(class)),
+                    Err(refusal) => Err(ModelCallError::Refused(refusal.class)),
+                    Ok(ModelAttempt::Replied(reply)) if self.live() =>
+                        Ok(reply),
+                    _ => Err(ModelCallError::Invalidated),
+                }
+            }
+=== lane	pub mod coordinator > mod lite	pub struct FileSession < P : EffectPort >	count 1	bytes 196
+        /// Owns the coordinator exclusively. Its Stop calls return recording errors.
+        pub struct FileSession<P: EffectPort> {
+            pub(super) coordinator: Coordinator<P>,
+        }
+=== lane	pub mod coordinator > mod lite	impl < P : EffectPort > FileSession < P >	count 1	bytes 995
+        /// SB-3E S4b (design 4.2, 4.5): poisons `Coordinator.inner` by a caught
+        /// panic while it is held (a prior panic under it); nothing else changes.
+        /// It never waits for the lock: applied while the route holds it (after the
+        /// lock is taken), it poisons nothing.
+        impl<P: EffectPort> FileSession<P> {
+            pub fn route_poison_coordinator(&self) {
+                const M: &str = "nexus-mother-route-seam-S4b";
+                std::hint::black_box(M.as_bytes());
+                let _ =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+                                {
+                                    let _held = self.coordinator.inner.try_lock();
+                                    {
+                                        ::core::panicking::panic_fmt(format_args!("route seam S4b: coordinator lock poisoned"));
+                                    };
+                                }));
+            }
+        }
+=== lane	pub mod coordinator > impl Inner	fn write_record ( & mut self , mission : MissionId , event : Event , poison : bool ) -> Result < u64 , CoordinatorError >	count 1	bytes 2908
+        fn write_record(&mut self, mission: MissionId, event: Event,
+            poison: bool) -> Result<u64, CoordinatorError> {
+            self.usable()?;
+            if let Err(code) = check(&event) {
+                return Err(CoordinatorError::Journal(JournalError::Inconsistent {
+                                line: self.next_seq as usize + 1,
+                                code,
+                            }));
+            }
+            let entry =
+                Entry::chained(self.next_seq, &self.head, mission, event);
+            let work = journal_work(&entry.event);
+            let line = entry.to_line();
+            if let Event::LaneReturned { invocation, .. } = &entry.event {
+                let ctx =
+                    crate::route_seams::Ctx::of(self.session_context.as_ref());
+                crate::route_seams::at("mother.admit",
+                    ctx.invocation(*invocation));
+            }
+            if work {
+                self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
+            }
+            if let Event::LaneReturned { invocation, .. } = &entry.event {
+                let ctx =
+                    crate::route_seams::Ctx::of(self.session_context.as_ref());
+                crate::route_seams::at("mother.admit.ok",
+                    ctx.invocation(*invocation));
+            }
+            match &entry.event {
+                Event::SessionOpened | Event::SessionClosed =>
+                    self.invalidate_calls(),
+                Event::LaneReturned { .. } | Event::LaneOvertaken { .. } |
+                    Event::Transition { .. } | Event::SettlementStarted { .. } |
+                    Event::Held { .. } => {
+                    if let Some(mission) = self.missions.get_mut(&mission) {
+                        mission.invalidate_calls();
+                    }
+                }
+                _ => {}
+            }
+            if let Event::Transition { trigger } = &entry.event {
+                if self.missions.get(&mission).is_some_and(|m|
+                            transition(m.state,
+                                    trigger).is_ok_and(|to| to.is_terminal())) {
+                    self.mission(mission)?.terminal_record.get_or_insert((trigger.clone(),
+                            None));
+                }
+            }
+            if let Err(e) = self.store.append(&line) {
+                self.broken = true;
+                self.invalidate_calls();
+                let owed = (self.fence)();
+                self.owed.extend(owed);
+                if poison && self.store.poison().is_err() {
+                    return Err(CoordinatorError::Journal(JournalError::Store(StoreFailure::PoisonFailed)));
+                }
+                return Err(CoordinatorError::Journal(e));
+            }
+            self.head = entry.hash;
+            self.next_seq += 1;
+            Ok(entry.seq)
+        }
+=== lane	pub mod coordinator > impl < P : EffectPort > Coordinator < P >	fn run_lanes ( & self , id : MissionId , generation : u64 , roles : & [ LaneRole ] , report : & mut Advance ) -> Result < Ended , CoordinatorError >	count 1	bytes 12812
+        /// Run `roles` in order for a reserved mission, and the effects they ask
+        /// for. `generation` is the reservation: if the mission moved (a Stop),
+        /// nothing more is called or dispatched.
+        fn run_lanes(&self, id: MissionId, generation: u64,
+            roles: &[LaneRole], report: &mut Advance)
+            -> Result<Ended, CoordinatorError> {
+            for (index, role) in roles.iter().enumerate() {
+                self.file_boundary(id)?;
+                let lane = self.lanes.get(*role);
+                let identity = lane.identity();
+                if self.port.emergency_stopped() {
+                    self.stop_for(id, StopReason::EmergencyStop)?;
+                    return Err(CoordinatorError::Stopped);
+                }
+                let verification =
+                    match self.page_verification(id, generation, *role, report)?
+                        {
+                        Ok(verification) => verification,
+                        Err(state) => return Ok(Ended::Ended(state)),
+                    };
+                let cap = lane.max_model_calls();
+                let model =
+                    (cap > 0).then(|| self.port.model_identity()).flatten();
+                let (step, caller, lane_contract) =
+                    self.step(|inner|
+                                {
+                                    inner.mission(id)?.proof.input = verification;
+                                    if identity.role != *role {
+                                        return Ok((Then::End(BlockReason::LaneIdentityChanged),
+                                                    None, None));
+                                    }
+                                    if cap > 0 {
+                                        let c = inner.mission(id)?.contract()?;
+                                        let reason =
+                                            match (&c.model, &model) {
+                                                (Some(pin), Some(view)) if
+                                                    self.file.is_some() &&
+                                                        c.deliverable.as_deref() == Some("index.html") => {
+                                                    (pin.name != view.name || pin.digest != view.digest ||
+                                                                pin.identity !=
+                                                                    view.identity).then_some(BlockReason::ModelIdentityChanged)
+                                                }
+                                                _ => Some(BlockReason::ModelNotPinned),
+                                            };
+                                        if let Some(reason) = reason {
+                                            return Ok((Then::End(reason), None, None));
+                                        }
+                                    }
+                                    let step =
+                                        model_calls::reserve_lane(inner, id, generation, &identity,
+                                                cap, &*self.clock)?;
+                                    let caller =
+                                        match &step {
+                                            Then::Go(input) if cap > 0 =>
+                                                Some(model_calls::Caller::reserved(self, inner,
+                                                            input.invocation, generation)?),
+                                            _ => None,
+                                        };
+                                    let lane_contract =
+                                        if #[allow(non_exhaustive_omitted_patterns)] match &step {
+                                                        Then::Go(_) => true,
+                                                        _ => false,
+                                                    } && *role == LaneRole::Builder && cap > 0 {
+                                            Some(inner.mission(id)?.contract()?.clone())
+                                        } else { None };
+                                    Ok((step, caller, lane_contract))
+                                })?;
+                let input =
+                    match self.then(id, step)? {
+                        Ok(input) => input,
+                        Err(state) => return Ok(Ended::Ended(state)),
+                    };
+                if let Some(caller) = &caller {
+                    if caller.admit().is_err() {
+                        return Ok(Ended::Ended(self.end(id,
+                                            BlockReason::ModelAdmissionRefused)?));
+                    }
+                }
+                self.file_boundary(id)?;
+                if let Some(context) = self.port.session_context() {
+                    context.admit(nexus_governed_control::host_session::MotherStep::LaneInvocation).map_err(|_|
+                                CoordinatorError::Stopped)?;
+                }
+                let context =
+                    crate::lane::LaneContext {
+                        contract: lane_contract.as_ref(),
+                        model: caller.as_ref().map(|c|
+                                c as &dyn crate::lane::ModelCaller),
+                    };
+                let output = lane.invoke_in(&input, &context);
+                drop(caller);
+                if cap > 0 {
+                    let terminal =
+                        match output.verdict {
+                            Verdict::Fail { .. } if *role == LaneRole::Verifier => {
+                                Some(Trigger::VerifyFail {
+                                        reason: VerifyFailReason::VerifierFailed,
+                                    })
+                            }
+                            Verdict::Fail { .. } =>
+                                Some(Trigger::Fail { reason: FailReason::LaneFail(*role) }),
+                            Verdict::Halt { .. } =>
+                                Some(Trigger::Block {
+                                        reason: BlockReason::LaneHalt(*role),
+                                    }),
+                            _ => None,
+                        };
+                    if let Some(trigger) = terminal {
+                        let ended = self.end_with(id, trigger);
+                        self.model_obligations()?;
+                        return Ok(Ended::Ended(ended?));
+                    }
+                }
+                let boundary = self.file_boundary(id);
+                self.model_obligations()?;
+                boundary?;
+                let hash = output_hash(&output);
+                crate::route_seams::at("mother.lane.prelock",
+                    crate::route_seams::Ctx::of(self.port.session_context().as_ref()).invocation(input.invocation));
+                let contract =
+                    self.step(|inner|
+                                {
+                                    inner.kept(id)?;
+                                    let m = inner.mission(id)?;
+                                    if m.generation != generation ||
+                                            m.pending_lane != Some(input.invocation) {
+                                        if m.pending_lane != Some(input.invocation) {
+                                            return Err(CoordinatorError::Stopped);
+                                        }
+                                        inner.append(id,
+                                                Event::LaneOvertaken { invocation: input.invocation })?;
+                                        let m = inner.mission(id)?;
+                                        m.pending_lane = None;
+                                        m.invalidate_calls();
+                                        return Err(CoordinatorError::Stopped);
+                                    }
+                                    inner.append(id,
+                                            Event::LaneReturned {
+                                                invocation: input.invocation,
+                                                output_hash: hash.clone(),
+                                            })?;
+                                    crate::route_seams::at("mother.lane.returned",
+                                        crate::route_seams::Ctx::of(inner.session_context.as_ref()).invocation(input.invocation));
+                                    let mission = inner.mission(id)?;
+                                    mission.pending_lane = None;
+                                    mission.invalidate_calls();
+                                    mission.prior_outputs.push(hash.clone());
+                                    Ok(mission.contract()?.clone())
+                                })?;
+                report.lanes.push(LaneReport {
+                        invocation: input.invocation,
+                        identity,
+                        text: output.text.clone(),
+                        verdict: output.verdict.clone(),
+                        input_hash: input_hash(&input),
+                        output_hash: hash,
+                    });
+                let page =
+                    contract.page_facts.is_some() && self.file.is_some();
+                if *role == LaneRole::Verifier && page {
+                    if let Some(state) =
+                            self.page_verdict(id, generation, &input, &output, report)?
+                        {
+                        return Ok(Ended::Ended(state));
+                    }
+                }
+                let verdict_end =
+                    match (&output.verdict, *role) {
+                        (Verdict::Halt { reason }, role) =>
+                            Some((Trigger::Block {
+                                        reason: BlockReason::LaneHalt(role),
+                                    }, Some(reason))),
+                        (Verdict::Fail { reason }, LaneRole::Verifier) =>
+                            Some((Trigger::VerifyFail {
+                                        reason: VerifyFailReason::VerifierFailed,
+                                    }, Some(reason))),
+                        (Verdict::Fail { reason }, role) =>
+                            Some((Trigger::Fail { reason: FailReason::LaneFail(role) },
+                                    Some(reason))),
+                        (Verdict::Continue, LaneRole::Verifier) =>
+                            Some((Trigger::VerifyFail {
+                                        reason: VerifyFailReason::VerifierGaveNoVerdict,
+                                    }, None)),
+                        _ => None,
+                    };
+                if let Some((trigger, reason)) = verdict_end {
+                    if let Some(reason) = reason {
+                        let detail =
+                            WorkingDetail::new("lane",
+                                    role.as_str()).and("lane reason", reason);
+                        self.step(|inner|
+                                    { inner.set_detail(id, detail); Ok(()) })?;
+                    }
+                    return Ok(Ended::Ended(self.end_with(id, trigger)?));
+                }
+                let page =
+                    *role == LaneRole::Builder && contract.page_facts.is_some();
+                if page && page_proof::deliverable(&output.effects).is_err() {
+                    let reason = FailReason::DeliverableInvalid;
+                    return Ok(Ended::Ended(self.end_with(id,
+                                        Trigger::Fail { reason })?));
+                }
+                if output.effects.len() > MAX_EFFECTS_PER_CALL {
+                    return Ok(Ended::Ended(self.end(id,
+                                        BlockReason::TooManyEffects)?));
+                }
+                if let Ended::Ended(state) =
+                        self.checked(id, &contract, &output.effects, report)? {
+                    return Ok(Ended::Ended(state));
+                }
+                if *role == LaneRole::Builder && contract.page_facts.is_some()
+                    {
+                    let retained =
+                        self.retain(id, generation, input.invocation,
+                                &output.effects)?;
+                    if let Ended::Ended(state) = retained {
+                        return Ok(Ended::Ended(state));
+                    }
+                }
+                if let Ended::Ended(state) =
+                        self.dispatch(id, generation, &output.effects,
+                                &roles[index + 1..], report)? {
+                    return Ok(Ended::Ended(state));
+                }
+            }
+            Ok(Ended::Through)
+        }
+=== lane		pub mod route_seams	count 1	bytes 11855
+/// SB-3E S5 (design 4.2): seam builds only; the route lane's cfg.
+pub mod route_seams {
+    //! SB-3E S5 (design 4.2, 4.4; AM-2 B.1): Mother's route seams, as S1.
+    //! Compiled only with `--cfg mother_route_seams`, which only the route lane's
+    //! wrapper sets; the shipped build has none. The writer `at` is
+    //! crate-private and called only at the audited `mother.*` rows of design
+    //! 4.4; the harness may only `arm` and `drain_trace`. `at` returns nothing:
+    //! it records, may pause, or begins an unwind, and never returns into the
+    //! route. Unlike S1 it touches no host resource itself (Mother's
+    //! `scan_no_host_access_outside_the_adapter`): a pause's timeout is the
+    //! harness's own never-returning sink.
+    use crate::lane::InvocationId;
+    use nexus_governed_control::authority::ids::RunId;
+    use nexus_governed_control::host_session::{
+        SessionContext, SessionIdentity,
+    };
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+    use std::sync::{Mutex, MutexGuard, PoisonError};
+    use std::time::{Duration, Instant};
+    /// S5's marker (SB3E-R9): the first statement of the writer's real body.
+    const M: &str = "nexus-mother-route-seam-S5";
+    /// The bounded wait of every pause (design 3.5).
+    const PATIENCE: Duration = Duration::from_secs(10);
+    /// Every point a harness may arm: the `mother.*` rows of design 4.4.
+    pub(crate) const POINTS: [&str; 10] =
+        ["mother.charge.entry", "mother.charge", "mother.charge.ok",
+                "mother.settle", "mother.classify", "mother.recheck",
+                "mother.lane.prelock", "mother.admit", "mother.admit.ok",
+                "mother.lane.returned"];
+    static ARMED: AtomicBool = AtomicBool::new(false);
+    static STATE: Mutex<State> =
+        Mutex::new(State {
+                tick: 0,
+                entries: Vec::new(),
+                pending: Vec::new(),
+            });
+    struct State {
+        tick: u64,
+        entries: Vec<Entry>,
+        pending: Vec<Pending>,
+    }
+    struct Pending {
+        id: u64,
+        point: &'static str,
+        ack: SyncSender<Entry>,
+        pause: Option<(Receiver<()>, &'static str, Timeout)>,
+    }
+    /// The identity a site knows (AM-2 A.3); unknown fields stay `None`.
+    pub(crate) struct Ctx {
+        session: Option<SessionIdentity>,
+        request: Option<u64>,
+        run: Option<RunId>,
+        invocation: Option<InvocationId>,
+    }
+    #[automatically_derived]
+    #[doc(hidden)]
+    unsafe impl ::core::clone::TrivialClone for Ctx { }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Ctx {
+        #[inline]
+        fn clone(&self) -> Ctx {
+            let _: ::core::clone::AssertParamIsClone<Option<SessionIdentity>>;
+            let _: ::core::clone::AssertParamIsClone<Option<u64>>;
+            let _: ::core::clone::AssertParamIsClone<Option<RunId>>;
+            let _: ::core::clone::AssertParamIsClone<Option<InvocationId>>;
+            *self
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::Copy for Ctx { }
+    #[automatically_derived]
+    impl ::core::default::Default for Ctx {
+        #[inline]
+        fn default() -> Ctx {
+            Ctx {
+                session: ::core::default::Default::default(),
+                request: ::core::default::Default::default(),
+                run: ::core::default::Default::default(),
+                invocation: ::core::default::Default::default(),
+            }
+        }
+    }
+    impl Ctx {
+        /// The session and request of the broker's request context, if any.
+        pub(crate) fn of(context: Option<&SessionContext>) -> Self {
+            Self {
+                session: context.map(SessionContext::session),
+                request: context.map(SessionContext::request),
+                ..Self::default()
+            }
+        }
+        pub(crate) fn invocation(self, invocation: InvocationId) -> Self {
+            let invocation = Some(invocation);
+            Self { invocation, ..self }
+        }
+        /// `mother.classify` only: it carries the run, and no invocation.
+        pub(crate) fn run(self, run: RunId) -> Self {
+            let run = Some(run);
+            Self { run, ..self }
+        }
+    }
+    /// One trace entry (AM-2 A.3, B.1).
+    pub struct Entry {
+        pub tick: u64,
+        pub point: &'static str,
+        pub session: Option<SessionIdentity>,
+        pub request: Option<u64>,
+        /// Only `mother.classify` carries a run.
+        pub run: Option<RunId>,
+        pub invocation: Option<InvocationId>,
+        /// The recording thread (AM-2 B.1).
+        pub thread: std::thread::ThreadId,
+        /// When it was recorded (AM-2 B.1: position evidence only).
+        pub instant: Instant,
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Entry {
+        #[inline]
+        fn clone(&self) -> Entry {
+            Entry {
+                tick: ::core::clone::Clone::clone(&self.tick),
+                point: ::core::clone::Clone::clone(&self.point),
+                session: ::core::clone::Clone::clone(&self.session),
+                request: ::core::clone::Clone::clone(&self.request),
+                run: ::core::clone::Clone::clone(&self.run),
+                invocation: ::core::clone::Clone::clone(&self.invocation),
+                thread: ::core::clone::Clone::clone(&self.thread),
+                instant: ::core::clone::Clone::clone(&self.instant),
+            }
+        }
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Entry {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            let names: &'static _ =
+                &["tick", "point", "session", "request", "run", "invocation",
+                            "thread", "instant"];
+            let values: &[&dyn ::core::fmt::Debug] =
+                &[&self.tick, &self.point, &self.session, &self.request,
+                            &self.run, &self.invocation, &self.thread, &&self.instant];
+            ::core::fmt::Formatter::debug_struct_fields_finish(f, "Entry",
+                names, values)
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Entry { }
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Entry {
+        #[inline]
+        fn eq(&self, other: &Entry) -> bool {
+            self.tick == other.tick && self.point == other.point &&
+                                    self.session == other.session &&
+                                self.request == other.request && self.run == other.run &&
+                        self.invocation == other.invocation &&
+                    self.thread == other.thread && self.instant == other.instant
+        }
+    }
+    #[automatically_derived]
+    impl ::core::cmp::Eq for Entry {
+        #[inline]
+        #[doc(hidden)]
+        #[coverage(off)]
+        fn assert_receiver_is_total_eq(&self) -> () {
+            let _: ::core::cmp::AssertParamIsEq<u64>;
+            let _: ::core::cmp::AssertParamIsEq<&'static str>;
+            let _: ::core::cmp::AssertParamIsEq<Option<SessionIdentity>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<u64>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<RunId>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<InvocationId>>;
+            let _: ::core::cmp::AssertParamIsEq<std::thread::ThreadId>;
+            let _: ::core::cmp::AssertParamIsEq<Instant>;
+        }
+    }
+    /// A pause's timeout: given the `TIMEOUT <cell> <point>` line, the harness
+    /// records it and ends the process; it cannot return (`!`).
+    pub type Timeout = fn(&str) -> !;
+    /// What an armed point does. Every arming turns recording on for all points.
+    pub enum Action {
+
+        /// Record only.
+        Trace,
+
+        /// At the first arrival: acknowledge, then block until the [`Held`] is
+        /// dropped. A pause not released within 10 s, or whose harness is gone,
+        /// is an irrevocable harness failure: `TIMEOUT <cell> <point>` is handed
+        /// to `timeout`, which writes it to the cell's result and aborts (design
+        /// 3.3); it never returns into the route.
+        Pause {
+            cell: &'static str,
+            timeout: Timeout,
+        },
+
+        /// At the first arrival: acknowledge, then begin an unwind.
+        Panic,
+    }
+    /// One arming. Dropping it releases its pause, or disarms it if it has not
+    /// fired; that never panics.
+    pub struct Held {
+        pub acknowledged: Receiver<Entry>,
+        _release: Release,
+    }
+    struct Release(u64, SyncSender<()>);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            state().pending.retain(|p| p.id != self.0);
+            let _ = self.1.try_send(());
+        }
+    }
+    /// Arm `point` (one of [`POINTS`]) with `action`.
+    pub fn arm(point: &'static str, action: Action) -> Held {
+        if !POINTS.contains(&point) {
+            {
+                ::core::panicking::panic_fmt(format_args!("not a Mother route point: {0}",
+                        point));
+            }
+        };
+        let (ack, acknowledged) = sync_channel(1);
+        let (release, released) = sync_channel(1);
+        let mut s = state();
+        s.tick += 1;
+        let id = s.tick;
+        let pause =
+            match action {
+                Action::Trace => None,
+                Action::Pause { cell, timeout } =>
+                    Some(Some((released, cell, timeout))),
+                Action::Panic => Some(None),
+            };
+        if let Some(pause) = pause {
+            s.pending.push(Pending { id, point, ack, pause });
+        }
+        ARMED.store(true, Ordering::SeqCst);
+        Held { acknowledged, _release: Release(id, release) }
+    }
+    /// Every entry recorded so far, in tick order; the trace is emptied.
+    pub fn drain_trace() -> Vec<Entry> {
+        std::mem::take(&mut state().entries)
+    }
+    /// A route point. Unarmed, this is the marker and one relaxed load.
+    pub(crate) fn at(point: &'static str, ctx: Ctx) {
+        std::hint::black_box(M.as_bytes());
+        if !ARMED.load(Ordering::Relaxed) { return; }
+        fire(point, ctx);
+    }
+    fn state() -> MutexGuard<'static, State> {
+        STATE.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+    fn fire(point: &'static str, ctx: Ctx) {
+        let (entry, pending) =
+            {
+                let mut s = state();
+                s.tick += 1;
+                let entry =
+                    Entry {
+                        tick: s.tick,
+                        point,
+                        session: ctx.session,
+                        request: ctx.request,
+                        run: ctx.run,
+                        invocation: ctx.invocation,
+                        thread: std::thread::current().id(),
+                        instant: Instant::now(),
+                    };
+                s.entries.push(entry.clone());
+                let found = s.pending.iter().position(|p| p.point == point);
+                (entry, found.map(|i| s.pending.remove(i)))
+            };
+        let Some(pending) = pending else { return };
+        let acknowledged = pending.ack.try_send(entry).is_ok();
+        match pending.pause {
+            None => {
+                ::core::panicking::panic_fmt(format_args!("route seam: armed panic at {0}",
+                        point));
+            }
+            Some((released, cell, timeout)) => {
+                if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
+                    timeout(&::alloc::__export::must_use({
+                                    ::alloc::fmt::format(format_args!("TIMEOUT {0} {1}", cell,
+                                            point))
+                                }));
+                }
+            }
+        }
+    }
+}

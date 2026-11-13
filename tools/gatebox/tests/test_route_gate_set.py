@@ -25,7 +25,7 @@ receipt, snapshot = core.receipt, core.snapshot
 ROUTE = json.loads((HERE/'policy/route-cells.json').read_text())
 SHA, EXE = '1'*40, '/work/target-route/release/deps/route_cells-0123456789abcdef'
 NAMES = ['cells::rc_r1_alpha_beta_one','cells::rc_r2_alpha_beta_two']
-WRAPPER = 'd23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762'
+WRAPPER = '8e728370d42af88e3df6eab76aca632c6fb66bef9d403158752b0945754bd775'
 def sha(data): return hashlib.sha256(data).hexdigest()
 INVENTORY = sha('\n'.join(NAMES).encode())
 PINS = 'e'*64  # GB3: the request's route_pins_sha256

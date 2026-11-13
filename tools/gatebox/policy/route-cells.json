@@ -9,7 +9,7 @@
     "evidence_dir": "/run/gate/a7",
     "verdict": "/run/gate/a7-verdict.json",
     "wrapper": "/gate/bin/route/route_rustc",
-    "wrapper_sha256": "d23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762",
+    "wrapper_sha256": "8e728370d42af88e3df6eab76aca632c6fb66bef9d403158752b0945754bd775",
     "evidence": ["ship/build.log", "ship/inventory.json", "ship/meta.json", "ship/metadata.json", "ship/start",
                  "ship/unit_graph.json", "lane/build.log", "lane/inventory.json", "lane/meta.json", "lane/metadata.json",
                  "lane/start", "lane/unit_graph.json", "lane/wrapper.log"]
@@ -20,7 +20,7 @@
                                 "--toolchain", "/opt/rust", "--pins", "/work/src/tools/route_pins.json"]},
     {"id": "a7", "argv": ["/usr/bin/python3", "-I", "-B", "/gate/bin/route/route_a7.py", "run", "--repo", "/work/src",
                           "--target", "/work/target-route", "--evidence", "/run/gate/a7", "--wrapper", "/gate/bin/route/route_rustc",
-                          "--wrapper-sha256", "d23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762",
+                          "--wrapper-sha256", "8e728370d42af88e3df6eab76aca632c6fb66bef9d403158752b0945754bd775",
                           "--toolchain", "/opt/rust", "--json", "/run/gate/a7-verdict.json", "--keep-lane-target",
                           "--pins", "/work/src/tools/route_pins.json"]},
     {"id": "route-cells", "adapter": "libtest", "package": "nexus-mother-host", "target": "route_cells",

@@ -1,0 +1,2 @@
+# SB-3E A5 C2 pin (SB3E-R72): nexus_kernel (kernel/src/lib.rs), rustc -Zunpretty=expanded, shipped vs lane recipe.
+# Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's unit, bytes (tab-separated); then exactly that many bytes of text.
