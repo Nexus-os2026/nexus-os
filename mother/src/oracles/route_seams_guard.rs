@@ -131,7 +131,7 @@ locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs a987d1b5da4b6e0b40273a842a728ab274f056d44dfdef51ee5255f643f1cc40
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
 s5.rs c6b8fd6e4d61bc095affc6cecce3fccfbe42dbcf158aba8b7d1325b91ab57301
-witness.rs 2961f83a1b06d8d0c4388f5ee727dd177b0fafe7018bb0e780b34cd29dcf312b
+witness.rs e4a6c14a0f349c67cf771b61919444e43b966594f93115da7b6609fcb5276a86
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {

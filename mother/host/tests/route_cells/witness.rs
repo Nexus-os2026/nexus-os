@@ -315,8 +315,8 @@ pub(super) fn control(r: &Ran) {
     assert!(diffs.is_empty(), "{}: {}", r.id, diffs.join("; "));
 }
 
-/// Rows 93-100 (the `call_chat` ingress cells) hold exactly the rendered
-/// fields; every location token they use is one of `TOKENS`, or is the
+/// Rows 93-96 and 98-100 (the `call_chat` ingress cells but the held row
+/// 97) hold exactly the rendered fields; every location token they use is one of `TOKENS`, or is the
 /// budget row's (`model.call.sampled`, `note:1`), which U5 does not map.
 #[test]
 fn witness_rows_hold_the_rendered_fields() {
@@ -325,7 +325,6 @@ fn witness_rows_hold_the_rendered_fields() {
         "repeated",
         "mission_stop",
         "stop_all",
-        "door_fence",
         "fatal",
         "quit",
         "budget",
@@ -350,6 +349,8 @@ fn witness_rows_hold_the_rendered_fields() {
         );
     }
     assert_eq!(frozen("call_chat", "ingress", "no_such_value"), None);
+    // SB3E-R49.1 (U5b): row 97 is held; it states no witness.
+    assert_eq!(frozen("call_chat", "ingress", "door_fence"), Some("hold"));
 }
 
 /// Design 3.3: a missing, a duplicate, a stale and a wrong-nonce `CELL`

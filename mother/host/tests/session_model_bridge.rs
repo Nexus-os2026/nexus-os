@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "46f9cb2d82fd4833b4d8c4f780b3bc70d4f13ff6d21f680843bebcf5c36843d6";
+const EXPECT_SHA256: &str = "ca1cfcc78a4749558c9f1fd61927a20ad6e40d0ea101d0f9ccc91bd6b38a1d04";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -2724,7 +2724,7 @@ fn sb3e_expect_table_is_complete() {
             by_status["denial"],
             by_status["hold"]
         ),
-        (761, 25, 9, 110)
+        (760, 25, 9, 111)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.
