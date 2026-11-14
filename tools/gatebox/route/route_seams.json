@@ -1,0 +1,60 @@
+{
+ "about": [
+  "SB-3E A3/A4 data (design section 5; SB3E-R33.3). The tools read only this file for seams,",
+  "binaries and controls; U4a-2 adds S3, S4b and S5 here, with their controls, without a scanner change.",
+  "seams: each marker is the seam's `const M: &str` in `source`; no marker may be a substring of another.",
+  "Per binary, 'reachable' means the marker survives a real release build with the cfg set (census);",
+  "'unwired' proves nothing and rests on A5/A6. U17 and later may only move a seam to 'reachable'.",
+  "ungates: exact edits removing a seam's cfg gates. controls: an ungate set plus a call on a path",
+  "reachable from the binary's entry; a real link of that binary must report each `expect` seam.",
+    "binaries: `shipped` names the script that installs the binary (A4 scans that binary), or null."
+ ],
+ "stem": "nexus-mother-route-seam-",
+ "route_packages": ["nexus-governed-control", "nexus-mother", "nexus-mother-host", "nexus-mother-desktop"],
+ "route_sources": ["crates/nexus-governed-control/src/", "mother/src/", "mother/host/src/", "mother/desktop/src/"],
+ "binaries": {
+  "nexus-mother": {"package": "nexus-mother-desktop", "shipped": "mother/desktop/install.sh"},
+  "mother-hands": {"package": "nexus-mother-host", "shipped": null}
+ },
+ "seams": [
+  {"name": "S1", "marker": "nexus-mother-route-seam-S1", "source": "crates/nexus-governed-control/src/broker/route_seams.rs", "binaries": {"nexus-mother": "reachable", "mother-hands": "reachable"}},
+  {"name": "S2", "marker": "nexus-mother-route-seam-S2", "source": "crates/nexus-governed-control/src/evidence_store.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
+  {"name": "S4-session", "marker": "nexus-mother-route-seam-S4-session", "source": "crates/nexus-governed-control/src/host_session/route_s4.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
+  {"name": "S4-evidence", "marker": "nexus-mother-route-seam-S4-evidence", "source": "crates/nexus-governed-control/src/evidence_store.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
+  {"name": "S4-store", "marker": "nexus-mother-route-seam-S4-store", "source": "crates/nexus-governed-control/src/evidence_store.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
+  {"name": "S4-runs", "marker": "nexus-mother-route-seam-S4-runs", "source": "crates/nexus-governed-control/src/authority/run.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}}
+ ],
+ "ungates": {
+  "S1": [
+   {"file": "crates/nexus-governed-control/src/broker.rs", "old": "#[cfg(mother_route_seams)]\npub mod route_seams;\n", "new": "pub mod route_seams;\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "#[cfg(mother_route_seams)]\nuse crate::broker::route_seams::{self, Ctx};\n", "new": "use crate::broker::route_seams::{self, Ctx};\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "    #[cfg(mother_route_seams)]\n    owed_flush: bool,\n", "new": "    owed_flush: bool,\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "            #[cfg(mother_route_seams)]\n            owed_flush: false,\n", "new": "            owed_flush: false,\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "        #[cfg(mother_route_seams)]\n        let kind = if std::mem::take(&mut self.owed_flush) {\n", "new": "        let kind = if std::mem::take(&mut self.owed_flush) {\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "        #[cfg(mother_route_seams)]\n        route_seams::at(\"store.commit\", Ctx::store(kind, phase, commitment));\n", "new": "        route_seams::at(\"store.commit\", Ctx::store(kind, phase, commitment));\n"}
+  ],
+  "S2": [
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "    #[cfg(mother_route_seams)]\n    route_refuse: Option<(String, Option<String>)>,\n", "new": "    route_refuse: Option<(String, Option<String>)>,\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "            #[cfg(mother_route_seams)]\n            route_refuse: None,\n", "new": "            route_refuse: None,\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "    #[cfg(mother_route_seams)]\n    pub fn route_refuse_next(&self, phase: &str, commitment: Option<&str>) {\n", "new": "    pub fn route_refuse_next(&self, phase: &str, commitment: Option<&str>) {\n"}
+  ],
+  "S4": [
+   {"file": "crates/nexus-governed-control/src/host_session.rs", "old": "#[cfg(mother_route_seams)]\npub mod route_s4;\n", "new": "pub mod route_s4;\n"},
+   {"file": "crates/nexus-governed-control/src/host_session/route_s4.rs", "old": "#[cfg(mother_route_seams)]\n#[derive(Clone, Copy, Debug, PartialEq, Eq)]\n", "new": "#[derive(Clone, Copy, Debug, PartialEq, Eq)]\n"},
+   {"file": "crates/nexus-governed-control/src/host_session/route_s4.rs", "old": "#[cfg(mother_route_seams)]\nimpl HostSession {\n", "new": "impl HostSession {\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "    #[cfg(mother_route_seams)]\n    fn route_poison_inner(&self) {\n", "new": "    fn route_poison_inner(&self) {\n"},
+   {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "    #[cfg(mother_route_seams)]\n    pub(crate) fn route_poison_inner(&self) {\n", "new": "    pub(crate) fn route_poison_inner(&self) {\n"},
+   {"file": "crates/nexus-governed-control/src/authority/run.rs", "old": "    #[cfg(mother_route_seams)]\n    pub(crate) fn route_poison_runs(&self) {\n", "new": "    pub(crate) fn route_poison_runs(&self) {\n"}
+  ]
+ },
+ "controls": [
+  {"name": "ungate_S1_store_commit_site", "binary": "nexus-mother", "ungate": ["S1"], "edits": [], "expect": ["S1"]},
+  {"name": "ungate_and_call_S2", "binary": "nexus-mother", "ungate": ["S2"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}], "expect": ["S2"]},
+  {"name": "ungate_and_call_S4_session", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::ModelState);\n    }\n"}], "expect": ["S4-session"]},
+  {"name": "ungate_and_call_S4_evidence", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::EvidenceInner);\n    }\n"}], "expect": ["S4-evidence"]},
+  {"name": "ungate_and_call_S4_store", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::EvidenceInner);\n    }\n"}], "expect": ["S4-store"]},
+  {"name": "ungate_and_call_S4_runs", "binary": "nexus-mother", "ungate": ["S4"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_governed_control::host_session::HostSession>) {\n        s.route_poison(nexus_governed_control::host_session::route_s4::RouteLock::RunTable);\n    }\n"}], "expect": ["S4-runs"]},
+  {"name": "ungate_and_call_S2_mother_hands", "binary": "mother-hands", "ungate": ["S2"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}], "expect": ["S2"]},
+  {"name": "near_miss_marker_is_not_matched", "binary": "nexus-mother", "ungate": ["S2"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}, {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "const M: &str = \"nexus-mother-route-seam-S2\";", "new": "const M: &str = \"nexus-mother-route-seam-S4-sessiom\";"}], "expect": [], "expect_unknown": ["S4-sessiom"]}
+ ]
+}
