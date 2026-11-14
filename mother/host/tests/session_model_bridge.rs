@@ -1692,8 +1692,8 @@ call_chat|4|Failed,||omitted
 call_chat|5|CR,||omitted
 call_chat|6|none,||omitted
 call_chat|7|;after=c:sb3_matrix_r5_cas_after||omitted
-call_chat|5|quit,|quit,escape,|unknown value escape
-call_chat|5|quit,|quit,quit,|duplicate value quit
+call_chat|5|quit=|quit,escape=|unknown value escape
+call_chat|5|quit=|quit,quit=|duplicate value quit
 call_chat|5|||malformed row
 call_chat|5||CR|malformed clause
 call_chat|5|c:sb3_matrix_r5_observer_before|maybe|no disposition
@@ -2090,16 +2090,40 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (45, 0, 645, 1, 33),
-        "after D2: {summary:?}"
+        (51, 0, 641, 1, 33),
+        "after D2 and U5b's six credited cells: {summary:?}"
     );
-    assert_eq!(count("cited"), 226, "no retained citation moved");
+    assert_eq!(count("cited"), 224, "quit and fatal moved to x:rc_");
 }
 
-/// SB-3E U2a: the manifest file is literal and, until a unit credits a cell, empty.
+/// SB-3E U5b (R54 U5-1, R86.4): the six credited `call_chat` ingress cells;
+/// `door_fence` is held and `budget` is not credited.
+const CREDITED: [&str; 6] = [
+    "r5/call_chat/ingress/original_cell_unscheduled",
+    "r5/call_chat/ingress/repeated",
+    "r5/call_chat/ingress/mission_stop",
+    "r5/call_chat/ingress/stop_all",
+    "r5/call_chat/ingress/fatal",
+    "r5/call_chat/ingress/quit",
+];
+/// U5b: `manifest` with the six credited entries first, for a control whose
+/// register keeps the real one's six `x:rc_` cells (each control's own
+/// entries and refusal are unchanged).
+fn with_credited(manifest: &str) -> String {
+    let entry = |c: &&str| format!("    {};\n", c.replace('/', " "));
+    let six: String = CREDITED.iter().map(entry).collect();
+    manifest.replacen("cells! {\n", &format!("cells! {{\n{six}"), 1)
+}
+/// The real manifest and `entry`.
+fn credited_and(entry: &str) -> String {
+    with_credited(&format!("cells! {{\n    {entry};\n}}\n"))
+}
+/// SB-3E U2a, U5b (R49.6): the manifest file is literal and exactly the
+/// credited set.
 #[test]
-fn sb3e_manifest_is_literal_and_empty() {
-    assert_eq!(parse_manifest(CELLS_RS), Ok(BTreeSet::new()));
+fn sb3e_manifest_is_literal_and_exact() {
+    let credited = CREDITED.iter().map(|c| c.to_string()).collect();
+    assert_eq!(parse_manifest(CELLS_RS), Ok(credited));
 }
 #[test]
 fn sb3e_overlong_manifest_is_refused() {
@@ -2291,7 +2315,7 @@ close_report/fault/panic|13|;deadline_fired=none|;deadline_fired=none;peer=none 
 call_chat/fault/decline|17||open|status is not
 seal/lifecycle/Normal|17||denial:sb3e_unresolved_lane_refuses_seal|status is not
 call_chat/fault/decline|17||hold:no_recipe|status is not
-call_chat/ingress/mission_stop|17||hold:Bad-Slug|bad status
+call_chat/ingress/door_fence|17||hold:Bad-Slug|bad status
 ";
 /// `manifest|wanted`, `~` a newline: refused through the verifier, for that reason.
 const BAD_MANIFESTS: &str = "\
@@ -2531,7 +2555,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     ] {
         let thin = apply_spec(&format!("{sink}/fault/none"), 13, "+0:all[s=S]", delta);
         let rc = format!("x:rc_{route}_{sink}_fault_none");
-        let manifest = format!("cells! {{\n    {route} {sink} fault none;\n}}\n");
+        let manifest = credited_and(&format!("{route} {sink} fault none"));
         let register = cell_text(sink, "fault", "none", &rc);
         let got = run(&register, &thin, &manifest, &sha256_hex(&thin));
         check(delta, got, "bad witness: ledger");
@@ -2559,7 +2583,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     // Manifests, through the same entry point.
     for spec in BAD_MANIFESTS.lines() {
         let (manifest, want) = spec.split_once('|').unwrap();
-        let manifest = manifest.replace('~', "\n");
+        let manifest = with_credited(&manifest.replace('~', "\n"));
         check(spec, run(&tsv, &base, &manifest, &pin), want);
     }
     // `x:rc_` needs its row, slug, manifest entry and 4.4; `na:` a reviewed row.
@@ -2569,7 +2593,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         "Normal",
         "x:rc_r5_call_chat_lifecycle_normal",
     );
-    let listed = "cells! {\n    r5 call_chat lifecycle Normal;\n}\n";
+    let listed = &credited_and("r5 call_chat lifecycle Normal");
     assert_eq!(
         run(&credited, &base, listed, &pin),
         Ok(()),
@@ -2624,12 +2648,13 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     for spec in RC_CONTROLS.lines() {
         let f: Vec<_> = spec.split('|').collect();
         let register = cell_text(f[0], f[1], f[2], f[3]);
-        let entry = format!("cells! {{\n    {};\n}}\n", f[4]);
+        let entry = credited_and(f[4]);
         let manifest = if f[4] == "-" { CELLS_RS } else { &entry };
         check(spec, run(&register, &base, manifest, &pin), f[5]);
     }
-    // R5.2: a hold row states no recipe and is never credited or excused.
-    const STOP: &str = "call_chat/ingress/mission_stop";
+    // R5.2: a hold row states no recipe and is never credited or excused
+    // (U5b: on door_fence, an open:D2 cell; mission_stop is credited now).
+    const STOP: &str = "call_chat/ingress/door_fence";
     let hold = |text: &str, cell: &str, slug: &'static str| {
         fixture_edit(text, cell, move |c: &mut Vec<String>| {
             for col in [5, 11, 12, 13] {
@@ -2652,9 +2677,9 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         let edited = fixture_edit(&held, STOP, move |c: &mut Vec<String>| c[col] = to.into());
         check(label, table(&edited), "carries no recipe");
     }
-    let on_stop = "x:rc_r5_call_chat_ingress_mission_stop";
-    let listed = "cells! {\n    r5 call_chat ingress mission_stop;\n}\n";
-    let credited = cell_text("call_chat", "ingress", "mission_stop", on_stop);
+    let on_stop = "x:rc_r5_call_chat_ingress_door_fence";
+    let listed = &credited_and("r5 call_chat ingress door_fence");
+    let credited = cell_text("call_chat", "ingress", "door_fence", on_stop);
     check(
         "x:rc_ on hold",
         run(&credited, &held, listed, &sha256_hex(&held)),
@@ -2663,7 +2688,7 @@ fn sb3e_expect_verifier_controls_are_rejected() {
     let excused = cell_text(
         "call_chat",
         "ingress",
-        "mission_stop",
+        "door_fence",
         "na:BOOTSTRAP_NO_MISSION",
     );
     check(
@@ -2709,7 +2734,8 @@ fn sb3e_expect_verifier_controls_are_rejected() {
 fn sb3e_expect_table_is_complete() {
     verify(&real()).unwrap();
     let expect = parse_expect(EXPECT, CELLS_RS).unwrap();
-    assert!(expect.manifest.is_empty(), "no cell is credited");
+    let credited: BTreeSet<String> = CREDITED.iter().map(|c| c.to_string()).collect();
+    assert_eq!(expect.manifest, credited, "exactly the credited cells");
     let mut by_status: BTreeMap<&str, usize> = BTreeMap::new();
     for row in &expect.rows {
         *by_status
@@ -2775,7 +2801,8 @@ fn sb3e_real_table_tampers_are_rejected() {
         table(&edit(panic, 8, "m:738")),
         "mislabelled point",
     );
-    let held = edit("call_chat/ingress/mission_stop", 17, "hold:x");
+    // U5b: a recipe row no register cell credits (mission_stop now is).
+    let held = edit(panic, 17, "hold:x");
     check(
         "a hold row keeping a recipe",
         table(&held),
@@ -2786,6 +2813,19 @@ fn sb3e_real_table_tampers_are_rejected() {
         table(&edit(panic, 3, "poison")),
         "expect: duplicate cell",
     );
+    // U5b (mission Other plants): row 97's hold, with exec not `own` or any
+    // of its four claims not `hold`, is refused by the existing verifier.
+    let fence = "call_chat/ingress/door_fence";
+    for (col, to) in [
+        (10, "g:x"),
+        (5, "canonical"),
+        (11, "x"),
+        (12, "x"),
+        (13, "x"),
+    ] {
+        let label = format!("row 97 column {col} {to}");
+        check(&label, table(&edit(fence, col, to)), "carries no recipe");
+    }
     let witness = fixture_edit(
         EXPECT,
         "call_chat/lifecycle/Normal",
@@ -2808,13 +2848,13 @@ fn sb3e_real_table_tampers_are_rejected() {
         "x: on amend",
         run(
             EXPECT,
-            "cells! {\n    r5 call_chat fault decline;\n}\n",
+            &credited_and("r5 call_chat fault decline"),
             &on_amend,
         ),
         "x:rc_ on a non-open row",
     );
     let cell = "call_chat/lifecycle/Normal";
-    let listed = "cells! {\n    r5 call_chat lifecycle Normal;\n}\n";
+    let listed = &credited_and("r5 call_chat lifecycle Normal");
     let credited = cell_text(
         "call_chat",
         "lifecycle",

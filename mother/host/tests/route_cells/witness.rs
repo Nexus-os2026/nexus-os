@@ -227,6 +227,12 @@ pub(super) fn render(f: &Facts) -> String {
         (true, false) => "none".to_string(),
         _ => format!("expired{expired:?} timeout={timed_out}"),
     };
+    let outcomes = f
+        .native
+        .iter()
+        .filter(attempt)
+        .map(|r| detail(r, "outcome"));
+    println!("WITNESS native outcome {:?}", outcomes.collect::<Vec<_>>());
     let values = [
         entry,
         check,
@@ -253,6 +259,11 @@ fn record(r: &Ran) -> Result<&str, &'static str> {
     if !r.passed {
         return Err("record: the child failed");
     }
+    written(r)
+}
+/// `record`'s checks of the record itself, whatever the child's exit (a
+/// driver's finding fails the child after its record is written).
+fn written(r: &Ran) -> Result<&str, &'static str> {
     let lines: Vec<&str> = r.result.lines().collect();
     if lines.iter().any(|l| !l.starts_with("CELL ")) {
         return Err("record: a line that is not a CELL record");
@@ -313,6 +324,33 @@ pub(super) fn control(r: &Ran) {
     };
     let diffs = compare(CONTROL, witness);
     assert!(diffs.is_empty(), "{}: {}", r.id, diffs.join("; "));
+}
+
+/// SB3E-R86.4 (U5b; Behaviour 1): a credited cell's record and witness
+/// against its frozen row, field by field and byte for byte, then the
+/// child's own exit; every difference is named, the witness's first.
+pub(super) fn credited(r: &Ran, sink: &str, dim: &str, value: &str) {
+    let want = frozen(sink, dim, value);
+    let want = want.unwrap_or_else(|| panic!("{}: no row {sink}/{dim}/{value}", r.id));
+    let mut found = match written(r) {
+        Ok(witness) => compare(want, witness),
+        Err(e) => vec![e.to_string()],
+    };
+    if !r.passed {
+        found.push("record: the child failed".into());
+    }
+    for line in r.output.lines().filter_map(|l| l.split_once("WITNESS ")) {
+        println!("{}: {}", r.id, line.1); // Measured evidence (--nocapture).
+    }
+    let shown = (&r.result, &r.output);
+    assert!(
+        found.is_empty(),
+        "{}: {}\n{}{}",
+        r.id,
+        found.join("; "),
+        shown.0,
+        shown.1
+    );
 }
 
 /// Rows 93-96 and 98-100 (the `call_chat` ingress cells but the held row
@@ -544,5 +582,46 @@ fn refused() -> Facts {
         journal: Vec::new(),
         native: Vec::new(),
         peer: Vec::new(),
+        findings: Vec::new(),
     }
+}
+
+/// Design 7.2's harness controls, each its own test, each against the frozen
+/// `quit` row (row 99): its record read whatever the child's exit, and each
+/// named field must differ.
+fn differs(name: &str, id: &'static str, drive: fn(&super::Fixture) -> Facts, fields: &[&str]) {
+    let Some(r) = super::s5::cell(name, id, drive, render) else {
+        return;
+    };
+    let want = frozen("call_chat", "ingress", "quit").unwrap();
+    let witness = written(&r).unwrap_or_else(|e| panic!("{id}: {e}\n{}", r.output));
+    let diffs = compare(want, witness);
+    let named = |k: &&str| diffs.iter().any(|d| d.starts_with(&format!("{k}: ")));
+    assert!(fields.iter().all(named), "{id}: {fields:?} in {diffs:?}");
+    println!("WITNESS {id}: {diffs:?}");
+}
+#[test]
+fn witness_control_ord3_fails_in_entry() {
+    let name = "witness::witness_control_ord3_fails_in_entry";
+    differs(name, "ctl_ord3", super::s5::ord3_quit, &["entry"]);
+}
+#[test]
+fn witness_control_other_attempt_fails_in_identity() {
+    let name = "witness::witness_control_other_attempt_fails_in_identity";
+    differs(
+        name,
+        "ctl_other_attempt",
+        super::s5::quit_other_attempt,
+        &["entry", "check"],
+    );
+}
+#[test]
+fn witness_control_earlier_refusal_fails_in_check_and_out() {
+    let name = "witness::witness_control_earlier_refusal_fails_in_check_and_out";
+    differs(
+        name,
+        "ctl_earlier_refusal",
+        super::s5::early_quit,
+        &["check", "out"],
+    );
 }
