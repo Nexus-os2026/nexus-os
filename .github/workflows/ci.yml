@@ -398,6 +398,32 @@ jobs:
           "$dir/bin/rustc" -vV && "$dir/bin/cargo" -V
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
+      # SB-3E route A1 (GB3, SB3E-R56.1): before either build, the checked tree's own pins
+      # file. A fresh runner has no crates and A1 runs Cargo offline, so the locked crates
+      # are fetched first from outside the tree: no candidate Cargo configuration is read
+      # and a fetch runs no build script.
+      - name: Route A1 (before any build)
+        shell: bash
+        env:
+          TOOLCHAIN: ${{ steps.toolchain.outputs.dir }}
+        run: |
+          set -euo pipefail
+          (cd "$RUNNER_TEMP" && env -i HOME="$HOME" PATH="$TOOLCHAIN/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            "$TOOLCHAIN/bin/cargo" fetch --locked --manifest-path "$GITHUB_WORKSPACE/Cargo.toml")
+          env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            /usr/bin/python3 -I tools/gatebox/route/route_a1.py --repo "$PWD" --toolchain "$TOOLCHAIN" \
+            --pins "$PWD/tools/route_pins.json" --json "$RUNNER_TEMP/route-a1.json"
+
+      - name: Route A1 controls
+        shell: bash
+        env:
+          TOOLCHAIN: ${{ steps.toolchain.outputs.dir }}
+        run: |
+          set -euo pipefail
+          env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            /usr/bin/python3 -I tools/gatebox/route/route_a1_controls.py --source "$PWD" \
+            --work "$RUNNER_TEMP/route-a1-controls" --toolchain "$TOOLCHAIN"
+
       - name: Install the desktop's build dependencies
         run: |
           sudo apt-get update
@@ -445,7 +471,7 @@ jobs:
             --target "$RUNNER_TEMP/route-a7/target" \
             --evidence "$RUNNER_TEMP/route-a7/evidence" \
             --wrapper "$wrapper" --wrapper-sha256 "$(sha256sum "$wrapper" | cut -d' ' -f1)" \
-            --json "$RUNNER_TEMP/route-a7/verdict.json"
+            --json "$RUNNER_TEMP/route-a7/verdict.json" --pins "$PWD/tools/route_pins.json"
 
       - name: Route lane (fresh target)
         shell: bash
@@ -456,4 +482,5 @@ jobs:
           env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 \
             /usr/bin/python3 -I tools/gatebox/route/route_a7.py lane \
             --repo "$PWD" --toolchain "$TOOLCHAIN" \
-            --target "$RUNNER_TEMP/route-lane" --wrapper "$RUNNER_TEMP/route_rustc"
+            --target "$RUNNER_TEMP/route-lane" --wrapper "$RUNNER_TEMP/route_rustc" \
+            --pins "$PWD/tools/route_pins.json"

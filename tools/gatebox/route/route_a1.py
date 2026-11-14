@@ -2,16 +2,21 @@
 """SB-3E A1: the route packages' build graph and the snapshot's Cargo configuration.
 
 Design section 5 row A1 (U4b item 1, ruling SB3E-R28.2). Stdlib only, Linux
-only. Not wired into install.sh, the policy or the bundle: it joins the
-installed bundle in GB3. It prints a JSON verdict and exits nonzero on any
+only. GB3 installs it in the Gate Box bundle as the route-cells gate
+`route_a1`, run before A7. It prints a JSON verdict and exits nonzero on any
 finding.
+
+SB3E GB3 (R48.1 B1): the repository's lock, graph and declared pins are read
+from the checked tree's own `tools/route_pins.json` (`--pins`, required, no
+default). GB3-1: a bad pins file, an inherited toolchain variable or any
+configuration finding ends A1 before any Cargo process.
 
 Checks, across the default and the all-features resolve, every target table
 and normal, build and dev edges:
 - route_package: each route package (ROUTE_PACKAGES, by name and manifest)
   exists, has no build script, no `[features]` entry (an implicit feature of
   an optional dependency counts), no `links`, and declares exactly the
-  reviewed dependencies (DECLARED, every field Cargo reports).
+  reviewed dependencies (the pins file's `declared`, every field Cargo reports).
 - graph_differs: the resolved graph reachable from the route packages
   (packages by name, version and normalized source; edges by extern name,
   kind and target; enabled features) equals its reviewed hash, per resolve.
@@ -19,7 +24,9 @@ and normal, build and dev edges:
   only at the root and is byte-equal to its pin (Cargo prefers the legacy name
   when both exist); no `.cargo` is a symbolic link. What a refused file sets is
   reported by key.
-- lock: Cargo.lock is byte-equal to its pin.
+- lock: Cargo.lock is byte-equal to the pins file's lock digest.
+- pins: the pins file is exactly <repo>/tools/route_pins.json, not a symbolic
+  link, a regular file within PINS_MAX bytes, with exactly the pins keys.
 Ancestor and Cargo-home configuration is outside the snapshot and is the
 runner's (SB3E-R13.2); A2 validates what an installation really ran.
 """
@@ -27,6 +34,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 import tomllib
@@ -37,61 +46,12 @@ ROUTE_PACKAGES = {
     "nexus-mother-host": "mother/host/Cargo.toml",
     "nexus-mother-desktop": "mother/desktop/Cargo.toml",
 }
-LOCK_PIN = "333ffb7b9727991faa287b07296ce803be4210dd13ed59d9af1b80b6ca53f773"
 CARGO_CONFIG_PIN = "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
-# Reviewed graph hashes: sha256 of graph_lines(), LF-joined (see graph_lines).
-GRAPH_PINS = {
-    "default": "cac938c933a829c612e8bb1e2c4802be1fc2a36b7d7002669b28d0daba1e0ef3",
-    "all-features": "44ad20845df6835b81beb8693a17ce7ac76d47cac1842e704ad7ce7c63fd69f5",
-}
-# Each route package's declared dependencies:
-# name|rename|kind|target|optional|default-features|features|req|source.
-DECLARED = {
-    "nexus-governed-control": [
-        "base64||normal||False|True||^0.22|registry+https://github.com/rust-lang/crates.io-index",
-        "getrandom||normal||False|True||^0.2|registry+https://github.com/rust-lang/crates.io-index",
-        "hex||normal||False|True||^0.4|registry+https://github.com/rust-lang/crates.io-index",
-        "libc||normal|cfg(target_os = \"linux\")|False|True||^0.2|registry+https://github.com/rust-lang/crates.io-index",
-        "nexus-kernel||normal||False|True||*|local:kernel",
-        "png||normal||False|True||^0.18|registry+https://github.com/rust-lang/crates.io-index",
-        "proc-macro2||dev||False|False||=1.0.106|registry+https://github.com/rust-lang/crates.io-index",
-        "reqwest||normal||False|False|rustls-tls|^0.12|registry+https://github.com/rust-lang/crates.io-index",
-        "rusqlite||normal||False|True|bundled|^0.41|registry+https://github.com/rust-lang/crates.io-index",
-        "serde_json||dev||False|True||^1.0|registry+https://github.com/rust-lang/crates.io-index",
-        "serde_json||normal||False|True||^1.0|registry+https://github.com/rust-lang/crates.io-index",
-        "serde||normal||False|True|derive|^1.0|registry+https://github.com/rust-lang/crates.io-index",
-        "sha2||normal||False|True||^0.10|registry+https://github.com/rust-lang/crates.io-index",
-        "tokio||normal||False|True|macros,rt,time|^1|registry+https://github.com/rust-lang/crates.io-index",
-        "unicode-segmentation||normal||False|True||^1.12|registry+https://github.com/rust-lang/crates.io-index",
-        "url||normal||False|True||^2|registry+https://github.com/rust-lang/crates.io-index",
-        "x11rb||normal|cfg(target_os = \"linux\")|False|True|xtest|^0.13|registry+https://github.com/rust-lang/crates.io-index",
-        "zeroize||normal||False|True||^1|registry+https://github.com/rust-lang/crates.io-index",
-    ],
-    "nexus-mother": [
-        "hex||normal||False|True||^0.4|registry+https://github.com/rust-lang/crates.io-index",
-        "nexus-governed-control||normal||False|True||*|local:crates/nexus-governed-control",
-        "nix||normal||False|False|fs|^0.29|registry+https://github.com/rust-lang/crates.io-index",
-        "proc-macro2||dev||False|False||=1.0.106|registry+https://github.com/rust-lang/crates.io-index",
-        "serde_json||normal||False|True||^1.0|registry+https://github.com/rust-lang/crates.io-index",
-        "serde||normal||False|True|derive|^1.0|registry+https://github.com/rust-lang/crates.io-index",
-        "sha2||normal||False|True||^0.10|registry+https://github.com/rust-lang/crates.io-index",
-    ],
-    "nexus-mother-desktop": [
-        "gtk4||normal||False|True||=0.11.5|registry+https://github.com/rust-lang/crates.io-index",
-        "nexus-governed-control||normal||False|True||*|local:crates/nexus-governed-control",
-        "nexus-kernel||normal||False|True||*|local:kernel",
-        "nexus-mother-host||normal||False|True||*|local:mother/host",
-        "nix||dev||False|False|process,signal|=0.29.0|registry+https://github.com/rust-lang/crates.io-index",
-    ],
-    "nexus-mother-host": [
-        "nexus-governed-control||normal||False|True||*|local:crates/nexus-governed-control",
-        "nexus-mother||normal||False|True||*|local:mother",
-        "nix||dev||False|True|fs,poll,term|^0.29|registry+https://github.com/rust-lang/crates.io-index",
-        "nix||normal|cfg(target_os = \"linux\")|False|True|poll,term|^0.29|registry+https://github.com/rust-lang/crates.io-index",
-        "sha2||normal||False|True||^0.10|registry+https://github.com/rust-lang/crates.io-index",
-        "uuid||normal||False|True|v4|^1.22|registry+https://github.com/rust-lang/crates.io-index",
-    ],
-}
+# Reviewed graph hashes are sha256 of graph_lines(), LF-joined; declared dependencies are
+# name|rename|kind|target|optional|default-features|features|req|source. Both are in the pins file.
+PINS = os.path.join("tools", "route_pins.json")
+PINS_MAX = 65536
+HEX = re.compile("[0-9a-f]{64}")
 REFUSED_EXACT = ("MAKEFLAGS", "MFLAGS")
 REFUSED_PREFIX = ("RUSTUP_", "RUSTC", "RUSTDOC", "RUSTFLAGS", "CARGO_")
 
@@ -116,6 +76,54 @@ def launch_block(toolchain):
     block["RUSTC"] = os.path.join(toolchain, "bin", "rustc")
     block["PATH"] = os.path.join(toolchain, "bin") + os.pathsep + os.environ.get("PATH", "/usr/bin:/bin")
     return block, out
+
+
+def unique(pairs):
+    if len({k for k, _ in pairs}) != len(pairs):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
+def load_pins(repo, path):
+    """([findings], pins): the checked tree's own pins file, opened without following a link (A1 and A7)."""
+    refused = lambda reason: ([f("pins", reason=reason)], None)
+    # GB3 Codex 1: the argument must be spelled exactly as the tree's own path (no `..` or alias spelling), and
+    # the file is reached from the repo directory through non-following descriptors, never by the pathname.
+    if path is None or not os.path.isabs(repo) or os.path.normpath(repo) != repo or path != os.path.join(repo, PINS):
+        return refused(f"--pins must be the checked tree's own {PINS}")
+    if os.path.islink(os.path.join(repo, "tools")):
+        return refused("tools is a symbolic link")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    root = tools = None
+    try:
+        root = os.open(repo, flags | os.O_DIRECTORY)
+        tools = os.open("tools", flags | os.O_DIRECTORY, dir_fd=root)
+        fd = os.open(os.path.basename(PINS), flags | os.O_NONBLOCK, dir_fd=tools)
+    except OSError as error:
+        return refused(f"missing or a symbolic link: {error.strerror}")
+    finally:
+        for handle in (tools, root):
+            if handle is not None:
+                os.close(handle)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        return refused("not a regular file")
+    with os.fdopen(fd, "rb") as handle:
+        data = handle.read(PINS_MAX + 1)
+    if len(data) > PINS_MAX:
+        return refused(f"over {PINS_MAX} bytes")
+    try:
+        pins = json.loads(data, object_pairs_hook=unique)
+    except ValueError:
+        return refused("not JSON")
+    digest = lambda value: isinstance(value, str) and bool(HEX.fullmatch(value))
+    lines = lambda value: isinstance(value, list) and all(isinstance(x, str) for x in value)
+    if (not isinstance(pins, dict) or set(pins) != {"lock_sha256", "graph", "declared"} or not digest(pins["lock_sha256"])
+            or not isinstance(pins["graph"], dict) or set(pins["graph"]) != {"default", "all-features"}
+            or not all(map(digest, pins["graph"].values())) or not isinstance(pins["declared"], dict)
+            or set(pins["declared"]) != set(ROUTE_PACKAGES) or not all(map(lines, pins["declared"].values()))):
+        return refused("keys or values differ from the pins schema")
+    return [], pins
 
 
 def keys(value, prefix=""):
@@ -198,7 +206,7 @@ def graph_lines(meta, repo, roots):
     return sorted(lines)
 
 
-def package_findings(meta, repo, label):
+def package_findings(meta, repo, label, wanted):
     out, roots = [], []
     for name, manifest in sorted(ROUTE_PACKAGES.items()):
         found = [p for p in meta["packages"] if p["name"] == name and p["source"] is None
@@ -216,59 +224,67 @@ def package_findings(meta, repo, label):
             out.append(f("route_package", package=name, resolve=label, reason="feature", feature=feature))
         if package.get("links"):
             out.append(f("route_package", package=name, resolve=label, reason="links"))
-        have, want = declared(package, repo), DECLARED.get(name, [])
+        have, want = declared(package, repo), wanted[name]
         for line in sorted(set(have) ^ set(want)):
             out.append(f("route_package", package=name, resolve=label,
                          reason="undeclared dependency" if line in have else "missing dependency", dependency=line))
     return out, roots
 
 
-def check(repo, toolchain):
+def preflight(repo, toolchain, path):
+    """GB3-1: (block, refusals, pins) from checks that start no process; any refusal ends A1 before Cargo."""
     block, out = launch_block(toolchain)
     if out:
-        return out
-    out += config_findings(repo)
+        return block, out, None
+    out, pins = load_pins(repo, path)
+    return block, out + config_findings(repo), pins
+
+
+def check(repo, toolchain, path):
+    block, out, pins = preflight(repo, toolchain, path)
     lock = os.path.join(repo, "Cargo.lock")
-    if not os.path.isfile(lock) or os.path.islink(lock) or sha256_file(lock) != LOCK_PIN:
+    if pins and (not os.path.isfile(lock) or os.path.islink(lock) or sha256_file(lock) != pins["lock_sha256"]):
         out.append(f("lock", reason="Cargo.lock differs from its pin"))
+    if any(x["kind"] != "lock" for x in out):
+        return out
     for label, all_features in (("default", False), ("all-features", True)):
         meta, error = metadata(repo, toolchain, block, all_features)
         if meta is None:
             out.append(f("metadata_failed", resolve=label, error=error))
             continue
-        found, roots = package_findings(meta, repo, label)
+        found, roots = package_findings(meta, repo, label, pins["declared"])
         out += found
         lines = graph_lines(meta, repo, roots)
         digest = sha256_bytes("\n".join(lines).encode())
-        if digest != GRAPH_PINS[label]:
+        if digest != pins["graph"][label]:
             out.append(f("graph_differs", resolve=label, sha256=digest, lines=len(lines)))
     return out
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--repo", required=True)
-    parser.add_argument("--toolchain", required=True)
+    for name in ("--repo", "--toolchain", "--pins"):
+        parser.add_argument(name, required=True)
     parser.add_argument("--json")
-    parser.add_argument("--print-pins", action="store_true", help="review aid: the values this tree would pin")
+    parser.add_argument("--print-pins", action="store_true", help="review aid: the pins file this tree would have")
     args = parser.parse_args()
     repo, toolchain = os.path.abspath(args.repo), os.path.abspath(args.toolchain)
     if args.print_pins:
-        block, refused = launch_block(toolchain)
+        block, refused, _ = preflight(repo, toolchain, args.pins)
         if refused:
             sys.exit(json.dumps(refused))
-        pins = {}
+        pins = {"lock_sha256": sha256_file(os.path.join(repo, "Cargo.lock")), "graph": {}}
         for label, all_features in (("default", False), ("all-features", True)):
             meta, error = metadata(repo, toolchain, block, all_features)
             if meta is None:
                 sys.exit(f"route_a1: metadata failed: {error}")
-            _, roots = package_findings(meta, repo, label)
-            pins[label] = sha256_bytes("\n".join(graph_lines(meta, repo, roots)).encode())
+            _, roots = package_findings(meta, repo, label, {name: [] for name in ROUTE_PACKAGES})
+            pins["graph"][label] = sha256_bytes("\n".join(graph_lines(meta, repo, roots)).encode())
             pins["declared"] = {p["name"]: declared(p, repo) for p in meta["packages"]
                                 if p["name"] in ROUTE_PACKAGES and p["source"] is None}
         print(json.dumps(pins, indent=1, sort_keys=True))
         return 0
-    findings = check(repo, toolchain)
+    findings = check(repo, toolchain, args.pins)
     result = {"verdict": "fail" if findings else "pass", "findings": findings}
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:

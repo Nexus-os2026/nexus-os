@@ -4,7 +4,9 @@
   route_exit.py --repo R --sha SHA --toolchain T --wrapper W --wrapper-sha256 H --work DIR --out FILE
 
 One run on one clean commit, steps in order, each logged under DIR/logs:
-  preflight     HEAD is SHA, the tree is clean (ignored files too, R55.5), the
+  preflight     HEAD is SHA, the tree is clean (ignored files too, R55.5), no
+                replacement ref, filter configuration or info/attributes
+                (R72 D7; every git call `--no-replace-objects`), then the
                 working files' tree (a private index, R60.8) is HEAD's, the
                 wrapper is the pinned one;
   a3_check_data A3's data check, before any scan and before A4 (R36.3);
@@ -22,7 +24,8 @@ One run on one clean commit, steps in order, each logged under DIR/logs:
                 list, its names without `expect` and its whole file's sha256
                 (R55.6) equal the `plants` pin;
   no_pycache    no `__pycache__` under tools/ (R60.7);
-  postflight    HEAD, the status and the working files' tree unchanged.
+  postflight    HEAD, the status, the local state and the working files' tree
+                unchanged.
 Each seam is listed with its data disposition per binary and what A3 and A4
 measured. One verdict JSON is written to a fresh FILE; exit 0 only if every step passes.
 Each tool runs with `-X pycache_prefix` under DIR, so no cached bytecode in the
@@ -58,7 +61,11 @@ os.close(fd)
 os.execv(sys.argv[1], sys.argv[1:])
 """
 # SB3E-R64: the exact control counts each controls step must report; any other count fails the step.
-CONTROLS = {"a1_controls": 15, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109}
+# SB3E GB3: A1's 15 plus its 8 sentinel and 7 pins controls (mission 9 items 1a, 2; Codex GB3 1 adds pins_alias_dotdot).
+CONTROLS = {"a1_controls": 30, "a2_controls": 45, "a3_controls": 27, "a7_controls": 109,
+            # SB3E-R72: A5's 46 lexical plants + 4 new (lone CR, three include rows) + 21 expanded plants + 9 capture controls;
+            # R75: + 3 expanded plants (C string before a hook, twice; `..` after a link) + 2 (pin order, whole-unit fallback).
+            "a5_controls": 85}
 
 
 def sha256(data):
@@ -119,10 +126,26 @@ class Gate:
             shutil.rmtree(os.path.join(self.work, name), ignore_errors=True)
 
 
-def git(repo, *args):
-    """stdout, or None when git fails (SB3E-R55.5: never read as a clean tree)."""
-    run = subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True)
-    return run.stdout.rstrip("\n") if run.returncode == 0 else None
+def git(repo, *args, codes=(0,)):
+    """stdout, or None when git exits other than `codes` (SB3E-R55.5: never read as a clean tree). SB3E-R72 D7:
+    every call with `--no-replace-objects`, so a replacement ref changes no object read."""
+    run = subprocess.run(["git", "--no-replace-objects", "-C", repo] + list(args), capture_output=True, text=True)
+    return run.stdout.rstrip("\n") if run.returncode in codes else None
+
+
+def local_state(repo):
+    """SB3E-R72 D7 (Fable SHOULD 8): local git state that can make the working files read as HEAD's when they are not;
+    each is a refusal: a replacement ref (any, packed too), a configured filter (`config --get-regexp` exit 1 is none,
+    any other failure refuses), and an `info/attributes` file at the path git itself resolves (worktree-aware)."""
+    found = []
+    refs = git(repo, "for-each-ref", "refs/replace/")
+    found += ["replacement refs"] if refs != "" else []
+    filters = git(repo, "config", "--get-regexp", r"^filter\.", codes=(0, 1))
+    found += ["filter configuration"] if filters != "" else []
+    attributes = git(repo, "rev-parse", "--git-path", "info/attributes")
+    if attributes is None or os.path.lexists(os.path.join(repo, attributes)):
+        found.append("info/attributes")
+    return found
 
 
 def status(repo):
@@ -144,12 +167,26 @@ def a7_controls_ok(run, _):
         and sum(x.startswith("PASS ") for x in lines) == CONTROLS["a7_controls"] and not any(x.startswith("FAIL ") for x in lines)
 
 
+def trusted_tree(repo, index):
+    """SB3E-R72 D7: (local-state refusals, clean, the working files' tree); the private index is built only for a
+    clean tree with no refusal, so a dirty tree's ignored files never enter `.git/objects` (Fable SHOULD 9)."""
+    refused, clean = local_state(repo), status(repo) == ""
+    return refused, clean, worktree_tree(repo, index) if clean and not refused else None
+
+
+def a5_controls_ok(run, parsed):
+    """SB3E-R72: A5's verdict passes and it ran the pinned number of plants, each killed (lexical and expanded)."""
+    rows = (parsed or {}).get("plants", []) + (parsed or {}).get("expanded", [])
+    return run.returncode == 0 and (parsed or {}).get("verdict") == "pass" and len(rows) == CONTROLS["a5_controls"] \
+        and all(x.get("killed") for x in rows)
+
+
 def worktree_tree(repo, index):
     """SB3E-R60.8: the tree of the working files, from a fresh private index (no assume-unchanged or
     skip-worktree flag hides an edit); None on failure."""
     env = {"PATH": "/usr/bin:/bin", "HOME": os.environ["HOME"], "LANG": "C.UTF-8", "GIT_INDEX_FILE": index}
     for args in (["add", "-A", "-f", "."], ["write-tree"]):
-        run = subprocess.run(["git", "-C", repo] + args, env=env, capture_output=True, text=True)
+        run = subprocess.run(["git", "--no-replace-objects", "-C", repo] + args, env=env, capture_output=True, text=True)
         if run.returncode != 0:
             return None
     return run.stdout.strip()
@@ -205,12 +242,11 @@ def main():
     gate, w = Gate(args), lambda name: os.path.join(args.work, name)
     data = json.load(open(DATA, encoding="utf-8"))
     head, tree = git(args.repo, "rev-parse", "HEAD"), git(args.repo, "rev-parse", "HEAD^{tree}")
-    clean = status(args.repo) == ""
-    files_tree = worktree_tree(args.repo, w("index-preflight"))
+    refused, clean, files_tree = trusted_tree(args.repo, w("index-preflight"))
     wrapper_sha = sha256(open(args.wrapper, "rb").read())
-    gate.fact("preflight", head == args.sha and clean and tree is not None and files_tree == tree
-              and wrapper_sha == args.wrapper_sha256, head=head, tree=tree, clean=clean, files_tree=files_tree,
-              wrapper_sha256=wrapper_sha)
+    gate.fact("preflight", head == args.sha and clean and not refused and tree is not None and files_tree == tree
+              and wrapper_sha == args.wrapper_sha256, head=head, tree=tree, clean=clean, refused=refused,
+              files_tree=files_tree, wrapper_sha256=wrapper_sha)
     if not gate.steps[-1]["pass"]:
         return finish(args, gate, head, tree, [])
     t, r = args.toolchain, args.repo
@@ -223,7 +259,8 @@ def main():
     gate.drop("target-std")
     gate.cargo("fmt", "target-fmt", "fmt", "--all", "--", "--check")
     lane(gate, data)
-    gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--json", w("a1.json"))
+    pins = os.path.join(r, "tools", "route_pins.json")  # SB3E GB3: the checked tree's own pins file
+    gate.tool("a1", "route_a1.py", "--repo", r, "--toolchain", t, "--pins", pins, "--json", w("a1.json"))
     gate.tool("a1_controls", "route_a1_controls.py", "--source", r, "--work", w("a1-work"), "--toolchain", t, ok=controls_ok("a1_controls"))
     gate.tool("a2_controls", "route_a2_controls.py", "--source", r, "--work", w("a2-work"), "--jobs", args.jobs, ok=controls_ok("a2_controls"),
               env=dict(gate.tool_env, RUSTC=gate.env["RUSTC"]))
@@ -239,14 +276,16 @@ def main():
     gate.tool("a4_controls", "route_a4.py", "controls", "--repo", r, "--toolchain", t, "--work", w("a4-controls"),
               "--wrapper", args.wrapper)
     gate.drop("a4-work", "a4-controls")
-    gate.tool("a5", "route_a5.py", "check", "--repo", r, "--toolchain", t)
-    gate.tool("a5_controls", "route_a5.py", "controls", "--repo", r, "--toolchain", t, "--work", w("a5-work"))
+    gate.tool("a5", "route_a5.py", "check", "--repo", r, "--toolchain", t, "--wrapper", args.wrapper, "--work", w("a5-check"))
+    gate.drop("a5-check")
+    gate.tool("a5_controls", "route_a5.py", "controls", "--repo", r, "--toolchain", t, "--wrapper", args.wrapper,
+              "--work", w("a5-work"), ok=a5_controls_ok)
     gate.tool("a6", "route_a6.py", "run", "--repo", r, "--toolchain", t, "--work", w("a6-work"))
     gate.tool("a6_control", "route_a6.py", "control", "--repo", r, "--toolchain", t, "--work", w("a6-control"))
     gate.drop("a5-work", "a6-work", "a6-control")
     gate.tool("a7", "route_a7.py", "run", "--repo", r, "--target", w("a7-target"), "--evidence", w("a7"),
               "--wrapper", args.wrapper, "--wrapper-sha256", args.wrapper_sha256, "--toolchain", t,
-              "--json", w("a7.json"), ok=lambda run, parsed: run.returncode == 0)
+              "--json", w("a7.json"), "--pins", pins, ok=lambda run, parsed: run.returncode == 0)
     gate.drop("a7-target")
     with open(w("python_wrapper"), "w", encoding="utf-8") as handle:
         handle.write(PY_WRAPPER)
@@ -268,8 +307,8 @@ def main():
     gate.drop("plants-work")
     caches = [os.path.relpath(d, r) for d, _, _ in os.walk(os.path.join(r, "tools")) if os.path.basename(d) == "__pycache__"]
     gate.fact("no_pycache", not caches, found=caches[:5])
-    after = git(r, "rev-parse", "HEAD"), status(r), worktree_tree(r, w("index-postflight"))
-    gate.fact("postflight", after == (head, "", tree), head=after[0], files_tree=after[2])
+    after = (git(r, "rev-parse", "HEAD"),) + trusted_tree(r, w("index-postflight"))
+    gate.fact("postflight", after == (head, [], True, tree), head=after[0], refused=after[1], files_tree=after[3])
     return finish(args, gate, head, tree, seams(gate, ship, census, a4))
 
 

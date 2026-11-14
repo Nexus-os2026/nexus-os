@@ -58,7 +58,7 @@ def blank(tree, roots):
             chars = list(text)
             for a, z in spans:
                 chars[a:z] = [c if c == "\n" else " " for c in chars[a:z]]
-            with open(os.path.join(tree, rel), "w", encoding="utf-8") as handle:
+            with open(os.path.join(tree, rel), "w", encoding="utf-8", newline="") as handle:
                 handle.write("".join(chars))
             blanked[rel] = len(spans)
     return blanked
@@ -100,10 +100,10 @@ def identity(repo, toolchain, work, broaden):
     if broaden:
         for edit in seams["ungates"]["S1"]:
             path = os.path.join(tree, edit["file"])
-            text = open(path, encoding="utf-8").read()
+            text = open(path, encoding="utf-8", newline="").read()
             if text.count(edit["old"]) != 1 or route_a5.ROUTE not in edit["old"]:
                 return [{"kind": "broadening_edit_not_unique", "file": edit["file"]}], out
-            with open(path, "w", encoding="utf-8") as handle:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
                 handle.write(text.replace(edit["old"], edit["old"].replace(route_a5.ROUTE, BROADENED, 1)))
         out["broadened"] = len(seams["ungates"]["S1"])
     home, parent = os.path.join(work, "home"), os.path.join(work, "parent")

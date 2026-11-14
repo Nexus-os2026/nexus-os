@@ -38,9 +38,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ('repo','sha','gateset'): parser.add_argument('--'+key,required=True)
     parser.add_argument('--inventory-sha256',help='route-cells: the reviewed harness name-list commitment')
+    parser.add_argument('--route-pins-sha256',help="route-cells: sha256 of the commit's tools/route_pins.json (GB3)")
     parser.add_argument('--wait',action='store_true')
     args = parser.parse_args()
-    request = receipt.request_for(args.repo,args.sha,args.gateset,args.inventory_sha256)
+    request = receipt.request_for(args.repo,args.sha,args.gateset,args.inventory_sha256,args.route_pins_sha256)
     success = receipt.GATE_SETS[args.gateset]['status']
     reply = submit(request)
     print(json.dumps(reply),flush=True)

@@ -42,13 +42,27 @@ FILES = ['MISSION.md','snapshot.py','receipt.py','supervisor.py','init.py','clie
          'units/mothergate-run@.service','units/mothergate-root@.service',
          # GB1 (SB3E-R18 P10): every route lane file, its policy and controls.
          'policy/route-cells.json','route/route_a7.py','route/route_a7_controls.py','route/route_a7_graph.py',
-         'route/route_a7_sweep.py','route/route_rustc.c','tests/test_route_gate_set.py']
+         'route/route_a7_sweep.py','route/route_rustc.c','tests/test_route_gate_set.py',
+         # GB3 (SB3E-R48): route A1, which the box runs before A7, and its controls (run live after install).
+         'route/route_a1.py','route/route_a1_controls.py']
+# GB3-7 (SB3E-R48.3): every other tracked tools/gatebox file, reviewed and never packaged. The README PIN step
+# requires FILES and NOT_INSTALLED to partition the tracked tree exactly.
+NOT_INSTALLED = ['route/route_a2_controls.py','route/route_a3.py','route/route_a3_controls.py','route/route_a4.py',
+                 'route/route_a5.json','route/route_a5.py','route/route_a6.py','route/route_exit.json','route/route_exit.py',
+                 'route/route_plants.json','route/route_plants.py','route/route_seams.json',
+                 # SB3E-R72/R75 (A5 rev 3.1): run by route_exit from the checkout, never packaged.
+                 'route/route_a5_expand.py','route/a5_expanded/build_script_build.pin','route/a5_expanded/nexus_crypto.pin',
+                 'route/a5_expanded/nexus_governed_control.pin','route/a5_expanded/nexus_kernel.pin',
+                 'route/a5_expanded/nexus_mother.pin','route/a5_expanded/nexus_mother_host.pin',
+                 'route/a5_expanded/nexus_persistence.pin','tests/test_route_a5_expanded.py','tests/test_route_exit_preflight.py']
 # SB3E-R18 P12: built unprivileged by the README PIN step (reproducible); root only verifies the literal.
 WRAPPER = 'route/route_rustc'
-WRAPPER_SHA256 = 'd23fdea2e987259b7c07a8ab7fe039cbd0c330ecf40b317cb5ad4195c69a7762'
+# SB3E-R77: rebuilt after the 2026-11-13 libc6-dev 2.43-2ubuntu2.4 -> 2.7 upgrade (gcc 15.2.0-5ubuntu1); the static
+# link embeds libc, so a libc6-dev change moves this literal (F-WRAPPER-LIBC). The source is unchanged.
+WRAPPER_SHA256 = '8e728370d42af88e3df6eab76aca632c6fb66bef9d403158752b0945754bd775'
 EXECUTABLE = ('install.sh','lifecycle.py','verify.py')
 TOOLCHAIN = Path('/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu')
-UPGRADE_BOOT = Path('/root/gatebox-gb2')  # GB2: a new bootstrap directory; the reviewed GB1 bundle stays where it is
+UPGRADE_BOOT = Path('/root/gatebox-gb3')  # GB3: a new bootstrap directory; the reviewed GB1 and GB2 bundles stay where they are
 SOURCE_GIT = Path('/home/nexus/NEXUS/nexus-os/.git')
 HISTORY = CONFIG/'history'
 ETC = Path('/etc')

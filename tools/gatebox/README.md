@@ -73,10 +73,12 @@ names=subprocess.check_output(['git','--no-replace-objects','ls-tree','-r','--na
 body=blob('tools/gatebox/install.sh').decode().split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0]
 values={n.targets[0].id:ast.literal_eval(n.value) for n in ast.parse(body).body
         if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name)
-        and n.targets[0].id in ('FILES','HARNESS','WRAPPER','WRAPPER_SHA256')}
-if len(values['FILES'])!=36 or set(names)!={'tools/gatebox/'+n for n in values['FILES']}:
-    raise SystemExit('reviewed FILES inventory mismatch')
-names+=[values['HARNESS']]
+        and n.targets[0].id in ('FILES','NOT_INSTALLED','HARNESS','WRAPPER','WRAPPER_SHA256')}
+files,excluded=values['FILES'],values['NOT_INSTALLED']
+if (len(values['FILES'])!=38 or len(excluded)!=22 or len(set(files))!=len(files) or len(set(excluded))!=len(excluded)
+        or set(files)&set(excluded) or set(names)!={'tools/gatebox/'+n for n in files+excluded}):
+    raise SystemExit('reviewed FILES/NOT_INSTALLED partition mismatch')
+names=['tools/gatebox/'+n for n in files]+[values['HARNESS']]
 wrapper='tools/gatebox/'+values['WRAPPER']
 bundle=pathlib.Path('/home/nexus/NEXUS/gatebox-slice1.tar')
 with tempfile.TemporaryDirectory(prefix='gatebox-pin-') as temporary:
@@ -363,11 +365,11 @@ final re-check, so no run starts or stops and no qualification evidence is writt
 meanwhile (SB3E-R21.2). An existing install
 is upgraded only by the separate action, never by `install` (which still refuses
 every existing output). After PIN and independent bundle review, with the new
-bundle extracted to the installer's `UPGRADE_BOOT` (`/root/gatebox-gb2` since GB2;
-GB1 used `/root/gatebox-gb1`, which is left in place) exactly as `/root/gatebox-slice1` above:
+bundle extracted to the installer's `UPGRADE_BOOT` (`/root/gatebox-gb3` since GB3;
+GB1's `/root/gatebox-gb1` and GB2's `/root/gatebox-gb2` are left in place) exactly as `/root/gatebox-slice1` above:
 
 ```bash
-sudo /bin/bash /root/gatebox-gb2/tools/gatebox/install.sh upgrade \
+sudo /bin/bash /root/gatebox-gb3/tools/gatebox/install.sh upgrade \
   --bundle-sha256 "$GBX_BUNDLE_SHA" --old-bundle-sha256 "$GBX_OLD_BUNDLE_SHA"
 ```
 
@@ -403,6 +405,33 @@ regular file, bytes equal to the inventory hash, then `--list --format terse` fr
 pathname. A7 refuses before any build unless the resolved graph's local (path source)
 packages are exactly its reviewed list and every local build script is pinned
 (R19.1). The supervisor publishes the `lane` group from the sealed logs.
+
+### GB3: route A1 in the bundle (SB3E-R48, R54, R57; route policy version 2)
+
+A `route-cells` request also carries `route_pins_sha256`, the sha256 of the commit's
+`tools/route_pins.json` (lock digest, graph hashes, declared dependencies). After the
+first quiescence (`before-route-a1`), init opens that file without following links,
+requires a bounded regular file whose sha256 equals the request, and records the result;
+a refusal (`PINS: …`) ends the run before any Cargo process. Route A1 then runs from
+`/gate/bin/route/route_a1.py` with `--pins /work/src/tools/route_pins.json`. It refuses
+a bad pins file, an inherited toolchain variable or any snapshot Cargo configuration
+finding before any Cargo process, then checks the lock, both resolved graphs and the
+route packages. Its whole output must be one JSON verdict `pass`, or the run fails
+(`route A1: …`) and A7 never starts. Quiescence `after-route-a1` precedes A7, which
+reads its lock digest from the same file. The pins file is chosen by the submitter: the
+box refuses drift from it, not from the reviewed base; only credit compares its digest
+with the independently reviewed one. Every command's log ends with an empty packet, so
+the supervisor knows a complete log; published bytes are unchanged.
+
+The lane adds `route_a1`, `route_a1_sha256` (route A1's log) and `route_pins_sha256`. A
+failed run keeps route A1's own result (`NOT_RUN`, `PINS_UNRECEIVED`, `PINS_REFUSED`,
+`NO_START_RECORD`, `START_WITHOUT_END`, `LOG_INCOMPLETE`, `FAIL`, `PASS`) from the pins
+record and route A1's start, end and log only, and invents no exit code or digest. A
+success receipt is validated by the schema its own route policy's `schema_version`
+selects, so GB1/GB2 route receipts (version 1) still authenticate, as `historical`.
+`client.py` and `verify.py --latest` take `--route-pins-sha256`. The PIN step requires
+`FILES` and `NOT_INSTALLED` to partition the tracked `tools/gatebox` files exactly and
+packages only `FILES`.
 
 ## Maintenance: retained custody and reboot-only reinstallation
 

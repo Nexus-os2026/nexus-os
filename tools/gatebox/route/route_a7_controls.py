@@ -366,7 +366,8 @@ def a7_run(c, opts, evidence, verdict, keep=False, err=None):
     cache = ["-X", "pycache_prefix=" + sys.pycache_prefix] if sys.pycache_prefix else []
     argv = [sys.executable, "-I", *cache, a7.__file__, "run", "--repo", c["tree"], "--target", c["target"], "--evidence", evidence,
             "--wrapper", opts.get("wrapper", c["wrapper"]), "--wrapper-sha256", c["wrapper_sha"],
-            "--toolchain", opts.get("toolchain", c["toolchain"]), "--json", verdict]
+            "--toolchain", opts.get("toolchain", c["toolchain"]), "--json", verdict,
+            "--pins", os.path.join(c["tree"], "tools", "route_pins.json")]  # SB3E GB3: the copy's own pins file
     argv += ["--keep-lane-target"] if keep else []
     argv += ["--continue-after-refusal"] if opts.get("continue") else []
     argv += [f"--ship-extra-arg={a}" for a in opts.get("ship_args", [])] + [f"--lane-extra-arg={a}" for a in opts.get("lane_args", [])]
