@@ -23,7 +23,9 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod grant;
 mod locks;
+mod s5;
 mod store;
 
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -90,6 +92,9 @@ fn child_with(name: &str, env: fn(&std::path::Path) -> Vec<(&str, PathBuf)>, bod
         "{name}: {result}{stdout}{stderr}"
     );
     assert!(stdout.contains(&format!("ROUTE CHILD PASSED {name}\n")));
+    for line in stdout.lines().filter_map(|l| l.split_once("WITNESS ")) {
+        println!("{name}: {}", line.1); // U4a-2: measured evidence (--nocapture).
+    }
     if let Some((_, digest)) = extra.iter().find(|(k, _)| *k == store::SHIM_SHA256) {
         store::shim_witnessed(&digest.to_string_lossy(), &stdout);
     }

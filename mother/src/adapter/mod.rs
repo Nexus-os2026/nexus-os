@@ -846,6 +846,11 @@ impl EffectPort for GovernedPort {
         let record = outcome.record();
         #[cfg(test)]
         let record = self.model_record.lock().unwrap().take().unwrap_or(record);
+        #[cfg(mother_route_seams)]
+        crate::route_seams::at(
+            "mother.classify",
+            crate::route_seams::Ctx::of(self.door.context().as_ref()).run(run),
+        );
         Ok(classify(record, outcome.into_result()))
     }
 
