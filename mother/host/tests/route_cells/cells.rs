@@ -1,7 +1,7 @@
-// SB-3E literal cell manifest (design 2.5, 3.1). U2 carries no cells.
-// The `cells!` macro and this directory's test target arrive with the
-// route_cells lane (U3). Until then this file is parsed as text only, by
-// session_model_bridge.rs and check-citations.py; no target compiles it.
+// SB-3E literal cell manifest (design 2.5, 3.1). U5a carries no cells.
+// The route_cells lane compiles it through `macro_rules! cells` in main.rs,
+// whose terminal arm is the control `ctl_call_chat`; session_model_bridge.rs
+// and check-citations.py parse it as text.
 // One entry per credited cell: `<route> <sink> <dim> <value>;`, for example
 // `r5 call_chat ingress quit;` (slug `rc_r5_call_chat_ingress_quit`).
 cells! {

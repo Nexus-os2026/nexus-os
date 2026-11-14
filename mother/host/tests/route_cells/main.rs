@@ -27,6 +27,28 @@ mod grant;
 mod locks;
 mod s5;
 mod store;
+/// SB3E-R86.4 (U5a; mission Behaviour 1): one literal arm per credited cell
+/// (none yet; `macro_rules!` cannot build `rc_<slug>`), then the terminal
+/// arm, the control `ctl_call_chat`: its driver run by the cell runner, its
+/// record and witness checked by `witness.rs`. An entry with no arm fails to
+/// compile.
+macro_rules! cells {
+    () => {
+        #[test]
+        fn ctl_call_chat() {
+            let (name, id) = ("cells::ctl_call_chat", "ctl_call_chat");
+            let ran = super::s5::cell(name, id, super::s5::ctl_call_chat, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::control(&ran);
+            }
+        }
+    };
+}
+// The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
+// check-citations.py): rustfmt does not reformat it.
+#[rustfmt::skip]
+mod cells;
+mod witness;
 
 const PATIENCE: Duration = Duration::from_secs(10);
 const CHILD: &str = "SB3E_ROUTE_CHILD";

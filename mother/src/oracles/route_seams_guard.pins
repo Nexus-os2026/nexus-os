@@ -15,6 +15,7 @@ host/tests/check_page.rs|include_str|"../../../kernel/src/inert_page/fixtures/re
 host/tests/check_page.rs|include_str|"../../../kernel/tests/fixtures/local_business.html"
 host/tests/route_cells/main.rs|include_str|"../../../../crates/nexus-governed-control/src/broker/route_seams.rs"
 host/tests/route_cells/store.rs|include_str|"route_fsync.c"
+host/tests/route_cells/witness.rs|include_str|"../session/model-bridge-expect.tsv"
 host/tests/session/coverage.rs|include_str|"sinks.tsv"
 host/tests/session/coverage.rs|include_str|"combination-receipts.tsv"
 host/tests/session/coverage.rs|include_str|"combination-rules.tsv"
@@ -730,3 +731,18 @@ pub(super) fn shim_witnessed(want: &str, stdout: &str) {
     assert_eq!(reports, 1, "one shim witness: {stdout}");
     println!("ROUTE SHIM SHA256 {want}");
 }
+@@@ host/tests/route_cells/main.rs
+macro_rules! cells {
+    () => {
+        #[test]
+        fn ctl_call_chat() {
+            let (name, id) = ("cells::ctl_call_chat", "ctl_call_chat");
+            let ran = super::s5::cell(name, id, super::s5::ctl_call_chat, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::control(&ran);
+            }
+        }
+    };
+}
+@@@ host/tests/route_cells/s5.rs
+let credited = credit(&d, &RECORDED, &broker, &trace);

@@ -6,16 +6,27 @@
 //! item 4/5, A.3 and A.4 check over the driver's own facts and both traces.
 // SB3E-R42.4: the parent's items by name, the guard's allow-list; no glob.
 use super::{child, fake_ollama, spec, Fixture, Opened, CHILD, DIGEST, NAME, PATIENCE};
+use nexus_governed_control::authority::approval::ResumeConfirmation;
+use nexus_governed_control::authority::approval::{
+    AcknowledgementConfirmation, ActionConfirmation,
+};
+use nexus_governed_control::authority::approval::{AgentDoorConfirmation, ControlConfirmer};
+use nexus_governed_control::authority::approval::{GrantConfirmation, MissionConfirmation};
 use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::evidence::{
+    EvidenceProjection, EvidenceRecord, MemoryEvidence,
+};
 use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::broker::route_seams as s1;
+use nexus_governed_control::evidence_store::PrimaryEvidence;
+use nexus_governed_control::host_session::HostSession;
 use nexus_governed_control::host_session::{CommandKind, SessionDoor, SessionSeed};
 use nexus_governed_control::host_session::{SessionContext, SessionIdentity};
 use nexus_governed_control::inference::{ModelIdentity, ModelRequest, ResponseSchema};
 use nexus_mother::adapter::{FileJournal, FilePrivate, SessionPort};
 use nexus_mother::contract::{Budget, MissionContract, ModelChoice, PassCriterion};
 use nexus_mother::coordinator::{Coordinator, FileSession, Lanes};
-use nexus_mother::journal::MissionId;
+use nexus_mother::journal::{Entry as Journaled, MissionId};
 use nexus_mother::lane::{InvocationId, Lane, LaneContext, LaneIdentity, LaneInput, LaneOutput};
 use nexus_mother::lane::{LaneRole, ScriptedLane, Verdict};
 use nexus_mother::route_seams as s5;
@@ -107,11 +118,12 @@ pub(super) struct Boot {
     pub(super) context: SessionContext,
     pub(super) name: String,
     pub(super) request: u64,
+    /// The fake peer's ordered log (Behaviour 5).
+    pub(super) peer: Arc<Mutex<Vec<String>>>,
 }
 pub(super) fn boot(f: &Fixture, o: &Opened) -> Boot {
-    o.session
-        .register_local_model(&fake_ollama().0, spec())
-        .unwrap();
+    let (endpoint, peer) = fake_ollama();
+    o.session.register_local_model(&endpoint, spec()).unwrap();
     let workspace = f.0.join("workspace");
     std::fs::DirBuilder::new()
         .mode(0o700)
@@ -127,6 +139,7 @@ pub(super) fn boot(f: &Fixture, o: &Opened) -> Boot {
         context,
         name,
         request,
+        peer,
     }
 }
 /// A consented mission with the pinned model, ready to advance.
@@ -173,6 +186,7 @@ struct Mother {
     request: u64,
     /// The request context (not the port or door): S4b's halt is read here.
     context: SessionContext,
+    peer: Arc<Mutex<Vec<String>>>,
 }
 fn mother(f: &Fixture, o: &Opened) -> Mother {
     let b = boot(f, o);
@@ -199,6 +213,7 @@ fn mother(f: &Fixture, o: &Opened) -> Mother {
         recorded,
         request: b.request,
         context: b.context,
+        peer: b.peer,
     }
 }
 impl Mother {
@@ -1057,4 +1072,312 @@ fn route_s5_unreleased_pause_times_out_and_aborts() {
     assert!(!stdout.contains("ROUTE CHILD RESUMED"), "{stdout}");
     assert!(elapsed >= PATIENCE, "after its patience: {elapsed:?}");
     println!("WITNESS timeout {result:?} after {elapsed:?}");
+}
+
+// SB3E-R86.4 (U5a): the cell runner (design 3.3; mission Behaviours 5, 7 and
+// 10), the facts it hands to `witness.rs`, and the T6 child half (Behaviour
+// 11). It credits no cell.
+
+/// The variable that carries a cell child's nonce (design 3.3).
+const NONCE: &str = "SB3E_ROUTE_NONCE";
+
+/// `Fixture::open`'s answers (main.rs `Owner`), copied: `s5.rs` imports no
+/// other item of its parent (G-S3). T7 names it as a difference.
+struct Answers;
+impl ControlConfirmer for Answers {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        true
+    }
+    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
+        true
+    }
+    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+        true
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
+}
+
+/// Behaviours 5 and 7: `Fixture::open` with a `MemoryEvidence` projection,
+/// the only native observation (R49.7; it sees the sealed records, R86.3).
+fn opened(f: &Fixture) -> (Opened, Arc<MemoryEvidence>) {
+    assert!(nexus_governed_control::files::make_non_dumpable());
+    let home = f.0.join("home");
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&home)
+        .unwrap();
+    let seed = SessionSeed::new().unwrap();
+    let ingress = seed.ingress();
+    let native = Arc::new(MemoryEvidence::new(4096));
+    let projection: Arc<dyn EvidenceProjection> = native.clone();
+    let db = home.join("broker/p3-evidence/evidence.sqlite3");
+    let evidence = PrimaryEvidence::open(&db, vec![projection]).unwrap();
+    let clock = Arc::new(SystemClock::default());
+    let session = HostSession::open_with_history(
+        seed,
+        &home.join("broker"),
+        &home,
+        evidence.clone(),
+        clock,
+        Arc::new(Answers),
+    )
+    .unwrap();
+    assert!(session.startup_report().ready());
+    let o = Opened {
+        session,
+        ingress,
+        evidence,
+    };
+    (o, native)
+}
+
+/// What a cell's child observed, passively, once every worker is joined
+/// (Behaviour 7); `witness.rs` renders it with S, Q, RUN, INV, ATT bound.
+pub(super) struct Facts {
+    pub(super) session: SessionIdentity,
+    pub(super) request: u64,
+    pub(super) recorded: Vec<(LaneRole, InvocationId)>,
+    /// `credit`'s claim (A.3): the session-bound run and the opening's attempt.
+    pub(super) claim: Option<(RunId, u32)>,
+    /// The held points' acknowledged entries, in hold order.
+    pub(super) acks: Vec<s1::Entry>,
+    /// The value applied while the last point was held (`none`: a control).
+    pub(super) value: &'static str,
+    pub(super) broker: Vec<s1::Entry>,
+    pub(super) mother: Vec<s5::Entry>,
+    /// The journal's entries since the hold began, through `journal_view`.
+    pub(super) journal: Vec<Journaled>,
+    /// The projection's records since the hold began.
+    pub(super) native: Vec<EvidenceRecord>,
+    /// The peer's requests since the hold began, in served order.
+    pub(super) peer: Vec<String>,
+}
+
+/// One cell child's run, as its parent saw it (design 3.3).
+pub(super) struct Ran {
+    pub(super) id: &'static str,
+    pub(super) nonce: String,
+    /// The child's private result file, whole.
+    pub(super) result: String,
+    pub(super) passed: bool,
+    pub(super) output: String,
+}
+
+/// The cell runner (design 3.3). In the parent: a fresh nonce by env and one
+/// child in an owned root, waited only through `bounded`; `Some` of what the
+/// child left. In the child: `drive`, then `render`'s witness written as the
+/// one `CELL <nonce> <id> <witness>` record of its root's result file; `None`.
+pub(super) fn cell(
+    name: &str,
+    id: &'static str,
+    drive: fn(&Fixture) -> Facts,
+    render: fn(&Facts) -> String,
+) -> Option<Ran> {
+    if let Some(root) = std::env::var_os(CHILD) {
+        let f = Fixture(PathBuf::from(root));
+        let witness = render(&drive(&f));
+        let nonce = std::env::var(NONCE).expect("the parent's nonce");
+        let mut append = std::fs::OpenOptions::new();
+        let mut result = append.append(true).open(f.0.join("result")).unwrap();
+        let line = format!("CELL {nonce} {id} {witness}\n");
+        std::io::Write::write_all(&mut result, line.as_bytes()).unwrap();
+        return None;
+    }
+    let mut bytes = [0u8; 16];
+    let mut random = std::fs::File::open("/dev/urandom").unwrap();
+    std::io::Read::read_exact(&mut random, &mut bytes).unwrap();
+    let nonce: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let leaf = format!("sb3e-route-{}-cell-{id}", std::process::id());
+    let root = std::env::temp_dir().join(leaf);
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let root = Fixture(root); // This child's owned root, removed on return.
+    std::fs::File::create(root.0.join("result")).unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.args(["--exact", name, "--nocapture", "--test-threads=1"]);
+    let out = bounded(command.env(CHILD, &root.0).env(NONCE, &nonce));
+    let result = std::fs::read_to_string(root.0.join("result")).unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let output = format!("{stdout}{}", String::from_utf8_lossy(&out.stderr));
+    let passed = out.status.success();
+    Some(Ran {
+        id,
+        nonce,
+        result,
+        passed,
+        output,
+    })
+}
+
+impl Mother {
+    /// Advances until the advance that made the Builder's one counted call
+    /// has returned; each step's result, as text.
+    fn advance_to_call(&self) -> Vec<String> {
+        let mut steps = Vec::new();
+        for _ in 0..8 {
+            let step = self.m.advance(self.id).map(|_| ());
+            steps.push(format!("{step:?}"));
+            if step.is_err() || self.calls.load(Ordering::SeqCst) > 0 {
+                break;
+            }
+        }
+        steps
+    }
+}
+
+/// The chained hold (Behaviour 6; no new accessor). The Builder's advance
+/// runs on a worker, held at S5 `mother.charge.entry` (between ord 3's
+/// `model.call.admitted` and ord 4's `call.gate`); each of `points` is armed
+/// while the hold before it stands, and that hold is then released, so each
+/// acknowledgement is the chat's (ord 4). Every wait is a bounded receive
+/// (`PATIENCE`); the last hold is released before the worker is joined.
+/// Returns the S1 acknowledgements, in order, and the advance's steps.
+fn chained(f: &Fixture, m: &Mother, points: &[&'static str]) -> (Vec<s1::Entry>, Vec<String>) {
+    let (cell, timeout) = ("u5", timeout as s5::Timeout);
+    let entry = s5::arm("mother.charge.entry", s5::Action::Pause { cell, timeout });
+    std::thread::scope(|s| {
+        let advancing = s.spawn(|| m.advance_to_call());
+        let reached = entry.acknowledged.recv_timeout(PATIENCE);
+        assert!(reached.is_ok(), "mother.charge.entry: not acknowledged");
+        let (mut first, mut before, mut acks) = (Some(entry), None, Vec::new());
+        for point in points {
+            let held = f.pause(point);
+            drop((first.take(), before.take()));
+            let Ok(ack) = held.acknowledged.recv_timeout(PATIENCE) else {
+                panic!("{point}: not acknowledged");
+            };
+            acks.push(ack);
+            before = Some(held);
+        }
+        drop(before);
+        (acks, advancing.join().unwrap())
+    })
+}
+
+/// Behaviour 10: `ctl_call_chat`'s driver. Held at `call.gate` and then at
+/// `model.call.observed` on ord 4, released with no value, the chat reaches
+/// `model.call.admitted` and a recorded outcome.
+pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
+    let (o, native) = opened(f);
+    let mother = mother(f, &o);
+    let _s1 = s1::arm("reg.reserve", s1::Action::Trace);
+    let _s5 = s5::arm("mother.charge", s5::Action::Trace);
+    s1::drain_trace();
+    s5::drain_trace();
+    let since = (
+        mother.m.journal_view().unwrap().len(),
+        native.records().len(),
+        mother.peer.lock().unwrap().len(),
+    );
+    let (acks, steps) = chained(f, &mother, &["call.gate", "model.call.observed"]);
+    // The T6 child half and `credit` judge the run first (`collect`).
+    let facts = collect(&o, &mother, &native, since, acks, "none");
+    assert!(
+        steps.iter().all(|s| s == "Ok(())"),
+        "the advance: {steps:?}"
+    );
+    facts
+}
+
+/// Behaviour 7: the passive observations, read only once both workers are
+/// joined: both traces (drained, never written), the journal through
+/// `journal_view` only, the projection's records and the peer's slice. Then
+/// the T6 child half (Behaviour 11) and `credit` (A.2-A.4) over them.
+fn collect(
+    o: &Opened,
+    m: &Mother,
+    native: &MemoryEvidence,
+    since: (usize, usize, usize),
+    acks: Vec<s1::Entry>,
+    value: &'static str,
+) -> Facts {
+    let (broker, trace) = (s1::drain_trace(), s5::drain_trace());
+    let d = m.driver(o);
+    let credited = credit(&d, &RECORDED, &broker, &trace);
+    let claim = credited.as_ref().ok().and_then(|w| w.claim);
+    let seams = t6(
+        cfg!(mother_route_seams),
+        d.session,
+        &d,
+        claim,
+        &broker,
+        &trace,
+    );
+    if let Err(finding) = seams {
+        panic!("T6 child half: {finding}");
+    }
+    if let Err(reason) = credited {
+        panic!("credit: {reason}");
+    }
+    Facts {
+        session: d.session,
+        request: d.request,
+        recorded: d.recorded,
+        claim,
+        acks,
+        value,
+        broker,
+        mother: trace,
+        journal: m.m.journal_view().unwrap()[since.0..].to_vec(),
+        native: native.records()[since.1..].to_vec(),
+        peer: m.peer.lock().unwrap()[since.2..].to_vec(),
+    }
+}
+
+/// Behaviour 11 (R49.5, R50.2, R54 U5-4): the T6 child half, on the first and
+/// only counted call. The harness-armed S1 and S5 instances recorded this
+/// call under its bound identity: ord 4's chat under S, Q, RUN, ATT, and the
+/// call's `mother.charge.entry` under S, Q and the Builder's invocation, its
+/// run the claim's. This shows participation, not the dependency closure
+/// (A7's, which does not yet refuse a repeated `--extern`: F-A7-DUP).
+fn t6(
+    cfg: bool,
+    session: SessionIdentity,
+    d: &Driver,
+    claim: Option<(RunId, u32)>,
+    broker: &[s1::Entry],
+    trace: &[s5::Entry],
+) -> Result<(), &'static str> {
+    if !cfg {
+        return Err("cfg");
+    }
+    if d.calls != 1 {
+        return Err("driver_calls");
+    }
+    if broker.is_empty() {
+        return Err("s1_inactive");
+    }
+    if trace.is_empty() {
+        return Err("s5_inactive");
+    }
+    let builder = d.recorded.iter().find(|r| r.0 == LaneRole::Builder);
+    let builder = builder.map(|r| r.1);
+    let chat = |e: &s1::Entry| {
+        e.session == Some(session)
+            && e.request == Some(d.request)
+            && e.run.zip(e.attempt) == claim
+            && e.kind == Some("chat")
+            && e.request_ordinal == Some(4)
+    };
+    let charged = |e: &s5::Entry| {
+        e.point == "mother.charge.entry"
+            && e.session == Some(session)
+            && e.request == Some(d.request)
+            && e.invocation == builder
+    };
+    let bound = claim.is_some() && builder.is_some();
+    if !bound || !broker.iter().any(chat) || !trace.iter().any(charged) {
+        return Err("seam_identity");
+    }
+    Ok(())
 }

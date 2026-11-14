@@ -115,9 +115,9 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "88064bcd652fb3ff878b3a455ae9dc7b0342a81ccba3a2f860c36307d9fc7359";
-const MUTANTS: usize = 617;
-const REGIONS: usize = 29;
+const PINS_SHA256: &str = "e79e0affe8907f7bc331bbc3246dda8e7367792fca1ba5d2fc557c20666814f2";
+const MUTANTS: usize = 636;
+const REGIONS: usize = 31;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
 /// included (R44.1). A reviewed commit that changes a file changes its row.
@@ -125,12 +125,13 @@ const REGIONS: usize = 29;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 0535a325de11a0121e89443e81001f0c83273b86a2b90328784d1b2c46d8d4f6
+cells.rs f14de104fe79a5b878445f740eaa971e96b2073c1fa961de4cc58f6e0e66d6bb
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 8cdb6029434f3121d8844bf8ec1ca8ecaf3d8d236e827f6f44f1c840147c8694
+main.rs a987d1b5da4b6e0b40273a842a728ab274f056d44dfdef51ee5255f643f1cc40
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 54bc7c29fd123056eebed2f46b31d5fcfa8dde919c795992c58e7bac7f628319
+s5.rs 6add070a435d29fdbf60624ebc6bef2a7b18b6298106090a9de32d85af3e9d00
+witness.rs e2c92c1e734617ce43022280c904b8076d7dcec7ff15eabdd2955f70c9b2b297
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -181,6 +182,9 @@ modgrant;\n\
 modlocks;\n\
 mods5;\n\
 modstore;\n\
+macro_rules!cells\n\
+#[rustfmt::skip]modcells;\n\
+modwitness;\n\
 constPATIENCE:Duration=Duration::from_secs(10);\n\
 constCHILD:&str=SB3E_ROUTE_CHILD;\n\
 constNAME:&str=qwen3.6:35b-a3b;\n\
@@ -231,10 +235,11 @@ const S5_SUPER: [&str; 9] = [
     "PATIENCE",
 ];
 /// SB3E-R42.1 (G-B1): every macro `s5.rs` may invoke.
-const S5_MACROS: [&str; 8] = [
+const S5_MACROS: [&str; 9] = [
     "assert",
     "assert_eq",
     "assert_ne",
+    "cfg",
     "format",
     "panic",
     "println",
@@ -888,6 +893,18 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     for finding in MANIFESTS.iter().flat_map(|(f, m)| manifest_findings(f, m)) {
         check(false, finding);
     }
+    // SB3E-R57.6, R86.4: the `cfg!` check over the harness, the `cells!`
+    // macro verifier and the T7 composition guard.
+    let harness = sources
+        .iter()
+        .filter(|(f, _)| f.starts_with(CELLS) && f.ends_with(".rs"));
+    let mut more: Vec<String> = harness.flat_map(|(f, s)| cfg_findings(f, s)).collect();
+    let (main, cells) = (format!("{CELLS}main.rs"), format!("{CELLS}cells.rs"));
+    more.extend(macro_findings(text(sources, &main), text(sources, &cells)));
+    more.extend(t7_findings(sources));
+    for finding in more {
+        check(false, finding);
+    }
     found
 }
 /// SB3E-R51.1: each harness file not listed, missing, or not its digest.
@@ -912,6 +929,183 @@ fn cells_findings(files: &[(String, Vec<u8>)]) -> Vec<String> {
         {
             found.push(format!("R51.1: {CELLS}{name} is missing"));
         }
+    }
+    found
+}
+/// SB3E-R57.6: in every `.rs` file of the harness each `cfg!` invocation is
+/// exactly `cfg!(mother_route_seams)`; any other predicate or delimiter is a
+/// finding naming the file (a `#[cfg(..)]` attribute is not an invocation).
+fn cfg_findings(file: &str, source: &str) -> Vec<String> {
+    let t = lex(source);
+    let exact = ["cfg", "!", "(", "mother_route_seams", ")"];
+    let at = (0..t.len()).filter(|&i| t[i] == "cfg" && t.get(i + 1) == Some(&"!"));
+    let other = at.filter(|&i| t.get(i..i + 5) != Some(&exact[..]));
+    let shown = |i: usize| flat(&t[i..(i + 6).min(t.len())]);
+    let other = other.map(|i| (file, shown(i)));
+    other
+        .map(|(f, s)| format!("R57.6: {f}: a cfg! other than cfg!(mother_route_seams): {s}"))
+        .collect()
+}
+/// The index of the bracket that closes `t[open]` (`t.len()` if none).
+fn close_of(t: &[&str], open: usize) -> usize {
+    let mut depth = 0i32;
+    for (i, x) in t.iter().enumerate().skip(open) {
+        depth += i32::from(["(", "[", "{"].contains(x)) - i32::from([")", "]", "}"].contains(x));
+        if depth == 0 {
+            return i;
+        }
+    }
+    t.len()
+}
+/// `cells.rs`'s literal manifest, as slugs (`rc_<route>_<sink>_<dim>_<value>`).
+fn manifest_slugs(cells: &str) -> Vec<String> {
+    let t = lex(cells);
+    let start = (0..t.len()).find(|&i| t[i..].starts_with(&["cells", "!", "{"]));
+    let Some(start) = start else {
+        return Vec::new();
+    };
+    let body = &t[start + 3..close_of(&t, start + 2)];
+    let entries = body.split(|w| *w == ";").filter(|e| !e.is_empty());
+    entries
+        .map(|e| format!("rc_{}", e.join("_").to_lowercase()))
+        .collect()
+}
+/// SB3E-R86.4 (U5a; R49.4; mission Behaviours 1, 2): `main.rs`'s `macro_rules!
+/// cells`, read through the guard's own sources. Each cell arm is exactly
+/// `(<route> <sink> <dim> <value>; $($rest:tt)*)`, defines exactly one test,
+/// its slug, and recurses; the terminal arm `()` defines exactly
+/// `ctl_call_chat`; the arms are exactly `cells.rs`'s manifest. The item is
+/// also a pinned region, whole and token-equal.
+fn macro_findings(main: &str, cells: &str) -> Vec<String> {
+    let t = lex(main);
+    let head = ["macro_rules", "!", "cells", "{"];
+    let Some(start) = (0..t.len()).find(|&i| t[i..].starts_with(&head)) else {
+        return vec!["U5 macro: no macro_rules! cells in host/tests/route_cells/main.rs".into()];
+    };
+    let (end, mut i) = (close_of(&t, start + 3), start + 4);
+    let (mut found, mut arms, mut terminal) = (Vec::new(), Vec::new(), 0);
+    let tail = [";", "$", "(", "$", "rest", ":", "tt", ")", "*"];
+    let again = ["cells", "!", "{", "$", "(", "$", "rest", ")", "*", "}"];
+    while i < end {
+        if t[i] != "(" {
+            found.push(format!("U5 macro: an arm opens with {}", t[i]));
+            break;
+        }
+        let pattern = &t[i + 1..close_of(&t, i)];
+        let open = (close_of(&t, i)..end).find(|&k| t[k] == "{").unwrap_or(end);
+        let body = &t[(open + 1).min(end)..close_of(&t, open).min(end)];
+        let defined = (1..body.len()).filter(|&k| body[k - 1] == "fn");
+        let defined: Vec<&str> = defined.map(|k| body[k]).collect();
+        if pattern.is_empty() {
+            terminal += 1;
+            if defined != ["ctl_call_chat"] {
+                found.push(format!("U5 macro: the terminal arm defines {defined:?}"));
+            }
+        } else {
+            let words = pattern.iter().take_while(|w| **w != ";").count();
+            let slug = format!("rc_{}", pattern[..words].join("_"));
+            let recurses = body.windows(again.len()).any(|w| w == again);
+            if words != 4 || pattern[words..] != tail || !recurses {
+                found.push(format!(
+                    "U5 macro: the arm {slug} is not a recursing cell arm"
+                ));
+            }
+            if defined != [slug.as_str()] {
+                found.push(format!("U5 macro: the arm {slug} defines {defined:?}"));
+            }
+            arms.push(slug);
+        }
+        i = close_of(&t, open) + 1;
+        i += usize::from(t.get(i) == Some(&";"));
+    }
+    if terminal != 1 {
+        found.push(format!("U5 macro: {terminal} terminal arms"));
+    }
+    let manifest = manifest_slugs(cells);
+    for arm in arms.iter().filter(|a| !manifest.contains(a)) {
+        found.push(format!("U5 macro: the arm {arm} has no manifest entry"));
+    }
+    for entry in manifest.iter().filter(|m| !arms.contains(m)) {
+        found.push(format!("U5 macro: the manifest entry {entry} has no arm"));
+    }
+    found
+}
+/// SB3E-R86.4 (U5a; design 1.4 T7; mission Behaviour 12, I8): `s5.rs`
+/// composes the route with production's constructors (`hands.rs`,
+/// `session_home.rs`): each `file|tokens|count` row exactly, space-separated
+/// tokens. The differences are `T7_DIFFERENCES`, by name.
+const T7: &str = "\
+host/src/hands.rs|SessionPort : : new (|1
+host/src/hands.rs|Coordinator : : open (|1
+host/src/hands.rs|. into_file_session (|1
+host/src/hands.rs|open_confirmed_file_door (|1
+host/src/hands.rs|open_file_door (|0
+host/src/hands.rs|SystemClock : : default (|1
+host/src/session_home.rs|open_with_history (|1
+host/src/session_home.rs|bind_history_inspector (|1
+host/tests/route_cells/s5.rs|SessionPort : : new (|1
+host/tests/route_cells/s5.rs|Coordinator : : open (|1
+host/tests/route_cells/s5.rs|. into_file_session (|1
+host/tests/route_cells/s5.rs|open_confirmed_file_door (|0
+host/tests/route_cells/s5.rs|open_file_door (|1
+host/tests/route_cells/s5.rs|SystemClock : : default (|2
+host/tests/route_cells/s5.rs|open_with_history (|1
+host/tests/route_cells/s5.rs|bind_history_inspector (|0
+";
+/// I8: the named differences of `s5.rs`'s composition from production's.
+const T7_DIFFERENCES: [&str; 4] = [
+    "open_file_door, not open_confirmed_file_door (no Owner dialog)",
+    "no history inspector (no bind_history_inspector: U5 does no close)",
+    "test lanes (ModelLane, RecordingLane) for production's",
+    "a test confirmer (Answers, as main.rs Owner)",
+];
+/// The only `Type::name(` paths of the composed types `s5.rs` may take.
+const T7_PATHS: [&str; 7] = [
+    "Coordinator::open(",
+    "FileJournal::open(",
+    "FilePrivate::open_session(",
+    "HostSession::open_with_history(",
+    "Lanes::new(",
+    "PrimaryEvidence::open(",
+    "SessionPort::new(",
+];
+const T7_TYPES: [&str; 8] = [
+    "Coordinator",
+    "FileJournal",
+    "FilePrivate",
+    "FileSession",
+    "HostSession",
+    "Lanes",
+    "PrimaryEvidence",
+    "SessionPort",
+];
+fn t7_findings(sources: &[(String, String)]) -> Vec<String> {
+    let mut found = Vec::new();
+    for row in T7.lines() {
+        let row: Vec<&str> = row.split('|').collect();
+        let (file, needle) = (row[0], row[1].split(' ').collect::<Vec<_>>());
+        let want: usize = row[2].parse().unwrap_or(usize::MAX);
+        let tokens = lex(text(sources, file));
+        let got = tokens
+            .windows(needle.len())
+            .filter(|w| *w == needle)
+            .count();
+        if got != want {
+            found.push(format!("T7: {file}: {} {got} times, not {want}", row[1]));
+        }
+    }
+    let s5 = lex(text(sources, S5));
+    for w in s5.windows(5) {
+        let path = format!("{}::{}(", w[0], w[3]);
+        let composed = T7_TYPES.contains(&w[0]) && w[1..3] == [":", ":"] && w[4] == "(";
+        if composed && !T7_PATHS.contains(&path.as_str()) {
+            found.push(format!("T7: {S5} constructs {path}"));
+        }
+    }
+    if !found.is_empty() {
+        found.push(format!(
+            "T7: the named differences are only {T7_DIFFERENCES:?}"
+        ));
     }
     found
 }
@@ -1297,6 +1491,8 @@ fn s5_findings(s5: &str) -> Vec<String> {
     }
     let tail = ["std", ":", ":", "process", ":", ":", "abort", "(", ")", "}"];
     check(body.ends_with(&tail), "timeout: ends in abort".into());
+    // SB3E-R57.6: `cfg` is a listed macro only as `cfg!(mother_route_seams)`.
+    found.extend(cfg_findings(S5, s5));
     found
 }
 /// SB3E-R15.2's sweep: at each statement boundary inside a pinned region,
@@ -1451,6 +1647,27 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
             ),
             "R44.2 harness impls: not exactly the list",
         ),
+        // SB3E-R86.4 (T7): another constructor in s5.rs; production's changed.
+        (
+            "T7 another constructor in s5.rs",
+            planted(
+                &sources,
+                S5,
+                "HostSession::open_with_history(\n        seed,\n        &home.join(\"broker\"),\n        &home,\n",
+                "HostSession::open(\n        seed,\n        &home.join(\"broker\"),\n",
+            ),
+            "T7: host/tests/route_cells/s5.rs constructs HostSession::open(",
+        ),
+        (
+            "T7 a production constructor changed",
+            planted(
+                &sources,
+                "host/src/hands.rs",
+                ".open_confirmed_file_door(request, confirmation)",
+                ".open_file_door(request)",
+            ),
+            "T7: host/src/hands.rs: open_confirmed_file_door ( 0 times, not 1",
+        ),
     ];
     for (plant, sources, expected) in plants {
         killed(
@@ -1474,7 +1691,29 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
         .find(|c| c.0.ends_with("/route_fsync.c"))
         .unwrap();
     c.1[0] ^= 1;
+    // SB3E-R86.4: `witness.rs` removed; one byte of it changed.
+    let unwitnessed: Vec<_> = cells
+        .iter()
+        .filter(|c| !c.0.ends_with("/witness.rs"))
+        .cloned()
+        .collect();
+    let mut rewitnessed = cells.clone();
+    let w = rewitnessed
+        .iter_mut()
+        .find(|c| c.0.ends_with("/witness.rs"))
+        .unwrap();
+    w.1[0] ^= 1;
     for (plant, files, expected) in [
+        (
+            "R51.1 a removed witness.rs",
+            unwitnessed,
+            "R51.1: host/tests/route_cells/witness.rs is missing",
+        ),
+        (
+            "R51.1 one byte of witness.rs",
+            rewitnessed,
+            "R51.1: host/tests/route_cells/witness.rs's sha256",
+        ),
         (
             "R51.1 an added extra.rs",
             added,
@@ -1600,6 +1839,8 @@ fn sb3e_s5_module_makes_one_counted_call() {
         ("G-B1 r#store", sub(run, &format!("{run}        self.calls.r#store(0, Ordering::SeqCst);\n")), vec!["G-B1: a raw identifier r#store", "(a) counter write `store` outside drive_call"]),
         ("G-B1 a local macro", format!("{s5}macro_rules! again {{\n    () => {{}};\n}}\n"), vec!["G-B1: a macro definition macro_rules"]),
         ("G-B1 an unlisted macro", before("let _ = concat!(\"a\", \"b\");"), vec!["G-B1: an unlisted macro concat!"]),
+        // SB3E-R57.6 (P-CFG): `cfg` is listed only as `cfg!(mother_route_seams)`.
+        ("P-CFG cfg!(test) in s5.rs", before("let _ = cfg!(test);"), vec!["R57.6: host/tests/route_cells/s5.rs: a cfg! other than cfg!(mother_route_seams): cfg!(test)"]),
         ("G-S3 a new sibling's helper", before("let _ = super::helper::drive(context);"), vec!["G-S3: a super:: path outside the import"]),
         ("G-S3 use super::{store as s}", format!("use super::{{store as s}};\n{s5}"), vec!["G-S3: the super imports"]),
         ("G-S3 a direct Driver credited", sub(credited, "let witness = credit(&Driver { calls: 1, ..driver.clone() }, &RECORDED"), vec!["pin host/tests/route_cells/s5.rs: let(driver,broker,mother)"]),
