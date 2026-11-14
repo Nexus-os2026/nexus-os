@@ -1172,77 +1172,141 @@ fn leaks_under(source: &str, seams: &[&str], attr: &str) -> usize {
 }
 const TEST: &str = "#[cfg(test)]";
 const ROUTE: &str = "#[cfg(mother_route_seams)]";
-/// Comments (nested block comments included) and the contents of string
-/// and char literals become spaces; line structure is kept.
+/// SB3E-R51.2: a source whose first line is a shebang (`tokens`).
+const SHEBANG: &str = "starts with a shebang";
+/// SB3E-R44.3: comments become spaces, and so does every literal's text
+/// between its first and last quote, whose quotes become `"` (so a masked
+/// char literal is still Rust). Byte offsets and lines are kept. The tokens
+/// are proc-macro2's; a source that does not tokenize panics here, and each
+/// guard reports it as a finding before it masks anything.
 fn mask(source: &str) -> String {
+    let found = tokens(source).unwrap_or_else(|e| panic!("does not tokenize: {e}"));
     let b = source.as_bytes();
-    let mut out = b.to_vec();
-    let mut i = 0;
-    let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
-        for c in &mut out[from..to.min(b.len())] {
-            if *c != b'\n' {
-                *c = b' ';
-            }
-        }
-    };
-    while i < b.len() {
-        if b[i..].starts_with(b"//") {
-            let end = b[i..]
-                .iter()
-                .position(|&c| c == b'\n')
-                .map_or(b.len(), |n| i + n);
-            blank(&mut out, i, end);
-            i = end;
-        } else if b[i..].starts_with(b"/*") {
-            let (mut depth, mut j) = (1, i + 2);
-            while j < b.len() && depth > 0 {
-                if b[j..].starts_with(b"/*") {
-                    (depth, j) = (depth + 1, j + 2);
-                } else if b[j..].starts_with(b"*/") {
-                    (depth, j) = (depth - 1, j + 2);
-                } else {
-                    j += 1;
+    let mut out: Vec<u8> = b
+        .iter()
+        .map(|&c| if c == b'\n' { c } else { b' ' })
+        .collect();
+    for (range, literal) in found {
+        out[range.clone()].copy_from_slice(&b[range.clone()]);
+        let text = &source[range.clone()];
+        let quotes = (text.find(['"', '\'']), text.rfind(['"', '\'']));
+        if let (true, Some(first), Some(last)) = (literal, quotes.0, quotes.1) {
+            for c in &mut out[range.start + first..=range.start + last] {
+                if *c != b'\n' {
+                    *c = b' ';
                 }
             }
-            blank(&mut out, i, j);
-            i = j;
-        } else if b[i] == b'r'
-            && (b[i + 1..].starts_with(b"#") || b[i + 1..].starts_with(b"\""))
-            && (i == 0 || !b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'b')
-        {
-            let hashes = b[i + 1..].iter().take_while(|&&c| c == b'#').count();
-            if b.get(i + 1 + hashes) != Some(&b'"') {
-                i += 1;
-                continue;
-            }
-            let close = format!("\"{}", "#".repeat(hashes));
-            let start = i + 2 + hashes;
-            let end = source[start..].find(&close).map_or(b.len(), |n| start + n);
-            blank(&mut out, start, end);
-            i = end + close.len();
-        } else if b[i] == b'"' {
-            let mut j = i + 1;
-            while j < b.len() && b[j] != b'"' {
-                j += if b[j] == b'\\' { 2 } else { 1 };
-            }
-            blank(&mut out, i + 1, j);
-            i = j + 1;
-        } else if b[i] == b'\'' && b.get(i + 1) == Some(&b'\\') && i + 3 <= b.len() {
-            // An escaped char literal ('\'', '\"', '\\', '\u{..}'; b'..' alike).
-            let end = b[i + 3..]
-                .iter()
-                .position(|&c| c == b'\'')
-                .map_or(b.len(), |n| i + 3 + n);
-            blank(&mut out, i + 1, end);
-            i = end + 1;
-        } else if b[i] == b'\'' && b.get(i + 2) == Some(&b'\'') {
-            blank(&mut out, i + 1, i + 2);
-            i += 3;
-        } else {
-            i += 1;
+            out[range.start + first] = b'"';
+            out[range.start + last] = b'"';
         }
     }
     String::from_utf8(out).unwrap()
+}
+/// SB3E-R44.3: every leaf token proc-macro2 reads in `source`, as its byte
+/// range and whether it is a literal. The tokens must line up with the text,
+/// apart only by whitespace and comments; a doc comment, which proc-macro2
+/// reads as a `#[doc]` attribute, is a comment here. Anything else is an error,
+/// and so is a first line `#!` that is not `#![` (SB3E-R51.2: rustc drops a
+/// shebang line, proc-macro2 lexes it).
+fn tokens(source: &str) -> Result<Vec<(std::ops::Range<usize>, bool)>, String> {
+    if source.starts_with("#!") && !source.starts_with("#![") {
+        return Err(SHEBANG.into());
+    }
+    let stream: proc_macro2::TokenStream = source.parse().map_err(|e| format!("{e:?}"))?;
+    let (mut found, mut at) = (Vec::new(), 0);
+    leaves(source, stream, &mut at, &mut found)?;
+    match gap(source, at) == source.len() {
+        true => Ok(found),
+        false => Err(format!("text after the last token at byte {at}")),
+    }
+}
+fn leaves(
+    source: &str,
+    stream: proc_macro2::TokenStream,
+    at: &mut usize,
+    found: &mut Vec<(std::ops::Range<usize>, bool)>,
+) -> Result<(), String> {
+    use proc_macro2::{Delimiter, TokenTree};
+    let mut trees = stream.into_iter();
+    while let Some(tree) = trees.next() {
+        *at = gap(source, *at);
+        let rest = &source[*at..];
+        match tree {
+            TokenTree::Punct(p) if p.as_char() == '#' && doc(rest) => {
+                // Its `!` (inner) and `[doc = ..]` group have no text of their own.
+                let inner = rest.starts_with("//!") || rest.starts_with("/*!");
+                *at += comment(rest).ok_or("an unclosed doc comment")?;
+                trees.nth(usize::from(inner));
+            }
+            TokenTree::Group(g) => {
+                let (open, close) = match g.delimiter() {
+                    Delimiter::Parenthesis => ("(", ")"),
+                    Delimiter::Brace => ("{", "}"),
+                    Delimiter::Bracket => ("[", "]"),
+                    Delimiter::None => return Err("an invisible group".into()),
+                };
+                place(source, at, found, open, false)?;
+                leaves(source, g.stream(), at, found)?;
+                *at = gap(source, *at);
+                place(source, at, found, close, false)?;
+            }
+            TokenTree::Ident(i) => place(source, at, found, &i.to_string(), false)?,
+            TokenTree::Punct(p) => place(source, at, found, &p.to_string(), false)?,
+            TokenTree::Literal(l) => place(source, at, found, &l.to_string(), true)?,
+        }
+    }
+    Ok(())
+}
+fn place(
+    source: &str,
+    at: &mut usize,
+    found: &mut Vec<(std::ops::Range<usize>, bool)>,
+    text: &str,
+    literal: bool,
+) -> Result<(), String> {
+    if !source[*at..].starts_with(text) {
+        return Err(format!("`{text}` is not at byte {at}"));
+    }
+    found.push((*at..*at + text.len(), literal));
+    *at += text.len();
+    Ok(())
+}
+/// A doc comment opens `rest` (proc-macro2's rule).
+fn doc(rest: &str) -> bool {
+    let line = rest.starts_with("///") && !rest.starts_with("////");
+    let block = rest.starts_with("/**") && !rest.starts_with("/***") && !rest.starts_with("/**/");
+    line || block || rest.starts_with("//!") || rest.starts_with("/*!")
+}
+/// The length of the comment (block comments nest) that opens `rest`.
+fn comment(rest: &str) -> Option<usize> {
+    if rest.starts_with("//") {
+        return Some(rest.find('\n').unwrap_or(rest.len()));
+    }
+    let (b, mut depth, mut i) = (rest.as_bytes(), 0usize, 0);
+    while rest.starts_with("/*") && i + 1 < b.len() {
+        match &b[i..i + 2] {
+            b"/*" => (depth, i) = (depth + 1, i + 2),
+            b"*/" => (depth, i) = (depth - 1, i + 2),
+            _ => i += 1,
+        }
+        if depth == 0 {
+            return Some(i);
+        }
+    }
+    None
+}
+/// The byte after the whitespace and comments (not doc comments) at `at`.
+fn gap(source: &str, mut at: usize) -> usize {
+    loop {
+        let rest = &source[at..];
+        match rest.chars().next() {
+            Some(c) if c.is_whitespace() => at += c.len_utf8(),
+            _ => match comment(rest).filter(|_| !doc(rest)) {
+                Some(n) => at += n,
+                None => return at,
+            },
+        }
+    }
 }
 /// The statement or item holding `at`, or an item or block enclosing it,
 /// carries the accepted attribute `attr` (G2: `#[cfg(test)]` for the test
@@ -1893,12 +1957,28 @@ fn route_sites(source: &str) -> Result<(Vec<String>, Regions), String> {
     }
     Ok((sites, regions))
 }
-/// The normalization (SB3E-R14.1): the comment-masked source as tokens,
-/// each an identifier or number, a whole string or char literal, or one
-/// punctuation character. Whitespace and comments are not tokens.
+/// The normalization (SB3E-R14.1, R44.3): proc-macro2's tokens of `source`
+/// as text, each an identifier, a whole literal or one punctuation
+/// character; a raw identifier is its `r`, `#` and name. Comments and
+/// whitespace are not tokens.
 fn lex(source: &str) -> Vec<&str> {
-    let (code, mut tokens, mut i) = (mask(source), Vec::new(), 0);
-    let c = code.as_bytes();
+    let found = tokens(source).unwrap_or_else(|e| panic!("does not tokenize: {e}"));
+    let mut out = Vec::new();
+    for (r, literal) in found {
+        if !literal && source[r.clone()].starts_with("r#") {
+            let (a, b) = (r.start + 1, r.start + 2);
+            out.extend([&source[r.start..a], &source[a..b], &source[b..r.end]]);
+        } else {
+            out.push(&source[r]);
+        }
+    }
+    out
+}
+/// The words of text `mask` has masked (a header's range ends inside its
+/// block, so it is not Rust on its own): an identifier or number, a string
+/// of spaces, or one character.
+fn words(code: &str) -> Vec<&str> {
+    let (c, mut found, mut i) = (code.as_bytes(), Vec::new(), 0);
     let word = |b: &u8| b.is_ascii_alphanumeric() || *b == b'_';
     while i < c.len() {
         let start = i;
@@ -1908,13 +1988,77 @@ fn lex(source: &str) -> Vec<&str> {
                 continue;
             }
             b'"' => code[i + 1..].find('"').map_or(c.len() - i, |n| n + 2),
-            b'\'' if c.get(i + 2) == Some(&b'\'') => 3,
             b if word(&b) => c[i..].iter().take_while(|b| word(b)).count(),
-            _ => source[i..].chars().next().map_or(1, char::len_utf8),
+            _ => code[i..].chars().next().map_or(1, char::len_utf8),
         };
-        tokens.push(&source[start..i.min(c.len())]);
+        found.push(&code[start..i.min(c.len())]);
     }
-    tokens
+    found
+}
+/// A reviewed region's tokens (SB3E-R44.3). A region may close or open a
+/// block it does not hold, so the delimiters it lacks are put around it for
+/// proc-macro2 and left out again. Only that padding is guessed (from the
+/// region's own brackets outside its strings, chars and comments); a wrong
+/// guess does not tokenize, and the region is one token that pins nothing.
+fn piece(region: &str) -> Vec<&str> {
+    let (b, mut i, mut open, mut lead) = (region.as_bytes(), 0, Vec::new(), String::new());
+    let skip = |from: usize, end: u8| {
+        let mut j = from;
+        while j < b.len() && b[j] != end {
+            j += if b[j] == b'\\' { 2 } else { 1 };
+        }
+        j + 1
+    };
+    let raw = |i: usize| {
+        let hashes = b[i + 1..].iter().take_while(|&&c| c == b'#').count();
+        let word = |c: &u8| c.is_ascii_alphanumeric() || *c == b'_';
+        b.get(i + 1 + hashes) == Some(&b'"')
+            && (i == 0 || !word(&b[i - 1]) || b"bc".contains(&b[i - 1]))
+    };
+    while i < b.len() {
+        let rest = &region[i..];
+        let len = |r: &str| r.chars().next().map_or(1, char::len_utf8);
+        let char_end = i + 1 + len(rest.get(1..).unwrap_or(""));
+        i = match b[i] {
+            _ if comment(rest).is_some() => i + comment(rest).unwrap_or(1),
+            b'"' => skip(i + 1, b'"'),
+            b'r' if raw(i) => {
+                let hashes = rest[1..].bytes().take_while(|&c| c == b'#').count();
+                let close = format!("\"{}", "#".repeat(hashes));
+                let body = &rest[2 + hashes..];
+                i + 2 + hashes + body.find(&close).map_or(body.len(), |n| n + close.len())
+            }
+            b'\'' if b.get(i + 1) == Some(&b'\\') => skip(i + 2, b'\''),
+            b'\'' if b.get(char_end) == Some(&b'\'') => char_end + 1,
+            c => {
+                match c {
+                    b'(' | b'[' | b'{' => open.push(c),
+                    b')' | b']' | b'}' if open.pop().is_none() => lead.insert(0, c as char),
+                    _ => {}
+                }
+                i + len(rest)
+            }
+        };
+    }
+    let pair = |c: char| match c {
+        ')' => '(',
+        ']' => '[',
+        '}' => '{',
+        '(' => ')',
+        '[' => ']',
+        _ => '}',
+    };
+    let head: String = lead.chars().map(pair).collect();
+    let tail: String = open.iter().rev().map(|&c| pair(c as char)).collect();
+    let padded = format!("{head}{region}{tail}");
+    let Ok(found) = tokens(&padded) else {
+        return vec![region];
+    };
+    let (n, k) = (head.len(), found.len() - tail.len());
+    let ranges = found[n.min(k)..k]
+        .iter()
+        .map(|(r, _)| r.start - n..r.end - n);
+    ranges.map(|r| &region[r]).collect()
 }
 /// Tokens as one reviewable word: no spaces, no quotes.
 fn flat(tokens: &[&str]) -> String {
@@ -1922,7 +2066,7 @@ fn flat(tokens: &[&str]) -> String {
 }
 /// How often the reviewed `literal` occurs in `source`, both normalized.
 fn pinned(source: &str, literal: &str) -> usize {
-    let (source, literal) = (lex(source), lex(literal));
+    let (source, literal) = (lex(source), piece(literal));
     let windows = source.windows(literal.len());
     windows.filter(|w| *w == literal).count()
 }
@@ -1930,7 +2074,7 @@ fn pinned(source: &str, literal: &str) -> usize {
 /// anywhere in `range`, and its whole header after its leading attributes:
 /// the complete signature or controlling condition expression.
 fn header(code: &str, range: std::ops::Range<usize>) -> (Vec<String>, String) {
-    let tokens = lex(&code[range]);
+    let tokens = words(&code[range]);
     let (mut attrs, mut lead, mut i) = (Vec::new(), 0, 0);
     while i < tokens.len() {
         let open = i + 1 + usize::from(tokens.get(i + 1) == Some(&"!"));
@@ -2044,6 +2188,43 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     {
         assert!(route_sites(&planted).is_err(), "planted: {planted}");
     }
+    // SB3E-R44.3: the lexer is proc-macro2, exactly, a dev-dependency only,
+    // so a multibyte char or a C string hides no site from it (B1).
+    let manifest = include_str!("../../Cargo.toml");
+    let lexer = "proc-macro2 = { version = \"=1.0.106\", default-features = false }";
+    let named = manifest
+        .lines()
+        .filter(|l| l.contains("proc-macro2") || l.contains("proc_macro2"));
+    let named: Vec<&str> = named.collect();
+    let dev = manifest
+        .split("\n[dev-dependencies]\n")
+        .nth(1)
+        .unwrap_or("");
+    let dev = dev
+        .split("\n[")
+        .next()
+        .unwrap_or("")
+        .lines()
+        .any(|l| l == lexer);
+    assert!(named == [lexer] && dev, "R44.3: proc-macro2 {named:?}");
+    for hide in ["let _ = ['\u{e9}', '\"'];", "let _ = cr#\"\"//\"#;"] {
+        let site = format!(
+            "    {hide}\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"q\", c);\n}}"
+        );
+        let found = route_sites(&good.replace("\n}", &format!("\n{site}")));
+        assert_eq!(
+            found.map(|r| r.0.len()),
+            Ok(2),
+            "R44.3: {hide} hides a site"
+        );
+    }
+    // SB3E-R51.2 (Fable B1): a shebang line fails closed; an inner attribute does not.
+    let hidden = format!("#! /*\n{good}// */\n");
+    assert_eq!(tokens(&hidden).err().as_deref(), Some(SHEBANG), "R51.2");
+    assert!(
+        tokens(&format!("#![allow(unused)]\n{good}")).is_ok(),
+        "R51.2: #!["
+    );
     let sources = crate_sources();
     for (file, source) in &sources {
         if file == "broker/route_seams.rs" {
@@ -2180,7 +2361,7 @@ fn sb3e_route_pins_reject_every_generated_mutant() {
     let text = |f: &str| &sources.iter().find(|(n, _)| n == f).unwrap().1;
     let mut cases = Vec::new();
     for (file, pin) in PINS {
-        let (tokens, literal, base) = (lex(text(file)), lex(pin), text(file).as_ptr() as usize);
+        let (tokens, literal, base) = (lex(text(file)), piece(pin), text(file).as_ptr() as usize);
         let at = tokens
             .windows(literal.len())
             .position(|w| w == literal)

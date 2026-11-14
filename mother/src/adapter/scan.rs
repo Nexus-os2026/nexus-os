@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[path = "../../../kernel/tests/desktop_tripwire/mod.rs"]
 mod desktop_tripwire;
 
-fn crate_root() -> PathBuf {
+pub(crate) fn crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
@@ -35,7 +35,7 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Every Rust file of the crate, as `(path relative to the crate, text)`.
-fn mother_sources() -> Vec<(String, String)> {
+pub(crate) fn mother_sources() -> Vec<(String, String)> {
     let root = crate_root();
     let mut files = Vec::new();
     rust_files(&root, &mut files);
@@ -51,6 +51,102 @@ fn mother_sources() -> Vec<(String, String)> {
             (rel, std::fs::read_to_string(&path).unwrap())
         })
         .collect()
+}
+
+/// SB3E-R51.1: every file under `host/tests/route_cells/` (subdirectories
+/// too; a symlink is a file), as `(path relative to the crate, bytes)`; a
+/// file that cannot be read has no bytes, so its digest differs.
+pub(crate) fn route_cells_files() -> Vec<(String, Vec<u8>)> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            match entry.file_type().is_ok_and(|k| k.is_dir()) {
+                true => walk(&entry.path(), out),
+                false => out.push(entry.path()),
+            }
+        }
+    }
+    let (root, mut files) = (crate_root(), Vec::new());
+    walk(&root.join("host/tests/route_cells"), &mut files);
+    files.sort();
+    let rel = |p: &Path| p.strip_prefix(&root).unwrap().to_string_lossy().to_string();
+    let read = |p: &Path| std::fs::read(p).unwrap_or_default();
+    files.iter().map(|p| (rel(p), read(p))).collect()
+}
+
+/// SB3E-R55.2 (Fable A-1): the route guard's source set, failing closed:
+/// every `.rs` file under `root` as `(path relative to it, text)`, sorted,
+/// with a finding for a symlink anywhere, an entry that cannot be read, a
+/// `.rs` entry that is not a regular file, and a directory `rust_files`
+/// skips when it sits below `src/` or `tests/`.
+/// Only `root/target` and `root/.git` are skipped. Other scans are unchanged.
+pub(crate) fn route_guard_sources(root: &Path) -> (Vec<(String, String)>, Vec<String>) {
+    type Out = (Vec<(String, String)>, Vec<String>);
+    fn walk(root: &Path, dir: &Path, out: &mut Out) {
+        let rel = |p: &Path| p.strip_prefix(root).unwrap().to_string_lossy().to_string();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return out.1.push(format!("A-1: {} cannot be read", rel(dir)));
+        };
+        for entry in entries {
+            let Ok((path, kind)) = entry.and_then(|e| Ok((e.path(), e.file_type()?))) else {
+                out.1
+                    .push(format!("A-1: an entry of {} cannot be read", rel(dir)));
+                continue;
+            };
+            let (at, name) = (rel(&path), path.file_name().unwrap().to_string_lossy());
+            let skipped = [
+                "target",
+                ".git",
+                "node_modules",
+                "dist",
+                ".cargo",
+                ".claude",
+            ];
+            let below = || {
+                Path::new(&at)
+                    .ancestors()
+                    .skip(1)
+                    .any(|a| a.ends_with("src") || a.ends_with("tests"))
+            };
+            if kind.is_symlink() {
+                out.1.push(format!("A-1: {at} is a symlink"));
+            } else if kind.is_dir() && dir == root && matches!(&*name, "target" | ".git") {
+                continue;
+            } else if kind.is_dir() {
+                if skipped.contains(&&*name) && below() {
+                    out.1.push(format!(
+                        "A-1: {at} is a skipped directory below src/ or tests/"
+                    ));
+                }
+                walk(root, &path, out);
+            } else if name.ends_with(".rs") && !kind.is_file() {
+                out.1.push(format!("A-1: {at} is not a regular file"));
+            } else if name.ends_with(".rs") {
+                match std::fs::read_to_string(&path) {
+                    Ok(text) => out.0.push((at, text)),
+                    Err(e) => out.1.push(format!("A-1: {at} cannot be read: {e}")),
+                }
+            }
+        }
+    }
+    let mut out = (Vec::new(), Vec::new());
+    walk(root, root, &mut out);
+    out.0.sort();
+    out
+}
+
+/// SB3E-R55.2: the guard's walk over a scratch tree holding a skipped
+/// directory below `src/` (with a file), a symlinked file and a symlinked
+/// directory (the guard's in-test plant; only the adapter touches the host).
+pub(crate) fn route_guard_walk_plant() -> (Vec<(String, String)>, Vec<String>) {
+    let tmp = std::env::temp_dir().join(format!("sb3e-r55-walk-{}", std::process::id()));
+    let src = tmp.join("src");
+    std::fs::create_dir_all(src.join("dist")).unwrap();
+    std::fs::write(src.join("dist/mod.rs"), "fn tidy() {}\n").unwrap();
+    std::os::unix::fs::symlink("dist/mod.rs", src.join("linked.rs")).unwrap();
+    std::os::unix::fs::symlink("dist", src.join("linkdir")).unwrap();
+    let walked = route_guard_sources(&tmp);
+    std::fs::remove_dir_all(&tmp).unwrap();
+    walked
 }
 
 fn code(text: &str) -> String {

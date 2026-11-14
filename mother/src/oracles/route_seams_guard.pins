@@ -1,0 +1,732 @@
+# SB3E-R42.2 (G-S1): the include_str!, include_bytes! and #[path] sites
+# of Mother's sources, exactly, as file|kind|argument (include!: none).
+desktop/src/stop.rs|path|"stop_tests.rs"
+desktop/tests/check_page_cli.rs|include_str|"../../src/oracles/m3a_bakery.html"
+desktop/tests/install.rs|path|"live/harness.rs"
+desktop/tests/install.rs|path|"../../../kernel/tests/process_leader/mod.rs"
+desktop/tests/live.rs|path|"live/harness.rs"
+desktop/tests/live.rs|path|"../../../kernel/tests/process_leader/mod.rs"
+desktop/tests/live.rs|path|"live/support.rs"
+host/src/check_page.rs|include_str|"../../src/oracles/m3a_bakery.html"
+host/src/stop_tests.rs|path|"../tests/support/mod.rs"
+host/src/terminal_tests.rs|include_str|"../../README.md"
+host/tests/check_page.rs|include_str|"../../src/oracles/m3a_bakery.html"
+host/tests/check_page.rs|include_str|"../../../kernel/src/inert_page/fixtures/reference.html"
+host/tests/check_page.rs|include_str|"../../../kernel/tests/fixtures/local_business.html"
+host/tests/route_cells/main.rs|include_str|"../../../../crates/nexus-governed-control/src/broker/route_seams.rs"
+host/tests/route_cells/store.rs|include_str|"route_fsync.c"
+host/tests/session/coverage.rs|include_str|"sinks.tsv"
+host/tests/session/coverage.rs|include_str|"combination-receipts.tsv"
+host/tests/session/coverage.rs|include_str|"combination-rules.tsv"
+host/tests/session/coverage.rs|include_str|"combination-boundaries.tsv"
+host/tests/session/coverage.rs|include_str|"combination-dispositions.tsv"
+host/tests/session_model_bridge.rs|include_str|"../../src/adapter/session_model_composition_tests.rs"
+host/tests/session_model_bridge.rs|include_str|"../../src/adapter/session_model_bridge_d_tests.rs"
+host/tests/session_model_bridge.rs|include_str|"../../src/adapter/session_model_bridge_d2_tests.rs"
+host/tests/session_model_bridge.rs|include_str|"route_cells/cells.rs"
+host/tests/session_model_bridge.rs|include_str|"session/model-bridge-expect.tsv"
+host/tests/session_model_bridge.rs|include_str|$
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_bridge.rs|include_str|"session/combination-receipts.tsv"
+host/tests/session_model_lifecycle.rs|path|"session/model.rs"
+host/tests/session_oracles.rs|path|"session/model.rs"
+host/tests/session_oracles.rs|path|"session/coverage.rs"
+host/tests/session_oracles.rs|path|"session_model_bridge.rs"
+host/tests/session_oracles.rs|include_str|"session/sinks.tsv"
+host/tests/session_oracles.rs|include_str|"session/desktop-live.txt"
+host/tests/session_oracles.rs|include_str|"session/combination-dispositions.tsv"
+host/tests/session_oracles.rs|include_str|"session/combination-dispositions.tsv"
+host/tests/session_oracles.rs|include_str|"../src/hands.rs"
+host/tests/session_oracles.rs|include_str|"session/sinks.tsv"
+host/tests/session_oracles.rs|include_str|"session/sink-verification.tsv"
+host/tests/session_outcome_product.rs|path|"session/model.rs"
+host/tests/session_outcome_product.rs|path|"session/outcomes.rs"
+host/tests/session_sealing.rs|include_str|"session/exclusions.tsv"
+host/tests/session_sealing.rs|include_str|"../../README.md"
+src/adapter/lite.rs|path|"lite_settlement.rs"
+src/adapter/lite.rs|path|"lite_recognition.rs"
+src/adapter/lite.rs|path|"lite_review1_dispatch.rs"
+src/adapter/lite.rs|path|"lite_review1_sequential.rs"
+src/adapter/lite.rs|path|"lite_review1_recovery.rs"
+src/adapter/lite.rs|path|"lite_review2_mixed.rs"
+src/adapter/lite_review1_recovery.rs|include_str|"lite_review1_fsync.c"
+src/adapter/m2as_scan.rs|include_str|"../coordinator.rs"
+src/adapter/m2as_scan.rs|include_str|"../consent.rs"
+src/adapter/m2as_scan.rs|include_str|"../contract.rs"
+src/adapter/m2as_scan.rs|include_str|"../effect.rs"
+src/adapter/m2as_scan.rs|include_str|"../journal.rs"
+src/adapter/m2as_scan.rs|include_str|"../lane.rs"
+src/adapter/m2as_scan.rs|include_str|"../state.rs"
+src/adapter/m2as_scan.rs|include_str|"../lib.rs"
+src/adapter/m2as_scan.rs|include_str|"mod.rs"
+src/adapter/m3d_publication_oracles.rs|include_str|"../oracles/m3a_bakery.html"
+src/adapter/private_file.rs|path|"private_session_oracles_tests.rs"
+src/adapter/scan.rs|path|"../../../kernel/tests/desktop_tripwire/mod.rs"
+src/adapter/session_close_oracles_tests.rs|path|"session_lifecycle_fix1_tests.rs"
+src/adapter/session_close_oracles_tests.rs|path|"session_native_record_fix1_tests.rs"
+src/adapter/session_model_bridge_d_tests.rs|include_str|"../../../crates/nexus-governed-control/src/authority/evidence.rs"
+src/adapter/session_model_bridge_d_tests.rs|include_str|"session_model_bridge_d_tests.rs"
+src/adapter/session_port.rs|path|"session_projection_tests.rs"
+src/adapter/session_terminal_oracles_tests.rs|path|"../../host/tests/session/model.rs"
+src/coordinator.rs|path|"oracles/m2e_budget.rs"
+src/coordinator.rs|path|"adapter/session_journal_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review3.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review4.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review5.rs"
+src/coordinator/lite.rs|path|"../adapter/lite_review6.rs"
+src/coordinator/lite.rs|path|"../adapter/session_terminal_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_continuation_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_close_oracles_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_result_fix1_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_budget_fix1_tests.rs"
+src/coordinator/lite.rs|path|"../adapter/session_terminal_fix2_tests.rs"
+src/coordinator/page_proof.rs|path|"../oracles/m3d_publication.rs"
+src/coordinator/page_proof.rs|path|"../oracles/m3d_verifier.rs"
+src/oracles/m2a_consent.rs|include_str|"../coordinator.rs"
+src/oracles/m2a_consent.rs|include_str|"../consent.rs"
+src/oracles/m2a_consent.rs|include_str|"../effect.rs"
+src/oracles/m3a_s_o4.rs|path|"../../../kernel/src/inert_page/tests/s_o4_round_trip.rs"
+src/oracles/m3a_verifier.rs|include_str|"m3a_bakery.html"
+src/oracles/m3a_verifier.rs|include_str|"../../../kernel/src/inert_page/fixtures/reference.html"
+src/oracles/m3a_verifier.rs|include_str|"../verifier.rs"
+src/oracles/route_seams_guard.rs|include_str|"../../Cargo.toml"
+src/oracles/route_seams_guard.rs|include_str|"../../../crates/nexus-governed-control/Cargo.toml"
+src/oracles/route_seams_guard.rs|include_str|"../../../crates/nexus-governed-control/src/host_session/model_call_tests.rs"
+src/oracles/route_seams_guard.rs|include_str|"route_seams_guard.pins"
+src/oracles/route_seams_guard.rs|include_str|"route_seams_guard.rs"
+src/oracles/structure.rs|include_str|"../../Cargo.toml"
+src/oracles/structure.rs|include_str|"../adapter/mod.rs"
+src/oracles/structure.rs|include_str|"../effect.rs"
+src/oracles/structure.rs|include_str|"../coordinator.rs"
+src/oracles/structure.rs|include_str|"../consent.rs"
+src/page_builder/cb_oracles.rs|include_str|"lane.rs"
+src/page_builder/cb_oracles.rs|include_str|"lane.rs"
+src/page_builder/cb_oracles.rs|include_str|"lane.rs"
+src/page_inputs.rs|path|"oracles/m3d_inputs.rs"
+@@@ src/lib.rs
+pub mod private;
+#[cfg(mother_route_seams)]
+pub mod route_seams;
+pub mod state;
+@@@ src/coordinator/model_calls.rs
+use super::*;
+#[cfg(mother_route_seams)]
+use crate::route_seams;
+use nexus_governed_control::inference::{
+@@@ src/coordinator/model_calls.rs
+#[cfg(mother_route_seams)]
+impl<P: EffectPort> BorrowedMeter<'_, P> {
+    fn route_ctx(&self) -> route_seams::Ctx {
+        let context = self.coordinator.port.session_context();
+        route_seams::Ctx::of(context.as_ref()).invocation(self.invocation)
+    }
+}
+impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
+@@@ src/coordinator/model_calls.rs
+let mut result = Err(MeterRefusal::Stale);
+#[cfg(mother_route_seams)]
+route_seams::at("mother.charge.entry", self.route_ctx());
+c.try_with_lock(|inner| {
+@@@ src/coordinator/model_calls.rs
+let Ok(charged) = result else {
+    return Ok(());
+};
+result = Err(MeterRefusal::NotRecorded);
+#[cfg(mother_route_seams)]
+route_seams::at("mother.charge", self.route_ctx());
+inner.append(
+    self.invocation.mission,
+    Event::ModelCallCharged {
+        invocation: self.invocation,
+        call: charged.call,
+    },
+)?;
+#[cfg(mother_route_seams)]
+route_seams::at("mother.charge.ok", self.route_ctx());
+let m = inner.mission(self.invocation.mission)?;
+@@@ src/coordinator/model_calls.rs
+fn settle(&self, call: u32) {
+    let c = self.coordinator;
+    #[cfg(mother_route_seams)]
+    route_seams::at("mother.settle", self.route_ctx());
+    let _ =
+        c.try_with_lock(|i| {
+            if i.usable().is_err() {
+@@@ src/coordinator/model_calls.rs
+#[cfg(test)]
+c.hooks.model_returned.fire();
+#[cfg(mother_route_seams)]
+route_seams::at("mother.recheck", self.meter.route_ctx());
+if self.live() && self.deadline.expired() {
+@@@ src/coordinator.rs
+#[cfg(all(test, target_os = "linux"))]
+lite::session_terminal_fix2::before(&entry);
+#[cfg(mother_route_seams)]
+if let Event::LaneReturned { invocation, .. } = &entry.event {
+    let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
+    crate::route_seams::at("mother.admit", ctx.invocation(*invocation));
+}
+if work {
+    self.admit_session(nexus_governed_control::host_session::MotherStep::Transition)?;
+}
+#[cfg(mother_route_seams)]
+if let Event::LaneReturned { invocation, .. } = &entry.event {
+    let ctx = crate::route_seams::Ctx::of(self.session_context.as_ref());
+    crate::route_seams::at("mother.admit.ok", ctx.invocation(*invocation));
+}
+@@@ src/coordinator.rs
+let hash = output_hash(&output);
+#[cfg(mother_route_seams)]
+crate::route_seams::at(
+    "mother.lane.prelock",
+    crate::route_seams::Ctx::of(self.port.session_context().as_ref())
+        .invocation(input.invocation),
+);
+let contract = self.step(|inner| {
+    inner.kept(id)?;
+@@@ src/coordinator.rs
+inner.append(
+    id,
+    Event::LaneReturned {
+        invocation: input.invocation,
+        output_hash: hash.clone(),
+    },
+)?;
+#[cfg(mother_route_seams)]
+crate::route_seams::at(
+    "mother.lane.returned",
+    crate::route_seams::Ctx::of(inner.session_context.as_ref())
+        .invocation(input.invocation),
+);
+let mission = inner.mission(id)?;
+mission.pending_lane = None;
+@@@ src/adapter/mod.rs
+let record = outcome.record();
+#[cfg(test)]
+let record = self.model_record.lock().unwrap().take().unwrap_or(record);
+#[cfg(mother_route_seams)]
+crate::route_seams::at(
+    "mother.classify",
+    crate::route_seams::Ctx::of(self.door.context().as_ref()).run(run),
+);
+Ok(classify(record, outcome.into_result()))
+@@@ src/adapter/session_port.rs
+#[cfg(mother_route_seams)]
+impl SessionPort {
+    pub fn route_revoke_original_grant(&self) -> bool {
+        const M: &str = "nexus-mother-route-seam-S3-port";
+        std::hint::black_box(M.as_bytes());
+        match &self.inner.door {
+            PortDoor::Session(door) => door.route_revoke_original_grant(),
+            PortDoor::Legacy(_) => false,
+        }
+    }
+}
+@@@ src/coordinator/lite.rs
+#[cfg(mother_route_seams)]
+impl<P: EffectPort> FileSession<P> {
+    pub fn route_poison_coordinator(&self) {
+        const M: &str = "nexus-mother-route-seam-S4b";
+        std::hint::black_box(M.as_bytes());
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = self.coordinator.inner.try_lock();
+            panic!("route seam S4b: coordinator lock poisoned");
+        }));
+    }
+}
+@@@ src/route_seams.rs
+#[cfg(not(target_os = "linux"))]
+compile_error!("mother_route_seams: the route seams are Linux-only");
+
+use crate::lane::InvocationId;
+use nexus_governed_control::authority::ids::RunId;
+use nexus_governed_control::host_session::{SessionContext, SessionIdentity};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
+
+const M: &str = "nexus-mother-route-seam-S5";
+const PATIENCE: Duration = Duration::from_secs(10);
+pub(crate) const POINTS: [&str; 10] = [
+    "mother.charge.entry",
+    "mother.charge",
+    "mother.charge.ok",
+    "mother.settle",
+    "mother.classify",
+    "mother.recheck",
+    "mother.lane.prelock",
+    "mother.admit",
+    "mother.admit.ok",
+    "mother.lane.returned",
+];
+
+static ARMED: AtomicBool = AtomicBool::new(false);
+static STATE: Mutex<State> = Mutex::new(State {
+    tick: 0,
+    entries: Vec::new(),
+    pending: Vec::new(),
+});
+
+struct State {
+    tick: u64,
+    entries: Vec<Entry>,
+    pending: Vec<Pending>,
+}
+struct Pending {
+    id: u64,
+    point: &'static str,
+    ack: SyncSender<Entry>,
+    pause: Option<(Receiver<()>, &'static str, Timeout)>,
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Ctx {
+    session: Option<SessionIdentity>,
+    request: Option<u64>,
+    run: Option<RunId>,
+    invocation: Option<InvocationId>,
+}
+impl Ctx {
+    pub(crate) fn of(context: Option<&SessionContext>) -> Self {
+        Self {
+            session: context.map(SessionContext::session),
+            request: context.map(SessionContext::request),
+            ..Self::default()
+        }
+    }
+    pub(crate) fn invocation(self, invocation: InvocationId) -> Self {
+        let invocation = Some(invocation);
+        Self { invocation, ..self }
+    }
+    pub(crate) fn run(self, run: RunId) -> Self {
+        let run = Some(run);
+        Self { run, ..self }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub tick: u64,
+    pub point: &'static str,
+    pub session: Option<SessionIdentity>,
+    pub request: Option<u64>,
+    pub run: Option<RunId>,
+    pub invocation: Option<InvocationId>,
+    pub thread: std::thread::ThreadId,
+    pub instant: Instant,
+}
+
+pub type Timeout = fn(&str) -> !;
+
+pub enum Action {
+    Trace,
+    Pause {
+        cell: &'static str,
+        timeout: Timeout,
+    },
+    Panic,
+}
+
+pub struct Held {
+    pub acknowledged: Receiver<Entry>,
+    _release: Release,
+}
+struct Release(u64, SyncSender<()>);
+impl Drop for Release {
+    fn drop(&mut self) {
+        state().pending.retain(|p| p.id != self.0);
+        let _ = self.1.try_send(());
+    }
+}
+
+pub fn arm(point: &'static str, action: Action) -> Held {
+    assert!(POINTS.contains(&point), "not a Mother route point: {point}");
+    let (ack, acknowledged) = sync_channel(1);
+    let (release, released) = sync_channel(1);
+    let mut s = state();
+    s.tick += 1;
+    let id = s.tick;
+    let pause = match action {
+        Action::Trace => None,
+        Action::Pause { cell, timeout } => Some(Some((released, cell, timeout))),
+        Action::Panic => Some(None),
+    };
+    if let Some(pause) = pause {
+        s.pending.push(Pending {
+            id,
+            point,
+            ack,
+            pause,
+        });
+    }
+    ARMED.store(true, Ordering::SeqCst);
+    Held {
+        acknowledged,
+        _release: Release(id, release),
+    }
+}
+
+pub fn drain_trace() -> Vec<Entry> {
+    std::mem::take(&mut state().entries)
+}
+
+pub(crate) fn at(point: &'static str, ctx: Ctx) {
+    std::hint::black_box(M.as_bytes());
+    if !ARMED.load(Ordering::Relaxed) {
+        return;
+    }
+    fire(point, ctx);
+}
+
+fn state() -> MutexGuard<'static, State> {
+    STATE.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn fire(point: &'static str, ctx: Ctx) {
+    let (entry, pending) = {
+        let mut s = state();
+        s.tick += 1;
+        let entry = Entry {
+            tick: s.tick,
+            point,
+            session: ctx.session,
+            request: ctx.request,
+            run: ctx.run,
+            invocation: ctx.invocation,
+            thread: std::thread::current().id(),
+            instant: Instant::now(),
+        };
+        s.entries.push(entry.clone());
+        let found = s.pending.iter().position(|p| p.point == point);
+        (entry, found.map(|i| s.pending.remove(i)))
+    };
+    let Some(pending) = pending else { return };
+    let acknowledged = pending.ack.try_send(entry).is_ok();
+    match pending.pause {
+        None => panic!("route seam: armed panic at {point}"),
+        Some((released, cell, timeout)) => {
+            if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
+                timeout(&format!("TIMEOUT {cell} {point}"));
+            }
+        }
+    }
+}
+@@@ host/tests/route_cells/s5.rs
+fn drive_call(calls: &AtomicU32, context: &LaneContext<'_>) -> bool {
+    let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
+    let request = ModelRequest::new("system".into(), "prompt".into(), schema).unwrap();
+    calls.fetch_add(1, Ordering::SeqCst);
+    context
+        .model
+        .expect("a model caller")
+        .call(&request)
+        .is_ok()
+}
+@@@ host/tests/route_cells/s5.rs
+let m = Coordinator::open(
+    journal,
+    Arc::new(SessionPort::new(b.door, b.name.clone())),
+    lanes(&calls, &recorded),
+    clock,
+    private,
+)
+.unwrap()
+.into_file_session()
+.unwrap();
+@@@ host/tests/route_cells/s5.rs
+fn timeout(line: &str) -> ! {
+    use std::io::Write;
+    let Some(root) = std::env::var_os(CHILD).map(PathBuf::from) else {
+        std::process::abort() // SB3E-R40.5: never relative to the cwd.
+    };
+    let mut open = std::fs::OpenOptions::new();
+    if let Ok(mut result) = open.create(true).append(true).open(root.join("result")) {
+        let _ = writeln!(result, "{line}");
+    }
+    std::process::abort()
+}
+@@@ host/tests/route_cells/s5.rs
+fn driver(&self, o: &Opened) -> Driver {
+    Driver {
+        session: o.session.identity(),
+        request: self.request,
+        calls: self.calls.load(Ordering::SeqCst),
+        recorded: self.recorded.lock().unwrap().clone(),
+    }
+}
+@@@ host/tests/route_cells/s5.rs
+fn recorded(f: &Fixture) -> (Driver, Vec<s1::Entry>, Vec<s5::Entry>) {
+    let o = f.open();
+    let mother = mother(f, &o);
+    let _s1 = s1::arm("reg.reserve", s1::Action::Trace);
+    let _s5 = s5::arm("mother.charge", s5::Action::Trace);
+    s1::drain_trace();
+    s5::drain_trace();
+    mother.run();
+    let traces = (s1::drain_trace(), s5::drain_trace());
+    (mother.driver(&o), traces.0, traces.1)
+}
+@@@ host/tests/route_cells/s5.rs
+let (driver, broker, mother) = recorded(f);
+let witness = credit(&driver, &RECORDED, &broker, &mother).unwrap();
+@@@ host/tests/route_cells/s5.rs
+let (d, b, m) = recorded(f);
+assert!(credit(&d, &RECORDED, &b, &m).is_ok());
+@@@ host/tests/route_cells/s5.rs
+fn bounded(command: &mut std::process::Command) -> std::process::Output {
+    let mut process = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while process.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            process.kill().unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(5)); // Polls an exit only.
+    }
+    process.wait_with_output().unwrap()
+}
+@@@ host/tests/route_cells/main.rs
+const PATIENCE: Duration = Duration::from_secs(10);
+const CHILD: &str = "SB3E_ROUTE_CHILD";
+const NAME: &str = "qwen3.6:35b-a3b";
+const DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";
+@@@ host/tests/route_cells/main.rs
+fn child(name: &str, body: fn(&Fixture)) {
+    child_with(name, |_| Vec::new(), body);
+}
+fn child_with(name: &str, env: fn(&std::path::Path) -> Vec<(&str, PathBuf)>, body: fn(&Fixture)) {
+    if let Some(root) = std::env::var_os(CHILD) {
+        if std::env::var_os(store::SHIM_SHA256).is_some() {
+            store::shim_witness();
+        }
+        body(&Fixture(PathBuf::from(root)));
+        return println!("ROUTE CHILD PASSED {name}");
+    }
+    // A path LD_PRELOAD can name: no `:` (its list separator).
+    let leaf = format!(
+        "sb3e-route-{}-{}",
+        std::process::id(),
+        name.replace("::", "-")
+    );
+    let root = std::env::temp_dir().join(leaf);
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let fixture = Fixture(root);
+    let extra = env(&fixture.0);
+    let mut process = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture", "--test-threads=1"])
+        .env(CHILD, &fixture.0)
+        .envs(extra.iter().cloned())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while process.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            process.kill().unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(5)); // Polls an exit only.
+    }
+    let out = process.wait_with_output().unwrap();
+    let result = std::fs::read_to_string(fixture.0.join("result")).unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && result.is_empty(),
+        "{name}: {result}{stdout}{stderr}"
+    );
+    assert!(stdout.contains(&format!("ROUTE CHILD PASSED {name}\n")));
+    for line in stdout.lines().filter_map(|l| l.split_once("WITNESS ")) {
+        println!("{name}: {}", line.1); // U4a-2: measured evidence (--nocapture).
+    }
+    if let Some((_, digest)) = extra.iter().find(|(k, _)| *k == store::SHIM_SHA256) {
+        store::shim_witnessed(&digest.to_string_lossy(), &stdout);
+    }
+}
+@@@ host/tests/route_cells/main.rs
+struct Fixture(PathBuf);
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if std::env::var_os(CHILD).is_none() {
+            let _ = std::fs::remove_dir_all(&self.0); // Only this owned root.
+        }
+    }
+}
+struct Opened {
+    session: HostSession,
+    ingress: SessionIngress,
+    evidence: Arc<PrimaryEvidence>,
+}
+impl Fixture {
+    fn open(&self) -> Opened {
+        assert!(nexus_governed_control::files::make_non_dumpable());
+        let home = self.0.join("home");
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&home)
+            .unwrap();
+        let seed = SessionSeed::new().unwrap();
+        let ingress = seed.ingress();
+        let store = home.join("broker/p3-evidence/evidence.sqlite3");
+        let evidence = PrimaryEvidence::open(&store, vec![]).unwrap();
+        let clock = Arc::new(SystemClock::default());
+        let session = HostSession::open_with_history(
+            seed,
+            &home.join("broker"),
+            &home,
+            evidence.clone(),
+            clock,
+            Arc::new(Owner),
+        )
+        .unwrap();
+        assert!(session.startup_report().ready());
+        Opened {
+            session,
+            ingress,
+            evidence,
+        }
+    }
+    fn pause(&self, point: &'static str) -> Held {
+        let result = Arc::new(std::fs::File::create(self.0.join("result")).unwrap());
+        arm(
+            point,
+            Action::Pause {
+                cell: "u3b",
+                result,
+            },
+        )
+    }
+}
+impl Opened {
+    /// The public bootstrap, then one original door with its File run.
+    fn door(&self, root: &std::path::Path) -> (SessionDoor, RunId, u64) {
+        let workspace = root.join("workspace");
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&workspace)
+            .unwrap();
+        self.session.bootstrap_workspace(&workspace, &[]).unwrap();
+        self.session.finish_bootstrap().unwrap();
+        let request = self.ingress.accept(CommandKind::Run, 1).unwrap();
+        let door = self.session.open_file_door(&request).unwrap();
+        let attachment = door.file_port().unwrap().attach().unwrap();
+        door.claim_file_session(&attachment).unwrap();
+        let run = door.open_file_run(&attachment).unwrap();
+        (door, run, request.sequence())
+    }
+}
+@@@ host/tests/route_cells/main.rs
+struct Owner;
+impl ControlConfirmer for Owner {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        true
+    }
+    fn confirm_agent_door(&self, _: &AgentDoorConfirmation) -> bool {
+        true
+    }
+    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+        true
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
+}
+@@@ host/tests/route_cells/main.rs
+fn fake_ollama() -> (String, Arc<Mutex<Vec<String>>>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let served: Arc<Mutex<Vec<String>>> = Arc::default();
+    let peer = served.clone();
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().map_while(Result::ok) {
+            let (mut head, mut byte) = (Vec::new(), [0u8; 1]);
+            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
+                head.push(byte[0]);
+            }
+            let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+            let length = head.split("content-length:").nth(1);
+            let length = length.and_then(|l| l.lines().next()?.trim().parse().ok());
+            let _ = stream.read_exact(&mut vec![0u8; length.unwrap_or(0)]);
+            let path = head.split_whitespace().nth(1).unwrap_or_default();
+            let body = match path {
+                "/api/version" => r#"{"version":"0.40.13"}"#.to_string(),
+                "/api/status" => r#"{"cloud":{"disabled":true,"source":"env"}}"#.to_string(),
+                "/api/tags" => format!(
+                    r#"{{"models":[{{"name":"{NAME}","model":"{NAME}","digest":"{DIGEST}"}}]}}"#
+                ),
+                "/api/chat" => format!(
+                    r#"{{"model":"{NAME}","message":{{"role":"assistant","content":"{{\"ok\":true}}"}},"done":true,"done_reason":"stop","prompt_eval_count":587,"eval_count":378}}"#
+                ),
+                _ => r#"{"capabilities":["completion","thinking"]}"#.to_string(),
+            };
+            peer.lock().unwrap().push(path.to_string());
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                 content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    (endpoint, served)
+}
+fn spec() -> ModelPinSpec {
+    ModelPinSpec {
+        name: NAME.into(),
+        digest: DIGEST.into(),
+        runtime_version: "0.40.13".into(),
+        config: RuntimeConfig {
+            num_ctx: 8192,
+            temperature_milli: 0,
+            seed: 7,
+            think: Think::Off,
+            truncate: false,
+        },
+    }
+}
+@@@ host/tests/route_cells/store.rs
+pub(super) const SHIM_SHA256: &str = "ROUTE_SHIM_SHA256";
+@@@ host/tests/route_cells/store.rs
+fn sha256_hex(path: &Path) -> String {
+    let digest = Sha256::digest(std::fs::read(path).unwrap());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+pub(super) fn shim_witness() {
+    let library = std::env::var_os("LD_PRELOAD").map(PathBuf::from).unwrap();
+    let library = std::fs::canonicalize(library).unwrap();
+    let maps = std::fs::read_to_string("/proc/self/maps").unwrap();
+    let mut mapped = maps.lines().filter_map(|l| l.split_whitespace().nth(5));
+    assert!(
+        mapped.any(|p| Path::new(p) == library),
+        "the shim is not mapped"
+    );
+    let hex = sha256_hex(&library);
+    assert_eq!(std::env::var(SHIM_SHA256).ok(), Some(hex.clone()));
+    println!("ROUTE SHIM SHA256 {hex}");
+}
+pub(super) fn shim_witnessed(want: &str, stdout: &str) {
+    let hex = want.len() == 64 && want.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    let line = format!("ROUTE SHIM SHA256 {want}\n");
+    assert!(
+        hex && stdout.matches(&line).count() == 1,
+        "shim witness {want}: {stdout}"
+    );
+    let reports = stdout.matches("ROUTE SHIM SHA256 ").count();
+    assert_eq!(reports, 1, "one shim witness: {stdout}");
+    println!("ROUTE SHIM SHA256 {want}");
+}

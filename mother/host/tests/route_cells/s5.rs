@@ -4,9 +4,14 @@
 //! `Coordinator::open` and never cloned (A.2 item 3 (c)); every scripted
 //! lane is a driver-owned `RecordingLane` (A.4 item 3). `credit` is the A.2
 //! item 4/5, A.3 and A.4 check over the driver's own facts and both traces.
-use super::*;
+// SB3E-R42.4: the parent's items by name, the guard's allow-list; no glob.
+use super::{child, fake_ollama, spec, Fixture, Opened, CHILD, DIGEST, NAME, PATIENCE};
+use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::broker::route_seams as s1;
+use nexus_governed_control::host_session::{CommandKind, SessionDoor, SessionSeed};
 use nexus_governed_control::host_session::{SessionContext, SessionIdentity};
+use nexus_governed_control::inference::{ModelIdentity, ModelRequest, ResponseSchema};
 use nexus_mother::adapter::{FileJournal, FilePrivate, SessionPort};
 use nexus_mother::contract::{Budget, MissionContract, ModelChoice, PassCriterion};
 use nexus_mother::coordinator::{Coordinator, FileSession, Lanes};
@@ -14,6 +19,11 @@ use nexus_mother::journal::MissionId;
 use nexus_mother::lane::{InvocationId, Lane, LaneContext, LaneIdentity, LaneInput, LaneOutput};
 use nexus_mother::lane::{LaneRole, ScriptedLane, Verdict};
 use nexus_mother::route_seams as s5;
+use std::os::unix::fs::DirBuilderExt;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 pub(super) type Recorded = Arc<Mutex<Vec<(LaneRole, InvocationId)>>>;
 
@@ -398,6 +408,10 @@ fn credit(
         Some(o) => Some(o.run.zip(o.attempt).ok_or("opening_fields")?),
         None => None,
     };
+    // SB3E-R42.8: an attempt-level credit needs a claim, whatever `bound` is.
+    if e.attempt_level && claim.is_none() {
+        return Err("attempt_level");
+    }
     // A.2 item 5: the path profile, exactly.
     let gates: Vec<&s1::Entry> = broker
         .iter()
@@ -430,12 +444,12 @@ fn credit(
     {
         return Err("unrecorded_invocation");
     }
-    let model = d.recorded.iter().filter(|r| r.0 == LaneRole::Builder);
-    let model: Vec<InvocationId> = model.map(|r| r.1).collect();
+    let builder = d.recorded.iter().filter(|r| r.0 == LaneRole::Builder);
+    let builder: Vec<InvocationId> = builder.map(|r| r.1).collect();
     let attempting = mother.iter().filter(|m| ATTEMPT.contains(&m.point));
     if attempting
         .filter_map(|m| m.invocation)
-        .any(|i| model != [i])
+        .any(|i| builder != [i])
     {
         return Err("not_model_invocation");
     }
@@ -539,8 +553,8 @@ fn route_s5_recorded_path_is_measured_and_credited() {
         let witness = credit(&driver, &RECORDED, &broker, &mother).unwrap();
         let run = witness.run.expect("a session-bound run");
         assert_eq!(witness.claim, Some((run, 1)), "{witness:?}");
-        let model = driver.recorded.iter().find(|r| r.0 == LaneRole::Builder);
-        let model = model.map(|r| r.1);
+        let builder = driver.recorded.iter().find(|r| r.0 == LaneRole::Builder);
+        let builder = builder.map(|r| r.1);
         let mut points: Vec<&str> = witness.sites.iter().map(|s| s.0).collect();
         points.sort_unstable();
         points.dedup();
@@ -549,7 +563,7 @@ fn route_s5_recorded_path_is_measured_and_credited() {
             let attempt = ATTEMPT.contains(site);
             let expected = match *site {
                 "mother.classify" => (None, Some((run, 1)), Some(true)),
-                _ if attempt => (model, Some((run, 1)), Some(true)),
+                _ if attempt => (builder, Some((run, 1)), Some(true)),
                 _ => {
                     let ours = |i: InvocationId| driver.recorded.iter().any(|r| r.1 == i);
                     assert!(
@@ -612,9 +626,19 @@ fn route_s5_join_plants_each_refuse() {
             scripted,
             unknown,
         };
-        let plants: [Plant; 38] = [
-            ("two calls", "driver_calls", |c| c.d.calls = 2),
-            ("no call with S5 entries", "driver_calls", |c| c.d.calls = 0),
+        let plants: [Plant; 39] = [
+            ("two calls", "driver_calls", |c| {
+                c.d = Driver {
+                    calls: 2,
+                    ..c.d.clone()
+                }
+            }),
+            ("no call with S5 entries", "driver_calls", |c| {
+                c.d = Driver {
+                    calls: 0,
+                    ..c.d.clone()
+                }
+            }),
             ("wrong session", "session", |c| {
                 c.m("mother.charge").session = Some(c.elsewhere)
             }),
@@ -726,6 +750,12 @@ fn route_s5_join_plants_each_refuse() {
                 |c| c.m("mother.admit").invocation = None,
             ),
             ("row count 2", "row_counts", |c| c.e.profile.recheck = 2),
+            // SB3E-R42.8: no opening, `attempts: 0`, `bound: yes`.
+            ("attempt-level with no claim", "attempt_level", |c| {
+                let opening = |e: &s1::Entry| e.point == "model.attempt.granted" && !e.note;
+                c.b.retain(|e| !opening(e));
+                (c.e.attempts, c.e.profile.opening) = (0, 0);
+            }),
             ("attempt-level on bound: no", "attempt_level", |c| {
                 c.e.profile.bound = false
             }),
@@ -808,6 +838,24 @@ fn timeout(line: &str) -> ! {
     std::process::abort()
 }
 
+/// SB3E-R42.5: a child's output, its wait bounded (killed after 30 s), as
+/// `child_with` waits.
+fn bounded(command: &mut std::process::Command) -> std::process::Output {
+    let mut process = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while process.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            process.kill().unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(5)); // Polls an exit only.
+    }
+    process.wait_with_output().unwrap()
+}
+
 /// SB3E-R40.5: without a child root, the harness `timeout` aborts and
 /// writes nothing, so no result file appears relative to the cwd.
 #[test]
@@ -819,16 +867,18 @@ fn route_s5_timeout_without_a_child_root_writes_nothing() {
     let name = "s5::route_s5_timeout_without_a_child_root_writes_nothing";
     let cwd = std::env::temp_dir().join(format!("sb3e-route-{}-no-root", std::process::id()));
     std::fs::DirBuilder::new().mode(0o700).create(&cwd).unwrap();
-    let out = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", name, "--nocapture", "--test-threads=1"])
-        .env_remove(CHILD)
-        .env(NO_ROOT, "1")
-        .current_dir(&cwd)
-        .output()
-        .unwrap();
+    let cwd = Fixture(cwd); // Removed when the test ends.
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.args(["--exact", name, "--nocapture", "--test-threads=1"]);
+    let out = bounded(
+        command
+            .env_remove(CHILD)
+            .env(NO_ROOT, "1")
+            .current_dir(&cwd.0),
+    );
     use std::os::unix::process::ExitStatusExt;
     assert_eq!(out.status.signal(), Some(6), "aborted");
-    let written: Vec<_> = std::fs::read_dir(&cwd).unwrap().collect();
+    let written: Vec<_> = std::fs::read_dir(&cwd.0).unwrap().collect();
     assert!(written.is_empty(), "nothing written: {written:?}");
 }
 
@@ -925,4 +975,86 @@ fn route_s4b_poisons_the_coordinator_before_its_lock() {
             );
         },
     );
+}
+
+/// SB3E-R39.3: a panicking model call is still counted (`drive_call` counts
+/// before the call). `mother.recheck` runs inside `ModelCaller::call` on the
+/// lane's own thread (S1's `call.gate` runs on the broker's exchange thread
+/// and does not unwind through the call); armed to panic there, the unwind
+/// leaves the call, and the driver's count is 1 beside S5 entries, so A.2
+/// item 4 never sees `driver_calls == 0`.
+#[test]
+fn route_s5_panicking_call_is_counted() {
+    child("s5::route_s5_panicking_call_is_counted", |f| {
+        let o = f.open();
+        let mother = mother(f, &o);
+        let _s1 = s1::arm("call.gate", s1::Action::Trace);
+        let held = s5::arm("mother.recheck", s5::Action::Panic);
+        s1::drain_trace();
+        s5::drain_trace();
+        let mut advanced = Ok(());
+        for _ in 0..8 {
+            advanced = mother.m.advance(mother.id).map(|_| ());
+            if advanced.is_err() {
+                break;
+            }
+        }
+        let fired = held.acknowledged.try_recv().map(|e| e.point);
+        assert_eq!(fired, Ok("mother.recheck"), "the call unwound");
+        assert_eq!(format!("{advanced:?}"), "Err(Poisoned)", "out of the call");
+        let (driver, broker, trace) = (mother.driver(&o), s1::drain_trace(), s5::drain_trace());
+        assert_eq!(driver.calls, 1, "counted before the call");
+        let entry = trace.iter().any(|e| e.point == "mother.charge.entry");
+        assert!(entry, "S5 entries of the call");
+        let uncounted = Driver {
+            calls: 0,
+            ..driver.clone()
+        };
+        let refused = credit(&uncounted, &RECORDED, &broker, &trace).err();
+        assert_eq!(refused, Some("driver_calls"), "A.2 item 4");
+        let measured = credit(&driver, &RECORDED, &broker, &trace).err();
+        assert_ne!(measured, Some("driver_calls"));
+        println!(
+            "WITNESS panic driver_calls={} s5={}",
+            driver.calls,
+            trace.len()
+        );
+    });
+}
+
+/// SB3E-R39.1: an unreleased pause times out. After S5's 10 s patience the
+/// harness's `timeout` writes `TIMEOUT <cell> <point>` and aborts; the route
+/// never resumes.
+#[test]
+fn route_s5_unreleased_pause_times_out_and_aborts() {
+    let name = "s5::route_s5_unreleased_pause_times_out_and_aborts";
+    if let Some(root) = std::env::var_os(CHILD) {
+        let f = Fixture(PathBuf::from(root));
+        let o = f.open();
+        let mother = mother(&f, &o);
+        mother.m.advance(mother.id).unwrap(); // To Investigating: no lane yet.
+        let (cell, timeout) = ("u4a3", timeout as s5::Timeout);
+        let _held = s5::arm("mother.lane.prelock", s5::Action::Pause { cell, timeout });
+        let resumed = mother.m.advance(mother.id);
+        return println!("ROUTE CHILD RESUMED {name} {resumed:?}");
+    }
+    let root = std::env::temp_dir().join(format!("sb3e-route-{}-timeout", std::process::id()));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let root = Fixture(root); // Removed when the test ends.
+    let started = Instant::now();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.args(["--exact", name, "--nocapture", "--test-threads=1"]);
+    let out = bounded(command.env(CHILD, &root.0));
+    let elapsed = started.elapsed();
+    let result = std::fs::read_to_string(root.0.join("result")).unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(out.status.signal(), Some(6), "aborted: {stdout}");
+    assert_eq!(result, "TIMEOUT u4a3 mother.lane.prelock\n");
+    assert!(!stdout.contains("ROUTE CHILD RESUMED"), "{stdout}");
+    assert!(elapsed >= PATIENCE, "after its patience: {elapsed:?}");
+    println!("WITNESS timeout {result:?} after {elapsed:?}");
 }

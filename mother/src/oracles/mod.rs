@@ -27,6 +27,8 @@ mod m3e_display;
 mod m3e_receipts;
 mod mn01;
 mod review;
+/// SB-3E U4a-3: Mother's route guard (Step 0 item 8).
+mod route_seams_guard;
 mod state;
 mod stop;
 mod structure;

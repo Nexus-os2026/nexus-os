@@ -37,12 +37,12 @@ ROUTE_PACKAGES = {
     "nexus-mother-host": "mother/host/Cargo.toml",
     "nexus-mother-desktop": "mother/desktop/Cargo.toml",
 }
-LOCK_PIN = "a42d2d167fe3c01f4c61b4365dcdb0c64f2548ed3c52d16193b702f1d30b000e"
+LOCK_PIN = "333ffb7b9727991faa287b07296ce803be4210dd13ed59d9af1b80b6ca53f773"
 CARGO_CONFIG_PIN = "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
 # Reviewed graph hashes: sha256 of graph_lines(), LF-joined (see graph_lines).
 GRAPH_PINS = {
-    "default": "71ec30cb55fa73058c55d27d8395d89c0ec67694b2f17aea7990512cb7ee2229",
-    "all-features": "044b850fa2953eab514b6d1d11fa75a9ce935ce1d2fb8ac6cacc8d71b18f2fa5",
+    "default": "cac938c933a829c612e8bb1e2c4802be1fc2a36b7d7002669b28d0daba1e0ef3",
+    "all-features": "44ad20845df6835b81beb8693a17ce7ac76d47cac1842e704ad7ce7c63fd69f5",
 }
 # Each route package's declared dependencies:
 # name|rename|kind|target|optional|default-features|features|req|source.
@@ -54,6 +54,7 @@ DECLARED = {
         "libc||normal|cfg(target_os = \"linux\")|False|True||^0.2|registry+https://github.com/rust-lang/crates.io-index",
         "nexus-kernel||normal||False|True||*|local:kernel",
         "png||normal||False|True||^0.18|registry+https://github.com/rust-lang/crates.io-index",
+        "proc-macro2||dev||False|False||=1.0.106|registry+https://github.com/rust-lang/crates.io-index",
         "reqwest||normal||False|False|rustls-tls|^0.12|registry+https://github.com/rust-lang/crates.io-index",
         "rusqlite||normal||False|True|bundled|^0.41|registry+https://github.com/rust-lang/crates.io-index",
         "serde_json||dev||False|True||^1.0|registry+https://github.com/rust-lang/crates.io-index",
@@ -70,6 +71,7 @@ DECLARED = {
         "hex||normal||False|True||^0.4|registry+https://github.com/rust-lang/crates.io-index",
         "nexus-governed-control||normal||False|True||*|local:crates/nexus-governed-control",
         "nix||normal||False|False|fs|^0.29|registry+https://github.com/rust-lang/crates.io-index",
+        "proc-macro2||dev||False|False||=1.0.106|registry+https://github.com/rust-lang/crates.io-index",
         "serde_json||normal||False|True||^1.0|registry+https://github.com/rust-lang/crates.io-index",
         "serde||normal||False|True|derive|^1.0|registry+https://github.com/rust-lang/crates.io-index",
         "sha2||normal||False|True||^0.10|registry+https://github.com/rust-lang/crates.io-index",

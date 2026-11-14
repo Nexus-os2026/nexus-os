@@ -14,5 +14,8 @@ sha2 = "0.10"
 hex = "0.4"
 nix = { version = "0.29", default-features = false, features = ["fs"] }
 
+[dev-dependencies]
+proc-macro2 = { version = "=1.0.106", default-features = false }
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(mother_route_seams)'] }
