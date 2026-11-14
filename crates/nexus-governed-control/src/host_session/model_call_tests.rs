@@ -1320,6 +1320,14 @@ fn sb3e_route_seams_are_route_only() {
     // reads as separate statements; its gated definition is checked here and
     // the standard build cannot name it elsewhere.
     let names = ["route_seams", "owed_flush", "fn route_ctx"];
+    let s2 = ["route_refuse", "route_refused", "route_refuse_next"];
+    let s4 = [
+        "route_poison",
+        "route_poison_inner",
+        "route_poison_runs",
+        "RouteLock",
+    ];
+    let names = [&names[..], &s2, &s4].concat();
     let seam = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
     let test = "fn f() {\n    #[cfg(test)]\n    route_seams::at(\"p\", c);\n}\n";
     // A route site; cfg(test) never gates it, nor the reverse; a test site.
@@ -1349,9 +1357,34 @@ fn sb3e_route_seams_are_route_only() {
         );
     }
     assert!(found >= 70, "the S1 names were scanned: {found}");
+    // U4 (design 4.2.1): the store's own test hooks stay exactly cfg(test),
+    // never widened into the lane beside S2.
+    let hooks = [
+        "Fault",
+        "fault",
+        "refusing",
+        "refuse_next",
+        "refuse_next_insert",
+    ];
+    let store = include_str!("../evidence_store.rs");
+    let widened = store.replace(
+        "#[cfg(test)]\n    refuse_next:",
+        "#[cfg(any(test, mother_route_seams))]\n    refuse_next:",
+    );
+    assert_eq!(leaks_under(&widened, &hooks, TEST), 1, "a widened hook");
+    assert!(
+        seam_sites(store, &hooks).len() >= 12,
+        "the store hooks were scanned"
+    );
+    assert_eq!(
+        leaks_under(store, &hooks, TEST),
+        0,
+        "a store test hook outside cfg(test)"
+    );
 }
 /// The audited S1 writer sites: the broker rows of design 4.4, the two
-/// store points of 4.2, and the refusal notes of 2.4 and 4.4 (seal).
+/// store points of 4.2, and the refusal notes of 2.4 and 4.4 (seal), with
+/// the store's COMMIT error note (SB3E-R12.3) and S2's refusal note (U4).
 const ROUTE_SITES: &str = "\
 host_session/model.rs: >pub(super)fnreserve(core:&Arc<Core>,scope:&Arc<RequestScope>)->Result<O\
 wner,SessionError>{ at(reg.reserve,scope.route_ctx());¦ionError>{¦let_produc >fnadmission(&self\
@@ -1448,14 +1481,17 @@ al),);¦t.cell),);¦letmuttabl >pub(crate)fnadmit_session_inference(&self,b:Sess
 >Result<(),AuthorityError>{>implRunRegistry{ at(model.bind.checked,Ctx::default().run(b.run));¦\
 iginal),);¦b.original at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
 evidence_store.rs: >fnappend(&mutself,phase:&str,commitment:Option<&str>,body:&str)->Append{>im\
-plInner{ at(store.commit,Ctx::store(kind,phase,commitment));¦certain;}}¦ifself.com at(store.com\
-mit.result,Ctx::store(kind,phase,commitment));¦ncertain;}¦self.known
+plInner{ +#[cfg(mother_route_seams)]ifself.route_refused(kind,phase,commitment){ note(store.ref\
+used,Ctx::store(kind,phase,commitment));¦mmitment){¦ifrolled_b = at(store.commit,Ctx::store(kin\
+d,phase,commitment));¦certain;}}¦ifself.com +ifself.commit().is_err(){ note(store.commit.result\
+,Ctx::store(kind,phase,commitment));¦.is_err(){¦self.latch = at(store.commit.result,Ctx::store(\
+kind,phase,commitment));¦ncertain;}¦self.known
 ";
 /// SB3E-R14.1 and R15.1: every reviewed region on the path from a site to
 /// `fire`, whole (the writers, `fire`, `GATES`, `Ctx` and its builders, the
 /// `route_ctx` helpers), and the owed-flush statements with their
 /// neighbours, each compared normalized.
-const PINS: [(&str, &str); 10] = [
+const PINS: [(&str, &str); 22] = [
     (
         "broker/route_seams.rs",
         r#"
@@ -1490,13 +1526,25 @@ state();s.tick+=1;let key=(ctx.session,ctx.request,ctx.run,ctx.attempt);let gate
 Some((_,n))=>{*n+=gate;Some(*n)}None if gate==1=>{s.ordinals.push((key,1));Some(1)}None=>None,};
 let entry=Entry{tick:s.tick,point,note,session:ctx.session,request:ctx.request,run:ctx.run,
 invocation:None,attempt:ctx.attempt,kind:ctx.kind,request_ordinal,phase:ctx.phase.map(str::
-to_owned),commitment:ctx.commitment.map(str::to_owned),};s.entries.push(entry.clone());let
+to_owned),commitment:ctx.commitment.map(str::to_owned),thread:std::thread::current().id(),
+instant:Instant::now(),};s.entries.push(entry.clone());let
 eligible=!note&&(point!="store.commit"||ctx.kind==Some("ordinary"));let found=s.pending.iter().
 position(|p|eligible&&p.point==point);(entry,found.map(|i|s.pending.remove(i)))};let Some(
 pending)=pending else{return};let acknowledged=pending.ack.try_send(entry).is_ok();match pending
 .pause{None=>panic!("route seam: armed panic at {point}"),Some((released,cell,result))=>{if!
 acknowledged||released.recv_timeout(PATIENCE).is_err(){FAILED.store(true,Ordering::SeqCst);let _
 =writeln!(&*result,"TIMEOUT {cell} {point}");std::process::abort();}}}}
+"#,
+    ),
+    // AM-2 B.1: the entry, whole, with its thread and instant.
+    (
+        "broker/route_seams.rs",
+        r#"
+#[derive(Clone,Debug,PartialEq,Eq)]pub struct Entry{pub tick:u64,pub point:&'static str,pub note:
+bool,pub session:Option<SessionIdentity>,pub request:Option<u64>,pub run:Option<RunId>,pub
+invocation:Option<u64>,pub attempt:Option<u32>,pub kind:Option<&'static str>,pub request_ordinal
+:Option<u64>,pub phase:Option<String>,pub commitment:Option<String>,pub thread:std::thread::
+ThreadId,pub instant:Instant,}
 "#,
     ),
     (
@@ -1549,7 +1597,166 @@ fn append(&mut self, phase: &str, commitment: Option<&str>, body: &str) -> Appen
 else { "ordinary" }; if self.latched {
 "#,
     ),
+    // U4 S2 (design 4.2, 4.2.1): its field and initializer beside the
+    // owed-flush flag, its arming, its one-shot ordinary-only branch after
+    // BEGIN, and the COMMIT error branch's note, each whole.
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(test)] refuse_next: bool, #[cfg(mother_route_seams)] route_refuse: Option<(String, Option<
+String>)>, #[cfg(mother_route_seams)] owed_flush: bool, }
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(test)] refuse_next: false, #[cfg(mother_route_seams)] route_refuse: None,
+#[cfg(mother_route_seams)] owed_flush: false, };
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] pub fn route_refuse_next(&self, phase: &str, commitment: Option<&str>)
+{ const M: &str = "nexus-mother-route-seam-S2"; std::hint::black_box(M.as_bytes()); let record =
+(phase.to_string(), commitment.map(str::to_string)); self.store.inner().route_refuse = Some(
+record); }
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] fn route_refused(&mut self, kind: &str, phase: &str, commitment: Option<
+&str>) -> bool { let armed = |r: &mut (String, Option<String>)| r.0 == phase && r.1.as_deref() ==
+commitment; kind == "ordinary" && self.route_refuse.take_if(armed).is_some() } fn append(
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+self.latch(); return Append::Uncertain; } #[cfg(mother_route_seams)] if self.route_refused(kind,
+phase, commitment) { #[cfg(mother_route_seams)] route_seams::note("store.refused", Ctx::store(kind, phase, commitment));
+if rolled_back(&self.conn) { return Append::NotCommitted; } self.latch(); return
+Append::Uncertain; } #[cfg(test)] if self.refusing || std::mem::take(&mut self.refuse_next) {
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] route_seams::at("store.commit", Ctx::store(kind, phase, commitment));
+if self.commit().is_err() { #[cfg(mother_route_seams)] route_seams::note("store.commit.result",
+Ctx::store(kind, phase, commitment)); self.latch(); return Append::Uncertain; }
+#[cfg(mother_route_seams)] route_seams::at("store.commit.result", Ctx::store(kind, phase,
+commitment)); self.known.take(&Row {
+"#,
+    ),
+    // AM-2 B.2 (S4): the lock names, the session's seam, its forwarder to the
+    // store and the two poisoning helpers, each whole with its marker. The
+    // session's seam is in its seam-only child module (SB3E-R32.7); the
+    // facade holds only its declaration.
+    (
+        "host_session.rs",
+        r#"
+#[cfg(mother_route_seams)] pub mod route_s4; pub struct SessionDoor {
+"#,
+    ),
+    (
+        "host_session/route_s4.rs",
+        r#"
+use super::HostSession;
+#[cfg(mother_route_seams)] #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum RouteLock {
+ModelState, EvidenceInner, RunTable, Pending, Producers, Actions, }
+#[cfg(mother_route_seams)] impl HostSession { pub fn route_poison(&self, lock: RouteLock) {
+const M: &str = "nexus-mother-route-seam-S4-session"; std::hint::black_box(M.as_bytes()); fn poison<T>(
+mutex: &std::sync::Mutex<T>) { let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+{ let _held = mutex.lock(); panic!("route seam S4: session lock poisoned"); })); } match lock {
+RouteLock::ModelState => poison(&self.core.model.state), RouteLock::EvidenceInner => self.
+evidence.route_poison_inner(), RouteLock::RunTable => self.control.authority().runs().
+route_poison_runs(), RouteLock::Pending => poison(&self.core.pending), RouteLock::Producers =>
+poison(&self.core.producers), RouteLock::Actions => poison(&self.core.actions), } } }
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] pub(crate) fn route_poison_inner(&self) { const M: &str =
+"nexus-mother-route-seam-S4-evidence"; std::hint::black_box(M.as_bytes()); self.store.
+route_poison_inner(); }
+"#,
+    ),
+    (
+        "evidence_store.rs",
+        r#"
+#[cfg(mother_route_seams)] fn route_poison_inner(&self) { const M: &str =
+"nexus-mother-route-seam-S4-store"; std::hint::black_box(M.as_bytes()); let _ = std::panic::
+catch_unwind(std::panic::AssertUnwindSafe(|| { let _held = self.inner.lock(); panic!(
+"route seam S4: evidence store poisoned"); })); }
+"#,
+    ),
+    (
+        "authority/run.rs",
+        r#"
+#[cfg(mother_route_seams)] pub(crate) fn route_poison_runs(&self) { const M: &str =
+"nexus-mother-route-seam-S4-runs"; std::hint::black_box(M.as_bytes()); let _ = std::panic::
+catch_unwind(std::panic::AssertUnwindSafe(|| { let _held = self.runs.lock(); panic!(
+"route seam S4: run table poisoned"); })); }
+"#,
+    ),
 ];
+/// AM-2 B.2: every S4 name, by file, as a definition (`fn`) or a call, with
+/// its enclosing items: the two `route_poison_inner` are told apart by type
+/// and file, and each function has exactly its one caller.
+/// Every route seam marker in the crate, each exactly once (SB3E-R32.5).
+const ROUTE_MARKERS: [&str; 6] = [
+    "nexus-mother-route-seam-S1",
+    "nexus-mother-route-seam-S2",
+    "nexus-mother-route-seam-S4-session",
+    "nexus-mother-route-seam-S4-evidence",
+    "nexus-mother-route-seam-S4-store",
+    "nexus-mother-route-seam-S4-runs",
+];
+const S4_SITES: [&str; 7] = [
+    "authority/run.rs: fn route_poison_runs < implRunRegistry{",
+    "evidence_store.rs: fn route_poison_inner < implEvidenceStore{",
+    "evidence_store.rs: fn route_poison_inner < implPrimaryEvidence{",
+    "evidence_store.rs: route_poison_inner < #[cfg(mother_route_seams)]pub(crate)fnroute_poison_inner\
+     (&self){>implPrimaryEvidence{",
+    "host_session/route_s4.rs: fn route_poison < #[cfg(mother_route_seams)]implHostSession{",
+    "host_session/route_s4.rs: route_poison_inner < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cf\
+     g(mother_route_seams)]implHostSession{",
+    "host_session/route_s4.rs: route_poison_runs < matchlock{>pubfnroute_poison(&self,lock:RouteLock){>#[cfg\
+     (mother_route_seams)]implHostSession{",
+];
+fn s4_sites(sources: &[(String, String)]) -> Vec<String> {
+    let names = ["route_poison", "route_poison_inner", "route_poison_runs"];
+    let mut found = Vec::new();
+    for (file, source) in sources {
+        let code = mask(source);
+        let mut at = seam_sites(source, &names);
+        at.sort_unstable();
+        for at in at {
+            let name = code[at..]
+                .split(|c: char| c != '_' && !c.is_alphanumeric())
+                .next();
+            let word = if code[..at].trim_end().ends_with("fn") {
+                "fn "
+            } else {
+                ""
+            };
+            let chain = enclosing(&code, at).into_iter().map(|r| {
+                let (attrs, head) = header(&code, r);
+                format!("{}{head}", attrs.concat())
+            });
+            let chain: Vec<String> = chain.collect();
+            found.push(format!(
+                "{file}: {word}{} < {}",
+                name.unwrap(),
+                chain.join(">")
+            ));
+        }
+    }
+    found
+}
 /// The audited sites of `file`, in source order. `>chain` sets the chain
 /// (and base) of the sites after it, `+levels` the inner levels over the base,
 /// `=` the base again.
@@ -1616,13 +1823,16 @@ fn route_sites(source: &str) -> Result<(Vec<String>, Regions), String> {
             return Err(format!("call shape at byte {at}"));
         }
         let statement = flat(&lex(&source[at..=end])).replacen("route_seams::", "", 1);
-        // No enclosing statement or item carries a cfg of its own; each
-        // enclosing level is pinned as its attributes and header.
+        // No enclosing statement or item carries a cfg of its own, except
+        // exactly `#[cfg(mother_route_seams)]` (SB3E-R32.4: the R30.4
+        // `store.refused` note sits inside the seam-only S2 block), admitted
+        // into the audited chain; the site still needs its own attribute.
+        // Each enclosing level is pinned as its attributes and header.
         let own = header(&code, prior.len()..end + 1).0;
         let (mut gated, mut chain) = (own != [ROUTE], Vec::new());
         for range in enclosing(&code, at) {
             let (attrs, head) = header(&code, range.clone());
-            gated |= attrs.iter().any(|a| a.contains("[cfg"));
+            gated |= attrs.iter().any(|a| a.contains("[cfg")) && attrs != [ROUTE];
             chain.push(format!("{}{head}", attrs.concat()));
             regions.push((range, 0));
         }
@@ -1759,6 +1969,12 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     let good = "fn f() {\n    #[cfg(mother_route_seams)]\n    route_seams::at(\"p\", c);\n}\n";
     let found = route_sites(good).map(|r| r.0);
     assert_eq!(found, Ok(vec!["at(p,c);¦fnf(){¦}¦fnf(){".to_string()]));
+    // U4 S2: a site inside a block gated exactly by the route cfg is audited
+    // with that block's attribute in its chain.
+    let block = good.replace("fn f() {", "fn f() { #[cfg(mother_route_seams)] if a {");
+    let block = route_sites(&block.replace(");\n}", ");\n} }")).map(|r| r.0);
+    let chain = "at(p,c);¦eams)]ifa{¦}}¦#[cfg(mother_route_seams)]ifa{>fnf(){";
+    assert_eq!(block, Ok(vec![chain.to_string()]));
     let (call, sub) = ("at(\"p\", c);", |a: &str, b: &str| good.replace(a, b));
     // Enclosing conditions, however spelled (SB3E-R14.1).
     let spelled = [
@@ -1778,6 +1994,20 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
         format!("{good}use crate::broker::route_seams::at as w;\n"),
         sub("fn f() {", "fn f() { #[cfg(test)] {").replace(");\n}", ");\n} }"),
         sub("fn f() {", "fn f() { #[ cfg(test)] {").replace(");\n}", ");\n} }"),
+        sub(
+            "fn f() {",
+            "fn f() { #[cfg(any(test, mother_route_seams))] {",
+        )
+        .replace(");\n}", ");\n} }"),
+        sub(
+            "fn f() {",
+            "fn f() { #[cfg(mother_route_seams)] #[cfg(test)] {",
+        )
+        .replace(");\n}", ");\n} }"),
+        // SB3E-R32.4: a site without its own attribute inside a ROUTE block.
+        sub("    #[cfg(mother_route_seams)]\n", "")
+            .replace("fn f() {", "fn f() { #[cfg(mother_route_seams)] if a {")
+            .replace(");\n}", ");\n} }"),
     ]
     .into_iter()
     .chain(spelled)
@@ -1839,6 +2069,34 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
         (4, 1),
         "no other flag use"
     );
+    // S2 (U4): its field, initializer, arming and one-shot take, and nothing
+    // else; it is armed only from outside the crate.
+    assert_eq!(uses("route_refuse"), 4, "no other S2 use");
+    let arming = sources.iter().map(|(_, s)| lex(s));
+    let arming: usize = arming
+        .map(|t| t.iter().filter(|x| **x == "route_refuse_next").count())
+        .sum();
+    assert_eq!(arming, 1, "route_refuse_next: its definition only");
+    assert_eq!(uses("route_refused"), 2, "S2's test: defined, used once");
+    assert_eq!(
+        s4_sites(&sources),
+        S4_SITES,
+        "AM-2 B.2: the S4 functions and callers"
+    );
+    // SB3E-R32.5: every route marker is its own; none is a substring of
+    // another, so a scan for one never reports another.
+    let markers: Vec<String> = sources
+        .iter()
+        .filter(|(file, _)| file != "host_session/model_call_tests.rs")
+        .flat_map(|(_, s)| s.split("\"nexus-mother-route-seam").skip(1))
+        .map(|rest| format!("nexus-mother-route-seam{}", rest.split('"').next().unwrap()))
+        .collect();
+    assert_eq!(markers.len(), ROUTE_MARKERS.len(), "{markers:?}");
+    for marker in &markers {
+        assert!(ROUTE_MARKERS.contains(&marker.as_str()), "{marker}");
+        let within = markers.iter().filter(|m| m.contains(marker.as_str()));
+        assert_eq!(within.count(), 1, "{marker}: within another marker");
+    }
     let append = tokens
         .windows(5)
         .position(|w| w == ["fn", "append", "(", "&", "mut"]);
@@ -1851,7 +2109,7 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     });
     assert_eq!(
         body.filter(|t| **t == "kind").count(),
-        3,
+        6,
         "append's kind, unrebound"
     );
     let seams = &sources
@@ -3380,7 +3638,8 @@ fn sb3_b1b_test_seams_are_test_only() {
             scanned += 1;
         }
     }
-    assert_eq!(scanned, 7, "every production host_session module scanned");
+    // 8 since SB3E-R32.7: the seam-only `route_s4` is scanned as well.
+    assert_eq!(scanned, 8, "every production host_session module scanned");
     let run = include_str!("../authority/run.rs");
     for (name, source) in [("host_session.rs", parent), ("run.rs", run)] {
         assert_eq!(

@@ -15,7 +15,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// S1's marker (SB3E-R9): the first statement of each writer's real body.
 const M: &str = "nexus-mother-route-seam-S1";
@@ -157,6 +157,10 @@ pub struct Entry {
     pub request_ordinal: Option<u64>,
     pub phase: Option<String>,
     pub commitment: Option<String>,
+    /// The recording thread (AM-2 B.1: 4.2.1 consumption checks).
+    pub thread: std::thread::ThreadId,
+    /// When it was recorded (AM-2 B.1: position evidence only).
+    pub instant: Instant,
 }
 
 /// What an armed point does. Every arming turns recording on for all points.
@@ -274,6 +278,8 @@ fn fire(point: &'static str, note: bool, ctx: Ctx<'_>) {
             request_ordinal,
             phase: ctx.phase.map(str::to_owned),
             commitment: ctx.commitment.map(str::to_owned),
+            thread: std::thread::current().id(),
+            instant: Instant::now(),
         };
         s.entries.push(entry.clone());
         // Only an ordinary append fires the `store.commit` hold (design 4.2.1).

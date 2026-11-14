@@ -625,6 +625,12 @@ pub struct HostSession {
     report: OnceLock<recovery::StartupReport>,
 }
 
+/// SB-3E S4 (design 4.2, 4.5): `HostSession::route_poison` and the broker
+/// locks it names, in a seam-only child module (SB3E-R32.7: the facade
+/// holds no S4 line beyond this declaration, and re-exports nothing).
+#[cfg(mother_route_seams)]
+pub mod route_s4;
+
 /// Mother's closed File door. Its raw legacy representation is private and
 /// cannot be extracted, adopted, resumed, or used for another effect domain.
 pub struct SessionDoor {
