@@ -1147,7 +1147,9 @@ pub(super) struct Facts {
     pub(super) recorded: Vec<(LaneRole, InvocationId)>,
     /// `credit`'s claim (A.3): the session-bound run and the opening's attempt.
     pub(super) claim: Option<(RunId, u32)>,
-    /// The held points' acknowledged entries, in hold order.
+    /// The points the chain held, in order (R88.1: each acknowledgement must
+    /// answer its own point), and their acknowledged entries.
+    pub(super) points: Vec<&'static str>,
     pub(super) acks: Vec<s1::Entry>,
     /// The value applied while the last point was held (`none`: a control).
     pub(super) value: &'static str,
@@ -1279,9 +1281,11 @@ pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
         native.records().len(),
         mother.peer.lock().unwrap().len(),
     );
-    let (acks, steps) = chained(f, &mother, &["call.gate", "model.call.observed"]);
+    let points = ["call.gate", "model.call.observed"];
+    let (acks, steps) = chained(f, &mother, &points);
     // The T6 child half and `credit` judge the run first (`collect`).
-    let facts = collect(&o, &mother, &native, since, acks, "none");
+    let held = (points.to_vec(), acks);
+    let facts = collect(&o, &mother, &native, since, held, "none");
     assert!(
         steps.iter().all(|s| s == "Ok(())"),
         "the advance: {steps:?}"
@@ -1298,7 +1302,7 @@ fn collect(
     m: &Mother,
     native: &MemoryEvidence,
     since: (usize, usize, usize),
-    acks: Vec<s1::Entry>,
+    (points, acks): (Vec<&'static str>, Vec<s1::Entry>),
     value: &'static str,
 ) -> Facts {
     let (broker, trace) = (s1::drain_trace(), s5::drain_trace());
@@ -1324,6 +1328,7 @@ fn collect(
         request: d.request,
         recorded: d.recorded,
         claim,
+        points,
         acks,
         value,
         broker,

@@ -115,9 +115,9 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "e79e0affe8907f7bc331bbc3246dda8e7367792fca1ba5d2fc557c20666814f2";
-const MUTANTS: usize = 636;
-const REGIONS: usize = 31;
+const PINS_SHA256: &str = "051334c42e917f2b98c2c9a83980a81d2fdf699afd4703517cf6751d11e94ca3";
+const MUTANTS: usize = 809;
+const REGIONS: usize = 33;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
 /// included (R44.1). A reviewed commit that changes a file changes its row.
@@ -130,8 +130,8 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs a987d1b5da4b6e0b40273a842a728ab274f056d44dfdef51ee5255f643f1cc40
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 6add070a435d29fdbf60624ebc6bef2a7b18b6298106090a9de32d85af3e9d00
-witness.rs e2c92c1e734617ce43022280c904b8076d7dcec7ff15eabdd2955f70c9b2b297
+s5.rs c6b8fd6e4d61bc095affc6cecce3fccfbe42dbcf158aba8b7d1325b91ab57301
+witness.rs 2961f83a1b06d8d0c4388f5ee727dd177b0fafe7018bb0e780b34cd29dcf312b
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -1033,7 +1033,10 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
 /// SB3E-R86.4 (U5a; design 1.4 T7; mission Behaviour 12, I8): `s5.rs`
 /// composes the route with production's constructors (`hands.rs`,
 /// `session_home.rs`): each `file|tokens|count` row exactly, space-separated
-/// tokens. The differences are `T7_DIFFERENCES`, by name.
+/// tokens. The differences are `T7_DIFFERENCES`, by name. SB3E-R88.2: the
+/// counts are supplementary; production's composition itself, `hands.rs`
+/// `fn run` and `session_home.rs` `fn open_projected`, is two pinned regions,
+/// whole and token-equal, so no inactive copy or other branch can stand in.
 const T7: &str = "\
 host/src/hands.rs|SessionPort : : new (|1
 host/src/hands.rs|Coordinator : : open (|1
@@ -1042,6 +1045,7 @@ host/src/hands.rs|open_confirmed_file_door (|1
 host/src/hands.rs|open_file_door (|0
 host/src/hands.rs|SystemClock : : default (|1
 host/src/session_home.rs|open_with_history (|1
+host/src/session_home.rs|HostSession : : open (|0
 host/src/session_home.rs|bind_history_inspector (|1
 host/tests/route_cells/s5.rs|SessionPort : : new (|1
 host/tests/route_cells/s5.rs|Coordinator : : open (|1
@@ -1493,6 +1497,35 @@ fn s5_findings(s5: &str) -> Vec<String> {
     check(body.ends_with(&tail), "timeout: ends in abort".into());
     // SB3E-R57.6: `cfg` is a listed macro only as `cfg!(mother_route_seams)`.
     found.extend(cfg_findings(S5, s5));
+    found.extend(passive_findings(s5));
+    found
+}
+/// SB3E-R88.3 (mission Behaviour 7, R49.7): a cell's collection is passive.
+/// `collect` reads the journal only through `journal_view` (`journal()`
+/// calls `touch()`, which can run `file_stop`), calls no `state()` or
+/// `touch()`, and takes native deltas only from the projection, never from
+/// S1's `store.commit` entries.
+fn passive_findings(s5: &str) -> Vec<String> {
+    let Some(body) = item(s5, "collect") else {
+        return vec!["Passive: no fn collect in host/tests/route_cells/s5.rs".into()];
+    };
+    let t = lex(body);
+    let mut found = Vec::new();
+    for (name, read) in [
+        (
+            "journal",
+            "the journal through journal(), not journal_view()",
+        ),
+        ("state", "state()"),
+        ("touch", "touch()"),
+    ] {
+        if t.windows(3).any(|w| w == [".", name, "("]) {
+            found.push(format!("Passive: collect reads {read}"));
+        }
+    }
+    if t.contains(&"\"store.commit\"") {
+        found.push("Passive: collect reads store.commit".into());
+    }
     found
 }
 /// SB3E-R15.2's sweep: at each statement boundary inside a pinned region,
@@ -1667,6 +1700,17 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
                 ".open_file_door(request)",
             ),
             "T7: host/src/hands.rs: open_confirmed_file_door ( 0 times, not 1",
+        ),
+        // SB3E-R88.2: the expected constructor kept as an inactive copy.
+        (
+            "T7 an inactive copy of production's constructor",
+            planted(
+                &sources,
+                "host/src/session_home.rs",
+                "            let mut session = HostSession::open_with_history(\n                seed,\n                &dir.join(\"broker\"),\n                dir,\n                evidence.clone(),\n                Arc::new(SystemClock::default()),\n                confirmer,\n            )\n",
+                "            let mut session = if false {\n                HostSession::open_with_history(\n                    seed,\n                    &dir.join(\"broker\"),\n                    dir,\n                    evidence.clone(),\n                    Arc::new(SystemClock::default()),\n                    confirmer,\n                )\n            } else {\n                let clock = Arc::new(SystemClock::default());\n                HostSession::open(seed, &dir.join(\"broker\"), evidence.clone(), clock, confirmer)\n            }\n",
+            ),
+            "pin host/src/session_home.rs: pub(crate)fnopen_projected(seed",
         ),
     ];
     for (plant, sources, expected) in plants {

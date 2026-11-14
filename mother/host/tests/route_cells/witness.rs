@@ -104,12 +104,16 @@ fn tag(e: &s1::Entry, b: &Bound, inv: bool) -> String {
     format!("s={s} q={q} run={run} inv={inv} att={att} kind={kind} ord={ord}")
 }
 /// `TOKENS[0]` and `[1]`: the observed entry, then on its thread, later,
-/// exactly one note of this identity and ordinal, `refused:8.cas`; no
-/// `model.call.admitted` of it.
+/// exactly one note of this identity and ordinal, `refused:8.cas`, of the
+/// chat (kind `chat`, R88.1); no `model.call.admitted` of it.
 fn cas(observed: Option<&s1::Entry>, notes: &[&s1::Entry], admitted: bool) -> bool {
     observed.is_some_and(|o| {
         let [note] = notes else { return false };
-        note.point == "refused:8.cas" && note.thread == o.thread && note.tick > o.tick && !admitted
+        note.point == "refused:8.cas"
+            && note.kind == Some("chat")
+            && note.thread == o.thread
+            && note.tick > o.tick
+            && !admitted
     })
 }
 
@@ -141,11 +145,24 @@ pub(super) fn render(f: &Facts) -> String {
         (false, Some(o)) => format!("model.call.observed[{}]", tag(o, &b, inv)),
         (_, None) => "none".into(),
     };
-    let held = f.acks.last().map_or("none", |a| a.point);
-    let ack = if f.acks.iter().all(|a| mine(a, &b)) && !f.acks.is_empty() {
-        "held"
+    // R88.1: each acknowledgement answers its own held point: the chat's
+    // (kind `chat`, ord 4) of the bound attempt, and the very trace entry.
+    let held = f.points.last().copied().unwrap_or("none");
+    let answers = |(a, point): (&s1::Entry, &&str)| {
+        a.point == *point
+            && !a.note
+            && a.kind == Some("chat")
+            && a.request_ordinal == Some(4)
+            && mine(a, &b)
+            && f.broker.contains(a)
+    };
+    let pairs = f.acks.iter().zip(&f.points);
+    let ack = if !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers)
+    {
+        "held".to_string()
     } else {
-        "foreign"
+        let shown = f.acks.iter().map(|a| (a.point, a.kind, a.request_ordinal));
+        format!("unanswered{:?}", shown.collect::<Vec<_>>())
     };
     let won = if refused { "value" } else { "route" };
     let out = match (refused, admitted) {
@@ -432,6 +449,34 @@ fn witness_token_map_plants_each_fail() {
         }
     });
 }
+/// SB3E-R88.1: over the same refusing attempt, an acknowledgement rewritten
+/// to `kind=metadata, ord=3`, and the `refused:8.cas` note made
+/// `kind=metadata`, each leave a named difference (on 7d27cde5, measured RED,
+/// both compared equal).
+#[test]
+fn witness_acknowledgement_and_note_plants_each_differ() {
+    super::child(
+        "witness::witness_acknowledgement_and_note_plants_each_differ",
+        |_| {
+            let base = render(&refused());
+            let mut acks = refused();
+            for a in acks.acks.iter_mut() {
+                (a.kind, a.request_ordinal) = (Some("metadata"), Some(3));
+            }
+            let mut note = refused();
+            note.broker[2].kind = Some("metadata");
+            for (plant, f, fields) in [
+                ("acks kind=metadata ord=3", acks, &["value"][..]),
+                ("note kind=metadata", note, &["check", "out", "branch"][..]),
+            ] {
+                let diffs = compare(&base, &render(&f));
+                let named = |k: &&str| diffs.iter().any(|d| d.starts_with(&format!("{k}: ")));
+                assert!(fields.iter().all(named), "{plant}: {diffs:?}");
+                println!("WITNESS R88 plant {plant:?}: {diffs:?}");
+            }
+        },
+    );
+}
 /// One refused ord-4 chat (`call.gate`, `model.call.observed`, then the note
 /// `refused:8.cas` on its thread), its charge entry under the Builder's
 /// invocation; the scripted Sentinel's invocation is recorded too.
@@ -470,6 +515,11 @@ fn refused() -> Facts {
         thread,
         instant: std::time::Instant::now(),
     };
+    let broker = vec![
+        entry(1, "call.gate", false),
+        entry(2, "model.call.observed", false),
+        entry(3, "refused:8.cas", true),
+    ];
     let charge = nexus_mother::route_seams::Entry {
         tick: 1,
         point: "mother.charge.entry",
@@ -485,13 +535,10 @@ fn refused() -> Facts {
         request: 1,
         recorded: vec![(LaneRole::Builder, builder), (LaneRole::Sentinel, sentinel)],
         claim: Some((run, 1)),
-        acks: vec![entry(2, "model.call.observed", false)],
+        points: vec!["model.call.observed"],
+        acks: vec![broker[1].clone()],
         value: "quit",
-        broker: vec![
-            entry(1, "call.gate", false),
-            entry(2, "model.call.observed", false),
-            entry(3, "refused:8.cas", true),
-        ],
+        broker,
         mother: vec![charge],
         journal: Vec::new(),
         native: Vec::new(),
