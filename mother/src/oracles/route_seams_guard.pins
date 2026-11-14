@@ -15,6 +15,7 @@ host/tests/check_page.rs|include_str|"../../../kernel/src/inert_page/fixtures/re
 host/tests/check_page.rs|include_str|"../../../kernel/tests/fixtures/local_business.html"
 host/tests/route_cells/main.rs|include_str|"../../../../crates/nexus-governed-control/src/broker/route_seams.rs"
 host/tests/route_cells/store.rs|include_str|"route_fsync.c"
+host/tests/route_cells/witness.rs|include_str|"../session/model-bridge-expect.tsv"
 host/tests/session/coverage.rs|include_str|"sinks.tsv"
 host/tests/session/coverage.rs|include_str|"combination-receipts.tsv"
 host/tests/session/coverage.rs|include_str|"combination-rules.tsv"
@@ -730,3 +731,190 @@ pub(super) fn shim_witnessed(want: &str, stdout: &str) {
     assert_eq!(reports, 1, "one shim witness: {stdout}");
     println!("ROUTE SHIM SHA256 {want}");
 }
+@@@ host/tests/route_cells/main.rs
+macro_rules! cells {
+    () => {
+        #[test]
+        fn ctl_call_chat() {
+            let (name, id) = ("cells::ctl_call_chat", "ctl_call_chat");
+            let ran = super::s5::cell(name, id, super::s5::ctl_call_chat, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::control(&ran);
+            }
+        }
+    };
+}
+@@@ host/tests/route_cells/s5.rs
+let credited = credit(&d, &RECORDED, &broker, &trace);
+@@@ host/src/session_home.rs
+pub(crate) fn open_projected(
+        seed: SessionSeed,
+        dir: &Path,
+        confirmer: Confirmer,
+        mut projections: Vec<Arc<dyn EvidenceProjection>>,
+    ) -> Result<Self, HomeError> {
+        let ingress = seed.ingress();
+        let result = (|| {
+            if !dir.is_absolute() {
+                return Err(HomeError("absolute_path_required".into()));
+            }
+            // Capture before even creating the Home. All session stores below
+            // (broker evidence/resources, Mother journal and private payloads)
+            // live beneath this root. Emptiness excludes earlier state at every
+            // one of those locations; post-open record counts cannot prove it.
+            let initially_empty = home_has_no_prior_state(dir);
+            create_private(dir).map_err(|_| HomeError("home_unavailable".into()))?;
+            let recent = Arc::new(MemoryEvidence::new(256));
+            projections.push(recent.clone());
+            let evidence = PrimaryEvidence::open(
+                &dir.join("broker/p3-evidence/evidence.sqlite3"),
+                projections,
+            )
+            .map_err(|_| HomeError("evidence_unavailable".into()))?;
+            let mut session = HostSession::open_with_history(
+                seed,
+                &dir.join("broker"),
+                dir,
+                evidence.clone(),
+                Arc::new(SystemClock::default()),
+                confirmer,
+            )
+            .map_err(|_| HomeError("session_unavailable".into()))?;
+            session
+                .bind_history_inspector(Arc::new(nexus_mother::adapter::SessionHistoryInspector))
+                .map_err(|_| HomeError("mother_history".into()))?;
+            Ok(Self {
+                dir: dir.into(),
+                initially_empty,
+                session: Arc::new(session),
+                recent,
+                evidence,
+            })
+        })();
+        if result.is_err() {
+            ingress.fail();
+        }
+        result
+    }
+@@@ host/src/hands.rs
+fn run(
+        &mut self,
+        request: &SessionRequest,
+        confirmation: Arc<crate::terminal::TerminalConfirmer>,
+    ) {
+        if self.used {
+            self.screen.emit("REFUSED file_session_used\n");
+            return;
+        }
+        self.used = true;
+        let Some(workspace) = self.home.session.workspace() else {
+            self.screen.emit("REFUSED workspace_unavailable\n");
+            return;
+        };
+        let door = match self
+            .home
+            .session
+            .open_confirmed_file_door(request, confirmation)
+        {
+            Ok(door) => door,
+            Err(_) => {
+                self.screen.emit("DOOR REFUSED request_unavailable\n");
+                return;
+            }
+        };
+        let context = door.context();
+        let port = Arc::new(SessionPort::new(door, workspace.name.clone()));
+        let lanes: Vec<Arc<dyn Lane>> = LaneRole::ALL
+            .into_iter()
+            .map(|role| {
+                let mut lane = ScriptedLane::new(
+                    role,
+                    "Deterministic Hands demonstration; no model was called.",
+                    if role == LaneRole::Verifier {
+                        Verdict::Pass
+                    } else {
+                        Verdict::Continue
+                    },
+                );
+                if role == LaneRole::Builder {
+                    lane = lane.asking(vec![EffectRequest::CreateFile(FileCreate {
+                        name: self.config.name.clone(),
+                        content: self.config.text.clone(),
+                    })]);
+                }
+                Arc::new(ObservedLane {
+                    route: self.screen.stop.clone(),
+                    lane,
+                }) as Arc<dyn Lane>
+            })
+            .collect();
+        let result = (|| {
+            let journal = self.home.journal().map_err(|_| "journal_unavailable")?;
+            let private = self
+                .home
+                .private(context.clone())
+                .map_err(|_| "private_store_unavailable")?;
+            let lanes = Lanes::new(lanes).map_err(|_| "lane_configuration")?;
+            let coordinator = Coordinator::open(
+                journal,
+                port.clone(),
+                lanes,
+                Arc::new(SystemClock::default()),
+                private,
+            )
+            .map_err(|_| "coordinator_unavailable")?;
+            coordinator
+                .into_file_session()
+                .map_err(|_| "file_session_unavailable")
+        })();
+        let session = match result {
+            Ok(s) => s,
+            Err(code) => {
+                self.screen.emit(&format!("REFUSED {code}\n"));
+                return;
+            }
+        };
+        self.mission = Some(Mission {
+            session,
+            port,
+            id: None,
+            last: None,
+        });
+        let contract = MissionContract {
+            model: None,
+            notes: vec![],
+            deliverable: None,
+            page_facts: None,
+            owner_words: format!("Create {} with {} UTF-8 bytes, shown in full at the separate File approval.", self.config.name, self.config.text.len()),
+            restatement: format!("Create one approved top-level text file named {}. One File mission per fresh process; no in-process replacement. Emergency ends mission work.", self.config.name),
+            requested_folder: Some(workspace.name),
+            budget: Budget { max_duration_ms: 300_000, max_model_calls: 20, max_money_minor: 0 },
+            forbidden_effects: BTreeSet::from([EffectKind::Spend, EffectKind::Process, EffectKind::Network]),
+            questions: vec![],
+            pass_criteria: vec![PassCriterion { id: "exact_file".into(), text: "Create only the approved file with its exact approved content.".into() }],
+        };
+        let mission = self.mission.as_mut().expect("installed typed session");
+        let result = (|| {
+            #[cfg(test)]
+            hands_tests::review2_before_step(&self.screen, &self.home, "draft");
+            let drafted = mission.session.draft(contract);
+            #[cfg(test)]
+            hands_tests::review2_after_step(&self.screen, &self.home, "draft", drafted.is_err());
+            let id = drafted?;
+            mission.id = Some(id);
+            #[cfg(test)]
+            hands_tests::review2_before_step(&self.screen, &self.home, "submit");
+            let submitted = mission.session.submit(id);
+            #[cfg(test)]
+            hands_tests::review2_after_step(&self.screen, &self.home, "submit", submitted.is_err());
+            submitted?;
+            mission.session.request_consent(id)?;
+            Ok::<(), CoordinatorError>(())
+        })();
+        if let Err(e) = result {
+            self.screen
+                .emit(&format!("MISSION REFUSED {}\n", mother_code(&e)));
+            return;
+        }
+        self.progress();
+    }
