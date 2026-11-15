@@ -26,7 +26,7 @@ copy's git tree hash (its own git directory) must be unchanged after it.
   lane    the route lane (the wrapper sets the cfg), built whole and run with
           only the plant's listed `tests` (`--exact`, each name; SB3E-R94.3
           Q3a): every `tests` name must fail (each failed test's own child
-          reason kept).
+          reason kept, whole: SB3E-R97.3(a)).
 
 Each `expect` finding (R44.4) must appear in the plant's own failure text (lane: its
 child reasons) and a refused build then never kills; R53: all plants but two carry one.
@@ -160,7 +160,8 @@ class Runner:
             section = out.split(f"---- {test} stdout ----", 1)
             section = section[1].split("\n---- ", 1)[0] if len(section) > 1 else ""
             child = re.findall(r"panicked at ((?!mother/host/tests/route_cells/main\.rs:)[^\n]*):\n([^\n]*)", section)
-            why[test] = {"child": [(a, b.strip()[:400]) for a, b in child],
+            # SB3E-R97.3(a): judged on the whole child reason (a cut one hid a row's own finding, F-PLANTS-BORROWED).
+            why[test] = {"child": [(a, b.strip()) for a, b in child],
                          "result": re.findall(r"TIMEOUT [^\n]*", section)}
         return {"exit": x.returncode, "passed": len(re.findall(r"^test \S+ \.\.\. ok", out, re.M)),
                 "failed": failed, "why": why}
@@ -364,7 +365,8 @@ tree = os.path.dirname(os.path.dirname(os.getcwd()))
 with open(os.path.join(os.path.dirname(tree), "lane-runs.log"), "a") as log:
     log.write(" ".join(sys.argv[1:]) + "\n")
 planted = any("PLANTED" in open(os.path.join(tree, f)).read() for f in ("a.txt", "b.txt"))
-reasons = {"cells::t_pass": None, "cells::t_fail": "reason fail", "cells::t_other": "reason other"}
+reasons = {"cells::t_pass": None, "cells::t_fail": "reason fail", "cells::t_other": "reason other",
+           "cells::t_long": "x" * 500 + " tail finding"}
 names = sys.argv[sys.argv.index("--exact") + 1:] if "--exact" in sys.argv else list(reasons)
 failed = [n for n in names if n in reasons and planted and reasons[n]]
 for name in names:
@@ -467,6 +469,18 @@ def selftest(work):
           and rows[1]["missing"] == ["an absent finding"] and rows[5]["missing"] == ["reason fail"]
           and all(r["restored"] for r in rows) and runner.tree_hash() == start
           and rows[1]["tree_before"] == rows[0]["tree_before"] == start, runs=runs)
+
+    # SB3E-R97.4 (F-PLANTS-BORROWED, G4): an expect carried only by an unlisted failing test of the (shared) run never
+    # counts; and a row's own finding past 400 characters of its child reason does.
+    w = os.path.join(work, "borrowed")
+    runner, start = fake_runner(w)
+    rows, _ = run_plants(runner, [fake("u1", "lane", "b.txt", ["cells::t_fail"], ["reason other"], "beta", "beta PLANTED"),
+                                  fake("u2", "lane", "b.txt", ["cells::t_other"], ["reason other"], "beta", "beta PLANTED"),
+                                  fake("u3", "lane", "a.txt", ["cells::t_long"], ["tail finding"])])
+    check("c_borrowed_survives", lines(os.path.join(w, "lane-runs.log"))[0] == "--exact cells::t_fail cells::t_other"
+          and rows[0]["result"]["failed"] == ["cells::t_fail", "cells::t_other"] and not rows[0]["killed"]
+          and rows[0]["missing"] == ["reason other"] and rows[1]["killed"] and runner.tree_hash() == start)
+    check("c_untruncated", rows[2]["killed"] and rows[2]["missing"] == [] and all(r["restored"] for r in rows))
 
     failed = [c["control"] for c in checks if not c["ok"]]
     print(json.dumps({"controls": len(checks), "failed": failed, "checks": checks,
