@@ -128,14 +128,76 @@ const ROUTE_CELLS: &str = "\
 cells.rs a0db8fa3831e75b432e451c8282939836850b2140f689c259f051ff8fb29874b
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 5c41f617582abf3a835c5102c621cab3b77074e2be286241f9cd7f00bc6723d6
+main.rs 53880db0e37791ead80b50b43571a56db3402acfe79bd5a4ecaa0354c39a011a
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
 s5.rs 1b2c2f9b90c1ebd8701aaae48c987943684e0795b805f9ac402969b81f31fcd3
+s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
+s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
+s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
 witness.rs 7f931ad82d0e6ccc7aeecb51e89b141756aadd18b154f648211a5a94293d65bc
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
     ROUTE_CELLS.lines().filter_map(|l| l.split_once(' '))
+}
+/// F-S5-SPLIT (the adopted amendment to AM-2 A.2 item 1, section 4 items 1
+/// and 2): the S5 boundary is `s5.rs` and these section files, a closed list,
+/// one row each: `file|unit|sink:dim,..|ctl_..,..|imports|helpers` (`-` is
+/// empty). `imports` is every item the file's `use` statements name, and
+/// `helpers` the `pub(super)` names it may expose besides its drivers. `s5.rs`
+/// is the first row; its imports are `S5_SUPER` (G-S3, in `s5_findings`). A
+/// stub's lists are empty: its unit fills them.
+const S5_SECTIONS: &str = "\
+s5.rs|U5|call_chat:ingress|ctl_call_chat|S5_SUPER|-
+s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|-|-
+s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|-|-
+s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
+";
+/// Item 1(a): the directory's files that are not sections, closed.
+const NON_SECTIONS: [&str; 7] = [
+    "cells.rs",
+    "grant.rs",
+    "locks.rs",
+    "main.rs",
+    "route_fsync.c",
+    "store.rs",
+    "witness.rs",
+];
+/// One `S5_SECTIONS` row.
+struct Row<'a> {
+    file: &'a str,
+    unit: &'a str,
+    pairs: Vec<&'a str>,
+    controls: Vec<&'a str>,
+    imports: Vec<&'a str>,
+    helpers: Vec<&'a str>,
+}
+fn list(field: &str) -> Vec<&str> {
+    let named = field.split(',').filter(|x| !x.is_empty() && *x != "-");
+    named.collect()
+}
+/// The rows of `data`; a line that is not six fields is no row (a finding in
+/// `sections_with`).
+fn section_rows(data: &str) -> Vec<Row<'_>> {
+    let mut rows = Vec::new();
+    for line in data.lines() {
+        if let [file, unit, pairs, controls, imports, helpers] =
+            line.split('|').collect::<Vec<_>>()[..]
+        {
+            rows.push(Row {
+                file,
+                unit,
+                pairs: list(pairs),
+                controls: list(controls),
+                imports: list(imports),
+                helpers: list(helpers),
+            });
+        }
+    }
+    rows
+}
+fn stem(file: &str) -> &str {
+    file.strip_suffix(".rs").unwrap_or(file)
 }
 /// SB3E-R55.6 (Fable A-N2): a row that is not `name sha256` is a finding.
 fn rows_findings(rows: &str) -> Vec<String> {
@@ -181,6 +243,9 @@ usestd::time::{Duration,Instant};\n\
 modgrant;\n\
 modlocks;\n\
 mods5;\n\
+mods5_close;\n\
+mods5_r34;\n\
+mods5_reg;\n\
 modstore;\n\
 macro_rules!cells\n\
 #[rustfmt::skip]modcells;\n\
@@ -1001,6 +1066,7 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
             if defined != ["ctl_call_chat"] {
                 found.push(format!("U5 macro: the terminal arm defines {defined:?}"));
             }
+            found.extend(control_binding(body));
         } else {
             let words = pattern.iter().take_while(|w| **w != ";").count();
             let slug = format!("rc_{}", pattern[..words].join("_"));
@@ -1012,6 +1078,9 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
             }
             if defined != [slug.as_str()] {
                 found.push(format!("U5 macro: the arm {slug} defines {defined:?}"));
+            }
+            if words == 4 {
+                found.extend(arm_binding(&slug, (pattern[1], pattern[2]), body));
             }
             arms.push(slug);
         }
@@ -1027,6 +1096,72 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
     }
     for entry in manifest.iter().filter(|m| !arms.contains(m)) {
         found.push(format!("U5 macro: the manifest entry {entry} has no arm"));
+    }
+    found
+}
+/// F-S5-SPLIT item 1(d): the drivers a `cells!` arm names, as `super::<stem>::
+/// <fn>`; the runner `super::s5::cell` and `super::witness::*` are not drivers.
+fn drivers<'a>(body: &[&'a str]) -> Vec<(&'a str, &'a str)> {
+    let path = |k: &usize| {
+        body[*k..].starts_with(&["super", ":", ":"])
+            && body.get(k + 4..k + 6) == Some(&[":", ":"][..])
+    };
+    let at = (0..body.len())
+        .filter(path)
+        .filter_map(|k| Some((body[k + 3], *body.get(k + 6)?)));
+    at.filter(|&(s, f)| s != "witness" && (s, f) != ("s5", "cell"))
+        .collect()
+}
+/// Item 1(d): a cell arm for `(sink, dim)` names its driver in the section
+/// that owns the pair.
+fn arm_binding(slug: &str, (sink, dim): (&str, &str), body: &[&str]) -> Vec<String> {
+    let pair = format!("{sink}:{dim}");
+    let rows = section_rows(S5_SECTIONS);
+    let Some(owner) = rows.iter().find(|r| r.pairs.contains(&pair.as_str())) else {
+        return vec![format!(
+            "S5 sections: the arm {slug} has no section owning {pair}"
+        )];
+    };
+    let named = drivers(body);
+    let mut found: Vec<String> = named
+        .iter()
+        .filter(|(s, _)| *s != stem(owner.file))
+        .map(|(s, _)| format!("S5 sections: the arm {slug} calls {s}, which does not own {pair}"))
+        .collect();
+    if named.is_empty() {
+        found.push(format!("S5 sections: the arm {slug} names no driver"));
+    }
+    found
+}
+/// Item 1(d): each control the terminal arm defines names its drivers in the
+/// section that lists it.
+fn control_binding(body: &[&str]) -> Vec<String> {
+    let rows = section_rows(S5_SECTIONS);
+    let mut found = Vec::new();
+    let defines = |k: &usize| {
+        body[*k - 1] == "fn"
+            && body[*k]
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    };
+    for k in (1..body.len()).filter(defines) {
+        let open = (k..body.len())
+            .find(|&j| body[j] == "{")
+            .unwrap_or(body.len());
+        let named = drivers(&body[open.min(body.len())..close_of(body, open).min(body.len())]);
+        let Some(row) = rows.iter().find(|r| r.controls.contains(&body[k])) else {
+            found.push(format!(
+                "S5 sections: the control {} is listed by no section",
+                body[k]
+            ));
+            continue;
+        };
+        for (s, _) in named.iter().filter(|(s, _)| *s != stem(row.file)) {
+            found.push(format!(
+                "S5 sections: {} calls {s}, which does not list it",
+                body[k]
+            ));
+        }
     }
     found
 }
@@ -1099,11 +1234,32 @@ fn t7_findings(sources: &[(String, String)]) -> Vec<String> {
         }
     }
     let s5 = lex(text(sources, S5));
-    for w in s5.windows(5) {
-        let path = format!("{}::{}(", w[0], w[3]);
-        let composed = T7_TYPES.contains(&w[0]) && w[1..3] == [":", ":"] && w[4] == "(";
-        if composed && !T7_PATHS.contains(&path.as_str()) {
+    for path in composed(&s5) {
+        if !T7_PATHS.contains(&path.as_str()) {
             found.push(format!("T7: {S5} constructs {path}"));
+        }
+    }
+    // F-S5-SPLIT section 4 item 6: in a section every `s5.rs` needle counts
+    // 0, and no composed type is constructed.
+    for row in section_rows(S5_SECTIONS)
+        .iter()
+        .filter(|r| r.file != "s5.rs")
+    {
+        let file = format!("{CELLS}{}", row.file);
+        let Some(source) = find(sources, &file).filter(|s| tokens(s).is_ok()) else {
+            continue;
+        };
+        let tokens = lex(source);
+        let needles = T7.lines().filter_map(|r| r.strip_prefix(&format!("{S5}|")));
+        for needle in needles.filter_map(|r| r.split('|').next()) {
+            let words: Vec<&str> = needle.split(' ').collect();
+            let got = tokens.windows(words.len()).filter(|w| *w == words).count();
+            if got != 0 {
+                found.push(format!("T7: {file}: {needle} {got} times, not 0"));
+            }
+        }
+        for path in composed(&tokens) {
+            found.push(format!("T7: {file} constructs {path}"));
         }
     }
     if !found.is_empty() {
@@ -1112,6 +1268,20 @@ fn t7_findings(sources: &[(String, String)]) -> Vec<String> {
         ));
     }
     found
+}
+/// The `Type::name(` paths of the composed types (`T7_TYPES`) in `tokens`.
+fn composed(tokens: &[&str]) -> Vec<String> {
+    let paths = tokens
+        .windows(5)
+        .filter(|w| T7_TYPES.contains(&w[0]) && w[1..3] == [":", ":"] && w[4] == "(");
+    paths.map(|w| format!("{}::{}(", w[0], w[3])).collect()
+}
+/// `file`'s text in `sources`, if it is there.
+fn find<'a>(sources: &'a [(String, String)], file: &str) -> Option<&'a str> {
+    sources
+        .iter()
+        .find(|(f, _)| f == file)
+        .map(|(_, s)| s.as_str())
 }
 /// SB3E-R44.3, R51.2: a source `tokens` refuses, as its finding.
 fn lex_finding(file: &str, e: &str) -> String {
@@ -1269,8 +1439,20 @@ fn route_leaks(source: &str) -> usize {
         .filter(|&at| !gated(at))
         .count()
 }
-fn port_uses(s5: &str) -> Vec<String> {
-    let tokens = lex(s5);
+/// A.2 item 3 (c) and F-S5-SPLIT section 4 item 4: each `SessionPort` or
+/// `SessionDoor` use in `file`, when they are not exactly its list (`s5.rs`:
+/// `PORT_USES`; a section: none, as its row lists no port use).
+fn port_uses(file: &str, source: &str) -> Option<Vec<String>> {
+    let uses = port_rows(source);
+    let listed: Vec<&str> = if file == S5 {
+        PORT_USES.lines().collect()
+    } else {
+        Vec::new()
+    };
+    (uses != listed).then_some(uses)
+}
+fn port_rows(source: &str) -> Vec<String> {
+    let tokens = lex(source);
     let at = (0..tokens.len()).filter(|&i| ["SessionPort", "SessionDoor"].contains(&tokens[i]));
     let row = |i: usize| {
         let (lo, hi) = (i.saturating_sub(3), (i + 4).min(tokens.len()));
@@ -1333,13 +1515,7 @@ fn s5_findings(s5: &str) -> Vec<String> {
     }
     // (a) the counter's writes only in `drive_call` (there is no `Driver::new`).
     for i in (0..tokens.len()).filter(|&i| outside(i)) {
-        let next = |k: usize| tokens.get(i + k).copied().unwrap_or("");
-        let op = next(1).len() == 1 && "+-*/%|&^".contains(next(1)) && next(2) == "=";
-        let shift = ["<", ">"].contains(&next(1)) && next(2) == next(1) && next(3) == "=";
-        let set = next(1) == "=" && !["=", ">"].contains(&next(2));
-        let assigned = tokens[i] == "calls" && (set || op || shift);
-        let write = WRITES.contains(&tokens[i]) || tokens[i].starts_with("fetch_");
-        if write || assigned {
+        if counter_write(&tokens, i) {
             check(
                 false,
                 format!("(a) counter write `{}` outside drive_call", tokens[i]),
@@ -1351,44 +1527,14 @@ fn s5_findings(s5: &str) -> Vec<String> {
         "(a) no second counter".into(),
     );
     // G-B1: no raw identifier, no macro definition, only the listed macros.
-    let b = code.as_bytes();
-    let word = |p: usize| {
-        b.get(p)
-            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_')
-    };
-    for (p, _) in code.match_indices("r#") {
-        if word(p + 2) && !p.checked_sub(1).is_some_and(word) {
-            let name = code[p + 2..].split(|c: char| !c.is_alphanumeric() && c != '_');
-            let name = name.into_iter().next().unwrap_or("");
-            check(false, format!("G-B1: a raw identifier r#{name}"));
-        }
-    }
-    for (i, t) in tokens.iter().enumerate() {
-        if ["macro_rules", "macro"].contains(t) {
-            check(false, format!("G-B1: a macro definition {t}"));
-        }
-        let next = |k: usize| tokens.get(i + k).copied().unwrap_or("");
-        let invoked = next(1) == "!" && ["(", "[", "{"].contains(&next(2));
-        let ident = t.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_');
-        if ident && invoked && !S5_MACROS.contains(t) {
-            check(false, format!("G-B1: an unlisted macro {t}!"));
-        }
+    for finding in gb1_findings(&code, &tokens) {
+        check(false, finding);
     }
     // (b) no other route to the broker's model call; no re-exported handle.
-    for id in [
-        "model_call",
-        "call_model",
-        "model_call_private",
-        "EffectPort",
-        "ModelCaller",
-    ] {
+    for id in ROUTE_IDS {
         check(n(&[id]) == 0, format!("(b) {id}"));
     }
-    let reexport = tokens.windows(2).any(|w| w[0] == "pub" && w[1] == "use");
-    let scoped = tokens
-        .windows(5)
-        .any(|w| w[0] == "pub" && w[1] == "(" && w[4] == "use");
-    check(!reexport && !scoped, "(b) no re-export".into());
+    check(!reexports(&tokens), "(b) no re-export".into());
     // (c) the port is made once, inside `Coordinator::open`, and never kept.
     let open = n(&["Coordinator", ":", ":", "open", "("]) == 1;
     let open = s5.find("Coordinator::open(").filter(|_| open);
@@ -1398,11 +1544,9 @@ fn s5_findings(s5: &str) -> Vec<String> {
     let made: Vec<usize> = made.map(|i| at(tokens[i])).collect();
     let inside = made.len() == 1 && made.iter().all(|p| open.contains(p));
     check(inside, "(c) the port made outside Coordinator::open".into());
-    let ports = port_uses(s5);
-    check(
-        ports == PORT_USES.lines().collect::<Vec<_>>(),
-        format!("(c) port uses {ports:?}"),
-    );
+    if let Some(ports) = port_uses(S5, s5) {
+        check(false, format!("(c) port uses {ports:?}"));
+    }
     // (d), G-S3: the parent's items only by the pinned import list; no glob,
     // no path through `crate`, `self`, `super` or a sibling module.
     let mut imported = Vec::new();
@@ -1438,13 +1582,7 @@ fn s5_findings(s5: &str) -> Vec<String> {
     // `.status(`, `.wait(`, `try_wait`, `wait_with_output`, `kill`, or a
     // `Command::` path other than `Command::new`.
     for (i, t) in tokens.iter().enumerate() {
-        let next = |k: usize| tokens.get(i + k).copied().unwrap_or("");
-        let method = i > 0 && tokens[i - 1] == "." && next(1) == "(";
-        let called = ["output", "status", "wait"].contains(t) || *t == "spawn" && next(2) == ")";
-        let path = *t == "Command" && next(1) == ":" && next(3) != "new";
-        let waits =
-            method && called || path || ["try_wait", "wait_with_output", "kill"].contains(t);
-        if waits && !bound.contains(&at(tokens[i])) {
+        if child_wait(&tokens, i) && !bound.contains(&at(tokens[i])) {
             check(false, format!("G-S4: an unbounded child wait ({t})"));
         }
     }
@@ -1497,7 +1635,76 @@ fn s5_findings(s5: &str) -> Vec<String> {
     check(body.ends_with(&tail), "timeout: ends in abort".into());
     // SB3E-R57.6: `cfg` is a listed macro only as `cfg!(mother_route_seams)`.
     found.extend(cfg_findings(S5, s5));
-    found.extend(passive_findings(s5));
+    found.extend(passive_findings(S5, s5));
+    // F-S5-SPLIT section 4 item 12: a new check, listed separately.
+    found.extend(alias_findings(S5, s5));
+    found
+}
+/// Rule (b): the other routes to the broker's model call.
+const ROUTE_IDS: [&str; 5] = [
+    "model_call",
+    "call_model",
+    "model_call_private",
+    "EffectPort",
+    "ModelCaller",
+];
+/// Rule (b): a `pub use` or `pub(..) use` re-export.
+fn reexports(tokens: &[&str]) -> bool {
+    let reexport = tokens.windows(2).any(|w| w[0] == "pub" && w[1] == "use");
+    let scoped = tokens
+        .windows(5)
+        .any(|w| w[0] == "pub" && w[1] == "(" && w[4] == "use");
+    reexport || scoped
+}
+/// Rule (a): token `i` writes the counter (a `WRITES` or `fetch_*` name, or
+/// `calls` assigned).
+fn counter_write(tokens: &[&str], i: usize) -> bool {
+    let next = |k: usize| tokens.get(i + k).copied().unwrap_or("");
+    let op = next(1).len() == 1 && "+-*/%|&^".contains(next(1)) && next(2) == "=";
+    let shift = ["<", ">"].contains(&next(1)) && next(2) == next(1) && next(3) == "=";
+    let set = next(1) == "=" && !["=", ">"].contains(&next(2));
+    let assigned = tokens[i] == "calls" && (set || op || shift);
+    WRITES.contains(&tokens[i]) || tokens[i].starts_with("fetch_") || assigned
+}
+/// G-S4: token `i` starts or awaits a child: `.spawn()`, `.output(`,
+/// `.status(`, `.wait(`, `try_wait`, `wait_with_output`, `kill`, or a
+/// `Command::` path other than `Command::new`.
+fn child_wait(tokens: &[&str], i: usize) -> bool {
+    let (t, next) = (tokens[i], |k: usize| {
+        tokens.get(i + k).copied().unwrap_or("")
+    });
+    let method = i > 0 && tokens[i - 1] == "." && next(1) == "(";
+    let called = ["output", "status", "wait"].contains(&t) || t == "spawn" && next(2) == ")";
+    let path = t == "Command" && next(1) == ":" && next(3) != "new";
+    method && called || path || ["try_wait", "wait_with_output", "kill"].contains(&t)
+}
+/// G-B1 over `code` (`mask`ed) and its `tokens`: raw identifiers, macro
+/// definitions and macros not in `S5_MACROS`, in that order.
+fn gb1_findings(code: &str, tokens: &[&str]) -> Vec<String> {
+    let mut found = Vec::new();
+    let b = code.as_bytes();
+    let word = |p: usize| {
+        b.get(p)
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_')
+    };
+    for (p, _) in code.match_indices("r#") {
+        if word(p + 2) && !p.checked_sub(1).is_some_and(word) {
+            let name = code[p + 2..].split(|c: char| !c.is_alphanumeric() && c != '_');
+            let name = name.into_iter().next().unwrap_or("");
+            found.push(format!("G-B1: a raw identifier r#{name}"));
+        }
+    }
+    for (i, t) in tokens.iter().enumerate() {
+        if ["macro_rules", "macro"].contains(t) {
+            found.push(format!("G-B1: a macro definition {t}"));
+        }
+        let next = |k: usize| tokens.get(i + k).copied().unwrap_or("");
+        let invoked = next(1) == "!" && ["(", "[", "{"].contains(&next(2));
+        let ident = t.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_');
+        if ident && invoked && !S5_MACROS.contains(t) {
+            found.push(format!("G-B1: an unlisted macro {t}!"));
+        }
+    }
     found
 }
 /// SB3E-R88.3 (mission Behaviour 7, R49.7): a cell's collection is passive.
@@ -1505,26 +1712,534 @@ fn s5_findings(s5: &str) -> Vec<String> {
 /// calls `touch()`, which can run `file_stop`), calls no `state()` or
 /// `touch()`, and takes native deltas only from the projection, never from
 /// S1's `store.commit` entries.
-fn passive_findings(s5: &str) -> Vec<String> {
-    let Some(body) = item(s5, "collect") else {
-        return vec!["Passive: no fn collect in host/tests/route_cells/s5.rs".into()];
-    };
-    let t = lex(body);
+/// F-S5-SPLIT section 4 item 5: every `fn collect*` of every listed file is
+/// passive; `s5.rs` has its `collect`.
+fn passive_findings(file: &str, source: &str) -> Vec<String> {
+    let t = lex(source);
+    let mut names: Vec<&str> = (1..t.len())
+        .filter(|&i| t[i - 1] == "fn" && t[i].starts_with("collect"))
+        .map(|i| t[i])
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    let none = || format!("Passive: no fn collect in {S5}");
+    if file == S5 && !names.contains(&"collect") {
+        return vec![none()];
+    }
     let mut found = Vec::new();
-    for (name, read) in [
-        (
-            "journal",
-            "the journal through journal(), not journal_view()",
-        ),
-        ("state", "state()"),
-        ("touch", "touch()"),
-    ] {
-        if t.windows(3).any(|w| w == [".", name, "("]) {
-            found.push(format!("Passive: collect reads {read}"));
+    for name in names {
+        let Some(body) = item(source, name) else {
+            found.push(match file == S5 && name == "collect" {
+                true => none(),
+                false => format!("Passive: fn {name} is not one item in {file}"),
+            });
+            continue;
+        };
+        let t = lex(body);
+        for (call, read) in [
+            (
+                "journal",
+                "the journal through journal(), not journal_view()",
+            ),
+            ("state", "state()"),
+            ("touch", "touch()"),
+        ] {
+            if t.windows(3).any(|w| w == [".", call, "("]) {
+                found.push(format!("Passive: {name} reads {read}"));
+            }
+        }
+        if t.contains(&"\"store.commit\"") {
+            found.push(format!("Passive: {name} reads store.commit"));
         }
     }
-    if t.contains(&"\"store.commit\"") {
-        found.push("Passive: collect reads store.commit".into());
+    found
+}
+/// F-S5-SPLIT item 1(a), (d) and section 4 item 8 over the harness, every
+/// finding: the list itself, the closed list, distinct digests, each
+/// section's owner header and closed `pub(super)` surface, no section named
+/// outside `main.rs`, S5 arming only inside the boundary; then each section's
+/// profile (`section_findings`). `files` as `route_cells_files`, `sources` as
+/// the walk.
+fn sections_findings(sources: &[(String, String)], files: &[(String, Vec<u8>)]) -> Vec<String> {
+    sections_with(ROUTE_CELLS, S5_SECTIONS, sources, files)
+}
+/// `sections_findings` over the given `ROUTE_CELLS` and `S5_SECTIONS` data.
+fn sections_with(
+    listed: &str,
+    data: &str,
+    sources: &[(String, String)],
+    files: &[(String, Vec<u8>)],
+) -> Vec<String> {
+    let rows = section_rows(data);
+    let mut found = rows_check(data, &rows);
+    found.extend(closed_findings(listed, &rows, files));
+    found.extend(digest_findings(&rows, files));
+    let harness: Vec<(&str, &str)> = sources
+        .iter()
+        .filter_map(|(f, s)| Some((f.strip_prefix(CELLS)?, s.as_str())))
+        .filter(|(f, _)| f.ends_with(".rs"))
+        .collect();
+    let lexed = harness.iter().filter_map(|(f, s)| {
+        let e = tokens(s).err()?;
+        Some(lex_finding(&format!("{CELLS}{f}"), &e))
+    });
+    let lexed: Vec<String> = lexed.collect();
+    if !lexed.is_empty() {
+        found.extend(lexed);
+        return found;
+    }
+    let main = harness.iter().find(|(f, _)| *f == "main.rs");
+    let main = main.map_or(Vec::new(), |(_, s)| macro_drivers(s));
+    for row in rows.iter().filter(|r| r.file != "s5.rs") {
+        let Some(&(_, source)) = harness.iter().find(|(f, _)| *f == row.file) else {
+            continue;
+        };
+        found.extend(owner_findings(row, source, &main));
+        found.extend(section_findings(row.file, row, source, &pins()));
+    }
+    found.extend(reach_findings(&rows, &harness));
+    found
+}
+/// The list itself: six fields a row, `s5.rs` (U5, `S5_SUPER`) first, each
+/// file, pair and control in one row, and no section row importing a composed
+/// type or an item of `nexus_mother::adapter`, `nexus_mother::coordinator` or
+/// `nexus_governed_control::evidence_store` (item 1(c)(iii)).
+fn rows_check(data: &str, rows: &[Row]) -> Vec<String> {
+    let malformed = data.lines().filter(|l| l.split('|').count() != 6);
+    let mut found: Vec<String> = malformed
+        .map(|l| format!("S5 sections: a malformed row {l:?}"))
+        .collect();
+    let first = rows.first().map(|r| (r.file, r.unit, r.imports.as_slice()));
+    if first != Some(("s5.rs", "U5", &["S5_SUPER"][..])) {
+        found.push("S5 sections: the first row is not s5.rs|U5 with S5_SUPER".into());
+    }
+    let banned = [
+        "nexus_mother::adapter",
+        "nexus_mother::coordinator",
+        "nexus_governed_control::evidence_store",
+    ];
+    let mut seen: Vec<&str> = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        let named = [row.file].into_iter().chain(row.pairs.iter().copied());
+        for x in named.chain(row.controls.iter().copied()) {
+            if seen.contains(&x) {
+                found.push(format!("S5 sections: {x} is in two rows"));
+            }
+            seen.push(x);
+        }
+        for x in row.imports.iter().filter(|_| i > 0) {
+            let typed = x.split("::").any(|s| T7_TYPES.contains(&s));
+            if typed || banned.iter().any(|b| x.starts_with(b)) {
+                found.push(format!("S5 sections: the row {} imports {x}", row.file));
+            }
+        }
+    }
+    found
+}
+/// Item 1(a): every file of the directory and every `ROUTE_CELLS` name is a
+/// listed section or a non-section file (an `s5*.rs` one is a section), and
+/// every listed file has its `ROUTE_CELLS` row.
+fn closed_findings(listed: &str, rows: &[Row], files: &[(String, Vec<u8>)]) -> Vec<String> {
+    let sections: Vec<&str> = rows.iter().map(|r| r.file).collect();
+    let pinned = listed.lines().filter_map(|l| l.split_once(' '));
+    let pinned: Vec<&str> = pinned.map(|r| r.0).collect();
+    let named = files.iter().filter_map(|(f, _)| f.strip_prefix(CELLS));
+    let mut names: Vec<&str> = named.chain(pinned.iter().copied()).collect();
+    names.sort_unstable();
+    names.dedup();
+    let mut found = Vec::new();
+    let unknown = |n: &&str| !sections.contains(n) && !NON_SECTIONS.contains(n);
+    for name in names.into_iter().filter(unknown) {
+        found.push(match name.starts_with("s5") && name.ends_with(".rs") {
+            true => format!("S5 sections: {name} is not a listed section"),
+            false => format!("S5 sections: {name} is neither a section nor a non-section file"),
+        });
+    }
+    let unpinned = sections
+        .iter()
+        .chain(&NON_SECTIONS)
+        .filter(|n| !pinned.contains(n));
+    for name in unpinned {
+        found.push(format!("S5 sections: {name} has no ROUTE_CELLS row"));
+    }
+    found
+}
+/// Item 1(a): no two listed files have one digest.
+fn digest_findings(rows: &[Row], files: &[(String, Vec<u8>)]) -> Vec<String> {
+    use sha2::Digest;
+    let digest = |file: &str| {
+        let (_, bytes) = files
+            .iter()
+            .find(|(f, _)| f.strip_prefix(CELLS) == Some(file))?;
+        Some(hex::encode(sha2::Sha256::digest(bytes)))
+    };
+    let digests: Vec<(&str, String)> = rows
+        .iter()
+        .filter_map(|r| Some((r.file, digest(r.file)?)))
+        .collect();
+    let mut found = Vec::new();
+    for (i, (a, x)) in digests.iter().enumerate() {
+        for (b, _) in digests[i + 1..].iter().filter(|(_, y)| y == x) {
+            found.push(format!("S5 sections: {a} and {b} share one digest"));
+        }
+    }
+    found
+}
+/// Item 1(d): a section's first line names its row's unit and file, and each
+/// of its `pub` items is a `fn` an arm or control names in it, or a helper of
+/// its row (a field is no item).
+fn owner_findings(row: &Row, source: &str, drivers: &[(String, String)]) -> Vec<String> {
+    let (file, mut found) = (row.file, Vec::new());
+    let header = source.lines().next().unwrap_or("");
+    let named = header.strip_prefix("//! SB-3E S5 section ");
+    match named.and_then(|h| h.split_once(": ")) {
+        Some((unit, named)) if (unit, named) == (row.unit, file) => {}
+        Some((unit, named)) if named == file => found.push(format!(
+            "S5 sections: {file} names {unit}, not {}",
+            row.unit
+        )),
+        _ => found.push(format!(
+            "S5 sections: {file}'s first line is not //! SB-3E S5 section {}: {file}",
+            row.unit
+        )),
+    }
+    let t = lex(source);
+    for i in (0..t.len()).filter(|&i| t[i] == "pub") {
+        let scoped = t.get(i + 1) == Some(&"(");
+        let j = if scoped {
+            close_of(&t, i + 1) + 1
+        } else {
+            i + 1
+        };
+        let (kind, name) = (
+            t.get(j).copied().unwrap_or(""),
+            t.get(j + 1).copied().unwrap_or(""),
+        );
+        let bound = kind == "fn" && drivers.iter().any(|(s, f)| s == stem(file) && f == name);
+        if name == ":" || bound || row.helpers.contains(&name) {
+            continue;
+        }
+        found.push(match kind {
+            "fn" => format!("S5 sections: {file} exposes an unbound pub(super) fn {name}"),
+            _ => format!("S5 sections: {file} exposes an unlisted pub(super) {kind} {name}"),
+        });
+    }
+    found
+}
+/// Every driver `main.rs`'s `macro_rules! cells` names, as (stem, fn).
+fn macro_drivers(main: &str) -> Vec<(String, String)> {
+    let t = lex(main);
+    let head = ["macro_rules", "!", "cells", "{"];
+    let Some(start) = (0..t.len()).find(|&i| t[i..].starts_with(&head)) else {
+        return Vec::new();
+    };
+    let named = drivers(&t[start..close_of(&t, start + 3).min(t.len())]);
+    named
+        .into_iter()
+        .map(|(s, f)| (s.to_string(), f.to_string()))
+        .collect()
+}
+/// Item 1(d): outside `main.rs` no harness file names a section other than
+/// `s5`; outside the boundary `nexus_mother::route_seams` is only the type
+/// path `nexus_mother::route_seams::Entry`, so S5 is armed only inside it.
+fn reach_findings(rows: &[Row], harness: &[(&str, &str)]) -> Vec<String> {
+    let stems: Vec<&str> = rows
+        .iter()
+        .map(|r| stem(r.file))
+        .filter(|s| *s != "s5")
+        .collect();
+    let mut found = Vec::new();
+    for (file, source) in harness {
+        let t = lex(source);
+        let mut named: Vec<&str> = t.iter().copied().filter(|x| stems.contains(x)).collect();
+        named.sort_unstable();
+        named.dedup();
+        for section in named.into_iter().filter(|_| *file != "main.rs") {
+            found.push(format!("S5 sections: {file} names section {section}"));
+        }
+        if rows.iter().any(|r| r.file == *file) {
+            continue;
+        }
+        for i in (0..t.len()).filter(|&i| t[i] == "route_seams") {
+            let after = |w: &[&str]| i >= 3 && t[i - 3..i] == *w;
+            let entry = t.get(i + 1..i + 4) == Some(&[":", ":", "Entry"][..]);
+            let entry = entry && t.get(i + 4) != Some(&":");
+            if !(after(&["broker", ":", ":"]) || after(&["nexus_mother", ":", ":"]) && entry) {
+                found.push(format!(
+                    "S5 sections: {file} reaches nexus_mother::route_seams other than as ::Entry"
+                ));
+            }
+        }
+    }
+    found
+}
+/// F-S5-SPLIT item 1(c): the profile of section `file` (its `row`), stricter
+/// than `s5_findings` and through its rules: no model call, counter or other
+/// route, no re-export, no port or door use (its row lists none), no
+/// composed constructor, child, `Command::`, `fn timeout` or `abort`; G-B1;
+/// `cfg!` exact; one parent import, no glob, no path through `crate`, `self`,
+/// `grant`, `locks`, `store` or another section; every `fn collect*`
+/// passive; each of its regions pinned once; each `impl` in `IMPLS`; no
+/// composed type by any name, and exactly its row's imports (1(c)(iii)); then
+/// the pause rule (`pause_findings`) and the alias check (`alias_findings`).
+fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) -> Vec<String> {
+    let path = format!("{CELLS}{file}");
+    if let Err(e) = tokens(source) {
+        return vec![lex_finding(&path, &e)];
+    }
+    let (t, code) = (lex(source), mask(source));
+    let n = |pat: &[&str]| t.windows(pat.len()).filter(|w| *w == pat).count();
+    let uses = use_ranges(&t);
+    let in_use = |i: usize| uses.iter().any(|r| r.contains(&i));
+    let mut found = Vec::new();
+    let mut say = |what: String| found.push(format!("section {file}: {what}"));
+    for (i, x) in t.iter().enumerate() {
+        if ["call", "model"].contains(x) {
+            say(format!("a model call ({x})"));
+        }
+        if counter_write(&t, i) {
+            say(format!("a counter write `{x}`"));
+        }
+        if child_wait(&t, i) {
+            say(format!("a child wait ({x})"));
+        }
+    }
+    if n(&["AtomicU32", ":", ":"]) > 0 {
+        say("a second counter (AtomicU32::)".into());
+    }
+    for id in ROUTE_IDS.iter().filter(|id| n(&[id]) > 0) {
+        say(format!("(b) {id}"));
+    }
+    if reexports(&t) {
+        say("a re-export".into());
+    }
+    if let Some(ports) = port_uses(&path, source) {
+        say(format!("port uses {ports:?}"));
+    }
+    for built in composed(&t) {
+        say(format!("constructs {built}"));
+    }
+    for (pat, what) in [
+        (&["Command", ":", ":"][..], "a Command:: path"),
+        (&["fn", "timeout"][..], "fn timeout"),
+        (&["abort"][..], "abort"),
+        (&[":", ":", "*"][..], "a glob import"),
+    ] {
+        if n(pat) > 0 {
+            say(what.into());
+        }
+    }
+    let shared = gb1_findings(&code, &t)
+        .into_iter()
+        .chain(cfg_findings(&path, source));
+    for finding in shared.chain(passive_findings(&path, source)) {
+        say(finding);
+    }
+    let supers = (0..t.len()).filter(|&i| t[i..].starts_with(&["super", ":", ":"]));
+    if supers.into_iter().any(|i| !in_use(i)) {
+        say("a super:: path outside its import".into());
+    }
+    if uses
+        .iter()
+        .filter(|r| t[r.start..].starts_with(&["super"]))
+        .count()
+        > 1
+    {
+        say("more than one super:: import".into());
+    }
+    let rows = section_rows(S5_SECTIONS);
+    let others = rows.iter().map(|r| stem(r.file)).filter(|s| *s != "s5");
+    for module in ["crate", "self", "grant", "locks", "store"]
+        .into_iter()
+        .chain(others)
+    {
+        if n(&[module, ":", ":"]) > 0 {
+            say(format!("a path through {module}"));
+        }
+    }
+    for (_, pin) in pins.iter().filter(|(f, _)| *f == path) {
+        let got = pinned(source, pin);
+        if got != 1 {
+            say(format!("pin {} matched {got}", label(pin)));
+        }
+    }
+    for r in impls(source) {
+        if !IMPLS.lines().any(|l| l == format!("{path}|{r}")) {
+            say(format!("an unlisted impl {r}"));
+        }
+    }
+    // Item 1(c)(iii): no composed type by any name; every `use` on its row.
+    let mut named: Vec<&str> = t.iter().copied().filter(|x| T7_TYPES.contains(x)).collect();
+    named.sort_unstable();
+    named.dedup();
+    for x in named {
+        say(format!("a T7 type name {x}"));
+    }
+    if uses.iter().any(|r| t[r.clone()].contains(&"as")) {
+        say("use .. as in a section".into());
+    }
+    if n(&["extern"]) > 0 {
+        say("an extern item in a section".into());
+    }
+    for i in (0..t.len()).filter(|&i| t[i] == "mod" && t.get(i + 2) == Some(&"{")) {
+        say(format!("an inline module in a section: {}", t[i + 1]));
+    }
+    if qualified(&t) {
+        say("a qualified <.. as ..>:: path".into());
+    }
+    // Built from parts so the kernel-dependency scan does not match this file.
+    let roots = [
+        "nexus_mother",
+        "nexus_governed_control",
+        concat!("nexus_", "kernel"),
+        "crate",
+    ];
+    for i in (0..t.len()).filter(|&i| roots.contains(&t[i]) && !in_use(i)) {
+        if t.get(i + 1..i + 3) == Some(&[":", ":"][..]) {
+            say(format!("a crate-root path outside use: {}::", t[i]));
+        }
+    }
+    let mut leaves = Vec::new();
+    for r in &uses {
+        use_leaves(&t[r.clone()], "", &mut leaves);
+    }
+    for x in leaves.iter().filter(|x| !row.imports.contains(&x.as_str())) {
+        say(format!("use not on its row: {x}"));
+    }
+    for x in row
+        .imports
+        .iter()
+        .filter(|x| !leaves.iter().any(|l| l == *x))
+    {
+        say(format!("row import {x} has no use"));
+    }
+    found.extend(pause_findings(file, source));
+    found.extend(alias_findings(&path, source));
+    found
+}
+/// The token range of each `use` statement's tree (after `use`, to its `;`).
+fn use_ranges(t: &[&str]) -> Vec<std::ops::Range<usize>> {
+    let at = (0..t.len()).filter(|&i| t[i] == "use");
+    let end = |i: usize| {
+        t[i..]
+            .iter()
+            .position(|x| *x == ";")
+            .map_or(t.len(), |e| i + e)
+    };
+    at.map(|i| i + 1..end(i)).collect()
+}
+/// A `use` tree's leaves as path text (`a::{b, c::d}` gives `a::b`, `a::c::d`).
+fn use_leaves(t: &[&str], prefix: &str, out: &mut Vec<String>) {
+    let (mut depth, mut start, mut items) = (0i32, 0, Vec::new());
+    for (i, x) in t.iter().enumerate() {
+        depth += i32::from(*x == "{") - i32::from(*x == "}");
+        if *x == "," && depth == 0 {
+            items.push(&t[start..i]);
+            start = i + 1;
+        }
+    }
+    items.push(&t[start..]);
+    for item in items.into_iter().filter(|i| !i.is_empty()) {
+        match item.iter().position(|x| *x == "{") {
+            Some(o) => {
+                let inner = &item[o + 1..close_of(item, o).min(item.len())];
+                use_leaves(inner, &format!("{prefix}{}", item[..o].concat()), out);
+            }
+            None => {
+                let text = item.iter().map(|x| if *x == "as" { " as " } else { x });
+                out.push(format!("{prefix}{}", text.collect::<String>()));
+            }
+        }
+    }
+}
+/// A qualified path `<.. as ..>::` in `t` (`->` and `=>` close nothing).
+fn qualified(t: &[&str]) -> bool {
+    let closes = |k: usize| t[k] == ">" && (k == 0 || !["-", "="].contains(&t[k - 1]));
+    let ends = (0..t.len()).filter(|&j| closes(j) && t.get(j + 1..j + 3) == Some(&[":", ":"][..]));
+    ends.into_iter().any(|j| {
+        let mut depth = 0i32;
+        for k in (0..=j).rev() {
+            match t[k] {
+                _ if closes(k) => depth += 1,
+                "<" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return t[k..j].contains(&"as");
+                    }
+                }
+                ";" | "{" | "}" => return false,
+                _ => {}
+            }
+        }
+        false
+    })
+}
+/// F-S5-SPLIT item 1(c)(ii) (SB3E-R95.7): a section arms an S5 pause only
+/// through `s5.rs`'s pause helper. No `use` brings `Action` or `arm` from a
+/// `route_seams` module (by name, path or glob, or the module itself), and no
+/// `Action`, `Pause`, `Timeout` or `timeout` token is in it at all.
+fn pause_findings(file: &str, source: &str) -> Vec<String> {
+    if tokens(source).is_err() {
+        return Vec::new(); // `section_findings` reports it.
+    }
+    let t = lex(source);
+    let mut found = Vec::new();
+    for r in use_ranges(&t) {
+        let u = &t[r];
+        let module = u.last() == Some(&"route_seams")
+            || u.windows(2)
+                .any(|w| w[0] == "route_seams" && [",", "}"].contains(&w[1]));
+        let brings = u.iter().any(|x| ["Action", "arm", "*", "self"].contains(x));
+        if u.contains(&"route_seams") && (module || brings) {
+            found.push(format!(
+                "section {file}: Action or arm imported from route_seams"
+            ));
+        }
+    }
+    let callback = ["Action", "Pause", "Timeout", "timeout"];
+    let mut named: Vec<&str> = t.iter().copied().filter(|x| callback.contains(x)).collect();
+    named.sort_unstable();
+    named.dedup();
+    for x in named {
+        found.push(format!(
+            "section {file}: a pause callback that is not s5::timeout ({x})"
+        ));
+    }
+    found
+}
+/// F-S5-SPLIT section 4 item 12 (W0a), on `s5.rs` and every section: no
+/// `type` item names a composed type (`T7_TYPES`), no `use .. as` renames one,
+/// and no module is inline, so no other name constructs a composed type.
+fn alias_findings(file: &str, source: &str) -> Vec<String> {
+    if tokens(source).is_err() {
+        return Vec::new(); // Its caller reports it.
+    }
+    let t = lex(source);
+    let mut found = Vec::new();
+    for i in (0..t.len()).filter(|&i| t[i] == "type") {
+        let end = t[i..]
+            .iter()
+            .position(|x| *x == ";")
+            .map_or(t.len(), |e| i + e);
+        let right = t[i..end].iter().position(|x| *x == "=");
+        let right = right.map_or(&[][..], |e| &t[i + e..end]);
+        if right.iter().any(|x| T7_TYPES.contains(x)) {
+            let name = t.get(i + 1).copied().unwrap_or("");
+            found.push(format!("{file}: type alias names a T7 type: {name}"));
+        }
+    }
+    for r in use_ranges(&t) {
+        let renamed = r.filter(|&k| t[k] == "as" && k > 0 && T7_TYPES.contains(&t[k - 1]));
+        for k in renamed {
+            let to = t.get(k + 1).copied().unwrap_or("");
+            found.push(format!(
+                "{file}: use .. as renames a T7 type: {} as {to}",
+                t[k - 1]
+            ));
+        }
+    }
+    for i in (0..t.len()).filter(|&i| t[i] == "mod" && t.get(i + 2) == Some(&"{")) {
+        found.push(format!("{file}: an inline module {}", t[i + 1]));
     }
     found
 }
@@ -1598,6 +2313,7 @@ fn sb3e_mother_route_sites_are_exactly_the_inventory() {
     found.extend(inventory_findings(&sources));
     found.extend(pins_findings(PIN_DATA));
     found.extend(cells_findings(&cells));
+    found.extend(sections_findings(&sources, &cells));
     // The plants below are built from the reviewed text; on a changed tree
     // its findings are reported first, whole, so no plant's own anchor check
     // can mask them (SB3E-R42.6).
@@ -1842,6 +2558,14 @@ fn sb3e_s5_module_makes_one_counted_call() {
     let sources = sources();
     let s5 = text(&sources, S5);
     let mut found = s5_findings(s5);
+    // F-S5-SPLIT: the counted call stays in s5.rs; no section makes one.
+    for row in section_rows(S5_SECTIONS)
+        .iter()
+        .filter(|r| r.file != "s5.rs")
+    {
+        let section = find(&sources, &format!("{CELLS}{}", row.file)).unwrap_or("");
+        found.extend(section_findings(row.file, row, section, &pins()));
+    }
     // The plants below are built from the reviewed text; on a changed tree
     // its findings are reported first, whole, so no plant's own anchor check
     // can mask them (SB3E-R42.6).
@@ -1934,6 +2658,319 @@ fn sb3e_s5_module_makes_one_counted_call() {
         if pin.is_empty() || pinned(&planted, pin) == 1 {
             misses.push("A.5: a changed condition still pins".into());
         }
+    }
+    found.extend(misses);
+    fail_on(found);
+}
+
+/// A plant's findings, printed whole (a RED run without its check reads
+/// them), then `killed`.
+fn shown(misses: &mut Vec<String>, plant: &str, found: &[String], expected: &[&str]) {
+    println!("PLANT {plant}: {found:?}");
+    killed(misses, plant, found, expected);
+}
+
+/// F-S5-SPLIT (the adopted amendment, section 6.1): the S5 boundary's closed
+/// list, its sections' headers, surfaces, reach and profile, the arm binding
+/// and the alias rules pass on the tree as it is; then each new check's plant
+/// shows its own finding.
+#[test]
+fn sb3e_s5_sections_are_the_closed_list() {
+    use sha2::Digest;
+    let ((sources, mut found), cells) = (walked(), crate::adapter::scan::route_cells_files());
+    found.extend(sections_findings(&sources, &cells));
+    // The plants below are built from the reviewed text; on a changed tree
+    // its findings are reported first, whole (SB3E-R42.6).
+    if !found.is_empty() {
+        return fail_on(found);
+    }
+    let (rows, pins, mut misses) = (section_rows(S5_SECTIONS), pins(), Vec::new());
+    let path = |f: &str| format!("{CELLS}{f}");
+    let row = |f: &str| rows.iter().find(|r| r.file == f).expect(f);
+    let stub = |f: &str| text(&sources, &path(f)).to_string();
+    let section = |f: &str, more: &str| section_findings(f, row(f), &(stub(f) + more), &pins);
+    // The tree with the directory's `file` set to `text`, as sources and files.
+    let with = |file: &str, text: &str| {
+        let (mut s, mut c) = (sources.clone(), cells.clone());
+        s.retain(|(f, _)| *f != path(file));
+        c.retain(|(f, _)| *f != path(file));
+        s.push((path(file), text.to_string()));
+        c.push((path(file), text.as_bytes().to_vec()));
+        s.sort();
+        c.sort();
+        (s, c)
+    };
+    let digest = |text: &str| hex::encode(sha2::Sha256::digest(text.as_bytes()));
+    let swap = |text: &str, old: &str, new: &str| {
+        assert_eq!(text.matches(old).count(), 1, "{old}");
+        text.replace(old, new)
+    };
+    let (s5, main, cells_rs) = (text(&sources, S5), stub("main.rs"), stub("cells.rs"));
+    // P-S1, P-S2, P-C1, P-C2: the closed list and distinct digests.
+    let (s, c) = with("s5_extra.rs", "//! SB-3E S5 section U9a: s5_extra.rs\n");
+    let s = planted(
+        &s,
+        &path("main.rs"),
+        "mod s5_reg;\n",
+        "mod s5_extra;\nmod s5_reg;\n",
+    );
+    let mut got = sections_findings(&s, &c);
+    got.extend(cells_findings(&c));
+    got.extend(inventory_findings(&s));
+    let expected = [
+        "S5 sections: s5_extra.rs is not a listed section",
+        "R51.1: host/tests/route_cells/s5_extra.rs is not listed",
+        "R44.2 main.rs items: unlisted mods5_extra;",
+    ];
+    shown(&mut misses, "P-S1 an unlisted section", &got, &expected);
+    for (plant, file, text, expected) in [
+        (
+            "P-S2 a listed file in neither list",
+            "extra.rs",
+            "fn extra() {}\n",
+            "S5 sections: extra.rs is neither a section nor a non-section file",
+        ),
+        (
+            "P-C1 a byte copy of s5.rs, listed",
+            "s5_copy.rs",
+            s5,
+            "S5 sections: s5_copy.rs is not a listed section",
+        ),
+    ] {
+        let ((s, c), listed) = (
+            with(file, text),
+            format!("{ROUTE_CELLS}{file} {}\n", digest(text)),
+        );
+        let got = sections_with(&listed, S5_SECTIONS, &s, &c);
+        shown(&mut misses, plant, &got, &[expected]);
+    }
+    let (s, c) = with("s5_r34.rs", &stub("s5_close.rs"));
+    let expected = ["S5 sections: s5_close.rs and s5_r34.rs share one digest"];
+    shown(
+        &mut misses,
+        "P-C2 one digest",
+        &sections_findings(&s, &c),
+        &expected,
+    );
+    // P-W1, P-W2: an arm and a control bound to a section that does not own them.
+    let head = "macro_rules! cells {\n    () => {\n";
+    let (cell, control) = (
+        "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => {\n        #[test]\n        fn rc_r9_seal_lifecycle_closingnormal() {\n            let (name, id) = (\"cells::rc_r9_seal_lifecycle_closingnormal\", \"rc_r9_seal_lifecycle_closingnormal\");\n            let ran = super::s5::cell(name, id, super::s5_r34::closingnormal, super::witness::render);\n            if let Some(ran) = ran {\n                super::witness::credited(&ran, \"seal\", \"lifecycle\", \"closingnormal\");\n            }\n        }\n        cells! { $($rest)* }\n    };\n",
+        "        #[test]\n        fn ctl_seal() {\n            let (name, id) = (\"cells::ctl_seal\", \"ctl_seal\");\n            let ran = super::s5::cell(name, id, super::s5_reg::ctl_seal, super::witness::render);\n            if let Some(ran) = ran {\n                super::witness::control(&ran);\n            }\n        }\n",
+    );
+    let wrong = "S5 sections: the arm rc_r9_seal_lifecycle_closingnormal calls s5_r34, which does not own seal:lifecycle";
+    let arm = swap(
+        &main,
+        head,
+        &format!("macro_rules! cells {{\n{cell}    () => {{\n"),
+    );
+    shown(
+        &mut misses,
+        "P-W1 an arm in another section",
+        &macro_findings(&arm, &cells_rs),
+        &[wrong],
+    );
+    let ctl = swap(&main, head, &format!("{head}{control}"));
+    let expected = ["S5 sections: ctl_seal calls s5_reg, which does not list it"];
+    shown(
+        &mut misses,
+        "P-W2 a control in another section",
+        &macro_findings(&ctl, &cells_rs),
+        &expected,
+    );
+    // P-W3, P-W4, P-W6 and S5 armed outside the boundary.
+    let witness = swap(
+        &stub("witness.rs"),
+        "use super::s5::{Facts, Ran};\n",
+        "use super::s5::{Facts, Ran};\nuse super::s5_close::seal;\n",
+    );
+    let grant = swap(
+        &stub("grant.rs"),
+        "use super::s5::{boot, consented, lanes, Recorded};\n",
+        "use super::s5::{boot, consented, lanes, Recorded};\nuse nexus_mother::route_seams::arm;\n",
+    );
+    for (plant, file, text, expected) in [
+        (
+            "P-W3 a header naming another unit",
+            "s5_close.rs",
+            "//! SB-3E S5 section U6b-2: s5_close.rs\n".to_string(),
+            "S5 sections: s5_close.rs names U6b-2, not U9a",
+        ),
+        (
+            "P-W4 an unbound pub(super) fn",
+            "s5_reg.rs",
+            stub("s5_reg.rs") + "pub(super) fn spare() {}\n",
+            "S5 sections: s5_reg.rs exposes an unbound pub(super) fn spare",
+        ),
+        (
+            "P-W6 witness.rs naming a section",
+            "witness.rs",
+            witness,
+            "S5 sections: witness.rs names section s5_close",
+        ),
+        (
+            "rule: S5 armed in grant.rs",
+            "grant.rs",
+            grant,
+            "S5 sections: grant.rs reaches nexus_mother::route_seams other than as ::Entry",
+        ),
+    ] {
+        let (s, c) = with(file, &text);
+        shown(&mut misses, plant, &sections_findings(&s, &c), &[expected]);
+    }
+    // P-C3, P-C4, P-W5, P-T1 to P-T6, P-A1 to P-A3, P-A7 to P-A10 and one plant
+    // per section rule: a stub with the planted text.
+    let drive = item(s5, "drive_call").unwrap_or("").to_string() + "\n";
+    let timeout = item(s5, "timeout")
+        .unwrap_or("")
+        .replace("fn timeout", "fn section_timeout");
+    let arm = "use nexus_mother::route_seams::{arm, Action};\n";
+    let pause = |callback: &str| {
+        format!("fn d() {{\n    let _h = arm(\"mother.charge.entry\", Action::Pause {{ cell: \"d\", {callback} }});\n}}\n")
+    };
+    let made =
+        "fn d(f: &Fixture) {\n    let _j = J::open(&f.0.join(\"extra.jsonl\")).unwrap();\n}\n";
+    let inline = "mod m {\n    pub use nexus_mother::adapter::FileJournal as Fj;\n}\nfn d(f: &Fixture) {\n    let _j = m::Fj::open(&f.0.join(\"extra.jsonl\")).unwrap();\n}\n";
+    let compose = "fn compose(f: &Fixture, o: &Opened) {\n    let _m = Coordinator::open(f.0.join(\"m\"), o);\n}\n";
+    let callback = "a pause callback that is not s5::timeout";
+    let direct = "Action or arm imported from route_seams";
+    let journal = "Passive: collect reads the journal through journal(), not journal_view()";
+    let cfg = "R57.6: host/tests/route_cells/s5_reg.rs: a cfg! other than cfg!(mother_route_seams): cfg!(test)";
+    // `std::process` is built from parts so the host-access scan does not match this file.
+    let profile: Vec<(&str, &str, String, &str)> = vec![
+        ("P-C3 a counted call copied", "s5_close.rs", drive, "a model call"),
+        ("P-W5 a path through another section", "s5_r34.rs", "use super::s5_close::seal;\n".into(), "a path through s5_close"),
+        ("P-T1 a closure callback", "s5_close.rs", arm.to_string() + &pause(concat!("timeout: |l| -> ! { std::", "process::abort() }")), callback),
+        ("P-T2 a panic! closure", "s5_close.rs", arm.to_string() + &pause("timeout: |_| panic!(\"timeout\")"), callback),
+        ("P-T3 a renamed import", "s5_close.rs", format!("use super::s5::{{timeout as t}};\n{arm}{}", pause("timeout: t")), callback),
+        ("P-T4 an alias binding", "s5_close.rs", format!("use nexus_mother::route_seams::{{arm, Action, Timeout}};\nfn e(timeout: Timeout) {{\n    let t: Timeout = timeout;\n    let _ = t;\n}}\n{}", pause("timeout: t")), callback),
+        ("P-T4 a rebinding", "s5_close.rs", format!("{arm}fn other_fn(_: &str) -> ! {{\n    loop {{}}\n}}\nfn e() {{\n    let timeout = other_fn;\n    let _h = arm(\"mother.charge.entry\", Action::Pause {{ cell: \"d\", timeout }});\n}}\n"), callback),
+        ("P-T5 a look-alike timeout", "s5_close.rs", format!("{arm}{timeout}\n{}", pause("timeout: section_timeout")), callback),
+        ("P-T6 Mother's Action and arm imported", "s5_close.rs", arm.into(), direct),
+        ("P-T6 the broker's Action and arm imported", "s5_close.rs", "use nexus_governed_control::broker::route_seams::{arm, Action};\n".into(), direct),
+        ("P-A1 a type alias", "s5_close.rs", format!("type J = nexus_mother::adapter::FileJournal;\n{made}"), "host/tests/route_cells/s5_close.rs: type alias names a T7 type: J"),
+        ("P-A2 use .. as", "s5_close.rs", format!("use nexus_mother::adapter::FileJournal as J;\n{made}"), "use .. as in a section"),
+        ("P-A3 an inline module", "s5_close.rs", inline.into(), "an inline module in a section"),
+        ("P-A7 a crate-root path", "s5_close.rs", "fn d(f: &Fixture) {\n    let _m = nexus_mother::coordinator::Coordinator::open(f.0.join(\"m\"));\n}\n".into(), "a crate-root path outside use: nexus_mother::"),
+        ("P-A8 an unlisted use", "s5_close.rs", "use std::sync::Arc;\n".into(), "use not on its row: std::sync::Arc"),
+        ("P-A9 a qualified path", "s5_close.rs", "fn d() {\n    let _ = <Vec<u8> as Default>::default();\n}\n".into(), "a qualified <.. as ..>:: path"),
+        ("P-A10 an extern crate alias", "s5_close.rs", "extern crate nexus_mother as m;\n".into(), "an extern item in a section"),
+        ("rule: a SessionPort token", "s5_reg.rs", "fn d(port: SessionPort) {\n    drop(port);\n}\n".into(), "port uses"),
+        ("rule: a .output( child wait", "s5_reg.rs", "fn d(c: &mut Command) {\n    let _ = c.output();\n}\n".into(), "a child wait (output)"),
+        ("rule: fn timeout", "s5_reg.rs", "fn timeout(_: &str) -> ! {\n    loop {}\n}\n".into(), "fn timeout"),
+        ("rule: abort", "s5_reg.rs", concat!("fn d() {\n    std::", "process::abort()\n}\n").into(), "abort"),
+        ("rule: macro_rules!", "s5_reg.rs", "macro_rules! again {\n    () => {};\n}\n".into(), "G-B1: a macro definition macro_rules"),
+        ("rule: an unlisted macro", "s5_reg.rs", "fn d() {\n    let _ = concat!(\"a\", \"b\");\n}\n".into(), "G-B1: an unlisted macro concat!"),
+        ("rule: a raw identifier", "s5_reg.rs", "fn d() {\n    let r#seal = 1;\n    let _ = r#seal;\n}\n".into(), "G-B1: a raw identifier r#seal"),
+        ("rule: a glob import", "s5_reg.rs", "use super::*;\n".into(), "a glob import"),
+        ("rule: cfg!(test)", "s5_reg.rs", "fn d() -> bool {\n    cfg!(test)\n}\n".into(), cfg),
+        ("rule: collect reads journal()", "s5_r34.rs", "fn collect(m: &Opened) -> usize {\n    m.journal().unwrap().len()\n}\n".into(), journal),
+        ("rule: collect reads store.commit", "s5_r34.rs", "fn collect_commits(broker: &[Entry]) -> usize {\n    broker.iter().filter(|e| e.point == \"store.commit\").count()\n}\n".into(), "Passive: collect_commits reads store.commit"),
+        ("rule: an unlisted impl", "s5_r34.rs", "struct Z;\nimpl Z {\n    fn d(&self) {}\n}\n".into(), "an unlisted impl implZ"),
+    ];
+    for (plant, file, text, expected) in &profile {
+        let expected = match expected.starts_with(CELLS) {
+            true => expected.to_string(),
+            false => format!("section {file}: {expected}"),
+        };
+        shown(
+            &mut misses,
+            plant,
+            &section(file, text),
+            &[expected.as_str()],
+        );
+    }
+    let (s, _) = with("s5_r34.rs", &(stub("s5_r34.rs") + compose));
+    let mut got = section("s5_r34.rs", compose);
+    got.extend(t7_findings(&s));
+    let expected = [
+        "section s5_r34.rs: constructs Coordinator::open(",
+        "T7: host/tests/route_cells/s5_r34.rs: Coordinator : : open ( 1 times, not 0",
+    ];
+    shown(
+        &mut misses,
+        "P-C4 a section composing the route",
+        &got,
+        &expected,
+    );
+    // A section's pinned region, changed and kept.
+    let region = "fn pinned_driver() {\n    let _ = 1;\n}\n";
+    let close = path("s5_close.rs");
+    let regions = [(close.as_str(), region)];
+    let changed = stub("s5_close.rs") + &region.replace('1', "2");
+    let got = section_findings("s5_close.rs", row("s5_close.rs"), &changed, &regions);
+    let expected = ["section s5_close.rs: pin fnpinned_driver(){let_= matched 0"];
+    shown(
+        &mut misses,
+        "rule: an unpinned change to a pinned region",
+        &got,
+        &expected,
+    );
+    let kept = section_findings(
+        "s5_close.rs",
+        row("s5_close.rs"),
+        &(stub("s5_close.rs") + region),
+        &regions,
+    );
+    if !kept.is_empty() {
+        misses.push(format!("the kept region: {kept:?}"));
+    }
+    // P-A4 to P-A6: the alias check on s5.rs, beside its byte finding.
+    let byte = "G-S5: host/tests/route_cells/s5.rs's sha256";
+    for (plant, more, expected) in [
+        (
+            "P-A4 a type alias in s5.rs",
+            format!("type J = nexus_mother::adapter::FileJournal;\n{made}"),
+            "host/tests/route_cells/s5.rs: type alias names a T7 type: J",
+        ),
+        (
+            "P-A5 use .. as in s5.rs",
+            format!("use nexus_mother::adapter::FileJournal as J;\n{made}"),
+            "host/tests/route_cells/s5.rs: use .. as renames a T7 type: FileJournal as J",
+        ),
+        (
+            "P-A6 an inline module in s5.rs",
+            inline.to_string(),
+            "host/tests/route_cells/s5.rs: an inline module m",
+        ),
+    ] {
+        shown(
+            &mut misses,
+            plant,
+            &s5_findings(&format!("{s5}{more}")),
+            &[expected, byte],
+        );
+    }
+    // The list itself.
+    for (plant, data, expected) in [
+        (
+            "P-R1 a malformed row",
+            format!("{S5_SECTIONS}s5_x.rs|U1\n"),
+            "S5 sections: a malformed row \"s5_x.rs|U1\"",
+        ),
+        (
+            "P-R2 a row importing a composed type",
+            S5_SECTIONS.replace(
+                "ctl_seal|-|-",
+                "ctl_seal|nexus_mother::adapter::FileJournal|-",
+            ),
+            "S5 sections: the row s5_close.rs imports nexus_mother::adapter::FileJournal",
+        ),
+        (
+            "P-R3 a pair in two rows",
+            S5_SECTIONS.replace(
+                "U6b-2|attempt_ticket",
+                "U6b-2|seal:lifecycle,attempt_ticket",
+            ),
+            "S5 sections: seal:lifecycle is in two rows",
+        ),
+    ] {
+        shown(
+            &mut misses,
+            plant,
+            &sections_with(ROUTE_CELLS, &data, &sources, &cells),
+            &[expected],
+        );
     }
     found.extend(misses);
     fail_on(found);
