@@ -1735,6 +1735,12 @@ fn passive_findings(file: &str, source: &str) -> Vec<String> {
             });
             continue;
         };
+        // SB3E-R99.2 F3b: a "body" that is not whole (a brace in the signature)
+        // is a finding, never a lexer panic or a passed check.
+        if tokens(body).is_err() {
+            found.push(format!("Passive: fn {name} has no whole body in {file}"));
+            continue;
+        }
         let t = lex(body);
         for (call, read) in [
             (
@@ -1748,7 +1754,7 @@ fn passive_findings(file: &str, source: &str) -> Vec<String> {
                 found.push(format!("Passive: {name} reads {read}"));
             }
         }
-        if t.contains(&"\"store.commit\"") {
+        if t.iter().any(|x| x.contains("store.commit")) {
             found.push(format!("Passive: {name} reads store.commit"));
         }
     }
@@ -2029,6 +2035,18 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
             say(what.into());
         }
     }
+    // SB3E-R99.2 F2: `Command` in any form but a `Command::` path is a child path.
+    let commands = (0..t.len()).filter(|&i| t[i] == "Command");
+    if commands
+        .into_iter()
+        .any(|i| t.get(i + 1..i + 3) != Some(&[":", ":"][..]))
+    {
+        say("a child path (Command)".into());
+    }
+    // SB3E-R99.2 F3b: no fn has a brace in its signature, so `item` finds its body.
+    for name in braced_signatures(&t) {
+        say(format!("a brace in the signature of fn {name}"));
+    }
     let shared = gb1_findings(&code, &t)
         .into_iter()
         .chain(cfg_findings(&full, source));
@@ -2041,7 +2059,7 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
     }
     if uses
         .iter()
-        .filter(|r| t[r.start..].starts_with(&["super"]))
+        .filter(|r| t[(*r).clone()].contains(&"super"))
         .count()
         > 1
     {
@@ -2085,7 +2103,7 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
         say(format!("an inline module in a section: {}", t[i + 1]));
     }
     if qualified(&t) {
-        say("a qualified <.. as ..>:: path".into());
+        say("a qualified-self path <..>::".into());
     }
     // Built from parts so the kernel-dependency scan does not match this file.
     let roots = [
@@ -2152,7 +2170,9 @@ fn use_leaves(t: &[&str], prefix: &str, out: &mut Vec<String>) {
         }
     }
 }
-/// A qualified path `<.. as ..>::` in `t` (`->` and `=>` close nothing).
+/// A qualified-self path `<..>::` in `t`, with or without `as` (SB3E-R99.2
+/// F2): a `>` before `::` whose `<` does not follow `::` (a turbofish). `->`
+/// and `=>` close nothing.
 fn qualified(t: &[&str]) -> bool {
     let closes = |k: usize| t[k] == ">" && (k == 0 || !["-", "="].contains(&t[k - 1]));
     let ends = (0..t.len()).filter(|&j| closes(j) && t.get(j + 1..j + 3) == Some(&[":", ":"][..]));
@@ -2164,7 +2184,7 @@ fn qualified(t: &[&str]) -> bool {
                 "<" => {
                     depth -= 1;
                     if depth == 0 {
-                        return t[k..j].contains(&"as");
+                        return k == 0 || t[k - 1] != ":";
                     }
                 }
                 ";" | "{" | "}" => return false,
@@ -2173,6 +2193,35 @@ fn qualified(t: &[&str]) -> bool {
         }
         false
     })
+}
+/// SB3E-R99.2 F3b: each `fn` whose signature (from its name to its body or
+/// `;`) holds a `{` inside `()`, `[]` or `<>`, by name.
+fn braced_signatures<'a>(t: &[&'a str]) -> Vec<&'a str> {
+    let mut found = Vec::new();
+    let named = |k: &usize| {
+        t[*k - 1] == "fn"
+            && t[*k]
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    };
+    for k in (1..t.len()).filter(named) {
+        let mut depth = 0i32;
+        for j in k + 1..t.len() {
+            let arrow = j > 0 && ["-", "="].contains(&t[j - 1]);
+            match t[j] {
+                "(" | "[" | "<" => depth += 1,
+                ")" | "]" => depth -= 1,
+                ">" if !arrow => depth -= 1,
+                "{" if depth > 0 => {
+                    found.push(t[k]);
+                    break;
+                }
+                "{" | ";" if depth <= 0 => break,
+                _ => {}
+            }
+        }
+    }
+    found
 }
 /// F-S5-SPLIT item 1(c)(ii) (SB3E-R95.7): a section arms an S5 pause only
 /// through `s5.rs`'s pause helper. No `use` brings `Action` or `arm` from a
@@ -2852,8 +2901,8 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("P-A2 use .. as", "s5_close.rs", format!("use nexus_mother::adapter::FileJournal as J;\n{made}"), "use .. as in a section"),
         ("P-A3 an inline module", "s5_close.rs", inline.into(), "an inline module in a section"),
         ("P-A7 a crate-root path", "s5_close.rs", "fn d(f: &Fixture) {\n    let _m = nexus_mother::coordinator::Coordinator::open(f.0.join(\"m\"));\n}\n".into(), "a crate-root path outside use: nexus_mother::"),
-        ("P-A8 an unlisted use", "s5_close.rs", "use std::sync::Arc;\n".into(), "use not on its row: std::sync::Arc"),
-        ("P-A9 a qualified path", "s5_close.rs", "fn d() {\n    let _ = <Vec<u8> as Default>::default();\n}\n".into(), "a qualified <.. as ..>:: path"),
+        ("P-A8 an unlisted use", "s5_close.rs", "use nexus_mother::adapter::FileJournal;\n".into(), "use not on its row: nexus_mother::adapter::FileJournal"),
+        ("P-A9 a qualified path", "s5_close.rs", "fn d() {\n    let _ = <Vec<u8> as Default>::default();\n}\n".into(), "a qualified-self path <..>::"),
         ("P-A10 an extern crate alias", "s5_close.rs", "extern crate nexus_mother as m;\n".into(), "an extern item in a section"),
         ("rule: a SessionPort token", "s5_reg.rs", "fn d(port: SessionPort) {\n    drop(port);\n}\n".into(), "port uses"),
         ("rule: a .output( child wait", "s5_reg.rs", "fn d(c: &mut Command) {\n    let _ = c.output();\n}\n".into(), "a child wait (output)"),
@@ -2941,6 +2990,56 @@ fn sb3e_s5_sections_are_the_closed_list() {
             &[expected, byte],
         );
     }
+    // SB3E-R99.2 F1: `file`'s row of the list, parsed, with field `k` set by
+    // `to` whatever it holds (a unit may fill its row; no plant reads a literal).
+    let set = |file: &str, k: usize, to: &dyn Fn(&str) -> String| {
+        let row = |l: &str| {
+            let mut fields: Vec<String> = l.split('|').map(String::from).collect();
+            if fields[0] == file {
+                fields[k] = to(&fields[k]);
+            }
+            fields.join("|") + "\n"
+        };
+        S5_SECTIONS.lines().map(row).collect::<String>()
+    };
+    // SB3E-R99.2 F2, F3, note 4 (Codex's forms): each on a stub whose row lists
+    // exactly the plant's imports, so no other finding stands beside the kill.
+    let command = concat!("std::", "process::Command");
+    let f2a = format!("#[allow(dead_code)]\nfn run_child(program: &str) {{\n    let mut c = <{command}>::new(program);\n}}\n");
+    let f2b = format!("#[allow(dead_code)]\nfn wait_child(c: &mut {command}) {{\n    let _ = <{command}>::status(c);\n}}\n");
+    let raw = "use super::Entry;\n#[allow(dead_code)]\nfn collect_native(broker: &[Entry]) -> usize {\n    broker.iter().filter(|e| e.point == r\"store.commit\").count()\n}\n";
+    let hashes = "use super::Entry;\nfn collect_native(broker: &[Entry]) -> usize {\n    broker.iter().filter(|e| e.point.as_bytes() == br#\"store.commit\"#).count()\n}\n";
+    let braced = "use super::Entry;\n#[allow(dead_code, unused_braces)]\nfn collect_native(broker: &[Entry]) -> [usize; { 1 }] {\n    [broker.iter().filter(|e| e.point == \"store.commit\").count()]\n}\n";
+    let two = "use {super::Entry};\nuse {super::PATIENCE};\n";
+    let qualified = "fn d() {\n    let _ = <Vec<u8>>::new();\n}\n";
+    let held = format!("fn d(_: &{command}) {{}}\n");
+    let fixed: [(&str, &str, &str, String, &[&str]); 10] = [
+        ("F2 Codex's <Command>::new", "s5_reg.rs", "-", f2a, &["a qualified-self path <..>::", "a child path (Command)"]),
+        ("F2 Codex's <Command>::status", "s5_reg.rs", "-", f2b, &["a qualified-self path <..>::", "a child path (Command)"]),
+        ("F2 a qualified-self path, no as", "s5_reg.rs", "-", qualified.into(), &["a qualified-self path <..>::"]),
+        ("F2 Command in another form", "s5_reg.rs", "-", held, &["a child path (Command)"]),
+        ("F3a Codex's r\"store.commit\"", "s5_r34.rs", "super::Entry", raw.into(), &["Passive: collect_native reads store.commit"]),
+        ("F3a a br#\"store.commit\"#", "s5_r34.rs", "super::Entry", hashes.into(), &["Passive: collect_native reads store.commit"]),
+        ("F3b Codex's brace in a return type", "s5_r34.rs", "super::Entry", braced.into(), &["a brace in the signature of fn collect_native"]),
+        ("note 4 two braced super imports", "s5_r34.rs", "super::Entry,super::PATIENCE", two.into(), &["more than one super:: import"]),
+        ("F2 control: Vec::<u8>::new() is no qualified-self path", "s5_reg.rs", "-", "fn d() {\n    let _ = Vec::<u8>::new();\n}\n".into(), &[]),
+        ("F3b control: a plain signature", "s5_r34.rs", "super::Entry", "use super::Entry;\nfn collect_native(broker: &[Entry]) -> usize {\n    broker.len()\n}\n".into(), &[]),
+    ];
+    for (plant, file, imports, text, expected) in fixed {
+        let data = set(file, 4, &|_| imports.into());
+        let rows = section_rows(&data);
+        let row = rows.iter().find(|r| r.file == file).expect(file);
+        let got = section_findings(file, row, &(stub(file) + &text), &pins);
+        let expected: Vec<String> = expected
+            .iter()
+            .map(|e| format!("section {file}: {e}"))
+            .collect();
+        let expected: Vec<&str> = expected.iter().map(String::as_str).collect();
+        shown(&mut misses, plant, &got, &expected);
+        if expected.is_empty() && !got.is_empty() {
+            misses.push(format!("{plant}: {got:?}"));
+        }
+    }
     // The list itself.
     for (plant, data, expected) in [
         (
@@ -2950,21 +3049,20 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ),
         (
             "P-R2 a row importing a composed type",
-            S5_SECTIONS.replace(
-                "ctl_seal|-|-",
-                "ctl_seal|nexus_mother::adapter::FileJournal|-",
-            ),
+            set("s5_close.rs", 4, &|_| {
+                "nexus_mother::adapter::FileJournal".into()
+            }),
             "S5 sections: the row s5_close.rs imports nexus_mother::adapter::FileJournal",
         ),
         (
             "P-R3 a pair in two rows",
-            S5_SECTIONS.replace(
-                "U6b-2|attempt_ticket",
-                "U6b-2|seal:lifecycle,attempt_ticket",
-            ),
+            set("s5_r34.rs", 2, &|pairs| format!("seal:lifecycle,{pairs}")),
             "S5 sections: seal:lifecycle is in two rows",
         ),
     ] {
+        if data == S5_SECTIONS {
+            misses.push(format!("{plant}: the list is unchanged"));
+        }
         shown(
             &mut misses,
             plant,
