@@ -1983,9 +1983,9 @@ fn reach_findings(rows: &[Row], harness: &[(&str, &str)]) -> Vec<String> {
 /// composed type by any name, and exactly its row's imports (1(c)(iii)); then
 /// the pause rule (`pause_findings`) and the alias check (`alias_findings`).
 fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) -> Vec<String> {
-    let path = format!("{CELLS}{file}");
+    let full = format!("{CELLS}{file}");
     if let Err(e) = tokens(source) {
-        return vec![lex_finding(&path, &e)];
+        return vec![lex_finding(&full, &e)];
     }
     let (t, code) = (lex(source), mask(source));
     let n = |pat: &[&str]| t.windows(pat.len()).filter(|w| *w == pat).count();
@@ -2013,7 +2013,7 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
     if reexports(&t) {
         say("a re-export".into());
     }
-    if let Some(ports) = port_uses(&path, source) {
+    if let Some(ports) = port_uses(&full, source) {
         say(format!("port uses {ports:?}"));
     }
     for built in composed(&t) {
@@ -2031,8 +2031,8 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
     }
     let shared = gb1_findings(&code, &t)
         .into_iter()
-        .chain(cfg_findings(&path, source));
-    for finding in shared.chain(passive_findings(&path, source)) {
+        .chain(cfg_findings(&full, source));
+    for finding in shared.chain(passive_findings(&full, source)) {
         say(finding);
     }
     let supers = (0..t.len()).filter(|&i| t[i..].starts_with(&["super", ":", ":"]));
@@ -2057,14 +2057,14 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
             say(format!("a path through {module}"));
         }
     }
-    for (_, pin) in pins.iter().filter(|(f, _)| *f == path) {
+    for (_, pin) in pins.iter().filter(|(f, _)| *f == full) {
         let got = pinned(source, pin);
         if got != 1 {
             say(format!("pin {} matched {got}", label(pin)));
         }
     }
     for r in impls(source) {
-        if !IMPLS.lines().any(|l| l == format!("{path}|{r}")) {
+        if !IMPLS.lines().any(|l| l == format!("{full}|{r}")) {
             say(format!("an unlisted impl {r}"));
         }
     }
@@ -2114,7 +2114,7 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
         say(format!("row import {x} has no use"));
     }
     found.extend(pause_findings(file, source));
-    found.extend(alias_findings(&path, source));
+    found.extend(alias_findings(&full, source));
     found
 }
 /// The token range of each `use` statement's tree (after `use`, to its `;`).
