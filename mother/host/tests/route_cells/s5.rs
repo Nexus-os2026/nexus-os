@@ -16,6 +16,7 @@ use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::evidence::{
     EvidenceProjection, EvidenceRecord, MemoryEvidence,
 };
+use nexus_governed_control::authority::file_session::HaltCell;
 use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::broker::route_seams as s1;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
@@ -34,6 +35,7 @@ use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread::ThreadId;
 use std::time::{Duration, Instant};
 
 pub(super) type Recorded = Arc<Mutex<Vec<(LaneRole, InvocationId)>>>;
@@ -187,9 +189,13 @@ struct Mother {
     /// The request context (not the port or door): S4b's halt is read here.
     context: SessionContext,
     peer: Arc<Mutex<Vec<String>>>,
+    /// Behaviour 5: the door's `lifecycle_halt` view, taken before
+    /// `SessionPort::new` (for `original_cell_unscheduled`).
+    halt: HaltCell,
 }
 fn mother(f: &Fixture, o: &Opened) -> Mother {
     let b = boot(f, o);
+    let halt = b.door.lifecycle_halt();
     let (calls, recorded) = (Arc::default(), Recorded::default());
     let journal = FileJournal::open(&f.0.join("mother-journal.jsonl")).unwrap();
     let private = FilePrivate::open_session(&f.0.join("private"), b.context.clone());
@@ -214,6 +220,7 @@ fn mother(f: &Fixture, o: &Opened) -> Mother {
         request: b.request,
         context: b.context,
         peer: b.peer,
+        halt,
     }
 }
 impl Mother {
@@ -263,8 +270,9 @@ type Neighbour = (&'static str, Option<u64>);
 struct Expect {
     attempts: usize,
     profile: Profile,
-    /// Each session-only site's count per recorded invocation (A.4 item 3).
-    per_invocation: [(&'static str, usize); 4],
+    /// Each session-only site's count per recorded invocation (A.4 item 3),
+    /// selected by the invocation's role through the row's closed lookup.
+    roles: Roles,
     /// Whether the cell credits a request-level property (A.4 item 5).
     request_level: bool,
     /// Whether it credits an attempt-level property (never on `bound: no`).
@@ -284,12 +292,7 @@ const RECORDED: Expect = Expect {
         call_gate: 4,
         bound: true,
     },
-    per_invocation: [
-        ("mother.lane.prelock", 1),
-        ("mother.admit", 1),
-        ("mother.admit.ok", 1),
-        ("mother.lane.returned", 1),
-    ],
+    roles: done_roles,
     request_level: true,
     attempt_level: true,
     multiplicity: [
@@ -303,6 +306,62 @@ const RECORDED: Expect = Expect {
         ("model.call.admitted", Some(3)),
         ("call.gate", Some(4)),
     )),
+};
+/// SB3E-R49.3 (mission Behaviour 8): a row's closed role lookup. A role
+/// only selects its invocations' expected counts, never a total: `None` is
+/// no entry (a recorded invocation of that role is `role_unexpected`), and
+/// an entry with no recorded invocation is `role_missing`.
+type Roles = fn(LaneRole) -> Option<[(&'static str, usize); 4]>;
+/// The four session-only sites (A.3), each `n` times per invocation.
+fn sessions(n: usize) -> Option<[(&'static str, usize); 4]> {
+    let sites = [
+        "mother.lane.prelock",
+        "mother.admit",
+        "mother.admit.ok",
+        "mother.lane.returned",
+    ];
+    Some(sites.map(|site| (site, n)))
+}
+/// `RECORDED`'s path to Done: every role, each invocation once.
+fn done_roles(role: LaneRole) -> Option<[(&'static str, usize); 4]> {
+    match role {
+        LaneRole::ResearcherA | LaneRole::ResearcherB | LaneRole::Skeptic => sessions(1),
+        LaneRole::Builder | LaneRole::Verifier | LaneRole::Sentinel => sessions(1),
+    }
+}
+/// `HELD`'s path, to the Builder's returned call: no Verifier yet.
+fn held_roles(role: LaneRole) -> Option<[(&'static str, usize); 4]> {
+    match role {
+        LaneRole::ResearcherA | LaneRole::ResearcherB | LaneRole::Skeptic => sessions(1),
+        LaneRole::Builder | LaneRole::Sentinel => sessions(1),
+        LaneRole::Verifier => None,
+    }
+}
+/// `REFUSED`'s path: the Builder's call refused, its lane never returns, so
+/// none of its session-only sites fires (its attempt sites do); no Verifier.
+fn refused_roles(role: LaneRole) -> Option<[(&'static str, usize); 4]> {
+    match role {
+        LaneRole::ResearcherA | LaneRole::ResearcherB | LaneRole::Skeptic => sessions(1),
+        LaneRole::Sentinel => sessions(1),
+        LaneRole::Builder => sessions(0),
+        LaneRole::Verifier => None,
+    }
+}
+/// Behaviour 10's control path (A.6, measured at U5 Step 0 item 5): held at
+/// ord 4 and released with no value, the recorded path's profile up to the
+/// Builder's returned call.
+const HELD: Expect = Expect {
+    roles: held_roles,
+    ..RECORDED
+};
+/// Behaviour 8 (A.6, measured on each of the six value paths alike): opening
+/// 1, recheck 1, classify 1, `call.gate` 4, bound; each attempt site once;
+/// `mother.charge.entry` between ord 3's `model.call.admitted` and ord 4's
+/// `call.gate`; Sentinel (twice), ResearcherA, ResearcherB and Skeptic 1/1/1/1
+/// per invocation, the Builder 0/0/0/0.
+const REFUSED: Expect = Expect {
+    roles: refused_roles,
+    ..RECORDED
 };
 /// Site domains (AM-2 rev 3 A.3, unchanged).
 const ATTEMPT: [&str; 6] = [
@@ -468,8 +527,18 @@ fn credit(
     {
         return Err("not_model_invocation");
     }
-    for (_, invocation) in &d.recorded {
-        for (site, n) in e.per_invocation {
+    // SB3E-R49.3: the role only selects each invocation's own counts.
+    if d.recorded.iter().any(|r| (e.roles)(r.0).is_none()) {
+        return Err("role_unexpected");
+    }
+    let mut entries = LaneRole::ALL
+        .into_iter()
+        .filter(|r| (e.roles)(*r).is_some());
+    if entries.any(|role| d.recorded.iter().all(|r| r.0 != role)) {
+        return Err("role_missing");
+    }
+    for (role, invocation) in &d.recorded {
+        for (site, n) in (e.roles)(*role).into_iter().flatten() {
             let at = |m: &&s5::Entry| m.point == site && m.invocation == Some(*invocation);
             if mother.iter().filter(at).count() != n {
                 return Err("per_invocation");
@@ -641,7 +710,7 @@ fn route_s5_join_plants_each_refuse() {
             scripted,
             unknown,
         };
-        let plants: [Plant; 39] = [
+        let plants: [Plant; 43] = [
             ("two calls", "driver_calls", |c| {
                 c.d = Driver {
                     calls: 2,
@@ -802,6 +871,41 @@ fn route_s5_join_plants_each_refuse() {
                 "request-level, call.gate 0 row only",
                 "request_level",
                 |c| c.e.profile.call_gate = 0,
+            ),
+            // SB3E-R49.3 (P-CREDIT): the role lookup selects, never totals.
+            ("a wrong count for one role", "per_invocation", |c| {
+                c.e.roles = |r| match r == LaneRole::Skeptic {
+                    true => sessions(2),
+                    false => done_roles(r),
+                }
+            }),
+            (
+                "a recorded role not in the lookup",
+                "role_unexpected",
+                |c| c.e.roles = |r| done_roles(r).filter(|_| r != LaneRole::Skeptic),
+            ),
+            ("a role in the lookup, none recorded", "role_missing", |c| {
+                let verifier = |r: &(LaneRole, InvocationId)| r.0 == LaneRole::Verifier;
+                let gone: Vec<_> =
+                    c.d.recorded
+                        .iter()
+                        .filter(|r| verifier(r))
+                        .map(|r| r.1)
+                        .collect();
+                c.d.recorded.retain(|r| !verifier(r));
+                c.m.retain(|e| !e.invocation.is_some_and(|i| gone.contains(&i)));
+            }),
+            (
+                "Sentinel's invocations 2/0, not 1/1",
+                "per_invocation",
+                |c| {
+                    let sentinel = |r: &&(LaneRole, InvocationId)| r.0 == LaneRole::Sentinel;
+                    let two: Vec<_> = c.d.recorded.iter().filter(sentinel).map(|r| r.1).collect();
+                    let second =
+                        |e: &s5::Entry| e.point == "mother.admit" && e.invocation == Some(two[1]);
+                    let at = c.m.iter().position(second).unwrap();
+                    c.m[at].invocation = Some(two[0]);
+                },
             ),
         ];
         for (name, reason, plant) in plants {
@@ -1161,6 +1265,10 @@ pub(super) struct Facts {
     pub(super) native: Vec<EvidenceRecord>,
     /// The peer's requests since the hold began, in served order.
     pub(super) peer: Vec<String>,
+    /// The child's own checks that failed (T6, `credit`, the driver's): they
+    /// fail the child after its record is written, so the parent still
+    /// compares the witness and names its fields (P-CELL attribution).
+    pub(super) findings: Vec<String>,
 }
 
 /// One cell child's run, as its parent saw it (design 3.3).
@@ -1185,12 +1293,16 @@ pub(super) fn cell(
 ) -> Option<Ran> {
     if let Some(root) = std::env::var_os(CHILD) {
         let f = Fixture(PathBuf::from(root));
-        let witness = render(&drive(&f));
+        let facts = drive(&f);
+        let witness = render(&facts);
         let nonce = std::env::var(NONCE).expect("the parent's nonce");
         let mut append = std::fs::OpenOptions::new();
         let mut result = append.append(true).open(f.0.join("result")).unwrap();
         let line = format!("CELL {nonce} {id} {witness}\n");
         std::io::Write::write_all(&mut result, line.as_bytes()).unwrap();
+        if !facts.findings.is_empty() {
+            panic!("{}; witness {witness}", facts.findings.join("; "));
+        }
         return None;
     }
     let mut bytes = [0u8; 16];
@@ -1242,9 +1354,16 @@ impl Mother {
 /// `model.call.admitted` and ord 4's `call.gate`); each of `points` is armed
 /// while the hold before it stands, and that hold is then released, so each
 /// acknowledgement is the chat's (ord 4). Every wait is a bounded receive
-/// (`PATIENCE`); the last hold is released before the worker is joined.
-/// Returns the S1 acknowledgements, in order, and the advance's steps.
-fn chained(f: &Fixture, m: &Mother, points: &[&'static str]) -> (Vec<s1::Entry>, Vec<String>) {
+/// (`PATIENCE`). `apply` runs while the last hold stands, with that hold and
+/// the advancing worker's thread, and releases it before the worker is
+/// joined. Returns the S1 acknowledgements, in order, the advance's steps
+/// and what `apply` returned.
+fn chained<R>(
+    f: &Fixture,
+    m: &Mother,
+    points: &[&'static str],
+    apply: impl FnOnce(s1::Held, ThreadId) -> R,
+) -> (Vec<s1::Entry>, Vec<String>, R) {
     let (cell, timeout) = ("u5", timeout as s5::Timeout);
     let entry = s5::arm("mother.charge.entry", s5::Action::Pause { cell, timeout });
     std::thread::scope(|s| {
@@ -1261,19 +1380,28 @@ fn chained(f: &Fixture, m: &Mother, points: &[&'static str]) -> (Vec<s1::Entry>,
             acks.push(ack);
             before = Some(held);
         }
-        drop(before);
-        (acks, advancing.join().unwrap())
+        let applied = apply(before.expect("a held point"), advancing.thread().id());
+        (acks, advancing.join().unwrap(), applied)
     })
 }
 
-/// Behaviour 10: `ctl_call_chat`'s driver. Held at `call.gate` and then at
-/// `model.call.observed` on ord 4, released with no value, the chat reaches
-/// `model.call.admitted` and a recorded outcome.
-pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
+/// A cell's start (Behaviour 5): the session with its projection, the S5
+/// fixture, both traces armed and drained, and where the observations begin
+/// (journal, projection, peer).
+struct Start {
+    o: Opened,
+    native: Arc<MemoryEvidence>,
+    mother: Mother,
+    since: (usize, usize, usize),
+    _traces: (s1::Held, s5::Held),
+}
+fn start(f: &Fixture) -> Start {
     let (o, native) = opened(f);
     let mother = mother(f, &o);
-    let _s1 = s1::arm("reg.reserve", s1::Action::Trace);
-    let _s5 = s5::arm("mother.charge", s5::Action::Trace);
+    let traces = (
+        s1::arm("reg.reserve", s1::Action::Trace),
+        s5::arm("mother.charge", s5::Action::Trace),
+    );
     s1::drain_trace();
     s5::drain_trace();
     let since = (
@@ -1281,16 +1409,291 @@ pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
         native.records().len(),
         mother.peer.lock().unwrap().len(),
     );
-    let points = ["call.gate", "model.call.observed"];
-    let (acks, steps) = chained(f, &mother, &points);
-    // The T6 child half and `credit` judge the run first (`collect`).
+    Start {
+        o,
+        native,
+        mother,
+        since,
+        _traces: traces,
+    }
+}
+/// A held cell: the chained hold through `points`, `apply` while the last
+/// stands (Behaviour 6), then the passive collection under the measured
+/// `row` (Behaviours 7, 8). Returns the facts, the advance's steps and what
+/// `apply` returned.
+fn driven<R>(
+    f: &Fixture,
+    value: &'static str,
+    points: &[&'static str],
+    row: &Expect,
+    apply: impl FnOnce(&Opened, &Mother, s1::Held, ThreadId) -> R,
+) -> (Facts, Vec<String>, R) {
+    let c = start(f);
+    let (o, m) = (&c.o, &c.mother);
+    let (acks, steps, applied) = chained(f, m, points, |held, chat| apply(o, m, held, chat));
+    println!("WITNESS {value}: the advance {steps:?}");
     let held = (points.to_vec(), acks);
-    let facts = collect(&o, &mother, &native, since, held, "none");
+    let facts = collect(o, m, &c.native, c.since, held, value, row);
+    (facts, steps, applied)
+}
+
+/// Behaviour 10: `ctl_call_chat`'s driver. Held at `call.gate` and then at
+/// `model.call.observed` on ord 4, released with no value, the chat reaches
+/// `model.call.admitted` and a recorded outcome.
+pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
+    let points = ["call.gate", "model.call.observed"];
+    let (facts, steps, ()) = driven(f, "none", &points, &HELD, |_, _, held, _| drop(held));
     assert!(
         steps.iter().all(|s| s == "Ok(())"),
         "the advance: {steps:?}"
     );
     facts
+}
+
+// SB3E-R86.4 (U5b): the six credited values (rows 93-96, 98, 99; mission
+// Behaviour 6), each applied while ord 4's chat is held at
+// `model.call.observed`, each with its own entry for its `cells!` arm.
+const OBSERVED: [&str; 1] = ["model.call.observed"];
+/// Design 3.4: `quit` and `fatal` start the close deadline, so the chat hold
+/// is released within this short post-shutdown pause budget (6.1).
+const SHUTDOWN_PAUSE: Duration = Duration::from_secs(1);
+/// SB3E-R86.2: the bounded wait for `door.cancel_run`'s acknowledgement,
+/// `PATIENCE / 2`: shorter than the chat hold's own 10 s, so a missing one is
+/// the cell's `cancel_run_ack`, never that hold's TIMEOUT abort. A slow host
+/// can only fail the cell (fail closed).
+const CANCEL_ACK_PATIENCE: Duration = Duration::from_secs(PATIENCE.as_secs() / 2);
+
+/// Row 93: `engage_emergency()` on the `lifecycle_halt` view.
+pub(super) fn original_cell_unscheduled(f: &Fixture) -> Facts {
+    let value = "original_cell_unscheduled";
+    let (mut facts, _, engaged) = driven(f, value, &OBSERVED, &REFUSED, |_, m, held, _| {
+        m.halt.engage_emergency();
+        drop(held);
+        m.halt.is_engaged()
+    });
+    if !engaged {
+        facts
+            .findings
+            .push(format!("{value}: the cell is not engaged"));
+    }
+    facts
+}
+/// Row 94: `emergency()` twice; both results and both applications (two
+/// `ingress.emergency` entries of S) are recorded.
+pub(super) fn repeated(f: &Fixture) -> Facts {
+    let (mut facts, _, results) = driven(f, "repeated", &OBSERVED, &REFUSED, |o, _, held, _| {
+        let results = [o.ingress.emergency(), o.ingress.emergency()];
+        drop(held);
+        results.map(|r| format!("{:?}", r.map(|_| ())))
+    });
+    let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(facts.session);
+    let applied = facts.broker.iter().filter(mine).count();
+    println!("WITNESS repeated: {results:?}, {applied} ingress.emergency entries");
+    if results != ["Ok(())", "Ok(())"] || applied != 2 {
+        let found = format!("repeated: {results:?}, {applied} applications");
+        facts.findings.push(found);
+    }
+    facts
+}
+/// Row 95: `FileSession::stop(<mission>)` (Behaviour 6.2).
+pub(super) fn mission_stop(f: &Fixture) -> Facts {
+    stop(f, "mission_stop", false)
+}
+/// Row 96: `FileSession::stop_all()`, the File API's own path (`lite.rs:390`),
+/// not `Coordinator::stop_all` (Behaviour 6.2).
+pub(super) fn stop_all(f: &Fixture) -> Facts {
+    stop(f, "stop_all", true)
+}
+/// Row 98: `fail()`, within the short post-shutdown pause budget.
+pub(super) fn fatal(f: &Fixture) -> Facts {
+    shutdown(f, "fatal", |o| {
+        o.ingress.fail();
+        Ok(())
+    })
+}
+/// Row 99: `accept(CommandKind::Quit, 2)`, within the same budget.
+pub(super) fn quit(f: &Fixture) -> Facts {
+    shutdown(f, "quit", |o| {
+        let accepted = o.ingress.accept(CommandKind::Quit, 2);
+        accepted.map(|_| ()).map_err(|e| format!("{e:?}"))
+    })
+}
+/// 6.1: `apply`, then the chat released within `SHUTDOWN_PAUSE`.
+fn shutdown(f: &Fixture, value: &'static str, apply: fn(&Opened) -> Result<(), String>) -> Facts {
+    let (mut facts, _, (result, released)) =
+        driven(f, value, &OBSERVED, &REFUSED, |o, _, held, _| {
+            let at = Instant::now();
+            let result = apply(o);
+            drop(held);
+            (result, at.elapsed())
+        });
+    println!("WITNESS {value}: {result:?}, released after {released:?}");
+    if let Err(e) = result {
+        facts.findings.push(format!("{value}: {e}"));
+    }
+    if released >= SHUTDOWN_PAUSE {
+        let late = format!("{value}: released after {released:?}, not within {SHUTDOWN_PAUSE:?}");
+        facts.findings.push(late);
+    }
+    facts
+}
+
+/// Behaviour 6.2 (R49.2), steps 2-6: `door.cancel_run` armed while the chat
+/// is held; the Stop worker launched, its `ThreadId` recorded before it
+/// starts work; its acknowledgement awaited (bounded); the chat released,
+/// then the cancellation; the worker joined (7). Returns the
+/// acknowledgement, if any, the worker's thread and its result.
+fn stopping(
+    f: &Fixture,
+    m: &Mother,
+    held: s1::Held,
+    all: bool,
+) -> (Option<s1::Entry>, ThreadId, String) {
+    let cancel = f.pause("door.cancel_run");
+    std::thread::scope(|s| {
+        let (go, gone) = std::sync::mpsc::channel::<()>();
+        let worker = s.spawn(move || {
+            assert!(gone.recv_timeout(PATIENCE).is_ok(), "the Stop worker's go");
+            match all {
+                false => format!("{:?}", m.m.stop(m.id)),
+                true => format!("{:?}", m.m.stop_all()),
+            }
+        });
+        let thread = worker.thread().id();
+        go.send(()).unwrap();
+        let ack = cancel.acknowledged.recv_timeout(CANCEL_ACK_PATIENCE).ok();
+        drop(held);
+        drop(cancel);
+        (ack, thread, worker.join().unwrap())
+    })
+}
+/// 6.2 step 4: the acknowledgement is `door.cancel_run`'s, of S, Q and RUN,
+/// on the Stop worker's thread. It proves arrival, and by program order that
+/// OwnerStop was engaged first; not that the cancellation completed.
+fn cancel_ack(f: &Facts, ack: Option<&s1::Entry>, worker: ThreadId) -> Result<(), String> {
+    let run = f.claim.map(|c| c.0);
+    let ours = |a: &&s1::Entry| {
+        (a.point, a.note, a.session, a.request)
+            == ("door.cancel_run", false, Some(f.session), Some(f.request))
+            && run.is_some()
+            && a.run == run
+            && a.thread == worker
+    };
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "cancel_run_ack: {:?}, the Stop worker {worker:?}",
+            ack.map(|a| (a.point, a.request, a.run, a.thread))
+        )),
+    }
+}
+/// 6.2: the Stop cell, then step 7's checks: the chat worker refused
+/// (`Err(Stopped)`), the Stop worker returned `Ok` with its state or count.
+fn stop(f: &Fixture, value: &'static str, all: bool) -> Facts {
+    let (mut facts, steps, (ack, worker, stopped)) =
+        driven(f, value, &OBSERVED, &REFUSED, |_, m, held, _| {
+            stopping(f, m, held, all)
+        });
+    println!("WITNESS {value}: the Stop worker {stopped}, its acknowledgement {ack:?}");
+    let want = if all { "Ok(1)" } else { "Ok(Stopped)" };
+    let refused = steps.last().map(String::as_str) == Some("Err(Stopped)");
+    let findings = [
+        cancel_ack(&facts, ack.as_ref(), worker).err(),
+        (stopped != want).then(|| format!("{value}: the Stop worker returned {stopped}")),
+        (!refused).then(|| format!("{value}: the chat worker returned {steps:?}")),
+    ];
+    facts.findings.extend(findings.into_iter().flatten());
+    facts
+}
+/// R49.2 (P-STOP attribution controls): the measured acknowledgement is the
+/// Stop worker's; checked against the chat worker's thread, or with another
+/// run, it is each time `cancel_run_ack`.
+#[test]
+fn route_s5_cancel_run_ack_controls_each_refuse() {
+    child("s5::route_s5_cancel_run_ack_controls_each_refuse", |f| {
+        let (facts, _, ((ack, worker, _), chat)) = driven(
+            f,
+            "mission_stop",
+            &OBSERVED,
+            &REFUSED,
+            |_, m, held, chat| (stopping(f, m, held, false), chat),
+        );
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        assert_eq!(cancel_ack(&facts, ack.as_ref(), worker), Ok(()));
+        let mut moved = ack.clone().expect("door.cancel_run acknowledged");
+        moved.run = Some(RunId::parse(&format!("run-{}", "0".repeat(32))).unwrap());
+        for (control, refused) in [
+            (
+                "the chat worker's thread",
+                cancel_ack(&facts, ack.as_ref(), chat),
+            ),
+            ("another run", cancel_ack(&facts, Some(&moved), worker)),
+        ] {
+            assert!(
+                refused
+                    .as_ref()
+                    .is_err_and(|e| e.starts_with("cancel_run_ack: ")),
+                "{control}"
+            );
+            println!("WITNESS cancel_run_ack control {control:?}: {refused:?}");
+        }
+    });
+}
+
+/// Design 7.2 harness control: `quit` applied at ord 3's
+/// `model.call.observed`, not ord 4's (S1 held from the call's first arrival
+/// and chained to its third); `entry` must differ.
+pub(super) fn ord3_quit(f: &Fixture) -> Facts {
+    let c = start(f);
+    let (o, m) = (&c.o, &c.mother);
+    let mut held = f.pause(OBSERVED[0]);
+    let acks = std::thread::scope(|s| {
+        let advancing = s.spawn(|| m.advance_to_call());
+        let mut acks = Vec::new();
+        while acks.len() < 3 {
+            let Ok(ack) = held.acknowledged.recv_timeout(PATIENCE) else {
+                panic!("ord {}: not acknowledged", acks.len() + 1);
+            };
+            acks.push(ack);
+            if acks.len() < 3 {
+                drop(std::mem::replace(&mut held, f.pause(OBSERVED[0])));
+            }
+        }
+        let quit = o.ingress.accept(CommandKind::Quit, 2).map(|_| ());
+        drop(held);
+        println!(
+            "WITNESS ord3 quit {quit:?}, the advance {:?}",
+            advancing.join()
+        );
+        acks
+    });
+    let last = acks.last().cloned().into_iter().collect();
+    collect(
+        o,
+        m,
+        &c.native,
+        c.since,
+        (OBSERVED.to_vec(), last),
+        "quit",
+        &REFUSED,
+    )
+}
+/// Design 7.2 harness control: the `quit` cell with ATT bound to another
+/// attempt; the identity fields must differ.
+pub(super) fn quit_other_attempt(f: &Fixture) -> Facts {
+    let mut facts = quit(f);
+    facts.claim = facts.claim.map(|(run, attempt)| (run, attempt + 1));
+    facts
+}
+/// Design 7.2 harness control: an earlier refusal, `quit` accepted before
+/// the mission advances; `check` and `out` must differ.
+pub(super) fn early_quit(f: &Fixture) -> Facts {
+    let c = start(f);
+    let quit = c.o.ingress.accept(CommandKind::Quit, 2).map(|_| ());
+    let steps = c.mother.advance_to_call();
+    println!("WITNESS early quit {quit:?}, the advance {steps:?}");
+    let held = (OBSERVED.to_vec(), Vec::new());
+    collect(&c.o, &c.mother, &c.native, c.since, held, "quit", &REFUSED)
 }
 
 /// Behaviour 7: the passive observations, read only once both workers are
@@ -1304,10 +1707,11 @@ fn collect(
     since: (usize, usize, usize),
     (points, acks): (Vec<&'static str>, Vec<s1::Entry>),
     value: &'static str,
+    row: &Expect,
 ) -> Facts {
     let (broker, trace) = (s1::drain_trace(), s5::drain_trace());
     let d = m.driver(o);
-    let credited = credit(&d, &RECORDED, &broker, &trace);
+    let credited = credit(&d, row, &broker, &trace);
     let claim = credited.as_ref().ok().and_then(|w| w.claim);
     let seams = t6(
         cfg!(mother_route_seams),
@@ -1317,11 +1721,12 @@ fn collect(
         &broker,
         &trace,
     );
+    let mut findings = Vec::new();
     if let Err(finding) = seams {
-        panic!("T6 child half: {finding}");
+        findings.push(format!("T6 child half: {finding}"));
     }
     if let Err(reason) = credited {
-        panic!("credit: {reason}");
+        findings.push(format!("credit: {reason}"));
     }
     Facts {
         session: d.session,
@@ -1336,6 +1741,7 @@ fn collect(
         journal: m.m.journal_view().unwrap()[since.0..].to_vec(),
         native: native.records()[since.1..].to_vec(),
         peer: m.peer.lock().unwrap()[since.2..].to_vec(),
+        findings,
     }
 }
 

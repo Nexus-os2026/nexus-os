@@ -115,8 +115,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "051334c42e917f2b98c2c9a83980a81d2fdf699afd4703517cf6751d11e94ca3";
-const MUTANTS: usize = 809;
+const PINS_SHA256: &str = "d680c59a28ffe6388e94dcce2aca7945b66bc910ce4c9c04a6b00aa903510aa5";
+const MUTANTS: usize = 935;
 const REGIONS: usize = 33;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -125,13 +125,13 @@ const REGIONS: usize = 33;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs f14de104fe79a5b878445f740eaa971e96b2073c1fa961de4cc58f6e0e66d6bb
+cells.rs a0db8fa3831e75b432e451c8282939836850b2140f689c259f051ff8fb29874b
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs a987d1b5da4b6e0b40273a842a728ab274f056d44dfdef51ee5255f643f1cc40
+main.rs 5c41f617582abf3a835c5102c621cab3b77074e2be286241f9cd7f00bc6723d6
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs c6b8fd6e4d61bc095affc6cecce3fccfbe42dbcf158aba8b7d1325b91ab57301
-witness.rs 2961f83a1b06d8d0c4388f5ee727dd177b0fafe7018bb0e780b34cd29dcf312b
+s5.rs 1b2c2f9b90c1ebd8701aaae48c987943684e0795b805f9ac402969b81f31fcd3
+witness.rs 7f931ad82d0e6ccc7aeecb51e89b141756aadd18b154f648211a5a94293d65bc
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {

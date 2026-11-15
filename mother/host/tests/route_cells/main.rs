@@ -27,11 +27,11 @@ mod grant;
 mod locks;
 mod s5;
 mod store;
-/// SB3E-R86.4 (U5a; mission Behaviour 1): one literal arm per credited cell
-/// (none yet; `macro_rules!` cannot build `rc_<slug>`), then the terminal
-/// arm, the control `ctl_call_chat`: its driver run by the cell runner, its
-/// record and witness checked by `witness.rs`. An entry with no arm fails to
-/// compile.
+/// SB3E-R86.4 (mission Behaviour 1): the terminal arm, the control
+/// `ctl_call_chat`, then one literal arm per credited cell (`macro_rules!`
+/// cannot build `rc_<slug>`; U5b's six), each its cell's own driver run by
+/// the cell runner, its record and witness checked by `witness.rs` against
+/// its frozen row. An entry with no arm fails to compile.
 macro_rules! cells {
     () => {
         #[test]
@@ -42,6 +42,72 @@ macro_rules! cells {
                 super::witness::control(&ran);
             }
         }
+    };
+    (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => {
+        #[test]
+        fn rc_r5_call_chat_ingress_original_cell_unscheduled() {
+            let (name, id) = ("cells::rc_r5_call_chat_ingress_original_cell_unscheduled", "rc_r5_call_chat_ingress_original_cell_unscheduled");
+            let ran = super::s5::cell(name, id, super::s5::original_cell_unscheduled, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::credited(&ran, "call_chat", "ingress", "original_cell_unscheduled");
+            }
+        }
+        cells! { $($rest)* }
+    };
+    (r5 call_chat ingress repeated; $($rest:tt)*) => {
+        #[test]
+        fn rc_r5_call_chat_ingress_repeated() {
+            let (name, id) = ("cells::rc_r5_call_chat_ingress_repeated", "rc_r5_call_chat_ingress_repeated");
+            let ran = super::s5::cell(name, id, super::s5::repeated, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::credited(&ran, "call_chat", "ingress", "repeated");
+            }
+        }
+        cells! { $($rest)* }
+    };
+    (r5 call_chat ingress mission_stop; $($rest:tt)*) => {
+        #[test]
+        fn rc_r5_call_chat_ingress_mission_stop() {
+            let (name, id) = ("cells::rc_r5_call_chat_ingress_mission_stop", "rc_r5_call_chat_ingress_mission_stop");
+            let ran = super::s5::cell(name, id, super::s5::mission_stop, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::credited(&ran, "call_chat", "ingress", "mission_stop");
+            }
+        }
+        cells! { $($rest)* }
+    };
+    (r5 call_chat ingress stop_all; $($rest:tt)*) => {
+        #[test]
+        fn rc_r5_call_chat_ingress_stop_all() {
+            let (name, id) = ("cells::rc_r5_call_chat_ingress_stop_all", "rc_r5_call_chat_ingress_stop_all");
+            let ran = super::s5::cell(name, id, super::s5::stop_all, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::credited(&ran, "call_chat", "ingress", "stop_all");
+            }
+        }
+        cells! { $($rest)* }
+    };
+    (r5 call_chat ingress fatal; $($rest:tt)*) => {
+        #[test]
+        fn rc_r5_call_chat_ingress_fatal() {
+            let (name, id) = ("cells::rc_r5_call_chat_ingress_fatal", "rc_r5_call_chat_ingress_fatal");
+            let ran = super::s5::cell(name, id, super::s5::fatal, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::credited(&ran, "call_chat", "ingress", "fatal");
+            }
+        }
+        cells! { $($rest)* }
+    };
+    (r5 call_chat ingress quit; $($rest:tt)*) => {
+        #[test]
+        fn rc_r5_call_chat_ingress_quit() {
+            let (name, id) = ("cells::rc_r5_call_chat_ingress_quit", "rc_r5_call_chat_ingress_quit");
+            let ran = super::s5::cell(name, id, super::s5::quit, super::witness::render);
+            if let Some(ran) = ran {
+                super::witness::credited(&ran, "call_chat", "ingress", "quit");
+            }
+        }
+        cells! { $($rest)* }
     };
 }
 // The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
