@@ -1754,11 +1754,74 @@ fn passive_findings(file: &str, source: &str) -> Vec<String> {
                 found.push(format!("Passive: {name} reads {read}"));
             }
         }
-        if t.iter().any(|x| x.contains("store.commit")) {
+        // SB3E-R101.2 F3a: each literal's value (escapes decoded, a raw one as
+        // written); a literal that does not decode is itself a finding.
+        let literals = tokens(body).unwrap_or_default().into_iter().filter(|x| x.1);
+        let mut commit = t.iter().any(|x| x.contains("store.commit"));
+        for (r, _) in literals {
+            match literal_value(&body[r.clone()]) {
+                Some(v) => commit |= v.contains("store.commit"),
+                None => found.push(format!(
+                    "Passive: {name} has a literal that does not decode: {}",
+                    &body[r]
+                )),
+            }
+        }
+        if commit {
             found.push(format!("Passive: {name} reads store.commit"));
         }
     }
     found
+}
+/// SB3E-R101.2 F3a: a literal token's value: a string, byte string or char
+/// with its escapes decoded (`\x`, `\u{..}`, `\n \r \t \\ \0 \' \"`, and a
+/// backslash-newline with the whitespace after it); a raw one as written; a
+/// number as written. `None` when it does not decode.
+fn literal_value(token: &str) -> Option<String> {
+    if token.starts_with(|c: char| c.is_ascii_digit()) {
+        return Some(token.into());
+    }
+    let s = token.strip_prefix(['b', 'c']).unwrap_or(token);
+    if let Some(raw) = s.strip_prefix('r') {
+        let hashes = raw.len() - raw.trim_start_matches('#').len();
+        let body = raw[hashes..].strip_prefix('"')?;
+        return Some(body[..body.rfind(&format!("\"{}", "#".repeat(hashes)))?].into());
+    }
+    let quote = s.chars().next().filter(|q| ['"', '\''].contains(q))?;
+    let mut chars = s[1..s.rfind(quote).filter(|&e| e > 0)?].chars().peekable();
+    let mut out = String::new();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        let hex = |h: &str| u32::from_str_radix(&h.replace('_', ""), 16).ok();
+        match chars.next()? {
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            '0' => out.push('\0'),
+            e @ ('\\' | '\'' | '"') => out.push(e),
+            'x' => out.push(char::from_u32(hex(&[chars.next()?, chars.next()?]
+                .iter()
+                .collect::<String>())?)?),
+            'u' if chars.next()? == '{' => {
+                let (mut digits, mut closed) = (String::new(), false);
+                for d in chars.by_ref() {
+                    closed = d == '}';
+                    if closed {
+                        break;
+                    }
+                    digits.push(d);
+                }
+                // An unterminated `\u{` does not decode.
+                out.push(char::from_u32(hex(&digits).filter(|_| closed)?)?);
+            }
+            '\n' => while chars.next_if(|c| c.is_whitespace()).is_some() {},
+            _ => return None,
+        }
+    }
+    Some(out)
 }
 /// F-S5-SPLIT item 1(a), (d) and section 4 item 8 over the harness, every
 /// finding: the list itself, the closed list, distinct digests, each
@@ -2105,6 +2168,9 @@ fn section_findings(file: &str, row: &Row, source: &str, pins: &[(&str, &str)]) 
     if qualified(&t) {
         say("a qualified-self path <..>::".into());
     }
+    for p in openers(&t) {
+        say(format!("a qualified-self opener < after `{p}`"));
+    }
     // Built from parts so the kernel-dependency scan does not match this file.
     let roots = [
         "nexus_mother",
@@ -2171,28 +2237,59 @@ fn use_leaves(t: &[&str], prefix: &str, out: &mut Vec<String>) {
     }
 }
 /// A qualified-self path `<..>::` in `t`, with or without `as` (SB3E-R99.2
-/// F2): a `>` before `::` whose `<` does not follow `::` (a turbofish). `->`
-/// and `=>` close nothing.
+/// F2, R101.2): each `>` before `::` is matched to its `<` by `<`/`>` depth
+/// alone, with no stop at `;`, `{` or `}`; a match that does not follow `::`
+/// (a turbofish), or no match, is one. `->` and `=>` close nothing; `>=` and
+/// `<=` are comparisons (`lex` gives one token per punctuation character).
 fn qualified(t: &[&str]) -> bool {
-    let closes = |k: usize| t[k] == ">" && (k == 0 || !["-", "="].contains(&t[k - 1]));
+    let after = |k: usize, p: &[&str]| k > 0 && p.contains(&t[k - 1]);
+    let closes = |k: usize| t[k] == ">" && !after(k, &["-", "="]) && t.get(k + 1) != Some(&"=");
+    let opens = |k: usize| t[k] == "<" && t.get(k + 1) != Some(&"=");
     let ends = (0..t.len()).filter(|&j| closes(j) && t.get(j + 1..j + 3) == Some(&[":", ":"][..]));
     ends.into_iter().any(|j| {
         let mut depth = 0i32;
         for k in (0..=j).rev() {
-            match t[k] {
-                _ if closes(k) => depth += 1,
-                "<" => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return k == 0 || t[k - 1] != ":";
-                    }
-                }
-                ";" | "{" | "}" => return false,
-                _ => {}
+            depth += i32::from(closes(k)) - i32::from(opens(k));
+            if opens(k) && depth == 0 {
+                return k < 2 || t[k - 2..k] != [":", ":"];
             }
         }
-        false
+        true
     })
+}
+/// SB3E-R101.2 F2, fail-closed beside `qualified`: each `<` whose previous
+/// token lets it only open a qualified-self path, as that token. Allowed
+/// before `<`: an identifier that is not a keyword (`impl` is; `for` only as
+/// `for<'a>`), a literal, `)`, a `]` that closes no attribute, `?` or `::`
+/// (a turbofish). Refused: a lifetime, a `<`, any other punctuation,
+/// nothing. A comparison inside `<..>` cannot move this rule's match.
+fn openers<'a>(t: &[&'a str]) -> Vec<&'a str> {
+    let keyword = |w: &str| {
+        let words = "as async await box break const continue crate dyn else enum extern false fn if in let loop match mod move mut pub ref return self Self static struct super trait true try type unsafe use where while yield";
+        words.split(' ').any(|k| k == w)
+    };
+    let allowed = |i: usize| {
+        let p = t[i - 1];
+        let word = p.starts_with(|c: char| c.is_alphanumeric() || c == '_');
+        let lifetime = i >= 2 && t[i - 2] == "'" && word;
+        let literal = p.starts_with(['"', '\'']) && p.len() > 1;
+        let higher = p != "for" || t.get(i + 1) == Some(&"'");
+        // A `]` that closes `#[..]` or `#![..]` is no operand.
+        let mut depth = 0i32;
+        let open = (0..i).rev().find(|&k| {
+            depth += i32::from(t[k] == "]") - i32::from(t[k] == "[");
+            depth == 0
+        });
+        let attribute = p == "]" && open.is_some_and(|k| k > 0 && ["#", "!"].contains(&t[k - 1]));
+        (i >= 2 && t[i - 2..i] == [":", ":"])
+            || [")", "]", "?"].contains(&p) && !attribute
+            || literal
+            || word && !lifetime && !keyword(p) && higher
+    };
+    let refused = (0..t.len()).filter(|&i| t[i] == "<" && (i == 0 || !allowed(i)));
+    refused
+        .map(|i| if i == 0 { "" } else { t[i - 1] })
+        .collect()
 }
 /// SB3E-R99.2 F3b: each `fn` whose signature (from its name to its body or
 /// `;`) holds a `{` inside `()`, `[]` or `<>`, by name.
@@ -3039,6 +3136,76 @@ fn sb3e_s5_sections_are_the_closed_list() {
         if expected.is_empty() && !got.is_empty() {
             misses.push(format!("{plant}: {got:?}"));
         }
+    }
+    // SB3E-R101.2 F2 and F3a (round 2): the ruled plants, the depth rule's own
+    // counterexample (a comparison inside `<..>` in a turbofish const block,
+    // refused by `openers`), the nearest variants tried, and controls.
+    let q = "a qualified-self path <..>::";
+    let opener = |p: &str| format!("a qualified-self opener < after `{p}`");
+    let (attr, fored) = (opener("]"), opener("for"));
+    let (eq, brace, lt, life, ret) = (
+        opener("="),
+        opener("{"),
+        opener("<"),
+        opener("a"),
+        opener("return"),
+    );
+    let commit = "Passive: collect_native reads store.commit";
+    let collect = |value: &str| {
+        format!("use super::Entry;\nfn collect_native(broker: &[Entry]) -> usize {{\n    broker.iter().filter(|e| e.point == {value}).count()\n}}\n")
+    };
+    let round2: [(&str, &str, &str, String, Vec<&str>); 26] = [
+        ("R2 F2 <[u8; 0]>::default()", "s5_reg.rs", "-", "fn d() {\n    let _ = <[u8; 0]>::default();\n}\n".into(), vec![q, &eq]),
+        ("R2 F2 <[u8; { 0 }]>::default()", "s5_reg.rs", "-", "fn d() {\n    let _ = <[u8; { 0 }]>::default();\n}\n".into(), vec![q, &eq]),
+        ("R2 F2 <Vec<[u8; 0]>>::new()", "s5_reg.rs", "-", "fn d() {\n    let _ = <Vec<[u8; 0]>>::new();\n}\n".into(), vec![q, &eq]),
+        ("R2 F2 a comparison inside <..> in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ <[u8; { (2 > 1) as usize }]>::default().len() }>();\n}\n".into(), vec![&brace]),
+        ("R2 F2 a nested <<..> as ..>:: in a turbofish", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<<[u8; { (2 > 1) as usize }] as Default>::Output>();\n}\n".into(), vec![&lt]),
+        ("R2 F2 a >:: with no <", "s5_reg.rs", "-", "fn d(a: u8) -> bool {\n    a > ::core::primitive::u8::MAX\n}\n".into(), vec![q]),
+        ("R2 F2 after a lifetime", "s5_reg.rs", "-", "fn d<'a>(_: &'a <Vec<u8> as IntoIterator>::Item) {}\n".into(), vec![q, &life]),
+        ("R2 F2 after return", "s5_reg.rs", "-", "fn d() -> usize {\n    return <[u8]>::len(&[]);\n}\n".into(), vec![q, &ret]),
+        ("R2 F2 after an attribute, in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ #[allow(unused)] <[[u8; { (2 > 1) as usize }]]>::len(&[]); 0 }>();\n}\n".into(), vec![&attr]),
+        ("R2 F2 after for, in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ for <[u8; { (2 > 1) as usize }]>::C in [] {} 0 }>();\n}\n".into(), vec![&fored]),
+        ("R2 F2 control: a[0] < b", "s5_reg.rs", "-", "fn d(a: [u8; 1], b: u8) -> bool {\n    a[0] < b\n}\n".into(), vec![]),
+        ("R2 F2 control: Vec::<[u8; 0]>::new()", "s5_reg.rs", "-", "fn d() {\n    let _ = Vec::<[u8; 0]>::new();\n}\n".into(), vec![]),
+        ("R2 F2 control: a < b, a > b, a >= b, a <= b", "s5_reg.rs", "-", "fn d(a: u8, b: u8) -> bool {\n    a < b || a > b || a >= b || a <= b\n}\n".into(), vec![]),
+        ("R2 F2 control: -> and => and >>", "s5_reg.rs", "-", "fn d(a: u8) -> u8 {\n    let f = |x: u8| -> u8 { x >> 1 };\n    match a {\n        _ => f(a),\n    }\n}\n".into(), vec![]),
+        ("R2 F2 control: generics and turbofish >>", "s5_reg.rs", "-", "fn g<T: Into<u8>>(t: T) -> Vec<u8> {\n    let v: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();\n    let _ = v.into_iter().collect::<Vec<Vec<u8>>>();\n    vec![t.into()]\n}\n".into(), vec![]),
+        ("R2 F2 control: for<'a>", "s5_reg.rs", "-", "fn h<F>(_: F)\nwhere\n    F: for<'a> Fn(&'a u8),\n{\n}\n".into(), vec![]),
+        ("R2 F3a \"store.\\x63ommit\"", "s5_r34.rs", "super::Entry", collect(r#""store.\x63ommit""#), vec![commit]),
+        ("R2 F3a \"store.\\u{63}ommit\"", "s5_r34.rs", "super::Entry", collect(r#""store.\u{63}ommit""#), vec![commit]),
+        ("R2 F3a a backslash-newline", "s5_r34.rs", "super::Entry", collect("\"store.\\\n        commit\""), vec![commit]),
+        ("R2 F3a b\"store.\\x63ommit\"", "s5_r34.rs", "super::Entry", collect(r#"std::str::from_utf8(b"store.\x63ommit").unwrap()"#), vec![commit]),
+        ("R2 F3a \"store\\x2ecommi\\u{0_074}\"", "s5_r34.rs", "super::Entry", collect(r#""store\x2ecommi\u{0_074}""#), vec![commit]),
+        ("R2 F3a a backslash-CRLF the decoder refuses", "s5_r34.rs", "super::Entry", collect("\"store.\\\r\n        commit\""), vec!["Passive: collect_native has a literal that does not decode"]),
+        ("R2 F3a \"store.\\q\" (the lexer refuses)", "s5_r34.rs", "super::Entry", collect(r#""store.\q""#), vec!["lex: host/tests/route_cells/s5_r34.rs does not tokenize"]),
+        ("R2 F3a an unterminated \\u{ (the lexer refuses)", "s5_r34.rs", "super::Entry", collect(r#""store.\u{63ommit""#), vec!["lex: host/tests/route_cells/s5_r34.rs does not tokenize"]),
+        ("R2 F3a control: \"store.commi\"", "s5_r34.rs", "super::Entry", collect(r#""store.commi""#), vec![]),
+        ("R2 F3a control: \"a\\tb\\n\"", "s5_r34.rs", "super::Entry", collect(r#""a\tb\n""#), vec![]),
+    ];
+    for (plant, file, imports, text, expected) in round2 {
+        let data = set(file, 4, &|_| imports.into());
+        let rows = section_rows(&data);
+        let row = rows.iter().find(|r| r.file == file).expect(file);
+        let got = section_findings(file, row, &(stub(file) + &text), &pins);
+        let named = |e: &&str| match e.starts_with("lex: ") {
+            true => e.to_string(),
+            false => format!("section {file}: {e}"),
+        };
+        let expected: Vec<String> = expected.iter().map(named).collect();
+        let expected: Vec<&str> = expected.iter().map(String::as_str).collect();
+        shown(&mut misses, plant, &got, &expected);
+        if expected.is_empty() && !got.is_empty() {
+            misses.push(format!("{plant}: {got:?}"));
+        }
+    }
+    // `lex` gives one token per punctuation character (R101.2's first check).
+    let split = lex("a -> b => c >= d <= e >> f << g");
+    let want = [
+        "a", "-", ">", "b", "=", ">", "c", ">", "=", "d", "<", "=", "e", ">", ">", "f", "<", "<",
+        "g",
+    ];
+    if split != want {
+        misses.push(format!("lex splits operators as {split:?}"));
     }
     // The list itself.
     for (plant, data, expected) in [
