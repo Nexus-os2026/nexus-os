@@ -247,8 +247,15 @@ fn ledger_tag<'a>(v: &View<'a>, keys: &[(&str, &str)]) -> String {
     });
     shown.collect::<Vec<_>>().join(" ")
 }
-/// A field's `<token>[..]`: its token and the kind and ordinal its tag reads.
-fn located(text: &str) -> (&str, Vec<(&str, &str)>, Option<&str>, Option<u64>) {
+/// A field's `<token>[..]`: its token, its tag's keys, and the kind and
+/// ordinal the tag reads.
+type Located<'a> = (
+    &'a str,
+    Vec<(&'a str, &'a str)>,
+    Option<&'a str>,
+    Option<u64>,
+);
+fn located(text: &str) -> Located<'_> {
     let token = text.split('[').next().unwrap_or(text);
     let keys = tag_keys(text).unwrap_or_default();
     let get = |k: &str| keys.iter().find(|x| x.0 == k).map(|x| x.1);
@@ -369,8 +376,8 @@ fn rendered(f: &Facts, shape: &Shape) -> String {
             "value" => format!("{}@{held} ack={ack} won={won}", f.value),
             "out" => out.clone(),
             "branch" => branch.clone(),
-            "ledger" => ledger(&v, t),
-            "window" => window(&v).to_string(),
+            "ledger" => ledger(v, t),
+            "window" => window(v).to_string(),
             "peer" => {
                 let chat = f.peer.iter().filter(|p| *p == "/api/chat").count();
                 let paths = if f.peer.is_empty() {
@@ -380,8 +387,8 @@ fn rendered(f: &Facts, shape: &Shape) -> String {
                 };
                 format!("{paths} chat={chat}")
             }
-            "next" => next(&v, t),
-            "deadline_fired" => deadline(&v, &noted),
+            "next" => next(v, t),
+            "deadline_fired" => deadline(v, &noted),
             other => format!("unbuilt:{other}"),
         })
         .collect();
