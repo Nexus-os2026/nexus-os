@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix round 1: 52) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -11,7 +11,7 @@
   "install"
  ],
  "inventory": {
-  "sha256": "c822249f1b9297748eb32946306d5131bd953c6fbefa0ca67714596c56cf6ac0",
+  "sha256": "71f691989e22f78e974e520abe5fdc30a1904b758436991a5493945c297182b0",
   "names": [
    "cells::ctl_call_chat",
    "cells::rc_r5_call_chat_ingress_fatal",
@@ -59,17 +59,19 @@
    "witness::witness_control_earlier_refusal_fails_in_check_and_out",
    "witness::witness_control_ord3_fails_in_entry",
    "witness::witness_control_other_attempt_fails_in_identity",
+   "witness::witness_native_ledger_binds_by_fixture_and_request",
    "witness::witness_renderer_controls_each_differ",
    "witness::witness_result_records_each_refused",
    "witness::witness_rows_hold_the_rendered_fields",
-   "witness::witness_token_map_plants_each_fail"
+   "witness::witness_token_map_plants_each_fail",
+   "witness::witness_wave_rows_render_from_recorded_identity"
   ]
  },
  "plants": {
-  "count": 233,
-  "names_sha256": "4cb178727bfd8c3daef0b7db79e3e53aecff0a7733eae0bd7d47440c08a8d80b",
+  "count": 243,
+  "names_sha256": "cc5248db3bfe76206c33c3a3c318e2224663497fcab418c99383b854c85fba7e",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "932999a5f31568b7dd74b828a0544b9d5d9b0e804c421c72a288a752e0f217ec"
+  "file_sha256": "2f5daa6ec8027554a5b161d4aa013c3e32bc8d71d6fd86c6aadb69ab84fd6cda"
  }
 }
