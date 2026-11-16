@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix round 1: 52) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -11,7 +11,7 @@
   "install"
  ],
  "inventory": {
-  "sha256": "71f691989e22f78e974e520abe5fdc30a1904b758436991a5493945c297182b0",
+  "sha256": "f8fe0262e0a5001d61cde7dcc5797e410808046f02ccc6ccb510ad3454cf225f",
   "names": [
    "cells::ctl_call_chat",
    "cells::rc_r5_call_chat_ingress_fatal",
@@ -56,6 +56,7 @@
    "store::route_shim_fires_only_on_its_named_thread",
    "store::route_shim_gate_is_refused_and_latched",
    "witness::witness_acknowledgement_and_note_plants_each_differ",
+   "witness::witness_collects_after_the_mother_is_released",
    "witness::witness_control_earlier_refusal_fails_in_check_and_out",
    "witness::witness_control_ord3_fails_in_entry",
    "witness::witness_control_other_attempt_fails_in_identity",
@@ -68,10 +69,10 @@
   ]
  },
  "plants": {
-  "count": 243,
-  "names_sha256": "cc5248db3bfe76206c33c3a3c318e2224663497fcab418c99383b854c85fba7e",
+  "count": 250,
+  "names_sha256": "aa6d45d358e2e53df13d70a00de00402dcc1e5d51903763bc19326b0955f3e3a",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "2f5daa6ec8027554a5b161d4aa013c3e32bc8d71d6fd86c6aadb69ab84fd6cda"
+  "file_sha256": "afa07dcf611cd3bcf418c4511e001caf9ca5c5787cc3ff4eb683d7650eb9b96f"
  }
 }
