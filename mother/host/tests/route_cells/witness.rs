@@ -318,10 +318,13 @@ fn rendered(f: &Facts, shape: &Shape) -> String {
         .strip_prefix("refused:")
         .is_some_and(|n| note.is_some() && note_token == format!("note:{n}"));
     let quiet = !class.starts_with("refused:") && noted.is_empty();
-    let out = match located_out.is_some() && (refused || quiet) {
-        true => out_text.to_string(),
-        false if noted.is_empty() => "none".to_string(),
-        false => format!("notes{noted:?}"),
+    // Otherwise the outcome as observed (U5's): the chat's admission, or what
+    // was noted.
+    let admitted = first_at(v, "model.call.admitted", kind, ord).is_some();
+    let out = match (located_out.is_some() && (refused || quiet), admitted) {
+        (true, _) => out_text.to_string(),
+        (false, true) => "admitted@model.call.admitted".to_string(),
+        (false, false) => format!("notes{noted:?}"),
     };
     let won = if out.starts_with("refused:") {
         "value"
