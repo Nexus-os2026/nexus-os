@@ -1245,6 +1245,7 @@ fn opened(f: &Fixture) -> (Opened, Arc<MemoryEvidence>) {
 
 /// What a cell's child observed, passively, once every worker is joined
 /// (Behaviour 7); `witness.rs` renders it with S, Q, RUN, INV, ATT bound.
+#[derive(Clone)]
 pub(super) struct Facts {
     pub(super) session: SessionIdentity,
     pub(super) request: u64,
@@ -1254,7 +1255,7 @@ pub(super) struct Facts {
     /// The points the chain held, in order (R88.1: each acknowledgement must
     /// answer its own point), and their acknowledged entries.
     pub(super) points: Vec<&'static str>,
-    pub(super) acks: Vec<s1::Entry>,
+    pub(super) acks: Vec<Ack>,
     /// The value applied while the last point was held (`none`: a control).
     pub(super) value: &'static str,
     /// W0b B1: the cell's table row, `(sink, dim)`, so `render` reads its
@@ -1273,6 +1274,68 @@ pub(super) struct Facts {
     /// fail the child after its record is written, so the parent still
     /// compares the witness and names its fields (P-CELL attribution).
     pub(super) findings: Vec<String>,
+}
+
+/// W0b A2: an acknowledgement, and a standing hold, of S1 or of S5.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Ack {
+    S1(s1::Entry),
+    S5(s5::Entry),
+}
+// Held only to stand until dropped (its drop releases the hold).
+#[allow(dead_code)]
+pub(super) enum Hold {
+    S1(s1::Held),
+    S5(s5::Held),
+}
+/// W0b B1', B2': each collection of this child (its facts, and whether
+/// `collect_broker` made it), and the running cell, kept where no section
+/// reaches; `cell` decides from them, not from what a driver returns.
+static KEPT: Mutex<Vec<(bool, Facts)>> = Mutex::new(Vec::new());
+static RUNNING: Mutex<&str> = Mutex::new("none");
+/// W0b B2': the sinks with no Mother (the table's `d_register` and
+/// `d_bootstrap` rows), the only ones `collect_broker` may collect.
+pub(super) const BROKER_SINKS: [&str; 8] = [
+    "registration_install",
+    "registration_readiness",
+    "registration_record",
+    "registration_reserve",
+    "registration_show",
+    "registration_status",
+    "registration_tags",
+    "registration_version",
+];
+/// W0b B1', B2': the one collection of cell `id`, as `cell` judges it: its
+/// own findings, its driver's facts unchanged, its row this cell's, and its
+/// collector the row's (`collect_broker` exactly for `BROKER_SINKS`).
+fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<String> {
+    let kept = std::mem::take(&mut *KEPT.lock().unwrap());
+    let [(broker, facts)] = &kept[..] else {
+        return vec![format!("collect: {} collections, not 1", kept.len())];
+    };
+    let mut found = facts.findings.clone();
+    if render(returned) != render(facts) || returned.findings != facts.findings {
+        found.push("collect: the driver's facts are not its collection's".into());
+    }
+    let ((sink, dim), value) = (facts.row, facts.value);
+    let own = match id.split_once('_') {
+        Some(("rc", slug)) => {
+            slug.split_once('_').map(|x| x.1) == Some(&*format!("{sink}_{dim}_{value}"))
+        }
+        Some(("ctl", control)) => control == sink && value == "none",
+        _ => false,
+    };
+    if !own {
+        found.push(format!(
+            "collect: {sink}/{dim}/{value} is not the row of {id}"
+        ));
+    }
+    if *broker != BROKER_SINKS.contains(&sink) {
+        found.push(format!(
+            "collect: {sink} collected by collect_broker {broker}"
+        ));
+    }
+    found
 }
 
 /// One cell child's run, as its parent saw it (design 3.3).
@@ -1297,15 +1360,17 @@ pub(super) fn cell(
 ) -> Option<Ran> {
     if let Some(root) = std::env::var_os(CHILD) {
         let f = Fixture(PathBuf::from(root));
+        *RUNNING.lock().unwrap() = id;
         let facts = drive(&f);
         let witness = render(&facts);
+        let findings = verdict(id, &facts, render);
         let nonce = std::env::var(NONCE).expect("the parent's nonce");
         let mut append = std::fs::OpenOptions::new();
         let mut result = append.append(true).open(f.0.join("result")).unwrap();
         let line = format!("CELL {nonce} {id} {witness}\n");
         std::io::Write::write_all(&mut result, line.as_bytes()).unwrap();
-        if !facts.findings.is_empty() {
-            panic!("{}; witness {witness}", facts.findings.join("; "));
+        if !findings.is_empty() {
+            panic!("{}; witness {witness}", findings.join("; "));
         }
         return None;
     }
@@ -1362,19 +1427,20 @@ impl Mother {
 /// way a section arms an S5 pause. It takes no callback: it passes this
 /// module's pinned `timeout` itself. Its body is a pinned region.
 pub(super) fn hold(point: &'static str) -> s5::Held {
-    let (cell, timeout) = ("u5", timeout as s5::Timeout);
+    let (cell, timeout) = (*RUNNING.lock().unwrap(), timeout as s5::Timeout);
     s5::arm(point, s5::Action::Pause { cell, timeout })
 }
 
-/// W0b B2: where a chained hold is anchored. `Charge` is U5's, kept for its
-/// rows: S5 `mother.charge.entry`, between ord 3's `model.call.admitted` and
-/// ord 4's `call.gate`. `Arrival(n)` is first-arrival anchoring: S1 paused at
+/// W0b B2: where a chained hold is anchored. `Mother(point)` pauses S5 at
+/// `point`; U5's is `mother.charge.entry`, between ord 3's
+/// `model.call.admitted` and ord 4's `call.gate`. A chain with no further
+/// point ends on that S5 hold (W0b A2). `Arrival(n)` is first-arrival anchoring: S1 paused at
 /// the chain's first point from before the advance, its `n`-th arrival
 /// acknowledged, re-armed between arrivals (as `ord3_quit` did), for points
 /// before the charge or outside it.
 #[derive(Clone, Copy)]
 pub(super) enum Anchor {
-    Charge,
+    Mother(&'static str),
     Arrival(usize),
 }
 /// A cell's chain: its anchor and the points held in order, the row's own
@@ -1383,6 +1449,15 @@ pub(super) struct Chain {
     pub(super) row: (&'static str, &'static str),
     pub(super) anchor: Anchor,
     pub(super) points: &'static [&'static str],
+}
+impl Chain {
+    /// The held points, in order: the further points, or the S5 anchor's.
+    fn anchor_point(&self) -> Vec<&'static str> {
+        match (self.anchor, self.points) {
+            (Anchor::Mother(point), []) => vec![point],
+            _ => self.points.to_vec(),
+        }
+    }
 }
 
 /// The chained hold (Behaviour 6; no new accessor). The Builder's advance
@@ -1397,23 +1472,27 @@ fn chained<R>(
     f: &Fixture,
     m: &Mother,
     chain: &Chain,
-    apply: impl FnOnce(s1::Held, ThreadId) -> R,
-) -> (Vec<s1::Entry>, Vec<String>, R) {
+    apply: impl FnOnce(Hold, ThreadId) -> R,
+) -> (Vec<Ack>, Vec<String>, R) {
     let (anchor, mut points) = (chain.anchor, chain.points);
     let entry = match anchor {
-        Anchor::Charge => Some(hold("mother.charge.entry")),
+        Anchor::Mother(point) => Some(hold(point)),
         Anchor::Arrival(_) => None,
     };
     let arrival = match anchor {
         Anchor::Arrival(_) => Some(f.pause(points[0])),
-        Anchor::Charge => None,
+        Anchor::Mother(_) => None,
     };
     std::thread::scope(|s| {
         let advancing = s.spawn(|| m.advance_to_call());
         let (mut before, mut acks) = (None, Vec::new());
         if let Some(entry) = &entry {
-            let reached = entry.acknowledged.recv_timeout(PATIENCE);
-            assert!(reached.is_ok(), "mother.charge.entry: not acknowledged");
+            let Ok(reached) = entry.acknowledged.recv_timeout(PATIENCE) else {
+                panic!("{:?}: not acknowledged", chain.anchor_point());
+            };
+            if points.is_empty() {
+                acks.push(Ack::S5(reached));
+            }
         }
         if let (Anchor::Arrival(n), Some(mut held)) = (anchor, arrival) {
             for k in 1..=n {
@@ -1422,7 +1501,7 @@ fn chained<R>(
                 };
                 match k < n {
                     true => drop(std::mem::replace(&mut held, f.pause(points[0]))),
-                    false => acks.push(ack),
+                    false => acks.push(Ack::S1(ack)),
                 }
             }
             (before, points) = (Some(held), &points[1..]);
@@ -1434,10 +1513,16 @@ fn chained<R>(
             let Ok(ack) = held.acknowledged.recv_timeout(PATIENCE) else {
                 panic!("{point}: not acknowledged");
             };
-            acks.push(ack);
+            acks.push(Ack::S1(ack));
             before = Some(held);
         }
-        let applied = apply(before.expect("a held point"), advancing.thread().id());
+        // W0b A2: with no S1 point after the anchor, the S5 hold stands.
+        let last = match (before, first) {
+            (Some(held), _) => Hold::S1(held),
+            (None, Some(held)) => Hold::S5(held),
+            (None, None) => panic!("a chain with no point"),
+        };
+        let applied = apply(last, advancing.thread().id());
         (acks, advancing.join().unwrap(), applied)
     })
 }
@@ -1483,7 +1568,7 @@ pub(super) fn driven<R>(
     value: &'static str,
     chain: &Chain,
     row: &Expect,
-    apply: impl FnOnce(&Opened, &Mother, s1::Held, ThreadId) -> R,
+    apply: impl FnOnce(&Opened, &Mother, Hold, ThreadId) -> R,
 ) -> (Facts, Vec<String>, R) {
     let c = start(f);
     let (o, m) = (&c.o, &c.mother);
@@ -1493,9 +1578,8 @@ pub(super) fn driven<R>(
         apply(o, m, held, chat)
     });
     println!("WITNESS {value}: the advance {steps:?}");
-    let held = (chain.points.to_vec(), acks);
-    let mut facts = collect(o, m, &c.native, c.since, held, (chain.row, value), row);
-    facts.applied = at;
+    let held = (chain.anchor_point(), acks, at);
+    let facts = collect(o, m, &c.native, c.since, held, (chain.row, value), row);
     (facts, steps, applied)
 }
 
@@ -1505,7 +1589,7 @@ pub(super) fn driven<R>(
 pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
     let chain = Chain {
         row: ("call_chat", "ingress"),
-        anchor: Anchor::Charge,
+        anchor: Anchor::Mother("mother.charge.entry"),
         points: &["call.gate", "model.call.observed"],
     };
     let (facts, steps, ()) = driven(f, "none", &chain, &HELD, |_, _, held, _| drop(held));
@@ -1524,7 +1608,7 @@ const OBSERVED: [&str; 1] = ["model.call.observed"];
 /// `model.call.observed`.
 const U5: Chain = Chain {
     row: ("call_chat", "ingress"),
-    anchor: Anchor::Charge,
+    anchor: Anchor::Mother("mother.charge.entry"),
     points: &OBSERVED,
 };
 /// Design 3.4: `quit` and `fatal` start the close deadline, so the chat hold
@@ -1633,7 +1717,7 @@ pub(super) fn shutdown(
 fn stopping(
     f: &Fixture,
     m: &Mother,
-    held: s1::Held,
+    held: Hold,
     all: bool,
 ) -> (Option<s1::Entry>, ThreadId, String) {
     let cancel = f.pause("door.cancel_run");
@@ -1762,7 +1846,7 @@ pub(super) fn early_quit(f: &Fixture) -> Facts {
     let quit = c.o.ingress.accept(CommandKind::Quit, 2).map(|_| ());
     let steps = c.mother.advance_to_call();
     println!("WITNESS early quit {quit:?}, the advance {steps:?}");
-    let held = (OBSERVED.to_vec(), Vec::new());
+    let held = (OBSERVED.to_vec(), Vec::new(), None);
     let value = (U5.row, "quit");
     collect(&c.o, &c.mother, &c.native, c.since, held, value, &REFUSED)
 }
@@ -1776,7 +1860,7 @@ pub(super) fn collect(
     m: &Mother,
     native: &MemoryEvidence,
     since: (usize, usize, usize),
-    (points, acks): (Vec<&'static str>, Vec<s1::Entry>),
+    (points, acks, applied): (Vec<&'static str>, Vec<Ack>, Option<Instant>),
     (cell, value): ((&'static str, &'static str), &'static str),
     row: &Expect,
 ) -> Facts {
@@ -1799,7 +1883,7 @@ pub(super) fn collect(
     if let Err(reason) = credited {
         findings.push(format!("credit: {reason}"));
     }
-    Facts {
+    let facts = Facts {
         session: d.session,
         request: d.request,
         recorded: d.recorded,
@@ -1808,36 +1892,63 @@ pub(super) fn collect(
         acks,
         value,
         row: cell,
-        applied: None,
+        applied,
         broker,
         mother: trace,
         journal: m.m.journal_view().unwrap()[since.0..].to_vec(),
         native: native.records()[since.1..].to_vec(),
         peer: m.peer.lock().unwrap()[since.2..].to_vec(),
         findings,
+    };
+    KEPT.lock().unwrap().push((false, facts.clone()));
+    facts
+}
+
+/// W0b D1: a broker-only opening for a cell with no Mother: the session with
+/// its own `MemoryEvidence` projection, a fake peer (no model registered),
+/// S1 armed and drained, and where the observations begin. Its request is
+/// the session's Bootstrap request (0; main.rs `route_correlated_identity_is_recorded`).
+pub(super) struct Broker {
+    pub(super) o: Opened,
+    pub(super) endpoint: String,
+    native: Arc<MemoryEvidence>,
+    peer: Arc<Mutex<Vec<String>>>,
+    since: (usize, usize),
+    _trace: s1::Held,
+}
+pub(super) fn open_broker(f: &Fixture) -> Broker {
+    let (o, native) = opened(f);
+    let (endpoint, peer) = fake_ollama();
+    let _trace = s1::arm("reg.reserve", s1::Action::Trace);
+    s1::drain_trace();
+    let since = (native.records().len(), peer.lock().unwrap().len());
+    Broker {
+        o,
+        endpoint,
+        native,
+        peer,
+        since,
+        _trace,
     }
 }
 
 /// W0b B3: the passive observations of a cell with no Mother (no journal, no
 /// `credit`), read only once its workers are joined: the S1 trace (drained,
-/// never written), the projection's records and the peer's slice since
-/// `since`. Then T6's S1 half: `cfg` is true and the armed S1 instance
-/// recorded this operation under the bound session and request.
+/// never written), the opening's projection records and peer slice since it
+/// opened. Then T6's S1 half: `cfg` is true and the armed S1 instance
+/// recorded this operation under the opening's session and request (D1).
 pub(super) fn collect_broker(
-    o: &Opened,
-    native: &MemoryEvidence,
-    (since, peer): ((usize, usize), &Mutex<Vec<String>>),
-    request: u64,
-    (points, acks): (Vec<&'static str>, Vec<s1::Entry>),
+    b: &Broker,
+    (points, acks, applied): (Vec<&'static str>, Vec<Ack>, Option<Instant>),
     (cell, value): ((&'static str, &'static str), &'static str),
 ) -> Facts {
-    let broker = s1::drain_trace();
-    let session = o.session.identity();
+    let (broker, request) = (s1::drain_trace(), 0);
+    let session = b.o.session.identity();
     let mut findings = Vec::new();
     if let Err(finding) = t6_s1(cfg!(mother_route_seams), session, request, &broker) {
         findings.push(format!("T6 child half: {finding}"));
     }
-    Facts {
+    let facts = Facts {
         session,
         request,
         recorded: Vec::new(),
@@ -1846,14 +1957,16 @@ pub(super) fn collect_broker(
         acks,
         value,
         row: cell,
-        applied: None,
+        applied,
         broker,
         mother: Vec::new(),
         journal: Vec::new(),
-        native: native.records()[since.0..].to_vec(),
-        peer: peer.lock().unwrap()[since.1..].to_vec(),
+        native: b.native.records()[b.since.0..].to_vec(),
+        peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
         findings,
-    }
+    };
+    KEPT.lock().unwrap().push((true, facts.clone()));
+    facts
 }
 /// W0b B3: T6's S1 half for a cell with no Mother: `cfg`, then the armed S1
 /// instance's entries of the bound session and request.
@@ -1924,22 +2037,19 @@ fn t6(
     Ok(())
 }
 
-/// W0b B3: the broker-only collection on the registration route (no Mother):
-/// the S1 trace of the bound session and the Bootstrap request (0), the
+/// W0b B3, D3: the broker-only collection on the registration route (no
+/// Mother), through `open_broker`: the S1 trace of the bound session and the Bootstrap request (0), the
 /// projection's registration record and the peer's slice, no finding; T6's S1
 /// half refuses an unarmed S1, `cfg` false and another request.
 #[test]
 fn route_s5_collect_broker_on_registration() {
     child("s5::route_s5_collect_broker_on_registration", |f| {
-        let (o, native) = opened(f);
-        let (endpoint, peer) = fake_ollama();
-        let _trace = s1::arm("reg.reserve", s1::Action::Trace);
-        s1::drain_trace();
-        let since = (native.records().len(), peer.lock().unwrap().len());
-        o.session.register_local_model(&endpoint, spec()).unwrap();
-        let held = (Vec::new(), Vec::new());
-        let cell = (("registration_reserve", "ingress"), "none");
-        let facts = collect_broker(&o, &native, (since, &peer), 0, held, cell);
+        let b = open_broker(f);
+        b.o.session
+            .register_local_model(&b.endpoint, spec())
+            .unwrap();
+        let held = (Vec::new(), Vec::new(), None);
+        let facts = collect_broker(&b, held, (("registration_reserve", "ingress"), "none"));
         let points: Vec<&str> = facts.broker.iter().map(|e| e.point).collect();
         println!(
             "WITNESS collect_broker broker={} native={} peer={:?} points={points:?}",

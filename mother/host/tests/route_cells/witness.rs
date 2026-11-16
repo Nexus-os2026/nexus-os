@@ -6,7 +6,7 @@
 //! expected text, field by field and byte for byte. W0b B1: `render` is
 //! row-driven: the cell's frozen row gives its fields, their order and each
 //! identity tag's keys; every value is rendered from the facts.
-use super::s5::{Facts, Ran};
+use super::s5::{Ack, Facts, Ran};
 use nexus_governed_control::broker::route_seams as s1;
 use nexus_mother::journal::Event;
 use nexus_mother::lane::LaneRole;
@@ -36,19 +36,23 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 /// Behaviour 9, W0b B1 (R88.1): the reviewed location tokens, each with the
 /// point it reads and the predicate that binds it to one observed entry:
 /// point, identity, ordinal, thread and order. Finding a string is never
-/// enough. U5's two, unchanged in meaning; later units add rows.
-type Predicate = for<'a> fn(&View<'a>) -> Option<&'a s1::Entry>;
-const TOKENS: [(&str, &str, Predicate); 2] = [
+/// enough. U5's two, unchanged in meaning; later units add rows (W0b A: the
+/// predicate gets its row's point and the tag; `first_at` and `note_at` are
+/// the admitted entry or note there).
+type Tag<'t> = (Option<&'t str>, Option<u64>);
+type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
+type Token = (&'static str, &'static str, Predicate);
+const TOKENS: [Token; 2] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
-    ("CAS:m:774", "model.call.observed", |v| {
+    ("CAS:m:774", "model.call.observed", |v, _, _| {
         cas(v).map(|(o, _)| o)
     }),
     // exactly the note refused:8.cas (refused:8.capacity is not it).
-    ("note:8", "refused:8.cas", |v| cas(v).map(|(_, n)| n)),
+    ("note:8", "refused:8.cas", |v, _, _| cas(v).map(|(_, n)| n)),
 ];
 /// W0b B1: the ledger's closed list: each event the table names, as a
-/// journal event (by invocation) or a native record's `op` (by run and
+/// journal event (by invocation) or a native record's phase (by run and
 /// attempt, or by session); `all` is every journal entry and native record
 /// of the session since the hold (SB3E-R6.3's empty delta is `+0:all[s=S]`).
 const LEDGER: [(&str, &str); 7] = [
@@ -60,6 +64,214 @@ const LEDGER: [(&str, &str); 7] = [
     ("session_closed", "native"),
     ("all", "all"),
 ];
+/// W0b A1 (SB3E-R112): `point|keys|source`, one row per point: the exact
+/// identity keys the route records there (`KEYS` order; `kind=`/`ord=` a
+/// fixed value the frozen tag does not show) and the line that records them.
+/// An entry is admitted only if its recorded keys are exactly its point's row
+/// and each equals the bound value; a point with no row is never admitted.
+const RECORDS: &str = "\
+call.gate|s q run att kind ord|host_session/model.rs:893-899; broker/route_seams.rs:255-266
+model.call.sampled|s q run att kind ord|host_session/model.rs:893-899
+model.call.observed|s q run att kind ord|host_session/model.rs:893-899
+model.call.admitted|s q run att kind ord|host_session/model.rs:893-899
+refused:8.cas|s q run att kind ord|host_session/model.rs:849, 893-899
+model.attempt.record.before|s run att|host_session/model.rs:519-523
+complete|s run att|host_session/model.rs:519-523
+mother.charge.entry|s q inv|mother coordinator/model_calls.rs:203-206, 216
+mother.settle|s q inv|mother coordinator/model_calls.rs:203-206, 307
+attempt.slot|s run|host_session/model.rs:383
+model.attempt.reserved|s run|host_session/model.rs:418-420
+model.attempt.checked|run att|authority/run.rs:2144-2146
+reg.reserve|s q|host_session/model.rs:122; host_session.rs:89-91
+model.record.before|s q ord=4|host_session/model.rs:301 (after the 4 metadata gates)
+model.install.before|s q ord=4|host_session/model.rs:314 (after the 4 metadata gates)
+reg.ready|s q ord=4|host_session.rs:858 (after the 4 metadata gates)
+close.obligations|s|host_session/close.rs:271
+close.delivery|s|host_session/close.rs:232
+close.mother_end|s|host_session/close.rs:205, 499
+close.primary|s|host_session/close.rs:524
+producer.join|s|host_session/close.rs:49
+close.seal|s q|host_session/close.rs:367-369
+seal:stop|s|host_session/close.rs:407
+";
+/// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
+/// key a point does not record, each through the observed entry `carrier`
+/// names (as A.4's `inv`); `native` and `journal` are a ledger's records.
+/// Each row has an inverse plant. Units add rows.
+const CORRELATIONS: &str = "\
+inv|call.gate model.call.sampled model.call.observed model.call.admitted|charge|AM-2 A.4: the call's mother.charge.entry of the Builder (model_calls.rs:216)
+inv|attempt.slot model.attempt.reserved|prelock|the Builder's mother.lane.prelock of S and Q (mother coordinator.rs:1978-1983)
+q|attempt.slot model.attempt.reserved|gate|the run's later call.gate of S and Q (host_session/model.rs:883, 893-899)
+att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs credit, A.3)
+run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
+att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
+s|native journal|fixture|the cell's own projection and journal since the hold (s5.rs collect; kept, B1')
+q|native|one_request|every S1 entry of S in the window carries Q (one request)
+";
+/// The carriers a `CORRELATIONS` row may name, a closed list.
+fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
+    let run = e.and_then(|e| e.run);
+    let builder = e.is_some_and(|e| e.inv.is_some() && e.inv == v.b.inv);
+    match name {
+        "charge" => v.inv,
+        "prelock" => prelocked(v),
+        "gate" => gated(v, run),
+        "claim" => v.b.att.is_some() && run.is_some() && run == v.b.run,
+        "sites" => builder && v.b.att.is_some(),
+        "fixture" => true,
+        "one_request" => one_request(v),
+        _ => false,
+    }
+}
+/// The tables a rendering reads (wave units add rows to each).
+struct Tables<'t> {
+    tokens: &'t [Token],
+    records: &'t str,
+    correlations: &'t str,
+}
+const TABLES: Tables<'static> = Tables {
+    tokens: &TOKENS,
+    records: RECORDS,
+    correlations: CORRELATIONS,
+};
+/// W0b A1, A2: one observed point, of S1 or of S5, with the keys recorded.
+#[derive(Clone, Copy, PartialEq)]
+struct Seen<'a> {
+    point: &'a str,
+    note: bool,
+    s1: bool,
+    tick: u64,
+    s: Option<nexus_governed_control::host_session::SessionIdentity>,
+    q: Option<u64>,
+    run: Option<nexus_governed_control::authority::ids::RunId>,
+    inv: Option<nexus_mother::lane::InvocationId>,
+    att: Option<u32>,
+    kind: Option<&'a str>,
+    ord: Option<u64>,
+    /// An S1 invocation (the broker records none): never admitted.
+    foreign: bool,
+    thread: std::thread::ThreadId,
+    instant: std::time::Instant,
+}
+fn of1(e: &s1::Entry) -> Seen<'_> {
+    Seen {
+        point: e.point,
+        note: e.note,
+        s1: true,
+        tick: e.tick,
+        s: e.session,
+        q: e.request,
+        run: e.run,
+        inv: None,
+        att: e.attempt,
+        kind: e.kind,
+        ord: e.request_ordinal,
+        foreign: e.invocation.is_some(),
+        thread: e.thread,
+        instant: e.instant,
+    }
+}
+fn of5(e: &nexus_mother::route_seams::Entry) -> Seen<'_> {
+    Seen {
+        point: e.point,
+        note: false,
+        s1: false,
+        tick: e.tick,
+        s: e.session,
+        q: e.request,
+        run: e.run,
+        inv: e.invocation,
+        att: None,
+        kind: None,
+        ord: None,
+        foreign: false,
+        thread: e.thread,
+        instant: e.instant,
+    }
+}
+fn of(a: &Ack) -> Seen<'_> {
+    match a {
+        Ack::S1(e) => of1(e),
+        Ack::S5(e) => of5(e),
+    }
+}
+/// Key `k` of `e`: whether it was recorded, and whether it equals the bound
+/// value (`kind`/`ord`: `fixed`'s, else the tag's).
+fn key(v: &View, e: &Seen, k: &str, tag: (Option<&str>, Option<u64>), fixed: &str) -> (bool, bool) {
+    let b = &v.b;
+    let pinned = |n: &str| {
+        fixed
+            .split(' ')
+            .find_map(|x| x.strip_prefix(n))
+            .and_then(|x| x.strip_prefix('='))
+    };
+    match k {
+        "s" => (e.s.is_some(), e.s == Some(b.s)),
+        "q" => (e.q.is_some(), e.q == Some(b.q)),
+        "run" => (e.run.is_some(), e.run.is_some() && e.run == b.run),
+        "inv" => (e.inv.is_some(), e.inv.is_some() && e.inv == b.inv),
+        "att" => (e.att.is_some(), e.att.is_some() && e.att == b.att),
+        "kind" => (e.kind.is_some(), e.kind == pinned("kind").or(tag.0)),
+        _ => (
+            e.ord.is_some(),
+            e.ord.map(|o| o.to_string()).as_deref()
+                == pinned("ord").or(tag.1.map(|o| o.to_string()).as_deref()),
+        ),
+    }
+}
+/// W0b A1: `e` admitted under the tag's kind and ordinal (its point's
+/// `RECORDS` row, exactly).
+fn admitted(v: &View, e: &Seen, tag: (Option<&str>, Option<u64>)) -> bool {
+    let mut rows =
+        v.t.records
+            .lines()
+            .map(|l| l.split('|').collect::<Vec<_>>());
+    let Some(row) = rows.find(|r| r[0] == e.point) else {
+        return false;
+    };
+    let keys: Vec<&str> = row[1]
+        .split(' ')
+        .map(|k| k.split('=').next().unwrap_or(k))
+        .collect();
+    !e.foreign
+        && KEYS.iter().all(|k| {
+            let (recorded, equal) = key(v, e, k, tag, row[1]);
+            recorded == keys.contains(k) && (!recorded || equal)
+        })
+}
+/// W0b A1b: a tag key bound on `e` (recorded, so equal), or by a correlation.
+fn bound(v: &View, e: Option<&Seen>, point: &str, k: &str) -> bool {
+    let recorded = e.is_some_and(|e| key(v, e, k, (None, None), "").0);
+    let rows =
+        v.t.correlations
+            .lines()
+            .map(|l| l.split('|').collect::<Vec<_>>());
+    let carries = |r: &Vec<&str>| r[0] == k && r[1].split(' ').any(|p| p == point);
+    recorded || rows.filter(carries).any(|r| carried(r[2], v, e))
+}
+/// The Builder's `mother.lane.prelock` of S and Q (its invocation).
+fn prelocked(v: &View) -> bool {
+    let at = |m: &&Seen| !m.s1 && m.point == "mother.lane.prelock" && m.inv.is_some();
+    v.seen
+        .iter()
+        .filter(at)
+        .any(|m| m.inv == v.b.inv && m.s == Some(v.b.s) && m.q == Some(v.b.q))
+}
+/// A `call.gate` of S and Q on `e`'s run.
+fn gated(v: &View, run: Option<nexus_governed_control::authority::ids::RunId>) -> bool {
+    let gate = |g: &&Seen| g.s1 && g.point == "call.gate" && run.is_some() && g.run == run;
+    let mut gates = v.seen.iter().filter(gate);
+    gates.any(|g| g.s == Some(v.b.s) && g.q == Some(v.b.q))
+}
+/// Every S1 entry of S in the window that carries a request carries Q.
+fn one_request(v: &View) -> bool {
+    let of_s = v
+        .seen
+        .iter()
+        .filter(|e| e.s1 && e.s == Some(v.b.s) && e.q.is_some());
+    let requests: Vec<Option<u64>> = of_s.map(|e| e.q).collect();
+    !requests.is_empty() && requests.iter().all(|q| *q == Some(v.b.q))
+}
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
 const CONTROLS: [(&str, &str, &str); 1] = [("call_chat", "ingress", CONTROL)];
@@ -136,137 +348,123 @@ fn bind(f: &Facts) -> Bound {
         inv: builder.map(|r| r.1),
     }
 }
-/// An S1 entry of the bound attempt: session, request, run and attempt.
-fn mine(e: &s1::Entry, b: &Bound) -> bool {
-    b.run.is_some()
-        && e.session == Some(b.s)
-        && e.request == Some(b.q)
-        && e.run == b.run
-        && e.attempt == b.att
-}
-/// What `render` reads: the facts, the binding, whether INV is correlated
-/// (A.4) and the placeholders' group suffix.
+/// What `render` reads: the facts, every observed point (S1, then S5), the
+/// binding, whether INV is correlated (A.4), the group suffix and the tables.
 struct View<'a> {
     f: &'a Facts,
+    seen: Vec<Seen<'a>>,
     b: Bound,
     inv: bool,
     group: String,
+    t: &'a Tables<'a>,
 }
-/// The first entry at `point` of the bound attempt, of the tag's kind
-/// and ordinal (binding point, identity, ordinal and order).
-fn first_at<'a>(
-    v: &View<'a>,
-    point: &str,
-    kind: Option<&str>,
-    ord: Option<u64>,
-) -> Option<&'a s1::Entry> {
-    let bound = |e: &&s1::Entry| mine(e, &v.b) && !e.note && e.point == point;
-    let tagged = |e: &&s1::Entry| e.kind == kind && e.request_ordinal == ord;
-    v.f.broker.iter().filter(bound).find(tagged)
+/// The rendering's view of `f`: every observed point, the binding, A.4's INV.
+fn view<'a>(f: &'a Facts, group: String, t: &'a Tables<'a>) -> View<'a> {
+    let b = bind(f);
+    let correlated = |m: &&nexus_mother::route_seams::Entry| {
+        m.point == "mother.charge.entry" && b.inv.is_some() && m.invocation == b.inv
+    };
+    let inv = f.mother.iter().any(|m| correlated(&m));
+    let seen = f
+        .broker
+        .iter()
+        .map(of1)
+        .chain(f.mother.iter().map(of5))
+        .collect();
+    View {
+        f,
+        seen,
+        b,
+        inv,
+        group,
+        t,
+    }
 }
-/// Ord 4's chat notes of the bound attempt.
-fn notes<'a>(v: &View<'a>) -> Vec<&'a s1::Entry> {
-    let four = |e: &&s1::Entry| mine(e, &v.b) && e.request_ordinal == Some(4);
-    v.f.broker.iter().filter(four).filter(|e| e.note).collect()
+/// The first admitted entry at `point` under the tag's kind and ordinal.
+fn first_at<'a>(v: &View<'a>, point: &str, tag: (Option<&str>, Option<u64>)) -> Option<Seen<'a>> {
+    let at = |e: &&Seen| !e.note && e.point == point && admitted(v, e, tag);
+    v.seen.iter().find(at).copied()
+}
+/// The admitted note at `point` under the tag's kind and ordinal.
+fn note_at<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    notes(v, tag).into_iter().find(|n| n.point == point)
+}
+/// The admitted notes under the tag's kind and ordinal.
+fn notes<'a>(v: &View<'a>, tag: (Option<&str>, Option<u64>)) -> Vec<Seen<'a>> {
+    v.seen
+        .iter()
+        .filter(|e| e.note && admitted(v, e, tag))
+        .copied()
+        .collect()
 }
 /// `TOKENS[0]` and `[1]`: the observed entry, then on its thread, later,
 /// exactly one note of this identity and ordinal, `refused:8.cas`, of the
 /// chat (kind `chat`, R88.1); no `model.call.admitted` of it.
-fn cas<'a>(v: &View<'a>) -> Option<(&'a s1::Entry, &'a s1::Entry)> {
-    let o = first_at(v, "model.call.observed", Some("chat"), Some(4))?;
-    let admitted = first_at(v, "model.call.admitted", Some("chat"), Some(4));
-    let [note] = notes(v)[..] else {
+fn cas<'a>(v: &View<'a>) -> Option<(Seen<'a>, Seen<'a>)> {
+    let chat = (Some("chat"), Some(4));
+    let o = first_at(v, "model.call.observed", chat)?;
+    let admitted = first_at(v, "model.call.admitted", chat);
+    let [note] = notes(v, chat)[..] else {
         return None;
     };
     let ok = note.point == "refused:8.cas"
-        && note.kind == Some("chat")
         && note.thread == o.thread
         && note.tick > o.tick
         && admitted.is_none();
     ok.then_some((o, note))
 }
-/// A location token's entry: a `TOKENS` row's predicate, or a plain
-/// point of the tag's kind and ordinal.
-fn token<'a>(
-    v: &View<'a>,
-    token: &str,
-    kind: Option<&str>,
-    ord: Option<u64>,
-) -> Option<&'a s1::Entry> {
-    match TOKENS.iter().find(|t| t.0 == token) {
-        Some((_, _, predicate)) => predicate(v),
-        None => first_at(v, token, kind, ord),
+/// A location token's entry: a `TOKENS` row's predicate, or a plain point.
+fn token<'a>(v: &View<'a>, token: &str, tag: (Option<&str>, Option<u64>)) -> Option<Seen<'a>> {
+    match v.t.tokens.iter().find(|t| t.0 == token) {
+        Some((_, point, predicate)) => predicate(v, point, tag),
+        None => first_at(v, token, tag),
     }
 }
-/// A placeholder, the bound value's (with the group's suffix), or else the
-/// observed value itv.
-fn hold<'a>(v: &View<'a>, name: &str, bound: bool, seen: String) -> String {
-    match bound {
-        true => format!("{name}{}", v.group),
-        false => seen,
-    }
-}
-/// `e`'s identity under `keys` (the row's tag keys, in `KEYS`'s order):
-/// each bound value as its placeholder, any other as itself; `inv=INV`
-/// is A.4's correlation, not the broker entry's.
-fn identity<'a>(v: &View<'a>, e: &s1::Entry, keys: &[(&str, &str)]) -> String {
-    let b = &v.b;
+/// `e`'s identity under the row's tag keys: each bound key (recorded, or
+/// correlated, W0b A1b) as its placeholder with the group suffix, any
+/// other as `none`; kind and ordinal as recorded.
+fn identity(v: &View, e: &Seen, keys: &[(&str, &str)]) -> String {
     let one = |k: &str| match k {
-        "s" => hold(v, "S", e.session == Some(b.s), format!("{:?}", e.session)),
-        "q" => hold(v, "Q", e.request == Some(b.q), format!("{:?}", e.request)),
-        "run" => hold(
-            v,
-            "RUN",
-            b.run.is_some() && e.run == b.run,
-            format!("{:?}", e.run),
-        ),
-        "inv" => hold(v, "INV", v.inv, "none".into()),
-        "att" => hold(
-            v,
-            "ATT",
-            b.att.is_some() && e.attempt == b.att,
-            format!("{:?}", e.attempt),
-        ),
         "kind" => e.kind.unwrap_or("none").to_string(),
-        _ => e.request_ordinal.map_or("none".into(), |n| n.to_string()),
+        "ord" => e.ord.map_or("none".into(), |n| n.to_string()),
+        _ if bound(v, Some(e), e.point, k) => format!("{}{}", placeholder(k), v.group),
+        _ => "none".to_string(),
     };
     let shown = keys.iter().map(|(k, _)| format!("{k}={}", one(k)));
     shown.collect::<Vec<_>>().join(" ")
 }
-/// A ledger tag: each key's placeholder (a ledger names no entry).
-fn ledger_tag<'a>(v: &View<'a>, keys: &[(&str, &str)]) -> String {
-    let shown = keys.iter().map(|(k, _)| {
-        let name = match *k {
-            "s" => "S",
-            "q" => "Q",
-            "run" => "RUN",
-            "inv" => "INV",
-            _ => "ATT",
-        };
-        format!("{k}={name}{}", v.group)
-    });
-    shown.collect::<Vec<_>>().join(" ")
+fn placeholder(k: &str) -> &'static str {
+    match k {
+        "s" => "S",
+        "q" => "Q",
+        "run" => "RUN",
+        "inv" => "INV",
+        _ => "ATT",
+    }
 }
 /// A field's `<token>[..]`: its token, its tag's keys, and the kind and
 /// ordinal the tag reads.
 type Located<'a> = (
     &'a str,
     Vec<(&'a str, &'a str)>,
-    Option<&'a str>,
-    Option<u64>,
+    (Option<&'a str>, Option<u64>),
 );
 fn located(text: &str) -> Located<'_> {
     let token = text.split('[').next().unwrap_or(text);
     let keys = tag_keys(text).unwrap_or_default();
     let get = |k: &str| keys.iter().find(|x| x.0 == k).map(|x| x.1);
-    let (kind, ord) = (get("kind"), get("ord").and_then(|o| o.parse().ok()));
-    (token, keys, kind, ord)
+    let tag = (get("kind"), get("ord").and_then(|o| o.parse().ok()));
+    (token, keys, tag)
 }
 
 /// The witness of `f`, in its frozen row's grammar (Behaviour 9; W0b B1).
 pub(super) fn render(f: &Facts) -> String {
+    render_in(f, &TABLES, &CONTROLS)
+}
+/// `render` over the given tables (W0b: a wave's rows, or a test's).
+fn render_in(f: &Facts, t: &Tables, controls: &[(&str, &str, &'static str)]) -> String {
     let (sink, dim) = f.row;
-    let control = CONTROLS
+    let control = controls
         .iter()
         .find(|c| (c.0, c.1) == (sink, dim) && f.value == "none");
     let found = match control {
@@ -277,82 +475,84 @@ pub(super) fn render(f: &Facts) -> String {
         return format!("no row {sink}/{dim}/{}", f.value);
     };
     match shape(witness, exec) {
-        Ok(shape) => rendered(f, &shape),
+        Ok(shape) => rendered(f, &shape, t),
         Err(e) => format!("unrenderable row {sink}/{dim}/{}: {e}", f.value),
     }
 }
 /// `f` rendered field by field in `shape`'s order.
-fn rendered(f: &Facts, shape: &Shape) -> String {
-    let b = bind(f);
-    let correlated = |m: &&nexus_mother::route_seams::Entry| {
-        m.point == "mother.charge.entry" && b.inv.is_some() && m.invocation == b.inv
-    };
-    let inv = f.mother.iter().any(|m| correlated(&m));
-    let group = shape.group.map_or(String::new(), |g| format!(".{g}"));
-    let v = &View { f, b, inv, group };
+fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
+    let v = &view(f, shape.group.map_or(String::new(), |g| format!(".{g}")), t);
     let text = |k: &str| shape.fields.iter().find(|x| x.0 == k).map_or("", |x| x.1);
-    let (entry_token, entry_keys, kind, ord) = located(text("entry"));
-    let (check_token, check_keys, _, _) = located(text("check"));
-    let entry = token(v, entry_token, kind, ord);
-    let check = token(v, check_token, kind, ord);
-    let noted: Vec<&str> = notes(v).iter().map(|n| n.point).collect();
+    let (entry_token, entry_keys, tag) = located(text("entry"));
+    let (check_token, check_keys, _) = located(text("check"));
+    let entry = token(v, entry_token, tag);
+    let check = token(v, check_token, tag);
+    let noted: Vec<&str> = notes(v, tag).iter().map(|n| n.point).collect();
+    // W0b A3: a note of the session that no `RECORDS` row admits is shown.
+    let stray = v
+        .seen
+        .iter()
+        .filter(|e| e.note && e.s == Some(v.b.s) && !admitted(v, e, tag));
+    let stray: Vec<&str> = stray.map(|e| e.point).collect();
     // The branch note: its token's predicate held, or what was noted.
     let branch_text = text("branch");
     let note_token = branch_text.split('@').next().unwrap_or("");
     let note = note_token
         .starts_with("note:")
-        .then(|| token(v, note_token, kind, ord))
+        .then(|| token(v, note_token, tag))
         .flatten();
-    let branch = match (note, noted.is_empty()) {
+    let observed = |shown: String| match (entry.is_some(), stray.is_empty()) {
+        (false, _) => "unobserved".to_string(),
+        (true, false) => format!("unadmitted{stray:?}"),
+        (true, true) => shown,
+    };
+    let branch = observed(match (note, noted.is_empty()) {
         (Some(_), _) => branch_text.to_string(),
         (None, true) => "none".to_string(),
         (None, false) => format!("notes{noted:?}"),
-    };
+    });
     // Generic outcome classes: `refused:<n>@<loc>` from the location's
     // predicate and its note `note:<n>`; `admitted@`, `passed@` and
     // `recorded@<loc>` from the location's predicate with no note.
     let out_text = text("out");
     let (class, loc) = out_text.split_once('@').unwrap_or((out_text, ""));
-    let located_out = token(v, loc, kind, ord);
+    let located_out = token(v, loc, tag);
     let refused = class
         .strip_prefix("refused:")
         .is_some_and(|n| note.is_some() && note_token == format!("note:{n}"));
     let quiet = !class.starts_with("refused:") && noted.is_empty();
     // Otherwise the outcome as observed (U5's): the chat's admission, or what
     // was noted.
-    let admitted = first_at(v, "model.call.admitted", kind, ord).is_some();
-    let out = match (located_out.is_some() && (refused || quiet), admitted) {
-        (true, _) => out_text.to_string(),
-        (false, true) => "admitted@model.call.admitted".to_string(),
-        (false, false) => format!("notes{noted:?}"),
-    };
+    let admission = first_at(v, "model.call.admitted", tag).is_some();
+    let out = observed(
+        match (located_out.is_some() && (refused || quiet), admission) {
+            (true, _) => out_text.to_string(),
+            (false, true) => "admitted@model.call.admitted".to_string(),
+            (false, false) => format!("notes{noted:?}"),
+        },
+    );
     let won = if out.starts_with("refused:") {
         "value"
     } else {
         "route"
     };
-    // R88.1: each acknowledgement answers its own held point, of the
-    // entry tag's kind and ordinal, of the bound attempt, the very trace
-    // entry; `held` if the value came while every one stood, `armed` if it
-    // was set before the first.
+    // R88.1, W0b A1/A2: each acknowledgement (S1 or S5) answers its own held
+    // point, admitted under the entry tag, the very trace entry; `held` if
+    // the value came while every one stood, `armed` if set before the first.
     let held = f.points.last().copied().unwrap_or("none");
-    let answers = |(a, point): (&s1::Entry, &&str)| {
-        a.point == *point
-            && !a.note
-            && a.kind == kind
-            && a.request_ordinal == ord
-            && mine(a, &v.b)
-            && f.broker.contains(a)
+    let answers = |(a, point): (&Ack, &&str)| {
+        let a = of(a);
+        a.point == *point && !a.note && admitted(v, &a, tag) && v.seen.contains(&a)
     };
     let pairs = f.acks.iter().zip(&f.points);
     let answered =
         !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers);
-    let first = f.acks.iter().map(|a| a.instant).min();
+    let first = f.acks.iter().map(|a| of(a).instant).min();
     let ack = match (answered, f.applied.zip(first)) {
         (true, Some((at, first))) if at < first => "armed".to_string(),
         (true, _) => "held".to_string(),
         (false, _) => {
-            let shown = f.acks.iter().map(|a| (a.point, a.kind, a.request_ordinal));
+            let shown = f.acks.iter().map(of).map(|a| (a.point, a.kind, a.ord));
             format!("unanswered{:?}", shown.collect::<Vec<_>>())
         }
     };
@@ -361,18 +561,19 @@ fn rendered(f: &Facts, shape: &Shape) -> String {
         .iter()
         .map(|(k, t)| match *k {
             "entry" => entry.map_or("none".into(), |e| {
-                format!("{entry_token}[{}]", identity(v, e, &entry_keys))
+                format!("{entry_token}[{}]", identity(v, &e, &entry_keys))
             }),
             "check" => match check {
-                Some(c) => format!("{check_token}[{}]", identity(v, c, &check_keys)),
+                Some(c) => format!("{check_token}[{}]", identity(v, &c, &check_keys)),
                 None => {
-                    let point = TOKENS
-                        .iter()
-                        .find(|x| x.0 == check_token)
-                        .map_or(check_token, |x| x.1);
-                    let seen = first_at(v, point, kind, ord);
+                    let point =
+                        v.t.tokens
+                            .iter()
+                            .find(|x| x.0 == check_token)
+                            .map_or(check_token, |x| x.1);
+                    let seen = first_at(v, point, tag);
                     seen.map_or("none".into(), |e| {
-                        format!("{point}[{}]", identity(v, e, &check_keys))
+                        format!("{point}[{}]", identity(v, &e, &check_keys))
                     })
                 }
             },
@@ -418,9 +619,11 @@ fn attempt(v: &View, r: &nexus_governed_control::authority::evidence::EvidenceRe
         && r.run == run
         && detail(r, "call") == v.b.att.map(|a| a.to_string())
 }
-/// W0b B1: the ledger from `LEDGER`'s closed list, each item `+N:<event>[..]`
-/// counted from the facts under its tag's identity; an event outside the
-/// list is shown as such (a named difference).
+/// W0b B1, A4: the ledger from `LEDGER`'s closed list, each item `+N:<event>[..]`
+/// counted from the facts under its tag's identity: a key the record itself
+/// carries (a journal event's invocation, `model_call`'s run and call), or a
+/// key bound by a correlation (`native`, `journal`); a record with any tag
+/// key unbound is not counted. An event outside the list is shown as such.
 fn ledger(v: &View, text: &str) -> String {
     let items = text.split("],").map(|i| i.trim_end_matches(']'));
     let shown = items.map(|item| {
@@ -432,7 +635,10 @@ fn ledger(v: &View, text: &str) -> String {
             .unwrap_or("");
         let closed = format!("{item}]");
         let keys = tag_keys(&closed).unwrap_or_default();
-        let tag = ledger_tag(v, &keys);
+        let tag = keys
+            .iter()
+            .map(|(k, _)| format!("{k}={}{}", placeholder(k), v.group));
+        let tag = tag.collect::<Vec<_>>().join(" ");
         let by_inv = |e: &&nexus_mother::journal::Entry| {
             let (name, invocation) = match e.event {
                 Event::ModelCallCharged { invocation, .. } => {
@@ -445,28 +651,38 @@ fn ledger(v: &View, text: &str) -> String {
             name == event && (invocation.is_none() || invocation == v.b.inv)
         };
         let native = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| {
-            detail(r, "op").as_deref() == Some(event) && (event != "model_call" || attempt(v, r))
+            r.phase.as_str() == event && (event != "model_call" || attempt(v, r))
         };
-        let n = match LEDGER.iter().find(|l| l.0 == event).map(|l| l.1) {
-            Some("journal") => v.f.journal.iter().filter(by_inv).count(),
-            Some("native") => v.f.native.iter().filter(native).count(),
-            Some(_) => v.f.journal.len() + v.f.native.len(),
-            None => return format!("unlisted:{event}"),
+        let Some(source) = LEDGER.iter().find(|l| l.0 == event).map(|l| l.1) else {
+            return format!("unlisted:{event}");
+        };
+        let carried: &[&str] = match event {
+            "ModelCallCharged" | "LaneReturned" => &["inv"],
+            "model_call" => &["run", "att"],
+            _ => &[],
+        };
+        let sources = if source == "all" {
+            "native journal"
+        } else {
+            source
+        };
+        let unbound = keys.iter().any(|(k, _)| {
+            !carried.contains(k) && sources.split(' ').any(|s| !bound(v, None, s, k))
+        });
+        let n = match source {
+            _ if unbound => 0,
+            "journal" => v.f.journal.iter().filter(by_inv).count(),
+            "native" => v.f.native.iter().filter(native).count(),
+            _ => v.f.journal.len() + v.f.native.len(),
         };
         format!("+{n}:{event}[{tag}]")
     });
     shown.collect::<Vec<_>>().join(",")
 }
-/// An attempt site carries the session, run and attempt, no request (A.1).
+/// An attempt site of the bound attempt, admitted (A.1: session, run and
+/// attempt, no request).
 fn window(v: &View) -> &'static str {
-    let site = |point: &str| {
-        let at = |e: &&s1::Entry| e.point == point && e.session == Some(v.b.s);
-        let run = v.b.run;
-        v.f.broker
-            .iter()
-            .filter(at)
-            .any(|e| run.is_some() && e.run == run && e.attempt == v.b.att)
-    };
+    let site = |point: &str| first_at(v, point, (None, None)).is_some();
     match site("model.attempt.record.before") && site("complete") {
         true => "completed_attempt",
         false => "boundary",
@@ -690,9 +906,11 @@ fn coverage() {
         let group = s.group.map_or(String::new(), |g| format!(".{g}"));
         let v = &View {
             f: &f,
+            seen: Vec::new(),
             b: bind(&f),
             inv: true,
             group,
+            t: &TABLES,
         };
         for (field, text) in &s.fields {
             for tag in text
@@ -711,8 +929,13 @@ fn coverage() {
                 e.kind = get("kind").map(|k| &*Box::leak(k.to_string().into_boxed_str()));
                 e.request_ordinal = get("ord").and_then(|o| o.parse().ok());
                 let shown = match *field {
-                    "ledger" => ledger_tag(v, &keys),
-                    _ => identity(v, &e, &keys),
+                    "ledger" => {
+                        let shown = keys
+                            .iter()
+                            .map(|(k, _)| format!("{k}={}{}", placeholder(k), v.group));
+                        shown.collect::<Vec<_>>().join(" ")
+                    }
+                    _ => identity(v, &of1(&e), &keys),
                 };
                 assert_eq!(shown, tag, "{}: {field}", c[..4].join(" "));
                 let form: Vec<&str> = keys.iter().map(|x| x.0).collect();
@@ -737,6 +960,13 @@ fn coverage() {
         println!("WITNESS B1 tag set [{}] group={}", t.0, t.1);
     }
     assert_eq!(rows, 794, "every row with a witness");
+    // W0b B2': `collect_broker`'s sinks are exactly the no-Mother drivers' rows.
+    let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
+    let no_mother = |c: &Vec<&str>| ["d_register", "d_bootstrap"].contains(&c[6]);
+    let mut sinks: Vec<&str> = rows.filter(no_mother).map(|c| c[1]).collect();
+    sinks.sort();
+    sinks.dedup();
+    assert_eq!(sinks, super::s5::BROKER_SINKS);
 }
 
 /// W0b B1 (Behaviour 4): a renderer control per new capability, each a named
@@ -753,7 +983,7 @@ fn witness_renderer_controls_each_differ() {
         armed.applied = armed
             .acks
             .first()
-            .map(|a| a.instant - std::time::Duration::from_millis(1));
+            .map(|a| of(a).instant - std::time::Duration::from_millis(1));
         let leak = |w: String| -> &'static str { Box::leak(w.into_boxed_str()) };
         let untagged = leak(want.replacen(" inv=INV", "", 1));
         let unlisted = leak(want.replace("+1:model_call[run=RUN att=ATT]", "+1:Foo[s=S]"));
@@ -766,13 +996,13 @@ fn witness_renderer_controls_each_differ() {
             ("an extra field", format!("{base};extra=x"), "extra"),
             (
                 "a wrong tag set",
-                rendered(&f, &shape(untagged, "own").unwrap()),
+                rendered(&f, &shape(untagged, "own").unwrap(), &TABLES),
                 "entry",
             ),
             ("ack=armed for a held value", render(&armed), "value"),
             (
                 "an unlisted ledger event",
-                rendered(&f, &shape(unlisted, "own").unwrap()),
+                rendered(&f, &shape(unlisted, "own").unwrap(), &TABLES),
                 "ledger",
             ),
         ] {
@@ -846,6 +1076,183 @@ fn witness_result_records_each_refused() {
     );
 }
 
+/// W0b readiness proof (SB3E-R111, R112): wave-1 rows (`u9a`, `u6a1`, `u6b2`),
+/// one per identity tag set, trace (S1/S5) and acknowledgement kind, each
+/// rendered byte for byte from synthetic facts that record exactly the
+/// route's identity at each point (close.rs:49, 232, 271, 368, 407;
+/// host_session.rs:89-91; model.rs:383; S5's `route_ctx`), under test-local
+/// tokens and the rows a unit adds (`UNIT`). `label|sink dim value|flag|entries`;
+/// an entry is `[!][5]point[:keys]` (keys after the last `:`): `!` a note, `5` S5's (of S, Q and the
+/// Builder; `inv'` the Sentinel's), S1 keys `s` (`s'` another session),
+/// `q` (`q2` another request), `run`, `ordN`; flag `armed` (the value set
+/// before the acknowledgement) or `noclaim`. A `not` row must not render; row
+/// 115 (and 76-82) refuse before any `call.gate` or claim, so q, att and the
+/// run have no carrier there: no sound binding.
+const READY: &str = "\
+573|close_obligations lifecycle Normal|armed|close.obligations:s
+574|close_obligations lifecycle Bootstrap|-|close.obligations:s
+700|seal lifecycle ClosingNormal|armed|close.seal:s q
+705|seal lifecycle ClosingRestricted|-|close.seal:s q,!seal:stop:s
+412|registration_install ingress original_cell_unscheduled|-|model.install.before:s q ord4,!reg:admission:s q ord4
+424|registration_readiness ingress original_cell_unscheduled|-|reg.ready:s q ord4,!reg:word_compare:s q ord4
+448|registration_reserve ingress original_cell_unscheduled|-|reg.reserve:s q,!reg:scope_admit:s q
+110|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock
+195|charge_append ingress original_cell_unscheduled|-|5mother.charge.entry,5mother.charge.stale
+not 573 another session|close_obligations lifecycle Normal|armed|close.obligations:s'
+not 700 close.seal of another request|seal lifecycle ClosingNormal|armed|close.seal:s q2
+not 700 with 705's note|seal lifecycle ClosingNormal|armed|close.seal:s q,!seal:stop:s
+not 705 the note removed|seal lifecycle ClosingRestricted|-|close.seal:s q
+not 412 the note removed|registration_install ingress original_cell_unscheduled|-|model.install.before:s q ord4
+not 424 ready of ord 3|registration_readiness ingress original_cell_unscheduled|-|reg.ready:s q ord3,!reg:word_compare:s q ord4
+not 448 the note removed|registration_reserve ingress original_cell_unscheduled|-|reg.reserve:s q
+not 110 no call.gate (q)|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,5mother.lane.prelock
+not 110 another lane's prelock (inv)|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock:inv'
+not 110 no claim (att, run)|call_slot_reserve ingress original_cell_unscheduled|noclaim|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock
+not 110 with a unit's slot:word|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock,!slot:word:s run
+not 195 no claim (run, att)|charge_append ingress original_cell_unscheduled|noclaim|5mother.charge.entry,5mother.charge.stale
+not 195 the stale point removed|charge_append ingress original_cell_unscheduled|-|5mother.charge.entry
+not 195 another builder|charge_append ingress original_cell_unscheduled|-|5mother.charge.entry:inv',5mother.charge.stale:inv'
+not 115 no sound binding (q, att, run)|call_slot_reserve ingress fatal|noclaim|attempt.slot:s run,!slot:word:s run
+";
+/// The rows a wave unit adds for `READY`'s notes, each with its site's context.
+const UNIT: &str = "\
+reg:admission|s q ord=4|a unit's note at host_session/model.rs:304, route_ctx (host_session.rs:89-91)
+reg:word_compare|s q ord=4|a unit's note at host_session.rs:841, route_ctx (89-91)
+reg:scope_admit|s q|a unit's note at host_session/model.rs:135-141, route_ctx (89-91)
+slot:word|s run|a unit's note at host_session/model.rs:371, the slot's context (383)
+mother.charge.stale|s q inv|a unit's S5 point at coordinator/model_calls.rs:205-212, route_ctx (203-206)
+";
+fn readiness() {
+    let tokens: [Token; 12] = [
+        ("c:265-300", "close.obligations", first_at),
+        ("c:372-429", "close.seal", first_at),
+        ("note:stop_obligations", "seal:stop", note_at),
+        ("m:304", "model.install.before", first_at),
+        ("note:admission", "reg:admission", note_at),
+        ("h:838", "reg.ready", first_at),
+        ("note:word_compare", "reg:word_compare", note_at),
+        ("m:126-141", "reg.reserve", first_at),
+        ("note:scope_admit", "reg:scope_admit", note_at),
+        ("m:371-381", "attempt.slot", first_at),
+        ("mc:205-250", "mother.charge.entry", first_at),
+        ("note:stale", "mother.charge.stale", first_at),
+    ];
+    let records = format!("{RECORDS}{UNIT}");
+    let t = &Tables {
+        tokens: &tokens,
+        records: &records,
+        correlations: CORRELATIONS,
+    };
+    let base = refused();
+    let other = nexus_governed_control::host_session::SessionSeed::new()
+        .unwrap()
+        .identity();
+    for line in READY.lines() {
+        let [label, row, flag, entries] = line.split('|').collect::<Vec<_>>()[..] else {
+            panic!("{line}")
+        };
+        let [sink, dim, value] = row.split(' ').collect::<Vec<_>>()[..] else {
+            panic!("{line}")
+        };
+        let (mut f, mut acks) = (base.clone(), Vec::new());
+        (f.row, f.value, f.broker, f.mother) = ((sink, dim), value, Vec::new(), Vec::new());
+        f.claim = f.claim.filter(|_| flag != "noclaim");
+        for (tick, text) in (1..).zip(entries.split(',')) {
+            let (note, text) = text.strip_prefix('!').map_or((false, text), |t| (true, t));
+            let (s5, text) = text.strip_prefix('5').map_or((false, text), |t| (true, t));
+            let (point, keys) = text.rsplit_once(':').unwrap_or((text, ""));
+            let has = |k: &str| keys.split(' ').any(|x| x == k);
+            if s5 {
+                let mut e = base.mother[0].clone();
+                (e.tick, e.point) = (tick, point);
+                e.invocation = Some(base.recorded[usize::from(has("inv'"))].1);
+                acks.push(Ack::S5(e.clone()));
+                f.mother.push(e);
+                continue;
+            }
+            let mut e = base.broker[0].clone();
+            (e.tick, e.point, e.note, e.attempt, e.kind) = (tick, point, note, None, None);
+            e.session =
+                (has("s") || has("s'")).then_some(if has("s'") { other } else { f.session });
+            e.request = [("q", 1), ("q2", 2)]
+                .into_iter()
+                .find(|k| has(k.0))
+                .map(|k| k.1);
+            e.run = e.run.filter(|_| has("run"));
+            e.request_ordinal = (1..5).find(|n| has(&format!("ord{n}")));
+            acks.push(Ack::S1(e.clone()));
+            f.broker.push(e);
+        }
+        f.acks = acks.into_iter().take(1).collect();
+        f.points = f
+            .acks
+            .iter()
+            .map(|a| match a {
+                Ack::S1(e) => e.point,
+                Ack::S5(e) => e.point,
+            })
+            .collect();
+        let first = f.acks.first().map(|a| of(a).instant);
+        f.applied = first
+            .filter(|_| flag == "armed")
+            .and_then(|i| i.checked_sub(std::time::Duration::from_millis(1)));
+        let want = frozen(sink, dim, value).unwrap_or_else(|| panic!("{label}: no row"));
+        let shown = render_in(&f, t, &[]);
+        match label.starts_with("not ") {
+            false => assert_eq!(shown, want, "readiness {label}"),
+            true => assert_ne!(shown, want, "readiness {label}"),
+        }
+        println!(
+            "WITNESS readiness {label}: {}",
+            compare(want, &shown).join("; ")
+        );
+    }
+}
+#[test]
+fn witness_wave_rows_render_from_recorded_identity() {
+    super::child(
+        "witness::witness_wave_rows_render_from_recorded_identity",
+        |_| readiness(),
+    );
+}
+/// W0b A4: `model_registered` of a real registration through `open_broker`
+/// is counted from the opening's own projection since it opened, and its
+/// request only if every S1 entry of the session in the window carries it
+/// (another request's entry: `+0`). Another fixture's projection cannot be
+/// opened beside it: a process claims the kernel stop's controller once
+/// (governed.rs:267-278), so a cell's child holds one opening.
+#[test]
+fn witness_native_ledger_binds_by_fixture_and_request() {
+    super::child(
+        "witness::witness_native_ledger_binds_by_fixture_and_request",
+        |f| {
+            let b = super::s5::open_broker(f);
+            b.o.session
+                .register_local_model(&b.endpoint, super::spec())
+                .unwrap();
+            let row = (("registration_record", "ingress"), "quit");
+            let facts = super::s5::collect_broker(&b, (Vec::new(), Vec::new(), None), row);
+            let led = |f: &Facts| {
+                ledger(
+                    &view(f, String::new(), &TABLES),
+                    "+1:model_registered[s=S q=Q]",
+                )
+            };
+            let mut foreign = facts.clone();
+            foreign.broker.push(s1::Entry {
+                request: Some(7),
+                ..facts.broker[0].clone()
+            });
+            assert_eq!(led(&facts), "+1:model_registered[s=S q=Q]");
+            assert_eq!(led(&foreign), "+0:model_registered[s=S q=Q]");
+            let second = super::Fixture(f.0.join("second"));
+            std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700)
+                .create(&second.0)
+                .unwrap();
+            assert!(std::panic::catch_unwind(|| super::s5::open_broker(&second)).is_err());
+        },
+    );
+}
 /// Behaviour 9 (Other plants): over one refusing attempt built from S1's own
 /// entry type, `CAS:m:774` and `note:8` map, and each plant fails: the note
 /// `refused:8.capacity`, INV bound to a scripted lane's invocation, the
@@ -908,7 +1315,9 @@ fn witness_acknowledgement_and_note_plants_each_differ() {
             let base = render(&refused());
             let mut acks = refused();
             for a in acks.acks.iter_mut() {
-                (a.kind, a.request_ordinal) = (Some("metadata"), Some(3));
+                if let Ack::S1(a) = a {
+                    (a.kind, a.request_ordinal) = (Some("metadata"), Some(3));
+                }
             }
             let mut note = refused();
             note.broker[2].kind = Some("metadata");
@@ -983,7 +1392,7 @@ fn refused() -> Facts {
         recorded: vec![(LaneRole::Builder, builder), (LaneRole::Sentinel, sentinel)],
         claim: Some((run, 1)),
         points: vec!["model.call.observed"],
-        acks: vec![broker[1].clone()],
+        acks: vec![Ack::S1(broker[1].clone())],
         value: "quit",
         row: ("call_chat", "ingress"),
         applied: Some(std::time::Instant::now()),

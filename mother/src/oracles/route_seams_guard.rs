@@ -115,8 +115,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "515f16ad397e36a2fdfd5823b8945733622a357b88f814c3f84502a6da181fa7";
-const MUTANTS: usize = 904;
+const PINS_SHA256: &str = "6c78671d0ab6ad26e06519714fe05de1a6ff2da71f43bdbdabdac0377adb0f22";
+const MUTANTS: usize = 908;
 const REGIONS: usize = 34;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -128,13 +128,13 @@ const ROUTE_CELLS: &str = "\
 cells.rs a0db8fa3831e75b432e451c8282939836850b2140f689c259f051ff8fb29874b
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 599fcc6f924244397268e8d06bfa8fafbd492ad5a721f9939e1756fd8dedf241
+main.rs 2f7a871a744c9cd705d200803481e6669d3acb0ba54ae52b24ac3458d0f18e53
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs db9d19b8c7dee0790c7cec7b5d115ba55f561b9953e8669d52446741fe6368c9
+s5.rs 002daff6929738fef498dd8dfbb4e9f9bb07b73429ae3acf1a81b71ac296b2b7
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs cce27342af0e68af0e1eac5d6a72737659aea9c9e4f081fec908251651ca53ef
+witness.rs 6c45b2d10412f6a4339bfa08ebc3d4a21c8bcd3a7a47318631f054183295df2a
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -2565,6 +2565,9 @@ s|fn sessions
 s|const HELD
 s|const REFUSED
 s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,journal,native,peer,findings}
+s|enum Ack
+s|enum Hold
+h|const BROKER_SINKS
 h|struct Ran{id,nonce,result,passed,output}
 h|fn cell
 s|fn mission
@@ -2589,6 +2592,8 @@ h|fn ord3_quit
 h|fn quit_other_attempt
 h|fn early_quit
 s|fn collect
+s|struct Broker{o,endpoint}
+s|fn open_broker
 s|fn collect_broker
 ";
 /// The one export that hands out a composed type (`T7_TYPES`): by value.
@@ -3225,8 +3230,8 @@ fn sb3e_s5_sections_are_the_closed_list() {
     // P-W3, P-W4, P-W6 and S5 armed outside the boundary.
     let witness = swap(
         &stub("witness.rs"),
-        "use super::s5::{Facts, Ran};\n",
-        "use super::s5::{Facts, Ran};\nuse super::s5_close::seal;\n",
+        "use super::s5::{Ack, Facts, Ran};\n",
+        "use super::s5::{Ack, Facts, Ran};\nuse super::s5_close::seal;\n",
     );
     let grant = swap(
         &stub("grant.rs"),
@@ -3587,11 +3592,11 @@ fn sb3e_w0b_s5_exports() {
         text.replace(old, new)
     };
     let mut misses = Vec::new();
-    let hold = "pub(super) fn hold(point: &'static str) -> s5::Held {\n    let (cell, timeout) = (\"u5\", timeout as s5::Timeout);";
+    let hold = "pub(super) fn hold(point: &'static str) -> s5::Held {\n    let (cell, timeout) = (*RUNNING.lock().unwrap(), timeout as s5::Timeout);";
     let callback = "pub(super) fn hold(point: &'static str, timeout: s5::Timeout) -> s5::Held {\n    let cell = \"u5\";";
     let region = "pin host/tests/route_cells/s5.rs: pub(super)fnhold(point";
     let journal = "pub(super) fn journal(f: &Fixture) -> FileJournal {\n    FileJournal::open(&f.0).unwrap()\n}\n";
-    let broker = "    let broker = s1::drain_trace();\n    let session = o.session.identity();\n";
+    let broker = "    let (broker, request) = (s1::drain_trace(), 0);\n    let session = b.o.session.identity();\n";
     let plants = [
         (
             "B4 an unlisted pub(super)",
@@ -3655,7 +3660,7 @@ fn sb3e_w0b_s5_exports() {
             swap(
                 s5,
                 broker,
-                &format!("{broker}    let _ = o.session.journal();\n"),
+                &format!("{broker}    let _ = b.o.session.journal();\n"),
             ),
             "Passive: collect_broker reads the journal through journal(), not journal_view()",
         ),
