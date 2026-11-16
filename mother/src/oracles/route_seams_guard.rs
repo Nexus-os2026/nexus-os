@@ -115,9 +115,9 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "d680c59a28ffe6388e94dcce2aca7945b66bc910ce4c9c04a6b00aa903510aa5";
-const MUTANTS: usize = 935;
-const REGIONS: usize = 33;
+const PINS_SHA256: &str = "44293338439bc379155c89b385c061f7386cedb3503721dbefd79fcb90e11eeb";
+const MUTANTS: usize = 943;
+const REGIONS: usize = 34;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
 /// included (R44.1). A reviewed commit that changes a file changes its row.
@@ -130,7 +130,7 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 53880db0e37791ead80b50b43571a56db3402acfe79bd5a4ecaa0354c39a011a
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 1b2c2f9b90c1ebd8701aaae48c987943684e0795b805f9ac402969b81f31fcd3
+s5.rs 485f321f07c784746925d725511f4520068e74dd52f480fa7ffcffdeb440ae42
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
@@ -1638,6 +1638,8 @@ fn s5_findings(s5: &str) -> Vec<String> {
     found.extend(passive_findings(S5, s5));
     // F-S5-SPLIT section 4 item 12: a new check, listed separately.
     found.extend(alias_findings(S5, s5));
+    // W0b B4 (item 1(f)): the closed `pub` surface.
+    found.extend(exports_findings(s5));
     found
 }
 /// Rule (b): the other routes to the broker's model call.
@@ -1900,6 +1902,18 @@ fn rows_check(data: &str, rows: &[Row]) -> Vec<String> {
             let typed = x.split("::").any(|s| T7_TYPES.contains(&s));
             if typed || banned.iter().any(|b| x.starts_with(b)) {
                 found.push(format!("S5 sections: the row {} imports {x}", row.file));
+            }
+            // W0b B4 (SB3E-R106.3), an allow-list: through `s5`, exactly
+            // `super::s5::<item>` of an `s` row of `S5_EXPORTS` (not the module,
+            // `self`, a path below an item, nor an `h` row).
+            let segs: Vec<&str> = x.split("::").collect();
+            let through = segs.get(1).and_then(|s| s.split(' ').next()) == Some("s5");
+            let item = (segs.len() == 3 && segs[0] == "super").then(|| segs[2]);
+            if through && !item.is_some_and(|i| section_exports().contains(&i)) {
+                found.push(format!(
+                    "S5 sections: the row {} imports {x}, not a section export of s5.rs",
+                    row.file
+                ));
             }
         }
     }
@@ -2388,6 +2402,157 @@ fn alias_findings(file: &str, source: &str) -> Vec<String> {
         found.push(format!("{file}: an inline module {}", t[i + 1]));
     }
     found
+}
+/// W0b B4 (F-S5-SPLIT item 1(f), SB3E-R95.4): `s5.rs`'s `pub` surface, exactly
+/// this list in source order, one row per item (`<class>|<kind> <name>`, a
+/// struct's exported fields after it in braces); an unlisted or a missing one
+/// is a finding. Class `s`: a section's row may import it, and none hands out
+/// a composed type but `S5_BY_VALUE`; `h`: only the harness's other files use
+/// it (`grant.rs`, `main.rs`, `witness.rs`; SB3E-R106.3), and no section row
+/// may import it. It holds the pause helper `hold`, not `timeout`; `Mother.m`
+/// is the named by-value export of the Mother `FileSession` for the close
+/// chain (R95.2, R106.4).
+const S5_EXPORTS: &str = "\
+h|type Recorded
+h|fn lanes
+h|struct Boot{door,context,name,request,peer}
+h|fn boot
+h|fn consented
+s|struct Mother{m}
+s|struct Profile{opening,recheck,classify,call_gate,bound}
+s|type Neighbour
+s|struct Expect{attempts,profile,roles,request_level,attempt_level,multiplicity,position}
+s|const RECORDED
+s|type Roles
+s|fn sessions
+s|const HELD
+s|const REFUSED
+s|struct Facts{session,request,recorded,claim,points,acks,value,broker,mother,journal,native,peer,findings}
+h|struct Ran{id,nonce,result,passed,output}
+h|fn cell
+s|fn mission
+s|fn hold
+s|enum Anchor
+s|struct Chain{anchor,points}
+s|struct Start{o,native,mother,since}
+s|fn start
+s|fn driven
+h|fn ctl_call_chat
+h|fn original_cell_unscheduled
+s|fn unscheduled
+h|fn repeated
+s|fn repeat
+h|fn mission_stop
+h|fn stop_all
+h|fn fatal
+h|fn quit
+s|fn shutdown
+s|fn stop
+h|fn ord3_quit
+h|fn quit_other_attempt
+h|fn early_quit
+s|fn collect
+s|fn collect_broker
+";
+/// The one export that hands out a composed type (`T7_TYPES`): by value.
+const S5_BY_VALUE: &str = "Mother.m";
+/// `s5.rs`'s `pub` items as `S5_EXPORTS` rows (without the class), and each
+/// export that hands out a composed type (a `fn` returning, a `const` typed or
+/// a field typed by a `T7_TYPES` name) as its item's row label and finding.
+fn exports_of(s5: &str) -> (Vec<String>, Vec<(String, String)>) {
+    let t = lex(s5);
+    let structs: Vec<(usize, usize, &str)> = (0..t.len())
+        .filter(|&i| t[i] == "struct" && t.get(i + 2) == Some(&"{"))
+        .map(|i| (i + 2, close_of(&t, i + 2), t[i + 1]))
+        .collect();
+    let (mut rows, mut handed) = (Vec::<(String, Vec<String>)>::new(), Vec::new());
+    for i in (0..t.len()).filter(|&i| t[i] == "pub") {
+        let j = match t.get(i + 1) == Some(&"(") {
+            true => close_of(&t, i + 1) + 1,
+            false => i + 1,
+        };
+        let (kind, name) = (
+            t.get(j).copied().unwrap_or(""),
+            t.get(j + 1).copied().unwrap_or(""),
+        );
+        let owner = structs.iter().find(|s| s.0 < j && j < s.1).map(|s| s.2);
+        let item = owner.map_or(format!("{kind} {name}"), |o| format!("struct {o}"));
+        let stop = |k: &&str| ["{", ";", "=", "where"].contains(k);
+        let head = (j..t.len()).take_while(|&k| !stop(&t[k]));
+        let (from, label) = match (name, kind, owner) {
+            (":", _, Some(o)) => (j + 2, format!("{o}.{kind}")),
+            // A `fn` hands out its return type; a `const` its type.
+            (_, "fn", _) => {
+                let arrow = head.clone().find(|&k| t[k] == ">" && t[k - 1] == "-");
+                (arrow.map_or(t.len(), |k| k + 1), format!("{kind} {name}"))
+            }
+            (_, "const", _) => {
+                let typed = head.clone().find(|&k| t[k] == ":");
+                (typed.map_or(t.len(), |k| k + 1), format!("{kind} {name}"))
+            }
+            _ => (t.len(), format!("{kind} {name}")),
+        };
+        // A field's type ends at its depth-0 `,` or the struct's `}`.
+        let mut depth = 0i32;
+        let to = (from..t.len()).find(|&k| {
+            depth += i32::from(["<", "(", "["].contains(&t[k]))
+                - i32::from([">", ")", "]"].contains(&t[k]));
+            stop(&t[k]) || t[k] == "}" || (name == ":" && t[k] == "," && depth == 0)
+        });
+        let to = to.unwrap_or(t.len());
+        let typed = t[from.min(to)..to].iter().find(|x| T7_TYPES.contains(x));
+        if let Some(ty) = typed.filter(|_| label != S5_BY_VALUE) {
+            let found = format!("S5_EXPORTS: {label} hands out a composed type {ty}");
+            handed.push((item, found));
+        }
+        match (name, owner) {
+            (":", Some(_)) => match rows.last_mut() {
+                Some((_, fields)) => fields.push(kind.to_string()),
+                None => rows.push((label, Vec::new())),
+            },
+            _ => rows.push((label, Vec::new())),
+        }
+    }
+    let rows = rows.into_iter().map(|(r, f)| match f.is_empty() {
+        true => r,
+        false => format!("{r}{{{}}}", f.join(",")),
+    });
+    (rows.collect(), handed)
+}
+/// W0b B4: the `pub` surface of `s5.rs` is exactly `S5_EXPORTS`; no `s` row's
+/// item but `S5_BY_VALUE` hands out a composed type (SB3E-R106.3: the `h` rows
+/// are `grant.rs`'s, which no section imports).
+fn exports_findings(s5: &str) -> Vec<String> {
+    let (rows, handed) = exports_of(s5);
+    let harness: Vec<&str> = S5_EXPORTS
+        .lines()
+        .filter_map(|l| l.strip_prefix("h|"))
+        .map(|r| r.split('{').next().unwrap_or(r))
+        .collect();
+    let section = handed
+        .into_iter()
+        .filter(|(item, _)| !harness.contains(&item.as_str()));
+    let mut found: Vec<String> = section.map(|(_, f)| f).collect();
+    let listed: Vec<&str> = S5_EXPORTS
+        .lines()
+        .filter_map(|l| l.split_once('|'))
+        .map(|l| l.1)
+        .collect();
+    for row in rows.iter().filter(|r| !listed.contains(&r.as_str())) {
+        found.push(format!("S5_EXPORTS: unlisted {row}"));
+    }
+    for row in listed.iter().filter(|l| !rows.iter().any(|r| r == *l)) {
+        found.push(format!("S5_EXPORTS: missing {row}"));
+    }
+    if rows != listed {
+        found.push("S5_EXPORTS: not exactly the list".into());
+    }
+    found
+}
+/// W0b B4: the `s5.rs` items a section's row may import (class `s`).
+fn section_exports() -> Vec<&'static str> {
+    let rows = S5_EXPORTS.lines().filter_map(|l| l.strip_prefix("s|"));
+    rows.filter_map(|r| r.split([' ', '{']).nth(1)).collect()
 }
 /// SB3E-R15.2's sweep: at each statement boundary inside a pinned region,
 /// and before each `&&` or `||`, a no-op-looking insertion; each region's
@@ -3269,4 +3434,157 @@ fn sb3e_mother_pins_reject_every_generated_mutant() {
         found.push("G-S2 a shrunk pin: the count kept".into());
     }
     fail_on(found);
+}
+
+/// W0b B3 and B4 (SB3E-R95.4, R95.7, R106.3, R106.4): on the tree as it is,
+/// `s5.rs`'s surface is `S5_EXPORTS`; each plant then shows its own finding
+/// through `s5_findings` or the list check; and a section using the section
+/// exports (the pause helper, a first-arrival chain, the by-value
+/// `FileSession`) passes the section profile.
+#[test]
+fn sb3e_w0b_s5_exports() {
+    let sources = sources();
+    let s5 = text(&sources, S5);
+    let found = exports_findings(s5);
+    if !found.is_empty() {
+        return fail_on(found);
+    }
+    let swap = |text: &str, old: &str, new: &str| {
+        assert_eq!(text.matches(old).count(), 1, "{old}");
+        text.replace(old, new)
+    };
+    let mut misses = Vec::new();
+    let hold = "pub(super) fn hold(point: &'static str) -> s5::Held {\n    let (cell, timeout) = (\"u5\", timeout as s5::Timeout);";
+    let callback = "pub(super) fn hold(point: &'static str, timeout: s5::Timeout) -> s5::Held {\n    let cell = \"u5\";";
+    let region = "pin host/tests/route_cells/s5.rs: pub(super)fnhold(point";
+    let journal = "pub(super) fn journal(f: &Fixture) -> FileJournal {\n    FileJournal::open(&f.0).unwrap()\n}\n";
+    let broker = "    let broker = s1::drain_trace();\n    let session = o.session.identity();\n";
+    let plants = [
+        (
+            "B4 an unlisted pub(super)",
+            format!("{s5}pub(super) fn spare() {{}}\n"),
+            "S5_EXPORTS: unlisted fn spare",
+        ),
+        (
+            "B4 a listed export removed",
+            swap(s5, "pub(super) fn collect_broker(", "fn collect_broker("),
+            "S5_EXPORTS: missing fn collect_broker",
+        ),
+        (
+            "B4 an exported constructor",
+            format!("{s5}{journal}"),
+            "S5_EXPORTS: fn journal hands out a composed type FileJournal",
+        ),
+        (
+            "B4 the pause helper removed",
+            swap(s5, "pub(super) fn hold(", "fn hold("),
+            "S5_EXPORTS: missing fn hold",
+        ),
+        (
+            "B4 timeout exported",
+            swap(
+                s5,
+                "fn timeout(line: &str) -> ! {",
+                "pub(super) fn timeout(line: &str) -> ! {",
+            ),
+            "S5_EXPORTS: unlisted fn timeout",
+        ),
+        (
+            "B4 the helper given a callback",
+            swap(s5, hold, callback),
+            region,
+        ),
+        (
+            "B4 the helper not passing timeout",
+            swap(
+                s5,
+                "timeout as s5::Timeout);\n    s5::arm(point",
+                "abort as s5::Timeout);\n    s5::arm(point",
+            ),
+            region,
+        ),
+        (
+            "B4 an exported alias of a T7 type",
+            format!("{s5}pub(super) type J = FileJournal;\n"),
+            "host/tests/route_cells/s5.rs: type alias names a T7 type: J",
+        ),
+        (
+            "B4 the by-value FileSession removed",
+            swap(
+                s5,
+                "    pub(super) m: FileSession<SessionPort>,",
+                "    m: FileSession<SessionPort>,",
+            ),
+            "S5_EXPORTS: missing struct Mother{m}",
+        ),
+        (
+            "B3 collect_broker reads journal()",
+            swap(
+                s5,
+                broker,
+                &format!("{broker}    let _ = o.session.journal();\n"),
+            ),
+            "Passive: collect_broker reads the journal through journal(), not journal_view()",
+        ),
+        (
+            "B3 collect_broker reads store.commit",
+            swap(
+                s5,
+                broker,
+                &format!(
+                    "{broker}    let _ = broker.iter().any(|e| e.point == \"store.commit\");\n"
+                ),
+            ),
+            "Passive: collect_broker reads store.commit",
+        ),
+    ];
+    for (plant, text, expected) in plants {
+        shown(&mut misses, plant, &s5_findings(&text), &[expected]);
+    }
+    // R106.3: a section row importing an `h` row (`lanes`) or the module.
+    for (import, expected) in [
+        ("super::s5::lanes", "S5 sections: the row s5_close.rs imports super::s5::lanes, not a section export of s5.rs"),
+        ("super::s5", "S5 sections: the row s5_close.rs imports super::s5, not a section export of s5.rs"),
+    ] {
+        let data: Vec<String> = S5_SECTIONS
+            .lines()
+            .map(|l| match l.starts_with("s5_close.rs|") {
+                true => {
+                    let mut f: Vec<&str> = l.split('|').collect();
+                    f[4] = import;
+                    f.join("|")
+                }
+                false => l.to_string(),
+            })
+            .collect();
+        let data = data.join("\n") + "\n";
+        let plant = format!("B4 a section row importing {import}");
+        shown(&mut misses, &plant, &rows_check(&data, &section_rows(&data)), &[expected]);
+    }
+    // A section using the section exports, its row listing exactly its imports.
+    let sample = "//! SB-3E S5 section U6b-2: s5_r34.rs\nuse super::{s5::{driven, hold, start, Anchor, Chain, Facts, REFUSED}, Fixture, PATIENCE};\nconst SLOT: Chain = Chain {\n    anchor: Anchor::Arrival(1),\n    points: &[\"attempt.slot\"],\n};\npub(super) fn quit(f: &Fixture) -> Facts {\n    let (facts, _, ()) = driven(f, \"quit\", &SLOT, &REFUSED, |_, m, held, _| {\n        let _ = m.mission();\n        drop(held);\n    });\n    facts\n}\npub(super) fn ending(f: &Fixture) -> bool {\n    let held = hold(\"mother.settle\");\n    let _ = held.acknowledged.recv_timeout(PATIENCE);\n    let session = start(f).mother.m;\n    session.prepare_session_end().is_ok()\n}\n";
+    let imports = "super::s5::driven,super::s5::hold,super::s5::start,super::s5::Anchor,super::s5::Chain,super::s5::Facts,super::s5::REFUSED,super::Fixture,super::PATIENCE";
+    let rows = section_rows(S5_SECTIONS);
+    let r34 = rows
+        .iter()
+        .find(|r| r.file == "s5_r34.rs")
+        .expect("s5_r34.rs");
+    let row = Row {
+        file: r34.file,
+        unit: r34.unit,
+        pairs: r34.pairs.clone(),
+        controls: r34.controls.clone(),
+        imports: list(imports),
+        helpers: Vec::new(),
+    };
+    let mut got = section_findings("s5_r34.rs", &row, sample, &pins());
+    let data = S5_SECTIONS.replace(
+        "ctl_meter_settle|-|",
+        &format!("ctl_meter_settle|{imports}|"),
+    );
+    got.extend(rows_check(&data, &section_rows(&data)));
+    if !got.is_empty() {
+        misses.push(format!("a section using the exports: {got:?}"));
+    }
+    fail_on(misses);
 }

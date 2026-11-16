@@ -492,6 +492,11 @@ fn bounded(command: &mut std::process::Command) -> std::process::Output {
     }
     process.wait_with_output().unwrap()
 }
+@@@ host/tests/route_cells/s5.rs
+pub(super) fn hold(point: &'static str) -> s5::Held {
+    let (cell, timeout) = ("u5", timeout as s5::Timeout);
+    s5::arm(point, s5::Action::Pause { cell, timeout })
+}
 @@@ host/tests/route_cells/main.rs
 const PATIENCE: Duration = Duration::from_secs(10);
 const CHILD: &str = "SB3E_ROUTE_CHILD";
