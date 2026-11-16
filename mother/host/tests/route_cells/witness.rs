@@ -580,13 +580,21 @@ fn compare(expected: &str, observed: &str) -> Vec<String> {
     diffs
 }
 
-/// Behaviour 10: the control's record, and its witness against `CONTROL`.
-pub(super) fn control(r: &Ran) {
+/// Behaviour 10, W0b C2: the control's record, and its witness against its
+/// `(sink, dim)` row of `CONTROLS`; no row is a named failure.
+pub(super) fn control(r: &Ran, sink: &str, dim: &str) {
+    control_in(r, (sink, dim), &CONTROLS)
+}
+fn control_in(r: &Ran, (sink, dim): (&str, &str), controls: &[(&str, &str, &'static str)]) {
+    let row = controls.iter().find(|c| (c.0, c.1) == (sink, dim));
+    let want = row
+        .unwrap_or_else(|| panic!("{}: no CONTROLS row {sink}/{dim}", r.id))
+        .2;
     let witness = match record(r) {
         Ok(w) => w,
         Err(e) => panic!("{}: {e}\n{}{}", r.id, r.result, r.output),
     };
-    let diffs = compare(CONTROL, witness);
+    let diffs = compare(want, witness);
     assert!(diffs.is_empty(), "{}: {}", r.id, diffs.join("; "));
 }
 
@@ -826,6 +834,21 @@ fn witness_result_records_each_refused() {
         ..ran(good)
     };
     assert_eq!(record(&failed), Err("record: the child failed"));
+    // W0b C2: a non-U5 control against its own `CONTROLS` row; another row's
+    // witness, or no row, fails (the missing one by name).
+    let fails = |controls: &[(&str, &str, &'static str)]| {
+        let run =
+            std::panic::catch_unwind(|| control_in(&ran(good), ("seal", "lifecycle"), controls));
+        run.err()
+            .map(|p| p.downcast::<String>().map_or(String::new(), |m| *m))
+    };
+    assert_eq!(fails(&[("seal", "lifecycle", "entry=x;check=y")]), None);
+    assert!(fails(&[("seal", "lifecycle", "entry=z;check=y")]).is_some());
+    let missing = fails(&CONTROLS).unwrap_or_default();
+    assert!(
+        missing.contains("no CONTROLS row seal/lifecycle"),
+        "{missing}"
+    );
 }
 
 /// Behaviour 9 (Other plants): over one refusing attempt built from S1's own

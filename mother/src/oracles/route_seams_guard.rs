@@ -1049,7 +1049,8 @@ fn invocations<'a, 'b>(body: &'b [&'a str], name: &str) -> Vec<&'b [&'a str]> {
 /// <route> <sink> <dim> <value>, <stem>::<fn>); cells! { $($rest)* } };`: one
 /// test, its slug, its pattern's own literals, one driver no other arm names
 /// in the section owning its pair, one compare (the helper's). The terminal
-/// arm `()` is one `ctl!(<control>, <stem>::<fn>);` per control, each once;
+/// arm `()` is one `ctl!(<control>, <sink> <dim>, <stem>::<fn>);` per control,
+/// each once (W0b C1: `<control>` is `ctl_<sink>`, its section owns the pair);
 /// the arms are exactly `cells.rs`'s manifest. The helpers `cell` and `ctl`
 /// and the item are one pinned region, whole and token-equal.
 fn macro_findings(main: &str, cells: &str) -> Vec<String> {
@@ -1111,9 +1112,12 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
             {
                 found.push(format!("U5 macro: the control {c} appears twice (at {k})"));
             }
-            for args in ctls.iter().filter(|a| !shaped(a, 6, &[1], &[0, 2, 5])) {
+            for args in ctls
+                .iter()
+                .filter(|a| !shaped(a, 9, &[1, 4], &[0, 2, 3, 5, 8]))
+            {
                 found.push(format!(
-                    "U5 macro: the control {} is not ctl!(<control>, <stem>::<fn>)",
+                    "U5 macro: the control {} is not ctl!(<control>, <sink> <dim>, <stem>::<fn>)",
                     flat(args)
                 ));
             }
@@ -1250,8 +1254,9 @@ fn paths<'a>(args: &[&'a str]) -> Vec<(&'a str, &'a str)> {
         .map(|k| (args[k - 1], args[k + 2]))
         .collect()
 }
-/// Item 1(d), W0b B5: each control of the terminal arm (`ctl!(<control>,
-/// <stem>::<fn>)`) names its driver in the section that lists it.
+/// Item 1(d), W0b B5, C1: each control of the terminal arm (`ctl!(<control>,
+/// <sink> <dim>, <stem>::<fn>)`) is `ctl_<sink>`, and the section that lists
+/// it owns `<sink>:<dim>` and has its driver.
 fn control_binding(body: &[&str]) -> Vec<String> {
     let rows = section_rows(S5_SECTIONS);
     let mut found = Vec::new();
@@ -1265,6 +1270,13 @@ fn control_binding(body: &[&str]) -> Vec<String> {
             ));
             continue;
         };
+        let (sink, dim) = (args.get(2).copied(), args.get(3).copied());
+        let pair = format!("{}:{}", sink.unwrap_or(""), dim.unwrap_or(""));
+        if Some(control) != sink.map(|s| format!("ctl_{s}")).as_deref()
+            || !row.pairs.contains(&&*pair)
+        {
+            found.push(format!("S5 sections: the control {control} is not ctl_<sink> of {pair}, owned by its section"));
+        }
         for (s, _) in paths(args)
             .into_iter()
             .filter(|(s, _)| *s != stem(row.file))
@@ -3175,10 +3187,10 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
-        "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); ctl!(ctl_seal, s5_reg::ctl_seal); };\n",
+        "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
     );
     let wrong = "S5 sections: the arm rc_r9_seal_lifecycle_closingnormal calls s5_r34, which does not own seal:lifecycle";
     let arm = swap(&main, head, &format!("{head}{cell}"));
@@ -3722,7 +3734,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";
@@ -3734,8 +3746,11 @@ fn sb3e_w0b_compact_arms() {
         ("B5 a compare of another row", arm(&format!("cell!(rc_r5_call_chat_ingress_quit, r5 call_chat lifecycle quit, s5::quit); {again}")), format!("{slug} passes rc_r5_call_chat_ingress_quit,r5call_chatlifecyclequit,s5::quit, not its own literals")),
         ("B5 an arm with no compare", arm(&format!("#[test] fn rc_r5_call_chat_ingress_quit() {{ let _ = super::s5::quit; }} {again}")), format!("{slug} has 0 compares")),
         ("B5 an arm with no manifest entry", swap(main, quit, &format!("{quit}{other}")), "U5 macro: the arm rc_r5_call_chat_ingress_read_failure has no manifest entry".into()),
-        ("B5 a control listed twice", swap(main, terminal, "    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); ctl!(ctl_call_chat, s5::ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat appears twice".into()),
-        ("B5 a control in no section row", swap(main, terminal, "    () => { ctl!(ctl_other, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_other is listed by no section".into()),
+        ("B5 a control listed twice", swap(main, terminal, "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat appears twice".into()),
+        ("B5 a control in no section row", swap(main, terminal, "    () => { ctl!(ctl_other, call_chat ingress, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_other is listed by no section".into()),
+        ("C1 a control of the old shape", swap(main, terminal, "    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat,s5::ctl_call_chat is not ctl!(<control>, <sink> <dim>, <stem>::<fn>)".into()),
+        ("C1 a control named for another sink", swap(main, terminal, "    () => { ctl!(ctl_call_chat, seal lifecycle, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_call_chat is not ctl_<sink> of seal:lifecycle, owned by its section".into()),
+        ("C1 a pair its section does not own", swap(main, terminal, "    () => { ctl!(ctl_call_chat, call_chat lifecycle, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_call_chat is not ctl_<sink> of call_chat:lifecycle, owned by its section".into()),
         ("B5 a duplicate arm", swap(main, quit, &format!("{quit}{quit}")), format!("{slug} appears twice")),
         ("B5 an arm defining no test", arm(again), format!("{slug} defines []")),
         ("B5 an arm with zero drivers", arm(&format!("cell!(rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit); {again}")), format!("{slug} has 0 drivers")),
@@ -3750,13 +3765,13 @@ fn sb3e_w0b_compact_arms() {
         ("self-attack an attribute in an arm", arm(&format!("#[allow(unused)] cell!(rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit, s5::quit); {again}")), "U5 macro: a # in macro_rules! cells".into()),
         ("self-attack a cell! with an extra argument", arm(&format!("cell!(rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit, s5::quit, x); {again}")), format!("{slug} is not cell!(<slug>, <route> <sink> <dim> <value>, <stem>::<fn>)")),
         ("self-attack a bracketed cell!", arm(&format!("cell![rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit, s5::quit]; {again}")), format!("{slug} defines []")),
-        ("self-attack a ctl! with no driver", swap(main, terminal, "    () => { ctl!(ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat is not ctl!(<control>, <stem>::<fn>)".into()),
-        ("self-attack a control sharing a cell's driver", swap(main, terminal, "    () => { ctl!(ctl_call_chat, s5::quit); };\n"), "U5 macro: the driver s5::quit is named by two arms".into()),
+        ("self-attack a ctl! with no driver", swap(main, terminal, "    () => { ctl!(ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat is not ctl!(<control>, <sink> <dim>, <stem>::<fn>)".into()),
+        ("self-attack a control sharing a cell's driver", swap(main, terminal, "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::quit); };\n"), "U5 macro: the driver s5::quit is named by two arms".into()),
     ] {
         shown(&mut misses, plant, &macro_findings(&text, cells), &[&expected]);
     }
     let mains = format!("{CELLS}main.rs");
-    let ctl = main[main.find("/// W0b B5: one control's test").unwrap()
+    let ctl = main[main.find("/// W0b B5, C1: one control's test").unwrap()
         ..main
             .find("/// SB3E-R86.4 (mission Behaviour 1), W0b B5")
             .unwrap()]
@@ -3768,7 +3783,7 @@ fn sb3e_w0b_compact_arms() {
     let label = "pin host/tests/route_cells/main.rs: macro_rules!cell{($slug: matched 0";
     for (plant, text, expected) in [
         ("B5 a helper moved outside the region", moved, label),
-        ("B5 the helper's body changed", swap(main, "                super::witness::control(&ran);\n", "                let _ = &ran;\n"), label),
+        ("B5 the helper's body changed", swap(main, "                super::witness::control(&ran, stringify!($sink), stringify!($dim));\n", "                let _ = &ran;\n"), label),
         ("B5 a third top-level helper", swap(main, "/// W0b B5 (SB3E-R94.2): one credited cell's test", "macro_rules! extra {\n    () => {};\n}\n/// W0b B5 (SB3E-R94.2): one credited cell's test"), "R44.2 main.rs items: unlisted macro_rules!extra"),
     ] {
         let planted = planted(&sources, &mains, main, &text);

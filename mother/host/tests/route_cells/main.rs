@@ -50,15 +50,16 @@ macro_rules! cell {
         }
     };
 }
-/// W0b B5: one control's test, as `cell!`, its witness against `CONTROL`.
+/// W0b B5, C1: one control's test, as `cell!`, its witness against its
+/// `(sink, dim)` row of `CONTROLS`.
 macro_rules! ctl {
-    ($slug:ident, $stem:ident::$driver:ident) => {
+    ($slug:ident, $sink:ident $dim:ident, $stem:ident::$driver:ident) => {
         #[test]
         fn $slug() {
             let (name, id) = (concat!("cells::", stringify!($slug)), stringify!($slug));
             let ran = super::s5::cell(name, id, super::$stem::$driver, super::witness::render);
             if let Some(ran) = ran {
-                super::witness::control(&ran);
+                super::witness::control(&ran, stringify!($sink), stringify!($dim));
             }
         }
     };
@@ -68,7 +69,7 @@ macro_rules! ctl {
 /// route, sink, dim, value and driver (`macro_rules!` cannot build
 /// `rc_<slug>`, so the arm writes it). An entry with no arm fails to compile.
 macro_rules! cells {
-    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); };
+    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); };
     (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_original_cell_unscheduled, r5 call_chat ingress original_cell_unscheduled, s5::original_cell_unscheduled); cells! { $($rest)* } };
     (r5 call_chat ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_repeated, r5 call_chat ingress repeated, s5::repeated); cells! { $($rest)* } };
     (r5 call_chat ingress mission_stop; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_mission_stop, r5 call_chat ingress mission_stop, s5::mission_stop); cells! { $($rest)* } };
