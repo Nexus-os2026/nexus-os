@@ -653,14 +653,9 @@ fn witness_rows_hold_the_rendered_fields() {
             .filter_map(|kv| kv.split_once('='))
             .map(|kv| kv.0)
             .collect();
-        let fields: Vec<&str> = shape(witness, "own")
-            .unwrap()
-            .fields
-            .iter()
-            .map(|x| x.0)
-            .collect();
-        assert_eq!(keys, fields, "{value}");
-        assert_eq!(keys.len(), 10, "{value}");
+        // W0b N8: U5's exact field list, not the witness against itself.
+        let u5 = "entry check value out branch ledger window peer next deadline_fired";
+        assert_eq!(keys.join(" "), u5, "{value}");
         let check = witness.split(";check=").nth(1).unwrap_or("");
         let token = check.split('[').next().unwrap_or("");
         let branch = witness.split(";branch=").nth(1).unwrap_or("");

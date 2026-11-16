@@ -1193,6 +1193,20 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
             ));
         }
     }
+    // W0b N7: `cells.rs` gets G-B1 as `s5.rs` and the sections do: no raw
+    // identifier, no macro definition, no macro but its one `cells!`.
+    let ct = lex(cells);
+    let cells_bang = (0..ct.len()).filter(|&i| ct[i] == "cells" && ct.get(i + 1) == Some(&"!"));
+    if cells_bang.count() != 1 {
+        found.push("U5 macro: cells.rs does not invoke cells! once".into());
+    }
+    let listed = |f: &String| f != "G-B1: an unlisted macro cells!";
+    found.extend(
+        gb1_findings(&mask(cells), &ct)
+            .into_iter()
+            .filter(listed)
+            .map(|f| format!("cells.rs {f}")),
+    );
     let manifest = manifest_slugs(cells);
     for arm in arms.iter().filter(|a| !manifest.contains(a)) {
         found.push(format!("U5 macro: the arm {arm} has no manifest entry"));
@@ -3759,6 +3773,15 @@ fn sb3e_w0b_compact_arms() {
     ] {
         shown(&mut misses, plant, &macro_findings(&text, cells), &[&expected]);
     }
+    // W0b N7: a `macro_rules! cell` planted in cells.rs.
+    let in_cells = format!("{cells}macro_rules! cell {{\n    () => {{}};\n}}\n");
+    let gb1 = ["cells.rs G-B1: a macro definition macro_rules"];
+    shown(
+        &mut misses,
+        "N7 a macro in cells.rs",
+        &macro_findings(main, &in_cells),
+        &gb1,
+    );
     // R102.3: the nearest variants of the new checks, each refused by class.
     for (plant, text, expected) in [
         ("self-attack a raw-identifier driver", arm(&format!("cell!(rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit, s5::r#fatal); {again}")), "U5 macro: a # in macro_rules! cells".to_string()),
