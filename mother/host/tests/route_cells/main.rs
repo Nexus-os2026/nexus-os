@@ -26,6 +26,9 @@ use std::time::{Duration, Instant};
 mod grant;
 mod locks;
 mod s5;
+mod s5_close;
+mod s5_r34;
+mod s5_reg;
 mod store;
 /// SB3E-R86.4 (mission Behaviour 1): the terminal arm, the control
 /// `ctl_call_chat`, then one literal arm per credited cell (`macro_rules!`
