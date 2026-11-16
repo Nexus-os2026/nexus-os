@@ -1243,8 +1243,15 @@ fn witness_native_ledger_binds_by_fixture_and_request() {
                 request: Some(7),
                 ..facts.broker[0].clone()
             });
-            assert_eq!(led(&facts), "+1:model_registered[s=S q=Q]");
-            assert_eq!(led(&foreign), "+0:model_registered[s=S q=Q]");
+            let (bound, other) = (led(&facts), led(&foreign));
+            assert_eq!(
+                bound, "+1:model_registered[s=S q=Q]",
+                "A4 ledger of the request: {bound}"
+            );
+            assert_eq!(
+                other, "+0:model_registered[s=S q=Q]",
+                "A4 ledger of another: {other}"
+            );
             let second = super::Fixture(f.0.join("second"));
             std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700)
                 .create(&second.0)

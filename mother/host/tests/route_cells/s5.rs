@@ -1314,6 +1314,13 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
         return vec![format!("collect: {} collections, not 1", kept.len())];
     };
     let mut found = facts.findings.clone();
+    // s5's own checks after the collection (6.2's Stop) add to the returned
+    // facts: shown too, while the kept ones decide (a section removes none).
+    let later = returned
+        .findings
+        .iter()
+        .filter(|x| !facts.findings.contains(x));
+    found.extend(later.cloned());
     if render(returned) != render(facts) || returned.findings != facts.findings {
         found.push("collect: the driver's facts are not its collection's".into());
     }
