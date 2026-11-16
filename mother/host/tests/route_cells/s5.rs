@@ -1264,7 +1264,7 @@ pub(super) struct Facts {
     pub(super) applied: Option<Instant>,
     pub(super) broker: Vec<s1::Entry>,
     pub(super) mother: Vec<s5::Entry>,
-    /// The journal's entries since the hold began, through `journal_view`.
+    /// The journal's entries since the hold began, read from its file (R1-2).
     pub(super) journal: Vec<Journaled>,
     /// The projection's records since the hold began.
     pub(super) native: Vec<EvidenceRecord>,
@@ -1539,10 +1539,31 @@ fn chained<R>(
 /// (journal, projection, peer).
 pub(super) struct Start {
     pub(super) o: Opened,
-    pub(super) native: Arc<MemoryEvidence>,
     pub(super) mother: Mother,
-    pub(super) since: (usize, usize, usize),
+}
+/// W0b R1-2: the running cell's observation sources, captured by `start` and
+/// private to s5.rs: the journal file, the projection, the peer, both
+/// traces, the driver's own counters and where each observation begins. So
+/// `collect` reads them after the Mother's `FileSession` is released by
+/// value (`prepare_session_end`, R95.2); a section supplies none of them.
+struct Sources {
+    cell: &'static str,
+    journal: PathBuf,
+    native: Arc<MemoryEvidence>,
+    peer: Arc<Mutex<Vec<String>>>,
+    driver: (SessionIdentity, u64, Arc<AtomicU32>, Recorded),
+    since: (usize, usize, usize),
     _traces: (s1::Held, s5::Held),
+}
+static SOURCES: Mutex<Option<Sources>> = Mutex::new(None);
+/// W0b N-b: when s5's own applier applied the cell's value (`driven`); a
+/// section can neither supply nor change it.
+static APPLIED: Mutex<Option<Instant>> = Mutex::new(None);
+/// The Mother journal's entries, read from its file (no handle is opened).
+fn journal_at(path: &std::path::Path) -> Result<Vec<Journaled>, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("journal: {:?}", e.kind()))?;
+    let lines: Vec<String> = text.lines().map(str::to_owned).collect();
+    nexus_mother::journal::verify(&lines).map_err(|e| format!("journal: {e:?}"))
 }
 pub(super) fn start(f: &Fixture) -> Start {
     let (o, native) = opened(f);
@@ -1553,18 +1574,30 @@ pub(super) fn start(f: &Fixture) -> Start {
     );
     s1::drain_trace();
     s5::drain_trace();
+    let journal = f.0.join("mother-journal.jsonl");
+    let peer = mother.peer.clone();
     let since = (
-        mother.m.journal_view().unwrap().len(),
+        journal_at(&journal).unwrap().len(),
         native.records().len(),
-        mother.peer.lock().unwrap().len(),
+        peer.lock().unwrap().len(),
     );
-    Start {
-        o,
+    let m = &mother;
+    *SOURCES.lock().unwrap() = Some(Sources {
+        cell: *RUNNING.lock().unwrap(),
+        journal,
         native,
-        mother,
+        peer,
+        driver: (
+            o.session.identity(),
+            m.request,
+            m.calls.clone(),
+            m.recorded.clone(),
+        ),
         since,
         _traces: traces,
-    }
+    });
+    *APPLIED.lock().unwrap() = None;
+    Start { o, mother }
 }
 /// A held cell: the chained hold of `chain`, `apply` while the last
 /// stands (Behaviour 6), then the passive collection under the measured
@@ -1579,17 +1612,32 @@ pub(super) fn driven<R>(
 ) -> (Facts, Vec<String>, R) {
     let c = start(f);
     let (o, m) = (&c.o, &c.mother);
-    let mut at = None;
     let (acks, steps, applied) = chained(f, m, chain, |held, chat| {
-        at = Some(Instant::now());
+        *APPLIED.lock().unwrap() = Some(Instant::now());
         apply(o, m, held, chat)
     });
     println!("WITNESS {value}: the advance {steps:?}");
-    let held = (chain.anchor_point(), acks, at);
-    let facts = collect(o, m, &c.native, c.since, held, (chain.row, value), row);
+    let facts = collect((chain.anchor_point(), acks), (chain.row, value), row);
     (facts, steps, applied)
 }
 
+/// W0b R1-2: `ctl_call_chat`'s path, then the Mother's `FileSession` released
+/// by value (`prepare_session_end`, R95.2, as the close chain does), and only
+/// then the collection, from the sources `start` captured.
+pub(super) fn released(f: &Fixture) -> Facts {
+    let Start { o, mother } = start(f);
+    let chain = Chain {
+        row: ("call_chat", "ingress"),
+        anchor: Anchor::Mother("mother.charge.entry"),
+        points: &["call.gate", "model.call.observed"],
+    };
+    let (acks, steps, ()) = chained(f, &mother, &chain, |held, _| drop(held));
+    let ended = mother.m.prepare_session_end().map(|_| ());
+    println!("WITNESS released: the advance {steps:?}, the end {ended:?}");
+    let facts = collect((chain.anchor_point(), acks), (chain.row, "none"), &HELD);
+    drop(o);
+    facts
+}
 /// Behaviour 10: `ctl_call_chat`'s driver. Held at `call.gate` and then at
 /// `model.call.observed` on ord 4, released with no value, the chat reaches
 /// `model.call.admitted` and a recorded outcome.
@@ -1853,9 +1901,7 @@ pub(super) fn early_quit(f: &Fixture) -> Facts {
     let quit = c.o.ingress.accept(CommandKind::Quit, 2).map(|_| ());
     let steps = c.mother.advance_to_call();
     println!("WITNESS early quit {quit:?}, the advance {steps:?}");
-    let held = (OBSERVED.to_vec(), Vec::new(), None);
-    let value = (U5.row, "quit");
-    collect(&c.o, &c.mother, &c.native, c.since, held, value, &REFUSED)
+    collect((OBSERVED.to_vec(), Vec::new()), (U5.row, "quit"), &REFUSED)
 }
 
 /// Behaviour 7: the passive observations, read only once both workers are
@@ -1863,16 +1909,25 @@ pub(super) fn early_quit(f: &Fixture) -> Facts {
 /// `journal_view` only, the projection's records and the peer's slice. Then
 /// the T6 child half (Behaviour 11) and `credit` (A.2-A.4) over them.
 pub(super) fn collect(
-    o: &Opened,
-    m: &Mother,
-    native: &MemoryEvidence,
-    since: (usize, usize, usize),
-    (points, acks, applied): (Vec<&'static str>, Vec<Ack>, Option<Instant>),
+    (points, acks): (Vec<&'static str>, Vec<Ack>),
     (cell, value): ((&'static str, &'static str), &'static str),
     row: &Expect,
 ) -> Facts {
     let (broker, trace) = (s1::drain_trace(), s5::drain_trace());
-    let d = m.driver(o);
+    let s = SOURCES
+        .lock()
+        .unwrap()
+        .take()
+        .expect("collect: start captured no observation");
+    let (session, request, calls, recorded) = &s.driver;
+    let recorded = recorded.lock().unwrap().clone();
+    let made = calls.load(Ordering::SeqCst);
+    let d = Driver {
+        session: *session,
+        request: *request,
+        calls: made,
+        recorded,
+    };
     let credited = credit(&d, row, &broker, &trace);
     let claim = credited.as_ref().ok().and_then(|w| w.claim);
     let seams = t6(
@@ -1890,6 +1945,14 @@ pub(super) fn collect(
     if let Err(reason) = credited {
         findings.push(format!("credit: {reason}"));
     }
+    let running = *RUNNING.lock().unwrap();
+    if s.cell != running {
+        findings.push(format!("collect: observed for {}, not {running}", s.cell));
+    }
+    let journal = journal_at(&s.journal).unwrap_or_else(|e| {
+        findings.push(e);
+        Vec::new()
+    });
     let facts = Facts {
         session: d.session,
         request: d.request,
@@ -1899,12 +1962,12 @@ pub(super) fn collect(
         acks,
         value,
         row: cell,
-        applied,
+        applied: APPLIED.lock().unwrap().take(),
         broker,
         mother: trace,
-        journal: m.m.journal_view().unwrap()[since.0..].to_vec(),
-        native: native.records()[since.1..].to_vec(),
-        peer: m.peer.lock().unwrap()[since.2..].to_vec(),
+        journal: journal.get(s.since.0..).unwrap_or_default().to_vec(),
+        native: s.native.records()[s.since.1..].to_vec(),
+        peer: s.peer.lock().unwrap()[s.since.2..].to_vec(),
         findings,
     };
     KEPT.lock().unwrap().push((false, facts.clone()));
@@ -1946,10 +2009,12 @@ pub(super) fn open_broker(f: &Fixture) -> Broker {
 /// recorded this operation under the opening's session and request (D1).
 pub(super) fn collect_broker(
     b: &Broker,
-    (points, acks, applied): (Vec<&'static str>, Vec<Ack>, Option<Instant>),
+    (points, acks): (Vec<&'static str>, Vec<Ack>),
     (cell, value): ((&'static str, &'static str), &'static str),
 ) -> Facts {
-    let (broker, request) = (s1::drain_trace(), 0);
+    // W0b N-b: no s5 applier runs for a cell with no Mother, so nothing was
+    // applied before an acknowledgement (`held`, never `armed`).
+    let (broker, request, applied) = (s1::drain_trace(), 0, None);
     let session = b.o.session.identity();
     let mut findings = Vec::new();
     if let Err(finding) = t6_s1(cfg!(mother_route_seams), session, request, &broker) {
@@ -2055,7 +2120,7 @@ fn route_s5_collect_broker_on_registration() {
         b.o.session
             .register_local_model(&b.endpoint, spec())
             .unwrap();
-        let held = (Vec::new(), Vec::new(), None);
+        let held = (Vec::new(), Vec::new());
         let facts = collect_broker(&b, held, (("registration_reserve", "ingress"), "none"));
         let points: Vec<&str> = facts.broker.iter().map(|e| e.point).collect();
         println!(

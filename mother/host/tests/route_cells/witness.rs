@@ -75,6 +75,7 @@ model.call.sampled|s q run att kind ord|host_session/model.rs:893-899
 model.call.observed|s q run att kind ord|host_session/model.rs:893-899
 model.call.admitted|s q run att kind ord|host_session/model.rs:893-899
 refused:8.cas|s q run att kind ord|host_session/model.rs:849, 893-899
+refused:1.expired|s q run att kind ord|host_session/model.rs:771, 893-899
 model.attempt.record.before|s run att|host_session/model.rs:519-523
 complete|s run att|host_session/model.rs:519-523
 mother.charge.entry|s q inv|mother coordinator/model_calls.rs:203-206, 216
@@ -106,7 +107,7 @@ att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs c
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
 att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
 s|native journal|fixture|the cell's own projection and journal since the hold (s5.rs collect; kept, B1')
-q|native|one_request|every S1 entry of S in the window carries Q (one request)
+q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
 fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
@@ -119,8 +120,17 @@ fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
         "claim" => v.b.att.is_some() && run.is_some() && run == v.b.run,
         "sites" => builder && v.b.att.is_some(),
         "fixture" => true,
-        "one_request" => one_request(v),
-        _ => false,
+        _ => name
+            .strip_prefix("bracket:")
+            .is_some_and(|p| brackets(v, p)),
+    }
+}
+/// A test's or a unit's tokens over the reviewed `RECORDS` and `CORRELATIONS`.
+fn tables<'t>(tokens: &'t [Token]) -> Tables<'t> {
+    Tables {
+        tokens,
+        records: RECORDS,
+        correlations: CORRELATIONS,
     }
 }
 /// The tables a rendering reads (wave units add rows to each).
@@ -241,13 +251,17 @@ fn admitted(v: &View, e: &Seen, tag: (Option<&str>, Option<u64>)) -> bool {
 }
 /// W0b A1b: a tag key bound on `e` (recorded, so equal), or by a correlation.
 fn bound(v: &View, e: Option<&Seen>, point: &str, k: &str) -> bool {
-    let recorded = e.is_some_and(|e| key(v, e, k, (None, None), "").0);
+    // W0b N-a: a recorded key binds only if it equals the bound value, and a
+    // recorded, unequal one is never bound by a correlation either.
+    if let Some((true, equal)) = e.map(|e| key(v, e, k, (None, None), "")) {
+        return equal;
+    }
     let rows =
         v.t.correlations
             .lines()
             .map(|l| l.split('|').collect::<Vec<_>>());
     let carries = |r: &Vec<&str>| r[0] == k && r[1].split(' ').any(|p| p == point);
-    recorded || rows.filter(carries).any(|r| carried(r[2], v, e))
+    rows.filter(carries).any(|r| carried(r[2], v, e))
 }
 /// The Builder's `mother.lane.prelock` of S and Q (its invocation).
 fn prelocked(v: &View) -> bool {
@@ -263,14 +277,16 @@ fn gated(v: &View, run: Option<nexus_governed_control::authority::ids::RunId>) -
     let mut gates = v.seen.iter().filter(gate);
     gates.any(|g| g.s == Some(v.b.s) && g.q == Some(v.b.q))
 }
-/// Every S1 entry of S in the window that carries a request carries Q.
-fn one_request(v: &View) -> bool {
-    let of_s = v
-        .seen
-        .iter()
-        .filter(|e| e.s1 && e.s == Some(v.b.s) && e.q.is_some());
-    let requests: Vec<Option<u64>> = of_s.map(|e| e.q).collect();
-    !requests.is_empty() && requests.iter().all(|q| *q == Some(v.b.q))
+/// W0b R1-1: q through the route's own request-carrying entries around the
+/// record (`bracket:<point>,..`): each listed point is observed for S, and
+/// every entry of S there is admitted, so carries Q. An entry of S at any
+/// other point (an applier's `ingress.accept`) neither binds nor unbinds Q.
+fn brackets(v: &View, points: &str) -> bool {
+    points.split(',').all(|p| {
+        let at = |e: &&Seen| e.s1 && !e.note && e.point == p && e.s == Some(v.b.s);
+        let mut at = v.seen.iter().filter(at).peekable();
+        at.peek().is_some() && at.all(|e| admitted(v, e, (None, None)))
+    })
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
@@ -420,18 +436,30 @@ fn token<'a>(v: &View<'a>, token: &str, tag: (Option<&str>, Option<u64>)) -> Opt
         None => first_at(v, token, tag),
     }
 }
-/// `e`'s identity under the row's tag keys: each bound key (recorded, or
-/// correlated, W0b A1b) as its placeholder with the group suffix, any
-/// other as `none`; kind and ordinal as recorded.
-fn identity(v: &View, e: &Seen, keys: &[(&str, &str)]) -> String {
+/// `e`'s identity under the row's tag keys: each bound key (recorded and
+/// equal, or correlated, W0b A1b) as its placeholder with the group suffix;
+/// any other key leaves it `Unbound` (R1-1); kind and ordinal as recorded.
+fn identity(v: &View, e: &Seen, keys: &[(&str, &str)]) -> Obs {
     let one = |k: &str| match k {
-        "kind" => e.kind.unwrap_or("none").to_string(),
-        "ord" => e.ord.map_or("none".into(), |n| n.to_string()),
-        _ if bound(v, Some(e), e.point, k) => format!("{}{}", placeholder(k), v.group),
-        _ => "none".to_string(),
+        "kind" => Ok(e.kind.unwrap_or("none").to_string()),
+        "ord" => Ok(e.ord.map_or("none".into(), |n| n.to_string())),
+        _ if bound(v, Some(e), e.point, k) => Ok(format!("{}{}", placeholder(k), v.group)),
+        _ => Err(Unbound),
     };
-    let shown = keys.iter().map(|(k, _)| format!("{k}={}", one(k)));
-    shown.collect::<Vec<_>>().join(" ")
+    let shown: Result<Vec<String>, Unbound> = keys
+        .iter()
+        .map(|(k, _)| Ok(format!("{k}={}", one(k)?)))
+        .collect();
+    Ok(shown?.join(" "))
+}
+/// W0b R1-1: an observation, or `Unbound` when a key its value depends on is
+/// not bound. Every field renders through `obs`, the one rule: `Unbound` is
+/// `unobserved`, which equals no frozen value.
+#[derive(Debug, PartialEq)]
+struct Unbound;
+type Obs = Result<String, Unbound>;
+fn obs(o: Obs) -> String {
+    o.unwrap_or_else(|Unbound| "unobserved".into())
 }
 fn placeholder(k: &str) -> &'static str {
     match k {
@@ -502,9 +530,9 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
         .then(|| token(v, note_token, tag))
         .flatten();
     let observed = |shown: String| match (entry.is_some(), stray.is_empty()) {
-        (false, _) => "unobserved".to_string(),
-        (true, false) => format!("unadmitted{stray:?}"),
-        (true, true) => shown,
+        (false, _) => Err(Unbound),
+        (true, false) => Ok(format!("unadmitted{stray:?}")),
+        (true, true) => Ok(shown),
     };
     let branch = observed(match (note, noted.is_empty()) {
         (Some(_), _) => branch_text.to_string(),
@@ -531,10 +559,9 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
             (false, false) => format!("notes{noted:?}"),
         },
     );
-    let won = if out.starts_with("refused:") {
-        "value"
-    } else {
-        "route"
+    let won = |out: &String| match out.starts_with("refused:") {
+        true => "value",
+        false => "route",
     };
     // R88.1, W0b A1/A2: each acknowledgement (S1 or S5) answers its own held
     // point, admitted under the entry tag, the very trace entry; `held` if
@@ -556,45 +583,49 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
             format!("unanswered{:?}", shown.collect::<Vec<_>>())
         }
     };
+    // W0b R1-1: every field is an `Obs`, and renders only through `obs`.
+    let at = |token: &str, e: Seen, keys: &[(&str, &str)]| -> Obs {
+        Ok(format!("{token}[{}]", identity(v, &e, keys)?))
+    };
     let values: Vec<String> = shape
         .fields
         .iter()
-        .map(|(k, t)| match *k {
-            "entry" => entry.map_or("none".into(), |e| {
-                format!("{entry_token}[{}]", identity(v, &e, &entry_keys))
-            }),
-            "check" => match check {
-                Some(c) => format!("{check_token}[{}]", identity(v, &c, &check_keys)),
-                None => {
-                    let point =
-                        v.t.tokens
-                            .iter()
-                            .find(|x| x.0 == check_token)
-                            .map_or(check_token, |x| x.1);
-                    let seen = first_at(v, point, tag);
-                    seen.map_or("none".into(), |e| {
-                        format!("{point}[{}]", identity(v, &e, &check_keys))
-                    })
+        .map(|(k, t)| -> Obs {
+            match *k {
+                "entry" => entry
+                    .ok_or(Unbound)
+                    .and_then(|e| at(entry_token, e, &entry_keys)),
+                "check" => match check {
+                    Some(c) => at(check_token, c, &check_keys),
+                    None => {
+                        let row = v.t.tokens.iter().find(|x| x.0 == check_token);
+                        let point = row.map_or(check_token, |x| x.1);
+                        let seen = first_at(v, point, tag).ok_or(Unbound);
+                        seen.and_then(|e| at(point, e, &check_keys))
+                    }
+                },
+                "value" => {
+                    let out = out.as_ref().map_err(|_| Unbound)?;
+                    Ok(format!("{}@{held} ack={ack} won={}", f.value, won(out)))
                 }
-            },
-            "value" => format!("{}@{held} ack={ack} won={won}", f.value),
-            "out" => out.clone(),
-            "branch" => branch.clone(),
-            "ledger" => ledger(v, t),
-            "window" => window(v).to_string(),
-            "peer" => {
-                let chat = f.peer.iter().filter(|p| *p == "/api/chat").count();
-                let paths = if f.peer.is_empty() {
-                    "none".to_string()
-                } else {
-                    f.peer.join(",")
-                };
-                format!("{paths} chat={chat}")
+                "out" => out.as_ref().map(String::clone).map_err(|_| Unbound),
+                "branch" => branch.as_ref().map(String::clone).map_err(|_| Unbound),
+                "ledger" => ledger(v, t),
+                "window" => window(v),
+                "peer" => {
+                    let chat = f.peer.iter().filter(|p| *p == "/api/chat").count();
+                    let paths = match f.peer.is_empty() {
+                        true => "none".to_string(),
+                        false => f.peer.join(","),
+                    };
+                    Ok(format!("{paths} chat={chat}"))
+                }
+                "next" => next(v, t),
+                "deadline_fired" => deadline(v, &noted),
+                other => Ok(format!("unbuilt:{other}")),
             }
-            "next" => next(v, t),
-            "deadline_fired" => deadline(v, &noted),
-            other => format!("unbuilt:{other}"),
         })
+        .map(obs)
         .collect();
     let fields = shape
         .fields
@@ -624,7 +655,7 @@ fn attempt(v: &View, r: &nexus_governed_control::authority::evidence::EvidenceRe
 /// carries (a journal event's invocation, `model_call`'s run and call), or a
 /// key bound by a correlation (`native`, `journal`); a record with any tag
 /// key unbound is not counted. An event outside the list is shown as such.
-fn ledger(v: &View, text: &str) -> String {
+fn ledger(v: &View, text: &str) -> Obs {
     let items = text.split("],").map(|i| i.trim_end_matches(']'));
     let shown = items.map(|item| {
         let event = item
@@ -639,22 +670,21 @@ fn ledger(v: &View, text: &str) -> String {
             .iter()
             .map(|(k, _)| format!("{k}={}{}", placeholder(k), v.group));
         let tag = tag.collect::<Vec<_>>().join(" ");
+        let named = |e: &nexus_mother::journal::Entry| match e.event {
+            Event::ModelCallCharged { invocation, .. } => ("ModelCallCharged", Some(invocation)),
+            Event::LaneReturned { invocation, .. } => ("LaneReturned", Some(invocation)),
+            Event::SessionClosed => ("SessionClosed", None),
+            _ => ("", None),
+        };
         let by_inv = |e: &&nexus_mother::journal::Entry| {
-            let (name, invocation) = match e.event {
-                Event::ModelCallCharged { invocation, .. } => {
-                    ("ModelCallCharged", Some(invocation))
-                }
-                Event::LaneReturned { invocation, .. } => ("LaneReturned", Some(invocation)),
-                Event::SessionClosed => ("SessionClosed", None),
-                _ => ("", None),
-            };
+            let (name, invocation) = named(e);
             name == event && (invocation.is_none() || invocation == v.b.inv)
         };
         let native = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| {
             r.phase.as_str() == event && (event != "model_call" || attempt(v, r))
         };
         let Some(source) = LEDGER.iter().find(|l| l.0 == event).map(|l| l.1) else {
-            return format!("unlisted:{event}");
+            return Ok(format!("unlisted:{event}"));
         };
         let carried: &[&str] = match event {
             "ModelCallCharged" | "LaneReturned" => &["inv"],
@@ -669,29 +699,58 @@ fn ledger(v: &View, text: &str) -> String {
         let unbound = keys.iter().any(|(k, _)| {
             !carried.contains(k) && sources.split(' ').any(|s| !bound(v, None, s, k))
         });
+        // R1-1: a candidate record with any tag key unbound (by the record or
+        // a correlation; the Builder's invocation; the claim) is unobserved,
+        // never a count. With no candidate, nothing is to bind: `+0` is seen.
+        let unbound = unbound
+            || carried.contains(&"inv") && v.b.inv.is_none()
+            || carried.contains(&"run") && (v.b.run.is_none() || v.b.att.is_none());
+        let candidates = match source {
+            "journal" => v.f.journal.iter().filter(|e| named(e).0 == event).count(),
+            "native" => {
+                v.f.native
+                    .iter()
+                    .filter(|r| r.phase.as_str() == event)
+                    .count()
+            }
+            _ => v.f.journal.len() + v.f.native.len(),
+        };
+        if unbound && candidates > 0 {
+            return Err(Unbound);
+        }
         let n = match source {
-            _ if unbound => 0,
             "journal" => v.f.journal.iter().filter(by_inv).count(),
             "native" => v.f.native.iter().filter(native).count(),
             _ => v.f.journal.len() + v.f.native.len(),
         };
-        format!("+{n}:{event}[{tag}]")
+        Ok(format!("+{n}:{event}[{tag}]"))
     });
-    shown.collect::<Vec<_>>().join(",")
+    Ok(shown.collect::<Result<Vec<_>, _>>()?.join(","))
 }
 /// An attempt site of the bound attempt, admitted (A.1: session, run and
-/// attempt, no request).
-fn window(v: &View) -> &'static str {
-    let site = |point: &str| first_at(v, point, (None, None)).is_some();
-    match site("model.attempt.record.before") && site("complete") {
-        true => "completed_attempt",
-        false => "boundary",
+/// attempt, no request). R1-1: a site of S with the attempt unbound is
+/// unobserved; with no site of S, the window is a boundary.
+fn window(v: &View) -> Obs {
+    let sites = ["model.attempt.record.before", "complete"];
+    let of_s = v
+        .seen
+        .iter()
+        .any(|e| e.s1 && sites.contains(&e.point) && e.s == Some(v.b.s));
+    match sites.iter().all(|p| first_at(v, p, (None, None)).is_some()) {
+        true => Ok("completed_attempt".into()),
+        false if of_s && (v.b.run.is_none() || v.b.att.is_none()) => Err(Unbound),
+        false => Ok("boundary".into()),
     }
 }
 /// W0b B1: `next`'s keys from the facts; `lane_returned` is built (U5), any
-/// other key is left to the unit that adds it.
-fn next(v: &View, text: &str) -> String {
+/// other key is left to the unit that adds it. R1-1: a `LaneReturned` with no
+/// Builder invocation bound is unobserved.
+fn next(v: &View, text: &str) -> Obs {
+    let lane = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { .. });
     let returned = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { invocation, .. } if Some(invocation) == v.b.inv);
+    if v.b.inv.is_none() && v.f.journal.iter().any(|e| lane(&e)) {
+        return Err(Unbound);
+    }
     let keys = text.split(',').map(|kv| kv.split('=').next().unwrap_or(""));
     let shown = keys.map(|k| match k {
         "lane_returned" => format!(
@@ -700,10 +759,17 @@ fn next(v: &View, text: &str) -> String {
         ),
         other => format!("{other}=unbuilt"),
     });
-    shown.collect::<Vec<_>>().join(",")
+    Ok(shown.collect::<Vec<_>>().join(","))
 }
 /// `deadline_fired`: an expiry note or a native timeout of the attempt.
-fn deadline(v: &View, noted: &[&str]) -> String {
+fn deadline(v: &View, noted: &[&str]) -> Obs {
+    // R1-1: a model call record with the attempt unbound is unobserved.
+    let call = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| {
+        r.phase.as_str() == "model_call"
+    };
+    if (v.b.run.is_none() || v.b.att.is_none()) && v.f.native.iter().any(|r| call(&r)) {
+        return Err(Unbound);
+    }
     let expired: Vec<&str> = noted
         .iter()
         .copied()
@@ -722,10 +788,10 @@ fn deadline(v: &View, noted: &[&str]) -> String {
             .filter(attempt)
             .map(|r| detail(r, "outcome"));
     println!("WITNESS native outcome {:?}", shown.collect::<Vec<_>>());
-    match (expired.is_empty(), timed_out) {
+    Ok(match (expired.is_empty(), timed_out) {
         (true, false) => "none".to_string(),
         _ => format!("expired{expired:?} timeout={timed_out}"),
-    }
+    })
 }
 
 /// Design 3.3: the child's result file must hold exactly one `CELL <nonce>
@@ -935,7 +1001,7 @@ fn coverage() {
                             .map(|(k, _)| format!("{k}={}{}", placeholder(k), v.group));
                         shown.collect::<Vec<_>>().join(" ")
                     }
-                    _ => identity(v, &of1(&e), &keys),
+                    _ => obs(identity(v, &of1(&e), &keys)),
                 };
                 assert_eq!(shown, tag, "{}: {field}", c[..4].join(" "));
                 let form: Vec<&str> = keys.iter().map(|x| x.0).collect();
@@ -1011,6 +1077,60 @@ fn witness_renderer_controls_each_differ() {
             assert!(named, "{control}: {diffs:?}");
             println!("WITNESS B1 control {control:?}: {diffs:?}");
         }
+        // W0b R1-1: the one rule, by structure. With the claim and the lanes
+        // unbound and a candidate for each field, every U5 field but `peer`
+        // (the fixture's) and `deadline_fired` (no native candidate can be
+        // built here) is `unobserved`, and none renders its frozen value.
+        let (mut unbound, inv) = (refused(), refused().recorded[0].1);
+        (unbound.claim, unbound.recorded) = (None, Vec::new());
+        let charged = Event::ModelCallCharged {
+            invocation: inv,
+            call: 1,
+        };
+        let returned = Event::LaneReturned {
+            invocation: inv,
+            output_hash: "h".into(),
+        };
+        for event in [charged, returned] {
+            let mission = nexus_mother::journal::MissionId(1);
+            unbound
+                .journal
+                .push(nexus_mother::journal::Entry::chained(0, "", mission, event));
+        }
+        let mut site = unbound.broker[0].clone();
+        site.point = "model.attempt.record.before";
+        unbound.broker.push(site);
+        for value in
+            "original_cell_unscheduled repeated mission_stop stop_all fatal quit".split(' ')
+        {
+            unbound.value = value;
+            let (shown, want) = (
+                render(&unbound),
+                frozen("call_chat", "ingress", value).unwrap(),
+            );
+            let open = |kv: &&str| kv.starts_with("peer=") || kv.starts_with("deadline_fired=");
+            let mut pairs = shown
+                .split(';')
+                .zip(want.split(';'))
+                .filter(|(kv, _)| !open(kv));
+            let rule = pairs.all(|(kv, w)| kv.ends_with("=unobserved") && kv != w);
+            assert!(rule, "R1-1 {value}: {shown}");
+        }
+        // W0b N-a: an entry a token returns unadmitted, of another session
+        // (its s recorded but unequal), renders no identity.
+        let other = nexus_governed_control::host_session::SessionSeed::new()
+            .unwrap()
+            .identity();
+        let foreign = s1::Entry {
+            session: Some(other),
+            ..f.broker[0].clone()
+        };
+        let v = &view(&f, String::new(), &TABLES);
+        assert_eq!(
+            identity(v, &of1(&foreign), &[("s", "S")]),
+            Err(Unbound),
+            "N-a"
+        );
     });
 }
 
@@ -1076,73 +1196,45 @@ fn witness_result_records_each_refused() {
     );
 }
 
-/// W0b readiness proof (SB3E-R111, R112): wave-1 rows (`u9a`, `u6a1`, `u6b2`),
-/// one per identity tag set, trace (S1/S5) and acknowledgement kind, each
-/// rendered byte for byte from synthetic facts that record exactly the
-/// route's identity at each point (close.rs:49, 232, 271, 368, 407;
-/// host_session.rs:89-91; model.rs:383; S5's `route_ctx`), under test-local
-/// tokens and the rows a unit adds (`UNIT`). `label|sink dim value|flag|entries`;
-/// an entry is `[!][5]point[:keys]` (keys after the last `:`): `!` a note, `5` S5's (of S, Q and the
-/// Builder; `inv'` the Sentinel's), S1 keys `s` (`s'` another session),
-/// `q` (`q2` another request), `run`, `ordN`; flag `armed` (the value set
-/// before the acknowledgement) or `noclaim`. A `not` row must not render; row
-/// 115 (and 76-82) refuse before any `call.gate` or claim, so q, att and the
-/// run have no carrier there: no sound binding.
+/// W0b readiness proof (SB3E-R111-R113): the wave-1 rows (`u9a`, `u6a1`,
+/// `u6b2`) whose observation exists in the route today, one per identity tag
+/// set, trace (S1/S5) and acknowledgement kind, each rendered byte for byte
+/// from synthetic facts that record exactly the route's identity at each
+/// point (close.rs:49, 232, 271, 368, 407; model.rs:383; S5's `route_ctx`),
+/// under test-local tokens only. `label|sink dim value|flag|entries`; an
+/// entry is `[!][5]point[:keys]` (keys after the last `:`): `!` a note, `5`
+/// S5's (of S, Q and the Builder; `inv'` the Sentinel's), S1 keys `s` (`s'`
+/// another session), `q` (`q2` another request), `run`, `ordN`; flag `armed`
+/// (applied before the acknowledgement) or `noclaim`. A `not` row must not
+/// render. Rows needing a seam the route lacks, or with no sound binding,
+/// are in readiness-ledger.md, not here; 115 shows the latter fails closed.
 const READY: &str = "\
 573|close_obligations lifecycle Normal|armed|close.obligations:s
 574|close_obligations lifecycle Bootstrap|-|close.obligations:s
 700|seal lifecycle ClosingNormal|armed|close.seal:s q
 705|seal lifecycle ClosingRestricted|-|close.seal:s q,!seal:stop:s
-412|registration_install ingress original_cell_unscheduled|-|model.install.before:s q ord4,!reg:admission:s q ord4
-424|registration_readiness ingress original_cell_unscheduled|-|reg.ready:s q ord4,!reg:word_compare:s q ord4
-448|registration_reserve ingress original_cell_unscheduled|-|reg.reserve:s q,!reg:scope_admit:s q
 110|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock
-195|charge_append ingress original_cell_unscheduled|-|5mother.charge.entry,5mother.charge.stale
+338|meter_settle ingress original_cell_unscheduled|-|5mother.settle
 not 573 another session|close_obligations lifecycle Normal|armed|close.obligations:s'
 not 700 close.seal of another request|seal lifecycle ClosingNormal|armed|close.seal:s q2
 not 700 with 705's note|seal lifecycle ClosingNormal|armed|close.seal:s q,!seal:stop:s
 not 705 the note removed|seal lifecycle ClosingRestricted|-|close.seal:s q
-not 412 the note removed|registration_install ingress original_cell_unscheduled|-|model.install.before:s q ord4
-not 424 ready of ord 3|registration_readiness ingress original_cell_unscheduled|-|reg.ready:s q ord3,!reg:word_compare:s q ord4
-not 448 the note removed|registration_reserve ingress original_cell_unscheduled|-|reg.reserve:s q
 not 110 no call.gate (q)|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,5mother.lane.prelock
 not 110 another lane's prelock (inv)|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock:inv'
 not 110 no claim (att, run)|call_slot_reserve ingress original_cell_unscheduled|noclaim|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock
-not 110 with a unit's slot:word|call_slot_reserve ingress original_cell_unscheduled|-|attempt.slot:s run,call.gate:s q run ord1,5mother.lane.prelock,!slot:word:s run
-not 195 no claim (run, att)|charge_append ingress original_cell_unscheduled|noclaim|5mother.charge.entry,5mother.charge.stale
-not 195 the stale point removed|charge_append ingress original_cell_unscheduled|-|5mother.charge.entry
-not 195 another builder|charge_append ingress original_cell_unscheduled|-|5mother.charge.entry:inv',5mother.charge.stale:inv'
-not 115 no sound binding (q, att, run)|call_slot_reserve ingress fatal|noclaim|attempt.slot:s run,!slot:word:s run
-";
-/// The rows a wave unit adds for `READY`'s notes, each with its site's context.
-const UNIT: &str = "\
-reg:admission|s q ord=4|a unit's note at host_session/model.rs:304, route_ctx (host_session.rs:89-91)
-reg:word_compare|s q ord=4|a unit's note at host_session.rs:841, route_ctx (89-91)
-reg:scope_admit|s q|a unit's note at host_session/model.rs:135-141, route_ctx (89-91)
-slot:word|s run|a unit's note at host_session/model.rs:371, the slot's context (383)
-mother.charge.stale|s q inv|a unit's S5 point at coordinator/model_calls.rs:205-212, route_ctx (203-206)
+not 338 no claim (run, att)|meter_settle ingress original_cell_unscheduled|noclaim|5mother.settle
+not 338 another builder|meter_settle ingress original_cell_unscheduled|-|5mother.settle:inv'
+not 115 no sound binding (q, att, run)|call_slot_reserve ingress fatal|noclaim|attempt.slot:s run
 ";
 fn readiness() {
-    let tokens: [Token; 12] = [
+    let tokens: [Token; 5] = [
         ("c:265-300", "close.obligations", first_at),
         ("c:372-429", "close.seal", first_at),
         ("note:stop_obligations", "seal:stop", note_at),
-        ("m:304", "model.install.before", first_at),
-        ("note:admission", "reg:admission", note_at),
-        ("h:838", "reg.ready", first_at),
-        ("note:word_compare", "reg:word_compare", note_at),
-        ("m:126-141", "reg.reserve", first_at),
-        ("note:scope_admit", "reg:scope_admit", note_at),
         ("m:371-381", "attempt.slot", first_at),
-        ("mc:205-250", "mother.charge.entry", first_at),
-        ("note:stale", "mother.charge.stale", first_at),
+        ("mc:296-300", "mother.settle", first_at),
     ];
-    let records = format!("{RECORDS}{UNIT}");
-    let t = &Tables {
-        tokens: &tokens,
-        records: &records,
-        correlations: CORRELATIONS,
-    };
+    let t = &tables(&tokens);
     let base = refused();
     let other = nexus_governed_control::host_session::SessionSeed::new()
         .unwrap()
@@ -1215,48 +1307,85 @@ fn witness_wave_rows_render_from_recorded_identity() {
         |_| readiness(),
     );
 }
-/// W0b A4: `model_registered` of a real registration through `open_broker`
-/// is counted from the opening's own projection since it opened, and its
-/// request only if every S1 entry of the session in the window carries it
-/// (another request's entry: `+0`). Another fixture's projection cannot be
-/// opened beside it: a process claims the kernel stop's controller once
-/// (governed.rs:267-278), so a cell's child holds one opening.
+/// W0b A4, R1-1, N-c: `model_registered` of a real registration through
+/// `open_broker`, counted from the opening's own projection since it opened,
+/// its q bound by the registration's own `model.record.before` and
+/// `model.install.before` of S and Q (model.rs:301-314). A bracketing entry of another request leaves q unbound, so the
+/// field is `unobserved`, never `+0`; an applier's `ingress.accept` of another
+/// request (U5's `accept(Quit, 2)`) changes nothing. The window holds only
+/// the registration's record; a record in another fixture's projection is
+/// not counted (N-c ii; N-c i: `witness_collects_after_the_mother_is_released`).
 #[test]
 fn witness_native_ledger_binds_by_fixture_and_request() {
     super::child(
         "witness::witness_native_ledger_binds_by_fixture_and_request",
+        native,
+    );
+}
+fn native(f: &super::Fixture) {
+    use nexus_governed_control::authority::evidence::{
+        EvidenceProjection, EvidenceRecord, MemoryEvidence,
+    };
+    let b = super::s5::open_broker(f);
+    b.o.session
+        .register_local_model(&b.endpoint, super::spec())
+        .unwrap();
+    let row = (("registration_record", "ingress"), "quit");
+    let facts = super::s5::collect_broker(&b, (Vec::new(), Vec::new()), row);
+    let text = "+1:model_registered[s=S q=Q]";
+    let led = |f: &Facts| obs(ledger(&view(f, String::new(), &TABLES), text));
+    let with = |point, request| {
+        let (mut planted, mut e) = (facts.clone(), facts.broker[0].clone());
+        (e.point, e.request) = (point, Some(request));
+        planted.broker.push(e);
+        led(&planted)
+    };
+    assert_eq!(led(&facts), text, "A4: {}", led(&facts));
+    let q = with("model.install.before", 7);
+    assert_eq!(q, "unobserved", "A4 q: {q}");
+    assert_eq!(with("ingress.accept", 2), text, "A4 accept");
+    let phases: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
+    assert_eq!(phases, ["model_registered"], "A4 window: {phases:?}");
+    // Row 440 (u6a1 `registration_record quit`), whole, from the real facts.
+    let (point, mut row440) = ("model.record.before", facts.clone());
+    let ack = facts.broker.iter().find(|e| e.point == point);
+    (row440.points, row440.acks) = (vec![point], ack.cloned().map(Ack::S1).into_iter().collect());
+    let shown = render_in(&row440, &tables(&[("m:292-299", point, first_at)]), &[]);
+    assert_eq!(
+        shown,
+        frozen("registration_record", "ingress", "quit").unwrap()
+    );
+    let other = MemoryEvidence::new(16);
+    for r in &facts.native {
+        let mut r = r.clone();
+        r.detail.push(("fixture".into(), "second".into()));
+        other.project(&r);
+    }
+    let mut later = super::s5::collect_broker(&b, (Vec::new(), Vec::new()), row);
+    later.broker = facts.broker.clone();
+    let second = |r: &EvidenceRecord| r.detail.iter().any(|d| d.1 == "second");
+    assert!(!later.native.iter().any(second) && other.records().len() == 1);
+    assert_eq!(led(&later), text, "A4 another projection");
+}
+/// W0b R1-2: a close-chain cell. `ctl_call_chat`'s path, then the Mother's
+/// `FileSession` released by value, then the collection (`s5::released`):
+/// credit and T6 hold, and the witness is `CONTROL`, byte for byte.
+#[test]
+fn witness_collects_after_the_mother_is_released() {
+    super::child(
+        "witness::witness_collects_after_the_mother_is_released",
         |f| {
-            let b = super::s5::open_broker(f);
-            b.o.session
-                .register_local_model(&b.endpoint, super::spec())
-                .unwrap();
-            let row = (("registration_record", "ingress"), "quit");
-            let facts = super::s5::collect_broker(&b, (Vec::new(), Vec::new(), None), row);
-            let led = |f: &Facts| {
-                ledger(
-                    &view(f, String::new(), &TABLES),
-                    "+1:model_registered[s=S q=Q]",
-                )
-            };
-            let mut foreign = facts.clone();
-            foreign.broker.push(s1::Entry {
-                request: Some(7),
-                ..facts.broker[0].clone()
-            });
-            let (bound, other) = (led(&facts), led(&foreign));
+            let facts = super::s5::released(f);
+            assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+            assert_eq!(compare(CONTROL, &render(&facts)), Vec::<String>::new());
+            // W0b N-c (i): the boot's records (consent, the door) precede the
+            // window; only the cell's own are in it.
+            let phases: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
             assert_eq!(
-                bound, "+1:model_registered[s=S q=Q]",
-                "A4 ledger of the request: {bound}"
+                phases,
+                ["run_opened", "model_call", "run_cancelled"],
+                "window: {phases:?}"
             );
-            assert_eq!(
-                other, "+0:model_registered[s=S q=Q]",
-                "A4 ledger of another: {other}"
-            );
-            let second = super::Fixture(f.0.join("second"));
-            std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700)
-                .create(&second.0)
-                .unwrap();
-            assert!(std::panic::catch_unwind(|| super::s5::open_broker(&second)).is_err());
         },
     );
 }

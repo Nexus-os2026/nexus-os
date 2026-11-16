@@ -130,11 +130,11 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 2f7a871a744c9cd705d200803481e6669d3acb0ba54ae52b24ac3458d0f18e53
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs e7d895968379a402770c9d8af40fdbd99e38595884a2277de4deb4da78a1b9f3
+s5.rs 1f35b4ed0cd465bb82898540eec6ccc195b7cd7007355282c596f7ad0157530d
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 2dd4e0fb4e9e21d8d40a6f31963c917748fab06068bbae903af408d39fb45209
+witness.rs d1cf0deee6b26a5cc624460070e8ef6366f3b93420e11106072f8024defc96cb
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -2574,9 +2574,10 @@ s|fn mission
 s|fn hold
 s|enum Anchor
 s|struct Chain{row,anchor,points}
-s|struct Start{o,native,mother,since}
+s|struct Start{o,mother}
 s|fn start
 s|fn driven
+h|fn released
 h|fn ctl_call_chat
 h|fn original_cell_unscheduled
 s|fn unscheduled
@@ -3596,7 +3597,7 @@ fn sb3e_w0b_s5_exports() {
     let callback = "pub(super) fn hold(point: &'static str, timeout: s5::Timeout) -> s5::Held {\n    let cell = \"u5\";";
     let region = "pin host/tests/route_cells/s5.rs: pub(super)fnhold(point";
     let journal = "pub(super) fn journal(f: &Fixture) -> FileJournal {\n    FileJournal::open(&f.0).unwrap()\n}\n";
-    let broker = "    let (broker, request) = (s1::drain_trace(), 0);\n    let session = b.o.session.identity();\n";
+    let broker = "    let (broker, request, applied) = (s1::drain_trace(), 0, None);\n    let session = b.o.session.identity();\n";
     let plants = [
         (
             "B4 an unlisted pub(super)",
