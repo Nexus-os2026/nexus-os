@@ -3,7 +3,9 @@
 //! table's grammar, S, Q, RUN, INV and ATT bound and the table's location
 //! tokens mapped by the reviewed `TOKENS`; in the parent, `record` checks the
 //! child's one `CELL` record and `compare` checks the witness against its
-//! expected text, field by field and byte for byte.
+//! expected text, field by field and byte for byte. W0b B1: `render` is
+//! row-driven: the cell's frozen row gives its fields, their order and each
+//! identity tag's keys; every value is rendered from the facts.
 use super::s5::{Facts, Ran};
 use nexus_governed_control::broker::route_seams as s1;
 use nexus_mother::journal::Event;
@@ -11,8 +13,9 @@ use nexus_mother::lane::LaneRole;
 
 /// The frozen expectation table: the one reviewed `include_str!` row.
 const TABLE: &str = include_str!("../session/model-bridge-expect.tsv");
-/// The witness fields of rows 93-100, in the table's order.
-const FIELDS: [&str; 10] = [
+/// W0b B1: every witness field, in the one order every row keeps (the
+/// table's 11 field sets are ordered subsets of it).
+const ORDER: [&str; 13] = [
     "entry",
     "check",
     "value",
@@ -21,33 +24,97 @@ const FIELDS: [&str; 10] = [
     "ledger",
     "window",
     "peer",
+    "grant",
+    "locks",
+    "store",
     "next",
     "deadline_fired",
 ];
-/// Behaviour 9: the reviewed token map, each table location token and the S1
-/// observation it stands for. Both need the full identity (`s`, `q`, `run`,
-/// `att`, `kind=chat`), the ordinal, the thread and the order; finding both
-/// strings is not enough (`cas`).
-const TOKENS: [(&str, &str); 2] = [
-    (
-        "CAS:m:774",
-        "model.call.observed, then on its thread exactly the note refused:8.cas, with no ord-4 model.call.admitted",
-    ),
-    ("note:8", "exactly the note refused:8.cas (refused:8.capacity is not it)"),
+/// W0b B1: an identity tag's keys, in their one order; a row's tag is an
+/// ordered subset of them.
+const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
+/// Behaviour 9, W0b B1 (R88.1): the reviewed location tokens, each with the
+/// point it reads and the predicate that binds it to one observed entry:
+/// point, identity, ordinal, thread and order. Finding a string is never
+/// enough. U5's two, unchanged in meaning; later units add rows.
+type Predicate = for<'a> fn(&View<'a>) -> Option<&'a s1::Entry>;
+const TOKENS: [(&str, &str, Predicate); 2] = [
+    // model.call.observed, then on its thread exactly the note
+    // refused:8.cas, with no ord-4 model.call.admitted.
+    ("CAS:m:774", "model.call.observed", |v| {
+        cas(v).map(|(o, _)| o)
+    }),
+    // exactly the note refused:8.cas (refused:8.capacity is not it).
+    ("note:8", "refused:8.cas", |v| cas(v).map(|(_, n)| n)),
 ];
-/// Behaviour 10: the control's witness, as measured at U5 Step 0 (R86).
+/// W0b B1: the ledger's closed list: each event the table names, as a
+/// journal event (by invocation) or a native record's `op` (by run and
+/// attempt, or by session); `all` is every journal entry and native record
+/// of the session since the hold (SB3E-R6.3's empty delta is `+0:all[s=S]`).
+const LEDGER: [(&str, &str); 7] = [
+    ("ModelCallCharged", "journal"),
+    ("LaneReturned", "journal"),
+    ("SessionClosed", "journal"),
+    ("model_call", "native"),
+    ("model_registered", "native"),
+    ("session_closed", "native"),
+    ("all", "all"),
+];
+/// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
+/// Step 0 (R86).
+const CONTROLS: [(&str, &str, &str); 1] = [("call_chat", "ingress", CONTROL)];
 const CONTROL: &str = "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4];\
 check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4];\
 value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
 ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
 peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=lane_returned=1;deadline_fired=none";
 
-/// The frozen witness of the row holding `value` for `sink` and `dim`.
-fn frozen(sink: &str, dim: &str, value: &str) -> Option<&'static str> {
+/// The row holding `value` for `sink` and `dim`, all 18 columns.
+fn row(sink: &str, dim: &str, value: &str) -> Option<Vec<&'static str>> {
     let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
     let mut rows = rows.filter(|c| c.len() == 18 && c[1] == sink && c[2] == dim);
-    let row = rows.find(|c| c[3].split(',').any(|v| v == value))?;
-    Some(row[13])
+    rows.find(|c| c[3].split(',').any(|v| v == value))
+}
+/// The frozen witness of the row holding `value` for `sink` and `dim`.
+fn frozen(sink: &str, dim: &str, value: &str) -> Option<&'static str> {
+    row(sink, dim, value).map(|c| c[13])
+}
+/// W0b B1: a witness's shape: each field's name and value text, in order,
+/// and the exec group whose placeholders a group runner binds (`S.<group>`).
+struct Shape {
+    fields: Vec<(&'static str, &'static str)>,
+    group: Option<&'static str>,
+}
+/// The shape of `witness` (fields split at `;`; a tag holds none), or the
+/// first field that is not in `ORDER`'s order.
+fn shape(witness: &'static str, exec: &'static str) -> Result<Shape, String> {
+    let fields: Vec<(&str, &str)> = witness
+        .split(';')
+        .map(|kv| kv.split_once('=').unwrap_or((kv, "")))
+        .collect();
+    let mut at = 0;
+    for (k, _) in &fields {
+        match ORDER[at..].iter().position(|o| o == k) {
+            Some(n) => at += n + 1,
+            None => return Err(format!("field {k} out of ORDER")),
+        }
+    }
+    let group = exec.strip_prefix("g:");
+    Ok(Shape { fields, group })
+}
+/// The keys of the first identity tag in `text` (`[s=S q=Q ..]`), checked to
+/// be an ordered subset of `KEYS`, each with its row value.
+fn tag_keys(text: &str) -> Option<Vec<(&str, &str)>> {
+    let inner = text.split_once('[')?.1.split_once(']')?.0;
+    let keys: Vec<(&str, &str)> = inner
+        .split(' ')
+        .filter_map(|kv| kv.split_once('='))
+        .collect();
+    let mut at = 0;
+    for (k, _) in &keys {
+        at += KEYS[at..].iter().position(|o| o == k)? + 1;
+    }
+    Some(keys)
 }
 
 /// AM-2 A.3/A.4: S and Q are the driver's, RUN and ATT `credit`'s claim, INV
@@ -77,179 +144,362 @@ fn mine(e: &s1::Entry, b: &Bound) -> bool {
         && e.run == b.run
         && e.attempt == b.att
 }
-/// An entry's identity, each bound value as its placeholder and any other
-/// value as itself. `inv=INV` is A.4's correlation, not the broker entry's.
-fn tag(e: &s1::Entry, b: &Bound, inv: bool) -> String {
-    let s = match e.session == Some(b.s) {
-        true => "S".to_string(),
-        false => format!("{:?}", e.session),
-    };
-    let q = match e.request == Some(b.q) {
-        true => "Q".to_string(),
-        false => format!("{:?}", e.request),
-    };
-    let run = match b.run.is_some() && e.run == b.run {
-        true => "RUN".to_string(),
-        false => format!("{:?}", e.run),
-    };
-    let att = match b.att.is_some() && e.attempt == b.att {
-        true => "ATT".to_string(),
-        false => format!("{:?}", e.attempt),
-    };
-    let inv = if inv { "INV" } else { "none" };
-    let kind = e.kind.unwrap_or("none");
-    let ord = e
-        .request_ordinal
-        .map_or("none".to_string(), |n| n.to_string());
-    format!("s={s} q={q} run={run} inv={inv} att={att} kind={kind} ord={ord}")
+/// What `render` reads: the facts, the binding, whether INV is correlated
+/// (A.4) and the placeholders' group suffix.
+struct View<'a> {
+    f: &'a Facts,
+    b: Bound,
+    inv: bool,
+    group: String,
+}
+/// The first entry at `point` of the bound attempt, of the tag's kind
+/// and ordinal (binding point, identity, ordinal and order).
+fn first_at<'a>(
+    v: &View<'a>,
+    point: &str,
+    kind: Option<&str>,
+    ord: Option<u64>,
+) -> Option<&'a s1::Entry> {
+    let bound = |e: &&s1::Entry| mine(e, &v.b) && !e.note && e.point == point;
+    let tagged = |e: &&s1::Entry| e.kind == kind && e.request_ordinal == ord;
+    v.f.broker.iter().filter(bound).find(tagged)
+}
+/// Ord 4's chat notes of the bound attempt.
+fn notes<'a>(v: &View<'a>) -> Vec<&'a s1::Entry> {
+    let four = |e: &&s1::Entry| mine(e, &v.b) && e.request_ordinal == Some(4);
+    v.f.broker.iter().filter(four).filter(|e| e.note).collect()
 }
 /// `TOKENS[0]` and `[1]`: the observed entry, then on its thread, later,
 /// exactly one note of this identity and ordinal, `refused:8.cas`, of the
 /// chat (kind `chat`, R88.1); no `model.call.admitted` of it.
-fn cas(observed: Option<&s1::Entry>, notes: &[&s1::Entry], admitted: bool) -> bool {
-    observed.is_some_and(|o| {
-        let [note] = notes else { return false };
-        note.point == "refused:8.cas"
-            && note.kind == Some("chat")
-            && note.thread == o.thread
-            && note.tick > o.tick
-            && !admitted
-    })
+fn cas<'a>(v: &View<'a>) -> Option<(&'a s1::Entry, &'a s1::Entry)> {
+    let o = first_at(v, "model.call.observed", Some("chat"), Some(4))?;
+    let admitted = first_at(v, "model.call.admitted", Some("chat"), Some(4));
+    let [note] = notes(v)[..] else {
+        return None;
+    };
+    let ok = note.point == "refused:8.cas"
+        && note.kind == Some("chat")
+        && note.thread == o.thread
+        && note.tick > o.tick
+        && admitted.is_none();
+    ok.then_some((o, note))
+}
+/// A location token's entry: a `TOKENS` row's predicate, or a plain
+/// point of the tag's kind and ordinal.
+fn token<'a>(
+    v: &View<'a>,
+    token: &str,
+    kind: Option<&str>,
+    ord: Option<u64>,
+) -> Option<&'a s1::Entry> {
+    match TOKENS.iter().find(|t| t.0 == token) {
+        Some((_, _, predicate)) => predicate(v),
+        None => first_at(v, token, kind, ord),
+    }
+}
+/// A placeholder, the bound value's (with the group's suffix), or else the
+/// observed value itv.
+fn hold<'a>(v: &View<'a>, name: &str, bound: bool, seen: String) -> String {
+    match bound {
+        true => format!("{name}{}", v.group),
+        false => seen,
+    }
+}
+/// `e`'s identity under `keys` (the row's tag keys, in `KEYS`'s order):
+/// each bound value as its placeholder, any other as itself; `inv=INV`
+/// is A.4's correlation, not the broker entry's.
+fn identity<'a>(v: &View<'a>, e: &s1::Entry, keys: &[(&str, &str)]) -> String {
+    let b = &v.b;
+    let one = |k: &str| match k {
+        "s" => hold(v, "S", e.session == Some(b.s), format!("{:?}", e.session)),
+        "q" => hold(v, "Q", e.request == Some(b.q), format!("{:?}", e.request)),
+        "run" => hold(
+            v,
+            "RUN",
+            b.run.is_some() && e.run == b.run,
+            format!("{:?}", e.run),
+        ),
+        "inv" => hold(v, "INV", v.inv, "none".into()),
+        "att" => hold(
+            v,
+            "ATT",
+            b.att.is_some() && e.attempt == b.att,
+            format!("{:?}", e.attempt),
+        ),
+        "kind" => e.kind.unwrap_or("none").to_string(),
+        _ => e.request_ordinal.map_or("none".into(), |n| n.to_string()),
+    };
+    let shown = keys.iter().map(|(k, _)| format!("{k}={}", one(k)));
+    shown.collect::<Vec<_>>().join(" ")
+}
+/// A ledger tag: each key's placeholder (a ledger names no entry).
+fn ledger_tag<'a>(v: &View<'a>, keys: &[(&str, &str)]) -> String {
+    let shown = keys.iter().map(|(k, _)| {
+        let name = match *k {
+            "s" => "S",
+            "q" => "Q",
+            "run" => "RUN",
+            "inv" => "INV",
+            _ => "ATT",
+        };
+        format!("{k}={name}{}", v.group)
+    });
+    shown.collect::<Vec<_>>().join(" ")
+}
+/// A field's `<token>[..]`: its token and the kind and ordinal its tag reads.
+fn located(text: &str) -> (&str, Vec<(&str, &str)>, Option<&str>, Option<u64>) {
+    let token = text.split('[').next().unwrap_or(text);
+    let keys = tag_keys(text).unwrap_or_default();
+    let get = |k: &str| keys.iter().find(|x| x.0 == k).map(|x| x.1);
+    let (kind, ord) = (get("kind"), get("ord").and_then(|o| o.parse().ok()));
+    (token, keys, kind, ord)
 }
 
-/// The witness of `f`, in the table's grammar (Behaviour 9).
+/// The witness of `f`, in its frozen row's grammar (Behaviour 9; W0b B1).
 pub(super) fn render(f: &Facts) -> String {
+    let (sink, dim) = f.row;
+    let control = CONTROLS
+        .iter()
+        .find(|c| (c.0, c.1) == (sink, dim) && f.value == "none");
+    let found = match control {
+        Some(c) => Some((c.2, "own")),
+        None => row(sink, dim, f.value).map(|c| (c[13], c[10])),
+    };
+    let Some((witness, exec)) = found else {
+        return format!("no row {sink}/{dim}/{}", f.value);
+    };
+    match shape(witness, exec) {
+        Ok(shape) => rendered(f, &shape),
+        Err(e) => format!("unrenderable row {sink}/{dim}/{}: {e}", f.value),
+    }
+}
+/// `f` rendered field by field in `shape`'s order.
+fn rendered(f: &Facts, shape: &Shape) -> String {
     let b = bind(f);
     let correlated = |m: &&nexus_mother::route_seams::Entry| {
         m.point == "mother.charge.entry" && b.inv.is_some() && m.invocation == b.inv
     };
     let inv = f.mother.iter().any(|m| correlated(&m));
-    let four: Vec<&s1::Entry> = f
-        .broker
-        .iter()
-        .filter(|e| mine(e, &b) && e.request_ordinal == Some(4))
-        .collect();
-    let first = |point: &str| {
-        four.iter()
-            .find(|e| e.point == point && !e.note && e.kind == Some("chat"))
-            .copied()
+    let group = shape.group.map_or(String::new(), |g| format!(".{g}"));
+    let v = &View { f, b, inv, group };
+    let text = |k: &str| shape.fields.iter().find(|x| x.0 == k).map_or("", |x| x.1);
+    let (entry_token, entry_keys, kind, ord) = located(text("entry"));
+    let (check_token, check_keys, _, _) = located(text("check"));
+    let entry = token(v, entry_token, kind, ord);
+    let check = token(v, check_token, kind, ord);
+    let noted: Vec<&str> = notes(v).iter().map(|n| n.point).collect();
+    // The branch note: its token's predicate held, or what was noted.
+    let branch_text = text("branch");
+    let note_token = branch_text.split('@').next().unwrap_or("");
+    let note = note_token
+        .starts_with("note:")
+        .then(|| token(v, note_token, kind, ord))
+        .flatten();
+    let branch = match (note, noted.is_empty()) {
+        (Some(_), _) => branch_text.to_string(),
+        (None, true) => "none".to_string(),
+        (None, false) => format!("notes{noted:?}"),
     };
-    let (gate, observed) = (first("call.gate"), first("model.call.observed"));
-    let admitted = first("model.call.admitted").is_some();
-    let notes: Vec<&s1::Entry> = four.iter().filter(|e| e.note).copied().collect();
-    let noted: Vec<&str> = notes.iter().map(|n| n.point).collect();
-    let refused = cas(observed, &notes, admitted);
-    let entry = gate.map_or("none".into(), |g| format!("call.gate[{}]", tag(g, &b, inv)));
-    let check = match (refused, observed) {
-        (true, Some(o)) => format!("CAS:m:774[{}]", tag(o, &b, inv)),
-        (false, Some(o)) => format!("model.call.observed[{}]", tag(o, &b, inv)),
-        (_, None) => "none".into(),
+    // Generic outcome classes: `refused:<n>@<loc>` from the location's
+    // predicate and its note `note:<n>`; `admitted@`, `passed@` and
+    // `recorded@<loc>` from the location's predicate with no note.
+    let out_text = text("out");
+    let (class, loc) = out_text.split_once('@').unwrap_or((out_text, ""));
+    let located_out = token(v, loc, kind, ord);
+    let refused = class
+        .strip_prefix("refused:")
+        .is_some_and(|n| note.is_some() && note_token == format!("note:{n}"));
+    let quiet = !class.starts_with("refused:") && noted.is_empty();
+    let out = match located_out.is_some() && (refused || quiet) {
+        true => out_text.to_string(),
+        false if noted.is_empty() => "none".to_string(),
+        false => format!("notes{noted:?}"),
     };
-    // R88.1: each acknowledgement answers its own held point: the chat's
-    // (kind `chat`, ord 4) of the bound attempt, and the very trace entry.
+    let won = if out.starts_with("refused:") {
+        "value"
+    } else {
+        "route"
+    };
+    // R88.1: each acknowledgement answers its own held point, of the
+    // entry tag's kind and ordinal, of the bound attempt, the very trace
+    // entry; `held` if the value came while every one stood, `armed` if it
+    // was set before the first.
     let held = f.points.last().copied().unwrap_or("none");
     let answers = |(a, point): (&s1::Entry, &&str)| {
         a.point == *point
             && !a.note
-            && a.kind == Some("chat")
-            && a.request_ordinal == Some(4)
-            && mine(a, &b)
+            && a.kind == kind
+            && a.request_ordinal == ord
+            && mine(a, &v.b)
             && f.broker.contains(a)
     };
     let pairs = f.acks.iter().zip(&f.points);
-    let ack = if !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers)
-    {
-        "held".to_string()
-    } else {
-        let shown = f.acks.iter().map(|a| (a.point, a.kind, a.request_ordinal));
-        format!("unanswered{:?}", shown.collect::<Vec<_>>())
+    let answered =
+        !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers);
+    let first = f.acks.iter().map(|a| a.instant).min();
+    let ack = match (answered, f.applied.zip(first)) {
+        (true, Some((at, first))) if at < first => "armed".to_string(),
+        (true, _) => "held".to_string(),
+        (false, _) => {
+            let shown = f.acks.iter().map(|a| (a.point, a.kind, a.request_ordinal));
+            format!("unanswered{:?}", shown.collect::<Vec<_>>())
+        }
     };
-    let won = if refused { "value" } else { "route" };
-    let out = match (refused, admitted) {
-        (true, _) => "refused:8@CAS:m:774".to_string(),
-        (false, true) => "admitted@model.call.admitted".to_string(),
-        (false, false) => format!("notes{noted:?}"),
-    };
-    let branch = match (refused, noted.is_empty()) {
-        (true, _) => "note:8@m:774-783".to_string(),
-        (false, true) => "none".to_string(),
-        (false, false) => format!("notes{noted:?}"),
-    };
-    let charged = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::ModelCallCharged { invocation, .. } if Some(invocation) == b.inv);
-    let returned = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { invocation, .. } if Some(invocation) == b.inv);
-    let detail = |r: &nexus_governed_control::authority::evidence::EvidenceRecord, k: &str| {
-        r.detail
-            .iter()
-            .find(|(key, _)| key == k)
-            .map(|(_, v)| v.clone())
-    };
-    let run = b.run.map(|r| r.to_string());
-    let attempt = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| {
-        detail(r, "op").as_deref() == Some("model_call")
-            && run.is_some()
-            && r.run == run
-            && detail(r, "call") == b.att.map(|a| a.to_string())
-    };
-    let ledger = format!(
-        "+{}:ModelCallCharged[inv=INV],+{}:model_call[run=RUN att=ATT]",
-        f.journal.iter().filter(charged).count(),
-        f.native.iter().filter(attempt).count()
-    );
-    // An attempt site carries the session, run and attempt, no request (A.1).
+    let values: Vec<String> = shape
+        .fields
+        .iter()
+        .map(|(k, t)| match *k {
+            "entry" => entry.map_or("none".into(), |e| {
+                format!("{entry_token}[{}]", identity(v, e, &entry_keys))
+            }),
+            "check" => match check {
+                Some(c) => format!("{check_token}[{}]", identity(v, c, &check_keys)),
+                None => {
+                    let point = TOKENS
+                        .iter()
+                        .find(|x| x.0 == check_token)
+                        .map_or(check_token, |x| x.1);
+                    let seen = first_at(v, point, kind, ord);
+                    seen.map_or("none".into(), |e| {
+                        format!("{point}[{}]", identity(v, e, &check_keys))
+                    })
+                }
+            },
+            "value" => format!("{}@{held} ack={ack} won={won}", f.value),
+            "out" => out.clone(),
+            "branch" => branch.clone(),
+            "ledger" => ledger(&v, t),
+            "window" => window(&v).to_string(),
+            "peer" => {
+                let chat = f.peer.iter().filter(|p| *p == "/api/chat").count();
+                let paths = if f.peer.is_empty() {
+                    "none".to_string()
+                } else {
+                    f.peer.join(",")
+                };
+                format!("{paths} chat={chat}")
+            }
+            "next" => next(&v, t),
+            "deadline_fired" => deadline(&v, &noted),
+            other => format!("unbuilt:{other}"),
+        })
+        .collect();
+    let fields = shape
+        .fields
+        .iter()
+        .zip(values)
+        .map(|((k, _), x)| format!("{k}={x}"));
+    fields.collect::<Vec<_>>().join(";")
+}
+/// A native record's detail `k`.
+fn detail(
+    r: &nexus_governed_control::authority::evidence::EvidenceRecord,
+    k: &str,
+) -> Option<String> {
+    let found = r.detail.iter().find(|(key, _)| key == k);
+    found.map(|(_, x)| x.clone())
+}
+/// A native record of the bound attempt (run and `call`).
+fn attempt(v: &View, r: &nexus_governed_control::authority::evidence::EvidenceRecord) -> bool {
+    let run = v.b.run.map(|r| r.to_string());
+    detail(r, "op").as_deref() == Some("model_call")
+        && run.is_some()
+        && r.run == run
+        && detail(r, "call") == v.b.att.map(|a| a.to_string())
+}
+/// W0b B1: the ledger from `LEDGER`'s closed list, each item `+N:<event>[..]`
+/// counted from the facts under its tag's identity; an event outside the
+/// list is shown as such (a named difference).
+fn ledger(v: &View, text: &str) -> String {
+    let items = text.split("],").map(|i| i.trim_end_matches(']'));
+    let shown = items.map(|item| {
+        let event = item
+            .split_once(':')
+            .map_or("", |x| x.1)
+            .split('[')
+            .next()
+            .unwrap_or("");
+        let closed = format!("{item}]");
+        let keys = tag_keys(&closed).unwrap_or_default();
+        let tag = ledger_tag(v, &keys);
+        let by_inv = |e: &&nexus_mother::journal::Entry| {
+            let (name, invocation) = match e.event {
+                Event::ModelCallCharged { invocation, .. } => {
+                    ("ModelCallCharged", Some(invocation))
+                }
+                Event::LaneReturned { invocation, .. } => ("LaneReturned", Some(invocation)),
+                Event::SessionClosed => ("SessionClosed", None),
+                _ => ("", None),
+            };
+            name == event && (invocation.is_none() || invocation == v.b.inv)
+        };
+        let native = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| {
+            detail(r, "op").as_deref() == Some(event) && (event != "model_call" || attempt(v, r))
+        };
+        let n = match LEDGER.iter().find(|l| l.0 == event).map(|l| l.1) {
+            Some("journal") => v.f.journal.iter().filter(by_inv).count(),
+            Some("native") => v.f.native.iter().filter(native).count(),
+            Some(_) => v.f.journal.len() + v.f.native.len(),
+            None => return format!("unlisted:{event}"),
+        };
+        format!("+{n}:{event}[{tag}]")
+    });
+    shown.collect::<Vec<_>>().join(",")
+}
+/// An attempt site carries the session, run and attempt, no request (A.1).
+fn window(v: &View) -> &'static str {
     let site = |point: &str| {
-        let at = |e: &&s1::Entry| e.point == point && e.session == Some(b.s);
-        f.broker
+        let at = |e: &&s1::Entry| e.point == point && e.session == Some(v.b.s);
+        let run = v.b.run;
+        v.f.broker
             .iter()
             .filter(at)
-            .any(|e| b.run.is_some() && e.run == b.run && e.attempt == b.att)
+            .any(|e| run.is_some() && e.run == run && e.attempt == v.b.att)
     };
-    let window = match site("model.attempt.record.before") && site("complete") {
+    match site("model.attempt.record.before") && site("complete") {
         true => "completed_attempt",
         false => "boundary",
-    };
-    let chat = f.peer.iter().filter(|p| *p == "/api/chat").count();
-    let paths = if f.peer.is_empty() {
-        "none".to_string()
-    } else {
-        f.peer.join(",")
-    };
+    }
+}
+/// W0b B1: `next`'s keys from the facts; `lane_returned` is built (U5), any
+/// other key is left to the unit that adds it.
+fn next(v: &View, text: &str) -> String {
+    let returned = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { invocation, .. } if Some(invocation) == v.b.inv);
+    let keys = text.split(',').map(|kv| kv.split('=').next().unwrap_or(""));
+    let shown = keys.map(|k| match k {
+        "lane_returned" => format!(
+            "lane_returned={}",
+            v.f.journal.iter().filter(returned).count()
+        ),
+        other => format!("{other}=unbuilt"),
+    });
+    shown.collect::<Vec<_>>().join(",")
+}
+/// `deadline_fired`: an expiry note or a native timeout of the attempt.
+fn deadline(v: &View, noted: &[&str]) -> String {
     let expired: Vec<&str> = noted
         .iter()
         .copied()
         .filter(|n| n.starts_with("refused:1"))
         .collect();
-    let timed_out = f
-        .native
-        .iter()
-        .filter(attempt)
-        .any(|r| detail(r, "outcome").as_deref() == Some("timeout"));
-    let deadline = match (expired.is_empty(), timed_out) {
+    let attempt = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| attempt(v, r);
+    let mut outcomes =
+        v.f.native
+            .iter()
+            .filter(attempt)
+            .map(|r| detail(r, "outcome"));
+    let timed_out = outcomes.any(|o| o.as_deref() == Some("timeout"));
+    let shown =
+        v.f.native
+            .iter()
+            .filter(attempt)
+            .map(|r| detail(r, "outcome"));
+    println!("WITNESS native outcome {:?}", shown.collect::<Vec<_>>());
+    match (expired.is_empty(), timed_out) {
         (true, false) => "none".to_string(),
         _ => format!("expired{expired:?} timeout={timed_out}"),
-    };
-    let outcomes = f
-        .native
-        .iter()
-        .filter(attempt)
-        .map(|r| detail(r, "outcome"));
-    println!("WITNESS native outcome {:?}", outcomes.collect::<Vec<_>>());
-    let values = [
-        entry,
-        check,
-        format!("{}@{held} ack={ack} won={won}", f.value),
-        out,
-        branch,
-        ledger,
-        window.to_string(),
-        format!("{paths} chat={chat}"),
-        format!(
-            "lane_returned={}",
-            f.journal.iter().filter(returned).count()
-        ),
-        deadline,
-    ];
-    let fields = FIELDS.iter().zip(values).map(|(k, v)| format!("{k}={v}"));
-    fields.collect::<Vec<_>>().join(";")
+    }
 }
 
 /// Design 3.3: the child's result file must hold exactly one `CELL <nonce>
@@ -298,7 +548,11 @@ fn compare(expected: &str, observed: &str) -> Vec<String> {
     };
     let (want, seen) = (split(expected), split(observed));
     let mut diffs = Vec::new();
-    for key in FIELDS {
+    let mut keys: Vec<&str> = want.iter().map(|(k, _)| k.as_str()).collect();
+    let extra = seen.iter().map(|(k, _)| k.as_str());
+    let extra: Vec<&str> = extra.filter(|k| !keys.contains(k)).collect();
+    keys.extend(extra);
+    for key in keys {
         let value = |of: &[(String, String)]| {
             let found = of.iter().find(|(k, _)| k == key);
             found.map_or("<absent>".to_string(), |(_, v)| v.clone())
@@ -356,8 +610,15 @@ pub(super) fn credited(r: &Ran, sink: &str, dim: &str, value: &str) {
 /// Rows 93-96 and 98-100 (the `call_chat` ingress cells but the held row
 /// 97) hold exactly the rendered fields; every location token they use is one of `TOKENS`, or is the
 /// budget row's (`model.call.sampled`, `note:1`), which U5 does not map.
+/// W0b B1: and every row of the table renders: its fields an ordered subset of
+/// `ORDER`, each identity tag an ordered subset of `KEYS` and exactly what
+/// `identity` gives an entry of the bound identity with the tag's kind and
+/// ordinal (no token predicate).
 #[test]
 fn witness_rows_hold_the_rendered_fields() {
+    super::child("witness::witness_rows_hold_the_rendered_fields", |_| {
+        coverage()
+    });
     let values = [
         "original_cell_unscheduled",
         "repeated",
@@ -374,7 +635,14 @@ fn witness_rows_hold_the_rendered_fields() {
             .filter_map(|kv| kv.split_once('='))
             .map(|kv| kv.0)
             .collect();
-        assert_eq!(keys, FIELDS, "{value}");
+        let fields: Vec<&str> = shape(witness, "own")
+            .unwrap()
+            .fields
+            .iter()
+            .map(|x| x.0)
+            .collect();
+        assert_eq!(keys, fields, "{value}");
+        assert_eq!(keys.len(), 10, "{value}");
         let check = witness.split(";check=").nth(1).unwrap_or("");
         let token = check.split('[').next().unwrap_or("");
         let branch = witness.split(";branch=").nth(1).unwrap_or("");
@@ -389,6 +657,118 @@ fn witness_rows_hold_the_rendered_fields() {
     assert_eq!(frozen("call_chat", "ingress", "no_such_value"), None);
     // SB3E-R49.1 (U5b): row 97 is held; it states no witness.
     assert_eq!(frozen("call_chat", "ingress", "door_fence"), Some("hold"));
+}
+
+/// W0b B1: the coverage over every row (`witness_rows_hold_the_rendered_fields`).
+fn coverage() {
+    let f = refused();
+    let (mut sets, mut tags, mut flags, mut rows) = (Vec::new(), Vec::new(), Vec::new(), 0);
+    for line in TABLE.lines().skip(1) {
+        let c: Vec<&'static str> = line.split('\t').collect();
+        if c[13] == "hold" {
+            continue;
+        }
+        rows += 1;
+        let s = shape(c[13], c[10]).unwrap_or_else(|e| panic!("{}: {e}", c[..4].join(" ")));
+        let keys: Vec<&str> = s.fields.iter().map(|x| x.0).collect();
+        if !sets.contains(&keys) {
+            sets.push(keys);
+        }
+        let group = s.group.map_or(String::new(), |g| format!(".{g}"));
+        let v = &View {
+            f: &f,
+            b: bind(&f),
+            inv: true,
+            group,
+        };
+        for (field, text) in &s.fields {
+            for tag in text
+                .split('[')
+                .skip(1)
+                .map(|t| t.split(']').next().unwrap_or(""))
+            {
+                if !tag.contains('=') {
+                    flags.push(format!("{field}[{tag}]"));
+                    continue;
+                }
+                let bracketed = format!("[{tag}]");
+                let keys = tag_keys(&bracketed).unwrap_or_else(|| panic!("{tag}"));
+                let get = |k: &str| keys.iter().find(|x| x.0 == k).map(|x| x.1);
+                let mut e = f.broker[0].clone();
+                e.kind = get("kind").map(|k| &*Box::leak(k.to_string().into_boxed_str()));
+                e.request_ordinal = get("ord").and_then(|o| o.parse().ok());
+                let shown = match *field {
+                    "ledger" => ledger_tag(v, &keys),
+                    _ => identity(v, &e, &keys),
+                };
+                assert_eq!(shown, tag, "{}: {field}", c[..4].join(" "));
+                let form: Vec<&str> = keys.iter().map(|x| x.0).collect();
+                let form = (form.join(" "), s.group.is_some());
+                if !tags.contains(&form) {
+                    tags.push(form);
+                }
+            }
+        }
+    }
+    flags.sort();
+    flags.dedup();
+    println!(
+        "WITNESS B1 coverage: {rows} rows, {} field sets, {} tag sets, flags {flags:?}",
+        sets.len(),
+        tags.len()
+    );
+    for s in &sets {
+        println!("WITNESS B1 field set {}", s.join(";"));
+    }
+    for t in &tags {
+        println!("WITNESS B1 tag set [{}] group={}", t.0, t.1);
+    }
+    assert_eq!(rows, 794, "every row with a witness");
+}
+
+/// W0b B1 (Behaviour 4): a renderer control per new capability, each a named
+/// difference: a row's field missing from the rendering, an extra field, a
+/// wrong identity tag set, `ack=armed` rendered for a held value, a ledger
+/// event outside the closed list.
+#[test]
+fn witness_renderer_controls_each_differ() {
+    super::child("witness::witness_renderer_controls_each_differ", |_| {
+        let f = refused();
+        let base = render(&f);
+        let want = frozen("call_chat", "ingress", "quit").unwrap();
+        let mut armed = refused();
+        armed.applied = armed
+            .acks
+            .first()
+            .map(|a| a.instant - std::time::Duration::from_millis(1));
+        let leak = |w: String| -> &'static str { Box::leak(w.into_boxed_str()) };
+        let untagged = leak(want.replacen(" inv=INV", "", 1));
+        let unlisted = leak(want.replace("+1:model_call[run=RUN att=ATT]", "+1:Foo[s=S]"));
+        let dropped = base
+            .split(';')
+            .filter(|kv| !kv.starts_with("window="))
+            .collect::<Vec<_>>();
+        for (control, observed, field) in [
+            ("a field missing", dropped.join(";"), "window"),
+            ("an extra field", format!("{base};extra=x"), "extra"),
+            (
+                "a wrong tag set",
+                rendered(&f, &shape(untagged, "own").unwrap()),
+                "entry",
+            ),
+            ("ack=armed for a held value", render(&armed), "value"),
+            (
+                "an unlisted ledger event",
+                rendered(&f, &shape(unlisted, "own").unwrap()),
+                "ledger",
+            ),
+        ] {
+            let diffs = compare(&base, &observed);
+            let named = diffs.iter().any(|d| d.starts_with(&format!("{field}: ")));
+            assert!(named, "{control}: {diffs:?}");
+            println!("WITNESS B1 control {control:?}: {diffs:?}");
+        }
+    });
 }
 
 /// Design 3.3: a missing, a duplicate, a stale and a wrong-nonce `CELL`
@@ -577,6 +957,8 @@ fn refused() -> Facts {
         points: vec!["model.call.observed"],
         acks: vec![broker[1].clone()],
         value: "quit",
+        row: ("call_chat", "ingress"),
+        applied: Some(std::time::Instant::now()),
         broker,
         mother: vec![charge],
         journal: Vec::new(),

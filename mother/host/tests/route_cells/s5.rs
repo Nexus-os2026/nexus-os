@@ -1257,6 +1257,10 @@ pub(super) struct Facts {
     pub(super) acks: Vec<s1::Entry>,
     /// The value applied while the last point was held (`none`: a control).
     pub(super) value: &'static str,
+    /// W0b B1: the cell's table row, `(sink, dim)`, so `render` reads its
+    /// frozen row; and when its value was applied (`ack=held` or `armed`).
+    pub(super) row: (&'static str, &'static str),
+    pub(super) applied: Option<Instant>,
     pub(super) broker: Vec<s1::Entry>,
     pub(super) mother: Vec<s5::Entry>,
     /// The journal's entries since the hold began, through `journal_view`.
@@ -1376,6 +1380,7 @@ pub(super) enum Anchor {
 /// A cell's chain: its anchor and the points held in order, the row's own
 /// point last.
 pub(super) struct Chain {
+    pub(super) row: (&'static str, &'static str),
     pub(super) anchor: Anchor,
     pub(super) points: &'static [&'static str],
 }
@@ -1482,10 +1487,15 @@ pub(super) fn driven<R>(
 ) -> (Facts, Vec<String>, R) {
     let c = start(f);
     let (o, m) = (&c.o, &c.mother);
-    let (acks, steps, applied) = chained(f, m, chain, |held, chat| apply(o, m, held, chat));
+    let mut at = None;
+    let (acks, steps, applied) = chained(f, m, chain, |held, chat| {
+        at = Some(Instant::now());
+        apply(o, m, held, chat)
+    });
     println!("WITNESS {value}: the advance {steps:?}");
     let held = (chain.points.to_vec(), acks);
-    let facts = collect(o, m, &c.native, c.since, held, value, row);
+    let mut facts = collect(o, m, &c.native, c.since, held, (chain.row, value), row);
+    facts.applied = at;
     (facts, steps, applied)
 }
 
@@ -1494,6 +1504,7 @@ pub(super) fn driven<R>(
 /// `model.call.admitted` and a recorded outcome.
 pub(super) fn ctl_call_chat(f: &Fixture) -> Facts {
     let chain = Chain {
+        row: ("call_chat", "ingress"),
         anchor: Anchor::Charge,
         points: &["call.gate", "model.call.observed"],
     };
@@ -1512,6 +1523,7 @@ const OBSERVED: [&str; 1] = ["model.call.observed"];
 /// W0b B2: U5's rows' chain, anchored at the charge, held at ord 4's
 /// `model.call.observed`.
 const U5: Chain = Chain {
+    row: ("call_chat", "ingress"),
     anchor: Anchor::Charge,
     points: &OBSERVED,
 };
@@ -1724,6 +1736,7 @@ fn route_s5_cancel_run_ack_controls_each_refuse() {
 /// and chained to its third); `entry` must differ.
 pub(super) fn ord3_quit(f: &Fixture) -> Facts {
     let ord3 = Chain {
+        row: ("call_chat", "ingress"),
         anchor: Anchor::Arrival(3),
         points: &OBSERVED,
     };
@@ -1750,7 +1763,8 @@ pub(super) fn early_quit(f: &Fixture) -> Facts {
     let steps = c.mother.advance_to_call();
     println!("WITNESS early quit {quit:?}, the advance {steps:?}");
     let held = (OBSERVED.to_vec(), Vec::new());
-    collect(&c.o, &c.mother, &c.native, c.since, held, "quit", &REFUSED)
+    let value = (U5.row, "quit");
+    collect(&c.o, &c.mother, &c.native, c.since, held, value, &REFUSED)
 }
 
 /// Behaviour 7: the passive observations, read only once both workers are
@@ -1763,7 +1777,7 @@ pub(super) fn collect(
     native: &MemoryEvidence,
     since: (usize, usize, usize),
     (points, acks): (Vec<&'static str>, Vec<s1::Entry>),
-    value: &'static str,
+    (cell, value): ((&'static str, &'static str), &'static str),
     row: &Expect,
 ) -> Facts {
     let (broker, trace) = (s1::drain_trace(), s5::drain_trace());
@@ -1793,6 +1807,8 @@ pub(super) fn collect(
         points,
         acks,
         value,
+        row: cell,
+        applied: None,
         broker,
         mother: trace,
         journal: m.m.journal_view().unwrap()[since.0..].to_vec(),
@@ -1813,7 +1829,7 @@ pub(super) fn collect_broker(
     (since, peer): ((usize, usize), &Mutex<Vec<String>>),
     request: u64,
     (points, acks): (Vec<&'static str>, Vec<s1::Entry>),
-    value: &'static str,
+    (cell, value): ((&'static str, &'static str), &'static str),
 ) -> Facts {
     let broker = s1::drain_trace();
     let session = o.session.identity();
@@ -1829,6 +1845,8 @@ pub(super) fn collect_broker(
         points,
         acks,
         value,
+        row: cell,
+        applied: None,
         broker,
         mother: Vec::new(),
         journal: Vec::new(),
@@ -1920,7 +1938,8 @@ fn route_s5_collect_broker_on_registration() {
         let since = (native.records().len(), peer.lock().unwrap().len());
         o.session.register_local_model(&endpoint, spec()).unwrap();
         let held = (Vec::new(), Vec::new());
-        let facts = collect_broker(&o, &native, (since, &peer), 0, held, "none");
+        let cell = (("registration_reserve", "ingress"), "none");
+        let facts = collect_broker(&o, &native, (since, &peer), 0, held, cell);
         let points: Vec<&str> = facts.broker.iter().map(|e| e.point).collect();
         println!(
             "WITNESS collect_broker broker={} native={} peer={:?} points={points:?}",

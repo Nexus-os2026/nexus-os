@@ -130,11 +130,11 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 53880db0e37791ead80b50b43571a56db3402acfe79bd5a4ecaa0354c39a011a
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 485f321f07c784746925d725511f4520068e74dd52f480fa7ffcffdeb440ae42
+s5.rs db9d19b8c7dee0790c7cec7b5d115ba55f561b9953e8669d52446741fe6368c9
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 7f931ad82d0e6ccc7aeecb51e89b141756aadd18b154f648211a5a94293d65bc
+witness.rs 3f5ba9f74a658b1173ce05e5add8e90adfddc745f70648a8f6963508766e6443
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -2427,13 +2427,13 @@ s|type Roles
 s|fn sessions
 s|const HELD
 s|const REFUSED
-s|struct Facts{session,request,recorded,claim,points,acks,value,broker,mother,journal,native,peer,findings}
+s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,journal,native,peer,findings}
 h|struct Ran{id,nonce,result,passed,output}
 h|fn cell
 s|fn mission
 s|fn hold
 s|enum Anchor
-s|struct Chain{anchor,points}
+s|struct Chain{row,anchor,points}
 s|struct Start{o,native,mother,since}
 s|fn start
 s|fn driven
@@ -3562,7 +3562,7 @@ fn sb3e_w0b_s5_exports() {
         shown(&mut misses, &plant, &rows_check(&data, &section_rows(&data)), &[expected]);
     }
     // A section using the section exports, its row listing exactly its imports.
-    let sample = "//! SB-3E S5 section U6b-2: s5_r34.rs\nuse super::{s5::{driven, hold, start, Anchor, Chain, Facts, REFUSED}, Fixture, PATIENCE};\nconst SLOT: Chain = Chain {\n    anchor: Anchor::Arrival(1),\n    points: &[\"attempt.slot\"],\n};\npub(super) fn quit(f: &Fixture) -> Facts {\n    let (facts, _, ()) = driven(f, \"quit\", &SLOT, &REFUSED, |_, m, held, _| {\n        let _ = m.mission();\n        drop(held);\n    });\n    facts\n}\npub(super) fn ending(f: &Fixture) -> bool {\n    let held = hold(\"mother.settle\");\n    let _ = held.acknowledged.recv_timeout(PATIENCE);\n    let session = start(f).mother.m;\n    session.prepare_session_end().is_ok()\n}\n";
+    let sample = "//! SB-3E S5 section U6b-2: s5_r34.rs\nuse super::{s5::{driven, hold, start, Anchor, Chain, Facts, REFUSED}, Fixture, PATIENCE};\nconst SLOT: Chain = Chain {\n    row: (\"call_slot_reserve\", \"ingress\"),\n    anchor: Anchor::Arrival(1),\n    points: &[\"attempt.slot\"],\n};\npub(super) fn quit(f: &Fixture) -> Facts {\n    let (facts, _, ()) = driven(f, \"quit\", &SLOT, &REFUSED, |_, m, held, _| {\n        let _ = m.mission();\n        drop(held);\n    });\n    facts\n}\npub(super) fn ending(f: &Fixture) -> bool {\n    let held = hold(\"mother.settle\");\n    let _ = held.acknowledged.recv_timeout(PATIENCE);\n    let session = start(f).mother.m;\n    session.prepare_session_end().is_ok()\n}\n";
     let imports = "super::s5::driven,super::s5::hold,super::s5::start,super::s5::Anchor,super::s5::Chain,super::s5::Facts,super::s5::REFUSED,super::Fixture,super::PATIENCE";
     let rows = section_rows(S5_SECTIONS);
     let r34 = rows
