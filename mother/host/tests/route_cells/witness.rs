@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 2] = [
+const TOKENS: [Token; 9] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -50,7 +50,37 @@ const TOKENS: [Token; 2] = [
     }),
     // exactly the note refused:8.cas (refused:8.capacity is not it).
     ("note:8", "refused:8.cas", |v, _, _| cas(v).map(|(_, n)| n)),
+    // U9a (d_close): the acknowledged entry at the row's point (close.rs:271,
+    // 232, 524, 49, 367-370), the next close.mother_end of S after it on its
+    // thread (observe_mother_end, close.rs:499; Q11), and the seal's stop note
+    // (close.rs:407).
+    ("c:265-300", "close.obligations", acked),
+    ("c:227-234", "close.delivery", acked),
+    ("c:462-480", "close.mother_end", after_acked),
+    ("c:490-505", "close.primary", acked),
+    ("c:48-54", "producer.join", acked),
+    ("c:372-429", "close.seal", acked),
+    ("note:stop_obligations", "seal:stop", note_at),
 ];
+/// U9a: the admitted entry at `point` that is the cell's acknowledgement.
+fn acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let ack = |e: &&Seen| v.f.acks.iter().any(|a| of(a) == **e);
+    let at = |e: &&Seen| !e.note && e.point == point && admitted(v, e, tag);
+    v.seen.iter().filter(at).find(ack).copied()
+}
+/// U9a (Q11): the next admitted entry at `point` after the acknowledged one,
+/// of S1 and on its thread.
+fn after_acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let later = |e: &&Seen| e.s1 && e.tick > a.tick && e.thread == a.thread;
+    let at = |e: &&Seen| !e.note && e.point == point && admitted(v, e, tag);
+    v.seen
+        .iter()
+        .filter(at)
+        .filter(later)
+        .min_by_key(|e| e.tick)
+        .copied()
+}
 /// W0b B1: the ledger's closed list: each event the table names, as a
 /// journal event (by invocation) or a native record's phase (by run and
 /// attempt, or by session); `all` is every journal entry and native record
@@ -292,7 +322,32 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 1] = [("call_chat", "ingress", CONTROL)];
+const CONTROLS: [(&str, &str, &str); 7] = [
+    ("call_chat", "ingress", CONTROL),
+    ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
+    ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
+    ("mother_end", "lifecycle", CLOSE_CONTROLS[2]),
+    ("primary_end", "lifecycle", CLOSE_CONTROLS[3]),
+    ("producer_join", "lifecycle", CLOSE_CONTROLS[4]),
+    ("seal", "lifecycle", CLOSE_CONTROLS[5]),
+];
+/// U9a (SB3E-R117.3 Q10): the d_close controls as measured at U9a Step 0,
+/// 20/20 each; `primary_end`'s `+0:session_closed` is the route's (the record
+/// is not projected, evidence_store.rs:992-1009).
+const CLOSE_CONTROLS: [&str; 6] = [
+    "entry=close.obligations[s=S];check=c:265-300[s=S];value=none@close.obligations ack=held won=route;\
+out=passed@c:265-300;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
+    "entry=close.delivery[s=S];check=c:227-234[s=S];value=none@close.delivery ack=held won=route;\
+out=passed@c:227-234;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
+    "entry=close.mother_end[s=S];check=c:462-480[s=S];value=none@close.mother_end ack=held won=route;\
+out=passed@c:462-480;branch=none;ledger=+1:SessionClosed[s=S];window=boundary;deadline_fired=none",
+    "entry=close.primary[s=S];check=c:490-505[s=S];value=none@close.primary ack=held won=route;\
+out=recorded@c:490-505;branch=none;ledger=+0:session_closed[s=S];window=boundary;deadline_fired=none",
+    "entry=producer.join[s=S];check=c:48-54[s=S];value=none@producer.join ack=held won=route;\
+out=passed@c:48-54;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
+    "entry=close.seal[s=S];check=c:372-429[s=S];value=none@close.seal ack=held won=route;\
+out=passed@c:372-429;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
+];
 const CONTROL: &str = "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4];\
 check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT kind=chat ord=4];\
 value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
@@ -1035,6 +1090,12 @@ fn coverage() {
     sinks.sort();
     sinks.dedup();
     assert_eq!(sinks, super::s5::BROKER_SINKS);
+    // U9a M1: `collect_close`'s sinks are exactly the `d_close` rows'.
+    let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
+    let mut close: Vec<&str> = rows.filter(|c| c[6] == "d_close").map(|c| c[1]).collect();
+    close.sort();
+    close.dedup();
+    assert_eq!(close, super::s5::CLOSE_SINKS);
 }
 
 /// W0b B1 (Behaviour 4): a renderer control per new capability, each a named
@@ -1181,19 +1242,24 @@ fn witness_result_records_each_refused() {
         ..ran(good)
     };
     assert_eq!(record(&failed), Err("record: the child failed"));
-    // W0b C2: a non-U5 control against its own `CONTROLS` row; another row's
+    // W0b C2: a non-U5 control against its own `CONTROLS` row (U9a: a pair
+    // with no control, now that seal/lifecycle has one); another row's
     // witness, or no row, fails (the missing one by name).
     let fails = |controls: &[(&str, &str, &'static str)]| {
-        let run =
-            std::panic::catch_unwind(|| control_in(&ran(good), ("seal", "lifecycle"), controls));
+        let run = std::panic::catch_unwind(|| {
+            control_in(&ran(good), ("call_chat", "lifecycle"), controls)
+        });
         run.err()
             .map(|p| p.downcast::<String>().map_or(String::new(), |m| *m))
     };
-    assert_eq!(fails(&[("seal", "lifecycle", "entry=x;check=y")]), None);
-    assert!(fails(&[("seal", "lifecycle", "entry=z;check=y")]).is_some());
+    assert_eq!(
+        fails(&[("call_chat", "lifecycle", "entry=x;check=y")]),
+        None
+    );
+    assert!(fails(&[("call_chat", "lifecycle", "entry=z;check=y")]).is_some());
     let missing = fails(&CONTROLS).unwrap_or_default();
     assert!(
-        missing.contains("no CONTROLS row seal/lifecycle"),
+        missing.contains("no CONTROLS row call_chat/lifecycle"),
         "{missing}"
     );
 }
@@ -1534,10 +1600,21 @@ fn refused() -> Facts {
 /// `quit` row (row 99): its record read whatever the child's exit, and each
 /// named field must differ.
 fn differs(name: &str, id: &'static str, drive: fn(&super::Fixture) -> Facts, fields: &[&str]) {
+    differs_at(name, id, drive, ("call_chat", "ingress", "quit"), fields);
+}
+/// `differs` against the frozen row of `(sink, dim, value)` (U9a).
+type Drive = fn(&super::Fixture) -> Facts;
+fn differs_at(
+    name: &str,
+    id: &'static str,
+    drive: Drive,
+    row: (&str, &str, &str),
+    fields: &[&str],
+) {
     let Some(r) = super::s5::cell(name, id, drive, render) else {
         return;
     };
-    let want = frozen("call_chat", "ingress", "quit").unwrap();
+    let want = frozen(row.0, row.1, row.2).unwrap();
     let witness = written(&r).unwrap_or_else(|e| panic!("{id}: {e}\n{}", r.output));
     let diffs = compare(want, witness);
     let named = |k: &&str| diffs.iter().any(|d| d.starts_with(&format!("{k}: ")));
@@ -1568,4 +1645,42 @@ fn witness_control_earlier_refusal_fails_in_check_and_out() {
         super::s5::early_quit,
         &["check", "out"],
     );
+}
+/// U9a harness control (labelled a control, over a real run's facts): row
+/// 573's d_close cell with S rebound to another session; `entry` and `check`
+/// must differ.
+#[test]
+fn witness_control_close_other_session_fails_in_entry_and_check() {
+    let name = "witness::witness_control_close_other_session_fails_in_entry_and_check";
+    let row = ("close_obligations", "lifecycle", "Normal");
+    differs_at(
+        name,
+        "ctl_close_other_session",
+        other_session,
+        row,
+        &["entry", "check"],
+    );
+}
+fn other_session(f: &super::Fixture) -> Facts {
+    use super::s5::{closed, Close, Mode, Setup};
+    let sink = |c: &Close, ()| {
+        let seen = c.o.session.close_obligations().map(|_| ());
+        (seen.map_err(|e| format!("{e:?}")), ())
+    };
+    let (row, mode) = (("close_obligations", "lifecycle"), Mode::Armed);
+    let (mut facts, ()) = closed(
+        f,
+        Setup::Mother,
+        row,
+        "Normal",
+        mode,
+        Ok(()),
+        |_| (),
+        sink,
+        |_| {},
+    );
+    facts.session = nexus_governed_control::host_session::SessionSeed::new()
+        .unwrap()
+        .identity();
+    facts
 }
