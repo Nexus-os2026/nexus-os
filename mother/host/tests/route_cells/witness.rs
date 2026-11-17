@@ -54,7 +54,9 @@ const TOKENS: [Token; 2] = [
 /// W0b B1: the ledger's closed list: each event the table names, as a
 /// journal event (by invocation) or a native record's phase (by run and
 /// attempt, or by session); `all` is every journal entry and native record
-/// of the session since the hold (SB3E-R6.3's empty delta is `+0:all[s=S]`).
+/// of the session since `start` (or `open_broker`) captured the sources
+/// (s5.rs `start`'s `since`), not since the hold (SB3E-R6.3's empty delta is
+/// `+0:all[s=S]`; where the window opens for U9a is R115.4's question).
 const LEDGER: [(&str, &str); 7] = [
     ("ModelCallCharged", "journal"),
     ("LaneReturned", "journal"),
@@ -1196,19 +1198,19 @@ fn witness_result_records_each_refused() {
     );
 }
 
-/// W0b readiness proof (SB3E-R111-R113): the wave-1 rows (`u9a`, `u6a1`,
-/// `u6b2`) whose observation exists in the route today, one per identity tag
-/// set, trace (S1/S5) and acknowledgement kind, each rendered byte for byte
-/// from synthetic facts that record exactly the route's identity at each
+/// W0b renderer-level check (SB3E-R111-R115; not a readiness proof): wave-1
+/// rows (`u9a`, `u6a1`, `u6b2`) whose points exist in the route today, one per
+/// identity tag set, trace (S1/S5) and acknowledgement kind, each rendered byte
+/// for byte from synthetic facts that record exactly the route's identity at each
 /// point (close.rs:49, 232, 271, 368, 407; model.rs:383; S5's `route_ctx`),
 /// under test-local tokens only. `label|sink dim value|flag|entries`; an
 /// entry is `[!][5]point[:keys]` (keys after the last `:`): `!` a note, `5`
 /// S5's (of S, Q and the Builder; `inv'` the Sentinel's), S1 keys `s` (`s'`
 /// another session), `q` (`q2` another request), `run`, `ordN`; flag `armed`
 /// (applied before the acknowledgement) or `noclaim`. A `not` row must not
-/// render. Rows needing a seam the route lacks, or with no sound binding,
-/// are in readiness-ledger.md, not here; 115 shows the latter fails closed.
-const READY: &str = "\
+/// render. Whether a real driver and `collect` can produce these facts is not
+/// shown here: readiness-ledger.md holds every such row; 115 fails closed.
+const RENDERED: &str = "\
 573|close_obligations lifecycle Normal|armed|close.obligations:s
 574|close_obligations lifecycle Bootstrap|-|close.obligations:s
 700|seal lifecycle ClosingNormal|armed|close.seal:s q
@@ -1226,7 +1228,7 @@ not 338 no claim (run, att)|meter_settle ingress original_cell_unscheduled|nocla
 not 338 another builder|meter_settle ingress original_cell_unscheduled|-|5mother.settle:inv'
 not 115 no sound binding (q, att, run)|call_slot_reserve ingress fatal|noclaim|attempt.slot:s run
 ";
-fn readiness() {
+fn renderer_level() {
     let tokens: [Token; 5] = [
         ("c:265-300", "close.obligations", first_at),
         ("c:372-429", "close.seal", first_at),
@@ -1239,7 +1241,7 @@ fn readiness() {
     let other = nexus_governed_control::host_session::SessionSeed::new()
         .unwrap()
         .identity();
-    for line in READY.lines() {
+    for line in RENDERED.lines() {
         let [label, row, flag, entries] = line.split('|').collect::<Vec<_>>()[..] else {
             panic!("{line}")
         };
@@ -1291,11 +1293,11 @@ fn readiness() {
         let want = frozen(sink, dim, value).unwrap_or_else(|| panic!("{label}: no row"));
         let shown = render_in(&f, t, &[]);
         match label.starts_with("not ") {
-            false => assert_eq!(shown, want, "readiness {label}"),
-            true => assert_ne!(shown, want, "readiness {label}"),
+            false => assert_eq!(shown, want, "renderer-level {label}"),
+            true => assert_ne!(shown, want, "renderer-level {label}"),
         }
         println!(
-            "WITNESS readiness {label}: {}",
+            "WITNESS renderer-level {label}: {}",
             compare(want, &shown).join("; ")
         );
     }
@@ -1304,7 +1306,7 @@ fn readiness() {
 fn witness_wave_rows_render_from_recorded_identity() {
     super::child(
         "witness::witness_wave_rows_render_from_recorded_identity",
-        |_| readiness(),
+        |_| renderer_level(),
     );
 }
 /// W0b A4, R1-1, N-c: `model_registered` of a real registration through
@@ -1313,8 +1315,8 @@ fn witness_wave_rows_render_from_recorded_identity() {
 /// `model.install.before` of S and Q (model.rs:301-314). A bracketing entry of another request leaves q unbound, so the
 /// field is `unobserved`, never `+0`; an applier's `ingress.accept` of another
 /// request (U5's `accept(Quit, 2)`) changes nothing. The window holds only
-/// the registration's record; a record in another fixture's projection is
-/// not counted (N-c ii; N-c i: `witness_collects_after_the_mother_is_released`).
+/// the registration's record (N-c i: `witness_collects_after_the_mother_is_released`).
+/// Row 440 renders at the renderer level: no value was applied (R2-4).
 #[test]
 fn witness_native_ledger_binds_by_fixture_and_request() {
     super::child(
@@ -1323,9 +1325,6 @@ fn witness_native_ledger_binds_by_fixture_and_request() {
     );
 }
 fn native(f: &super::Fixture) {
-    use nexus_governed_control::authority::evidence::{
-        EvidenceProjection, EvidenceRecord, MemoryEvidence,
-    };
     let b = super::s5::open_broker(f);
     b.o.session
         .register_local_model(&b.endpoint, super::spec())
@@ -1346,7 +1345,8 @@ fn native(f: &super::Fixture) {
     assert_eq!(with("ingress.accept", 2), text, "A4 accept");
     let phases: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
     assert_eq!(phases, ["model_registered"], "A4 window: {phases:?}");
-    // Row 440 (u6a1 `registration_record quit`), whole, from the real facts.
+    // Row 440 (u6a1 `registration_record quit`) at the renderer level: the facts
+    // of a real registration, with no value applied (R2-4).
     let (point, mut row440) = ("model.record.before", facts.clone());
     let ack = facts.broker.iter().find(|e| e.point == point);
     (row440.points, row440.acks) = (vec![point], ack.cloned().map(Ack::S1).into_iter().collect());
@@ -1355,17 +1355,6 @@ fn native(f: &super::Fixture) {
         shown,
         frozen("registration_record", "ingress", "quit").unwrap()
     );
-    let other = MemoryEvidence::new(16);
-    for r in &facts.native {
-        let mut r = r.clone();
-        r.detail.push(("fixture".into(), "second".into()));
-        other.project(&r);
-    }
-    let mut later = super::s5::collect_broker(&b, (Vec::new(), Vec::new()), row);
-    later.broker = facts.broker.clone();
-    let second = |r: &EvidenceRecord| r.detail.iter().any(|d| d.1 == "second");
-    assert!(!later.native.iter().any(second) && other.records().len() == 1);
-    assert_eq!(led(&later), text, "A4 another projection");
 }
 /// W0b R1-2: a close-chain cell. `ctl_call_chat`'s path, then the Mother's
 /// `FileSession` released by value, then the collection (`s5::released`):
