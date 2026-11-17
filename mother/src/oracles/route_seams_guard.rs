@@ -115,8 +115,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "415499b1a07eb1117bba380c446fb69433cc63e3eeb2d8e7d2ef54dfc96a4899";
-const MUTANTS: usize = 1039;
+const PINS_SHA256: &str = "31e85117b1ad96d8df38be8029128aaf87df7697125bd0293f9c939764b1d1f5";
+const MUTANTS: usize = 1069;
 const REGIONS: usize = 37;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -125,14 +125,14 @@ const REGIONS: usize = 37;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs ca7ac71a93c3e104c87f4acebbe47aa71ab1689b7f255add8507880f217baa21
+cells.rs f11e2af26c53d5af16b7c025f428c203ef1c6a2e0dabbd0a2fc0f49a5a0ab19b
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 39c63fd02b6f47ddca7ce23b794d3108397e27229d98ab860cb5a98f9056ccbe
+main.rs e8c6732d967c108b88c735053c53a22f789b12245ac46c44af71c38ded8f226c
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
 s5.rs 1f011f19ed4c48a0262707fe90ede998faf08abbe4623658c55b7a5085e7dd19
 s5_close.rs e0c20ad6fe2b17db99559b9af33b6385b51657f829edef91fc336a0e845d5424
-s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
+s5_reg.rs 2e66d53abc10ba3b9f3322f66384d1f9e9a88485ec1a7643b0dbc9fa10c4fa85
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
 witness.rs 3b3bcfdc2d411239fa84881bc61d14eec7b49acf7578bd1afa8228a53c1c775e
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
@@ -150,7 +150,7 @@ fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
 const S5_SECTIONS: &str = "\
 s5.rs|U5|call_chat:ingress|ctl_call_chat|S5_SUPER|-
 s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture,nexus_governed_control::host_session::close::CloseSeal,nexus_governed_control::host_session::SessionRequest|-
-s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|-|-
+s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
@@ -3216,7 +3216,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
         "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
@@ -3432,7 +3432,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("F3a a br#\"store.commit\"#", "s5_r34.rs", "super::Entry", hashes.into(), &["Passive: collect_native reads store.commit"]),
         ("F3b Codex's brace in a return type", "s5_r34.rs", "super::Entry", braced.into(), &["a brace in the signature of fn collect_native"]),
         ("note 4 two braced super imports", "s5_r34.rs", "super::Entry,super::PATIENCE", two.into(), &["more than one super:: import"]),
-        ("F2 control: Vec::<u8>::new() is no qualified-self path", "s5_reg.rs", "-", "fn d() {\n    let _ = Vec::<u8>::new();\n}\n".into(), &[]),
+        ("F2 control: Vec::<u8>::new() is no qualified-self path", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d() {\n    let _ = Vec::<u8>::new();\n}\n".into(), &[]),
         ("F3b control: a plain signature", "s5_r34.rs", "super::Entry", "use super::Entry;\nfn collect_native(broker: &[Entry]) -> usize {\n    broker.len()\n}\n".into(), &[]),
     ];
     for (plant, file, imports, text, expected) in fixed {
@@ -3478,12 +3478,12 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("R2 F2 after return", "s5_reg.rs", "-", "fn d() -> usize {\n    return <[u8]>::len(&[]);\n}\n".into(), vec![q, &ret]),
         ("R2 F2 after an attribute, in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ #[allow(unused)] <[[u8; { (2 > 1) as usize }]]>::len(&[]); 0 }>();\n}\n".into(), vec![&attr]),
         ("R2 F2 after for, in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ for <[u8; { (2 > 1) as usize }]>::C in [] {} 0 }>();\n}\n".into(), vec![&fored]),
-        ("R2 F2 control: a[0] < b", "s5_reg.rs", "-", "fn d(a: [u8; 1], b: u8) -> bool {\n    a[0] < b\n}\n".into(), vec![]),
-        ("R2 F2 control: Vec::<[u8; 0]>::new()", "s5_reg.rs", "-", "fn d() {\n    let _ = Vec::<[u8; 0]>::new();\n}\n".into(), vec![]),
-        ("R2 F2 control: a < b, a > b, a >= b, a <= b", "s5_reg.rs", "-", "fn d(a: u8, b: u8) -> bool {\n    a < b || a > b || a >= b || a <= b\n}\n".into(), vec![]),
-        ("R2 F2 control: -> and => and >>", "s5_reg.rs", "-", "fn d(a: u8) -> u8 {\n    let f = |x: u8| -> u8 { x >> 1 };\n    match a {\n        _ => f(a),\n    }\n}\n".into(), vec![]),
-        ("R2 F2 control: generics and turbofish >>", "s5_reg.rs", "-", "fn g<T: Into<u8>>(t: T) -> Vec<u8> {\n    let v: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();\n    let _ = v.into_iter().collect::<Vec<Vec<u8>>>();\n    vec![t.into()]\n}\n".into(), vec![]),
-        ("R2 F2 control: for<'a>", "s5_reg.rs", "-", "fn h<F>(_: F)\nwhere\n    F: for<'a> Fn(&'a u8),\n{\n}\n".into(), vec![]),
+        ("R2 F2 control: a[0] < b", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: [u8; 1], b: u8) -> bool {\n    a[0] < b\n}\n".into(), vec![]),
+        ("R2 F2 control: Vec::<[u8; 0]>::new()", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d() {\n    let _ = Vec::<[u8; 0]>::new();\n}\n".into(), vec![]),
+        ("R2 F2 control: a < b, a > b, a >= b, a <= b", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: u8, b: u8) -> bool {\n    a < b || a > b || a >= b || a <= b\n}\n".into(), vec![]),
+        ("R2 F2 control: -> and => and >>", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: u8) -> u8 {\n    let f = |x: u8| -> u8 { x >> 1 };\n    match a {\n        _ => f(a),\n    }\n}\n".into(), vec![]),
+        ("R2 F2 control: generics and turbofish >>", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn g<T: Into<u8>>(t: T) -> Vec<u8> {\n    let v: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();\n    let _ = v.into_iter().collect::<Vec<Vec<u8>>>();\n    vec![t.into()]\n}\n".into(), vec![]),
+        ("R2 F2 control: for<'a>", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn h<F>(_: F)\nwhere\n    F: for<'a> Fn(&'a u8),\n{\n}\n".into(), vec![]),
         ("R2 F3a \"store.\\x63ommit\"", "s5_r34.rs", "super::Entry", collect(r#""store.\x63ommit""#), vec![commit]),
         ("R2 F3a \"store.\\u{63}ommit\"", "s5_r34.rs", "super::Entry", collect(r#""store.\u{63}ommit""#), vec![commit]),
         ("R2 F3a a backslash-newline", "s5_r34.rs", "super::Entry", collect("\"store.\\\n        commit\""), vec![commit]),
@@ -3763,7 +3763,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";
