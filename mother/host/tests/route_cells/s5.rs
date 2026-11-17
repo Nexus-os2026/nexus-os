@@ -2575,3 +2575,183 @@ fn route_s5_close_window_opens_at_the_hold() {
         println!("WITNESS close window: prefix records {before:?} -> {after:?}, window empty");
     });
 }
+
+// SB3E-R120, R125 (U6a-1 section R; the R115.4-style exception R120.2): the
+// d_register collection. A cell holds its sink's point (`REG_POINTS`); s5
+// applies the value while held and checks its effect (F-R3), records when
+// (APPLIED) and collects (`collect_reg`), every check in the kept facts (F-R5).
+/// R1 (R100.2, R101.3: points are compared only with `REG_POINTS` and the
+/// literal lists): each d_register sink's held point (model.rs:301).
+const REG_POINTS: [(&str, &str); 1] = [("registration_record", "model.record.before")];
+/// R2: the registration-time reductions, lock-free (design 4.4 `free`), each
+/// with its effect checked while the hold stands; the findings.
+fn reg_apply(o: &Opened, value: &str) -> Vec<String> {
+    let (want, results): (&str, Vec<String>) = match value {
+        "none" => return Vec::new(),
+        "repeated" => {
+            let results = [o.ingress.emergency(), o.ingress.emergency()];
+            (
+                "Emergency",
+                results.map(|r| format!("{:?}", r.map(|_| ()))).to_vec(),
+            )
+        }
+        "fatal" => {
+            o.ingress.fail();
+            ("Failed", Vec::new())
+        }
+        "quit" => {
+            let accepted = o.ingress.accept(CommandKind::Quit, 1);
+            ("ClosingNormal", vec![format!("{:?}", accepted.map(|_| ()))])
+        }
+        _ => {
+            return vec![format!(
+                "registered: no registration-time reduction for {value}"
+            )]
+        }
+    };
+    let state = format!("{:?}", o.session.state());
+    println!("WITNESS registered {value}: {results:?}, state {state}");
+    let mut findings = Vec::new();
+    if results.iter().any(|r| r != "Ok(())") {
+        findings.push(format!("registered: {value} returned {results:?}"));
+    }
+    if state != want {
+        findings.push(format!("registered: state {state}, not {want}"));
+    }
+    findings
+}
+/// R3 (R88.1): the acknowledgement is the worker's, at `point`, of S and the
+/// Bootstrap request 0 (h:703-715).
+fn reg_ack(
+    ack: Option<&s1::Entry>,
+    point: &str,
+    s: SessionIdentity,
+    worker: ThreadId,
+) -> Result<(), String> {
+    let ours = |a: &&s1::Entry| {
+        (a.point, a.note, a.session, a.request, a.thread)
+            == (point, false, Some(s), Some(0), worker)
+    };
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "registered: acknowledgement {:?}, the worker {worker:?}",
+            ack.map(|a| (a.point, a.request, a.thread))
+        )),
+    }
+}
+/// R3: the d_register driver. `open_broker`; the row's point armed before the
+/// worker starts, which borrows only the session and the endpoint (R125.2
+/// F-2); at the bounded acknowledgement `reg_apply`, then APPLIED, then the
+/// release within `SHUTDOWN_PAUSE`; the worker joined; then `collect_reg`.
+pub(super) fn registered(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+) -> Facts {
+    let b = open_broker(f);
+    let Some(point) = REG_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1) else {
+        let missing = vec![format!("registered: {} has no d_register point", row.0)];
+        let held = (Vec::new(), Vec::new());
+        return collect_reg(&b, held, (row, value), (None, missing), "collect_reg");
+    };
+    *APPLIED.lock().unwrap() = None;
+    let (session, endpoint) = (&b.o.session, b.endpoint.as_str());
+    let mut findings = Vec::new();
+    let held = f.pause(point);
+    let (ack, result) = std::thread::scope(|scope| {
+        let worker =
+            scope.spawn(move || session.register_local_model(endpoint, spec()).map(|_| ()));
+        let thread = worker.thread().id();
+        let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
+        match reg_ack(ack.as_ref(), point, session.identity(), thread) {
+            Ok(()) => {
+                let at = Instant::now();
+                findings.extend(reg_apply(&b.o, value));
+                if value != "none" {
+                    *APPLIED.lock().unwrap() = Some(Instant::now());
+                }
+                let released = at.elapsed();
+                if released >= SHUTDOWN_PAUSE {
+                    let late =
+                        format!("released after {released:?}, not within {SHUTDOWN_PAUSE:?}");
+                    findings.push(format!("registered: {late}"));
+                }
+            }
+            Err(e) => findings.push(e),
+        }
+        drop(held);
+        (ack, worker.join().unwrap())
+    });
+    println!("WITNESS registered {value}: the registration {result:?}");
+    let (applied, acks) = (APPLIED.lock().unwrap().take(), ack.map(Ack::S1));
+    let held = (vec![point], acks.into_iter().collect());
+    let mut facts = collect_reg(&b, held, (row, value), (applied, findings), "collect_reg");
+    let phases: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
+    println!("WITNESS registered {value}: native {phases:?}");
+    let s = facts.session;
+    let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
+    let applications = facts.broker.iter().filter(mine).count();
+    if value == "repeated" && applications != 2 {
+        let found = format!("registered: {applications} ingress.emergency entries");
+        later(&mut facts, found);
+    }
+    facts
+}
+/// R5: a real `registered` run of `repeated`: collected as `collect_reg`, the
+/// kept facts clean, APPLIED after the ack; the ack rule refuses another
+/// thread, point and request, and no ack, over that run's ack (rule level).
+#[test]
+fn route_s5_registered_applies_and_collects() {
+    child("s5::route_s5_registered_applies_and_collects", |f| {
+        let facts = registered(f, ("registration_record", "ingress"), "repeated");
+        let kept = std::mem::take(&mut *KEPT.lock().unwrap());
+        let [(tag, kept)] = &kept[..] else {
+            panic!("R5: {} collections", kept.len())
+        };
+        assert_eq!(*tag, "collect_reg", "R5: the collector");
+        assert!(kept.findings.is_empty(), "R5: kept {:?}", kept.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("R5: no acknowledgement")
+        };
+        let after = facts.applied.is_some_and(|a| a > ack.instant);
+        assert!(after, "R5: APPLIED is not after the acknowledgement");
+        let (s, point, worker) = (facts.session, "model.record.before", ack.thread);
+        assert_eq!(reg_ack(Some(ack), point, s, worker), Ok(()));
+        let mut other = ack.clone();
+        other.request = Some(7);
+        for (refused, what) in [
+            (
+                reg_ack(Some(ack), point, s, std::thread::current().id()),
+                "another thread",
+            ),
+            (
+                reg_ack(Some(ack), "model.install.before", s, worker),
+                "another point",
+            ),
+            (reg_ack(Some(&other), point, s, worker), "request 7"),
+            (reg_ack(None, point, s, worker), "no acknowledgement"),
+        ] {
+            assert!(refused.is_err(), "R5: {what} not refused");
+            println!("WITNESS registered ack plant refused: {what}");
+        }
+    });
+}
+/// R5 (F-R2, F-R5): a value with no registration-time reduction (`stop_all`,
+/// one session per child) is a kept finding; with it erased from the
+/// returned facts, `verdict` still has it.
+#[test]
+fn route_s5_registered_refuses_an_unreduced_value() {
+    child("s5::route_s5_registered_refuses_an_unreduced_value", |f| {
+        let facts = registered(f, ("registration_record", "ingress"), "stop_all");
+        let want = "registered: no registration-time reduction for stop_all";
+        assert_eq!(facts.findings, [want], "R5: the unreduced value");
+        let mut erased = facts.clone();
+        erased.findings.clear();
+        let id = "rc_r0_registration_record_ingress_stop_all";
+        let found = verdict(id, &erased, |_| String::new());
+        let kept = found.iter().any(|x| x == want);
+        assert!(kept, "F-R5: verdict lost the kept finding: {found:?}");
+        println!("WITNESS registered: erased, verdict {found:?}");
+    });
+}

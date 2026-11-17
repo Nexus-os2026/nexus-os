@@ -798,6 +798,16 @@ let credited = credit(&d, row, &broker, &trace);
 if let Err(reason) = credit_close(counted, *session, &broker, &mother) {
         findings.push(format!("credit_close: {reason}"));
     }
+@@@ host/tests/route_cells/s5.rs
+peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
+        findings,
+    };
+    KEPT.lock().unwrap().push((tag, facts.clone()));
+@@@ host/tests/route_cells/s5.rs
+findings.extend(reg_apply(&b.o, value));
+                if value != "none" {
+                    *APPLIED.lock().unwrap() = Some(Instant::now());
+                }
 @@@ host/src/session_home.rs
 pub(crate) fn open_projected(
         seed: SessionSeed,
