@@ -1293,6 +1293,15 @@ pub(super) enum Hold {
 /// reaches; `cell` decides from them, not from what a driver returns.
 static KEPT: Mutex<Vec<(bool, Facts)>> = Mutex::new(Vec::new());
 static RUNNING: Mutex<&str> = Mutex::new("none");
+/// W0b F-R5: a finding s5's own check makes after the collection (an
+/// applier's): in the facts it returns, and in the kept collection, which
+/// `verdict` reads; never only in what a section hands back.
+fn later(facts: &mut Facts, finding: String) {
+    if let Some((_, kept)) = KEPT.lock().unwrap().last_mut() {
+        kept.findings.push(finding.clone());
+    }
+    facts.findings.push(finding);
+}
 /// W0b B2': the sinks with no Mother (the table's `d_register` and
 /// `d_bootstrap` rows), the only ones `collect_broker` may collect.
 pub(super) const BROKER_SINKS: [&str; 8] = [
@@ -1313,14 +1322,10 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
     let [(broker, facts)] = &kept[..] else {
         return vec![format!("collect: {} collections, not 1", kept.len())];
     };
+    // The kept findings are the collection's and s5's own later ones
+    // (`later`, W0b F-R5): they decide, and the returned facts must carry
+    // exactly them, so a section can neither clear nor add one.
     let mut found = facts.findings.clone();
-    // s5's own checks after the collection (6.2's Stop) add to the returned
-    // facts: shown too, while the kept ones decide (a section removes none).
-    let later = returned
-        .findings
-        .iter()
-        .filter(|x| !facts.findings.contains(x));
-    found.extend(later.cloned());
     if render(returned) != render(facts) || returned.findings != facts.findings {
         found.push("collect: the driver's facts are not its collection's".into());
     }
@@ -1688,9 +1693,7 @@ pub(super) fn unscheduled(f: &Fixture, chain: &Chain, row: &Expect) -> Facts {
         m.halt.is_engaged()
     });
     if !engaged {
-        facts
-            .findings
-            .push(format!("{value}: the cell is not engaged"));
+        later(&mut facts, format!("{value}: the cell is not engaged"));
     }
     facts
 }
@@ -1711,7 +1714,7 @@ pub(super) fn repeat(f: &Fixture, chain: &Chain, row: &Expect) -> Facts {
     println!("WITNESS repeated: {results:?}, {applied} ingress.emergency entries");
     if results != ["Ok(())", "Ok(())"] || applied != 2 {
         let found = format!("repeated: {results:?}, {applied} applications");
-        facts.findings.push(found);
+        later(&mut facts, found);
     }
     facts
 }
@@ -1755,11 +1758,11 @@ pub(super) fn shutdown(
     });
     println!("WITNESS {value}: {result:?}, released after {released:?}");
     if let Err(e) = result {
-        facts.findings.push(format!("{value}: {e}"));
+        later(&mut facts, format!("{value}: {e}"));
     }
     if released >= SHUTDOWN_PAUSE {
         let late = format!("{value}: released after {released:?}, not within {SHUTDOWN_PAUSE:?}");
-        facts.findings.push(late);
+        later(&mut facts, late);
     }
     facts
 }
@@ -1835,7 +1838,9 @@ pub(super) fn stop(
         (stopped != want).then(|| format!("{value}: the Stop worker returned {stopped}")),
         (!refused).then(|| format!("{value}: the chat worker returned {steps:?}")),
     ];
-    facts.findings.extend(findings.into_iter().flatten());
+    for finding in findings.into_iter().flatten() {
+        later(&mut facts, finding);
+    }
     facts
 }
 /// R49.2 (P-STOP attribution controls): the measured acknowledgement is the
