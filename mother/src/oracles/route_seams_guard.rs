@@ -130,7 +130,7 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 2f7a871a744c9cd705d200803481e6669d3acb0ba54ae52b24ac3458d0f18e53
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 3c7faa8062d171687833a8d11c97017644d4dc31446e82b75384efa45e07fc1a
+s5.rs d2413b992863445c25facccd53bfe009672e3e342c1b797148ed1512055c6b19
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
@@ -1331,7 +1331,7 @@ host/tests/route_cells/s5.rs|bind_history_inspector (|0
 /// I8: the named differences of `s5.rs`'s composition from production's.
 const T7_DIFFERENCES: [&str; 4] = [
     "open_file_door, not open_confirmed_file_door (no Owner dialog)",
-    "no history inspector (no bind_history_inspector: U5 does no close)",
+    "no history inspector (no bind_history_inspector: the seal's history check is the broker's own replay, recovery.rs:168-200)",
     "test lanes (ModelLane, RecordingLane) for production's",
     "a test confirmer (Answers, as main.rs Owner)",
 ];

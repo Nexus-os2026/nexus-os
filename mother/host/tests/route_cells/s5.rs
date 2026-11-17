@@ -197,7 +197,9 @@ fn mother(f: &Fixture, o: &Opened) -> Mother {
     let b = boot(f, o);
     let halt = b.door.lifecycle_halt();
     let (calls, recorded) = (Arc::default(), Recorded::default());
-    let journal = FileJournal::open(&f.0.join("mother-journal.jsonl")).unwrap();
+    // U9a M8 (SB3E-R123): the journal under the history root, as production
+    // (session_home.rs:85), so the seal's history check reads it (close.rs:456-462).
+    let journal = FileJournal::open(&f.0.join("home/mother-journal.jsonl")).unwrap();
     let private = FilePrivate::open_session(&f.0.join("private"), b.context.clone());
     let private = private.unwrap();
     let clock = Arc::new(SystemClock::default());
@@ -1579,7 +1581,7 @@ pub(super) fn start(f: &Fixture) -> Start {
     );
     s1::drain_trace();
     s5::drain_trace();
-    let journal = f.0.join("mother-journal.jsonl");
+    let journal = f.0.join("home/mother-journal.jsonl");
     let peer = mother.peer.clone();
     let since = (
         journal_at(&journal).unwrap().len(),
