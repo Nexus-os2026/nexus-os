@@ -130,7 +130,7 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 39c63fd02b6f47ddca7ce23b794d3108397e27229d98ab860cb5a98f9056ccbe
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs a92bc59ede8b84314458cefbe93fb64f5d1cd64d1953216e99c54afc59c054b1
+s5.rs 20d91b7c688ca2456728bc15fbe2560840f297dac147fb64544f3a90d0c77f56
 s5_close.rs e0c20ad6fe2b17db99559b9af33b6385b51657f829edef91fc336a0e845d5424
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
@@ -3605,7 +3605,7 @@ fn sb3e_w0b_s5_exports() {
     let callback = "pub(super) fn hold(point: &'static str, timeout: s5::Timeout) -> s5::Held {\n    let cell = \"u5\";";
     let region = "pin host/tests/route_cells/s5.rs: pub(super)fnhold(point";
     let journal = "pub(super) fn journal(f: &Fixture) -> FileJournal {\n    FileJournal::open(&f.0).unwrap()\n}\n";
-    let broker = "    let (broker, request, applied) = (s1::drain_trace(), 0, None);\n    let session = b.o.session.identity();\n";
+    let broker = "    let (broker, request) = (s1::drain_trace(), 0);\n    let session = b.o.session.identity();\n";
     let plants = [
         (
             "B4 an unlisted pub(super)",
@@ -3665,16 +3665,16 @@ fn sb3e_w0b_s5_exports() {
             "S5_EXPORTS: missing struct Mother{m}",
         ),
         (
-            "B3 collect_broker reads journal()",
+            "B3 collect_reg reads journal()",
             swap(
                 s5,
                 broker,
                 &format!("{broker}    let _ = b.o.session.journal();\n"),
             ),
-            "Passive: collect_broker reads the journal through journal(), not journal_view()",
+            "Passive: collect_reg reads the journal through journal(), not journal_view()",
         ),
         (
-            "B3 collect_broker reads store.commit",
+            "B3 collect_reg reads store.commit",
             swap(
                 s5,
                 broker,
@@ -3682,7 +3682,7 @@ fn sb3e_w0b_s5_exports() {
                     "{broker}    let _ = broker.iter().any(|e| e.point == \"store.commit\");\n"
                 ),
             ),
-            "Passive: collect_broker reads store.commit",
+            "Passive: collect_reg reads store.commit",
         ),
     ];
     for (plant, text, expected) in plants {

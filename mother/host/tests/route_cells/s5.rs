@@ -1304,7 +1304,7 @@ fn later(facts: &mut Facts, finding: String) {
     facts.findings.push(finding);
 }
 /// W0b B2': the sinks with no Mother (the table's `d_register` and
-/// `d_bootstrap` rows), the only ones `collect_broker` may collect.
+/// `d_bootstrap` rows), the only ones `collect_reg` may collect (U6a-1).
 pub(super) const BROKER_SINKS: [&str; 8] = [
     "registration_install",
     "registration_readiness",
@@ -1328,8 +1328,8 @@ pub(super) const CLOSE_SINKS: [&str; 6] = [
 /// W0b B1', B2', U9a M1: the one collection of cell `id`, as `cell` judges it:
 /// its own findings, its driver's facts unchanged, its row this cell's (the
 /// slug is lowercase, the value keeps its case), and its collector the row's
-/// (`collect_broker` exactly for `BROKER_SINKS`, `collect_close` exactly for
-/// `CLOSE_SINKS`).
+/// (`collect_reg` exactly for `BROKER_SINKS`, `collect_close` exactly for
+/// `CLOSE_SINKS`; `collect_broker` for no cell, SB3E-R125.1).
 fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<String> {
     let kept = std::mem::take(&mut *KEPT.lock().unwrap());
     let [(collector, facts)] = &kept[..] else {
@@ -1356,11 +1356,17 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
             "collect: {sink}/{dim}/{value} is not the row of {id}"
         ));
     }
+    // SB3E-R125.1: (a) `collect_broker` collects no cell, (b) `collect_reg`
+    // exactly the `BROKER_SINKS` rows; (c) the `collect_close` check below.
     let broker = *collector == "collect_broker";
-    if broker != BROKER_SINKS.contains(&sink) {
+    if broker {
         found.push(format!(
             "collect: {sink} collected by collect_broker {broker}"
         ));
+    }
+    let reg = *collector == "collect_reg";
+    if reg != BROKER_SINKS.contains(&sink) {
+        found.push(format!("collect: {sink} collected by collect_reg {reg}"));
     }
     let close = *collector == "collect_close";
     if close != CLOSE_SINKS.contains(&sink) {
@@ -2035,14 +2041,23 @@ pub(super) fn open_broker(f: &Fixture) -> Broker {
 /// recorded this operation under the opening's session and request (D1).
 pub(super) fn collect_broker(
     b: &Broker,
+    held: (Vec<&'static str>, Vec<Ack>),
+    cell: ((&'static str, &'static str), &'static str),
+) -> Facts {
+    collect_reg(b, held, cell, (None, Vec::new()), "collect_broker")
+}
+/// U6a-1 R3: `collect_broker`'s body with `registered`'s APPLIED (W0b N-b:
+/// only s5 records it) and findings, kept before the push (F-R5), and the
+/// collector's name (`collect_broker` here collects no cell, R125.1).
+fn collect_reg(
+    b: &Broker,
     (points, acks): (Vec<&'static str>, Vec<Ack>),
     (cell, value): ((&'static str, &'static str), &'static str),
+    (applied, mut findings): (Option<Instant>, Vec<String>),
+    tag: &'static str,
 ) -> Facts {
-    // W0b N-b: no s5 applier runs for a cell with no Mother, so nothing was
-    // applied before an acknowledgement (`held`, never `armed`).
-    let (broker, request, applied) = (s1::drain_trace(), 0, None);
+    let (broker, request) = (s1::drain_trace(), 0);
     let session = b.o.session.identity();
-    let mut findings = Vec::new();
     if let Err(finding) = t6_s1(cfg!(mother_route_seams), session, request, &broker) {
         findings.push(format!("T6 child half: {finding}"));
     }
@@ -2063,7 +2078,7 @@ pub(super) fn collect_broker(
         peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
         findings,
     };
-    KEPT.lock().unwrap().push(("collect_broker", facts.clone()));
+    KEPT.lock().unwrap().push((tag, facts.clone()));
     facts
 }
 /// W0b B3: T6's S1 half for a cell with no Mother: `cfg`, then the armed S1
