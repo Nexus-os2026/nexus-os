@@ -197,8 +197,6 @@ fn mother(f: &Fixture, o: &Opened) -> Mother {
     let b = boot(f, o);
     let halt = b.door.lifecycle_halt();
     let (calls, recorded) = (Arc::default(), Recorded::default());
-    // U9a M8 (SB3E-R123): the journal under the history root, as production
-    // (session_home.rs:85), so the seal's history check reads it (close.rs:456-462).
     let journal = FileJournal::open(&f.0.join("home/mother-journal.jsonl")).unwrap();
     let private = FilePrivate::open_session(&f.0.join("private"), b.context.clone());
     let private = private.unwrap();
