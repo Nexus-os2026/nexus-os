@@ -2694,8 +2694,8 @@ pub(super) fn registered(
     let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
     let applications = facts.broker.iter().filter(mine).count();
     if value == "repeated" && applications != 2 {
-        let found = format!("registered: {applications} ingress.emergency entries");
-        later(&mut facts, found);
+        let counted = format!("registered: {applications} ingress.emergency entries");
+        later(&mut facts, counted);
     }
     facts
 }
