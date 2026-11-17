@@ -1248,6 +1248,7 @@ fn opened(f: &Fixture) -> (Opened, Arc<MemoryEvidence>) {
 #[derive(Clone)]
 pub(super) struct Facts {
     pub(super) session: SessionIdentity,
+    /// Q: the driver's request; for a d_close cell, the close request s5 accepted (M7).
     pub(super) request: u64,
     pub(super) recorded: Vec<(LaneRole, InvocationId)>,
     /// `credit`'s claim (A.3): the session-bound run and the opening's attempt.
@@ -2261,7 +2262,7 @@ fn reopen() {
 /// point; at the (bounded) acknowledgement the window opens and `apply` runs;
 /// `Paused`, the state is then `value` and `APPLIED` is recorded. A missing
 /// acknowledgement, a late release after a close deadline, and a sink result
-/// other than `want` (S1) are findings. A control (`none`) reads no state.
+/// other than `want` (S1) are findings. A control (`none`) checks no state.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn closed<S: Send, R: Send>(
     f: &Fixture,
