@@ -1290,10 +1290,10 @@ pub(super) enum Hold {
     S1(s1::Held),
     S5(s5::Held),
 }
-/// W0b B1', B2': each collection of this child (its facts, and whether
-/// `collect_broker` made it), and the running cell, kept where no section
-/// reaches; `cell` decides from them, not from what a driver returns.
-static KEPT: Mutex<Vec<(bool, Facts)>> = Mutex::new(Vec::new());
+/// W0b B1', B2', U9a M1: each collection of this child (its collector's
+/// name and its facts), and the running cell, kept where no section reaches;
+/// `cell` decides from them, not from what a driver returns.
+static KEPT: Mutex<Vec<(&'static str, Facts)>> = Mutex::new(Vec::new());
 static RUNNING: Mutex<&str> = Mutex::new("none");
 /// W0b F-R5: a finding s5's own check makes after the collection (an
 /// applier's): in the facts it returns, and in the kept collection, which
@@ -1316,12 +1316,24 @@ pub(super) const BROKER_SINKS: [&str; 8] = [
     "registration_tags",
     "registration_version",
 ];
-/// W0b B1', B2': the one collection of cell `id`, as `cell` judges it: its
-/// own findings, its driver's facts unchanged, its row this cell's, and its
-/// collector the row's (`collect_broker` exactly for `BROKER_SINKS`).
+/// U9a M1: the sinks of the table's `d_close` rows, the only ones
+/// `collect_close` may collect.
+pub(super) const CLOSE_SINKS: [&str; 6] = [
+    "close_obligations",
+    "delivery",
+    "mother_end",
+    "primary_end",
+    "producer_join",
+    "seal",
+];
+/// W0b B1', B2', U9a M1: the one collection of cell `id`, as `cell` judges it:
+/// its own findings, its driver's facts unchanged, its row this cell's (the
+/// slug is lowercase, the value keeps its case), and its collector the row's
+/// (`collect_broker` exactly for `BROKER_SINKS`, `collect_close` exactly for
+/// `CLOSE_SINKS`).
 fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<String> {
     let kept = std::mem::take(&mut *KEPT.lock().unwrap());
-    let [(broker, facts)] = &kept[..] else {
+    let [(collector, facts)] = &kept[..] else {
         return vec![format!("collect: {} collections, not 1", kept.len())];
     };
     // The kept findings are the collection's and s5's own later ones
@@ -1334,7 +1346,8 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
     let ((sink, dim), value) = (facts.row, facts.value);
     let own = match id.split_once('_') {
         Some(("rc", slug)) => {
-            slug.split_once('_').map(|x| x.1) == Some(&*format!("{sink}_{dim}_{value}"))
+            let row = format!("{sink}_{dim}_{value}").to_lowercase();
+            slug.split_once('_').map(|x| x.1) == Some(&*row)
         }
         Some(("ctl", control)) => control == sink && value == "none",
         _ => false,
@@ -1344,9 +1357,16 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
             "collect: {sink}/{dim}/{value} is not the row of {id}"
         ));
     }
-    if *broker != BROKER_SINKS.contains(&sink) {
+    let broker = *collector == "collect_broker";
+    if broker != BROKER_SINKS.contains(&sink) {
         found.push(format!(
             "collect: {sink} collected by collect_broker {broker}"
+        ));
+    }
+    let close = *collector == "collect_close";
+    if close != CLOSE_SINKS.contains(&sink) {
+        found.push(format!(
+            "collect: {sink} collected by collect_close {close}"
         ));
     }
     found
@@ -1977,7 +1997,7 @@ pub(super) fn collect(
         peer: s.peer.lock().unwrap()[s.since.2..].to_vec(),
         findings,
     };
-    KEPT.lock().unwrap().push((false, facts.clone()));
+    KEPT.lock().unwrap().push(("collect", facts.clone()));
     facts
 }
 
@@ -2044,7 +2064,7 @@ pub(super) fn collect_broker(
         peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
         findings,
     };
-    KEPT.lock().unwrap().push((true, facts.clone()));
+    KEPT.lock().unwrap().push(("collect_broker", facts.clone()));
     facts
 }
 /// W0b B3: T6's S1 half for a cell with no Mother: `cfg`, then the armed S1

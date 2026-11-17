@@ -130,7 +130,7 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 2f7a871a744c9cd705d200803481e6669d3acb0ba54ae52b24ac3458d0f18e53
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs d2413b992863445c25facccd53bfe009672e3e342c1b797148ed1512055c6b19
+s5.rs f03c2e9a3f2cbb1c8d54eb79f32c110018ce95bbc9864e1fd028dcff0c616efb
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
@@ -1125,7 +1125,9 @@ fn macro_findings(main: &str, cells: &str) -> Vec<String> {
             found.extend(control_binding(body));
         } else {
             let words = pattern.iter().take_while(|w| **w != ";").count();
-            let slug = format!("rc_{}", pattern[..words].join("_"));
+            // U9a M1 (F-B): the slug is lowercase, as the manifest's and the
+            // register's; the pattern keeps the value's case.
+            let slug = format!("rc_{}", pattern[..words].join("_").to_lowercase());
             let recurses = body.ends_with(&again);
             if words != 4 || pattern[words..] != tail || !recurses {
                 found.push(format!(
@@ -2568,6 +2570,7 @@ s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,brok
 s|enum Ack
 s|enum Hold
 h|const BROKER_SINKS
+h|const CLOSE_SINKS
 h|struct Ran{id,nonce,result,passed,output}
 h|fn cell
 s|fn mission
@@ -3766,6 +3769,7 @@ fn sb3e_w0b_compact_arms() {
         ("B5 a compare of another row", arm(&format!("cell!(rc_r5_call_chat_ingress_quit, r5 call_chat lifecycle quit, s5::quit); {again}")), format!("{slug} passes rc_r5_call_chat_ingress_quit,r5call_chatlifecyclequit,s5::quit, not its own literals")),
         ("B5 an arm with no compare", arm(&format!("#[test] fn rc_r5_call_chat_ingress_quit() {{ let _ = super::s5::quit; }} {again}")), format!("{slug} has 0 compares")),
         ("B5 an arm with no manifest entry", swap(main, quit, &format!("{quit}{other}")), "U5 macro: the arm rc_r5_call_chat_ingress_read_failure has no manifest entry".into()),
+        ("U9a F-B a test name keeping its value's case", swap(main, quit, &format!("{quit}{}", other.replace("ingress read_failure", "ingress Read_failure").replace("ingress_read_failure,", "ingress_Read_failure,"))), "U5 macro: the arm rc_r5_call_chat_ingress_read_failure defines [\"rc_r5_call_chat_ingress_Read_failure\"]".into()),
         ("B5 a control listed twice", swap(main, terminal, "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat appears twice".into()),
         ("B5 a control in no section row", swap(main, terminal, "    () => { ctl!(ctl_other, call_chat ingress, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_other is listed by no section".into()),
         ("C1 a control of the old shape", swap(main, terminal, "    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat,s5::ctl_call_chat is not ctl!(<control>, <sink> <dim>, <stem>::<fn>)".into()),
