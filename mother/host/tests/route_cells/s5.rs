@@ -197,7 +197,7 @@ fn mother(f: &Fixture, o: &Opened) -> Mother {
     let b = boot(f, o);
     let halt = b.door.lifecycle_halt();
     let (calls, recorded) = (Arc::default(), Recorded::default());
-    let journal = FileJournal::open(&f.0.join("mother-journal.jsonl")).unwrap();
+    let journal = FileJournal::open(&f.0.join("home/mother-journal.jsonl")).unwrap();
     let private = FilePrivate::open_session(&f.0.join("private"), b.context.clone());
     let private = private.unwrap();
     let clock = Arc::new(SystemClock::default());
@@ -1264,11 +1264,12 @@ pub(super) struct Facts {
     pub(super) applied: Option<Instant>,
     pub(super) broker: Vec<s1::Entry>,
     pub(super) mother: Vec<s5::Entry>,
-    /// The journal's entries since the hold began, read from its file (R1-2).
+    /// The journal's entries in the window, read from its file (R1-2): since
+    /// `start` captured the sources (`collect`), or since the hold (`collect_close`).
     pub(super) journal: Vec<Journaled>,
-    /// The projection's records since the hold began.
+    /// The projection's records in the window.
     pub(super) native: Vec<EvidenceRecord>,
-    /// The peer's requests since the hold began, in served order.
+    /// The peer's requests in the window, in served order.
     pub(super) peer: Vec<String>,
     /// The child's own checks that failed (T6, `credit`, the driver's): they
     /// fail the child after its record is written, so the parent still
@@ -1288,10 +1289,10 @@ pub(super) enum Hold {
     S1(s1::Held),
     S5(s5::Held),
 }
-/// W0b B1', B2': each collection of this child (its facts, and whether
-/// `collect_broker` made it), and the running cell, kept where no section
-/// reaches; `cell` decides from them, not from what a driver returns.
-static KEPT: Mutex<Vec<(bool, Facts)>> = Mutex::new(Vec::new());
+/// W0b B1', B2', U9a M1: each collection of this child (its collector's
+/// name and its facts), and the running cell, kept where no section reaches;
+/// `cell` decides from them, not from what a driver returns.
+static KEPT: Mutex<Vec<(&'static str, Facts)>> = Mutex::new(Vec::new());
 static RUNNING: Mutex<&str> = Mutex::new("none");
 /// W0b F-R5: a finding s5's own check makes after the collection (an
 /// applier's): in the facts it returns, and in the kept collection, which
@@ -1314,12 +1315,24 @@ pub(super) const BROKER_SINKS: [&str; 8] = [
     "registration_tags",
     "registration_version",
 ];
-/// W0b B1', B2': the one collection of cell `id`, as `cell` judges it: its
-/// own findings, its driver's facts unchanged, its row this cell's, and its
-/// collector the row's (`collect_broker` exactly for `BROKER_SINKS`).
+/// U9a M1: the sinks of the table's `d_close` rows, the only ones
+/// `collect_close` may collect.
+pub(super) const CLOSE_SINKS: [&str; 6] = [
+    "close_obligations",
+    "delivery",
+    "mother_end",
+    "primary_end",
+    "producer_join",
+    "seal",
+];
+/// W0b B1', B2', U9a M1: the one collection of cell `id`, as `cell` judges it:
+/// its own findings, its driver's facts unchanged, its row this cell's (the
+/// slug is lowercase, the value keeps its case), and its collector the row's
+/// (`collect_broker` exactly for `BROKER_SINKS`, `collect_close` exactly for
+/// `CLOSE_SINKS`).
 fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<String> {
     let kept = std::mem::take(&mut *KEPT.lock().unwrap());
-    let [(broker, facts)] = &kept[..] else {
+    let [(collector, facts)] = &kept[..] else {
         return vec![format!("collect: {} collections, not 1", kept.len())];
     };
     // The kept findings are the collection's and s5's own later ones
@@ -1332,7 +1345,8 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
     let ((sink, dim), value) = (facts.row, facts.value);
     let own = match id.split_once('_') {
         Some(("rc", slug)) => {
-            slug.split_once('_').map(|x| x.1) == Some(&*format!("{sink}_{dim}_{value}"))
+            let row = format!("{sink}_{dim}_{value}").to_lowercase();
+            slug.split_once('_').map(|x| x.1) == Some(&*row)
         }
         Some(("ctl", control)) => control == sink && value == "none",
         _ => false,
@@ -1342,9 +1356,16 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
             "collect: {sink}/{dim}/{value} is not the row of {id}"
         ));
     }
-    if *broker != BROKER_SINKS.contains(&sink) {
+    let broker = *collector == "collect_broker";
+    if broker != BROKER_SINKS.contains(&sink) {
         found.push(format!(
             "collect: {sink} collected by collect_broker {broker}"
+        ));
+    }
+    let close = *collector == "collect_close";
+    if close != CLOSE_SINKS.contains(&sink) {
+        found.push(format!(
+            "collect: {sink} collected by collect_close {close}"
         ));
     }
     found
@@ -1579,7 +1600,7 @@ pub(super) fn start(f: &Fixture) -> Start {
     );
     s1::drain_trace();
     s5::drain_trace();
-    let journal = f.0.join("mother-journal.jsonl");
+    let journal = f.0.join("home/mother-journal.jsonl");
     let peer = mother.peer.clone();
     let since = (
         journal_at(&journal).unwrap().len(),
@@ -1975,7 +1996,7 @@ pub(super) fn collect(
         peer: s.peer.lock().unwrap()[s.since.2..].to_vec(),
         findings,
     };
-    KEPT.lock().unwrap().push((false, facts.clone()));
+    KEPT.lock().unwrap().push(("collect", facts.clone()));
     facts
 }
 
@@ -2042,7 +2063,7 @@ pub(super) fn collect_broker(
         peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
         findings,
     };
-    KEPT.lock().unwrap().push((true, facts.clone()));
+    KEPT.lock().unwrap().push(("collect_broker", facts.clone()));
     facts
 }
 /// W0b B3: T6's S1 half for a cell with no Mother: `cfg`, then the armed S1
@@ -2141,5 +2162,401 @@ fn route_s5_collect_broker_on_registration() {
         assert_eq!(t6_s1(false, facts.session, 0, &facts.broker), Err("cfg"));
         let other = t6_s1(true, facts.session, 7, &facts.broker);
         assert_eq!(other, Err("seam_identity"), "another request");
+    });
+}
+
+// SB3E-R117, R123 (U9a section M; R115.4): the d_close collection. A cell
+// holds one S1 point, its sink's (`CLOSE_POINTS`); s5 reads the state and
+// records when the value was applied (M4), opens the window at the hold's
+// acknowledgement (M3), checks the sink's own result (M5) and collects (M2).
+use nexus_governed_control::host_session::SessionRequest;
+
+/// M4: each d_close sink's held point (close.rs:271, 232, 205 (the first
+/// arrival), 524, 49, 367-370); only `closed` arms one.
+const CLOSE_POINTS: [(&str, &str); 6] = [
+    ("close_obligations", "close.obligations"),
+    ("delivery", "close.delivery"),
+    ("mother_end", "close.mother_end"),
+    ("primary_end", "close.primary"),
+    ("producer_join", "producer.join"),
+    ("seal", "close.seal"),
+];
+/// M6: the opening, `opened` only (Bootstrap, h:141-144) or `start`'s Mother.
+pub(super) enum Setup {
+    Bootstrap,
+    Mother,
+}
+/// M4: the value applied before the point is armed, or while it is held.
+pub(super) enum Mode {
+    Armed,
+    Paused,
+}
+/// M5: what a section's closures reach; `mother` is taken by value for
+/// `prepare_session_end` (R95.2).
+pub(super) struct Close {
+    pub(super) o: Opened,
+    pub(super) mother: Option<Mother>,
+}
+/// M7: the Quit s5 accepted, the cell's Q (`close.seal` records it).
+static CLOSE_Q: Mutex<Option<u64>> = Mutex::new(None);
+impl Close {
+    /// M7: `accept(Quit, 2)`, above the boot's Run 1 (h:1704-1709).
+    pub(super) fn accept_quit(&self) -> Result<SessionRequest, String> {
+        let quit = self.o.ingress.accept(CommandKind::Quit, 2);
+        let quit = quit.map_err(|e| format!("{e:?}"))?;
+        *CLOSE_Q.lock().unwrap() = Some(quit.sequence());
+        Ok(quit)
+    }
+}
+/// M6: `opened` and nothing else, both traces armed and drained; no Mother,
+/// so no journal file, peer or counted call.
+fn bootstrap(f: &Fixture) -> Close {
+    let (o, native) = opened(f);
+    let traces = (
+        s1::arm("reg.reserve", s1::Action::Trace),
+        s5::arm("mother.charge", s5::Action::Trace),
+    );
+    s1::drain_trace();
+    s5::drain_trace();
+    let (cell, since) = (*RUNNING.lock().unwrap(), (0, native.records().len(), 0));
+    let driver = (o.session.identity(), 0, Arc::default(), Recorded::default());
+    *SOURCES.lock().unwrap() = Some(Sources {
+        cell,
+        journal: f.0.join("home/mother-journal.jsonl"),
+        native,
+        peer: Arc::default(),
+        driver,
+        since,
+        _traces: traces,
+    });
+    *APPLIED.lock().unwrap() = None;
+    Close { o, mother: None }
+}
+/// M3: the window opens at the hold's acknowledgement, before any apply.
+fn reopen() {
+    let mut sources = SOURCES.lock().unwrap();
+    let s = sources.as_mut().expect("closed: no sources");
+    let journal = journal_at(&s.journal).map_or(0, |j| j.len());
+    let (native, peer) = (s.native.records().len(), s.peer.lock().unwrap().len());
+    s.since = (journal, native, peer);
+}
+/// M3-M6 (SB3E-R123): `prefix` runs, then s5 reads the state: `Armed`, it is
+/// `value` and `APPLIED` is recorded before arming; `Paused`, it is not yet
+/// `value` (S2, but for Q3's two rows). The sink runs on a worker held at its
+/// point; at the (bounded) acknowledgement the window opens and `apply` runs;
+/// `Paused`, the state is then `value` and `APPLIED` is recorded. A missing
+/// acknowledgement, a late release after a close deadline, and a sink result
+/// other than `want` (S1) are findings. A control (`none`) reads no state.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn closed<S: Send, R: Send>(
+    f: &Fixture,
+    setup: Setup,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    mode: Mode,
+    want: Result<(), &'static str>,
+    prefix: impl FnOnce(&mut Close) -> S,
+    sink: impl FnOnce(&Close, S) -> (Result<(), String>, R) + Send,
+    apply: impl FnOnce(&Close),
+) -> (Facts, R) {
+    *CLOSE_Q.lock().unwrap() = None;
+    let (mut c, journal) = match setup {
+        Setup::Mother => (start(f).into(), true),
+        Setup::Bootstrap => (bootstrap(f), false),
+    };
+    let point = CLOSE_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1);
+    let point = point.expect("closed: a d_close sink");
+    let s = prefix(&mut c);
+    let state = |c: &Close| format!("{:?}", c.o.session.state());
+    let (control, before, mut findings) = (value == "none", state(&c), Vec::new());
+    // SB3E-R117.3 Q3: the values that precede every arrival at their point.
+    let q3 = [
+        ("close_obligations", "Bootstrap"),
+        ("producer_join", "ClosingNormal"),
+    ];
+    match mode {
+        _ if control => {}
+        Mode::Armed if before == value => *APPLIED.lock().unwrap() = Some(Instant::now()),
+        Mode::Armed => findings.push(format!("value: state {before}, not {value}")),
+        Mode::Paused if before == value && !q3.contains(&(row.0, value)) => {
+            findings.push(format!(
+                "value: no transition, state {before} before the hold"
+            ));
+        }
+        Mode::Paused => {}
+    }
+    let c = &c;
+    let held = f.pause(point);
+    let (after, (result, r)) = std::thread::scope(|scope| {
+        let worker = scope.spawn(move || sink(c, s));
+        let after = held.acknowledged.recv_timeout(PATIENCE).ok().map(|ack| {
+            let acked = Instant::now();
+            reopen();
+            apply(c);
+            let late = c.o.ingress.close_deadline().is_some() && acked.elapsed() >= SHUTDOWN_PAUSE;
+            (ack, state(c), late.then(|| acked.elapsed()))
+        });
+        drop(held);
+        (after, worker.join().unwrap())
+    });
+    let ack = match after {
+        None => {
+            findings.push(format!("closed: {point} not acknowledged"));
+            None
+        }
+        Some((ack, after, late)) => {
+            if let Some(late) = late {
+                findings.push(format!(
+                    "closed: released after {late:?}, not within {SHUTDOWN_PAUSE:?}"
+                ));
+            }
+            match (mode, control, after == value) {
+                (Mode::Paused, false, true) => *APPLIED.lock().unwrap() = Some(Instant::now()),
+                (Mode::Paused, false, false) => {
+                    findings.push(format!("value: state {after}, not {value}"))
+                }
+                _ => {}
+            }
+            println!(
+                "WITNESS {}/{} {value}: state {before} before the hold, {after} after",
+                row.0, row.1
+            );
+            Some(ack)
+        }
+    };
+    let shown = |r: Result<(), &str>| r.map_or_else(|e| format!("Err({e})"), |()| "Ok".into());
+    let got = shown(result.as_ref().map(|_| ()).map_err(String::as_str));
+    println!("WITNESS {}/{} {value}: the sink {got}", row.0, row.1);
+    if got != shown(want) {
+        findings.push(format!(
+            "closed: the sink returned {got}, not {}",
+            shown(want)
+        ));
+    }
+    let facts = collect_close(point, ack, journal, (row, value), findings);
+    (facts, r)
+}
+impl From<Start> for Close {
+    fn from(Start { o, mother }: Start) -> Self {
+        let mother = Some(mother);
+        Close { o, mother }
+    }
+}
+/// M2, M3 (R100.2, R101.3: points are compared only with `CLOSE_POINTS`' and
+/// the literal lists): the passive d_close collection once the worker is
+/// joined: both traces, the journal (a Mother's, from its file), projection
+/// and peer since the hold's acknowledgement, `credit_close` and `t6_close`.
+/// Its Q is the Quit s5 accepted (M7), else the driver's request.
+fn collect_close(
+    point: &'static str,
+    ack: Option<s1::Entry>,
+    journal: bool,
+    (cell, value): ((&'static str, &'static str), &'static str),
+    mut findings: Vec<String>,
+) -> Facts {
+    let mother = s5::drain_trace();
+    let broker = s1::drain_trace();
+    let s = SOURCES.lock().unwrap().take();
+    let s = s.expect("collect_close: no observation");
+    let (session, request, calls, recorded) = &s.driver;
+    let counted = calls.load(Ordering::SeqCst);
+    if let Err(reason) = credit_close(counted, *session, &broker, &mother) {
+        findings.push(format!("credit_close: {reason}"));
+    }
+    if let Err(reason) = t6_close(cfg!(mother_route_seams), *session, point, &broker) {
+        findings.push(format!("T6 close: {reason}"));
+    }
+    let running = *RUNNING.lock().unwrap();
+    if s.cell != running {
+        findings.push(format!(
+            "collect_close: observed for {}, not {running}",
+            s.cell
+        ));
+    }
+    let read = match journal {
+        true => journal_at(&s.journal).map(|mut j| j.split_off(s.since.0.min(j.len()))),
+        false => Ok(Vec::new()),
+    };
+    let window = read.unwrap_or_else(|e| {
+        findings.push(e);
+        Vec::new()
+    });
+    let native = s.native.records().split_off(s.since.1);
+    let peer = s
+        .peer
+        .lock()
+        .unwrap()
+        .get(s.since.2..)
+        .unwrap_or_default()
+        .to_vec();
+    let phases: Vec<&str> = native.iter().map(|r| r.phase.as_str()).collect();
+    let events: Vec<String> = window.iter().map(|e| format!("{:?}", e.event)).collect();
+    println!("WITNESS window: journal {events:?}, native {phases:?}, peer {peer:?}");
+    let applied = APPLIED.lock().unwrap().take();
+    let facts = Facts {
+        session: *session,
+        request: CLOSE_Q.lock().unwrap().take().unwrap_or(*request),
+        recorded: recorded.lock().unwrap().clone(),
+        claim: None,
+        points: vec![point],
+        acks: ack.into_iter().map(Ack::S1).collect(),
+        value,
+        row: cell,
+        applied,
+        broker,
+        mother,
+        journal: window,
+        native,
+        peer,
+        findings,
+    };
+    KEPT.lock().unwrap().push(("collect_close", facts.clone()));
+    facts
+}
+/// A.2 item 4's opening (s5.rs `credit`).
+const ATTEMPT_OPENING: &str = "model.attempt.granted";
+/// M2 (SB3E-R117.3 Q1): no model traffic on a d_close path: no counted call
+/// (`drive_call`'s counter), S5 attempt site, opening, broker binding entry
+/// or refusal note, and no S5 entry of another session.
+fn credit_close(
+    calls: u32,
+    session: SessionIdentity,
+    broker: &[s1::Entry],
+    mother: &[s5::Entry],
+) -> Result<(), &'static str> {
+    let attempt = mother.iter().any(|m| ATTEMPT.contains(&m.point));
+    let opening = broker.iter().any(|b| b.point == ATTEMPT_OPENING);
+    let foreign = mother.iter().any(|m| m.session != Some(session));
+    match () {
+        _ if calls != 0 => Err("driver_calls"),
+        _ if attempt => Err("attempt_site"),
+        _ if opening => Err("opening"),
+        _ if broker.iter().any(binding) => Err("binding"),
+        _ if foreign => Err("session"),
+        _ => Ok(()),
+    }
+}
+/// M2: T6 for a d_close cell: `cfg`, the armed S1 instance, and the row's
+/// point entered for the bound session.
+fn t6_close(
+    cfg: bool,
+    session: SessionIdentity,
+    point: &str,
+    broker: &[s1::Entry],
+) -> Result<(), &'static str> {
+    let entered = |e: &s1::Entry| !e.note && e.point == point && e.session == Some(session);
+    match () {
+        _ if !cfg => Err("cfg"),
+        _ if broker.is_empty() => Err("s1_inactive"),
+        _ if !broker.iter().any(entered) => Err("seam_identity"),
+        _ => Ok(()),
+    }
+}
+/// The prefix to the seal (d2:185-214): Quit, the Mother end prepared (its
+/// type inferred), resources and authority settled; counts of the journal
+/// and projection records before and after it.
+type Counts = ((usize, usize), (usize, usize));
+fn to_the_seal(c: &mut Close) -> (SessionRequest, Counts) {
+    let counts = || {
+        let s = SOURCES.lock().unwrap();
+        let s = s.as_ref().unwrap();
+        (
+            journal_at(&s.journal).unwrap().len(),
+            s.native.records().len(),
+        )
+    };
+    let (before, quit) = (counts(), c.accept_quit().unwrap());
+    drop(c.mother.take().unwrap().m.prepare_session_end().unwrap());
+    c.o.session.settle_close_resources(&quit).unwrap();
+    c.o.session.settle_close_authority(&quit).unwrap();
+    (quit, (before, counts()))
+}
+/// A real d_close control run to the seal (`ctl_seal`'s path).
+fn sealed(f: &Fixture) -> (Facts, Counts) {
+    let sink = |c: &Close, (quit, counts): (SessionRequest, Counts)| {
+        let sealed = c.o.session.seal_close(&quit).map(|_| ());
+        (sealed.map_err(|e| format!("{e:?}")), counts)
+    };
+    let (row, mode) = (("seal", "lifecycle"), Mode::Paused);
+    closed(
+        f,
+        Setup::Mother,
+        row,
+        "none",
+        mode,
+        Ok(()),
+        to_the_seal,
+        sink,
+        |_| {},
+    )
+}
+/// M2 (rule level, over a real d_close run's facts): each rule of
+/// `credit_close` and `t6_close` refuses for its own reason; the run credits.
+#[test]
+fn route_s5_close_credit_plants_each_refuse() {
+    child("s5::route_s5_close_credit_plants_each_refuse", |f| {
+        let (facts, _) = sealed(f);
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let (s, b, m) = (facts.session, facts.broker.clone(), facts.mother.clone());
+        let other = SessionSeed::new().unwrap().identity();
+        let e1 = |point, note| {
+            let (mut b, mut e) = (b.clone(), b[0].clone());
+            (e.point, e.note) = (point, note);
+            b.push(e);
+            b
+        };
+        let e5 = |point, session| {
+            let (tick, request, run, invocation) = (1, Some(facts.request), None, None);
+            let (thread, instant) = (std::thread::current().id(), Instant::now());
+            let session = Some(session);
+            vec![s5::Entry {
+                tick,
+                point,
+                session,
+                request,
+                run,
+                invocation,
+                thread,
+                instant,
+            }]
+        };
+        let cc = |calls, b: &[s1::Entry], m: &[s5::Entry]| credit_close(calls, s, b, m);
+        let t6 = |cfg, session, point, b: &[s1::Entry]| t6_close(cfg, session, point, b);
+        let seal = "close.seal";
+        assert_eq!(cc(0, &b, &m).and(t6(true, s, seal, &b)), Ok(()));
+        for (refused, want) in [
+            (cc(1, &b, &m), "driver_calls"),
+            (cc(0, &b, &e5("mother.charge", s)), "attempt_site"),
+            (cc(0, &e1(ATTEMPT_OPENING, false), &m), "opening"),
+            (cc(0, &e1("call.gate", false), &m), "binding"),
+            (cc(0, &e1("refused:8.cas", true), &m), "binding"),
+            (cc(0, &b, &e5("mother.admit", other)), "session"),
+            (t6(false, s, seal, &b), "cfg"),
+            (t6(true, s, seal, &[]), "s1_inactive"),
+            (t6(true, s, "close.delivery", &b), "seam_identity"),
+            (t6(true, other, seal, &b), "seam_identity"),
+        ] {
+            assert_eq!(refused, Err(want));
+            println!("WITNESS close credit plant refused {want:?}");
+        }
+    });
+}
+/// M3: the window opens at the hold's acknowledgement: the prefix wrote
+/// journal and projection records, and none of them is in the window.
+#[test]
+fn route_s5_close_window_opens_at_the_hold() {
+    child("s5::route_s5_close_window_opens_at_the_hold", |f| {
+        let (facts, (before, after)) = sealed(f);
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        assert!(
+            after.0 > before.0 && after.1 > before.1,
+            "{before:?} {after:?}"
+        );
+        let (journal, native) = (&facts.journal, &facts.native);
+        assert!(
+            journal.is_empty() && native.is_empty(),
+            "the window: {native:?}"
+        );
+        println!("WITNESS close window: prefix records {before:?} -> {after:?}, window empty");
     });
 }

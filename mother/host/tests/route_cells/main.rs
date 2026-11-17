@@ -69,13 +69,24 @@ macro_rules! ctl {
 /// route, sink, dim, value and driver (`macro_rules!` cannot build
 /// `rc_<slug>`, so the arm writes it). An entry with no arm fails to compile.
 macro_rules! cells {
-    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); };
+    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); };
     (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_original_cell_unscheduled, r5 call_chat ingress original_cell_unscheduled, s5::original_cell_unscheduled); cells! { $($rest)* } };
     (r5 call_chat ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_repeated, r5 call_chat ingress repeated, s5::repeated); cells! { $($rest)* } };
     (r5 call_chat ingress mission_stop; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_mission_stop, r5 call_chat ingress mission_stop, s5::mission_stop); cells! { $($rest)* } };
     (r5 call_chat ingress stop_all; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_stop_all, r5 call_chat ingress stop_all, s5::stop_all); cells! { $($rest)* } };
     (r5 call_chat ingress fatal; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_fatal, r5 call_chat ingress fatal, s5::fatal); cells! { $($rest)* } };
     (r5 call_chat ingress quit; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit, s5::quit); cells! { $($rest)* } };
+    (r9 close_obligations lifecycle Normal; $($rest:tt)*) => { cell!(rc_r9_close_obligations_lifecycle_normal, r9 close_obligations lifecycle Normal, s5_close::obligations_normal); cells! { $($rest)* } };
+    (r9 close_obligations lifecycle Bootstrap; $($rest:tt)*) => { cell!(rc_r9_close_obligations_lifecycle_bootstrap, r9 close_obligations lifecycle Bootstrap, s5_close::obligations_bootstrap); cells! { $($rest)* } };
+    (r9 close_obligations lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r9_close_obligations_lifecycle_emergency, r9 close_obligations lifecycle Emergency, s5_close::obligations_emergency); cells! { $($rest)* } };
+    (r9 close_obligations lifecycle Failed; $($rest:tt)*) => { cell!(rc_r9_close_obligations_lifecycle_failed, r9 close_obligations lifecycle Failed, s5_close::obligations_failed); cells! { $($rest)* } };
+    (r9 close_obligations lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r9_close_obligations_lifecycle_closingrestricted, r9 close_obligations lifecycle ClosingRestricted, s5_close::obligations_closingrestricted); cells! { $($rest)* } };
+    (r9 delivery lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_delivery_lifecycle_sealedfinalizing, r9 delivery lifecycle SealedFinalizing, s5_close::delivery_sealedfinalizing); cells! { $($rest)* } };
+    (r9 mother_end lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_mother_end_lifecycle_sealedfinalizing, r9 mother_end lifecycle SealedFinalizing, s5_close::mother_end_sealedfinalizing); cells! { $($rest)* } };
+    (r9 producer_join lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r9_producer_join_lifecycle_closingrestricted, r9 producer_join lifecycle ClosingRestricted, s5_close::join_closingrestricted); cells! { $($rest)* } };
+    (r9 producer_join lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r9_producer_join_lifecycle_closingnormal, r9 producer_join lifecycle ClosingNormal, s5_close::join_closingnormal); cells! { $($rest)* } };
+    (r9 seal lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle ClosingNormal, s5_close::seal_closingnormal); cells! { $($rest)* } };
+    (r9 seal lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingrestricted, r9 seal lifecycle ClosingRestricted, s5_close::seal_closingrestricted); cells! { $($rest)* } };
 }
 // The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
 // check-citations.py): rustfmt does not reformat it.

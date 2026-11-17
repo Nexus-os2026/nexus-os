@@ -2090,21 +2090,37 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (51, 0, 641, 1, 33),
-        "after D2 and U5b's six credited cells: {summary:?}"
+        (62, 0, 636, 1, 33),
+        "after D2, U5b's six and U9a's eleven credited cells: {summary:?}"
     );
-    assert_eq!(count("cited"), 224, "quit and fatal moved to x:rc_");
+    assert_eq!(
+        count("cited"),
+        218,
+        "quit, fatal and six U9a cells moved to x:rc_"
+    );
 }
 
 /// SB-3E U5b (R54 U5-1, R86.4): the six credited `call_chat` ingress cells;
-/// `door_fence` is held and `budget` is not credited.
-const CREDITED: [&str; 6] = [
+/// `door_fence` is held and `budget` is not credited. U9a (SB3E-R123.1): the
+/// eleven close-chain lifecycle cells.
+const CREDITED: [&str; 17] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
     "r5/call_chat/ingress/stop_all",
     "r5/call_chat/ingress/fatal",
     "r5/call_chat/ingress/quit",
+    "r9/close_obligations/lifecycle/Normal",
+    "r9/close_obligations/lifecycle/Bootstrap",
+    "r9/close_obligations/lifecycle/Emergency",
+    "r9/close_obligations/lifecycle/Failed",
+    "r9/close_obligations/lifecycle/ClosingRestricted",
+    "r9/delivery/lifecycle/SealedFinalizing",
+    "r9/mother_end/lifecycle/SealedFinalizing",
+    "r9/producer_join/lifecycle/ClosingRestricted",
+    "r9/producer_join/lifecycle/ClosingNormal",
+    "r9/seal/lifecycle/ClosingNormal",
+    "r9/seal/lifecycle/ClosingRestricted",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own
