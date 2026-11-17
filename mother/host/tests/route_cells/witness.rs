@@ -54,9 +54,9 @@ const TOKENS: [Token; 2] = [
 /// W0b B1: the ledger's closed list: each event the table names, as a
 /// journal event (by invocation) or a native record's phase (by run and
 /// attempt, or by session); `all` is every journal entry and native record
-/// of the session since `start` (or `open_broker`) captured the sources
-/// (s5.rs `start`'s `since`), not since the hold (SB3E-R6.3's empty delta is
-/// `+0:all[s=S]`; where the window opens for U9a is R115.4's question).
+/// of the session in the cell's window: since `start` (or `open_broker`)
+/// captured the sources (s5.rs `start`'s `since`), or for `collect_close` since
+/// the hold's acknowledgement (U9a M3; SB3E-R6.3's empty delta is `+0:all[s=S]`).
 const LEDGER: [(&str, &str); 7] = [
     ("ModelCallCharged", "journal"),
     ("LaneReturned", "journal"),
@@ -108,7 +108,7 @@ q|attempt.slot model.attempt.reserved|gate|the run's later call.gate of S and Q 
 att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs credit, A.3)
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
 att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
-s|native journal|fixture|the cell's own projection and journal since the hold (s5.rs collect; kept, B1')
+s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close: since the hold; kept, B1')
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.

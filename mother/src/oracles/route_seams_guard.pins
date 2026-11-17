@@ -783,6 +783,10 @@ macro_rules! cells {
 }
 @@@ host/tests/route_cells/s5.rs
 let credited = credit(&d, row, &broker, &trace);
+@@@ host/tests/route_cells/s5.rs
+if let Err(reason) = credit_close(counted, *session, &broker, &mother) {
+        findings.push(format!("credit_close: {reason}"));
+    }
 @@@ host/src/session_home.rs
 pub(crate) fn open_projected(
         seed: SessionSeed,

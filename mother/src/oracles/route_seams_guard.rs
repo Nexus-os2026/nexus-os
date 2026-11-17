@@ -115,9 +115,9 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "6c78671d0ab6ad26e06519714fe05de1a6ff2da71f43bdbdabdac0377adb0f22";
-const MUTANTS: usize = 908;
-const REGIONS: usize = 34;
+const PINS_SHA256: &str = "846e58f8ae980a8bd2c445ad49d7bda0b78ad25fe0fa7bfe672003d14fd4f624";
+const MUTANTS: usize = 913;
+const REGIONS: usize = 35;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
 /// included (R44.1). A reviewed commit that changes a file changes its row.
@@ -130,11 +130,11 @@ grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs 2f7a871a744c9cd705d200803481e6669d3acb0ba54ae52b24ac3458d0f18e53
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs f03c2e9a3f2cbb1c8d54eb79f32c110018ce95bbc9864e1fd028dcff0c616efb
+s5.rs 8447916c3a9102c25b769eafc50eea5b5bd1e352d55bcd7c5d824d24e7ed157f
 s5_close.rs 7cf86125346f23e1ab1802dcfd5366f7ff40ef1c06f7910779d9d8038433a9d4
 s5_reg.rs e2e66717dd9800fecdf3846448bbfc7e9770371851e1b9eea89afa545be26341
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 2be444b11500970af186e16e466b287d4fe40a177aa9ce07cec603ea4d064a95
+witness.rs 1b0f7a9df13be08f3add0b18225ba01b671217379afa337b008d3fe432353d0b
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -2599,6 +2599,11 @@ s|fn collect
 s|struct Broker{o,endpoint}
 s|fn open_broker
 s|fn collect_broker
+s|enum Setup
+s|enum Mode
+s|struct Close{o,mother}
+s|fn accept_quit
+s|fn closed
 ";
 /// The one export that hands out a composed type (`T7_TYPES`): by value.
 const S5_BY_VALUE: &str = "Mother.m";
