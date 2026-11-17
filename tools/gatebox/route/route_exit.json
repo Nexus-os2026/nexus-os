@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -11,15 +11,31 @@
   "install"
  ],
  "inventory": {
-  "sha256": "f8fe0262e0a5001d61cde7dcc5797e410808046f02ccc6ccb510ad3454cf225f",
   "names": [
    "cells::ctl_call_chat",
+   "cells::ctl_close_obligations",
+   "cells::ctl_delivery",
+   "cells::ctl_mother_end",
+   "cells::ctl_primary_end",
+   "cells::ctl_producer_join",
+   "cells::ctl_seal",
    "cells::rc_r5_call_chat_ingress_fatal",
    "cells::rc_r5_call_chat_ingress_mission_stop",
    "cells::rc_r5_call_chat_ingress_original_cell_unscheduled",
    "cells::rc_r5_call_chat_ingress_quit",
    "cells::rc_r5_call_chat_ingress_repeated",
    "cells::rc_r5_call_chat_ingress_stop_all",
+   "cells::rc_r9_close_obligations_lifecycle_bootstrap",
+   "cells::rc_r9_close_obligations_lifecycle_closingrestricted",
+   "cells::rc_r9_close_obligations_lifecycle_emergency",
+   "cells::rc_r9_close_obligations_lifecycle_failed",
+   "cells::rc_r9_close_obligations_lifecycle_normal",
+   "cells::rc_r9_delivery_lifecycle_sealedfinalizing",
+   "cells::rc_r9_mother_end_lifecycle_sealedfinalizing",
+   "cells::rc_r9_producer_join_lifecycle_closingnormal",
+   "cells::rc_r9_producer_join_lifecycle_closingrestricted",
+   "cells::rc_r9_seal_lifecycle_closingnormal",
+   "cells::rc_r9_seal_lifecycle_closingrestricted",
    "grant::route_s3_revokes_the_original_grant_through_its_port",
    "locks::route_s4_poisons_the_actions_lock",
    "locks::route_s4_poisons_the_evidence_lock",
@@ -36,6 +52,8 @@
    "route_unarmed_point_records_nothing_and_does_not_block",
    "s5::route_s4b_poisons_the_coordinator_before_its_lock",
    "s5::route_s5_cancel_run_ack_controls_each_refuse",
+   "s5::route_s5_close_credit_plants_each_refuse",
+   "s5::route_s5_close_window_opens_at_the_hold",
    "s5::route_s5_collect_broker_on_registration",
    "s5::route_s5_join_plants_each_refuse",
    "s5::route_s5_panicking_call_is_counted",
@@ -57,6 +75,7 @@
    "store::route_shim_gate_is_refused_and_latched",
    "witness::witness_acknowledgement_and_note_plants_each_differ",
    "witness::witness_collects_after_the_mother_is_released",
+   "witness::witness_control_close_other_session_fails_in_entry_and_check",
    "witness::witness_control_earlier_refusal_fails_in_check_and_out",
    "witness::witness_control_ord3_fails_in_entry",
    "witness::witness_control_other_attempt_fails_in_identity",
@@ -66,13 +85,14 @@
    "witness::witness_rows_hold_the_rendered_fields",
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
-  ]
+  ],
+  "sha256": "85979a8b9a6af3d72f225a0703d66156a35398b81470e611213ee8fd984fea35"
  },
  "plants": {
-  "count": 262,
-  "names_sha256": "203d3a320160bb39f19b6a2455b53d1b78cc8bb64ccbb44c9137748e2bfc14b5",
+  "count": 307,
+  "names_sha256": "ef77daa5f8ec0b2f60834da5a511e59b7a7f2d193b5a45223ff8bfd68682caba",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "193db92fc29789b32759644172d57196f0ae7afa95608e5fdc5231a711067a04"
+  "file_sha256": "bcd85eb5044f4764627f5caff212d9a74b1192560d8b063c334ff7cc9e6dedc1"
  }
 }
