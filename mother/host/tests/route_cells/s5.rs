@@ -2794,7 +2794,7 @@ fn route_s5_registered_bootstraps_then_holds_ready() {
         };
         assert_eq!(ack.point, "reg.ready");
         let record = |e: &&s1::Entry| e.phase.as_deref() == Some("model_registered");
-        let commit = facts.broker.iter().filter(record).last();
+        let commit = facts.broker.iter().rfind(record);
         let before = commit.is_some_and(|c| c.tick < ack.tick && c.thread != ack.thread);
         assert!(
             before,
