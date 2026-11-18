@@ -1106,6 +1106,18 @@ impl Terminal {
         );
         Ok(terminal)
     }
+    /// SB-3E S6 (design 4.2, 4.3): bind stop recording to `session` as
+    /// production does once the home is open (hands.rs `StopRoute::bind`).
+    /// Route lane only.
+    #[cfg(mother_route_seams)]
+    pub fn route_bind(
+        &self,
+        session: Arc<nexus_governed_control::host_session::HostSession>,
+    ) -> bool {
+        const M: &str = "nexus-mother-route-seam-S6";
+        std::hint::black_box(M.as_bytes());
+        self.shared.stop.bind(session)
+    }
     pub(crate) fn quiesce(&mut self, deadline: Instant) -> bool {
         let mut ok = self.stop_reader(deadline);
         self.reporter_end.store(true, Ordering::SeqCst);
