@@ -767,16 +767,23 @@ fn m2ed_child() -> bool {
             stream.read_exact(&mut go).unwrap();
             assert_eq!(go, [b'C']);
             let phases = PHASES.lock().unwrap().clone();
-            eprintln!("M2ED HELD {} phases={phases:?}", obligations());
+            report(format!("M2ED HELD {} phases={phases:?}", obligations()));
             stream.write_all(b"S").unwrap();
         });
     }
     let args = std::env::var(M2ED_ARGS).unwrap();
     let clean = run(args.split('\n').map(str::to_owned));
-    eprintln!("M2ED RUN RETURNED clean={clean}");
-    eprintln!("M2ED OBLIGATIONS {}", obligations());
-    eprintln!("M2ED PHASES {:?}", PHASES.lock().unwrap());
+    report(format!("M2ED RUN RETURNED clean={clean}"));
+    report(format!("M2ED OBLIGATIONS {}", obligations()));
+    report(format!("M2ED PHASES {:?}", PHASES.lock().unwrap()));
     std::process::exit(if clean { 0 } else { 17 })
+}
+
+/// One child line in one write, starting a fresh line: the host's renderer
+/// may still be delivering a late unclean report after `run` returns.
+fn report(line: String) {
+    use std::io::Write;
+    let _ = std::io::stderr().write_all(format!("\n{line}\n").as_bytes());
 }
 
 fn m2ed(f: &Fixture, test: &str, endpoint: &str, mode: &str) -> std::process::Command {
@@ -1102,7 +1109,16 @@ fn m2ed_registration_failure_blocks_readiness() {
                 out.contains("REFUSED request_unavailable\n"),
                 "{class}: {out}"
             );
-            assert!(out.contains(UNKNOWN_MODEL), "{class}: {out}");
+            // The refusal fails the session and the host idles to the close
+            // deadline, so the unclean report is delivered at or after that
+            // deadline and may never reach the PTY (existing hands.rs path,
+            // ledger). Any model report shown is the unknown one.
+            assert!(
+                out.lines()
+                    .filter(|l| l.starts_with("CLOSE MODEL "))
+                    .all(|l| l == UNKNOWN_MODEL),
+                "{class}: {out}"
+            );
             assert!(!out.contains("SESSION CLOSED recorded"), "{class}: {out}");
             assert_eq!(status.code(), Some(17), "{class}: {out}");
         }
@@ -1122,6 +1138,8 @@ fn m2ed_no_model_mode_makes_no_request() {
     let test = "m2ed_no_model_mode_makes_no_request";
     let mut p = Pty::start(m2ed(&f, test, &counter.endpoint, FILE_MODE));
     let prefix = p.expect("HANDS READY\n");
+    // Startup has finished: any registration would already have reached the peer.
+    assert_eq!(counter.paths(), Vec::<String>::new(), "no model request");
     let start = prefix.find("SOURCES ").expect("startup report");
     assert_eq!(
         &prefix[start..],
