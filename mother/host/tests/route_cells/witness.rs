@@ -103,8 +103,10 @@ fn after_acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
         .copied()
 }
 /// W0b B1: the ledger's closed list: each event the table names, as a
-/// journal event (by invocation) or a native record's phase (by run and
-/// attempt, or by session); `all` is every journal entry and native record
+/// journal event (by invocation), a native record's phase (by run and
+/// attempt, or by session) or, for the store's own unprojected end record
+/// (evidence_store.rs:353-357), its S1 commit (SEAM-1 T2, `commit`: the
+/// `store.commit.result` of that phase, evidence_store.rs:1382-1383); `all` is every journal entry and native record
 /// of the session in the cell's window: since `start` (or `open_broker`)
 /// captured the sources (s5.rs `start`'s `since`), or for `collect_close` and
 /// `registered` since the hold's acknowledgement (U9a M3, SEAM-1; SB3E-R6.3's
@@ -115,7 +117,7 @@ const LEDGER: [(&str, &str); 7] = [
     ("SessionClosed", "journal"),
     ("model_call", "native"),
     ("model_registered", "native"),
-    ("session_closed", "native"),
+    ("session_closed", "commit"),
     ("all", "all"),
 ];
 /// W0b A1 (SB3E-R112): `point|keys|source`, one row per point: the exact
@@ -163,6 +165,7 @@ att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs c
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
 att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
 s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close, registered: since the hold; kept, B1')
+s|commit|primary|the end record's S1 commit on the acknowledged close.primary's thread, after it (close.rs:524, 538; evidence_store.rs:1382-1383)
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
@@ -176,6 +179,7 @@ fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
         "claim" => v.b.att.is_some() && run.is_some() && run == v.b.run,
         "sites" => builder && v.b.att.is_some(),
         "fixture" => true,
+        "primary" => acked(v, "close.primary", (None, None)).is_some(),
         _ => name
             .strip_prefix("bracket:")
             .is_some_and(|p| brackets(v, p)),
@@ -373,8 +377,9 @@ const REG_CONTROL: &str = "entry=model.record.before[s=S q=Q];check=m:292-299[s=
 value=none@model.record.before ack=held won=route;out=recorded@m:292-299;branch=none;\
 ledger=+1:model_registered[s=S q=Q];window=boundary;deadline_fired=none";
 /// U9a (SB3E-R117.3 Q10): the d_close controls as measured at U9a Step 0,
-/// 20/20 each; `primary_end`'s `+0:session_closed` is the route's (the record
-/// is not projected, evidence_store.rs:992-1009).
+/// 20/20 each; `primary_end`'s `+1:session_closed` is the end record's S1
+/// commit (SEAM-1 T2, measured 10/10: the record is not projected,
+/// evidence_store.rs:992-1009).
 const CLOSE_CONTROLS: [&str; 6] = [
     "entry=close.obligations[s=S];check=c:265-300[s=S];value=none@close.obligations ack=held won=route;\
 out=passed@c:265-300;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
@@ -383,7 +388,7 @@ out=passed@c:227-234;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fir
     "entry=close.mother_end[s=S];check=c:462-480[s=S];value=none@close.mother_end ack=held won=route;\
 out=passed@c:462-480;branch=none;ledger=+1:SessionClosed[s=S];window=boundary;deadline_fired=none",
     "entry=close.primary[s=S];check=c:490-505[s=S];value=none@close.primary ack=held won=route;\
-out=recorded@c:490-505;branch=none;ledger=+0:session_closed[s=S];window=boundary;deadline_fired=none",
+out=recorded@c:490-505;branch=none;ledger=+1:session_closed[s=S];window=boundary;deadline_fired=none",
     "entry=producer.join[s=S];check=c:48-54[s=S];value=none@producer.join ack=held won=route;\
 out=passed@c:48-54;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
     "entry=close.seal[s=S];check=c:372-429[s=S];value=none@close.seal ack=held won=route;\
@@ -789,6 +794,18 @@ fn ledger(v: &View, text: &str) -> Obs {
             "model_call" => &["run", "att"],
             _ => &[],
         };
+        // SEAM-1 T2: the end record's S1 commits of `event`; counted only on
+        // the acknowledged close.primary's thread, after it.
+        let primary = acked(v, "close.primary", (None, None));
+        let commits = |after: bool| {
+            let commit = |e: &&s1::Entry| {
+                e.point == "store.commit.result" && !e.note && e.phase.as_deref() == Some(event)
+            };
+            let later =
+                |e: &&s1::Entry| primary.is_some_and(|a| a.thread == e.thread && e.tick > a.tick);
+            let found = v.f.broker.iter().filter(commit);
+            found.filter(|e| !after || later(e)).count()
+        };
         let sources = if source == "all" {
             "native journal"
         } else {
@@ -811,6 +828,7 @@ fn ledger(v: &View, text: &str) -> Obs {
                     .filter(|r| r.phase.as_str() == event)
                     .count()
             }
+            "commit" => commits(false),
             _ => v.f.journal.len() + v.f.native.len(),
         };
         if unbound && candidates > 0 {
@@ -819,6 +837,7 @@ fn ledger(v: &View, text: &str) -> Obs {
         let n = match source {
             "journal" => v.f.journal.iter().filter(by_inv).count(),
             "native" => v.f.native.iter().filter(native).count(),
+            "commit" => commits(true),
             _ => v.f.journal.len() + v.f.native.len(),
         };
         Ok(format!("+{n}:{event}[{tag}]"))
@@ -1769,5 +1788,81 @@ fn reg_other_request(f: &super::Fixture) -> Facts {
     let mut planted = record.cloned().expect("the record's entry");
     planted.request = Some(7);
     facts.broker.push(planted);
+    facts
+}
+/// SEAM-1 T2 harness controls (labelled controls over a real run of row
+/// 642): the end record's S1 commit moved to another thread, or before the
+/// acknowledgement, is not counted, so `ledger` must differ.
+#[test]
+fn witness_control_end_commit_on_another_thread_is_not_counted() {
+    let name = "witness::witness_control_end_commit_on_another_thread_is_not_counted";
+    let row = ("primary_end", "lifecycle", "SealedFinalizing");
+    differs_at(
+        name,
+        "ctl_end_other_thread",
+        end_elsewhere,
+        row,
+        &["ledger"],
+    );
+}
+fn end_elsewhere(f: &super::Fixture) -> Facts {
+    let mut facts = end_run(f);
+    let other = std::thread::spawn(|| std::thread::current().id());
+    let other = other.join().unwrap();
+    let end = |e: &&mut s1::Entry| e.phase.as_deref() == Some("session_closed");
+    facts
+        .broker
+        .iter_mut()
+        .filter(end)
+        .for_each(|e| e.thread = other);
+    facts
+}
+#[test]
+fn witness_control_end_commit_before_the_hold_is_not_counted() {
+    let name = "witness::witness_control_end_commit_before_the_hold_is_not_counted";
+    let row = ("primary_end", "lifecycle", "SealedFinalizing");
+    differs_at(name, "ctl_end_before_hold", end_before, row, &["ledger"]);
+}
+/// Row 642's real run: the close chain through observe_mother_end, then
+/// close_primary held at close.primary (as s5_close.rs's row driver).
+fn end_run(f: &super::Fixture) -> Facts {
+    use super::s5::{closed, Close, Mode, Setup};
+    use nexus_governed_control::host_session::close::CloseSeal;
+    let prefix = |c: &mut Close| {
+        let quit = c.accept_quit().expect("Quit");
+        let mother = c.mother.take().expect("the Mother");
+        let end = mother.m.prepare_session_end().expect("the Mother end");
+        let s = &c.o.session;
+        s.settle_close_resources(&quit).expect("resources");
+        s.settle_close_authority(&quit).expect("authority");
+        let seal = s.seal_close(&quit).expect("the seal");
+        end.record(&seal).expect("the Mother end recorded");
+        s.observe_mother_end(&seal)
+            .expect("the Mother end observed");
+        seal
+    };
+    let sink = |c: &Close, seal: CloseSeal| {
+        let end = c.o.session.close_primary(&seal);
+        (end.map_err(|e| format!("{e:?}")), seal)
+    };
+    let row = ("primary_end", "lifecycle");
+    let (mode, value) = (Mode::Armed, "SealedFinalizing");
+    closed(
+        f,
+        Setup::Mother,
+        row,
+        value,
+        mode,
+        Ok(()),
+        prefix,
+        sink,
+        |_| {},
+    )
+    .0
+}
+fn end_before(f: &super::Fixture) -> Facts {
+    let mut facts = end_run(f);
+    let end = |e: &&mut s1::Entry| e.phase.as_deref() == Some("session_closed");
+    facts.broker.iter_mut().filter(end).for_each(|e| e.tick = 0);
     facts
 }

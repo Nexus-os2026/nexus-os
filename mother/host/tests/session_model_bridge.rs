@@ -2090,13 +2090,13 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (71, 0, 627, 1, 33),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three and SEAM-1's six credited cells: {summary:?}"
+        (72, 0, 627, 1, 33),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three and SEAM-1's seven credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
-        218,
-        "quit, fatal and six U9a cells moved to x:rc_"
+        217,
+        "quit, fatal, six U9a cells and SEAM-1's primary_end SealedFinalizing moved to x:rc_"
     );
 }
 
@@ -2104,8 +2104,9 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// `door_fence` is held and `budget` is not credited. U9a (SB3E-R123.1): the
 /// eleven close-chain lifecycle cells. U6a-1 (SB3E-R120.1): the three
 /// registration_record ingress cells. SEAM-1 (SB3E-R139): the three
-/// registration_reserve and three registration_readiness ingress cells.
-const CREDITED: [&str; 26] = [
+/// registration_reserve and three registration_readiness ingress cells, and
+/// the R9 primary_end lifecycle cell (row 642).
+const CREDITED: [&str; 27] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2132,6 +2133,7 @@ const CREDITED: [&str; 26] = [
     "r0/registration_readiness/ingress/repeated",
     "r0/registration_readiness/ingress/fatal",
     "r0/registration_readiness/ingress/quit",
+    "r9/primary_end/lifecycle/SealedFinalizing",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own

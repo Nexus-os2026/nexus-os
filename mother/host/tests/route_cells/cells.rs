@@ -3,7 +3,8 @@
 // `budget` is not credited), U9a's eleven R9 close-chain lifecycle cells
 // (SB3E-R123.1), U6a-1's three R0 registration_record ingress cells
 // (SB3E-R120.1) and SEAM-1's three registration_reserve and three
-// registration_readiness ingress cells (SB3E-R139). The route_cells lane
+// registration_readiness ingress cells and the R9 primary_end lifecycle cell
+// (SB3E-R139). The route_cells lane
 // compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
@@ -36,4 +37,5 @@ cells! {
     r0 registration_readiness ingress repeated;
     r0 registration_readiness ingress fatal;
     r0 registration_readiness ingress quit;
+    r9 primary_end lifecycle SealedFinalizing;
 }

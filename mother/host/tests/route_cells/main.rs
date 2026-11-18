@@ -96,6 +96,7 @@ macro_rules! cells {
     (r0 registration_readiness ingress repeated; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_repeated, r0 registration_readiness ingress repeated, s5_reg::readiness_repeated); cells! { $($rest)* } };
     (r0 registration_readiness ingress fatal; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_fatal, r0 registration_readiness ingress fatal, s5_reg::readiness_fatal); cells! { $($rest)* } };
     (r0 registration_readiness ingress quit; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_quit, r0 registration_readiness ingress quit, s5_reg::readiness_quit); cells! { $($rest)* } };
+    (r9 primary_end lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_primary_end_lifecycle_sealedfinalizing, r9 primary_end lifecycle SealedFinalizing, s5_close::primary_end_sealedfinalizing); cells! { $($rest)* } };
 }
 // The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
 // check-citations.py): rustfmt does not reformat it.
