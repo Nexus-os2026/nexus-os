@@ -809,10 +809,14 @@ enum Serve {
     NoModel,
     /// `/api/show` is never answered; the peer reports the connection's end.
     HoldShow,
+    /// Arm the shim when `/api/show` arrives, then answer it.
+    ArmShow,
+    /// Arm the shim when `/api/show` arrives, and never answer it.
+    HoldShowArm,
 }
 enum PeerEvent {
     ShowHeld,
-    ShowClosed { eof: bool },
+    ShowClosed { at: std::time::Instant, eof: bool },
 }
 struct Peer {
     endpoint: String,
@@ -832,6 +836,10 @@ impl Peer {
 /// A loopback runtime answering as the pinned model, one request per
 /// connection; it logs every request path in the order received.
 fn peer(serve: Serve) -> Peer {
+    armed_peer(serve, None)
+}
+/// As `peer`, writing the shim's arm file when `/api/show` arrives.
+fn armed_peer(serve: Serve, arm: Option<std::path::PathBuf>) -> Peer {
     use std::io::{Read, Write};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -858,11 +866,15 @@ fn peer(serve: Serve) -> Peer {
                 .to_string();
             log.lock().unwrap().push(path.clone());
             let show = path == "/api/show";
-            if show && serve == Serve::HoldShow {
+            if show && matches!(serve, Serve::ArmShow | Serve::HoldShowArm) {
+                std::fs::write(arm.as_ref().unwrap(), b"armed").unwrap();
+            }
+            if show && matches!(serve, Serve::HoldShow | Serve::HoldShowArm) {
                 let _ = events.send(PeerEvent::ShowHeld);
                 let mut rest = [0u8; 64];
                 let eof = matches!(stream.read(&mut rest), Ok(0));
-                let _ = events.send(PeerEvent::ShowClosed { eof });
+                let at = std::time::Instant::now();
+                let _ = events.send(PeerEvent::ShowClosed { at, eof });
                 continue;
             }
             let body = match (serve, path.as_str()) {
@@ -1124,4 +1136,182 @@ fn m2ed_no_model_mode_makes_no_request() {
         Some("operation=none active=false owner_complete=true child_complete=true record=not_required uncertain=false")
     );
     f.empty();
+}
+
+/// B3a H3-R (R131.2): a real registration worker held at its uncancellable
+/// evidence append (model.rs:305), through the shim, reaches the real
+/// bounded `failed_startup` fallback. Slot active, the normal close reporter
+/// skipped, only the unknown model report, no affirmative close notice,
+/// nonzero exit within the bound; the hold is read from the backend, not
+/// from the MODEL_UNKNOWN text alone.
+#[test]
+fn m2ed_h3_held_registration_fallback() {
+    use std::io::{Read, Write};
+    use std::os::fd::AsFd;
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::{SocketAddr, UnixListener};
+    if m2ed_child() {
+        return;
+    }
+    let f = Fixture::new();
+    let fault = crate::stop_tests::support::faults::Fault::new(&f, "evidence");
+    let peer = armed_peer(Serve::ArmShow, Some(fault.arm.clone()));
+    let socket = format!("m2ed.h3r.{}", std::process::id());
+    let listener =
+        UnixListener::bind_addr(&SocketAddr::from_abstract_name(socket.as_bytes()).unwrap())
+            .unwrap();
+    let mut command = m2ed(
+        &f,
+        "m2ed_h3_held_registration_fallback",
+        &peer.endpoint,
+        MODEL_MODE,
+    );
+    fault.attach(&f, &mut command);
+    command.env(M2ED_SOCKET, &socket);
+    let mut p = Pty::start(command);
+    let mut fds = [nix::poll::PollFd::new(
+        listener.as_fd(),
+        nix::poll::PollFlags::POLLIN,
+    )];
+    assert_eq!(nix::poll::poll(&mut fds, 10000u16).unwrap(), 1);
+    let (mut helper, _) = listener.accept().unwrap();
+    helper
+        .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .unwrap();
+    // The first armed evidence write, after the peer answered `/api/show`.
+    let receipt = fault.reached();
+    assert!(
+        receipt
+            .path
+            .contains("/broker/p3-evidence/evidence.sqlite3"),
+        "{}",
+        receipt.path
+    );
+    assert_eq!(peer.paths(), MODEL_PATHS, "verification finished");
+    helper.write_all(b"C").unwrap();
+    let mut read = [0];
+    helper.read_exact(&mut read).unwrap();
+    assert_eq!(read, [b'S']);
+    p.expect("M2ED HELD ");
+    let held = p.expect("\n").trim_end().to_string();
+    // Verified, owner incomplete, the record pending and not committed:
+    // the worker is inside model.rs:295-330 at the append.
+    assert_eq!(
+        held,
+        "operation=registration active=true owner_complete=false child_complete=true record=pending uncertain=false phases=[]",
+        "{}",
+        p.output
+    );
+    assert!(!p.output.contains("STOP"), "no other evidence producer");
+    let quit = std::time::Instant::now();
+    p.line("quit");
+    let status = p.finish();
+    let elapsed = quit.elapsed();
+    drop(receipt);
+    let out = &p.output;
+    assert_eq!(status.code(), Some(17), "nonzero exit: {out}");
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "Quit to exit {elapsed:?}: {out}"
+    );
+    println!("M2ED H3-R quit_to_exit_ms={}", elapsed.as_millis());
+    let close: Vec<&str> = out
+        .lines()
+        .filter(|l| l.starts_with("CLOSE MODEL "))
+        .collect();
+    assert_eq!(close, [UNKNOWN_MODEL], "{out}");
+    for absent in [
+        "SESSION CLOSED recorded",
+        "CLOSE FAILED stage=",
+        "HANDS READY",
+        "MODEL VERIFIED",
+    ] {
+        assert!(!out.contains(absent), "{absent:?}: {out}");
+    }
+    assert!(out.contains(crate::terminal::UNCLEAN_NOTICE), "{out}");
+    assert_eq!(line_of(out, "M2ED RUN RETURNED "), Some("clean=false"));
+    // The worker is still held when `run` returns.
+    assert_eq!(
+        line_of(out, "M2ED OBLIGATIONS "),
+        Some("operation=registration active=true owner_complete=false child_complete=true record=pending uncertain=false"),
+        "{out}"
+    );
+    assert_eq!(line_of(out, "M2ED PHASES "), Some("[]"));
+    assert_eq!(peer.paths(), MODEL_PATHS);
+    f.empty();
+}
+
+/// B3b H3-C (R131.2, fail-safe control): an open registration request is
+/// cancelled at the shutdown trigger and the peer sees the connection's end
+/// before the producer deadline, so it cannot reach the deadline. At Quit
+/// the close is clean; at an input failure it is the unclean fallback.
+#[test]
+fn m2ed_h3_open_request_cancelled_at_quit() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m2ed_h3_open_request_cancelled_at_quit";
+    for trigger in ["quit", "input_failure"] {
+        let f = Fixture::new();
+        let fault = crate::stop_tests::support::faults::Fault::new(&f, "read-fail");
+        let failure = trigger == "input_failure";
+        let peer = if failure {
+            armed_peer(Serve::HoldShowArm, Some(fault.arm.clone()))
+        } else {
+            peer(Serve::HoldShow)
+        };
+        let mut command = m2ed(&f, test, &peer.endpoint, MODEL_MODE);
+        if failure {
+            fault.attach(&f, &mut command);
+        }
+        let mut p = Pty::start(command);
+        assert!(matches!(peer.event(), PeerEvent::ShowHeld));
+        let sent = std::time::Instant::now();
+        if failure {
+            // The next stdin read returns EIO: the reader's input failure.
+            p.send(b"x");
+        } else {
+            p.line("quit");
+        }
+        let PeerEvent::ShowClosed { at, eof } = peer.event() else {
+            panic!("{trigger}: the held request's end")
+        };
+        let alive = p.child.try_wait().unwrap().is_none();
+        assert!(eof && alive, "{trigger}: EOF {eof}, child alive {alive}");
+        let latency = at.duration_since(sent);
+        assert!(
+            latency < std::time::Duration::from_millis(2750),
+            "{trigger}: EOF after {latency:?}"
+        );
+        println!("M2ED H3-C {trigger} eof_ms={}", latency.as_millis());
+        let status = p.finish();
+        let out = &p.output;
+        assert_eq!(peer.paths(), MODEL_PATHS, "{trigger}: no further request");
+        assert!(
+            out.contains("STARTUP REFUSED model_registration_refused\n"),
+            "{out}"
+        );
+        for absent in ["MODEL VERIFIED", "HANDS READY"] {
+            assert!(!out.contains(absent), "{trigger}: {absent:?}: {out}");
+        }
+        assert_eq!(
+            line_of(out, "M2ED OBLIGATIONS "),
+            Some(NOT_REQUIRED),
+            "{out}"
+        );
+        let close: Vec<&str> = out
+            .lines()
+            .filter(|l| l.starts_with("CLOSE MODEL "))
+            .collect();
+        if failure {
+            assert_eq!(status.code(), Some(17), "{out}");
+            assert_eq!(close, [UNKNOWN_MODEL], "{out}");
+            assert!(!out.contains("SESSION CLOSED recorded"), "{out}");
+        } else {
+            assert_eq!(status.code(), Some(0), "{out}");
+            assert!(close.is_empty(), "{out}");
+            assert!(out.contains("SESSION CLOSED recorded\n"), "{out}");
+        }
+        f.empty();
+    }
 }
