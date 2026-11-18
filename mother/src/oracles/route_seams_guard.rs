@@ -134,7 +134,7 @@ s5.rs a9ef85403163e2a1c284ad1c1a71fbb9f50c2daadc74299edff4a7f9d7cbc95d
 s5_close.rs e0c20ad6fe2b17db99559b9af33b6385b51657f829edef91fc336a0e845d5424
 s5_reg.rs 2e66d53abc10ba3b9f3322f66384d1f9e9a88485ec1a7643b0dbc9fa10c4fa85
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 3b3bcfdc2d411239fa84881bc61d14eec7b49acf7578bd1afa8228a53c1c775e
+witness.rs e5fd95ef7ef936cd73a22136b53324011d94f0ab2a88da8e2ed1ad92f09d311b
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {

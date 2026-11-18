@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 10] = [
+const TOKENS: [Token; 14] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -64,6 +64,13 @@ const TOKENS: [Token; 10] = [
     // U6a-1 (d_register): the acknowledged model.record.before, then on its
     // thread, later, the admitted model.install.before (model.rs:301, 309, 314).
     ("m:292-299", "model.record.before", recorded_write),
+    // SEAM-1 (d_register, d_bootstrap): the acknowledged reg.reserve and
+    // reg.ready (model.rs:122, host_session.rs:858) and their refusal notes
+    // (model.rs:142, host_session.rs:865).
+    ("m:126-141", "reg.reserve", acked),
+    ("note:scope_admit", "reg:scope_admit", note_at),
+    ("h:838", "reg.ready", acked),
+    ("note:word_compare", "reg:word_compare", note_at),
 ];
 /// U9a: the admitted entry at `point` that is the cell's acknowledgement.
 fn acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
@@ -99,8 +106,9 @@ fn after_acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
 /// journal event (by invocation) or a native record's phase (by run and
 /// attempt, or by session); `all` is every journal entry and native record
 /// of the session in the cell's window: since `start` (or `open_broker`)
-/// captured the sources (s5.rs `start`'s `since`), or for `collect_close` since
-/// the hold's acknowledgement (U9a M3; SB3E-R6.3's empty delta is `+0:all[s=S]`).
+/// captured the sources (s5.rs `start`'s `since`), or for `collect_close` and
+/// `registered` since the hold's acknowledgement (U9a M3, SEAM-1; SB3E-R6.3's
+/// empty delta is `+0:all[s=S]`).
 const LEDGER: [(&str, &str); 7] = [
     ("ModelCallCharged", "journal"),
     ("LaneReturned", "journal"),
@@ -133,6 +141,8 @@ reg.reserve|s q|host_session/model.rs:122; host_session.rs:89-91
 model.record.before|s q ord=4|host_session/model.rs:301 (after the 4 metadata gates)
 model.install.before|s q ord=4|host_session/model.rs:314 (after the 4 metadata gates)
 reg.ready|s q ord=4|host_session.rs:858 (after the 4 metadata gates)
+reg:scope_admit|s q|host_session/model.rs:142; host_session.rs:89-91
+reg:word_compare|s q ord=4|host_session.rs:865 (after the 4 metadata gates); 89-91
 close.obligations|s|host_session/close.rs:271
 close.delivery|s|host_session/close.rs:232
 close.mother_end|s|host_session/close.rs:205, 499
@@ -152,7 +162,7 @@ q|attempt.slot model.attempt.reserved|gate|the run's later call.gate of S and Q 
 att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs credit, A.3)
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
 att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
-s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close: since the hold; kept, B1')
+s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close, registered: since the hold; kept, B1')
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
@@ -336,7 +346,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 8] = [
+const CONTROLS: [(&str, &str, &str); 10] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -345,7 +355,18 @@ const CONTROLS: [(&str, &str, &str); 8] = [
     ("producer_join", "lifecycle", CLOSE_CONTROLS[4]),
     ("seal", "lifecycle", CLOSE_CONTROLS[5]),
     ("registration_record", "ingress", REG_CONTROL),
+    ("registration_reserve", "ingress", RESERVE_CONTROL),
+    ("registration_readiness", "ingress", READY_CONTROL),
 ];
+/// SEAM-1 (SB3E-R139 Q-6): the reserve and readiness controls as measured at
+/// SEAM-1 Step 0, 10/10 each: the refused rows' text with no value, the sink
+/// passing (reserve then records its registration after the hold).
+const RESERVE_CONTROL: &str = "entry=reg.reserve[s=S q=Q];check=m:126-141[s=S q=Q];\
+value=none@reg.reserve ack=held won=route;out=passed@m:126-141;branch=none;\
+ledger=+1:all[s=S];window=boundary;deadline_fired=none";
+const READY_CONTROL: &str = "entry=reg.ready[s=S];check=h:838[s=S];\
+value=none@reg.ready ack=held won=route;out=passed@h:838;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
 /// U6a-1 (SB3E-R120.6 Q7): the registration_record control as measured at
 /// U6a-1 Step 0, 10/10: the record rows' text with no value.
 const REG_CONTROL: &str = "entry=model.record.before[s=S q=Q];check=m:292-299[s=S q=Q];\
