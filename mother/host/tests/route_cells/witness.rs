@@ -1763,3 +1763,41 @@ fn reg_other_request(f: &super::Fixture) -> Facts {
     facts.broker.push(planted);
     facts
 }
+
+/// U9b D6 (SB3E-R127.3, R135.2; rule level over a real run): row 584 driven
+/// through `closed` with the value applied in the sink closure, before the
+/// point. D5 refuses it; its witness is otherwise the frozen row's.
+#[test]
+fn route_s5_closed_refuses_a_value_applied_before_the_hold() {
+    let name = "witness::route_s5_closed_refuses_a_value_applied_before_the_hold";
+    super::child(name, |f| {
+        use super::s5::{closed, Close, Mode, Setup};
+        let sink = |c: &Close, ()| {
+            let early = c.o.ingress.emergency().map(|_| ());
+            let early = early.map_err(|e| format!("{e:?}"));
+            (early.and(c.accept_quit().map(|_| ())), ())
+        };
+        let (row, mode) = (("close_restrict", "lifecycle"), Mode::Paused);
+        let none = |_: &mut Close| ();
+        let (facts, ()) = closed(
+            f,
+            Setup::Mother,
+            row,
+            "Emergency",
+            mode,
+            Ok(()),
+            none,
+            sink,
+            |_| {},
+        );
+        let want = frozen("close_restrict", "lifecycle", "Emergency").unwrap();
+        println!("WITNESS D6: {:?}, {}", facts.findings, render(&facts));
+        assert_eq!(
+            compare(want, &render(&facts)),
+            Vec::<String>::new(),
+            "D6: the witness"
+        );
+        let d5 = "value: state Emergency at the hold, before the apply";
+        assert_eq!(facts.findings, [d5], "D6: the D5 finding");
+    });
+}

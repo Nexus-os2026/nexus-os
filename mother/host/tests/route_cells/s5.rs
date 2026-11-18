@@ -2311,14 +2311,15 @@ pub(super) fn closed<S: Send, R: Send>(
     }
     let c = &c;
     let held = f.pause(point);
-    let (after, (result, r)) = std::thread::scope(|scope| {
-        let worker = scope.spawn(move || sink(c, s));
+    let (after, (worker, (result, r))) = std::thread::scope(|scope| {
+        let worker = scope.spawn(move || (std::thread::current().id(), sink(c, s)));
         let after = held.acknowledged.recv_timeout(PATIENCE).ok().map(|ack| {
             let acked = Instant::now();
             reopen();
+            let at = state(c);
             apply(c);
             let late = c.o.ingress.close_deadline().is_some() && acked.elapsed() >= SHUTDOWN_PAUSE;
-            (ack, state(c), late.then(|| acked.elapsed()))
+            (ack, at, state(c), late.then(|| acked.elapsed()))
         });
         drop(held);
         (after, worker.join().unwrap())
@@ -2328,7 +2329,19 @@ pub(super) fn closed<S: Send, R: Send>(
             findings.push(format!("closed: {point} not acknowledged"));
             None
         }
-        Some((ack, after, late)) => {
+        Some((ack, at, after, late)) => {
+            // U9b D8 (SB3E-R135.1, F-S0-1): the hold is the sink's own call.
+            if ack.thread != worker {
+                findings.push(format!(
+                    "closed: {point} acknowledged off the sink's worker"
+                ));
+            }
+            // U9b D5 (SB3E-R127.3 F-U9A-PAUSE): `Paused`, the state is not yet
+            // `value` at the hold (outside Q3); else it came before the apply.
+            let early = !control && at == value && !q3.contains(&(row.0, value));
+            if let (Mode::Paused, true) = (&mode, early) {
+                findings.push(format!("value: state {at} at the hold, before the apply"));
+            }
             if let Some(late) = late {
                 findings.push(format!(
                     "closed: released after {late:?}, not within {SHUTDOWN_PAUSE:?}"
