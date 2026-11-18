@@ -1315,3 +1315,90 @@ fn m2ed_h3_open_request_cancelled_at_quit() {
         f.empty();
     }
 }
+
+/// B4 X1: SIGKILL of the model-mode host at three barriers (the
+/// `/api/show` request open at the peer; the registration append held by
+/// the shim; after readiness), then two restarts on the same home. Each
+/// restart is report-only from the backend's startup report: no model
+/// request, no registration, no readiness, `run` refused, no dialogue.
+#[test]
+fn m2ed_x1_death_restart_report_only() {
+    use std::os::unix::process::ExitStatusExt;
+    if m2ed_child() {
+        return;
+    }
+    let test = "m2ed_x1_death_restart_report_only";
+    for barrier in ["show_open", "append_held", "ready"] {
+        let f = Fixture::new();
+        let fault = crate::stop_tests::support::faults::Fault::new(&f, "evidence");
+        let (serve, arm) = match barrier {
+            "show_open" => (Serve::HoldShow, None),
+            "append_held" => (Serve::ArmShow, Some(fault.arm.clone())),
+            _ => (Serve::Healthy, None),
+        };
+        let first = armed_peer(serve, arm);
+        let mut command = m2ed(&f, test, &first.endpoint, MODEL_MODE);
+        if barrier == "append_held" {
+            fault.attach(&f, &mut command);
+        }
+        let mut p = Pty::start(command);
+        let receipt = match barrier {
+            "show_open" => {
+                assert!(matches!(first.event(), PeerEvent::ShowHeld));
+                None
+            }
+            "append_held" => Some(fault.reached()),
+            _ => {
+                p.expect(MODEL_READY);
+                None
+            }
+        };
+        p.child.kill().unwrap();
+        let killed = p.child.wait().unwrap();
+        assert_eq!(killed.signal(), Some(9), "{barrier}: killed");
+        drop(receipt);
+        drop(p);
+        for restart in 1..=2 {
+            let counter = peer(Serve::Healthy);
+            let mut q = Pty::start(m2ed(&f, test, &counter.endpoint, MODEL_MODE));
+            q.expect("HANDS REPORT ONLY");
+            q.line("run");
+            q.expect("REFUSED");
+            q.line("quit");
+            let status = q.finish();
+            let out = &q.output;
+            let sources = line_of(out, "SOURCES ").unwrap_or_default();
+            assert!(
+                sources.ends_with(&format!(" primary_unclean_sessions={restart}")),
+                "{barrier} restart {restart}: {sources}"
+            );
+            assert_eq!(
+                counter.paths(),
+                Vec::<String>::new(),
+                "{barrier} restart {restart}: {out}"
+            );
+            for absent in [
+                "MODEL VERIFIED",
+                "HANDS READY",
+                "Model verified;",
+                "Answer code:",
+            ] {
+                assert!(
+                    !out.contains(absent),
+                    "{barrier} restart {restart}: {absent:?}: {out}"
+                );
+            }
+            assert_eq!(
+                line_of(out, "M2ED OBLIGATIONS "),
+                Some("operation=none active=false owner_complete=true child_complete=true record=not_required uncertain=false"),
+                "{barrier} restart {restart}: no registration was attempted"
+            );
+            assert_eq!(
+                status.code(),
+                Some(17),
+                "{barrier} restart {restart}: {out}"
+            );
+        }
+        f.empty();
+    }
+}
