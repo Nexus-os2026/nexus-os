@@ -16,12 +16,18 @@ use std::io::Write;
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// F-S0-6: every wait of a child ends by this, before child_with's 30 s kill.
 const BUDGET: Duration = Duration::from_secs(25);
-type Master = Arc<Mutex<Option<OwnedFd>>>;
+/// A request to the drain thread and its bounded acknowledgement.
+type Request = (Op, SyncSender<()>);
+enum Op {
+    Write(Vec<u8>),
+    Close,
+}
 type Transcript = Arc<(Mutex<Vec<u8>>, Condvar)>;
 
 /// One child's clock: each wait gets at most PATIENCE and never past the
@@ -50,10 +56,11 @@ impl Clock {
     }
 }
 
-/// B4: the pty's slave is fd 0 and fd 1 (fd 2 is never touched); the one
-/// master fd is held by the drain thread's lock and writes use it too.
+/// B4: the pty's slave is fd 0 and fd 1 (fd 2 is never touched). The drain
+/// thread alone owns the one master fd and serves write and close requests
+/// between its bounded polls (review F3: no caller waits behind a poll).
 struct Tty {
-    master: Master,
+    requests: SyncSender<Request>,
     transcript: Transcript,
     drain: Option<std::thread::JoinHandle<()>>,
     saved: Option<(OwnedFd, OwnedFd)>,
@@ -67,29 +74,29 @@ impl Tty {
         nix::unistd::dup2(pty.slave.as_raw_fd(), 0).unwrap();
         nix::unistd::dup2(pty.slave.as_raw_fd(), 1).unwrap();
         drop(pty.slave);
-        let master: Master = Arc::new(Mutex::new(Some(pty.master)));
-        let transcript: Transcript = Arc::default();
-        let (m, t) = (master.clone(), transcript.clone());
-        let drain = std::thread::spawn(move || drain(m, t));
+        let (requests, served) = sync_channel(4);
+        let (master, transcript) = (pty.master, Transcript::default());
+        let t = transcript.clone();
+        let drain = std::thread::spawn(move || drain(master, served, t));
         Self {
-            master,
+            requests,
             transcript,
             drain: Some(drain),
             saved: Some((saved_in, saved_out)),
         }
     }
-    fn write(&self, bytes: &[u8]) {
-        let master = self.master.lock().unwrap();
-        let fd = master.as_ref().expect("the master is open");
-        let (mut written, deadline) = (0, Instant::now() + PATIENCE);
-        while written < bytes.len() {
-            assert!(Instant::now() < deadline, "bounded pty write");
-            written += nix::unistd::write(fd, &bytes[written..]).unwrap();
-        }
+    /// One request, served by the drain thread; its acknowledgement bounded.
+    fn request(&self, op: Op) -> bool {
+        let (done, served) = sync_channel(1);
+        let sent = self.requests.try_send((op, done)).is_ok();
+        sent && served.recv_timeout(PATIENCE).is_ok()
     }
-    /// Drops the only master fd.
+    fn write(&self, bytes: &[u8]) {
+        assert!(self.request(Op::Write(bytes.to_vec())), "bounded pty write");
+    }
+    /// The drain thread drops the only master fd.
     fn close_master(&self) {
-        drop(self.master.lock().unwrap().take());
+        assert!(self.request(Op::Close), "bounded master close");
     }
     fn len(&self) -> usize {
         self.transcript.0.lock().unwrap().len()
@@ -128,20 +135,31 @@ impl Tty {
         }
     }
 }
-fn drain(master: Master, transcript: Transcript) {
+fn drain(master: OwnedFd, served: Receiver<Request>, transcript: Transcript) {
     loop {
-        let guard = master.lock().unwrap();
-        let Some(fd) = guard.as_ref() else { return };
-        let mut fds = [PollFd::new(fd.as_fd(), PollFlags::POLLIN)];
+        while let Ok((op, done)) = served.try_recv() {
+            let Op::Write(bytes) = op else {
+                drop(master);
+                let _ = done.send(());
+                return;
+            };
+            let (mut written, deadline) = (0, Instant::now() + PATIENCE);
+            while written < bytes.len() && Instant::now() < deadline {
+                match nix::unistd::write(&master, &bytes[written..]) {
+                    Ok(n) => written += n,
+                    Err(_) => break,
+                }
+            }
+            if written == bytes.len() {
+                let _ = done.send(());
+            }
+        }
+        let mut fds = [PollFd::new(master.as_fd(), PollFlags::POLLIN)];
         if !matches!(poll(&mut fds, 10u16), Ok(n) if n > 0) {
-            drop(guard);
-            std::thread::yield_now();
             continue;
         }
         let mut bytes = [0u8; 4096];
-        let read = nix::unistd::read(fd.as_raw_fd(), &mut bytes);
-        drop(guard);
-        match read {
+        match nix::unistd::read(master.as_raw_fd(), &mut bytes) {
             Ok(n) if n > 0 => {
                 transcript.0.lock().unwrap().extend_from_slice(&bytes[..n]);
                 transcript.1.notify_all();
@@ -159,7 +177,7 @@ impl Drop for Tty {
             let _ = nix::unistd::dup2(input.as_raw_fd(), 0);
             let _ = nix::unistd::dup2(output.as_raw_fd(), 1);
         }
-        self.close_master();
+        let _ = self.request(Op::Close);
         if let Some(drain) = self.drain.take() {
             let _ = drain.join();
         }
@@ -278,7 +296,10 @@ pub(super) fn read_ack(
         if a.eot != *eot {
             return Err(format!("read: eot {}", a.eot));
         }
-        if a.branch != *branch {
+        // F2 (SB3E-R146): after the master closes, a slave read returns 0 or
+        // EIO; both are the reader's end arms.
+        let end = value == "master_close" && a.branch == Branch::Err;
+        if a.branch != *branch && !end {
             return Err(format!("read: branch {:?}, not {branch:?}", a.branch));
         }
         if a.n != *n {
@@ -384,6 +405,9 @@ fn value(f: &Fixture, value: &'static str, state: SessionState) {
     let received: Vec<_> = a.acks.iter().flatten().cloned().collect();
     assert_eq!(received, acks, "read: the barriers are not the trace's");
     assert_eq!(a.state, state, "read: state after {value}");
+    if value == "master_close" {
+        println!("WITNESS master_close branch={:?}", acks[0].branch);
+    }
     if value == "partial+04" {
         assert!(a.echo.starts_with(b"quit"), "read: echo {:?}", a.echo);
     }
