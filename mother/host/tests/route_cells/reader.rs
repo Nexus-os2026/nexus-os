@@ -169,9 +169,11 @@ impl Drop for Tty {
 /// B5: the fixture's session; production's terminal over its ingress, bound
 /// by S6; then production's bootstrap order (hold, workspace, model,
 /// readiness). Ready iff the state is Normal (N4: never a printed line).
+/// `terminal` is declared before `tty`: the terminal and its reader drop
+/// before the fds are restored (review N4).
 struct Reader {
-    tty: Tty,
     terminal: Terminal,
+    tty: Tty,
     session: Arc<HostSession>,
     ingress: SessionIngress,
     clock: Clock,
@@ -488,10 +490,15 @@ fn route_reader_unarmed_records_nothing() {
         "reader::route_reader_unarmed_records_nothing",
         no_env,
         |f| {
-            let r = compose(f);
+            let mut r = compose(f);
             let mark = r.tty.len();
             r.tty.write(b"\r");
             let echoed = r.tty.wait_for(&r.clock, mark, b"\r\n");
+            // The echo precedes the reader's site (review F1): the trace is
+            // read only after the reader has been joined.
+            let deadline = Instant::now() + r.clock.left();
+            let finished = r.terminal.finish(deadline);
+            assert!(finished, "unarmed: the terminal did not finish");
             let recorded = s7::drain_trace().len();
             drop(r);
             assert_eq!(recorded, 0, "unarmed: {recorded} entries");
