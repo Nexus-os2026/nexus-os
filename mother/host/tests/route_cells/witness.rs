@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 9] = [
+const TOKENS: [Token; 10] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -61,12 +61,26 @@ const TOKENS: [Token; 9] = [
     ("c:48-54", "producer.join", acked),
     ("c:372-429", "close.seal", acked),
     ("note:stop_obligations", "seal:stop", note_at),
+    // U6a-1 (d_register): the acknowledged model.record.before, then on its
+    // thread, later, the admitted model.install.before (model.rs:301, 309, 314).
+    ("m:292-299", "model.record.before", recorded_write),
 ];
 /// U9a: the admitted entry at `point` that is the cell's acknowledgement.
 fn acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
     let ack = |e: &&Seen| v.f.acks.iter().any(|a| of(a) == **e);
     let at = |e: &&Seen| !e.note && e.point == point && admitted(v, e, tag);
     v.seen.iter().filter(at).find(ack).copied()
+}
+/// U6a-1: the record write returned (model.rs:309's `?` did not): the
+/// acknowledged entry, then a later admitted `model.install.before` of S and
+/// Q on its thread (model.rs:314).
+fn recorded_write<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let install = |e: &Seen| {
+        let at = e.s1 && !e.note && e.point == "model.install.before";
+        at && e.thread == a.thread && e.tick > a.tick && admitted(v, e, tag)
+    };
+    v.seen.iter().any(install).then_some(a)
 }
 /// U9a (Q11): the next admitted entry at `point` after the acknowledged one,
 /// of S1 and on its thread.
@@ -322,7 +336,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 7] = [
+const CONTROLS: [(&str, &str, &str); 8] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -330,7 +344,13 @@ const CONTROLS: [(&str, &str, &str); 7] = [
     ("primary_end", "lifecycle", CLOSE_CONTROLS[3]),
     ("producer_join", "lifecycle", CLOSE_CONTROLS[4]),
     ("seal", "lifecycle", CLOSE_CONTROLS[5]),
+    ("registration_record", "ingress", REG_CONTROL),
 ];
+/// U6a-1 (SB3E-R120.6 Q7): the registration_record control as measured at
+/// U6a-1 Step 0, 10/10: the record rows' text with no value.
+const REG_CONTROL: &str = "entry=model.record.before[s=S q=Q];check=m:292-299[s=S q=Q];\
+value=none@model.record.before ack=held won=route;out=recorded@m:292-299;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;deadline_fired=none";
 /// U9a (SB3E-R117.3 Q10): the d_close controls as measured at U9a Step 0,
 /// 20/20 each; `primary_end`'s `+0:session_closed` is the route's (the record
 /// is not projected, evidence_store.rs:992-1009).
@@ -1083,7 +1103,7 @@ fn coverage() {
         println!("WITNESS B1 tag set [{}] group={}", t.0, t.1);
     }
     assert_eq!(rows, 794, "every row with a witness");
-    // W0b B2': `collect_broker`'s sinks are exactly the no-Mother drivers' rows.
+    // W0b B2', U6a-1: `collect_reg`'s sinks are exactly the no-Mother drivers' rows.
     let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
     let no_mother = |c: &Vec<&str>| ["d_register", "d_bootstrap"].contains(&c[6]);
     let mut sinks: Vec<&str> = rows.filter(no_mother).map(|c| c[1]).collect();
@@ -1682,5 +1702,51 @@ fn other_session(f: &super::Fixture) -> Facts {
     facts.session = nexus_governed_control::host_session::SessionSeed::new()
         .unwrap()
         .identity();
+    facts
+}
+/// U6a-1 harness controls (labelled controls over a real `registered` run of
+/// row 440): S rebound to another session fails in `entry` and `check`; and
+/// another request's `model.record.before` in the trace leaves Q unbound, so
+/// `ledger` is `unobserved` (as the A4 inverse).
+#[test]
+fn witness_control_registration_other_session_fails_in_entry_and_check() {
+    let name = "witness::witness_control_registration_other_session_fails_in_entry_and_check";
+    let row = ("registration_record", "ingress", "quit");
+    let fields = ["entry", "check"];
+    differs_at(
+        name,
+        "ctl_reg_other_session",
+        reg_other_session,
+        row,
+        &fields,
+    );
+}
+fn reg_other_session(f: &super::Fixture) -> Facts {
+    let mut facts = super::s5::registered(f, ("registration_record", "ingress"), "quit");
+    let other = nexus_governed_control::host_session::SessionSeed::new().unwrap();
+    facts.session = other.identity();
+    facts
+}
+#[test]
+fn witness_control_registration_other_request_unbinds_the_ledger() {
+    let name = "witness::witness_control_registration_other_request_unbinds_the_ledger";
+    let row = ("registration_record", "ingress", "quit");
+    differs_at(
+        name,
+        "ctl_reg_other_request",
+        reg_other_request,
+        row,
+        &["ledger"],
+    );
+}
+fn reg_other_request(f: &super::Fixture) -> Facts {
+    let mut facts = super::s5::registered(f, ("registration_record", "ingress"), "quit");
+    let record = facts
+        .broker
+        .iter()
+        .find(|e| e.point == "model.record.before");
+    let mut planted = record.cloned().expect("the record's entry");
+    planted.request = Some(7);
+    facts.broker.push(planted);
     facts
 }
