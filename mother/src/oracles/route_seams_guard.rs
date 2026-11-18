@@ -2495,6 +2495,11 @@ fn pause_findings(file: &str, source: &str) -> Vec<String> {
             ));
         }
     }
+    // U9b D7 (SB3E-R127.3 F-U9A-PAUSE, R130.1, R133 N4): a section never calls
+    // `Fixture::pause`, in any form; the token is refused (a closed identifier rule).
+    if t.contains(&"pause") {
+        found.push(format!("section {file}: a pause call (F-U9A-PAUSE)"));
+    }
     let callback = ["Action", "Pause", "Timeout", "timeout"];
     let mut named: Vec<&str> = t.iter().copied().filter(|x| callback.contains(x)).collect();
     named.sort_unstable();
@@ -3297,7 +3302,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
     let journal = "Passive: collect reads the journal through journal(), not journal_view()";
     let cfg = "R57.6: host/tests/route_cells/s5_reg.rs: a cfg! other than cfg!(mother_route_seams): cfg!(test)";
     // `std::process` is built from parts so the host-access scan does not match this file.
-    let profile: Vec<(&str, &str, String, &str)> = vec![
+    let mut profile: Vec<(&str, &str, String, &str)> = vec![
         ("P-C3 a counted call copied", "s5_close.rs", drive, "a model call"),
         ("P-W5 a path through another section", "s5_r34.rs", "use super::s5_close::seal;\n".into(), "a path through s5_close"),
         ("P-T1 a closure callback", "s5_close.rs", arm.to_string() + &pause(concat!("timeout: |l| -> ! { std::", "process::abort() }")), callback),
@@ -3328,6 +3333,24 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("rule: collect reads store.commit", "s5_r34.rs", "fn collect_commits(broker: &[Entry]) -> usize {\n    broker.iter().filter(|e| e.point == \"store.commit\").count()\n}\n".into(), "Passive: collect_commits reads store.commit"),
         ("rule: an unlisted impl", "s5_r34.rs", "struct Z;\nimpl Z {\n    fn d(&self) {}\n}\n".into(), "an unlisted impl implZ"),
     ];
+    // U9b D7: a pause call in every section file, in each form (R102.3).
+    let calls = [
+        "f.pause(\"ingress.accept\")",
+        "Fixture::pause(f, \"ingress.accept\")",
+        "(f).pause(\"ingress.accept\")",
+        "{ let p = Fixture::pause; p(f, \"ingress.accept\") }",
+    ];
+    for file in ["s5_close.rs", "s5_reg.rs", "s5_r34.rs"] {
+        for call in calls {
+            let text = format!("fn d(f: &Fixture) {{\n    let _h = {call};\n}}\n");
+            profile.push((
+                "D7 a section pause call",
+                file,
+                text,
+                "a pause call (F-U9A-PAUSE)",
+            ));
+        }
+    }
     for (plant, file, text, expected) in &profile {
         let expected = match expected.starts_with(CELLS) {
             true => expected.to_string(),
