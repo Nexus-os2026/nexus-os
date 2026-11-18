@@ -9,6 +9,7 @@ use nexus_governed_control::host_session::{
     close::{CloseSeal, Producer, ProducerKind},
     CommandKind, SessionRequest, SessionSeed, SessionState,
 };
+use nexus_governed_control::inference::{ModelPinSpec, RuntimeConfig, Think};
 use nexus_mother::adapter::SessionPort;
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion};
 use nexus_mother::coordinator::{
@@ -67,13 +68,34 @@ struct Config {
     text: String,
     hold: Duration,
 }
-fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+/// M2e-D (E-O50): the trusted local runtime. No flag, variable or file
+/// chooses it, the pin, or any part of either.
+#[cfg(not(test))]
+const ENDPOINT: &str = "http://127.0.0.1:11434";
+/// The qualified pin (m2e-design §4).
+fn qualified_pin() -> ModelPinSpec {
+    ModelPinSpec {
+        name: "qwen3.6:35b-a3b".into(),
+        digest: "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c".into(),
+        runtime_version: "0.40.13".into(),
+        config: RuntimeConfig {
+            num_ctx: 8192,
+            temperature_milli: 0,
+            seed: 7,
+            think: Think::Off,
+            truncate: false,
+        },
+    }
+}
+/// The configuration, and whether `--mission one-page-site` selected the
+/// M2e-D model mode (registration before readiness; `run` unavailable).
+fn parse(args: impl Iterator<Item = String>) -> Result<(Config, bool), &'static str> {
     let mut values = std::collections::BTreeMap::new();
     let mut args = args;
     while let Some(key) = args.next() {
         if !matches!(
             key.as_str(),
-            "--home" | "--workspace" | "--name" | "--text" | "--hold-before-publish"
+            "--home" | "--workspace" | "--name" | "--text" | "--hold-before-publish" | "--mission"
         ) || values.contains_key(&key)
         {
             return Err("invalid_arguments");
@@ -84,6 +106,22 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
     let workspace = PathBuf::from(values.remove("--workspace").ok_or("workspace_required")?);
     if !home.is_absolute() || !workspace.is_absolute() {
         return Err("absolute_path_required");
+    }
+    if let Some(mission) = values.remove("--mission") {
+        if mission != crate::inputs::PAGE_MISSION || !values.is_empty() {
+            return Err("invalid_arguments");
+        }
+        let (name, text, hold) = (String::new(), String::new(), Duration::ZERO);
+        return Ok((
+            Config {
+                home,
+                workspace,
+                name,
+                text,
+                hold,
+            },
+            true,
+        ));
     }
     let name = values.remove("--name").ok_or("name_required")?;
     let text = values.remove("--text").ok_or("text_required")?;
@@ -97,13 +135,17 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
     if hold > 30 {
         return Err("invalid_hold");
     }
-    Ok(Config {
-        home,
-        workspace,
-        name,
-        text,
-        hold: Duration::from_secs(hold),
-    })
+    let hold = Duration::from_secs(hold);
+    Ok((
+        Config {
+            home,
+            workspace,
+            name,
+            text,
+            hold,
+        },
+        false,
+    ))
 }
 
 // The coordinator performs actual lane admission. This test-only observer
@@ -1003,7 +1045,7 @@ fn join<T>(handle: &mut Option<JoinHandle<T>>, deadline: Instant, screen: &Share
 
 /// Run one process using the original seed created before terminal input.
 pub fn run(args: impl Iterator<Item = String>) -> bool {
-    let config = match parse(args) {
+    let (config, model) = match parse(args) {
         Ok(c) => c,
         Err(code) => {
             eprintln!("{code}");
@@ -1070,6 +1112,7 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             if home.session.state() == SessionState::Bootstrap
                 && home.session.startup_report().ready()
             {
+                let mut verified = None;
                 let setup = home
                     .session
                     .bootstrap_hold(config.hold)
@@ -1081,10 +1124,29 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                             .map_err(|_| "workspace_refused")
                     })
                     .and_then(|()| {
+                        if !model {
+                            return Ok(());
+                        }
+                        #[cfg(test)]
+                        let endpoint = hands_tests::model_endpoint();
+                        #[cfg(not(test))]
+                        let endpoint = ENDPOINT;
+                        home.session
+                            .register_local_model(endpoint, qualified_pin())
+                            .map(|view| verified = Some(view))
+                            .map_err(|_| "model_registration_refused")
+                    })
+                    .and_then(|()| {
                         home.session
                             .finish_bootstrap()
                             .map_err(|_| "readiness_refused")
                     });
+                if let (Ok(()), Some(view)) = (&setup, &verified) {
+                    startup_screen.emit(&format!(
+                        "MODEL VERIFIED name={} digest={} identity={}\n",
+                        view.name, view.digest, view.identity
+                    ));
+                }
                 if let Err(code) = setup {
                     startup_screen.emit(&format!("STARTUP REFUSED {code}\n"));
                     if !home.session.ingress().emergency_seen()
@@ -1142,7 +1204,9 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         session.state(),
         SessionState::ClosingNormal | SessionState::ClosingRestricted
     ) {
-        screen.emit(if session.state() == SessionState::Normal {
+        screen.emit(if session.state() == SessionState::Normal && model {
+            "Model verified; the page mission is not available in this build. No model call is made.\nHANDS READY\n"
+        } else if session.state() == SessionState::Normal {
             "One File mission per fresh process. Emergency ends mission work.\nHANDS READY\n"
         } else if session.state() == SessionState::Emergency {
             "Report only; no work authority is available.\nHANDS READY\n"
@@ -1187,6 +1251,14 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                 let current = session.stop_snapshot();
                 let receipt = screen.stop.receipt();
                 screen.emit(&format!("host_recovery_only={}\nsession={:?}\nkernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP WORKERS outstanding={}\nSTATUS END\n", ingress.emergency_seen(), session.state(), current.kernel_stopped, current.broker_stopped, current.stop_number, current.policy_generation, receipt.outstanding));
+            } else if model
+                && command
+                    .request
+                    .as_ref()
+                    .is_some_and(|r| r.kind() == CommandKind::Run)
+            {
+                screen.emit("RESULT: request refused; no new operation was admitted.\n");
+                screen.emit("REFUSED page_mission_unavailable\n");
             } else if let Some(request) = command.request {
                 let kind = if request.kind() == CommandKind::Evidence {
                     ProducerKind::Observation
