@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 10] = [
+const TOKENS: [Token; 12] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -64,6 +64,10 @@ const TOKENS: [Token; 10] = [
     // U6a-1 (d_register): the acknowledged model.record.before, then on its
     // thread, later, the admitted model.install.before (model.rs:301, 309, 314).
     ("m:292-299", "model.record.before", recorded_write),
+    // U9b (d_quit, d_stop): the acknowledged entry at the held sink's point
+    // (host_session.rs:1695-1698, 1642).
+    ("h:1690-1712", "ingress.accept", acked),
+    ("CAS:h:1630-1633", "ingress.emergency", acked),
 ];
 /// U9a: the admitted entry at `point` that is the cell's acknowledgement.
 fn acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
@@ -140,6 +144,8 @@ close.primary|s|host_session/close.rs:524
 producer.join|s|host_session/close.rs:49
 close.seal|s q|host_session/close.rs:367-369
 seal:stop|s|host_session/close.rs:407
+ingress.accept|s q|host_session.rs:1695-1698
+ingress.emergency|s|host_session.rs:1642
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -1116,6 +1122,13 @@ fn coverage() {
     close.sort();
     close.dedup();
     assert_eq!(close, super::s5::CLOSE_SINKS);
+    // U9b: `HELD_SINKS` are exactly the `d_quit` and `d_stop` rows' sinks.
+    let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
+    let quit_stop = |c: &Vec<&str>| ["d_quit", "d_stop"].contains(&c[6]);
+    let mut held: Vec<&str> = rows.filter(quit_stop).map(|c| c[1]).collect();
+    held.sort();
+    held.dedup();
+    assert_eq!(held, super::s5::HELD_SINKS);
 }
 
 /// W0b B1 (Behaviour 4): a renderer control per new capability, each a named
