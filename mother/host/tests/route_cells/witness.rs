@@ -342,7 +342,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 8] = [
+const CONTROLS: [(&str, &str, &str); 10] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -351,6 +351,16 @@ const CONTROLS: [(&str, &str, &str); 8] = [
     ("producer_join", "lifecycle", CLOSE_CONTROLS[4]),
     ("seal", "lifecycle", CLOSE_CONTROLS[5]),
     ("registration_record", "ingress", REG_CONTROL),
+    ("close_restrict", "lifecycle", HELD_CONTROLS[0]),
+    ("emergency_restrict", "lifecycle", HELD_CONTROLS[1]),
+];
+/// U9b (SB3E-R135.3 Q8): the held-sink controls as measured at U9b Step 0,
+/// 20/20 each: the credited rows' text with no value.
+const HELD_CONTROLS: [&str; 2] = [
+    "entry=ingress.accept[s=S q=Q];check=h:1690-1712[s=S q=Q];value=none@ingress.accept ack=held won=route;\
+out=passed@h:1690-1712;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
+    "entry=ingress.emergency[s=S];check=CAS:h:1630-1633[s=S];value=none@ingress.emergency ack=held won=route;\
+out=passed@CAS:h:1630-1633;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
 ];
 /// U6a-1 (SB3E-R120.6 Q7): the registration_record control as measured at
 /// U6a-1 Step 0, 10/10: the record rows' text with no value.
@@ -1800,4 +1810,41 @@ fn route_s5_closed_refuses_a_value_applied_before_the_hold() {
         let d5 = "value: state Emergency at the hold, before the apply";
         assert_eq!(facts.findings, [d5], "D6: the D5 finding");
     });
+}
+/// U9b harness control (over a real run): row 584 with S rebound to another
+/// session; `entry` and `check` must differ.
+#[test]
+fn witness_control_quit_other_session_fails_in_entry_and_check() {
+    let name = "witness::witness_control_quit_other_session_fails_in_entry_and_check";
+    let row = ("close_restrict", "lifecycle", "Emergency");
+    differs_at(
+        name,
+        "ctl_quit_other_session",
+        quit_other_session,
+        row,
+        &["entry", "check"],
+    );
+}
+fn quit_other_session(f: &super::Fixture) -> Facts {
+    use super::s5::{closed, Close, Mode, Setup};
+    let sink = |c: &Close, ()| (c.accept_quit().map(|_| ()), ());
+    let emergency = |c: &Close| {
+        c.o.ingress.emergency().expect("emergency");
+    };
+    let row = ("close_restrict", "lifecycle");
+    let (mut facts, ()) = closed(
+        f,
+        Setup::Mother,
+        row,
+        "Emergency",
+        Mode::Paused,
+        Ok(()),
+        |_| (),
+        sink,
+        emergency,
+    );
+    facts.session = nexus_governed_control::host_session::SessionSeed::new()
+        .unwrap()
+        .identity();
+    facts
 }
