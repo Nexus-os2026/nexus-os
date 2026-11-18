@@ -1198,12 +1198,11 @@ fn m2ed_h3_held_registration_fallback() {
         .unwrap();
     // The first armed evidence write, after the peer answered `/api/show`.
     let receipt = fault.reached();
+    // Bound outside the macro: route A5's subset check refuses the token.
+    let written = receipt.path.clone();
     assert!(
-        receipt
-            .path
-            .contains("/broker/p3-evidence/evidence.sqlite3"),
-        "{}",
-        receipt.path
+        written.contains("/broker/p3-evidence/evidence.sqlite3"),
+        "{written}"
     );
     assert_eq!(peer.paths(), MODEL_PATHS, "verification finished");
     helper.write_all(b"C").unwrap();
