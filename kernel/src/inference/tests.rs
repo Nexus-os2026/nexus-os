@@ -123,11 +123,16 @@ fn standard() -> Vec<FixtureRecord> {
 /// The fake runtime owns its fixture listener (the authority) and serves
 /// that listener's clone, which carries none.
 struct Fake {
-    owner: FixtureListener,
+    /// `None` once expired (F-1/F-2): the server clone keeps serving.
+    owner: Option<FixtureListener>,
     addr: SocketAddr,
     events: Receiver<Event>,
     log: Log,
     connections: Arc<AtomicUsize>,
+    /// One event per accept, independent of the counter (v6 §6.1), and how
+    /// many of them the observer has consumed.
+    accepted: Receiver<()>,
+    accept_events: std::cell::Cell<usize>,
     route: Arc<Mutex<Route>>,
 }
 
@@ -140,15 +145,19 @@ impl Fake {
         let owner = FixtureListener::bind(records).unwrap();
         let listener = owner.peer_listener().unwrap();
         let addr = owner.addr();
+        let owner = Some(owner);
         let (tx, events) = mpsc::channel();
         let log: Log = Arc::default();
         let connections = Arc::new(AtomicUsize::new(0));
         let route = Arc::new(Mutex::new(route));
+        let (accept_tx, accepted) = mpsc::channel();
         {
             let (log, connections, route) = (log.clone(), connections.clone(), route.clone());
             std::thread::spawn(move || {
                 for stream in listener.incoming() {
                     let Ok(stream) = stream else { return };
+                    // The event first: whoever sees the count sees its event.
+                    let _ = accept_tx.send(());
                     connections.fetch_add(1, Ordering::SeqCst);
                     let (tx, log, route) = (tx.clone(), log.clone(), route.clone());
                     std::thread::spawn(move || serve(stream, &tx, &log, &route));
@@ -161,6 +170,8 @@ impl Fake {
             events,
             log,
             connections,
+            accepted,
+            accept_events: std::cell::Cell::new(0),
             route,
         }
     }
@@ -170,7 +181,16 @@ impl Fake {
     }
 
     fn endpoint(&self) -> FixtureEndpoint {
-        self.owner.endpoint()
+        self.owner
+            .as_ref()
+            .expect("a live fixture owner")
+            .endpoint()
+    }
+
+    /// Drop the fixture owner (its authority expires); the server keeps
+    /// serving its listener's clone.
+    fn expire(&mut self) {
+        self.owner = None;
     }
 
     fn set_route(&self, route: Route) {
@@ -202,6 +222,14 @@ impl Fake {
 
     fn connections(&self) -> usize {
         self.connections.load(Ordering::SeqCst)
+    }
+
+    /// The accept events consumed so far (draining every pending one).
+    fn connection_events(&self) -> usize {
+        while self.accepted.try_recv().is_ok() {
+            self.accept_events.set(self.accept_events.get() + 1);
+        }
+        self.accept_events.get()
     }
 
     /// Wait for `want`, skipping other events.
@@ -384,6 +412,8 @@ const NOTHING: [Metered; 0] = [];
 #[derive(Default)]
 struct Meter {
     events: Mutex<Vec<Metered>>,
+    /// Every invocation of `charge`, refused ones included.
+    calls: AtomicUsize,
     refuse: AtomicBool,
     server: Mutex<Option<Log>>,
     at_charge: Mutex<Vec<Vec<String>>>,
@@ -397,6 +427,7 @@ impl Meter {
 
 impl CallMeter for Meter {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
         if self.refuse.load(Ordering::SeqCst) {
             return Err(MeterRefusal::Exhausted);
         }
@@ -593,7 +624,7 @@ fn call_with(
 
 /// [`call_with`] with N1's route opened by the private seam, on the thread
 /// that executes the call and only there (CQ-R4). The only open helper:
-/// [`call`], [`call_in_thread`] and [`call_with`] stay closed.
+/// [`call_in_thread`] and [`call_with`] stay closed.
 fn call_with_open_n1(
     transport: &Arc<VerifiedOllama>,
     ctx: &Arc<Ctx>,
@@ -614,10 +645,6 @@ fn call_in_thread(
     request: ModelRequest,
 ) -> Receiver<Outcome<ModelReply>> {
     call_with(transport, ctx, request, ctx.watch.clone(), None)
-}
-
-fn call(transport: &Arc<VerifiedOllama>, ctx: &Arc<Ctx>) -> Outcome<ModelReply> {
-    done(&call_in_thread(transport, ctx, small()))
 }
 
 fn request(system: &str, user: &str) -> ModelRequest {
@@ -1689,19 +1716,9 @@ fn e_o10_proxy_variables_are_never_used() {
         std::thread::yield_now();
     }
     let output = child.wait_with_output().unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        output.status.success() && stdout.contains("M2E-A1 proxy child: ok"),
-        "{stdout}\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        proxied.load(Ordering::SeqCst),
-        0,
-        "the proxy was not contacted"
-    );
-    // The trap works: one raw connection is exactly one accept (its accepts
-    // are serial, so a child connection would have come first).
+    // The trap first (v6 §8.2, P-Cq-18), synchronized: one raw control
+    // connection; the trap accepts serially, so any child connection was
+    // accepted before it. Exactly one accept means the child sent none.
     drop(TcpStream::connect(proxy_addr).unwrap());
     let deadline = std::time::Instant::now() + PATIENCE;
     while proxied.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
@@ -1710,7 +1727,13 @@ fn e_o10_proxy_variables_are_never_used() {
     assert_eq!(
         proxied.load(Ordering::SeqCst),
         1,
-        "the trap accepts exactly the control"
+        "the proxy was not contacted (trap accepts == 0 before the control)"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("M2E-A1 proxy child: ok"),
+        "{stdout}\n{}",
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 
@@ -2084,9 +2107,12 @@ fn e_o18_a_watch_admitted_before_a_stop_refuses_after_the_resume() {
 fn a1_identity_digests_are_pinned() {
     let identity = ModelIdentity::from_spec(&spec()).unwrap();
     assert_eq!(identity.provider(), "ollama");
+    // O-9a (Cq): identity v2; the default fake is N1Worker. The v1 value
+    // 4d7211f0... is retired.
+    assert_eq!(identity.purpose(), Purpose::N1Worker);
     assert_eq!(
         hex::encode(identity.digest()),
-        "4d7211f035868b327c0e10f2bc23155a7d492d7beecc5b505edfa373db82f9a4"
+        "5fad3aa48de2db319cb39dc9659aa54eeb75807c3ec5c88f2174adc010df9c9c"
     );
     assert_eq!(
         hex::encode(identity.config().digest()),
@@ -2144,36 +2170,27 @@ fn a1_the_grammar_is_the_qualified_one() {
 
 // ── oracle-add after Codex review 1 of PR #60 ───────────────────────────────
 
-/// The provisional scaffold floor (design §10.4 `SCAFFOLD_FLOOR`; the
-/// Architect's provisional value until Q-R3 records the qualified one).
-const PROVISIONAL_FLOOR: u64 = 256;
-
-/// E-O8b: a reply whose prompt count is below the scaffold floor, 0
-/// included, cannot have processed the fixed qualified texts: refused,
-/// charged once and settled, never retried. At or above the floor a valid
-/// reply is accepted.
+/// E-O8b (O-14, Cq): a reply whose prompt count is below the transport's
+/// qualified floor, 0 included, cannot have processed the fixed qualified
+/// texts: refused, charged once and settled, never retried. At or above the
+/// floor a valid reply is accepted. The explicit PageBuilder fixture record
+/// has F = 300 (freeze_floor(332)).
 #[test]
-fn e_o8b_a_prompt_count_below_the_scaffold_floor_is_refused() {
+fn e_o8b_a_prompt_count_below_the_qualified_floor_is_refused() {
+    const FLOOR: u64 = 300;
     let fake = Fake::healthy();
     let ctx = Ctx::new();
-    let transport = verified(&fake, &ctx);
+    let transport = cq::registered(&fake, &ctx, cq::spec_for(Purpose::PageBuilder));
     let reply = |count: u64| {
         let mut value = chat_value();
         value["prompt_eval_count"] = json!(count);
         fake.set_route(chat(value));
-        call(&transport, &ctx)
+        cq::closed(&transport, &ctx, cq::pair(Purpose::PageBuilder))
     };
-    for (what, count) in [
-        ("zero", 0),
-        ("one", 1),
-        ("one below the floor", PROVISIONAL_FLOOR - 1),
-    ] {
+    for (what, count) in [("zero", 0), ("one", 1), ("one below the floor", FLOOR - 1)] {
         assert_eq!(reply(count).code(), Err(ModelError::Truncated), "{what}");
     }
-    for (what, count) in [
-        ("at the floor", PROVISIONAL_FLOOR),
-        ("the qualification's 587", 587),
-    ] {
+    for (what, count) in [("at the floor", FLOOR), ("the qualification's 587", 587)] {
         let content = reply(count).result.map(ModelReply::into_content);
         assert_eq!(content, Ok(FINISH.to_string()), "{what}");
     }
@@ -2638,3 +2655,11 @@ mod n1;
 
 #[path = "sb1_tests.rs"]
 mod sb1;
+
+// ── M3-Cq (v6 §6.4) ─────────────────────────────────────────────────────────
+
+#[path = "cq_tests.rs"]
+mod cq;
+
+#[path = "cq_fixture_tests.rs"]
+mod cq_fixture;
