@@ -129,10 +129,12 @@ struct Fake {
     events: Receiver<Event>,
     log: Log,
     connections: Arc<AtomicUsize>,
-    /// One event per accept, independent of the counter (v6 §6.1), and how
-    /// many of them the observer has consumed.
-    accepted: Receiver<()>,
+    /// One event per accept (the peer's address when it can be read),
+    /// independent of the counter (v6 §6.1); how many of them the observer
+    /// has consumed, and how many were its own barrier sentinels.
+    accepted: Receiver<Option<SocketAddr>>,
     accept_events: std::cell::Cell<usize>,
+    sentinels: std::cell::Cell<usize>,
     route: Arc<Mutex<Route>>,
 }
 
@@ -155,10 +157,11 @@ impl Fake {
             let (log, connections, route) = (log.clone(), connections.clone(), route.clone());
             std::thread::spawn(move || {
                 for stream in listener.incoming() {
-                    let Ok(stream) = stream else { return };
-                    // The event first: whoever sees the count sees its event.
-                    let _ = accept_tx.send(());
+                    // Every accept is counted, an error too; the loop never
+                    // stops. The event first: whoever sees the count sees it.
+                    let _ = accept_tx.send(stream.as_ref().ok().and_then(|s| s.peer_addr().ok()));
                     connections.fetch_add(1, Ordering::SeqCst);
+                    let Ok(stream) = stream else { continue };
                     let (tx, log, route) = (tx.clone(), log.clone(), route.clone());
                     std::thread::spawn(move || serve(stream, &tx, &log, &route));
                 }
@@ -172,6 +175,7 @@ impl Fake {
             connections,
             accepted,
             accept_events: std::cell::Cell::new(0),
+            sentinels: std::cell::Cell::new(0),
             route,
         }
     }
@@ -230,6 +234,38 @@ impl Fake {
             self.accept_events.set(self.accept_events.get() + 1);
         }
         self.accept_events.get()
+    }
+
+    /// A bounded one-connection barrier (v6 §6.1): connect a sentinel and
+    /// consume accept events until its own arrives. Accepts are serial, so
+    /// every earlier connection has been counted. Returns the sentinels so
+    /// far, which the observer subtracts.
+    fn barrier(&self) -> usize {
+        let sentinel = TcpStream::connect(self.addr).expect("the fake accepts");
+        let mine = Some(sentinel.local_addr().unwrap());
+        let deadline = std::time::Instant::now() + PATIENCE;
+        loop {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            let peer = self
+                .accepted
+                .recv_timeout(left)
+                .expect("cq.barrier: the sentinel was accepted");
+            self.accept_events.set(self.accept_events.get() + 1);
+            if peer == mine {
+                break;
+            }
+        }
+        // Each event precedes its count: wait until the counter has them all.
+        while self.connections() < self.accept_events.get() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cq.barrier: the accept counter caught up"
+            );
+            std::thread::yield_now();
+        }
+        drop(sentinel);
+        self.sentinels.set(self.sentinels.get() + 1);
+        self.sentinels.get()
     }
 
     /// Wait for `want`, skipping other events.

@@ -32,11 +32,14 @@ pub(super) struct Snapshot {
     pub(super) settlements: usize,
 }
 
+/// Taken behind the fake's sentinel barrier (every earlier accept counted),
+/// the sentinels themselves subtracted.
 pub(super) fn snapshot(fake: &Fake, ctx: &Ctx) -> Snapshot {
+    let sentinels = fake.barrier();
     let events = ctx.meter.events();
     Snapshot {
-        accepts: fake.connections(),
-        connection_events: fake.connection_events(),
+        accepts: fake.connections() - sentinels,
+        connection_events: fake.connection_events() - sentinels,
         metadata: ["/api/version", "/api/status", "/api/tags", "/api/show"]
             .map(|path| fake.count(path)),
         chats: fake.count("/api/chat"),

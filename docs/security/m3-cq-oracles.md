@@ -274,7 +274,9 @@ independent per-accept event, consumed by the observer), metadata [version, stat
 (`cq.no_accepts`, `cq.no_connection_events`, `cq.no_metadata`, `cq.no_chat`, `cq.no_charge_calls`,
 `cq.no_charge_entries`, `cq.no_settlements`). H is +4 accepts and events, metadata [1,1,1,0], one chat, call, entry
 and settlement. Each value is read after the synchronous call has returned: every request it made was accepted and
-logged before its reply.
+logged before its reply. Barrier (R163 N-1): `snapshot()` first connects a sentinel and waits (bounded) for its own
+accept event and count, so every earlier accept, a connect-only one included, is counted; the sentinels are
+subtracted. The Fake's accept loop counts every accept, an accept error too, and never stops.
 
 The shared Fake's fixture owner can expire (`Fake::expire`) while its server clone keeps serving (F-1, F-2, F-3). The
 closed `call()` helper is removed (no caller after O-14); `call_in_thread` and `call_with` stay closed.

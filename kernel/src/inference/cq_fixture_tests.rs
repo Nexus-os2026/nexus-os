@@ -50,8 +50,9 @@ fn cq_expired_fixture_refuses_while_peer_serves() {
         Some(ModelError::Unavailable),
         "cq.f1 expired before verify"
     );
+    let raw = fake.connections();
     drop(TcpStream::connect(fake.addr).unwrap());
-    accepted(&fake, before.accepts + 1);
+    accepted(&fake, raw + 1);
 
     // Expired after a verification made while the owner was alive.
     let mut fake = Fake::healthy();
@@ -75,8 +76,9 @@ fn cq_expired_fixture_refuses_while_peer_serves() {
         Err(ModelError::Unavailable),
         "cq.f1 expired after verify"
     );
+    let raw = fake.connections();
     drop(TcpStream::connect(fake.addr).unwrap());
-    accepted(&fake, before.accepts + 1);
+    accepted(&fake, raw + 1);
 }
 
 // ── F-2 ─────────────────────────────────────────────────────────────────────
@@ -234,8 +236,9 @@ fn cq_accept_counter_counts_connect_without_request() {
     let transport = registered(&fake, &ctx, spec_for(Purpose::PageBuilder));
     let before = snapshot(&fake, &ctx);
     // C: a raw connect without any HTTP request.
+    let raw = fake.connections();
     drop(TcpStream::connect(fake.addr).unwrap());
-    accepted(&fake, before.accepts + 1);
+    accepted(&fake, raw + 1);
     let after = snapshot(&fake, &ctx);
     assert_eq!(after.accepts, before.accepts + 1, "cq.c accepts +1");
     assert_eq!(
