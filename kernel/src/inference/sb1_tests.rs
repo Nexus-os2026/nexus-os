@@ -280,7 +280,7 @@ impl Rig {
                     exchange_seams::set_after_construction(seam);
                 }
                 match transport {
-                    None => VerifiedOllama::verify(
+                    None => VerifiedOllama::verify_fixture(
                         endpoint,
                         &spec(),
                         cancel.as_ref(),
@@ -300,7 +300,7 @@ impl Rig {
                             stop: &ctx.watch,
                             observer: Some(notices.as_ref()),
                         };
-                        transport.call(&small(), &call).map(|_| ())
+                        qualification_seam::open(|| transport.call(&small(), &call)).map(|_| ())
                     }
                 }
             },

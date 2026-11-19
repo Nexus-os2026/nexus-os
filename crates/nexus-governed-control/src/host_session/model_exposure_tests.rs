@@ -71,7 +71,13 @@ impl CallDeadline for Open {
 }
 fn request() -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    ModelRequest::new("SB3C system".into(), "SB3C prompt".into(), schema).unwrap()
+    ModelRequest::new(
+        crate::inference::Purpose::PageBuilder,
+        "SB3C system".into(),
+        "SB3C prompt".into(),
+        schema,
+    )
+    .unwrap()
 }
 
 /// A Bootstrap session, optionally registered through the public R0 on its

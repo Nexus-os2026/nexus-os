@@ -23,7 +23,9 @@ use nexus_governed_control::authority::clock::ManualClock;
 use nexus_governed_control::authority::evidence::EndStatus;
 use nexus_governed_control::authority::file_session::{FileSessionError, HaltCell};
 use nexus_governed_control::governed::HaltReason;
-use nexus_governed_control::inference::{ModelIdentity, ModelReply, ModelRequest, ResponseSchema};
+use nexus_governed_control::inference::{
+    ModelIdentity, ModelReply, ModelRequest, Purpose, ResponseSchema,
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, sync_channel, Receiver};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -95,7 +97,13 @@ impl Lane for ModelLane {
 
 pub(crate) fn request(user: &str) -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    ModelRequest::new("C1B system".into(), user.into(), schema).unwrap()
+    ModelRequest::new(
+        Purpose::PageBuilder,
+        "C1B system".into(),
+        user.into(),
+        schema,
+    )
+    .unwrap()
 }
 pub(crate) fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
     context

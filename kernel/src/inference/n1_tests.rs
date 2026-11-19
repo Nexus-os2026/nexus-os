@@ -503,7 +503,15 @@ fn e_o62_a_conversation_accepts_only_a_reply_to_its_own_current_history() {
         .result
         .unwrap();
     assert_eq!(a.accept(&to_b), Err(ModelError::Malformed), "b's reply");
-    let pair = call(&transport, &ctx).result.unwrap();
+    let pair = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        small(),
+        ctx.watch.clone(),
+        None,
+    ))
+    .result
+    .unwrap();
     assert_eq!(a.accept(&pair), Err(ModelError::Malformed), "a pair reply");
     b.accept(&to_b).unwrap();
     b.push_answer(retained(READ)).unwrap();
@@ -712,8 +720,29 @@ fn e_o65_with_the_route_shut_a_conversation_call_refuses_before_any_charge_or_co
         qualification_seam::open(move || done(&call_in_thread(&transport2, &ctx2, request)).code());
     assert_eq!(other, Err(ModelError::ConfigMismatch));
     assert_eq!(fake.connections(), before);
-    // A1's two-message kind is unaffected, and the seam opens the route.
-    assert_eq!(call(&transport, &ctx).code(), Ok(()));
+    // CQ-R4 dual gate (N-5): an N1 pair is refused like a conversation while
+    // the route is shut, before any charge or connection; the seam, on the
+    // calling thread, opens it.
+    let pair = closed_call(&transport, &ctx, small());
+    assert_eq!(
+        pair.code(),
+        Err(ModelError::ConfigMismatch),
+        "closed N1 pair"
+    );
+    assert_eq!(
+        ctx.meter.events(),
+        NOTHING,
+        "closed N1 pair: no meter event"
+    );
+    assert_eq!(fake.connections(), before, "closed N1 pair: no connection");
+    let pair = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        small(),
+        ctx.watch.clone(),
+        None,
+    ));
+    assert_eq!(pair.code(), Ok(()), "open N1 pair");
     assert_eq!(
         seam_call(&transport, &ctx, conv_request(&conversation(OPENING))).code(),
         Ok(())
@@ -778,7 +807,16 @@ fn n1_the_conversation_configuration_is_pinned_and_every_field_is_a_mismatch() {
 
 #[test]
 fn n1_a_conversation_on_another_context_size_is_a_config_mismatch() {
-    let fake = Fake::healthy();
+    // N1_CONTEXT_16384 (v6 §5.4): STANDARD plus the explicit N1 fake at
+    // num_ctx=16384 (217 encoded bytes), so qualification cannot mask the
+    // transport's own context check.
+    let mut records = standard();
+    records.push(fixture_record(
+        Purpose::N1Worker,
+        "116f4ff9bbfdc908bddcb2f3f61f356d1e44084b32296fe13b4d1e0b66244bf6",
+        288,
+    ));
+    let fake = Fake::start_with(&records, route(|_| None));
     let ctx = Ctx::new();
     let mut other = spec();
     other.config.num_ctx = 16_384;

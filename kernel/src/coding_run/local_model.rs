@@ -27,8 +27,9 @@ use sha2::{Digest, Sha256};
 use crate::emergency_stop::StopWatch;
 use crate::inference::{
     grammar, AbsoluteDeadline, CallCancel, CallContext, CallDeadline, CallMeter, Conversation,
-    DeadlineClock, LoopbackEndpoint, MessageRole, ModelRequest, ModelTransport, RetainedAnswer,
-    RuntimeConfig, SystemClocks, VerifiedOllama, CALL_HARD_TIMEOUT, CONVERSATION_CONFIG,
+    DeadlineClock, LoopbackEndpoint, MessageRole, ModelRequest, ModelTransport, Purpose,
+    RetainedAnswer, RuntimeConfig, SystemClocks, VerifiedOllama, CALL_HARD_TIMEOUT,
+    CONVERSATION_CONFIG,
 };
 
 /// The local model errors: the kernel transport's codes.
@@ -51,6 +52,7 @@ pub struct ModelPin {
     digest: String,
     runtime: String,
     config_digest: [u8; 32],
+    purpose: Purpose,
 }
 
 impl ModelPin {
@@ -64,6 +66,9 @@ impl ModelPin {
             digest: identity.model_digest().to_string(),
             runtime: identity.runtime_version().to_string(),
             config_digest: model_config_digest(identity.config()),
+            // Inert (Cq-1b-k): every pin is N1's until Cq-2a copies
+            // `identity.purpose()` (W-1 is RED until then; P-Cq-11).
+            purpose: Purpose::N1Worker,
         }
     }
 
@@ -93,6 +98,11 @@ impl ModelPin {
     /// configuration and the conversation configuration.
     pub fn config_digest(&self) -> [u8; 32] {
         self.config_digest
+    }
+
+    /// The purpose the pinned transport was verified for.
+    pub const fn purpose(&self) -> Purpose {
+        self.purpose
     }
 }
 
@@ -449,5 +459,16 @@ pub(crate) fn pin_for_test_at(endpoint: &str, model: &str) -> ModelPin {
         digest: TEST_PIN_DIGEST.to_string(),
         runtime: TEST_PIN_RUNTIME.to_string(),
         config_digest: model_config_digest(&test_pin_config()),
+        purpose: Purpose::N1Worker,
+    }
+}
+
+/// The test pin with only its purpose changed.
+#[cfg(test)]
+#[allow(dead_code)] // first use: Cq-1c
+pub(crate) fn pin_for_test_with_purpose(endpoint: &str, model: &str, purpose: Purpose) -> ModelPin {
+    ModelPin {
+        purpose,
+        ..pin_for_test_at(endpoint, model)
     }
 }

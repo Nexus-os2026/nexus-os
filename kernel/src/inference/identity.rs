@@ -3,7 +3,7 @@
 use sha2::{Digest, Sha256};
 
 use super::request::MIN_NUM_CTX;
-use super::ModelError;
+use super::{ModelError, Purpose};
 
 /// The only provider of the local model transport.
 pub const LOCAL_PROVIDER: &str = "ollama";
@@ -68,13 +68,14 @@ impl RuntimeConfig {
 
 /// What a caller pins: the model's name and manifest digest (64 lowercase
 /// hex characters, as `/api/tags` lists it), the runtime's version and the
-/// configuration.
+/// configuration, and the purpose it is pinned for (required: no default).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelPinSpec {
     pub name: String,
     pub digest: String,
     pub runtime_version: String,
     pub config: RuntimeConfig,
+    pub purpose: Purpose,
 }
 
 /// A checked model identity. [`ModelIdentity::from_spec`] checks only its
@@ -86,6 +87,7 @@ pub struct ModelIdentity {
     model_digest: String,
     runtime_version: String,
     config: RuntimeConfig,
+    purpose: Purpose,
 }
 
 impl ModelIdentity {
@@ -120,6 +122,7 @@ impl ModelIdentity {
             model_digest: spec.digest.clone(),
             runtime_version: version.clone(),
             config: spec.config,
+            purpose: spec.purpose,
         })
     }
 
@@ -142,6 +145,11 @@ impl ModelIdentity {
 
     pub fn config(&self) -> &RuntimeConfig {
         &self.config
+    }
+
+    /// The purpose this identity was pinned for.
+    pub const fn purpose(&self) -> Purpose {
+        self.purpose
     }
 
     /// SHA-256 over `nexus.inference.identity.v1` and the length-prefixed

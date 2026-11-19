@@ -185,6 +185,8 @@ pub enum BrokerClass {
     ModelCancelled,
     ModelLate,
     ModelUnsafeDelimiter,
+    ModelPurposeNotQualified,
+    ModelPurposeMismatch,
     /// Anything outside this registry.
     Unknown,
 }
@@ -265,6 +267,8 @@ impl BrokerClass {
         BrokerClass::ModelCancelled,
         BrokerClass::ModelLate,
         BrokerClass::ModelUnsafeDelimiter,
+        BrokerClass::ModelPurposeNotQualified,
+        BrokerClass::ModelPurposeMismatch,
         BrokerClass::Unknown,
     ];
 
@@ -344,6 +348,8 @@ impl BrokerClass {
             BrokerClass::ModelCancelled => "model_cancelled",
             BrokerClass::ModelLate => "model_late",
             BrokerClass::ModelUnsafeDelimiter => "model_unsafe_delimiter",
+            BrokerClass::ModelPurposeNotQualified => "model_purpose_not_qualified",
+            BrokerClass::ModelPurposeMismatch => "model_purpose_mismatch",
             BrokerClass::Unknown => "unknown",
         }
     }

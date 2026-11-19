@@ -18,7 +18,7 @@ use nexus_kernel::emergency_stop::{StopAuthority, StopWatch};
 use nexus_kernel::inference::{
     grammar, AbsoluteDeadline, CallCancel, CallContext, CallMeter, CancelCause, Charged,
     LoopbackEndpoint, MeterRefusal, ModelError, ModelPinSpec, ModelRequest, ModelTransport,
-    RuntimeConfig, SystemClocks, Think, VerifiedOllama,
+    Purpose, RuntimeConfig, SystemClocks, Think, VerifiedOllama,
 };
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -199,12 +199,14 @@ fn spec() -> ModelPinSpec {
             think: Think::Off,
             truncate: false,
         },
+        purpose: Purpose::PageBuilder,
     }
 }
 
 /// The qualified two-message request.
 fn request() -> ModelRequest {
     ModelRequest::new(
+        Purpose::PageBuilder,
         grammar::WORKER_SYSTEM_INSTRUCTION.to_string(),
         "Owner task:\ntask\n".to_string(),
         grammar::worker_schema(),

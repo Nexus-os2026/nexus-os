@@ -33,7 +33,7 @@ use crate::harness_tests::{temp_root, TempRoot};
 use crate::test_hooks::at;
 use nexus_kernel::inference::{
     grammar, CallDeadline, CallMeter, Charged, MeterRefusal, ModelIdentity, ModelPinSpec,
-    ModelReply, ModelRequest, RuntimeConfig, Think,
+    ModelReply, ModelRequest, Purpose, RuntimeConfig, Think,
 };
 use serde_json::json;
 use std::io::{Read, Write};
@@ -86,6 +86,7 @@ fn spec() -> ModelPinSpec {
             think: Think::Off,
             truncate: false,
         },
+        purpose: Purpose::PageBuilder,
     }
 }
 
@@ -419,6 +420,7 @@ impl CallDeadline for Deadline {
 
 fn request(user: &str) -> ModelRequest {
     ModelRequest::new(
+        Purpose::PageBuilder,
         "You draft one file.".into(),
         user.into(),
         grammar::worker_schema(),

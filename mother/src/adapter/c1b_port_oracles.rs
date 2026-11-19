@@ -27,7 +27,7 @@ use nexus_governed_control::authority::AuthorityError;
 use nexus_governed_control::governed::GrantRequest;
 use nexus_governed_control::inference::{
     CallDeadline, CallMeter, Charged, MeterRefusal, ModelError, ModelIdentity, ModelRequest,
-    ResponseSchema,
+    Purpose, ResponseSchema,
 };
 use nexus_governed_control::inference::{InvocationObserver, InvocationOwner};
 use std::io::Read;
@@ -152,7 +152,13 @@ fn model_lanes(invoked: &Arc<AtomicUsize>) -> Vec<Arc<dyn Lane>> {
 
 fn request() -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    ModelRequest::new("C1B system".into(), "C1B prompt".into(), schema).unwrap()
+    ModelRequest::new(
+        Purpose::PageBuilder,
+        "C1B system".into(),
+        "C1B prompt".into(),
+        schema,
+    )
+    .unwrap()
 }
 fn identity_bytes() -> [u8; 32] {
     ModelIdentity::from_spec(&spec()).unwrap().digest()

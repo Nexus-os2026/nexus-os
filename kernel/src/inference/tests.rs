@@ -9,6 +9,7 @@
 //! emergency-stop authorities.
 
 use super::exchange::seams;
+use super::fixture::{FixtureEndpoint, FixtureListener, FixtureRecord};
 use super::grammar::{self, EditAction};
 use super::*;
 use crate::emergency_stop::{StopAuthority, StopController, StopWatch};
@@ -61,6 +62,7 @@ fn spec() -> ModelPinSpec {
         digest: DIGEST.to_string(),
         runtime_version: VERSION.to_string(),
         config: qualified_config(),
+        purpose: Purpose::N1Worker,
     }
 }
 
@@ -87,7 +89,41 @@ enum Reply {
 type Route = Arc<dyn Fn(&str) -> Reply + Send + Sync>;
 type Log = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
 
+/// One synthetic fixture record (never measured evidence): `purpose` for
+/// the identity whose v2 digest is `digest_hex`, floor `minimum - 32`.
+fn fixture_record(purpose: Purpose, digest_hex: &str, minimum: u32) -> FixtureRecord {
+    FixtureRecord {
+        purpose,
+        identity_sha256: hex::decode(digest_hex).unwrap().try_into().unwrap(),
+        floor: freeze_floor(minimum).unwrap(),
+    }
+}
+
+/// STANDARD (v6 §5.4): the three literal v2 goldens of [`spec`]'s pin.
+fn standard() -> Vec<FixtureRecord> {
+    vec![
+        fixture_record(
+            Purpose::PageBuilder,
+            "c5b838e3070d2ffcfb20f15e4420cca44c4f17456ff08a2232c0cd2a91c5b978",
+            332,
+        ),
+        fixture_record(
+            Purpose::N1Worker,
+            "5fad3aa48de2db319cb39dc9659aa54eeb75807c3ec5c88f2174adc010df9c9c",
+            288,
+        ),
+        fixture_record(
+            Purpose::Judge,
+            "b46c2ff5a58505f7f8a01cbb24a50818683dc1ad51a2ec55733aec506a008584",
+            132,
+        ),
+    ]
+}
+
+/// The fake runtime owns its fixture listener (the authority) and serves
+/// that listener's clone, which carries none.
 struct Fake {
+    owner: FixtureListener,
     addr: SocketAddr,
     events: Receiver<Event>,
     log: Log,
@@ -97,8 +133,13 @@ struct Fake {
 
 impl Fake {
     fn start(route: Route) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
+        Self::start_with(&standard(), route)
+    }
+
+    fn start_with(records: &[FixtureRecord], route: Route) -> Self {
+        let owner = FixtureListener::bind(records).unwrap();
+        let listener = owner.peer_listener().unwrap();
+        let addr = owner.addr();
         let (tx, events) = mpsc::channel();
         let log: Log = Arc::default();
         let connections = Arc::new(AtomicUsize::new(0));
@@ -115,6 +156,7 @@ impl Fake {
             });
         }
         Self {
+            owner,
             addr,
             events,
             log,
@@ -127,8 +169,8 @@ impl Fake {
         Self::start(route(|_| None))
     }
 
-    fn endpoint(&self) -> LoopbackEndpoint {
-        LoopbackEndpoint::parse(&format!("http://{}", self.addr)).unwrap()
+    fn endpoint(&self) -> FixtureEndpoint {
+        self.owner.endpoint()
     }
 
     fn set_route(&self, route: Route) {
@@ -517,7 +559,9 @@ fn verify_in_thread(
 ) -> Receiver<Outcome<VerifiedOllama>> {
     let (endpoint, ctx) = (fake.endpoint(), ctx.clone());
     in_thread(
-        move || VerifiedOllama::verify(endpoint, &spec, &ctx.cancel, &ctx.deadline, &ctx.watch),
+        move || {
+            VerifiedOllama::verify_fixture(endpoint, &spec, &ctx.cancel, &ctx.deadline, &ctx.watch)
+        },
         None,
     )
 }
@@ -547,6 +591,23 @@ fn call_with(
     )
 }
 
+/// [`call_with`] with N1's route opened by the private seam, on the thread
+/// that executes the call and only there (CQ-R4). The only open helper:
+/// [`call`], [`call_in_thread`] and [`call_with`] stay closed.
+fn call_with_open_n1(
+    transport: &Arc<VerifiedOllama>,
+    ctx: &Arc<Ctx>,
+    request: ModelRequest,
+    watch: StopWatch,
+    after_reply: Option<Box<dyn Fn() + Send>>,
+) -> Receiver<Outcome<ModelReply>> {
+    let (transport, ctx) = (transport.clone(), ctx.clone());
+    in_thread(
+        move || qualification_seam::open(|| transport.call(&request, &ctx.call_ctx(&watch))),
+        after_reply,
+    )
+}
+
 fn call_in_thread(
     transport: &Arc<VerifiedOllama>,
     ctx: &Arc<Ctx>,
@@ -561,6 +622,7 @@ fn call(transport: &Arc<VerifiedOllama>, ctx: &Arc<Ctx>) -> Outcome<ModelReply> 
 
 fn request(system: &str, user: &str) -> ModelRequest {
     ModelRequest::new(
+        Purpose::N1Worker,
         system.to_string(),
         user.to_string(),
         grammar::worker_schema(),
@@ -872,13 +934,30 @@ fn e_o2b_drift_after_registration_is_refused_before_any_charge() {
         let ctx = Ctx::new();
         let transport = verified(&fake, &ctx);
         fake.set_route(drift);
-        let outcome = call(&transport, &ctx);
+        let outcome = done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None,
+        ));
         assert_eq!(outcome.code(), Err(code), "{what}");
         assert_eq!(ctx.meter.events(), NOTHING, "{what}: nothing charged");
         assert_eq!(fake.count("/api/chat"), 0, "{what}: no chat");
         // Control: once the runtime is the pinned one again, a call runs.
         fake.set_route(route(|_| None));
-        assert_eq!(call(&transport, &ctx).code(), Ok(()), "{what}");
+        assert_eq!(
+            done(&call_with_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                ctx.watch.clone(),
+                None
+            ))
+            .code(),
+            Ok(()),
+            "{what}"
+        );
     }
 }
 
@@ -913,7 +992,17 @@ fn e_o2c_cloud_status_must_report_disabled_at_registration_and_before_each_call(
         let ctx = Ctx::new();
         let transport = verified(&fake, &ctx);
         fake.set_route(on("/api/status", reply));
-        assert_eq!(call(&transport, &ctx).code(), Err(ModelError::CloudEnabled));
+        assert_eq!(
+            done(&call_with_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                ctx.watch.clone(),
+                None
+            ))
+            .code(),
+            Err(ModelError::CloudEnabled)
+        );
         assert_eq!(ctx.meter.events(), NOTHING, "nothing charged");
         assert_eq!(fake.count("/api/chat"), 0, "no chat");
     }
@@ -926,10 +1015,12 @@ fn e_o3_the_chat_body_is_the_frozen_qualified_body() {
     let fake = Fake::healthy();
     let ctx = Ctx::new();
     let transport = verified(&fake, &ctx);
-    let outcome = done(&call_in_thread(
+    let outcome = done(&call_with_open_n1(
         &transport,
         &ctx,
         request("S \"q\"\n1", "U \u{e9}\t2"),
+        ctx.watch.clone(),
+        None,
     ));
     assert_eq!(outcome.code(), Ok(()));
     let expected = [
@@ -1007,7 +1098,13 @@ fn e_o5_order_is_version_status_tags_charge_chat_and_nothing_is_refunded() {
     let transport = verified(&fake, &ctx);
     let from = fake.paths().len();
 
-    let outcome = call(&transport, &ctx);
+    let outcome = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        small(),
+        ctx.watch.clone(),
+        None,
+    ));
     assert_eq!(outcome.code(), Ok(()));
     assert_eq!(
         ctx.meter.events(),
@@ -1035,7 +1132,17 @@ fn e_o5_order_is_version_status_tags_charge_chat_and_nothing_is_refunded() {
     // A refused charge sends no chat and settles nothing.
     ctx.meter.refuse.store(true, Ordering::SeqCst);
     let from = fake.paths().len();
-    assert_eq!(call(&transport, &ctx).code(), Err(ModelError::OverBudget));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Err(ModelError::OverBudget)
+    );
     assert_eq!(
         fake.paths()[from..],
         ["/api/version", "/api/status", "/api/tags"]
@@ -1047,14 +1154,30 @@ fn e_o5_order_is_version_status_tags_charge_chat_and_nothing_is_refunded() {
     let from = fake.paths().len();
     let oversize =
         ModelRequest::unchecked("s".repeat(2000), "u".repeat(1937), grammar::worker_schema());
-    let outcome = done(&call_in_thread(&transport, &ctx, oversize));
+    let outcome = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        oversize,
+        ctx.watch.clone(),
+        None,
+    ));
     assert_eq!(outcome.code(), Err(ModelError::RequestTooLarge));
     assert_eq!(fake.paths().len(), from);
     assert_eq!(ctx.meter.events().len(), 2);
 
     // Failed metadata makes no charge.
     fake.set_route(on("/api/tags", Reply::Json(500, "{}".into())));
-    assert_eq!(call(&transport, &ctx).code(), Err(ModelError::Unavailable));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Err(ModelError::Unavailable)
+    );
     assert_eq!(ctx.meter.events().len(), 2);
     assert_eq!(fake.count("/api/chat"), 1);
 
@@ -1062,7 +1185,17 @@ fn e_o5_order_is_version_status_tags_charge_chat_and_nothing_is_refunded() {
     let mut truncated = chat_value();
     truncated["done_reason"] = json!("length");
     fake.set_route(chat(truncated));
-    assert_eq!(call(&transport, &ctx).code(), Err(ModelError::Truncated));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Err(ModelError::Truncated)
+    );
     assert_eq!(
         ctx.meter.events()[2..],
         [Metered::Charge(2), Metered::Settle(2)]
@@ -1076,7 +1209,7 @@ fn held_chat_ends(cause: Cause) {
     let fake = Fake::start(on("/api/chat", Reply::Hold));
     let ctx = Ctx::new();
     let transport = verified(&fake, &ctx);
-    let rx = call_in_thread(&transport, &ctx, small());
+    let rx = call_with_open_n1(&transport, &ctx, small(), ctx.watch.clone(), None);
     fake.wait_for(Event::Request("/api/chat".into()));
     cause.trigger(&ctx);
     let outcome = within_bound(&rx, &format!("held chat, {cause:?}"));
@@ -1143,7 +1276,7 @@ fn e_o6b_held_metadata_before_a_charge_ends_within_the_bound_and_charges_nothing
             let transport = verified(&fake, &ctx);
             let from = fake.paths().len();
             fake.set_route(on(path, Reply::Hold));
-            let rx = call_in_thread(&transport, &ctx, small());
+            let rx = call_with_open_n1(&transport, &ctx, small(), ctx.watch.clone(), None);
             fake.wait_for(Event::Request(path.into()));
             cause.trigger(&ctx);
             let outcome = within_bound(&rx, &format!("{path} held before a charge, {cause:?}"));
@@ -1170,7 +1303,7 @@ fn e_o7_a_reply_after_the_call_ended_is_late_and_unused() {
         let ctx = Ctx::new();
         let transport = verified(&fake, &ctx);
         let hook_ctx = ctx.clone();
-        let rx = call_with(
+        let rx = call_with_open_n1(
             &transport,
             &ctx,
             small(),
@@ -1330,7 +1463,18 @@ fn e_o8_each_reply_refusal_has_its_code() {
     let transport = verified(&fake, &ctx);
     for (what, value, code) in cases {
         fake.set_route(chat(value));
-        assert_eq!(call(&transport, &ctx).code(), Err(code), "{what}");
+        assert_eq!(
+            done(&call_with_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                ctx.watch.clone(),
+                None
+            ))
+            .code(),
+            Err(code),
+            "{what}"
+        );
     }
     for (what, reply, code) in [
         (
@@ -1353,7 +1497,18 @@ fn e_o8_each_reply_refusal_has_its_code() {
         ),
     ] {
         fake.set_route(on("/api/chat", reply));
-        assert_eq!(call(&transport, &ctx).code(), Err(code), "{what}");
+        assert_eq!(
+            done(&call_with_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                ctx.watch.clone(),
+                None
+            ))
+            .code(),
+            Err(code),
+            "{what}"
+        );
     }
 
     // Controls: no false refusal at the boundaries.
@@ -1376,13 +1531,27 @@ fn e_o8_each_reply_refusal_has_its_code() {
         ),
     ] {
         fake.set_route(chat(value));
-        let outcome = call(&transport, &ctx);
+        let outcome = done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None,
+        ));
         let reply = outcome
             .result
             .unwrap_or_else(|error| panic!("{what}: {error:?}"));
         assert_eq!(reply.content(), FINISH, "{what}");
     }
-    let reply = call(&transport, &ctx).result.unwrap();
+    let reply = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        small(),
+        ctx.watch.clone(),
+        None,
+    ))
+    .result
+    .unwrap();
     assert_eq!((reply.prompt_tokens(), reply.output_tokens()), (587, 378));
 }
 
@@ -1405,14 +1574,25 @@ fn e_o9_a_failed_chat_is_never_retried() {
         let fake = Fake::start(on("/api/chat", reply));
         let ctx = Ctx::new();
         let transport = verified(&fake, &ctx);
-        assert_eq!(call(&transport, &ctx).code(), Err(code), "{what}");
+        assert_eq!(
+            done(&call_with_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                ctx.watch.clone(),
+                None
+            ))
+            .code(),
+            Err(code),
+            "{what}"
+        );
         assert_eq!(fake.count("/api/chat"), 1, "{what}: exactly one chat");
     }
     // A timeout: the caller's deadline ends a held chat.
     let fake = Fake::start(on("/api/chat", Reply::Hold));
     let ctx = Ctx::new();
     let transport = verified(&fake, &ctx);
-    let rx = call_in_thread(&transport, &ctx, small());
+    let rx = call_with_open_n1(&transport, &ctx, small(), ctx.watch.clone(), None);
     fake.wait_for(Event::Request("/api/chat".into()));
     Cause::Deadline.trigger(&ctx);
     assert_eq!(
@@ -1436,7 +1616,17 @@ fn e_o10_a_redirect_is_never_followed() {
     ));
     let ctx = Ctx::new();
     let transport = verified(&fake, &ctx);
-    assert_eq!(call(&transport, &ctx).code(), Err(ModelError::Unavailable));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Err(ModelError::Unavailable)
+    );
     assert_eq!(
         second.connections(),
         0,
@@ -1456,8 +1646,10 @@ const PROXY_KEYS: [&str; 6] = [
 
 #[test]
 fn e_o10_proxy_variables_are_never_used() {
-    let fake = Fake::healthy();
+    // The model fake and its fixture authority live only in the child; no
+    // model address or record crosses the environment or argv.
     let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_addr = proxy.local_addr().unwrap();
     let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
     let proxied = Arc::new(AtomicUsize::new(0));
     {
@@ -1477,13 +1669,26 @@ fn e_o10_proxy_variables_are_never_used() {
             "--nocapture",
             "--test-threads=1",
         ])
-        .env(PROXY_CHILD, fake.addr.to_string())
+        .env(PROXY_CHILD, "1")
         .env_remove("NO_PROXY")
         .env_remove("no_proxy");
     for key in PROXY_KEYS {
         child.env(key, &proxy_url);
     }
-    let output = child.output().unwrap();
+    child
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = child.spawn().unwrap();
+    // Bounded: the child is killed at the deadline (a failure, not a pass).
+    let deadline = std::time::Instant::now() + PATIENCE * 6;
+    while child.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            break;
+        }
+        std::thread::yield_now();
+    }
+    let output = child.wait_with_output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         output.status.success() && stdout.contains("M2E-A1 proxy child: ok"),
@@ -1495,10 +1700,17 @@ fn e_o10_proxy_variables_are_never_used() {
         0,
         "the proxy was not contacted"
     );
+    // The trap works: one raw connection is exactly one accept (its accepts
+    // are serial, so a child connection would have come first).
+    drop(TcpStream::connect(proxy_addr).unwrap());
+    let deadline = std::time::Instant::now() + PATIENCE;
+    while proxied.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
+        std::thread::yield_now();
+    }
     assert_eq!(
-        fake.count("/api/chat"),
+        proxied.load(Ordering::SeqCst),
         1,
-        "the runtime was reached directly"
+        "the trap accepts exactly the control"
     );
 }
 
@@ -1506,14 +1718,29 @@ fn e_o10_proxy_variables_are_never_used() {
 /// the child process it starts, with the proxy variables set.
 #[test]
 fn e_o10_proxy_child() {
-    let Some(addr) = std::env::var_os(PROXY_CHILD) else {
+    if std::env::var_os(PROXY_CHILD).is_none_or(|role| role != "1") {
         return;
-    };
-    let endpoint = LoopbackEndpoint::parse(&format!("http://{}", addr.to_string_lossy())).unwrap();
+    }
+    // The child owns the fake and its fixture, through verification, the
+    // call and the observation.
+    let fake = Fake::healthy();
     let ctx = Ctx::new();
-    let transport =
-        VerifiedOllama::verify(endpoint, &spec(), &ctx.cancel, &ctx.deadline, &ctx.watch).unwrap();
-    transport.call(&small(), &ctx.call_ctx(&ctx.watch)).unwrap();
+    let transport = VerifiedOllama::verify_fixture(
+        fake.endpoint(),
+        &spec(),
+        &ctx.cancel,
+        &ctx.deadline,
+        &ctx.watch,
+    )
+    .unwrap();
+    qualification_seam::open(|| transport.call(&small(), &ctx.call_ctx(&ctx.watch))).unwrap();
+    assert_eq!(fake.count("/api/chat"), 1, "one direct chat");
+    assert_eq!(
+        ["/api/version", "/api/status", "/api/tags", "/api/show"].map(|path| fake.count(path)),
+        [2, 2, 2, 1],
+        "four registration and three call metadata requests"
+    );
+    assert_eq!(ctx.meter.events(), [Metered::Charge(1), Metered::Settle(1)]);
     println!("M2E-A1 proxy child: ok");
 }
 
@@ -1523,6 +1750,7 @@ fn e_o10_proxy_child() {
 fn e_o11_debug_and_display_carry_no_content() {
     const CANARY: &str = "M2E-A1-CANARY-c0ffee";
     let request = ModelRequest::new(
+        Purpose::N1Worker,
         format!("system {CANARY}"),
         format!("user {CANARY}"),
         grammar::worker_schema(),
@@ -1536,16 +1764,32 @@ fn e_o11_debug_and_display_carry_no_content() {
     let mut value = chat_value();
     value["message"]["content"] = json!(format!("answer {CANARY}"));
     fake.set_route(chat(value.clone()));
-    let reply = call(&transport, &ctx).result.unwrap();
+    let reply = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        small(),
+        ctx.watch.clone(),
+        None,
+    ))
+    .result
+    .unwrap();
     assert!(reply.content().contains(CANARY));
     assert!(!format!("{reply:?}").contains(CANARY), "{reply:?}");
     // A refused reply carries nothing of it.
     value["done_reason"] = json!("length");
     fake.set_route(chat(value));
-    let error = call(&transport, &ctx).result.unwrap_err();
+    let error = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        small(),
+        ctx.watch.clone(),
+        None,
+    ))
+    .result
+    .unwrap_err();
     assert!(!format!("{error} {error:?}").contains(CANARY));
 
-    const ALL: [ModelError; 24] = [
+    const ALL: [ModelError; 26] = [
         ModelError::NotLocal,
         ModelError::InvalidAddress,
         ModelError::InvalidModelName,
@@ -1570,6 +1814,8 @@ fn e_o11_debug_and_display_carry_no_content() {
         ModelError::Cancelled,
         ModelError::Late,
         ModelError::UnsafeDelimiter,
+        ModelError::PurposeNotQualified,
+        ModelError::PurposeMismatch,
     ];
     assert_eq!(ALL.map(ModelError::code), ModelError::CODES);
     let mut codes = ModelError::CODES.to_vec();
@@ -1598,22 +1844,52 @@ fn e_o16_a_request_over_the_byte_bound_is_refused_before_any_charge() {
     assert_eq!(MAX_RENDERED_CONTENT_BYTES, 3_936);
     let schema = grammar::worker_schema;
     assert_eq!(
-        ModelRequest::new(String::new(), "x".repeat(20 * 1024), schema()).err(),
+        ModelRequest::new(
+            Purpose::N1Worker,
+            String::new(),
+            "x".repeat(20 * 1024),
+            schema()
+        )
+        .err(),
         Some(ModelError::RequestTooLarge),
         "a 20 KiB prompt"
     );
     let system = "s".repeat(2000);
     assert_eq!(
-        ModelRequest::new(system.clone(), "u".repeat(1937), schema()).err(),
+        ModelRequest::new(
+            Purpose::N1Worker,
+            system.clone(),
+            "u".repeat(1937),
+            schema()
+        )
+        .err(),
         Some(ModelError::RequestTooLarge),
         "3,937 bytes"
     );
-    let fits = ModelRequest::new(system.clone(), "u".repeat(1936), schema()).unwrap();
+    let fits = ModelRequest::new(
+        Purpose::N1Worker,
+        system.clone(),
+        "u".repeat(1936),
+        schema(),
+    )
+    .unwrap();
     assert_eq!(fits.rendered_bytes(), 3_936);
     // Bytes, not characters.
-    assert!(ModelRequest::new(String::new(), "語".repeat(1312), schema()).is_ok());
+    assert!(ModelRequest::new(
+        Purpose::N1Worker,
+        String::new(),
+        "語".repeat(1312),
+        schema()
+    )
+    .is_ok());
     assert_eq!(
-        ModelRequest::new(String::new(), format!("{}x", "語".repeat(1312)), schema()).err(),
+        ModelRequest::new(
+            Purpose::N1Worker,
+            String::new(),
+            format!("{}x", "語".repeat(1312)),
+            schema()
+        )
+        .err(),
         Some(ModelError::RequestTooLarge)
     );
 
@@ -1623,7 +1899,13 @@ fn e_o16_a_request_over_the_byte_bound_is_refused_before_any_charge() {
     let transport = verified(&fake, &ctx);
     let (from, connections) = (fake.paths().len(), fake.connections());
     let oversize = ModelRequest::unchecked(system, "u".repeat(1937), schema());
-    let outcome = done(&call_in_thread(&transport, &ctx, oversize));
+    let outcome = done(&call_with_open_n1(
+        &transport,
+        &ctx,
+        oversize,
+        ctx.watch.clone(),
+        None,
+    ));
     assert_eq!(outcome.code(), Err(ModelError::RequestTooLarge));
     assert_eq!(ctx.meter.events(), NOTHING);
     assert_eq!(
@@ -1640,15 +1922,45 @@ fn e_o17_one_deadline_serves_every_call_and_a_delay_never_extends_it() {
     let clocks = Clocks::default();
     let ctx = Ctx::with_deadline(clocks.clone(), 10_000, 10_000);
     let transport = verified(&fake, &ctx);
-    assert_eq!(call(&transport, &ctx).code(), Ok(()));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Ok(())
+    );
     // A delay between calls, short of the deadline: the next call runs.
     clocks.advance_wall(9_999);
     clocks.advance_monotonic(9_999);
-    assert_eq!(call(&transport, &ctx).code(), Ok(()));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Ok(())
+    );
     // The deadline is where it was fixed: the next call is refused at once.
     clocks.advance_monotonic(1);
     let (from, connections) = (fake.paths().len(), fake.connections());
-    assert_eq!(call(&transport, &ctx).code(), Err(ModelError::Timeout));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Err(ModelError::Timeout)
+    );
     assert_eq!(
         (fake.paths().len(), fake.connections()),
         (from, connections)
@@ -1664,7 +1976,7 @@ fn e_o17_a_held_request_ends_when_either_clock_passes_the_deadline() {
         let ctx = Ctx::new();
         let transport = verified(&fake, &ctx);
         fake.set_route(on("/api/version", Reply::Hold));
-        let rx = call_in_thread(&transport, &ctx, small());
+        let rx = call_with_open_n1(&transport, &ctx, small(), ctx.watch.clone(), None);
         fake.wait_for(Event::Request("/api/version".into()));
         cause.trigger(&ctx);
         let outcome = within_bound(&rx, &format!("version held, {cause:?}"));
@@ -1676,7 +1988,7 @@ fn e_o17_a_held_request_ends_when_either_clock_passes_the_deadline() {
         let fake = Fake::start(on("/api/chat", Reply::Hold));
         let ctx = Ctx::new();
         let transport = verified(&fake, &ctx);
-        let rx = call_in_thread(&transport, &ctx, small());
+        let rx = call_with_open_n1(&transport, &ctx, small(), ctx.watch.clone(), None);
         fake.wait_for(Event::Request("/api/chat".into()));
         cause.trigger(&ctx);
         let outcome = within_bound(&rx, &format!("chat held, {cause:?}"));
@@ -1700,7 +2012,7 @@ fn e_o17_n2_a_suspend_before_reservation_leaves_only_the_wall_time() {
     // now + time left.
     let ctx = Ctx::with_deadline(clocks.clone(), BUDGET, BUDGET);
     let transport = verified(&fake, &ctx);
-    let rx = call_in_thread(&transport, &ctx, small());
+    let rx = call_with_open_n1(&transport, &ctx, small(), ctx.watch.clone(), None);
     fake.wait_for(Event::Request("/api/chat".into()));
     // The monotonic clock alone still has nearly all of it: no expiry.
     clocks.advance_monotonic(100);
@@ -1721,7 +2033,17 @@ fn e_o17_n2_a_suspend_before_reservation_leaves_only_the_wall_time() {
     let transport = verified(&fake, &ctx);
     clocks.advance_wall(BUDGET);
     let from = fake.paths().len();
-    assert_eq!(call(&transport, &ctx).code(), Err(ModelError::Timeout));
+    assert_eq!(
+        done(&call_with_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            ctx.watch.clone(),
+            None
+        ))
+        .code(),
+        Err(ModelError::Timeout)
+    );
     assert_eq!(fake.paths().len(), from);
     assert_eq!(ctx.meter.events(), NOTHING);
 }
@@ -1736,7 +2058,7 @@ fn e_o18_a_watch_admitted_before_a_stop_refuses_after_the_resume() {
     let number = ctx.controller.engage();
     assert!(ctx.controller.lift_if(number), "the owner's resume");
     let connections = fake.connections();
-    let outcome = done(&call_with(
+    let outcome = done(&call_with_open_n1(
         &transport,
         &ctx,
         small(),
@@ -1752,7 +2074,7 @@ fn e_o18_a_watch_admitted_before_a_stop_refuses_after_the_resume() {
     assert_eq!(ctx.meter.events(), NOTHING);
     // Work admitted after the resume runs.
     let fresh = ctx.stop.admit().unwrap();
-    let outcome = done(&call_with(&transport, &ctx, small(), fresh, None));
+    let outcome = done(&call_with_open_n1(&transport, &ctx, small(), fresh, None));
     assert_eq!(outcome.code(), Ok(()));
 }
 
@@ -1968,7 +2290,7 @@ mod dispatch {
 
     /// A call with `recorder` as its observer (and `meter`, if any, in
     /// place of the caller's own).
-    fn observed(
+    fn observed_open_n1(
         transport: &Arc<VerifiedOllama>,
         ctx: &Arc<Ctx>,
         request: ModelRequest,
@@ -1989,7 +2311,7 @@ mod dispatch {
                     stop: &ctx.watch,
                     observer: Some(recorder.as_ref()),
                 };
-                transport.call(&request, &call)
+                qualification_seam::open(|| transport.call(&request, &call))
             },
             None,
         )
@@ -2005,7 +2327,13 @@ mod dispatch {
         let from = fake.paths().len();
         let recorder = Recorder::new(&fake);
         let before = host_monotonic_ms();
-        let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+        let outcome = done(&observed_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            &recorder,
+            None,
+        ));
         let after = host_monotonic_ms();
         assert_eq!(outcome.code(), Ok(()));
         let notices = recorder.notices();
@@ -2035,7 +2363,7 @@ mod dispatch {
             let ctx = Ctx::new();
             let transport = verified(&fake, &ctx);
             let recorder = Recorder::new(&fake);
-            let rx = observed(&transport, &ctx, small(), &recorder, None);
+            let rx = observed_open_n1(&transport, &ctx, small(), &recorder, None);
             fake.wait_for(Event::Request("/api/chat".into()));
             assert_eq!(
                 recorder.notices().len(),
@@ -2055,7 +2383,13 @@ mod dispatch {
             let ctx = Ctx::new();
             let transport = verified(&fake, &ctx);
             let recorder = Recorder::new(&fake);
-            let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+            let outcome = done(&observed_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                &recorder,
+                None,
+            ));
             assert_eq!(outcome.code(), Err(ModelError::Unavailable), "{what}");
             assert_eq!(recorder.notices().len(), 1, "{what}: once");
         }
@@ -2077,7 +2411,7 @@ mod dispatch {
             let transport = verified(&fake, &ctx);
             fake.set_route(on(path, Reply::Hold));
             let recorder = Recorder::new(&fake);
-            let rx = observed(&transport, &ctx, small(), &recorder, None);
+            let rx = observed_open_n1(&transport, &ctx, small(), &recorder, None);
             fake.wait_for(Event::Request(path.into()));
             cause.trigger(&ctx);
             let outcome = within_bound(&rx, &format!("observed {path} held, {cause:?}"));
@@ -2113,7 +2447,13 @@ mod dispatch {
             let transport = verified(&fake, &ctx);
             fake.set_route(route);
             let recorder = Recorder::new(&fake);
-            let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+            let outcome = done(&observed_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                &recorder,
+                None,
+            ));
             assert_eq!(outcome.code(), Err(code), "{what}");
             assert_eq!(recorder.notices(), [], "{what}: no notice");
         }
@@ -2123,10 +2463,18 @@ mod dispatch {
         let recorder = Recorder::new(&fake);
         let oversize =
             ModelRequest::unchecked("s".repeat(2000), "u".repeat(1937), grammar::worker_schema());
-        let outcome = done(&observed(&transport, &ctx, oversize, &recorder, None));
+        let outcome = done(&observed_open_n1(
+            &transport, &ctx, oversize, &recorder, None,
+        ));
         assert_eq!(outcome.code(), Err(ModelError::RequestTooLarge));
         ctx.meter.refuse.store(true, Ordering::SeqCst);
-        let outcome = done(&observed(&transport, &ctx, small(), &recorder, None));
+        let outcome = done(&observed_open_n1(
+            &transport,
+            &ctx,
+            small(),
+            &recorder,
+            None,
+        ));
         assert_eq!(outcome.code(), Err(ModelError::OverBudget));
         assert_eq!(recorder.notices(), [], "byte bound, meter: no notice");
         // Ended after the charge, before the send.
@@ -2139,7 +2487,13 @@ mod dispatch {
                 ctx: ctx.clone(),
                 on_charge: cause,
             };
-            let outcome = done(&observed(&transport, &ctx, small(), &recorder, Some(meter)));
+            let outcome = done(&observed_open_n1(
+                &transport,
+                &ctx,
+                small(),
+                &recorder,
+                Some(meter),
+            ));
             assert_eq!(
                 outcome.code(),
                 Err(cause.code()),
@@ -2197,7 +2551,7 @@ mod dispatch_panic {
                         stop: &ctx.watch,
                         observer: Some(observer.as_ref()),
                     };
-                    transport.call(&small(), &call)
+                    qualification_seam::open(|| transport.call(&small(), &call))
                 },
                 None,
             )
@@ -2262,7 +2616,7 @@ mod dispatch_panic_payload {
                         stop: &ctx.watch,
                         observer: Some(observer.as_ref()),
                     };
-                    transport.call(&small(), &call)
+                    qualification_seam::open(|| transport.call(&small(), &call))
                 },
                 None,
             )

@@ -2,7 +2,7 @@
 use super::{assemble::*, draft::*, fixtures::*, prompt::*, *};
 use nexus_governed_control::{
     inert_page::*,
-    inference::{ModelError, ModelRequest, ResponseSchema},
+    inference::{ModelError, ModelRequest, Purpose, ResponseSchema},
 };
 use sha2::{Digest, Sha256};
 fn hash(s: &str) -> String {
@@ -153,6 +153,7 @@ fn m3c_request_bound_counts_every_separator() {
 fn m3c_oversize_request_never_reaches_caller() {
     // Kernel-constructor evidence only; the caller/charge count proof is Cb's.
     let r = ModelRequest::new(
+        Purpose::PageBuilder,
         "s".repeat(3937),
         String::new(),
         ResponseSchema::new(SCHEMA).unwrap(),

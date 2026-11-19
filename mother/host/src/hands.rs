@@ -9,7 +9,7 @@ use nexus_governed_control::host_session::{
     close::{CloseSeal, Producer, ProducerKind},
     CommandKind, SessionRequest, SessionSeed, SessionState,
 };
-use nexus_governed_control::inference::{ModelPinSpec, RuntimeConfig, Think};
+use nexus_governed_control::inference::{ModelPinSpec, Purpose, RuntimeConfig, Think};
 use nexus_mother::adapter::SessionPort;
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion};
 use nexus_mother::coordinator::{
@@ -85,6 +85,7 @@ fn qualified_pin() -> ModelPinSpec {
             think: Think::Off,
             truncate: false,
         },
+        purpose: Purpose::PageBuilder,
     }
 }
 /// The configuration, and whether `--mission one-page-site` selected the

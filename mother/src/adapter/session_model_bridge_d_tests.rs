@@ -19,7 +19,7 @@ use nexus_governed_control::authority::evidence::EndStatus;
 use nexus_governed_control::authority::file_session::HaltCause;
 use nexus_governed_control::authority::ids::Digest;
 use nexus_governed_control::host_session::{CommandKind, SessionState};
-use nexus_governed_control::inference::{ModelReply, ModelRequest, ResponseSchema};
+use nexus_governed_control::inference::{ModelReply, ModelRequest, Purpose, ResponseSchema};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
@@ -56,7 +56,13 @@ fn run(case: &str) {
 
 fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    let request = ModelRequest::new("SB3D1 system".into(), PROMPT.into(), schema).unwrap();
+    let request = ModelRequest::new(
+        Purpose::PageBuilder,
+        "SB3D1 system".into(),
+        PROMPT.into(),
+        schema,
+    )
+    .unwrap();
     context
         .model
         .expect("a model lane gets a caller")

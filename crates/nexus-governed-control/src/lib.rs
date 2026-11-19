@@ -501,7 +501,7 @@
 //! use nexus_governed_control::inference::{
 //!     grammar, AbsoluteDeadline, CallDeadline, CallMeter, Charged, MeterRefusal,
 //!     ModelCallOutcome, ModelError, ModelIdentity, ModelIdentityView, ModelPinSpec, ModelReply,
-//!     ModelRequest, ResponseSchema, RuntimeConfig, SystemClocks, Think,
+//!     ModelRequest, Purpose, ResponseSchema, RuntimeConfig, SystemClocks, Think,
 //!     MAX_RENDERED_CONTENT_BYTES,
 //! };
 //! struct Meter;
@@ -517,13 +517,19 @@
 //!         false
 //!     }
 //! }
-//! let request = ModelRequest::new("s".into(), "u".into(), grammar::worker_schema()).unwrap();
+//! let request = ModelRequest::new(
+//!     Purpose::PageBuilder,
+//!     "s".into(),
+//!     "u".into(),
+//!     grammar::worker_schema(),
+//! )
+//! .unwrap();
 //! assert!(request.rendered_bytes() <= MAX_RENDERED_CONTENT_BYTES);
 //! assert!(ResponseSchema::new(r#"{"type":"object"}"#).is_ok());
 //! let deadline = AbsoluteDeadline::within(SystemClocks, std::time::Duration::from_secs(60));
 //! assert!(!deadline.expired());
 //! assert_eq!(ModelError::Late.code(), "late");
-//! assert_eq!(ModelError::CODES.len(), 24);
+//! assert_eq!(ModelError::CODES.len(), 26);
 //! let spec = ModelPinSpec {
 //!     name: "qwen3.6:35b-a3b".into(),
 //!     digest: "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c".into(),
@@ -535,6 +541,7 @@
 //!         think: Think::Off,
 //!         truncate: false,
 //!     },
+//!     purpose: Purpose::PageBuilder,
 //! };
 //! let identity: [u8; 32] = ModelIdentity::from_spec(&spec).unwrap().digest();
 //! fn reads(reply: &ModelReply) -> (&str, u32, u32, u32) {

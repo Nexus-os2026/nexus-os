@@ -20,7 +20,7 @@ use nexus_governed_control::host_session::HostSession;
 use nexus_governed_control::host_session::{CommandKind, SessionRequest, SessionState};
 use nexus_governed_control::inference::{
     CallDeadline, CallMeter, Charged, InvocationOwner, MeterRefusal, ModelReply, ModelRequest,
-    ResponseSchema,
+    Purpose, ResponseSchema,
 };
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, SyncSender};
@@ -91,7 +91,13 @@ fn run(case: &str) {
 
 fn request() -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    ModelRequest::new("SB3D2 system".into(), "SB3D2 prompt".into(), schema).unwrap()
+    ModelRequest::new(
+        Purpose::PageBuilder,
+        "SB3D2 system".into(),
+        "SB3D2 prompt".into(),
+        schema,
+    )
+    .unwrap()
 }
 fn ask(context: &LaneContext<'_>) -> Result<ModelReply, ModelCallError> {
     context

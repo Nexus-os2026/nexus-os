@@ -24,7 +24,7 @@ use nexus_kernel::emergency_stop::StopAuthority;
 use nexus_kernel::inference::{
     grammar, AbsoluteDeadline, CallCancel, CallContext, CallMeter, CancelCause, Charged,
     Conversation, LoopbackEndpoint, MeterRefusal, ModelPinSpec, ModelRequest, ModelTransport,
-    RuntimeConfig, SystemClocks, Think, VerifiedOllama, N1_QUALIFIED,
+    Purpose, RuntimeConfig, SystemClocks, Think, VerifiedOllama, N1_QUALIFIED,
 };
 use source::{production_files, ProdFile};
 use std::io::{Read, Write};
@@ -131,6 +131,7 @@ fn spec() -> ModelPinSpec {
             think: Think::Off,
             truncate: false,
         },
+        purpose: Purpose::N1Worker,
     }
 }
 
@@ -192,6 +193,7 @@ fn e_o65_in_a_non_test_build_bind_and_a_conversation_call_refuse_before_any_char
 
     // A1's qualified two-message kind is unaffected.
     let pair = ModelRequest::new(
+        Purpose::N1Worker,
         grammar::WORKER_SYSTEM_INSTRUCTION.to_string(),
         "Owner task:\nx\n".to_string(),
         grammar::worker_schema(),

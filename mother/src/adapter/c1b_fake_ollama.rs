@@ -2,7 +2,7 @@
 //! ordinary broker (the broker's own fake is private to its test module).
 //! It answers as the healthy pinned runtime, except for the paths a test
 //! routes. A held request is answered only when its client closes it.
-use nexus_governed_control::inference::{ModelPinSpec, RuntimeConfig, Think};
+use nexus_governed_control::inference::{ModelPinSpec, Purpose, RuntimeConfig, Think};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -27,6 +27,7 @@ pub(crate) fn spec() -> ModelPinSpec {
             think: Think::Off,
             truncate: false,
         },
+        purpose: Purpose::PageBuilder,
     }
 }
 

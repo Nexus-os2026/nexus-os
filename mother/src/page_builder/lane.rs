@@ -6,7 +6,7 @@ use crate::lane::{
 };
 use nexus_governed_control::{
     authority::ids::MarkerUnavailable,
-    inference::{ModelError, ModelRequest, ResponseSchema},
+    inference::{ModelError, ModelRequest, Purpose, ResponseSchema},
 };
 
 pub(crate) struct PageBuilderLane;
@@ -71,7 +71,12 @@ impl Lane for PageBuilderLane {
                 Ok(schema) => schema,
                 Err(_) => return failure("assembler_fault"),
             };
-            let request = match ModelRequest::new(prompt::SYSTEM_M3.into(), user, schema) {
+            let request = match ModelRequest::new(
+                Purpose::PageBuilder,
+                prompt::SYSTEM_M3.into(),
+                user,
+                schema,
+            ) {
                 Ok(request) => request,
                 Err(ModelError::RequestTooLarge) => return failure("model_request_too_large"),
                 Err(_) => return failure("assembler_fault"),

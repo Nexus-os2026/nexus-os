@@ -1,6 +1,6 @@
 //! Frozen SB-2a oracles. Q/R/C/L are N/A for Bootstrap registration.
 use super::*;
-use crate::inference::{ModelError, ModelPinSpec, RuntimeConfig, Think};
+use crate::inference::{ModelError, ModelPinSpec, Purpose, RuntimeConfig, Think};
 use crate::test_hooks::Gate;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -11,11 +11,24 @@ use std::sync::{
 };
 const PATHS: [&str; 4] = ["/api/version", "/api/status", "/api/tags", "/api/show"];
 const CANARY: &str = "SB2_METADATA_PRIVATE_CANARY";
-pub(super) const CHAT: &str = r#"{"model":"qwen3:8b","message":{"role":"assistant","content":"{\"sb3b\":\"reply\"}"},"done":true,"done_reason":"stop","prompt_eval_count":587,"eval_count":378}"#;
+/// The production pin's name and digest (hands.rs:76-89): every session
+/// fake serves the one identity production registers (v6 §9.1.3).
+const NAME: &str = "qwen3.6:35b-a3b";
+const DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";
+pub(super) const CHAT: &str = r#"{"model":"qwen3.6:35b-a3b","message":{"role":"assistant","content":"{\"sb3b\":\"reply\"}"},"done":true,"done_reason":"stop","prompt_eval_count":587,"eval_count":378}"#;
 pub(super) fn pin() -> ModelPinSpec {
+    pin_of(NAME, DIGEST)
+}
+/// The former session pin (qwen3:8b, "ab"x32): no production record can
+/// hold its digests, so production-path negatives use it (v6 §6.7).
+#[allow(dead_code)] // first use: Cq-1d
+pub(super) fn unrecorded_pin() -> ModelPinSpec {
+    pin_of("qwen3:8b", &"ab".repeat(32))
+}
+fn pin_of(name: &str, digest: &str) -> ModelPinSpec {
     ModelPinSpec {
-        name: "qwen3:8b".into(),
-        digest: "ab".repeat(32),
+        name: name.into(),
+        digest: digest.into(),
         runtime_version: "0.40.13".into(),
         config: RuntimeConfig {
             num_ctx: 8192,
@@ -24,6 +37,7 @@ pub(super) fn pin() -> ModelPinSpec {
             think: Think::Off,
             truncate: false,
         },
+        purpose: Purpose::PageBuilder,
     }
 }
 // Core-only tests use an original Bootstrap on the real pre-input cell.
@@ -199,6 +213,8 @@ pub(super) fn fixture() -> Fixture {
 pub(super) struct Peer {
     pub(super) endpoint: String,
     pub(super) paths: Arc<Mutex<Vec<String>>>,
+    /// Snapshot requests, answered by the peer thread itself (v6 §6.1).
+    snapshots: std::sync::mpsc::Sender<std::sync::mpsc::Sender<(usize, usize)>>,
     pub(super) events: Receiver<(String, bool)>,
     done: Arc<std::sync::atomic::AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
@@ -211,7 +227,21 @@ impl Peer {
     pub(super) fn chat(held: Option<usize>, bad: Option<usize>) -> Self {
         Self::serve(held, bad, true)
     }
+    /// A peer serving the unrecorded pin (with chat).
+    #[allow(dead_code)] // first use: Cq-1d
+    pub(super) fn unrecorded(held: Option<usize>, bad: Option<usize>) -> Self {
+        Self::serve_pin(held, bad, true, unrecorded_pin())
+    }
     fn serve(held: Option<usize>, bad: Option<usize>, chat: bool) -> Self {
+        Self::serve_pin(held, bad, chat, pin())
+    }
+    fn serve_pin(
+        held: Option<usize>,
+        bad: Option<usize>,
+        chat: bool,
+        served: ModelPinSpec,
+    ) -> Self {
+        let (snapshots, requests) = channel::<std::sync::mpsc::Sender<(usize, usize)>>();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -222,15 +252,24 @@ impl Peer {
         let (tx, events) = channel();
         let thread = std::thread::spawn(move || {
             let limit = Instant::now() + Duration::from_secs(10);
+            // Every accepted connection, counted before any byte is read.
+            let mut accepted = 0usize;
             while !stop.load(Ordering::SeqCst) && Instant::now() < limit {
                 let (mut stream, _) = match listener.accept() {
                     Ok(s) => s,
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // Drained, and every earlier connection was handled to
+                        // completion on this thread: the counts are stable.
+                        if let Ok(reply) = requests.try_recv() {
+                            let _ = reply.send((accepted, seen.lock().unwrap().len()));
+                            continue;
+                        }
                         std::thread::sleep(Duration::from_millis(1));
                         continue;
                     }
                     Err(e) => panic!("accept: {e}"),
                 };
+                accepted += 1;
                 stream
                     .set_read_timeout(Some(Duration::from_millis(100)))
                     .unwrap();
@@ -288,13 +327,13 @@ impl Peer {
                             "/api/version" => r#"{"version":"0.40.13"}"#.into(),
                             "/api/status" => r#"{"cloud":{"disabled":true,"source":"env"}}"#.into(),
                             "/api/tags" => format!(
-                                r#"{{"models":[{{"name":"qwen3:8b","digest":"{}"}}]}}"#,
-                                "ab".repeat(32)
+                                r#"{{"models":[{{"name":"{}","digest":"{}"}}]}}"#,
+                                served.name, served.digest
                             ),
                             "/api/show" => {
                                 format!(r#"{{"capabilities":["thinking"],"private":"{CANARY}"}}"#)
                             }
-                            "/api/chat" if chat => CHAT.into(),
+                            "/api/chat" if chat => CHAT.replace(NAME, &served.name),
                             _ => panic!("forbidden {path}"),
                         }
                     };
@@ -305,10 +344,23 @@ impl Peer {
         Self {
             endpoint,
             paths,
+            snapshots,
             events,
             done,
             thread: Some(thread),
         }
+    }
+    /// (accepted connections, logged requests), acknowledged by the peer
+    /// thread only after its listener has drained to WouldBlock, so every
+    /// connection accepted before the request is counted and handled
+    /// (v6 §6.1). Bounded: no answer within 10 s fails the test; no sleep.
+    #[allow(dead_code)] // first use: Cq-1d
+    pub(super) fn snapshot(&self) -> (usize, usize) {
+        let (reply, answer) = channel();
+        self.snapshots.send(reply).expect("the peer is serving");
+        answer
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the peer acknowledged the snapshot")
     }
     pub(super) fn prefix(&self, n: usize) {
         assert_eq!(

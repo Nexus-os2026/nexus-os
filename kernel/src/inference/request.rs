@@ -6,7 +6,7 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 
 use sha2::{Digest, Sha256};
 
-use super::ModelError;
+use super::{ModelError, Purpose};
 
 /// The bound on the complete rendered content of a request (system plus
 /// user message, in bytes): `num_ctx / 2 − 96 − 64` at the qualified
@@ -90,6 +90,7 @@ impl fmt::Debug for ResponseSchema {
 pub struct ModelRequest {
     body: Body,
     format: ResponseSchema,
+    purpose: Purpose,
 }
 
 enum Body {
@@ -115,10 +116,18 @@ pub(super) struct Answered {
 }
 
 impl ModelRequest {
-    pub fn new(system: String, user: String, format: ResponseSchema) -> Result<Self, ModelError> {
+    /// A system and a user message, declared for `purpose` (required; not
+    /// sent: purpose changes no byte of the chat body).
+    pub fn new(
+        purpose: Purpose,
+        system: String,
+        user: String,
+        format: ResponseSchema,
+    ) -> Result<Self, ModelError> {
         let request = Self {
             body: Body::Pair { system, user },
             format,
+            purpose,
         };
         request.check()?;
         Ok(request)
@@ -141,7 +150,13 @@ impl ModelRequest {
         Ok(Self {
             body: Body::Conversation(rendered),
             format,
+            purpose: Purpose::N1Worker,
         })
+    }
+
+    /// The purpose this request declares (a conversation is always N1's).
+    pub const fn purpose(&self) -> Purpose {
+        self.purpose
     }
 
     /// Whether this request carries a conversation (N1's kind).
@@ -205,6 +220,23 @@ impl ModelRequest {
         Self {
             body: Body::Pair { system, user },
             format,
+            purpose: Purpose::N1Worker,
+        }
+    }
+
+    /// A pair for `purpose` exceeding [`MAX_RENDERED_CONTENT_BYTES`] by one,
+    /// with a valid fixed schema, made without the construction check (the
+    /// call-time precedence oracle, v6 §4.1).
+    #[cfg(test)]
+    #[allow(dead_code)] // first use: Cq-1c
+    pub(super) fn cq_oversize_pair(purpose: Purpose) -> Self {
+        Self {
+            body: Body::Pair {
+                system: String::new(),
+                user: "x".repeat(MAX_RENDERED_CONTENT_BYTES + 1),
+            },
+            format: super::grammar::worker_schema(),
+            purpose,
         }
     }
 
@@ -227,6 +259,7 @@ impl ModelRequest {
                 previous_prompt: None,
             }),
             format,
+            purpose: Purpose::N1Worker,
         }
     }
 }

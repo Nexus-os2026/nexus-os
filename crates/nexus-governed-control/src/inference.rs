@@ -51,7 +51,7 @@ use nexus_kernel::inference::{
 /// hooks are not re-exported.
 pub use nexus_kernel::inference::{
     grammar, AbsoluteDeadline, CallDeadline, CallMeter, Charged, DeadlineClock, MeterRefusal,
-    ModelError, ModelIdentity, ModelPinSpec, ModelReply, ModelRequest, ResponseSchema,
+    ModelError, ModelIdentity, ModelPinSpec, ModelReply, ModelRequest, Purpose, ResponseSchema,
     RuntimeConfig, SystemClocks, Think, MAX_RENDERED_CONTENT_BYTES,
 };
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -536,6 +536,8 @@ pub(crate) const MODEL_CLASSES: [&str; ModelError::CODES.len()] = [
     "model_cancelled",
     "model_late",
     "model_unsafe_delimiter",
+    "model_purpose_not_qualified",
+    "model_purpose_mismatch",
 ];
 
 /// The `outcome` codes a `model_call` record may hold: `ok` and each of

@@ -169,11 +169,15 @@ pub enum ModelError {
     Late,
     #[error("the model request contains a delimiter of the pinned template")]
     UnsafeDelimiter,
+    #[error("the model is not qualified for this purpose")]
+    PurposeNotQualified,
+    #[error("the model request's purpose differs from the model's")]
+    PurposeMismatch,
 }
 
 impl ModelError {
     /// Every code, in declaration order.
-    pub const CODES: [&'static str; 24] = [
+    pub const CODES: [&'static str; 26] = [
         "not_local",
         "invalid_address",
         "invalid_model_name",
@@ -198,6 +202,8 @@ impl ModelError {
         "cancelled",
         "late",
         "unsafe_delimiter",
+        "purpose_not_qualified",
+        "purpose_mismatch",
     ];
 
     /// The fixed code of this error (one of [`ModelError::CODES`]).

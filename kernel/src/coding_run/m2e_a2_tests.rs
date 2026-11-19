@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -28,10 +28,11 @@ use super::ledger::{digest_in, TEXT_DOMAIN};
 use super::local_model::model_config_digest;
 use super::*;
 use crate::emergency_stop::{StopAuthority, StopWatch};
+use crate::inference::fixture::{FixtureEndpoint, FixtureListener, FixtureRecord};
 use crate::inference::{
     grammar, qualification_seam, AbsoluteDeadline, CallCancel, CallDeadline, CallMeter,
-    CancelCause, Charged, DeadlineClock, MeterRefusal, ModelPinSpec, RetainedAnswer, RuntimeConfig,
-    SystemClocks, Think, VerifiedOllama, FRAME_CLOSE, FRAME_OPEN,
+    CancelCause, Charged, DeadlineClock, MeterRefusal, ModelPinSpec, Purpose, RetainedAnswer,
+    RuntimeConfig, SystemClocks, Think, VerifiedOllama, FRAME_CLOSE, FRAME_OPEN,
 };
 use crate::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
@@ -87,7 +88,38 @@ struct State {
 
 type Log = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
 
+/// STANDARD (v6 §5.4): synthetic fixture records for the three literal v2
+/// goldens of [`spec`]'s pin; never measured evidence.
+fn standard() -> Vec<FixtureRecord> {
+    [
+        (
+            Purpose::PageBuilder,
+            "c5b838e3070d2ffcfb20f15e4420cca44c4f17456ff08a2232c0cd2a91c5b978",
+            332,
+        ),
+        (
+            Purpose::N1Worker,
+            "5fad3aa48de2db319cb39dc9659aa54eeb75807c3ec5c88f2174adc010df9c9c",
+            288,
+        ),
+        (
+            Purpose::Judge,
+            "b46c2ff5a58505f7f8a01cbb24a50818683dc1ad51a2ec55733aec506a008584",
+            132,
+        ),
+    ]
+    .map(|(purpose, digest, minimum)| FixtureRecord {
+        purpose,
+        identity_sha256: hex::decode(digest).unwrap().try_into().unwrap(),
+        floor: crate::inference::freeze_floor(minimum).unwrap(),
+    })
+    .to_vec()
+}
+
+/// The fake owns its fixture listener (the authority) and serves that
+/// listener's clone, which carries none.
 struct Fake {
+    owner: FixtureListener,
     addr: SocketAddr,
     events: Receiver<Event>,
     log: Log,
@@ -97,8 +129,9 @@ struct Fake {
 
 impl Fake {
     fn start(answers: Vec<Answer>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
+        let owner = FixtureListener::bind(&standard()).unwrap();
+        let listener = owner.peer_listener().unwrap();
+        let addr = owner.addr();
         let (tx, events) = mpsc::channel();
         let log: Log = Arc::default();
         let connections = Arc::new(AtomicUsize::new(0));
@@ -119,6 +152,7 @@ impl Fake {
             });
         }
         Self {
+            owner,
             addr,
             events,
             log,
@@ -137,8 +171,8 @@ impl Fake {
         )
     }
 
-    fn endpoint(&self) -> LocalEndpoint {
-        loopback_endpoint(&format!("http://{}", self.addr)).unwrap()
+    fn endpoint(&self) -> FixtureEndpoint {
+        self.owner.endpoint()
     }
 
     fn connections(&self) -> usize {
@@ -360,6 +394,7 @@ fn spec() -> ModelPinSpec {
         digest: DIGEST.to_string(),
         runtime_version: VERSION.to_string(),
         config: qualified_config(),
+        purpose: Purpose::N1Worker,
     }
 }
 
@@ -370,7 +405,7 @@ fn register(fake: &Fake, spec: &ModelPinSpec) -> Arc<VerifiedOllama> {
     let watch = stop.admit().unwrap();
     let deadline = AbsoluteDeadline::within(SystemClocks, Duration::from_secs(60));
     Arc::new(
-        VerifiedOllama::verify(fake.endpoint(), spec, &Never::default(), &deadline, &watch)
+        VerifiedOllama::verify_fixture(fake.endpoint(), spec, &Never::default(), &deadline, &watch)
             .expect("registration"),
     )
 }
@@ -1198,6 +1233,8 @@ impl DeadlineClock for Manual {
 /// until the test releases that path (or the client closes).
 struct Gated {
     fake: Fake,
+    /// The back peer's own fixture owner, kept alive beside the front's.
+    _back: FixtureListener,
     gate: Arc<AtomicBool>,
     released: Arc<Mutex<Vec<String>>>,
 }
@@ -1209,8 +1246,9 @@ impl Gated {
         // requests, then forwards each request to the fake unchanged.
         let gate = Arc::new(AtomicBool::new(false));
         let released: Arc<Mutex<Vec<String>>> = Arc::default();
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let front = listener.local_addr().unwrap();
+        let front_owner = FixtureListener::bind(&standard()).unwrap();
+        let listener = front_owner.peer_listener().unwrap();
+        let front = front_owner.addr();
         let (back, events) = (fake.addr, mpsc::channel::<Event>());
         let (tx, rx) = events;
         {
@@ -1226,10 +1264,14 @@ impl Gated {
             });
         }
         let mut fake = fake;
+        // The exposed typed endpoint is the front listener's; the back owner
+        // stays alive separately (no address-only rewrite of authority).
+        let back_owner = std::mem::replace(&mut fake.owner, front_owner);
         fake.addr = front;
         fake.events = rx;
         Self {
             fake,
+            _back: back_owner,
             gate,
             released,
         }

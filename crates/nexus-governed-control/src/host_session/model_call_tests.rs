@@ -525,11 +525,17 @@ fn sb3_binding_contention_refuses_without_latching() {
 
 // SB-3B1a frozen oracles (SB3B-R3): R3 attempt admission through the
 // private original-door route. No transport, meter, gate or public route.
-use crate::inference::{ModelRequest, ResponseSchema};
+use crate::inference::{ModelRequest, Purpose, ResponseSchema};
 
 fn request() -> ModelRequest {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
-    ModelRequest::new("SB3B system".into(), "SB3B prompt".into(), schema).unwrap()
+    ModelRequest::new(
+        Purpose::PageBuilder,
+        "SB3B system".into(),
+        "SB3B prompt".into(),
+        schema,
+    )
+    .unwrap()
 }
 
 /// A bound original door (SB-3A R2) and its live invocation.

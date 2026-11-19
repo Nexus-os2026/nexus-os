@@ -119,6 +119,8 @@ pub(crate) const REASONS: &[&str] = &[
     "model_cancelled",
     "model_late",
     "model_unsafe_delimiter",
+    "model_purpose_not_qualified",
+    "model_purpose_mismatch",
     "facts_invalid",
     "file_type_not_allowed",
     "page_not_inert",
