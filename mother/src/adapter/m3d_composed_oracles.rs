@@ -246,6 +246,12 @@ fn pre_final_check(arg: &str) {
     } else {
         assert_eq!(p.tally(), (1, 1, 1), "charge recorded, never refunded");
         assert_eq!((p.count(is_retained), p.f.dispatched()), (1, 1));
+        // The withheld-content check's positive control: the retained page
+        // rests in the private store as plain text.
+        assert!(
+            p.private().contains(CONTENT),
+            "the retained page rests privately"
+        );
         assert_eq!(p.end(), "settled");
     }
 }

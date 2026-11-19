@@ -219,6 +219,11 @@ impl Page {
             other => other.name().to_string(),
         }
     }
+    /// The private store's files, concatenated (its positive control is the
+    /// retained page in O35 pre-perform).
+    pub fn private(&self) -> String {
+        walk(&self.f.home.dir.join("private"))
+    }
     /// No accepted Builder output, File dispatch or written page, and the
     /// reply's content is in neither the journal nor the private store.
     pub fn nothing_accepted(&self) {
@@ -226,8 +231,7 @@ impl Page {
         assert_eq!(self.f.dispatched(), 0, "no File dispatch");
         assert!(self.index().is_none(), "no File");
         let journal = self.f.home.lines().concat();
-        let private = walk(&self.f.home.dir.join("private"));
-        for surface in [journal, private] {
+        for surface in [journal, self.private()] {
             assert!(
                 !surface.contains(CONTENT),
                 "the reply's content is withheld"
