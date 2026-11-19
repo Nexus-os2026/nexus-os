@@ -2090,8 +2090,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (65, 0, 633, 1, 33),
-        "after D2, U5b's six, U9a's eleven and U6a-1's three credited cells: {summary:?}"
+        (70, 0, 628, 1, 33),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three and U9b's five credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
@@ -2103,8 +2103,9 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// SB-3E U5b (R54 U5-1, R86.4): the six credited `call_chat` ingress cells;
 /// `door_fence` is held and `budget` is not credited. U9a (SB3E-R123.1): the
 /// eleven close-chain lifecycle cells. U6a-1 (SB3E-R120.1): the three
-/// registration_record ingress cells.
-const CREDITED: [&str; 20] = [
+/// registration_record ingress cells. U9b (SB3E-R135): the five R6 held-sink
+/// lifecycle cells.
+const CREDITED: [&str; 25] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2125,6 +2126,11 @@ const CREDITED: [&str; 20] = [
     "r0/registration_record/ingress/repeated",
     "r0/registration_record/ingress/fatal",
     "r0/registration_record/ingress/quit",
+    "r6/close_restrict/lifecycle/Emergency",
+    "r6/close_restrict/lifecycle/Failed",
+    "r6/emergency_restrict/lifecycle/Bootstrap",
+    "r6/emergency_restrict/lifecycle/Emergency",
+    "r6/emergency_restrict/lifecycle/Failed",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own
