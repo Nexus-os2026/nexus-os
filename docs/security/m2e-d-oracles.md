@@ -59,7 +59,7 @@ The child's exit status is `run`'s outcome (0 true, 17 false).
 |---|---|---|
 | `m2ed_mode_parse_and_run_refused` | B0: five refused argument lists (no home opened); `run` refused in model mode; no dialogue, lane or chat | P8 |
 | `m2ed_registration_precedes_readiness` | B1: peer paths exactly `/api/version,/api/status,/api/tags,/api/show`; `MODEL VERIFIED` with the frozen identity `4d7211f035868b327c0e10f2bc23155a7d492d7beecc5b505edfa373db82f9a4`, before readiness; `record=recorded` | P2, P3, P5, P5b |
-| `m2ed_no_override_in_production_source` | B1c (static): `hands.rs` contains no `env` text at all; one `#[cfg(not(test))]` endpoint binding to `ENDPOINT`; one registration call. M-5a adds: one `#[cfg(not(test))]` meminfo source, the literal `/proc/meminfo`; the preflight call in every build | P6; P-5a8, P-5a9, P-5a10 (M-5a) |
+| `m2ed_no_override_in_production_source` | B1c (static): `hands.rs` contains no `env` text at all; one `#[cfg(not(test))]` endpoint binding to `ENDPOINT`; one registration call. M-5a adds: one `#[cfg(not(test))]` meminfo source, the literal `/proc/meminfo`; the preflight call in every build; the shipped floor with no cfg and exactly 6 `cfg(not(test))` sites (R175) | P6; P-5a8 to P-5a12 (M-5a) |
 | `m2ed_registration_failure_blocks_readiness` | B2: wrong version, cloud enabled, digest absent, no listener, Stop during a held `/api/show`. Each: one exact refusal, the exact peer paths (no retry), no verified view or model readiness, `record=not_required`. Assertions read the transcript after exit | P1, P10 |
 | `m2ed_h3_held_registration_fallback` | B3a H3-R | P9, P9b |
 | `m2ed_h3_open_request_cancelled_at_quit` | B3b H3-C (control) | (control) |

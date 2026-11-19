@@ -585,10 +585,10 @@ M2e-D constants hands_tests.rs:700-713.
 | `m2ed_fixed_pin_memory_and_no_override` (A-3, E-O50) | One child, ten `run`s with the seam file rewritten: 37,748,735 kB `host_memory_low`; 37,748,736 and above reach the preview; missing line, non-decimal, no ` kB`, u64::MAX kB, more than u64, a duplicate line and a missing file `host_memory_unavailable`. A refusal shows no goal and no preview; the peer saw the four registration paths only. |
 | `m5a_memory_preflight_reads_the_real_meminfo` (A-3, real driver) | No seam: the real file is read and parsed, so the outcome is the preview or `host_memory_low`, never `host_memory_unavailable`. |
 | `m5a_goal_file_or_typed` (A-4) | File goal: `goal_display`, no `INPUT READY`, no prompt. Typed: the real reader, the goal display, the preview's goal line. A second `run` left untyped: `REFUSED goal_timed_out`, no preview. |
-| `m5a_display_matches_contract` (A-5) | Every preview line equals the expected field from the snapshot and the verified view (goal LF shown as `\n`, one `model:` line, frozen pin identity); both files rewritten after readiness, the preview is still the snapshot's; no chat. |
+| `m5a_display_matches_contract` (A-5) | Every preview line equals the expected field from the snapshot and the verified view (goal LF shown as `\n`, one `model:` line, frozen pin identity, the workspace folder `rosa-site`, unlike the backend's fallback name: R175 N1); both files rewritten after readiness, the preview is still the snapshot's; no chat. |
 | `m2ed_no_verified_line_without_readiness` (A-6) | Worker held after a successful registration; a real `stop`, then release: `STARTUP REFUSED readiness_refused`, `record=recorded`, `model_registered` committed, no `MODEL VERIFIED`, no `PAGE INPUTS`, Emergency readiness text. |
 | `m2ed_x1_death_restart_report_only` (A-7, N5) | Amended: the restart's `run` gives exactly `RESULT: request refused; no new operation was admitted.\nREFUSED request_unavailable\n`. |
-| `m2ed_no_override_in_production_source` (B1c, R155) | Amended: one `#[cfg(not(test))]` meminfo source binding to the literal `/proc/meminfo` (the only occurrence); one `#[cfg(test)]` `meminfo_source()` binding; the preflight call directly after the page check, in every build. |
+| `m2ed_no_override_in_production_source` (B1c, R155) | Amended: one `#[cfg(not(test))]` meminfo source binding to the literal `/proc/meminfo` (the only occurrence); one `#[cfg(test)]` `meminfo_source()` binding; the preflight call directly after the page check, in every build. R175 N2: `const MEMORY_FLOOR_KB: u64 = 36 * 1024 * 1024;` (37,748,736 kB) once, with no cfg attribute; exactly 6 `cfg(not(test))` sites in hands.rs. |
 | `m2ed_mode_parse_and_run_refused`, `m2ed_registration_precedes_readiness` and five other M2e-D oracles | Oracle-amend: page mode now needs `--notes --facts`; B0's model-mode `run` uses a goal file and the seam; B1 expects the `PAGE INPUTS` line after `MODEL VERIFIED`. No assertion is weakened. |
 | `m5a_page_contract_is_the_fixed_contract` (unit) | The contract passes `validate_for_consent`; budget 1,800,000 / 9 / 0; `index.html`; `page_criteria()`; the four forbidden effects; File not forbidden. |
 
@@ -608,14 +608,18 @@ M2e-D constants hands_tests.rs:700-713.
 | P-5a8 | the shipped meminfo source read from the process environment (R155) | B1c: `hands.rs names env` |
 | P-5a9 | the shipped meminfo source is another file (R155) | B1c: `R155: the shipped meminfo source` |
 | P-5a10 | the preflight call compiled in tests only (R155) | B1c: `R155: the preflight runs in every build` |
+| P-5a11 | a shipped-only floor of 0 beside the cfg(test) real one (R175 N2) | B1c: `R175: the shipped floor` |
+| P-5a12 | a shipped-only `return Ok(())` at the top of the preflight (R175 N2) | B1c: `R175: the shipped-only sites` |
+| P-5a13 | the folder hard-coded to the fallback name `workspace` (R175 N1) | display: the line-by-line preview comparison |
 
 Measured on the final head (one whole run per plant, plant applied: host lib,
 `session_oracles`, `session_sealing`, `session_model_bridge`, Mother's
 `route_seams_guard` and `adapter::scan`). Every failing test (R97 list):
 P-5a3b also fails B1c; P-5a5 also fails B0, A-3 (seam and real file) and
 A-5; P-N5 also fails B2, A-3 (seam and real file), A-4 and A-5; every other
-plant fails only its named oracle. P-5a8, P-5a9 and P-5a10 compile in a
-non-test build (`cargo check`). Not counted: B2 also failed once under
+plant fails only its named oracle. P-5a8 to P-5a12 compile in a non-test
+build (`cargo check`). P-5a8 to P-5a13 were run again after R175's change
+to B1c and A-5: each fails only its named oracle. Not counted: B2 also failed once under
 P-5a10, whose test build equals the head's. That is the pre-existing B2
 race: `run` is read before the worker's `fail()` and is answered by the
 model branch, as at the base (ledger F-M5A-B2-RACE).
