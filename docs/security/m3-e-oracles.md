@@ -596,18 +596,29 @@ M2e-D constants hands_tests.rs:700-713.
 
 | Plant | Mutation | Killing oracle (named assertion) |
 |---|---|---|
-| P-5a1 | page mode accepts a relative `--notes` | args: exit 17 for the relative-notes list |
+| P-5a1 | page mode accepts a relative `--notes` | args: the exact code `absolute_path_required` for the relative-notes list |
 | P-5a2 | the printed notes digest from a second read | inputs: the held variant's `PAGE INPUTS` line |
 | P-5a3 | the preflight accepts 1 kB below the floor | E-O50: expect `REFUSED host_memory_low` |
 | P-5a3b | the goal before the preflight | E-O50: a refusal shows no goal |
 | P-5a4 | a missing `MemAvailable` line passes | E-O50: expect `REFUSED host_memory_unavailable` |
-| P-5a5 | typed mode although a goal file is given | goal: the file-goal case's expect of the refusal (the prompt waits instead) |
+| P-5a5 | typed mode although a goal file is given | goal: the file-goal case's expect of `REFUSED page_mission_unavailable` (the prompt waits instead) |
 | P-5a6 | the preview's facts re-read at `run` | display: the line-by-line preview comparison |
 | P-5a7 | `MODEL VERIFIED` printed before `finish_bootstrap` is `Ok` (U17-N2) | N2: no `MODEL VERIFIED` |
 | P-N5 | the model `run` check moved before the restart's terminal refusal | X1: expect the exact `REFUSED request_unavailable` |
 | P-5a8 | the shipped meminfo source read from the process environment (R155) | B1c: `hands.rs names env` |
 | P-5a9 | the shipped meminfo source is another file (R155) | B1c: `R155: the shipped meminfo source` |
 | P-5a10 | the preflight call compiled in tests only (R155) | B1c: `R155: the preflight runs in every build` |
+
+Measured on the final head (one whole run per plant, plant applied: host lib,
+`session_oracles`, `session_sealing`, `session_model_bridge`, Mother's
+`route_seams_guard` and `adapter::scan`). Every failing test (R97 list):
+P-5a3b also fails B1c; P-5a5 also fails B0, A-3 (seam and real file) and
+A-5; P-N5 also fails B2, A-3 (seam and real file), A-4 and A-5; every other
+plant fails only its named oracle. P-5a8, P-5a9 and P-5a10 compile in a
+non-test build (`cargo check`). Not counted: B2 also failed once under
+P-5a10, whose test build equals the head's. That is the pre-existing B2
+race: `run` is read before the worker's `fail()` and is answered by the
+model branch, as at the base (ledger F-M5A-B2-RACE).
 
 ### Not claimed
 
