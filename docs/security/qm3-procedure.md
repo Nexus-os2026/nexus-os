@@ -9,7 +9,7 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 - **Isolation.** It is not part of any Cargo package, build script, installer or workflow (G-Q1, in the H1 replay tests).
 - **Network (G-Q3).** It speaks only to `127.0.0.1:11434` through one `http.client.HTTPConnection` site, on `/api/{version,status,tags,show,ps,chat}`.
 - **Subprocesses (G-Q3).** It runs subprocesses only with literal argv: `pgrep`, `ss`, `nvidia-smi --query-gpu`, the replay test binary and, in `confirm`, the installed binary.
-- **Confirm's program (ruled on G-Q3).** `confirm` may start exactly one more program: the installed binary at the path given to `--binary`. No other new program is allowed. Its sha256 is printed for C-1's comparison with the approved artifact; the harness does not itself compare it against an expected value.
+- **Confirm's program (ruled on G-Q3; SB3E-R171).** `confirm` may start exactly one more program: the installed binary at the path given to `--binary`. No other new program is allowed. Before starting anything, `confirm` computes that file's sha256 and compares it with `--artifact-sha`, the approved artifact's hash. A mismatch refuses: non-zero exit, a ledger line, and no confirm record.
 - **Environment.** It sets no variable, flag or file that a Mother binary reads. `QM3_STEP` is read only by the cfg(test) replay test binary (SB3E-R168).
 
 | Mode | What it does | Network |
@@ -19,7 +19,7 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 | `run` | Phase M (O-2): the 31 cases of §6.1, once, top to bottom | local runtime |
 | `verify` | Recompute `evidence_sha256` from the committed record and `raw_bundle_sha256` from the bundle | none |
 | `freplay` | Phase R2: each case's final step replayed on the code head with the recorded replies. The step has no floor field, so F reaches it only through the production record | none |
-| `confirm` | Phase C (O-5): the installed binary carries no measure marker; one registration-only startup under a PTY prints `MODEL VERIFIED … identity=` equal to the record's identity. It types `quit`; no chat is made | metadata only (the binary's own registration) |
+| `confirm` | Phase C (O-5): the binary's sha256 equals `--artifact-sha` (C-1, checked before it starts); it carries no measure marker; one registration-only startup under a PTY prints `MODEL VERIFIED … identity=` equal to the record's identity. It types `quit`; no chat is made | metadata only (the binary's own registration) |
 
 **G-Q5.** `run` and `freplay` refuse unless all three hold:
 - the harness file's sha256 equals `--harness-sha` (the frozen value recorded below);
@@ -70,5 +70,6 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 | P-Q9 | `<script` dropped from the S scan | `test_forbidden_tokens_per_family` |
 | P-Q10 | ABORT skips the ledger line | `test_abort_writes_its_ledger_line` |
 | P-Q12 | freplay accepts another `built_from` | `test_gq5_replay_must_be_built_from_the_candidate` |
+| P-Q13 (SB3E-R171) | confirm ignores an artifact sha mismatch | `test_confirm_refuses_another_binary_before_starting_it` |
 
 The frozen harness sha256 is recorded in the QM3-H2 hand-back and is frozen with P0 (`run --harness-sha`).

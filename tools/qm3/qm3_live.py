@@ -8,8 +8,9 @@
   verify --record F --bundle D   recompute evidence_sha256 and raw_bundle_sha256
   freplay --bundle D --candidate SHA --replay BIN --replay-meta F --harness-sha HEX --root DIR
                                  Phase R2: every step replayed on the code head (no network)
-  confirm --binary B --record F --harness-sha HEX
-                                 Phase C: marker absent; the installed startup identity equals the record's
+  confirm --binary B --artifact-sha HEX --record F --root DIR
+                                 Phase C: the binary is the approved artifact (checked before it starts), the
+                                 marker is absent, and its startup identity equals the record's
 
 Measure marker (G-Q4): NEXUS-QM3-MEASURE-v1. The harness sets no variable, flag or file that a Mother binary
 reads; QM3_STEP is read only by the cfg(test) replay test binary (SB3E-R168).
@@ -602,11 +603,25 @@ def freplay(args):
     return 0 if ok else 1
 
 
+def artifact_bound(args, blob):
+    """C-1 (SB3E-R171): the binary given is exactly the approved artifact; checked before anything starts.
+    A mismatch refuses with a ledger line and no confirm record."""
+    want = args.get("artifact_sha", "")
+    if len(want) == 64 and all(c in "0123456789abcdef" for c in want) and sha(blob) == want:
+        return True
+    ledger_line(os.path.join(args["root"], "runs.jsonl"), {"kind": "confirm", "verdict": "REFUSED",
+                                                           "abort": {"code": "artifact_sha256"}})
+    print("QM3 CONFIRM REFUSED binary sha256 differs from --artifact-sha")
+    return False
+
+
 def confirm(args):
-    """Phase C: the installed binary carries no measure marker, and one registration-only startup prints the
-    record's identity (C-2, C-3). It types `quit`; no chat is made."""
+    """Phase C: the installed binary is the approved artifact (C-1), carries no measure marker (C-2), and one
+    registration-only startup prints the record's identity (C-3). It types `quit`; no chat is made."""
     with open(args["binary"], "rb") as h:
         blob = h.read()
+    if not artifact_bound(args, blob):
+        return 1
     marker_absent = MEASURE_MARKER.encode() not in blob
     print(f"QM3 CONFIRM binary={args['binary']} sha256={sha(blob)} measure_marker="
           f"{'absent' if marker_absent else 'PRESENT'}")

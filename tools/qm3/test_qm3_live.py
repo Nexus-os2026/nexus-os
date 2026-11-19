@@ -137,6 +137,28 @@ class Identity(unittest.TestCase):
                               "replay": "/nonexistent"})
 
 
+class Confirm(unittest.TestCase):
+    def test_confirm_refuses_another_binary_before_starting_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            started = os.path.join(d, "started")
+            binary = os.path.join(d, "mother-hands")
+            with open(binary, "w", encoding="utf-8") as h:
+                h.write(f"#!/bin/sh\ntouch {started}\n")
+            os.chmod(binary, 0o700)
+            record = os.path.join(d, "evidence.json")
+            with open(record, "wb") as h:
+                h.write(q.canonical({"frozen": {"identity_v2": q.IDENTITY_V2}}))
+            with open(binary, "rb") as h:
+                blob = h.read()
+            self.assertTrue(q.artifact_bound({"artifact_sha": q.sha(blob), "root": d}, blob))
+            args = {"binary": binary, "artifact_sha": "0" * 64, "record": record, "root": d}
+            self.assertEqual(q.confirm(args), 1)
+            self.assertFalse(os.path.exists(started), "the binary was not started")
+            with open(os.path.join(d, "runs.jsonl"), encoding="utf-8") as h:
+                lines = [json.loads(x) for x in h]
+            self.assertEqual([(x["kind"], x["verdict"]) for x in lines], [("confirm", "REFUSED")])
+
+
 class NetworkAllowlist(unittest.TestCase):
     """G-Q3: one loopback HTTPConnection site; no socket/urllib/requests; subprocess only with literal argv
     (pgrep, ss, nvidia-smi, the replay binary, and confirm's installed binary)."""
