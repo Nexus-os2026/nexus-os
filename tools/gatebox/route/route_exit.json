@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U18: 91) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -47,6 +47,16 @@
    "locks::route_s4_poisons_the_pending_lock",
    "locks::route_s4_poisons_the_producers_lock",
    "locks::route_s4_poisons_the_run_table_lock",
+   "reader::route_reader_cr",
+   "reader::route_reader_crlf",
+   "reader::route_reader_eof",
+   "reader::route_reader_injected_eof_is_not_read",
+   "reader::route_reader_lf",
+   "reader::route_reader_master_close",
+   "reader::route_reader_partial_ctrl_d",
+   "reader::route_reader_read_failure",
+   "reader::route_reader_unarmed_records_nothing",
+   "reader::route_s6_binds_the_stop_route",
    "route_armed_panic_begins_an_unwind",
    "route_armed_pause_acknowledges_blocks_and_releases",
    "route_at_cannot_return_into_the_route",
@@ -94,13 +104,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "3b80372e5f5525746d07449d2ba257428ba2f8afb6c3387d0a170391e91adefb"
+  "sha256": "2bdfa86f6728483f29968c2c2a7d9cec11344a1e05cfe0943b9a283749609531"
  },
  "plants": {
-  "count": 321,
-  "names_sha256": "2d3710364b9293f89e420cf4b78dec91606fa3fdcdf5d4e20cdf9193da15f387",
+  "count": 335,
+  "names_sha256": "b2e950afede2f7522d23c3a02f3a609fe0986304c4f4cd7b7811d258fd80445f",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "4fe575708abeb6f44c9aa67505101807237507935ef852dd20ca24c91010848c"
+  "file_sha256": "f610e7c5ad777e748e6965d38174ef2784a7f4519905c74877ac423aade46b53"
  }
 }
