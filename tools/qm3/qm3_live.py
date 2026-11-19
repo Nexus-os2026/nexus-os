@@ -8,7 +8,7 @@
   verify --record F --bundle D   recompute evidence_sha256 and raw_bundle_sha256
   freplay --bundle D --candidate SHA --replay BIN --replay-meta F --harness-sha HEX --root DIR
                                  Phase R2: every step replayed on the code head (no network)
-  confirm --binary B --artifact-sha HEX --record F --root DIR
+  confirm --binary B --artifact-sha HEX --record F --freplay F --golden-ci ID --root DIR
                                  Phase C: the binary is the approved artifact (checked before it starts), the
                                  marker is absent, and its startup identity equals the record's
 
@@ -803,7 +803,8 @@ def confirm(args):
         print(f"QM3 CONFIRM binary={args['binary']} sha256={sha(blob)} measure_marker="
               f"{'absent' if marker_absent else 'PRESENT'}")
         with open(args["record"], "rb") as h:
-            record = json.loads(h.read())
+            data = h.read()
+        record = json.loads(data)
         home, work = os.path.join(tmp, "home"), os.path.join(tmp, "workspace")
         os.mkdir(home, 0o700)
         os.mkdir(work, 0o700)
@@ -832,9 +833,16 @@ def confirm(args):
     line = next((x for x in seen.decode("utf-8", "replace").splitlines() if x.startswith("MODEL VERIFIED ")), "")
     identity = dict(p.split("=", 1) for p in line.split()[2:] if "=" in p).get("identity")
     match = identity == record["frozen"]["identity_v2"] == IDENTITY_V2 and marker_absent and b"STARTUP REFUSED" not in seen
-    print(f"QM3 CONFIRM identity={identity} record=QM3-PB-1:{sha(canonical(record))} "
+    print(f"QM3 CONFIRM identity={identity} record=QM3-PB-1:{sha(data)} "
           f"match={'yes' if match else 'no'} {'PASS' if match else 'FAIL'}")
-    return 0 if match else 1
+    # C-4 (v2 section 11 O-5): the committed F-replay record is CONFIRMED for this evidence record. The golden
+    # CI run id is the operator's (the harness has no network); it is printed, not fetched.
+    with open(args["freplay"], "rb") as h:
+        fr = json.loads(h.read())
+    c4 = fr.get("verdict") == "CONFIRMED" and fr.get("evidence_sha256") == sha(data) and fr.get("run_id") == record.get(
+        "run_id")
+    print(f"QM3 CONFIRM golden_ci={args.get('golden_ci')} freplay={fr.get('verdict')} {'PASS' if c4 else 'FAIL'}")
+    return 0 if match and c4 else 1
 
 
 def options(argv):

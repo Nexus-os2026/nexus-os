@@ -346,6 +346,29 @@ class Pinned(unittest.TestCase):
                 self.assertEqual(json.loads(h.read())["abort"]["code"], "binary_path")
 
 
+class ConfirmC4(unittest.TestCase):
+    """C-3 and C-4 on a stand-in binary that prints the startup lines (no network, no model)."""
+
+    def test_confirm_needs_the_identity_and_a_confirmed_freplay(self):
+        with tempfile.TemporaryDirectory() as d:
+            binary = os.path.join(d, "mother-hands")
+            with open(binary, "w", encoding="utf-8") as h:
+                h.write(f"#!/bin/sh\nprintf 'MODEL VERIFIED name=a digest=b identity={q.IDENTITY_V2}\\nHANDS READY\\n'"
+                        "\nsleep 1\n")
+            os.chmod(binary, 0o700)
+            record = os.path.join(d, "evidence.json")
+            data = q.canonical({"run_id": "ab" * 16, "frozen": {"identity_v2": q.IDENTITY_V2}})
+            with open(record, "wb") as h:
+                h.write(data)
+            for verdict, want in (("CONFIRMED", 0), ("BLOCKED", 1)):
+                fr = os.path.join(d, "freplay.json")
+                with open(fr, "wb") as h:
+                    h.write(q.canonical({"run_id": "ab" * 16, "evidence_sha256": q.sha(data), "verdict": verdict}))
+                args = {"binary": binary, "artifact_sha": q.sha_file(binary), "record": record, "freplay": fr,
+                        "golden_ci": "123", "root": d}
+                self.assertEqual(q.confirm(args), want, verdict)
+
+
 class NetworkAllowlist(unittest.TestCase):
     """G-Q3: one loopback HTTPConnection site; no socket/urllib/requests; subprocess only with literal argv
     (pgrep, ss, nvidia-smi, the replay binary, and confirm's installed binary)."""
