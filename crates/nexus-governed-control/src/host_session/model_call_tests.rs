@@ -5666,6 +5666,37 @@ fn cq_z(before: (usize, usize, u32, u32), after: (usize, usize, u32, u32)) {
     assert_eq!(after.3, before.3, "cq.no_settlements");
 }
 
+/// H's exact counts on a fresh session (v6 §6.1; R167 C3): every counter Z
+/// reads moves.
+#[track_caller]
+fn cq_h(before: (usize, usize, u32, u32), after: (usize, usize, u32, u32)) {
+    assert_eq!(
+        (
+            after.0 - before.0,
+            after.1 - before.1,
+            after.2 - before.2,
+            after.3 - before.3
+        ),
+        (4, 4, 1, 1),
+        "H counts: accepts, requests, charge calls, settles"
+    );
+}
+
+/// A refused bind's observations: peer (accepts, requests) and model_call
+/// rows. A bind takes no meter, so it has no charge or settle callback.
+fn cq_bind_obs(b: &Bind) -> ((usize, usize), usize) {
+    let rows = b.primary.store().rows();
+    let records = rows.iter().filter(|r| r.phase == "model_call").count();
+    (b.peer().snapshot(), records)
+}
+
+#[track_caller]
+fn cq_bind_z(before: ((usize, usize), usize), after: ((usize, usize), usize)) {
+    assert_eq!(after.0 .0, before.0 .0, "cq.no_accepts");
+    assert_eq!(after.0 .1, before.0 .1, "cq.no_metadata/no_chat");
+    assert_eq!(after.1, before.1, "no record");
+}
+
 /// The two refusals (v6 §6.7): not qualified on a Judge registration of
 /// the served pin; the mismatch on the PageBuilder registration with a
 /// Judge request.
@@ -5713,8 +5744,10 @@ fn cq_session_refusal_attempt_accounting() {
         assert_eq!(class(&again), want, "{what}: the next invocation works");
     }
     let h = Call::new();
+    let before = h.z_obs();
     let outcome = h.call().expect("H");
     assert!(outcome.result().is_ok() && recorded(&outcome), "H");
+    cq_h(before, h.z_obs());
 }
 
 /// B-3: eight admitted not-qualified refusals, never refunded; the ninth is
@@ -5846,12 +5879,14 @@ fn cq_session_rejects_legacy_expected_identity() {
     for (purpose, v2) in CQ_V2 {
         let b = cq_unbound(purpose);
         let accounting = b.runs().model_accounting(b.run);
+        let obs = cq_bind_obs(&b);
         assert_eq!(
             cq_bind_with(&b, CQ_V1),
             Err("model_identity_mismatch"),
             "cq.sid1 {purpose:?}: v1 refused"
         );
         assert!(b.bound().is_none(), "{purpose:?}: no binding");
+        cq_bind_z(obs, cq_bind_obs(&b));
         assert_eq!(
             b.runs().model_accounting(b.run),
             accounting,
@@ -5872,12 +5907,14 @@ fn cq_session_rejects_other_purpose_expected_identity() {
     for (purpose, v2) in CQ_V2 {
         let b = cq_unbound(purpose);
         for (other, wrong) in CQ_V2.iter().filter(|(p, _)| *p != purpose) {
+            let obs = cq_bind_obs(&b);
             assert_eq!(
                 cq_bind_with(&b, wrong),
                 Err("model_identity_mismatch"),
                 "{purpose:?}: {other:?} v2 refused"
             );
             assert!(b.bound().is_none(), "{purpose:?}: no binding");
+            cq_bind_z(obs, cq_bind_obs(&b));
         }
         assert_eq!(
             cq_bind_with(&b, v2),
@@ -5886,8 +5923,10 @@ fn cq_session_rejects_other_purpose_expected_identity() {
         );
     }
     let page = Call::for_spec(cq_spec(Purpose::PageBuilder));
+    let before = page.z_obs();
     let outcome = page.call_as(&cq_request(Purpose::PageBuilder)).expect("H");
     assert!(outcome.result().is_ok(), "PageBuilder H");
+    cq_h(before, page.z_obs());
     let judge = Call::for_spec(cq_spec(Purpose::Judge));
     let before = judge.z_obs();
     let outcome = judge.call_as(&cq_request(Purpose::Judge)).expect("attempt");
@@ -5925,6 +5964,7 @@ fn cq_broker_and_session_n1_pair_stays_closed() {
     assert_eq!(f.counts().0, attempts + 1, "one attempt");
     one_correlated_record(&f, &outcome);
     let judge = Call::for_spec(cq_spec(Purpose::Judge));
+    let before = judge.z_obs();
     let outcome = judge
         .call_as(&cq_request(Purpose::PageBuilder))
         .expect("attempt");
@@ -5933,9 +5973,12 @@ fn cq_broker_and_session_n1_pair_stays_closed() {
         "model_purpose_not_qualified",
         "PageBuilder on a Judge registration"
     );
+    cq_z(before, judge.z_obs());
     let page = Call::new();
+    let before = page.z_obs();
     assert!(
         page.call().is_ok_and(|o| o.result().is_ok()),
         "PageBuilder H"
     );
+    cq_h(before, page.z_obs());
 }

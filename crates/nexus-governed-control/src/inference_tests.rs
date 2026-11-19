@@ -149,8 +149,13 @@ struct Fake {
     addr: SocketAddr,
     events: Receiver<Event>,
     log: Arc<Mutex<Vec<String>>>,
-    /// Every accepted connection, counted before any byte is read.
+    /// Every accepted connection (accept errors too), counted before any byte is read.
     accepts: Arc<AtomicUsize>,
+    /// One event per accept, sent before its count (v6 §6.1); the events
+    /// consumed, and how many were barrier sentinels.
+    accepted: Receiver<Option<SocketAddr>>,
+    accept_events: std::cell::Cell<usize>,
+    sentinels: std::cell::Cell<usize>,
     route: Arc<Mutex<Route>>,
 }
 
@@ -193,12 +198,15 @@ impl Fake {
         let route: Route = Arc::new(healthy);
         let route = Arc::new(Mutex::new(route));
         let accepts = Arc::new(AtomicUsize::new(0));
+        let (accept_tx, accepted) = channel();
         {
-            let (log, route, accepted) = (log.clone(), route.clone(), accepts.clone());
+            let (log, route, counted) = (log.clone(), route.clone(), accepts.clone());
             std::thread::spawn(move || {
                 for stream in listener.incoming() {
-                    let Ok(stream) = stream else { return };
-                    accepted.fetch_add(1, Ordering::SeqCst);
+                    let peer = stream.as_ref().ok().and_then(|s| s.peer_addr().ok());
+                    let _ = accept_tx.send(peer);
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    let Ok(stream) = stream else { continue };
                     let (tx, log, route) = (tx.clone(), log.clone(), route.clone());
                     std::thread::spawn(move || serve(stream, &tx, &log, &route));
                 }
@@ -209,12 +217,39 @@ impl Fake {
             events,
             log,
             accepts,
+            accepted,
+            accept_events: std::cell::Cell::new(0),
+            sentinels: std::cell::Cell::new(0),
             route,
         }
     }
 
+    /// Accepts after the bounded sentinel barrier (v6 §6.1): accepts are
+    /// serial, so once the sentinel's own event is consumed every earlier
+    /// connection is counted. The sentinels are subtracted.
     fn accepts(&self) -> usize {
-        self.accepts.load(Ordering::SeqCst)
+        let sentinel = TcpStream::connect(self.addr).expect("the fake accepts");
+        let mine = Some(sentinel.local_addr().unwrap());
+        let deadline = Instant::now() + PATIENCE;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let peer = self
+                .accepted
+                .recv_timeout(left)
+                .expect("cq.barrier: sentinel");
+            self.accept_events.set(self.accept_events.get() + 1);
+            if peer == mine {
+                break;
+            }
+        }
+        // Each event precedes its count: wait until the counter has them all.
+        while self.accepts.load(Ordering::SeqCst) < self.accept_events.get() {
+            assert!(Instant::now() < deadline, "cq.barrier: count");
+            std::thread::yield_now();
+        }
+        drop(sentinel);
+        self.sentinels.set(self.sentinels.get() + 1);
+        self.accepts.load(Ordering::SeqCst) - self.sentinels.get()
     }
 
     fn endpoint(&self) -> String {
@@ -1894,6 +1929,7 @@ fn refused_once(f: &Fx, run: RunId, request: &ModelRequest, want: &str) {
 #[track_caller]
 fn healthy_once(f: &Fx, run: RunId) {
     let meter = Meter::new();
+    let before = observed(f, &meter);
     let (accepts, chats) = (f.fake.accepts(), f.fake.count("/api/chat"));
     assert_eq!(
         f.call_as(
@@ -1916,6 +1952,18 @@ fn healthy_once(f: &Fx, run: RunId) {
         (meter.charged(), meter.settled()),
         (1, vec![1]),
         "H: one charge, settled"
+    );
+    // Every counter Z reads moves on H (R167 C3).
+    let after = observed(f, &meter);
+    assert_eq!(
+        (
+            after.0 - before.0,
+            after.1 - before.1,
+            after.2 - before.2,
+            after.3 - before.3
+        ),
+        (4, 4, 1, 1),
+        "H counts: accepts, requests, charge calls, settles"
     );
 }
 

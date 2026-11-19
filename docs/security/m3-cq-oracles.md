@@ -336,6 +336,10 @@ P-Cq-12 site authority/run.rs:2149 in `admit_session_attempt` (:2049); P-Cq-8 si
 Z (R162 f4, R164 f2): the broker test Fake counts every accept; the broker and session test meters count every
 `charge` invocation, refused ones included; the session side reads `Peer::snapshot()`'s synchronized accept and request
 counts. Labels: `cq.no_accepts`, `cq.no_metadata/no_chat`, `cq.no_charge_calls`, `cq.no_settlements`.
+R167: the broker Fake counts accept errors and never stops, and its accept count is read behind the bounded sentinel
+barrier of R163 N-1. The S-ID1/S-ID2 refused binds assert the peer's accepts and requests unchanged and no model_call
+row (a bind takes no meter). Every H (broker `healthy_once`; session B-2, S-ID2, N-4) asserts the exact counts
+accepts 4, requests 4, charge calls 1, settles 1, so each counter Z reads is shown to move.
 
 Oracles and expected outcomes at this inert head (each RED on its named assertion):
 - B-1 `cq_purpose_refusals_propagate_content_free`: RED (`cq.class model_purpose_not_qualified`, ok).
