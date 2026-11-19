@@ -32,8 +32,7 @@ pub(super) struct Snapshot {
     pub(super) settlements: usize,
 }
 
-/// Taken behind the fake's sentinel barrier (every earlier accept counted),
-/// the sentinels themselves subtracted.
+/// Behind the fake's sentinel barrier (every earlier accept counted), sentinels subtracted.
 pub(super) fn snapshot(fake: &Fake, ctx: &Ctx) -> Snapshot {
     let sentinels = fake.barrier();
     let events = ctx.meter.events();

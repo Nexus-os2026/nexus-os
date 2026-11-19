@@ -91,7 +91,6 @@ fn cq_exchange_lease_outlives_owner() {
     let mut fake = Fake::healthy();
     let ctx = Ctx::new();
     let transport = registered(&fake, &ctx, spec_for(Purpose::PageBuilder));
-    // A second transport on the same fixture, for the second lease below.
     let second = registered(&fake, &ctx, spec_for(Purpose::PageBuilder));
     let observer = fake.endpoint();
     let (paused_tx, paused) = mpsc::channel::<()>();
@@ -100,8 +99,7 @@ fn cq_exchange_lease_outlives_owner() {
     let (t, c) = (transport.clone(), ctx.clone());
     let rx = in_thread(
         move || {
-            // Pause on the call's last exchange, the chat (v6 §5.3: each
-            // exchange takes its own lease); the hook is this thread's only.
+            // Pause on the chat, the call's last exchange (v6 §5.3: one lease each).
             let leases = AtomicUsize::new(0);
             seams::set_after_lease(Some(Box::new(move || {
                 if leases.fetch_add(1, Ordering::SeqCst) + 1 == CHAT_LEASE {
@@ -128,9 +126,8 @@ fn cq_exchange_lease_outlives_owner() {
     let release = Release(resume);
     fake.expire();
     let alive = observer.authority_alive_for_test();
-    // A second lease, from another thread, while the paused lease still
-    // holds the authority's Arc: refused before any connection or charge
-    // (P-Cq-21's killer).
+    // A second lease from another thread while the paused one holds the Arc:
+    // refused before any connection or charge (P-Cq-21's killer).
     let before = snapshot(&fake, &ctx);
     let other = done(&call_with(
         &second,
