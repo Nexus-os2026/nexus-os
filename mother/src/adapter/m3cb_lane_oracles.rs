@@ -417,19 +417,20 @@ fn transport(arg: &str) {
         let path = s.fx.home.dir.join("broker/p3-evidence/evidence.sqlite3");
         // Release the native store's exclusive lock after all live judgments.
         drop(s);
-        let output = std::process::Command::new("python3")
-            .arg("-c")
-            .arg(
-                r#"
+        // Cb2-R2 carry (DD-R1 Q3): the same 10 s bound, kill and reap.
+        let output = super::m3cb_privacy_oracles::bounded(
+            std::process::Command::new("python3")
+                .arg("-c")
+                .arg(
+                    r#"
 import json, sqlite3, sys
 with sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True, timeout=1) as con:
     rows = con.execute("SELECT body FROM record WHERE phase='model_call'").fetchall()
 print(json.dumps([json.loads(row[0]) for row in rows]))
 "#,
-            )
-            .arg(path)
-            .output()
-            .unwrap();
+                )
+                .arg(path),
+        );
         assert!(
             output.status.success(),
             "{}",
