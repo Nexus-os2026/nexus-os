@@ -126,13 +126,13 @@ W = `kernel/src/coding_run/m2e_a2_tests.rs`, L = `kernel/src/coding_run/p0b_ledg
 | O-9 | `cq_identity_v2_goldens` | K | the three standard, three session and the 16384/N1 goldens from literal bytes and lengths; v1 differs | RED | GREEN |
 | O-9a | `a1_identity_digests_are_pinned` (amend) | I:1762 | default fake N1Worker → `5fad3aa4…f9c9c`; runtime config golden unchanged | RED | GREEN |
 | O-10 | `cq_wire_bytes_unchanged` | K | three purposes, identical chat bytes, no purpose field; literal expected body | GREEN | GREEN |
-| O-14 | `e_o8b_…_qualified_floor` (amend, rename) | I:1834 | explicit PageBuilder F=300: 0/1/299 refused, 300/587 accepted; 5 charges/settlements/chats; `PROVISIONAL_FLOOR` (:1827) removed | RED at 299 | GREEN |
+| O-14 | `e_o8b_a_prompt_count_below_the_qualified_floor_is_refused` (amend; renamed from `e_o8b_a_prompt_count_below_the_scaffold_floor_is_refused`) | I:1834 (15eb63e7: :2156) | explicit PageBuilder F=300: 0/1/299 refused, 300/587 accepted; 5 charges/settlements/chats; `PROVISIONAL_FLOOR` (:1827) removed | RED at 299 | GREEN |
 | PXY | `e_o10_proxy_variables_are_never_used` (amend) | I:1458 | child owns its fixture; parent trap zero accepts, then one raw connect → exactly one accept; no model address in env/argv | GREEN | GREEN |
 | PXY-child | `e_o10_proxy_child` (amend) | I:1508 | under PROXY_CHILD=1: one direct chat, reply, 4+3 metadata, one charge/settle, sentinel | GREEN | GREEN |
 | N-1 | `cq_n1_pair_and_conversation_require_route_and_record` | K | seam shut: N1 pair and conversation `ConfigMismatch`+Z; seam open H; open+EMPTY `PurposeNotQualified`+Z; request-only and transport-only N1 shut `ConfigMismatch`+Z; open qualified wrong purpose `PurposeMismatch`+Z; PageBuilder/Judge H without seam | RED at closed pairs and open EMPTY | GREEN |
-| N-2 | `e_o65_in_a_non_test_build_bind_and_a_conversation_call_refuse_…` (amend) | kernel/tests/m2e_a2_guards.rs:142 | ordinary N1 transport: bind, pair, conversation `ConfigMismatch`+Z; ordinary Judge pair `PurposeNotQualified`+Z; ordinary PageBuilder H (256 floor before 2a, record base at 2a); no fixture subcase | RED at pair | GREEN |
+| N-2 | `e_o65_in_a_non_test_build_bind_and_a_conversation_call_refuse_before_any_charge_or_connection` (amend) | kernel/tests/m2e_a2_guards.rs:142 (15eb63e7: :143) | ordinary N1 transport: bind, pair, conversation `ConfigMismatch`+Z; ordinary Judge pair `PurposeNotQualified`+Z; ordinary PageBuilder H (256 floor before 2a, record base at 2a); no fixture subcase | RED at pair | GREEN |
 | N-3 | `n1_a_conversation_on_another_context_size_is_a_config_mismatch` (amend) | n1_tests.rs:780 | N1_CONTEXT_16384, seam open → `ConfigMismatch`+Z | GREEN | GREEN |
-| N-5 | `e_o65_with_the_route_shut_a_conversation_call_refuses_…` (amend) | n1_tests.rs:715-716 | default-N1 pair closed → `ConfigMismatch`, zero connections/meter; same pair via `call_with_open_n1` Ok; cross-thread closure kept | closed RED; open GREEN | GREEN |
+| N-5 | `e_o65_with_the_route_shut_a_conversation_call_refuses_before_any_charge_or_connection` (amend) | n1_tests.rs:715-716 | default-N1 pair closed → `ConfigMismatch`, zero connections/meter; same pair via `call_with_open_n1` Ok; cross-thread closure kept | closed RED; open GREEN | GREEN |
 | W-1 | `cq_worker_pin_purpose_is_distinct` | W | pins from real same-endpoint PageBuilder/Judge transports differ only by purpose → unequal | RED | GREEN |
 | W-2 | `cq_worker_bind_requires_n1` | W | seam open: PageBuilder/Judge → `PurposeMismatch`, N1 binds and works; seam shut: all `ConfigMismatch`; Z per failed bind | RED | GREEN |
 | W-3 | `e_o13b_the_ledger_records_the_full_pin_by_digest` (amend) | W:614 | exact eight-key pin facts with literal `n1_worker` | RED | GREEN |
@@ -226,7 +226,7 @@ review; Owner merge (kernel security core, D13).
 ## Cq-1b-k: type and caller migration, inert enforcement (SB3E-R160)
 
 Base mother/cq1a 30498097. Measured at Step 0 (/home/nexus/.m2d/cq1bk/step0-report.md):
-- `ModelRequest::new(` gains a required purpose at all 23 sites outside route_cells (route_cells is Cq-2a).
+- `ModelRequest::new(` gains a required purpose at all 20 sites outside route_cells (23 in total; route_cells' 3 migrate in Cq-2a).
   `ModelPinSpec {` gains `purpose` at all 9 literals outside route_cells. Purpose is PageBuilder for Mother,
   broker, session and hands.rs:77. It is N1Worker for the shared kernel and worker fakes and for m2e_a2_guards.
 - `ModelError` gains `PurposeNotQualified`, `PurposeMismatch`; CODES 24 → 26 (mod.rs:176). Broker
@@ -244,7 +244,7 @@ Base mother/cq1a 30498097. Measured at Step 0 (/home/nexus/.m2d/cq1bk/step0-repo
   negatives. The Peer serves its pin, counts every accept before reading, and answers a synchronized
   snapshot. That snapshot is installed here and first used in Cq-1d.
 
-Expected at this head (inert): N-5 (n1_tests.rs, e_o65_with_the_route_shut_...) RED at "closed N1 pair"
+Expected at this head (inert): N-5 (n1_tests.rs, e_o65_with_the_route_shut_a_conversation_call_refuses_before_any_charge_or_connection) RED at "closed N1 pair"
 (Ok instead of ConfigMismatch: the pair route is not enforced until Cq-2a). Every other existing test keeps
 its outcome.
 
@@ -260,6 +260,38 @@ Dead-code allows added here (R157 g3, R160 f4), each removed by its first-use un
 `Peer::unrecorded`, `Peer::snapshot` (Cq-1d); `ModelRequest::cq_oversize_pair`,
 `pin_for_test_with_purpose` (Cq-1c). The Cq-1a allows on `FixtureListener::bind/endpoint/peer_listener/addr`
 and `verify_fixture` are redundant from this head on; Cq-2a removes them (R160 f2).
+
+## Cq-1c-i: kernel inference oracles (SB3E-R162)
+
+Split of v6 Cq-1c (R162 f1). 1c-i adds K = `kernel/src/inference/cq_tests.rs` (O-1..O-6, O-9, O-10, N-1) and
+F = `kernel/src/inference/cq_fixture_tests.rs` (F-1..F-5, G-1, R-3) as children of `inference::tests`, and amends I
+(`kernel/src/inference/tests.rs`): O-9a (v2 golden `5fad3aa4…`, N1Worker), O-14 (explicit PageBuilder F=300), and PXY.
+1c-ii carries W-1..W-3, L-1..L-3 and N-2.
+
+Observation (v6 §6.1; R162 f4): `Snapshot` = accepts (counted at accept, before reading), connection_events (an
+independent per-accept event, consumed by the observer), metadata [version, status, tags, show], chats, charge_calls
+(every meter invocation, refused ones included), charge_entries, settlements. Z checks each field under its label
+(`cq.no_accepts`, `cq.no_connection_events`, `cq.no_metadata`, `cq.no_chat`, `cq.no_charge_calls`,
+`cq.no_charge_entries`, `cq.no_settlements`). H is +4 accepts and events, metadata [1,1,1,0], one chat, call, entry
+and settlement. Each value is read after the synchronous call has returned: every request it made was accepted and
+logged before its reply.
+
+The shared Fake's fixture owner can expire (`Fake::expire`) while its server clone keeps serving (F-1, F-2, F-3). The
+closed `call()` helper is removed (no caller after O-14); `call_in_thread` and `call_with` stay closed.
+
+PXY (R162 f2): the parent synchronizes the trap with one raw control connection. The trap accepts serially, so any
+child connection came first. It asserts exactly one accept ("the proxy was not contacted (trap accepts == 0 before the
+control)") before the child-status assertion. That is P-Cq-18's named killer.
+
+Expected at this head (inert), each on its named assertion: RED O-1 (PageBuilder F−1; N1 subcases green), O-2, O-3,
+O-4 (after its conversation and size subcases pass), O-5, O-6, O-9 (after the literal encodings pass), N-1 (after
+closed conversation), F-1, F-2 (authority liveness, not a timeout), F-3, R-3, O-9a, O-14 (299), N-5. GREEN: O-10,
+F-4, F-5, G-1, PXY, PXY-child, N-3. Plants re-killed by these committed tests (Cq1a-N1): P-Cq-22 (F-5), P-Cq-24, 25,
+26′, 27 (G-1 parts 1-4), P-Cq-18 (PXY trap). Owed: Cq-2a P-Cq-1, 3a, 3b, 4a, 4b, 5, 6, 7, 7b, 9, 10, 11, 14, 16, 17,
+21, 23; Cq-1d P-Cq-8, 12.
+
+Ledger Cq1c-N5 (R162 f5): the `set_after_lease` allow in exchange.rs is redundant from here on. It stays until a unit
+whose allowlist covers exchange.rs removes it.
 
 ## Cq-0 results
 
