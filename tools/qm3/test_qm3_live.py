@@ -6,6 +6,8 @@ import ast
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
 
 import qm3_live as q
@@ -222,6 +224,41 @@ class FReplay(unittest.TestCase):
             self.assertEqual(q.freplay(args), 1)
             with open(os.path.join(args["root"], "runs.jsonl"), encoding="utf-8") as h:
                 self.assertEqual([json.loads(x)["verdict"] for x in h], ["CONFIRMED", "BLOCKED"])
+
+
+class RunnerAndWatchdog(unittest.TestCase):
+    """SB3E-R172 F4: Q-8 runner identity and the Q-4 one-second memory watchdog."""
+
+    def test_runner_identity_is_fixed_after_the_first_call(self):
+        self.assertGreater(q.starttime(os.getpid()), 0)
+        seen = [[[4242, 100]], [[4242, 100]], [[4343, 200]]]
+        real, q.runner_identity = q.runner_identity, lambda: seen.pop(0)
+        try:
+            ctx = {"calls_sent": 1}
+            q.check_runner(ctx, "QM-N1", 1)
+            self.assertEqual(ctx["runner"], [[4242, 100]])
+            q.check_runner(ctx, "QM-N1", 2)
+            with self.assertRaises(q.Abort) as e:
+                q.check_runner(ctx, "QM-N2", 1)
+            self.assertEqual(e.exception.code, "runner_changed")
+        finally:
+            q.runner_identity = real
+
+    def test_watchdog_trips_and_shuts_the_connection(self):
+        class Sock:
+            closed = threading.Event()
+
+            def shutdown(self, how):
+                self.closed.set()
+
+        conn = type("Conn", (), {"sock": Sock()})()
+        with q.Watchdog(0, read=lambda: (1024, 0), interval=0.01) as dog:
+            dog.conns.append(conn)
+            self.assertTrue(Sock.closed.wait(5))
+        self.assertEqual(dog.tripped, {"mem_available_kb": 1024, "swap_in_delta_kb": 0})
+        with q.Watchdog(0, read=lambda: (64 * 1024 * 1024, 0), interval=0.01) as quiet:
+            time.sleep(0.05)
+        self.assertIsNone(quiet.tripped)
 
 
 class Identity(unittest.TestCase):

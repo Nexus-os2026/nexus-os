@@ -25,6 +25,7 @@ import select
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 
@@ -306,10 +307,12 @@ def bound_identity(args):
 
 
 # The only network site (G-Q3): one loopback connection per request.
-def request(method, path, body=None, timeout=10):
+def request(method, path, body=None, timeout=10, conns=None):
     if path not in PATHS:
         raise ValueError(path)
     conn = http.client.HTTPConnection(HOST, PORT, timeout=timeout)
+    if conns is not None:
+        conns.append(conn)
     try:
         conn.request(method, path, body=body, headers={"content-type": "application/json"} if body else {})
         reply = conn.getresponse()
@@ -393,6 +396,67 @@ def quiet(swap_start):
     return ok, q
 
 
+def starttime(pid):
+    """Field 22 of /proc/<pid>/stat (start time, clock ticks); the command name may hold spaces or ')'."""
+    with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as h:
+        return int(h.read().rsplit(")", 1)[1].split()[19])
+
+
+def runner_identity():
+    """Q-8 (SB3E-R172 F4): the llama-server runner(s) as sorted [pid, start time] pairs (pgrep and /proc)."""
+    found = subprocess.run(["pgrep", "-x", "llama-server"], capture_output=True, text=True)
+    out = []
+    for pid in found.stdout.split():
+        try:
+            out.append([int(pid), starttime(pid)])
+        except (OSError, IndexError, ValueError):
+            out.append([int(pid), None])
+    return sorted(out)
+
+
+def check_runner(ctx, cid, n):
+    """Q-8: once identified after the first live call, the runner never changes; a change is ABORTED."""
+    now = runner_identity()
+    if ctx.get("runner") is None:
+        if ctx.get("calls_sent"):
+            if len(now) != 1 or now[0][1] is None:
+                raise Abort("runner_unidentified", cid, n, now)
+            ctx["runner"] = now
+        return
+    if now != ctx["runner"]:
+        raise Abort("runner_changed", cid, n, now)
+
+
+class Watchdog:
+    """Q-4 (SB3E-R172 F4): during a live call, every second, MemAvailable >= 6 GiB and swap-in growth
+    <= 1 GiB; a trip shuts the harness connection so the runtime cancels the request, then ABORTED."""
+
+    def __init__(self, swap_start, read=None, interval=1.0):
+        self.read = read or (lambda: (_meminfo(), (_swap_in() - swap_start) * 4))
+        self.interval, self.conns, self.tripped, self.stop = interval, [], None, threading.Event()
+        self.thread = threading.Thread(target=self.loop, daemon=True)
+
+    def loop(self):
+        while not self.stop.wait(self.interval):
+            mem, swap = self.read()
+            if mem < 6 * 1024 * 1024 or swap > 1024 * 1024:
+                self.tripped = {"mem_available_kb": mem, "swap_in_delta_kb": swap}
+                for conn in list(self.conns):
+                    try:
+                        conn.sock.shutdown(2)
+                    except (AttributeError, OSError):
+                        pass
+                return
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stop.set()
+        self.thread.join()
+
+
 def wait_quiet(swap_start):
     deadline = time.monotonic() + QUIET_WAIT
     while True:
@@ -450,6 +514,7 @@ def run_case(ctx, cid, base, scripted):
         r = runtime()
         if not runtime_ok(r):
             raise Abort("runtime_changed", cid, n, r)
+        check_runner(ctx, cid, n)
         marker = uuid.uuid4().hex
         if markers and marker == markers[-1]:
             raise Abort("marker_repeat", cid, n)
@@ -463,12 +528,17 @@ def run_case(ctx, cid, base, scripted):
         with open(os.path.join(case_dir, f"call{n}.request"), "wb") as h:
             h.write(body)
         start = time.monotonic()
-        try:
-            status, raw = request("POST", "/api/chat", body, timeout=CALL_TIMEOUT)
-            timeout = False
-        except (TimeoutError, OSError):
-            status, raw, timeout = None, b"", True
+        with Watchdog(ctx["swap_start"]) as dog:
+            try:
+                status, raw = request("POST", "/api/chat", body, timeout=CALL_TIMEOUT, conns=dog.conns)
+                timeout = False
+            except (TimeoutError, OSError):
+                status, raw, timeout = None, b"", True
         latency = int((time.monotonic() - start) * 1000)
+        if dog.tripped:
+            raise Abort("memory_watchdog", cid, n, dog.tripped)
+        ctx["calls_sent"] = ctx.get("calls_sent", 0) + 1
+        check_runner(ctx, cid, n)
         with open(os.path.join(case_dir, f"call{n}.reply"), "wb") as h:
             h.write(raw)
         fields, content = reply_fields(status, raw, latency)
@@ -549,6 +619,7 @@ def measure(args, meta, table, ledger, prior, run_id, bundle):
             case["misses"] = case_misses(case)
             print(f"QM3 CASE {cid} {'PASS' if not case['misses'] else 'MISS ' + ','.join(case['misses'])}", flush=True)
             cases.append(case)
+        check_runner(ctx, "end", 0)
     except Abort as e:
         return abort(ledger, run_id, e.code, e.case, e.call), 1
     except RuntimeError:
@@ -569,7 +640,8 @@ def measure(args, meta, table, ledger, prior, run_id, bundle):
                          "runtime": VERSION, "decoding": "stream=false;think=false;truncate=false;temperature=0;"
                                                          "num_ctx=8192;seed=7"},
               "runtime": {"version": r["version"], "cloud_disabled": r["cloud_disabled"],
-                          "tags_digest": r["tags"]["digest"], "thinking": r["thinking_capability"]},
+                          "tags_digest": r["tags"]["digest"], "thinking": r["thinking_capability"],
+                          "runner_first": ctx.get("runner"), "runner_last": runner_identity()},
               "host": host(),
               "cases": [{"id": c["id"], "calls": c["calls"], "outcome": c["outcome"],
                          "verdict": "miss" if c["misses"] else "pass", "misses": c["misses"]} for c in cases],
