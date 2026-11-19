@@ -25,9 +25,11 @@ use std::time::{Duration, Instant};
 
 mod grant;
 mod locks;
+mod reader;
 mod s5;
 mod s5_close;
 mod s5_r34;
+mod s5_r6;
 mod s5_reg;
 mod store;
 /// W0b B5 (SB3E-R94.2): one credited cell's test, built only from its arm's
@@ -69,7 +71,7 @@ macro_rules! ctl {
 /// route, sink, dim, value and driver (`macro_rules!` cannot build
 /// `rc_<slug>`, so the arm writes it). An entry with no arm fails to compile.
 macro_rules! cells {
-    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };
+    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };
     (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_original_cell_unscheduled, r5 call_chat ingress original_cell_unscheduled, s5::original_cell_unscheduled); cells! { $($rest)* } };
     (r5 call_chat ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_repeated, r5 call_chat ingress repeated, s5::repeated); cells! { $($rest)* } };
     (r5 call_chat ingress mission_stop; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_mission_stop, r5 call_chat ingress mission_stop, s5::mission_stop); cells! { $($rest)* } };
@@ -90,6 +92,11 @@ macro_rules! cells {
     (r0 registration_record ingress repeated; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_repeated, r0 registration_record ingress repeated, s5_reg::record_repeated); cells! { $($rest)* } };
     (r0 registration_record ingress fatal; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_fatal, r0 registration_record ingress fatal, s5_reg::record_fatal); cells! { $($rest)* } };
     (r0 registration_record ingress quit; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_quit, r0 registration_record ingress quit, s5_reg::record_quit); cells! { $($rest)* } };
+    (r6 close_restrict lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r6_close_restrict_lifecycle_emergency, r6 close_restrict lifecycle Emergency, s5_r6::quit_emergency); cells! { $($rest)* } };
+    (r6 close_restrict lifecycle Failed; $($rest:tt)*) => { cell!(rc_r6_close_restrict_lifecycle_failed, r6 close_restrict lifecycle Failed, s5_r6::quit_failed); cells! { $($rest)* } };
+    (r6 emergency_restrict lifecycle Bootstrap; $($rest:tt)*) => { cell!(rc_r6_emergency_restrict_lifecycle_bootstrap, r6 emergency_restrict lifecycle Bootstrap, s5_r6::emergency_bootstrap); cells! { $($rest)* } };
+    (r6 emergency_restrict lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r6_emergency_restrict_lifecycle_emergency, r6 emergency_restrict lifecycle Emergency, s5_r6::emergency_emergency); cells! { $($rest)* } };
+    (r6 emergency_restrict lifecycle Failed; $($rest:tt)*) => { cell!(rc_r6_emergency_restrict_lifecycle_failed, r6 emergency_restrict lifecycle Failed, s5_r6::emergency_failed); cells! { $($rest)* } };
     (r0 registration_reserve ingress repeated; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_repeated, r0 registration_reserve ingress repeated, s5_reg::reserve_repeated); cells! { $($rest)* } };
     (r0 registration_reserve ingress fatal; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_fatal, r0 registration_reserve ingress fatal, s5_reg::reserve_fatal); cells! { $($rest)* } };
     (r0 registration_reserve ingress quit; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_quit, r0 registration_reserve ingress quit, s5_reg::reserve_quit); cells! { $($rest)* } };

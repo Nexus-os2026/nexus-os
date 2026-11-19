@@ -9,6 +9,7 @@ use nexus_governed_control::host_session::{
     close::{CloseSeal, Producer, ProducerKind},
     CommandKind, SessionRequest, SessionSeed, SessionState,
 };
+use nexus_governed_control::inference::{ModelPinSpec, RuntimeConfig, Think};
 use nexus_mother::adapter::SessionPort;
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion};
 use nexus_mother::coordinator::{
@@ -67,13 +68,44 @@ struct Config {
     text: String,
     hold: Duration,
 }
-fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+/// M2e-D (E-O50): the trusted local runtime. No flag, variable or file
+/// chooses it, the pin, or any part of either.
+#[cfg(not(test))]
+const ENDPOINT: &str = "http://127.0.0.1:11434";
+/// The qualified pin (m2e-design §4).
+fn qualified_pin() -> ModelPinSpec {
+    ModelPinSpec {
+        name: "qwen3.6:35b-a3b".into(),
+        digest: "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c".into(),
+        runtime_version: "0.40.13".into(),
+        config: RuntimeConfig {
+            num_ctx: 8192,
+            temperature_milli: 0,
+            seed: 7,
+            think: Think::Off,
+            truncate: false,
+        },
+    }
+}
+/// The configuration, and the page flags when `--mission one-page-site`
+/// selected the model mode (M-5a: inputs and registration before readiness).
+fn parse(
+    args: impl Iterator<Item = String>,
+) -> Result<(Config, Option<crate::inputs::PageArgs>), &'static str> {
     let mut values = std::collections::BTreeMap::new();
     let mut args = args;
     while let Some(key) = args.next() {
         if !matches!(
             key.as_str(),
-            "--home" | "--workspace" | "--name" | "--text" | "--hold-before-publish"
+            "--home"
+                | "--workspace"
+                | "--name"
+                | "--text"
+                | "--hold-before-publish"
+                | "--mission"
+                | "--notes"
+                | "--facts"
+                | "--goal"
         ) || values.contains_key(&key)
         {
             return Err("invalid_arguments");
@@ -85,11 +117,34 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
     if !home.is_absolute() || !workspace.is_absolute() {
         return Err("absolute_path_required");
     }
+    if let Some(mission) = values.remove("--mission") {
+        if mission != crate::inputs::PAGE_MISSION {
+            return Err("invalid_arguments");
+        }
+        // M-5a (SB3E-R152, M-Q11): the page flags, by the one page grammar.
+        let rest = values.into_iter().flat_map(|(key, value)| [key, value]);
+        let page =
+            crate::inputs::parse_page_args(["--mission".into(), mission].into_iter().chain(rest))?;
+        let (name, text, hold) = (String::new(), String::new(), Duration::ZERO);
+        return Ok((
+            Config {
+                home,
+                workspace,
+                name,
+                text,
+                hold,
+            },
+            Some(page),
+        ));
+    }
     let name = values.remove("--name").ok_or("name_required")?;
     let text = values.remove("--text").ok_or("text_required")?;
     let hold = values
         .remove("--hold-before-publish")
         .unwrap_or_else(|| "0".into());
+    if !values.is_empty() {
+        return Err("invalid_arguments");
+    }
     if hold.is_empty() || !hold.bytes().all(|b| b.is_ascii_digit()) {
         return Err("invalid_hold");
     }
@@ -97,13 +152,17 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
     if hold > 30 {
         return Err("invalid_hold");
     }
-    Ok(Config {
-        home,
-        workspace,
-        name,
-        text,
-        hold: Duration::from_secs(hold),
-    })
+    let hold = Duration::from_secs(hold);
+    Ok((
+        Config {
+            home,
+            workspace,
+            name,
+            text,
+            hold,
+        },
+        None,
+    ))
 }
 
 // The coordinator performs actual lane admission. This test-only observer
@@ -138,6 +197,12 @@ struct Runtime {
     confirmer: Arc<crate::terminal::TerminalConfirmer>,
     used: bool,
     mission: Option<Mission>,
+}
+/// M-5a: the startup snapshot and the backend's verified view, both set only
+/// after readiness; the page `run` reads them, never the files again.
+struct PageMode {
+    inputs: crate::inputs::PageInputs,
+    view: nexus_governed_control::inference::ModelIdentityView,
 }
 impl Runtime {
     fn run(
@@ -1003,7 +1068,7 @@ fn join<T>(handle: &mut Option<JoinHandle<T>>, deadline: Instant, screen: &Share
 
 /// Run one process using the original seed created before terminal input.
 pub fn run(args: impl Iterator<Item = String>) -> bool {
-    let config = match parse(args) {
+    let (config, page_args) = match parse(args) {
         Ok(c) => c,
         Err(code) => {
             eprintln!("{code}");
@@ -1042,6 +1107,10 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     let screen = terminal.shared.clone();
     let confirmer = terminal.confirmer.clone();
     let startup_screen = screen.clone();
+    let model = page_args.is_some();
+    // M-5a: set once by the startup worker after readiness, read by the loop.
+    let page_slot = Arc::new(std::sync::OnceLock::<PageMode>::new());
+    let startup_page = page_slot.clone();
     let mut startup = std::thread::Builder::new()
         .name("hands-startup".into())
         .spawn(move || {
@@ -1070,6 +1139,8 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
             if home.session.state() == SessionState::Bootstrap
                 && home.session.startup_report().ready()
             {
+                let mut verified = None;
+                let mut inputs = None;
                 let setup = home
                     .session
                     .bootstrap_hold(config.hold)
@@ -1081,10 +1152,58 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                             .map_err(|_| "workspace_refused")
                     })
                     .and_then(|()| {
+                        if !model {
+                            return Ok(());
+                        }
+                        // M-5a (M3-O43): each page input read once, before
+                        // registration; a refusal blocks readiness.
+                        let args = page_args.as_ref().ok_or("page_inputs_refused")?;
+                        let read = crate::inputs::read_page_inputs(args).map_err(|(kind, e)| {
+                            startup_screen.emit(&input_refusal(kind, &e));
+                            "page_inputs_refused"
+                        })?;
+                        inputs = Some(read);
+                        Ok(())
+                    })
+                    .and_then(|()| {
+                        if !model {
+                            return Ok(());
+                        }
+                        #[cfg(test)]
+                        let endpoint = hands_tests::model_endpoint();
+                        #[cfg(not(test))]
+                        let endpoint = ENDPOINT;
+                        home.session
+                            .register_local_model(endpoint, qualified_pin())
+                            .map(|view| verified = Some(view))
+                            .map_err(|_| "model_registration_refused")
+                    })
+                    .and_then(|()| {
+                        #[cfg(test)]
+                        hands_tests::review2_startup("readiness");
                         home.session
                             .finish_bootstrap()
                             .map_err(|_| "readiness_refused")
                     });
+                if let (Ok(()), Some(view)) = (&setup, &verified) {
+                    startup_screen.emit(&format!(
+                        "MODEL VERIFIED name={} digest={} identity={}\n",
+                        view.name, view.digest, view.identity
+                    ));
+                    if let Some(read) = inputs {
+                        let hex = crate::inputs::sha256_hex;
+                        startup_screen.emit(&format!(
+                            "PAGE INPUTS notes_sha256={} facts_sha256={} goal={}\n",
+                            hex(&read.notes_sha256),
+                            hex(&read.facts_sha256),
+                            read.goal_sha256.as_ref().map_or("typed".into(), hex)
+                        ));
+                        let _set = startup_page.set(PageMode {
+                            inputs: read,
+                            view: view.clone(),
+                        });
+                    }
+                }
                 if let Err(code) = setup {
                     startup_screen.emit(&format!("STARTUP REFUSED {code}\n"));
                     if !home.session.ingress().emergency_seen()
@@ -1138,11 +1257,14 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
         }
     };
     let session = runtime.lock().unwrap().home.session.clone();
+    let page = page_slot.get();
     if !matches!(
         session.state(),
         SessionState::ClosingNormal | SessionState::ClosingRestricted
     ) {
-        screen.emit(if session.state() == SessionState::Normal {
+        screen.emit(if session.state() == SessionState::Normal && model {
+            "Model verified; the page mission is not available in this build. No model call is made.\nHANDS READY\n"
+        } else if session.state() == SessionState::Normal {
             "One File mission per fresh process. Emergency ends mission work.\nHANDS READY\n"
         } else if session.state() == SessionState::Emergency {
             "Report only; no work authority is available.\nHANDS READY\n"
@@ -1187,6 +1309,18 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
                 let current = session.stop_snapshot();
                 let receipt = screen.stop.receipt();
                 screen.emit(&format!("host_recovery_only={}\nsession={:?}\nkernel_stopped={} broker_stopped={} stop_number={} generation={}\nSTOP WORKERS outstanding={}\nSTATUS END\n", ingress.emergency_seen(), session.state(), current.kernel_stopped, current.broker_stopped, current.stop_number, current.policy_generation, receipt.outstanding));
+            } else if model
+                && command
+                    .request
+                    .as_ref()
+                    .is_some_and(|r| r.kind() == CommandKind::Run)
+            {
+                // M-5a (SB3E-R152): preflight, goal and preview; still refused.
+                let refusal = page_preview(&screen, &session, page)
+                    .err()
+                    .unwrap_or("page_mission_unavailable");
+                screen.emit("RESULT: request refused; no new operation was admitted.\n");
+                screen.emit(&format!("REFUSED {refusal}\n"));
             } else if let Some(request) = command.request {
                 let kind = if request.kind() == CommandKind::Evidence {
                     ProducerKind::Observation
@@ -1317,6 +1451,107 @@ pub fn run(args: impl Iterator<Item = String>) -> bool {
     std::mem::forget(screen);
     false
 }
+/// An input refusal: its kind and fixed code (and a facts line), no content.
+fn input_refusal(kind: crate::inputs::InputKind, e: &crate::inputs::InputError) -> String {
+    match e.line() {
+        Some(line) => format!(
+            "INPUT REFUSED {} {} (facts file line {line})\n",
+            kind.as_str(),
+            e.code()
+        ),
+        None => format!("INPUT REFUSED {} {}\n", kind.as_str(), e.code()),
+    }
+}
+
+/// R131.4 / E-O50: 36 GiB, in kB, is the least `MemAvailable` that passes.
+const MEMORY_FLOOR_KB: u64 = 36 * 1024 * 1024;
+/// The typed goal's wait (M3E-R10: M-5 picks).
+#[cfg(not(test))]
+const GOAL_WAIT: Duration = Duration::from_secs(300);
+
+/// R131.4: `MemAvailable` through the adapter's bounded read. A missing,
+/// duplicate, malformed or overflowing measurement refuses.
+fn memory_preflight() -> Result<(), &'static str> {
+    const UNAVAILABLE: &str = "host_memory_unavailable";
+    #[cfg(test)]
+    let source = hands_tests::meminfo_source();
+    #[cfg(not(test))]
+    let source = std::path::PathBuf::from("/proc/meminfo");
+    let bytes = nexus_mother::adapter::input_files::open(&source, 8192)
+        .and_then(|file| file.read())
+        .map_err(|_| UNAVAILABLE)?;
+    let text = std::str::from_utf8(bytes.bytes()).map_err(|_| UNAVAILABLE)?;
+    let mut found = None;
+    for line in text.split('\n') {
+        let Some(rest) = line.strip_prefix("MemAvailable:") else {
+            continue;
+        };
+        let value = rest.trim_start_matches(' ');
+        let digits = value
+            .strip_suffix(" kB")
+            .filter(|_| value.len() < rest.len());
+        let digits = digits.filter(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()));
+        let kb: u64 = digits.and_then(|d| d.parse().ok()).ok_or(UNAVAILABLE)?;
+        kb.checked_mul(1024).ok_or(UNAVAILABLE)?;
+        if found.replace(kb).is_some() {
+            return Err(UNAVAILABLE);
+        }
+    }
+    match found {
+        None => Err(UNAVAILABLE),
+        Some(kb) if kb < MEMORY_FLOOR_KB => Err("host_memory_low"),
+        Some(_) => Ok(()),
+    }
+}
+
+/// M-5a: the page `run` before any producer: memory, goal, then the
+/// preview of the fixed contract. Nothing is drafted, consented or opened.
+fn page_preview(
+    screen: &Shared,
+    session: &nexus_governed_control::host_session::HostSession,
+    page: Option<&PageMode>,
+) -> Result<(), &'static str> {
+    let page = page.ok_or("page_mission_unavailable")?;
+    memory_preflight()?;
+    let goal = match &page.inputs.goal {
+        Some(goal) => {
+            screen
+                .send(crate::goal_input::goal_display(goal))
+                .map_err(|_| "goal_unavailable")?;
+            goal.clone()
+        }
+        None => {
+            #[cfg(test)]
+            let wait = hands_tests::goal_wait();
+            #[cfg(not(test))]
+            let wait = GOAL_WAIT;
+            let typed = crate::goal_input::read_typed_goal(screen, false, Instant::now() + wait)?;
+            typed.text().to_string()
+        }
+    };
+    let folder = session.workspace().ok_or("workspace_unavailable")?.name;
+    let model = nexus_mother::contract::ModelChoice {
+        name: page.view.name.clone(),
+        digest: page.view.digest.clone(),
+        identity: page.view.identity.clone(),
+    };
+    let contract = nexus_mother::page_mission::page_contract(
+        &goal,
+        page.inputs.note.clone(),
+        page.inputs.facts.clone(),
+        &folder,
+        model,
+    );
+    contract
+        .validate_for_consent()
+        .map_err(|_| "page_contract_invalid")?;
+    let text = nexus_mother::page_mission::preview(&contract);
+    screen
+        .send(crate::page_display::page_text(&text))
+        .map_err(|_| "preview_unavailable")?;
+    Ok(())
+}
+
 fn failed_startup(
     mut terminal: Terminal,
     startup: Option<JoinHandle<Result<Runtime, &'static str>>>,

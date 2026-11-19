@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 14] = [
+const TOKENS: [Token; 16] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -64,6 +64,10 @@ const TOKENS: [Token; 14] = [
     // U6a-1 (d_register): the acknowledged model.record.before, then on its
     // thread, later, the admitted model.install.before (model.rs:301, 309, 314).
     ("m:292-299", "model.record.before", recorded_write),
+    // U9b (d_quit, d_stop): the acknowledged entry at the held sink's point
+    // (host_session.rs:1695-1698, 1642).
+    ("h:1690-1712", "ingress.accept", acked),
+    ("CAS:h:1630-1633", "ingress.emergency", acked),
     // SEAM-1 (d_register, d_bootstrap): the acknowledged reg.reserve and
     // reg.ready (model.rs:122, host_session.rs:858) and their refusal notes
     // (model.rs:142, host_session.rs:865).
@@ -152,6 +156,8 @@ close.primary|s|host_session/close.rs:524
 producer.join|s|host_session/close.rs:49
 close.seal|s q|host_session/close.rs:367-369
 seal:stop|s|host_session/close.rs:407
+ingress.accept|s q|host_session.rs:1695-1698
+ingress.emergency|s|host_session.rs:1642
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -350,7 +356,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 10] = [
+const CONTROLS: [(&str, &str, &str); 12] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -359,8 +365,18 @@ const CONTROLS: [(&str, &str, &str); 10] = [
     ("producer_join", "lifecycle", CLOSE_CONTROLS[4]),
     ("seal", "lifecycle", CLOSE_CONTROLS[5]),
     ("registration_record", "ingress", REG_CONTROL),
+    ("close_restrict", "lifecycle", HELD_CONTROLS[0]),
+    ("emergency_restrict", "lifecycle", HELD_CONTROLS[1]),
     ("registration_reserve", "ingress", RESERVE_CONTROL),
     ("registration_readiness", "ingress", READY_CONTROL),
+];
+/// U9b (SB3E-R135.3 Q8): the held-sink controls as measured at U9b Step 0,
+/// 20/20 each: the credited rows' text with no value.
+const HELD_CONTROLS: [&str; 2] = [
+    "entry=ingress.accept[s=S q=Q];check=h:1690-1712[s=S q=Q];value=none@ingress.accept ack=held won=route;\
+out=passed@h:1690-1712;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
+    "entry=ingress.emergency[s=S];check=CAS:h:1630-1633[s=S];value=none@ingress.emergency ack=held won=route;\
+out=passed@CAS:h:1630-1633;branch=none;ledger=+0:all[s=S];window=boundary;deadline_fired=none",
 ];
 /// SEAM-1 (SB3E-R139 Q-6): the reserve and readiness controls as measured at
 /// SEAM-1 Step 0, 10/10 each: the refused rows' text with no value, the sink
@@ -1156,6 +1172,13 @@ fn coverage() {
     close.sort();
     close.dedup();
     assert_eq!(close, super::s5::CLOSE_SINKS);
+    // U9b: `HELD_SINKS` are exactly the `d_quit` and `d_stop` rows' sinks.
+    let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
+    let quit_stop = |c: &Vec<&str>| ["d_quit", "d_stop"].contains(&c[6]);
+    let mut held: Vec<&str> = rows.filter(quit_stop).map(|c| c[1]).collect();
+    held.sort();
+    held.dedup();
+    assert_eq!(held, super::s5::HELD_SINKS);
 }
 
 /// W0b B1 (Behaviour 4): a renderer control per new capability, each a named
@@ -1788,6 +1811,81 @@ fn reg_other_request(f: &super::Fixture) -> Facts {
     let mut planted = record.cloned().expect("the record's entry");
     planted.request = Some(7);
     facts.broker.push(planted);
+    facts
+}
+
+/// U9b D6 (SB3E-R127.3, R135.2; rule level over a real run): row 584 driven
+/// through `closed` with the value applied in the sink closure, before the
+/// point. D5 refuses it; its witness is otherwise the frozen row's.
+#[test]
+fn route_s5_closed_refuses_a_value_applied_before_the_hold() {
+    let name = "witness::route_s5_closed_refuses_a_value_applied_before_the_hold";
+    super::child(name, |f| {
+        use super::s5::{closed, Close, Mode, Setup};
+        let sink = |c: &Close, ()| {
+            let early = c.o.ingress.emergency().map(|_| ());
+            let early = early.map_err(|e| format!("{e:?}"));
+            (early.and(c.accept_quit().map(|_| ())), ())
+        };
+        let (row, mode) = (("close_restrict", "lifecycle"), Mode::Paused);
+        let none = |_: &mut Close| ();
+        let (facts, ()) = closed(
+            f,
+            Setup::Mother,
+            row,
+            "Emergency",
+            mode,
+            Ok(()),
+            none,
+            sink,
+            |_| {},
+        );
+        let want = frozen("close_restrict", "lifecycle", "Emergency").unwrap();
+        println!("WITNESS D6: {:?}, {}", facts.findings, render(&facts));
+        assert_eq!(
+            compare(want, &render(&facts)),
+            Vec::<String>::new(),
+            "D6: the witness"
+        );
+        let d5 = "value: state Emergency at the hold, before the apply";
+        assert_eq!(facts.findings, [d5], "D6: the D5 finding");
+    });
+}
+/// U9b harness control (over a real run): row 584 with S rebound to another
+/// session; `entry` and `check` must differ.
+#[test]
+fn witness_control_quit_other_session_fails_in_entry_and_check() {
+    let name = "witness::witness_control_quit_other_session_fails_in_entry_and_check";
+    let row = ("close_restrict", "lifecycle", "Emergency");
+    differs_at(
+        name,
+        "ctl_quit_other_session",
+        quit_other_session,
+        row,
+        &["entry", "check"],
+    );
+}
+fn quit_other_session(f: &super::Fixture) -> Facts {
+    use super::s5::{closed, Close, Mode, Setup};
+    let sink = |c: &Close, ()| (c.accept_quit().map(|_| ()), ());
+    let emergency = |c: &Close| {
+        c.o.ingress.emergency().expect("emergency");
+    };
+    let row = ("close_restrict", "lifecycle");
+    let (mut facts, ()) = closed(
+        f,
+        Setup::Mother,
+        row,
+        "Emergency",
+        Mode::Paused,
+        Ok(()),
+        |_| (),
+        sink,
+        emergency,
+    );
+    facts.session = nexus_governed_control::host_session::SessionSeed::new()
+        .unwrap()
+        .identity();
     facts
 }
 /// SEAM-1 T2 harness controls (labelled controls over a real run of row

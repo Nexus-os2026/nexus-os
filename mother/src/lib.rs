@@ -248,6 +248,7 @@ pub mod lane;
 mod page_builder;
 pub use page_builder::{request_identity, RequestIdentity};
 pub mod page_inputs;
+pub mod page_mission;
 pub mod page_verifier;
 pub mod private;
 /// SB-3E S5 (design 4.2): seam builds only; the route lane's cfg.

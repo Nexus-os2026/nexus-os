@@ -40,18 +40,25 @@ const LEXER: [&str; 18] = [
     "enclosing",
 ];
 const S5: &str = "host/tests/route_cells/s5.rs";
+/// U18's reader harness (B4-B7).
+const READER: &str = "host/tests/route_cells/reader.rs";
+/// The two seam modules, each gated whole by its one declaration.
+const MODULES: [&str; 2] = ["src/route_seams.rs", "host/src/route_seams.rs"];
 /// Every name of Mother's route seams outside `route_seams.rs` itself.
-const NAMES: [&str; 4] = [
+const NAMES: [&str; 5] = [
+    "route_bind",
     "route_seams",
     "route_ctx",
     "route_revoke_original_grant",
     "route_poison_coordinator",
 ];
 /// Mother's route markers, each exactly once (SB3E-R32.5, R40.6).
-const MARKERS: [&str; 3] = [
+const MARKERS: [&str; 5] = [
     "nexus-mother-route-seam-S3-port",
     "nexus-mother-route-seam-S4b",
     "nexus-mother-route-seam-S5",
+    "nexus-mother-route-seam-S6",
+    "nexus-mother-route-seam-S7",
 ];
 /// The test hooks beside the sites stay exactly `#[cfg(test)]` (mission 11).
 const HOOKS: [(&str, &str); 5] = [
@@ -64,6 +71,17 @@ const HOOKS: [(&str, &str); 5] = [
 ];
 /// Every route name's site: `file: [fn ]name < enclosing chain` (as AM-2 B.2).
 const SITES: &str = "\
+host/src/lib.rs: route_seams < \n\
+host/src/terminal.rs: route_seams < \n\
+host/src/terminal.rs: fn route_bind < implTerminal{\n\
+host/src/terminal.rs: route_seams < Ok(0)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Ok(0)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Ok(0)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Ok(n)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Ok(n)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Err(_)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Err(_)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
+host/src/terminal.rs: route_seams < Err(_)=>{>matchnix::unistd::read(stdin.as_raw_fd(),&mutbytes){>while!shared.input_end.load(Ordering::SeqCst){>fnread_input(shared:Arc<Shared>){\n\
 src/adapter/mod.rs: route_seams < fnmodel_call(&self,mission:MissionId,request:&ModelRequest,meter:&dynCallMeter,deadline:&dynCallDeadline,invocation:&InvocationObserver,)->Result<ModelAttempt,EffectRefusal>{>implEffectPortforGovernedPort{\n\
 src/adapter/mod.rs: route_seams < fnmodel_call(&self,mission:MissionId,request:&ModelRequest,meter:&dynCallMeter,deadline:&dynCallDeadline,invocation:&InvocationObserver,)->Result<ModelAttempt,EffectRefusal>{>implEffectPortforGovernedPort{\n\
 src/adapter/session_port.rs: fn route_revoke_original_grant < #[cfg(mother_route_seams)]implSessionPort{\n\
@@ -115,9 +133,9 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "ea1c01ff2f7cd2078a6359b7d97a1f8de8b7fb3df234ea87341e001383f79afd";
-const MUTANTS: usize = 1138;
-const REGIONS: usize = 37;
+const PINS_SHA256: &str = "d2d99113967dfc4b1bbd48ae60c8648c732d7b1990a18a76ef1ffa9c6dc109b1";
+const MUTANTS: usize = 1377;
+const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
 /// included (R44.1). A reviewed commit that changes a file changes its row.
@@ -125,16 +143,19 @@ const REGIONS: usize = 37;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 34dae4aba17aa92896d46db4d363b2b892dedad5eb7396bca7fab0fbb5fd0e30
+cells.rs 10580c7d1e02433fca1b88b5fcf476c43586f6de6657f6be506336df6495f319
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs df6fbefef9543093764f20f6fcd921a25546fc5c9e88bc4c5fa54c7c8f628c9d
+main.rs 1bd539a0b66344fc13e34b1d9e2ee7153e56b273061826c89b2956314e75acd7
+reader.rs 8ce8b9818b76bb4f7af534ea336473d6bc86a229829130bc5040f7d4a9765fe1
+route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 3b7c78b22398a5ba0d6a1d4ea2bd9538ca28d8b06f183278e2889326c4725f76
+s5.rs 4a95ad1c74fdbd1eaa1b3eb72446fe85c8202921d5508e562786f7e1db2fae49
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
 s5_reg.rs 918c258697d0a0a52aa41693f7feb343a38ccd6dac61e94a69651a8475d5e6ac
+s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 76ed0f7863a59311ac8fb3de8f42a2806cb32ebc9d597c50dc1568c26b9a7abb
+witness.rs 6dd11a95a06b1537a194c8fde6ac992af88ae2985c2a905ecab82d15bab1c120
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -152,14 +173,17 @@ s5.rs|U5|call_chat:ingress|ctl_call_chat|S5_SUPER|-
 s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture,nexus_governed_control::host_session::close::CloseSeal,nexus_governed_control::host_session::SessionRequest|-
 s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
+s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
-const NON_SECTIONS: [&str; 7] = [
+const NON_SECTIONS: [&str; 9] = [
     "cells.rs",
     "grant.rs",
     "locks.rs",
     "main.rs",
+    "reader.rs",
     "route_fsync.c",
+    "route_read.c",
     "store.rs",
     "witness.rs",
 ];
@@ -242,9 +266,11 @@ usestd::sync::{Arc,Mutex};\n\
 usestd::time::{Duration,Instant};\n\
 modgrant;\n\
 modlocks;\n\
+modreader;\n\
 mods5;\n\
 mods5_close;\n\
 mods5_r34;\n\
+mods5_r6;\n\
 mods5_reg;\n\
 modstore;\n\
 macro_rules!cell\n\
@@ -287,6 +313,9 @@ host/tests/route_cells/main.rs|implOpened\n\
 host/tests/route_cells/main.rs|implCallMeterforMeter\n\
 host/tests/route_cells/main.rs|implCallDeadlineforNever\n\
 host/tests/route_cells/main.rs|implControlConfirmerforOwner\n\
+host/tests/route_cells/reader.rs|implClock\n\
+host/tests/route_cells/reader.rs|implTty\n\
+host/tests/route_cells/reader.rs|implDropforTty\n\
 host/tests/route_cells/store.rs|impl<T>Faulted<T>\n\
 ";
 /// SB3E-R42.4 (G-S3): `s5.rs`'s one import from its parent, by name.
@@ -853,7 +882,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     // Each marker exactly once in Mother's sources, none within another.
     let markers = sources
         .iter()
-        .filter(|(f, _)| !exempt(f) || f == "src/route_seams.rs");
+        .filter(|(f, _)| !exempt(f) || MODULES.contains(&f.as_str()));
     let markers = markers.flat_map(|(_, s)| s.split("\"nexus-mother-route-seam").skip(1));
     let markers = markers.map(|rest| {
         let name = rest.split('"').next().unwrap_or("");
@@ -879,7 +908,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     for marker in MARKERS {
         let quoted = format!("\"{marker}\"");
         let holds = |(f, s): &&(String, String)| {
-            (!exempt(f) || f == "src/route_seams.rs") && s.contains(&quoted)
+            (!exempt(f) || MODULES.contains(&f.as_str())) && s.contains(&quoted)
         };
         for (file, source) in sources.iter().filter(holds) {
             let tokens = lex(source);
@@ -908,7 +937,8 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
         format!("S5: {calls} timeout calls (SB3E-R39.1)"),
     );
     let mut audited = Vec::new();
-    for (_, source) in sources.iter().filter(|(f, _)| !exempt(f)) {
+    let mother = |f: &str| f.starts_with("src/");
+    for (_, source) in sources.iter().filter(|(f, _)| !exempt(f) && mother(f)) {
         let tokens = lex(source);
         let at = tokens
             .windows(6)
@@ -932,6 +962,56 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     let declared = text(sources, "src/lib.rs");
     let declaration = "\n#[cfg(mother_route_seams)]\npub mod route_seams;\n";
     check(declared.contains(declaration), "S5: its declaration".into());
+    let host = text(sources, "host/src/route_seams.rs");
+    let ht = lex(host);
+    let whole = pins()
+        .into_iter()
+        .filter(|(f, _)| *f == "host/src/route_seams.rs");
+    let whole: Vec<Vec<&str>> = whole.map(|(_, pin)| lex(pin)).collect();
+    check(
+        whole == [ht.clone()],
+        "S7: host/src/route_seams.rs is not its pin, whole".into(),
+    );
+    check(
+        !ht.iter().any(|t| defines.contains(t)),
+        "S7: a macro definition".into(),
+    );
+    let public = ht.windows(3).filter(|w| w[..2] == ["pub", "fn"]);
+    let public: Vec<&str> = public.map(|w| w[2]).collect();
+    check(
+        public == ["arm", "drain_trace"],
+        format!("S7: public {public:?}"),
+    );
+    check(!host.contains("#[used]"), "S7: #[used] (SB3E-R9)".into());
+    let calls = ht.windows(2).filter(|w| w == &["timeout", "("]).count();
+    check(calls == 1, format!("S7: {calls} timeout calls"));
+    let host_lib = text(sources, "host/src/lib.rs");
+    check(host_lib.contains(declaration), "S7: its declaration".into());
+    let mut reached = Vec::new();
+    for (_, source) in sources
+        .iter()
+        .filter(|(f, _)| !exempt(f) && f.starts_with("host/src/"))
+    {
+        let t = lex(source);
+        let at = t
+            .windows(6)
+            .filter(|w| w[..5] == ["route_seams", ":", ":", "at", "("]);
+        reached.extend(at.map(|w| w[5].trim_matches('"').to_string()));
+    }
+    reached.sort();
+    reached.dedup();
+    let points = host.split("POINTS: [&str; 1] = [").nth(1).unwrap_or("");
+    let points = points.split("];").next().unwrap_or("");
+    let points: Vec<String> = points
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(String::from)
+        .collect();
+    check(
+        reached == points,
+        format!("S7: armable {points:?}, reached {reached:?}"),
+    );
     // SB3E-R44.2: `s5.rs`'s reach. Its parent's items are exactly these (the
     // reached ones also pinned whole, above), and no `impl` in the harness
     // is added (S2: no other `impl` of `Fixture` or `Opened`).
@@ -969,6 +1049,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     let (main, cells) = (format!("{CELLS}main.rs"), format!("{CELLS}cells.rs"));
     more.extend(macro_findings(text(sources, &main), text(sources, &cells)));
     more.extend(t7_findings(sources));
+    more.extend(reader_timeout_findings(text(sources, READER)));
     for finding in more {
         check(false, finding);
     }
@@ -1318,6 +1399,7 @@ host/src/hands.rs|. into_file_session (|1
 host/src/hands.rs|open_confirmed_file_door (|1
 host/src/hands.rs|open_file_door (|0
 host/src/hands.rs|SystemClock : : default (|1
+host/src/hands.rs|Terminal : : open (|1
 host/src/session_home.rs|open_with_history (|1
 host/src/session_home.rs|HostSession : : open (|0
 host/src/session_home.rs|bind_history_inspector (|1
@@ -1329,13 +1411,17 @@ host/tests/route_cells/s5.rs|open_file_door (|1
 host/tests/route_cells/s5.rs|SystemClock : : default (|2
 host/tests/route_cells/s5.rs|open_with_history (|1
 host/tests/route_cells/s5.rs|bind_history_inspector (|0
+host/tests/route_cells/reader.rs|Terminal : : open (|1
+host/tests/route_cells/reader.rs|route_bind (|1
 ";
 /// I8: the named differences of `s5.rs`'s composition from production's.
-const T7_DIFFERENCES: [&str; 4] = [
+const T7_DIFFERENCES: [&str; 6] = [
     "open_file_door, not open_confirmed_file_door (no Owner dialog)",
     "no history inspector (no bind_history_inspector: the seal's history check is the broker's own replay, recovery.rs:168-200)",
     "test lanes (ModelLane, RecordingLane) for production's",
     "a test confirmer (Answers, as main.rs Owner)",
+    "reader.rs: the terminal opened after the session (hands.rs opens it first)",
+    "reader.rs: stop recording bound through S6 route_bind (hands.rs: StopRoute::bind)",
 ];
 /// The only `Type::name(` paths of the composed types `s5.rs` may take.
 const T7_PATHS: [&str; 7] = [
@@ -1499,7 +1585,11 @@ fn text<'a>(sources: &'a [(String, String)], file: &str) -> &'a str {
 /// Files outside the inventory: S5's module (gated whole by its one
 /// declaration), this guard, and the lane-only harness.
 fn exempt(file: &str) -> bool {
-    let skip = ["src/route_seams.rs", "src/oracles/route_seams_guard.rs"];
+    let skip = [
+        "src/route_seams.rs",
+        "host/src/route_seams.rs",
+        "src/oracles/route_seams_guard.rs",
+    ];
     skip.contains(&file) || file.starts_with("host/tests/route_cells/")
 }
 fn sites(sources: &[(String, String)]) -> Vec<String> {
@@ -1603,6 +1693,36 @@ fn port_rows(source: &str) -> Vec<String> {
         )
     };
     at.map(row).collect()
+}
+/// The tokens that can begin an unwind in a pause timeout's body.
+const UNWINDS: [&str; 12] = [
+    "unwrap",
+    "expect",
+    "panic",
+    "assert",
+    "unreachable",
+    "todo",
+    "?",
+    "[",
+    "assert_eq",
+    "assert_ne",
+    "unimplemented",
+    "println",
+];
+/// U18 B8: `reader.rs`'s pause timeout, as `s5.rs`'s: no panic path, and
+/// `std::process::abort()` last.
+fn reader_timeout_findings(reader: &str) -> Vec<String> {
+    let body = lex(item(reader, "timeout").unwrap_or(""));
+    let mut found: Vec<String> = body
+        .iter()
+        .filter(|t| UNWINDS.contains(t) || t.starts_with("debug_assert"))
+        .map(|t| format!("reader timeout: a panic path {t}"))
+        .collect();
+    let tail = ["std", ":", ":", "process", ":", ":", "abort", "(", ")", "}"];
+    if !body.ends_with(&tail) {
+        found.push("reader timeout: ends in abort".into());
+    }
+    found
 }
 /// A.2 item 3 (a)-(d), SB3E-R42.1, R42.4 and R42.5, and the harness
 /// `timeout` (SB3E-R39.1, R40.6) over `s5.rs`, by identifier token.
@@ -1751,22 +1871,8 @@ fn s5_findings(s5: &str) -> Vec<String> {
     }
     // The timeout aborts and cannot unwind: no panic path, `abort` last.
     let body = lex(item(s5, "timeout").unwrap_or(""));
-    let unwinds = [
-        "unwrap",
-        "expect",
-        "panic",
-        "assert",
-        "unreachable",
-        "todo",
-        "?",
-        "[",
-        "assert_eq",
-        "assert_ne",
-        "unimplemented",
-        "println",
-    ];
     for t in &body {
-        if unwinds.contains(t) || t.starts_with("debug_assert") {
+        if UNWINDS.contains(t) || t.starts_with("debug_assert") {
             check(false, format!("timeout: a panic path {t}"));
         }
     }
@@ -2186,7 +2292,11 @@ fn reach_findings(rows: &[Row], harness: &[(&str, &str)]) -> Vec<String> {
             let after = |w: &[&str]| i >= 3 && t[i - 3..i] == *w;
             let entry = t.get(i + 1..i + 4) == Some(&[":", ":", "Entry"][..]);
             let entry = entry && t.get(i + 4) != Some(&":");
-            if !(after(&["broker", ":", ":"]) || after(&["nexus_mother", ":", ":"]) && entry) {
+            let host = *file == "reader.rs" && after(&["nexus_mother_host", ":", ":"]);
+            if !(host
+                || after(&["broker", ":", ":"])
+                || after(&["nexus_mother", ":", ":"]) && entry)
+            {
                 found.push(format!(
                     "S5 sections: {file} reaches nexus_mother::route_seams other than as ::Entry"
                 ));
@@ -2495,6 +2605,11 @@ fn pause_findings(file: &str, source: &str) -> Vec<String> {
             ));
         }
     }
+    // U9b D7 (SB3E-R127.3 F-U9A-PAUSE, R130.1, R133 N4): a section never calls
+    // `Fixture::pause`, in any form; the token is refused (a closed identifier rule).
+    if t.contains(&"pause") {
+        found.push(format!("section {file}: a pause call (F-U9A-PAUSE)"));
+    }
     let callback = ["Action", "Pause", "Timeout", "timeout"];
     let mut named: Vec<&str> = t.iter().copied().filter(|x| callback.contains(x)).collect();
     named.sort_unstable();
@@ -2571,6 +2686,7 @@ s|enum Ack
 s|enum Hold
 h|const BROKER_SINKS
 h|const CLOSE_SINKS
+h|const HELD_SINKS
 h|struct Ran{id,nonce,result,passed,output}
 h|fn cell
 s|fn mission
@@ -3216,7 +3332,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
         "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
@@ -3296,7 +3412,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
     let journal = "Passive: collect reads the journal through journal(), not journal_view()";
     let cfg = "R57.6: host/tests/route_cells/s5_reg.rs: a cfg! other than cfg!(mother_route_seams): cfg!(test)";
     // `std::process` is built from parts so the host-access scan does not match this file.
-    let profile: Vec<(&str, &str, String, &str)> = vec![
+    let mut profile: Vec<(&str, &str, String, &str)> = vec![
         ("P-C3 a counted call copied", "s5_close.rs", drive, "a model call"),
         ("P-W5 a path through another section", "s5_r34.rs", "use super::s5_close::seal;\n".into(), "a path through s5_close"),
         ("P-T1 a closure callback", "s5_close.rs", arm.to_string() + &pause(concat!("timeout: |l| -> ! { std::", "process::abort() }")), callback),
@@ -3327,6 +3443,24 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("rule: collect reads store.commit", "s5_r34.rs", "fn collect_commits(broker: &[Entry]) -> usize {\n    broker.iter().filter(|e| e.point == \"store.commit\").count()\n}\n".into(), "Passive: collect_commits reads store.commit"),
         ("rule: an unlisted impl", "s5_r34.rs", "struct Z;\nimpl Z {\n    fn d(&self) {}\n}\n".into(), "an unlisted impl implZ"),
     ];
+    // U9b D7: a pause call in every section file, in each form (R102.3).
+    let calls = [
+        "f.pause(\"ingress.accept\")",
+        "Fixture::pause(f, \"ingress.accept\")",
+        "(f).pause(\"ingress.accept\")",
+        "{ let p = Fixture::pause; p(f, \"ingress.accept\") }",
+    ];
+    for file in ["s5_close.rs", "s5_reg.rs", "s5_r34.rs", "s5_r6.rs"] {
+        for call in calls {
+            let text = format!("fn d(f: &Fixture) {{\n    let _h = {call};\n}}\n");
+            profile.push((
+                "D7 a section pause call",
+                file,
+                text,
+                "a pause call (F-U9A-PAUSE)",
+            ));
+        }
+    }
     for (plant, file, text, expected) in &profile {
         let expected = match expected.starts_with(CELLS) {
             true => expected.to_string(),
@@ -3763,7 +3897,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";
