@@ -170,6 +170,60 @@ class RunLedger(unittest.TestCase):
                 self.assertEqual(lines[0]["run_id"], lines[1]["run_id"])
 
 
+FAKE_REPLAY = """#!/usr/bin/python3 -I
+import json, os, sys
+step = os.environ["QM3_STEP"]
+with open(step, encoding="utf-8") as h:
+    v = json.load(h)
+for r in v["replies"]:
+    if not os.path.isfile(os.path.join(os.path.dirname(step), r["path"])):
+        sys.exit(101)
+print("QM3STEP " + json.dumps({"bodies": [@BODY@], "next": None, "outcome": {"kind": "file", "page_sha256": "p"}}))
+"""
+
+
+class FReplay(unittest.TestCase):
+    """SB3E-R172 F3: freplay over a recorded bundle; the replay finds the recorded replies."""
+
+    def recorded(self, d):
+        body = q.sha(q.chat_body("N", "1c2d3e4f5a6b4c7d8e9fa0b1c2d3e4f5"))
+        replay = os.path.join(d, "replay")
+        with open(replay, "w", encoding="utf-8") as h:
+            h.write(FAKE_REPLAY.replace("@BODY@", json.dumps(body)))
+        os.chmod(replay, 0o700)
+        meta = os.path.join(d, "replay.json")
+        with open(meta, "w", encoding="utf-8") as h:
+            json.dump({"sha256": q.sha_file(replay), "built_from": "c" * 40}, h)
+        steps = os.path.join(d, "bundle", "QM-N1", "steps")
+        os.makedirs(steps)
+        with open(os.path.join(d, "bundle", "QM-N1", "call1.reply"), "w", encoding="utf-8") as h:
+            h.write("{}")
+        with open(os.path.join(steps, "step-001.json"), "w", encoding="utf-8") as h:
+            json.dump({"shape": "N", "markers": ["1c2d3e4f5a6b4c7d8e9fa0b1c2d3e4f5"],
+                       "replies": [{"status": 200, "path": "../call1.reply"}], "scripted": None}, h)
+        with open(os.path.join(steps, "step-001.json.out"), "w", encoding="utf-8") as h:
+            h.write("not a step\n")
+        record = os.path.join(d, "evidence.json")
+        with open(record, "wb") as h:
+            h.write(q.canonical({"run_id": "ab" * 16, "floor": {"floor": 568}, "cases": [
+                {"id": "QM-N1", "calls": [{"body_sha256": body, "marker": "1c2d3e4f5a6b4c7d8e9fa0b1c2d3e4f5"}],
+                 "outcome": {"kind": "file", "page_sha256": "p"}}]}))
+        os.mkdir(os.path.join(d, "root"))
+        return {"record": record, "bundle": os.path.join(d, "bundle"), "root": os.path.join(d, "root"),
+                "replay": replay, "replay_meta": meta, "candidate": "c" * 40, "harness_sha": q.sha_file(q.__file__)}
+
+    def test_freplay_confirms_a_recorded_bundle_and_blocks_a_broken_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            args = self.recorded(d)
+            self.assertEqual(q.freplay(args), 0)
+            with open(os.path.join(args["root"], "freplay-" + "ab" * 16 + ".json"), encoding="utf-8") as h:
+                self.assertEqual(json.load(h)["verdict"], "CONFIRMED")
+            os.remove(os.path.join(args["bundle"], "QM-N1", "call1.reply"))
+            self.assertEqual(q.freplay(args), 1)
+            with open(os.path.join(args["root"], "runs.jsonl"), encoding="utf-8") as h:
+                self.assertEqual([json.loads(x)["verdict"] for x in h], ["CONFIRMED", "BLOCKED"])
+
+
 class Identity(unittest.TestCase):
     def test_gq5_replay_must_be_built_from_the_candidate(self):
         q.bound_replay({"built_from": "a" * 40}, "a" * 40)

@@ -20,6 +20,7 @@ import http.client
 import json
 import os
 import pty
+import re
 import select
 import subprocess
 import sys
@@ -606,13 +607,25 @@ def freplay(args):
     rows, ok = [], True
     for case in record["cases"]:
         steps = os.path.join(args["bundle"], case["id"], "steps")
-        saved = sorted(f for f in os.listdir(steps) if f.endswith(".json"))
-        last = json.load(open(os.path.join(steps, saved[-1]), encoding="utf-8")) if saved else None
-        if last is None or case["outcome"].get("code") == "live_timeout":
+        # SB3E-R172 F3: only the harness's own step files; reply paths made absolute, because the replay
+        # resolves them against the step file's own folder (qm3_replay_tests.rs `qm3_step`).
+        saved = sorted(f for f in os.listdir(steps) if re.fullmatch(r"step-[0-9]{3}\.json", f))
+        last = None
+        if saved:
+            with open(os.path.join(steps, saved[-1]), encoding="utf-8") as h:
+                last = json.load(h)
+            last["replies"] = [dict(r, path=os.path.normpath(os.path.join(steps, r["path"]))) for r in last["replies"]]
+        out = None
+        if last is not None and case["outcome"].get("code") != "live_timeout":
+            try:
+                with tempfile.TemporaryDirectory(dir=args["root"]) as work:
+                    out = replay_step(args["replay"], work, last)
+            except RuntimeError:
+                out = None
+        if out is None:
             rows.append({"id": case["id"], "bodies_equal": False, "outcome_equal": False, "read_chat_at_f": False})
             ok = False
             continue
-        out = replay_step(args["replay"], tempfile.mkdtemp(dir=args["root"]), last)
         bodies_equal = out["bodies"][-len(case["calls"]):] == [c["body_sha256"] for c in case["calls"]]
         outcome_equal = out["outcome"] == case["outcome"]
         rows.append({"id": case["id"], "bodies_equal": bodies_equal, "outcome_equal": outcome_equal,
