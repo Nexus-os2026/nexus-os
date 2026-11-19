@@ -295,7 +295,7 @@ const GROUPS: [std::ops::Range<usize>; 3] = [0..4, 4..8, 8..9];
 const VAR: &str = "NEXUS_QM3_CASE";
 const MODULE: &str = "adapter::qm3_replay_tests";
 /// One process holds one broker home (the emergency-stop owner), so every
-/// mission runs in its own child of this test binary (c1b_port_oracles.rs:51).
+/// mission runs in its own child of this test binary (c1b_port_oracles.rs:61).
 fn cases(test: &str, list: &[&str]) -> Option<Vec<String>> {
     if let Ok(case) = std::env::var(VAR) {
         run(&case);
@@ -475,7 +475,10 @@ fn qm3_step_replay_is_consistent() {
         (&json!(true), &json!(true), &json!(true))
     );
     let l: Value = serde_json::from_str(&low[0]).unwrap();
-    assert_eq!(l["kind"], "fail");
+    assert_eq!(
+        (&l["kind"], &l["code"]),
+        (&json!("fail"), &json!("model_truncated"))
+    );
 }
 fn chat_body(content: &str) -> String {
     match chat(content) {
@@ -526,11 +529,19 @@ fn own() -> String {
         .unwrap()
 }
 
-/// Production-tree occurrences of `needles`: `mother/`, `crates/`, `kernel/`
+/// Production-tree occurrences of `needles`: `mother/`, `crates/`, `kernel/`,
+/// `persistence/` (a kernel dependency linked into Mother, kernel/Cargo.toml:51)
 /// and `.github/`, every file, except this one.
 fn production_hits(needles: &[&str]) -> Vec<String> {
+    let dirs = ["mother", "crates", "kernel", "persistence", ".github"];
+    production_hits_in(&repo(), &dirs, needles)
+}
+/// A read error or a missing root fails the scan, so the guard never passes vacuously.
+fn production_hits_in(root: &std::path::Path, dirs: &[&str], needles: &[&str]) -> Vec<String> {
     fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let entries = std::fs::read_dir(dir).unwrap_or_else(|e| panic!("G-Q scan: {dir:?}: {e}"));
+        for e in entries {
+            let e = e.unwrap_or_else(|e| panic!("G-Q scan: {dir:?}: {e}"));
             let (p, kind) = (e.path(), e.file_type().unwrap());
             let name = e.file_name().to_string_lossy().to_string();
             if kind.is_dir()
@@ -542,9 +553,8 @@ fn production_hits(needles: &[&str]) -> Vec<String> {
             }
         }
     }
-    let root = repo();
     let mut files = vec![];
-    for d in ["mother", "crates", "kernel", ".github"] {
+    for d in dirs {
         walk(&root.join(d), &mut files);
     }
     let mut hits = vec![];
@@ -553,7 +563,7 @@ fn production_hits(needles: &[&str]) -> Vec<String> {
         if rel == "mother/src/adapter/qm3_replay_tests.rs" {
             continue;
         }
-        let bytes = std::fs::read(&f).unwrap_or_default();
+        let bytes = std::fs::read(&f).unwrap_or_else(|e| panic!("G-Q scan: {rel}: {e}"));
         for n in needles {
             if bytes.windows(n.len()).any(|w| w == n.as_bytes()) {
                 hits.push(format!("{rel}: {n}"));
@@ -561,6 +571,13 @@ fn production_hits(needles: &[&str]) -> Vec<String> {
         }
     }
     hits
+}
+
+/// The G-Q scan fails on a missing root (SB3E-R179 N2).
+#[test]
+#[should_panic(expected = "G-Q scan")]
+fn qm3_gq_scan_fails_on_a_missing_root() {
+    production_hits_in(&repo(), &["qm3-no-such-root"], &["x"]);
 }
 
 /// G-Q1: nothing outside tools/qm3, docs and this file names the harness.

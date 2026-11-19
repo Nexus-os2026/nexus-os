@@ -56,7 +56,7 @@ There is no fixture and no floor input: the floor is whatever the built code app
 | `qm3_body_goldens` | **B1+B2.** The 63 bodies of the real path equal the literals. Each body carries its injected marker exactly 4 times. **B3:** the re-derived fixtures equal the M3-O20 hashes |
 | `qm3_step_replay_is_consistent` | The same step in two fresh processes gives the same body hashes and outcome. A reply under the built floor is refused |
 | `qm3_step` (`#[ignore]`) | The measurement step, run only from the prebuilt binary with `--exact` |
-| `qm3_gq1_no_production_reference` | **G-Q1.** Nothing in `mother/`, `crates/`, `kernel/` or `.github/` names `tools/qm3` or the measure marker, except this test file |
+| `qm3_gq1_no_production_reference` | **G-Q1.** Nothing in `mother/`, `crates/`, `kernel/`, `persistence/` or `.github/` names `tools/qm3` or the measure marker, except this test file. The scan fails on a read error or a missing root (`qm3_gq_scan_fails_on_a_missing_root`) |
 | `qm3_gq2_declaration_is_test_only` | **G-Q2.** The one declaration is exactly `#[cfg(target_os = "linux")] #[cfg(test)] mod qm3_replay_tests;`. The step variable `QM3_STEP` occurs nowhere in those trees outside this file (SB3E-R168) |
 | `qm3_gq6_no_cq_coupling` | **G-Q6.** No `ModelRequest::new(` and no `ModelPinSpec {` in this file |
 
@@ -77,7 +77,7 @@ There is no floor field. The first unserved chat is answered 503.
 **Output.** One line:
 
 ```
-QM3STEP {"bodies": [<sha256>...], "next": null | {"sha256", "correction"}, "outcome": {"kind": "file"|"fail", "code" | "page_sha256", "page_bytes", "check", "check_facts", "email_scan"}}
+QM3STEP {"bodies": [<sha256>...], "next": null | {"sha256", "correction"}, "outcome": {"kind": "file"|"fail"|"other", "code" | "page_sha256", "page_bytes", "check", "check_facts", "email_scan"}}
 ```
 
 ## Plants (local scripted runs, recorded by sha; SB3E-R134.2 form)
