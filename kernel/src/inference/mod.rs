@@ -28,6 +28,8 @@
 
 mod endpoint;
 mod exchange;
+#[cfg(test)]
+pub(crate) mod fixture;
 pub mod grammar;
 mod identity;
 pub mod ollama;
@@ -46,7 +48,7 @@ use crate::emergency_stop::StopWatch;
 pub use endpoint::LoopbackEndpoint;
 pub use exchange::{AbsoluteDeadline, DeadlineClock, SystemClocks, CALL_HARD_TIMEOUT};
 pub use identity::{ModelIdentity, ModelPinSpec, RuntimeConfig, Think, LOCAL_PROVIDER};
-pub use ollama::VerifiedOllama;
+pub use ollama::{Provenance, VerifiedOllama};
 pub use purpose::{
     freeze_floor, qualified_floor, Floor, Purpose, QualificationRecord, QUALIFICATIONS,
 };

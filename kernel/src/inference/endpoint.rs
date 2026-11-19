@@ -1,7 +1,11 @@
 //! The loopback address of the local model runtime.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+#[cfg(test)]
+use std::sync::Arc;
 
+#[cfg(test)]
+use super::fixture::{FixtureRecord, WeakAuthority};
 use super::ModelError;
 
 /// A checked loopback address: `127.0.0.1` or `::1`, with a port. It is
@@ -30,10 +34,49 @@ use super::ModelError;
 /// use nexus_kernel::inference::LoopbackEndpoint;
 /// let endpoint: LoopbackEndpoint = serde_json::from_str("\"192.0.2.1:9\"").unwrap();
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct LoopbackEndpoint {
     addr: SocketAddr,
+    source: Source,
 }
+
+/// Where an endpoint came from. Parsing always makes `Ordinary`; the
+/// fixture source exists only in this crate's own unit tests (G1).
+#[derive(Clone, Debug)]
+enum Source {
+    Ordinary,
+    #[cfg(test)]
+    Fixture {
+        #[allow(dead_code)] // first use: Cq-2a
+        records: Arc<[FixtureRecord]>,
+        authority: WeakAuthority,
+    },
+}
+
+/// The admission of one exchange. Inert (Cq-1a): always `Ordinary`; the
+/// checked fixture authority arrives with enforcement (Cq-2a).
+pub(super) enum ExchangeLease {
+    Ordinary,
+}
+
+impl PartialEq for LoopbackEndpoint {
+    /// Address and source kind; two fixture capabilities are equal only for
+    /// the same authority. Ordinary and fixture are never equal.
+    fn eq(&self, other: &Self) -> bool {
+        self.addr == other.addr
+            && match (&self.source, &other.source) {
+                (Source::Ordinary, Source::Ordinary) => true,
+                #[cfg(test)]
+                (Source::Fixture { authority: a, .. }, Source::Fixture { authority: b, .. }) => {
+                    a.ptr_eq(b)
+                }
+                #[cfg(test)]
+                _ => false,
+            }
+    }
+}
+
+impl Eq for LoopbackEndpoint {}
 
 impl LoopbackEndpoint {
     /// Parse `http://127.0.0.1:<port>`, `http://[::1]:<port>` or
@@ -73,12 +116,52 @@ impl LoopbackEndpoint {
         }
         Ok(Self {
             addr: SocketAddr::new(ip, port),
+            source: Source::Ordinary,
         })
     }
 
     /// The loopback socket address.
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// The fixture-source endpoint of a listener this crate's own tests
+    /// bound themselves (G1).
+    #[cfg(test)]
+    pub(super) fn fixture(
+        addr: SocketAddr,
+        records: Arc<[FixtureRecord]>,
+        authority: WeakAuthority,
+    ) -> Self {
+        Self {
+            addr,
+            source: Source::Fixture { records, authority },
+        }
+    }
+
+    /// The fixture records of a fixture-source endpoint.
+    #[cfg(test)]
+    #[allow(dead_code)] // first use: Cq-2a
+    pub(super) fn fixture_records(&self) -> Option<&[FixtureRecord]> {
+        match &self.source {
+            Source::Ordinary => None,
+            Source::Fixture { records, .. } => Some(records),
+        }
+    }
+
+    /// The fixture authority's strong count (0 when ordinary or expired).
+    #[cfg(test)]
+    pub(super) fn fixture_authority_strong_count(&self) -> usize {
+        match &self.source {
+            Source::Ordinary => 0,
+            Source::Fixture { authority, .. } => authority.strong_count(),
+        }
+    }
+
+    /// The admission of one exchange. Inert (Cq-1a): `Ordinary` for every
+    /// source.
+    pub(super) fn exchange_lease(&self) -> Result<ExchangeLease, ModelError> {
+        Ok(ExchangeLease::Ordinary)
     }
 }
 

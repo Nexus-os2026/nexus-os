@@ -15,8 +15,8 @@ use super::request::{
 };
 use super::request::{ModelReply, ModelRequest, SCAFFOLD_FLOOR};
 use super::{
-    CallCancel, CallContext, CallDeadline, CallMeter, MessageRole, ModelError, ModelPinSpec,
-    ModelTransport, Think, CONVERSATION_CONFIG,
+    qualified_floor, CallCancel, CallContext, CallDeadline, CallMeter, Floor, MessageRole,
+    ModelError, ModelPinSpec, ModelTransport, Purpose, Think, CONVERSATION_CONFIG,
 };
 use crate::emergency_stop::StopWatch;
 
@@ -93,6 +93,32 @@ impl VerifiedOllama {
         deadline: &dyn CallDeadline,
         stop: &StopWatch,
     ) -> Result<Self, ModelError> {
+        Self::verify_endpoint(endpoint, spec, cancel, deadline, stop)
+    }
+
+    /// Register the pinned model on a typed fixture endpoint: the same
+    /// verification as [`VerifiedOllama::verify`]. Only this crate's own unit
+    /// tests have it (G1).
+    #[cfg(test)]
+    #[allow(dead_code)] // first use: Cq-1b-k
+    pub(crate) fn verify_fixture(
+        endpoint: super::fixture::FixtureEndpoint,
+        spec: &ModelPinSpec,
+        cancel: &dyn CallCancel,
+        deadline: &dyn CallDeadline,
+        stop: &StopWatch,
+    ) -> Result<Self, ModelError> {
+        Self::verify_endpoint(endpoint.into_endpoint(), spec, cancel, deadline, stop)
+    }
+
+    /// The one verification, for an ordinary or a fixture endpoint.
+    fn verify_endpoint(
+        endpoint: LoopbackEndpoint,
+        spec: &ModelPinSpec,
+        cancel: &dyn CallCancel,
+        deadline: &dyn CallDeadline,
+        stop: &StopWatch,
+    ) -> Result<Self, ModelError> {
         let identity = ModelIdentity::from_spec(spec)?;
         let guard = Guard {
             cancel,
@@ -108,6 +134,41 @@ impl VerifiedOllama {
     pub fn endpoint(&self) -> &LoopbackEndpoint {
         &self.endpoint
     }
+
+    /// Where this transport's qualification comes from: an in-process
+    /// observation, never registration evidence. Inert (Cq-1a): always
+    /// `Frozen(None)`.
+    pub fn provenance(&self) -> Provenance {
+        Provenance::Frozen(None)
+    }
+
+    /// The floor qualified for `purpose` and the identity whose v2 digest
+    /// is `digest`, chosen by the endpoint's immutable source tag, never by
+    /// its address: a fixture endpoint consults only its own frozen records,
+    /// an ordinary one only the production records. Its only call is the
+    /// enforcement step (Cq-2a), with this transport's own purpose and
+    /// digest.
+    #[allow(dead_code)] // first use: Cq-2a
+    fn lookup_floor(&self, purpose: Purpose, digest: &[u8; 32]) -> Option<Floor> {
+        #[cfg(test)]
+        if let Some(records) = self.endpoint.fixture_records() {
+            return records
+                .iter()
+                .find(|record| record.purpose == purpose && &record.identity_sha256 == digest)
+                .map(|record| record.floor);
+        }
+        qualified_floor(purpose, digest)
+    }
+}
+
+/// The source of a transport's qualification (in-process only).
+/// `Frozen(None)`: an ordinary, currently unqualified identity;
+/// `Frozen(Some(evidence))`: an exact production record; `Fixture`: a
+/// typed fixture instance (this crate's unit tests only).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Provenance {
+    Frozen(Option<&'static str>),
+    Fixture,
 }
 
 impl ModelTransport for VerifiedOllama {

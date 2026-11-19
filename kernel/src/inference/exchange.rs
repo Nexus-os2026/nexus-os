@@ -156,6 +156,11 @@ pub(super) fn exchange(
     guard: &Guard<'_>,
 ) -> Result<Reply, ModelError> {
     guard.check()?;
+    // Each exchange's own admission (Cq): held until the worker is joined
+    // and its runtime and request are dropped, then dropped explicitly.
+    let lease = endpoint.exchange_lease()?;
+    #[cfg(test)]
+    seams::after_lease();
     let addr = endpoint.addr();
     // The address is loopback by construction; checked again before every
     // connection all the same.
@@ -218,6 +223,11 @@ pub(super) fn exchange(
             Err(_) => Err(Ended::Error(ModelError::Unavailable)),
         }
     });
+    // The admission ends here, after the worker is joined (v6 §5.3). An
+    // ordinary lease owns nothing, so in a library build this drop only
+    // marks that point.
+    #[allow(clippy::drop_non_drop)]
+    drop(lease);
     match outcome {
         Ok(reply) => Ok(reply),
         Err(Ended::Stopped) => {
@@ -373,6 +383,22 @@ pub(super) mod seams {
         static PROBE: RefCell<Option<Arc<AtomicUsize>>> = const { RefCell::new(None) };
         static AFTER_REPLY: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
         static AFTER_CONSTRUCTION: RefCell<Option<AfterConstruction>> = const { RefCell::new(None) };
+        static AFTER_LEASE: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+    }
+
+    /// The Cq paused-lease hook: run on the calling thread after an
+    /// exchange's lease is acquired and before its worker starts.
+    #[allow(dead_code)] // first use: Cq-1c
+    pub(crate) fn set_after_lease(hook: Option<Box<dyn Fn()>>) {
+        AFTER_LEASE.with(|slot| *slot.borrow_mut() = hook);
+    }
+
+    pub(super) fn after_lease() {
+        AFTER_LEASE.with(|slot| {
+            if let Some(hook) = slot.borrow().as_ref() {
+                hook();
+            }
+        });
     }
 
     /// Set on the calling thread; each later exchange from it carries the
