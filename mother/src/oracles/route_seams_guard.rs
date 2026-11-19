@@ -133,8 +133,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "1683b8a9657593b85e4f2f0bda53adbe805b46d3444f74fdf929f37cd8671f48";
-const MUTANTS: usize = 1257;
+const PINS_SHA256: &str = "32a681da7b09ad6992d3316322592d517d7c69a9f8cb9a477f96781ed5b7c70a";
+const MUTANTS: usize = 1308;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -143,18 +143,19 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs f11e2af26c53d5af16b7c025f428c203ef1c6a2e0dabbd0a2fc0f49a5a0ab19b
+cells.rs 7ed051ba5fdf0b8ae85f771e2ba41cf694454c63cffc226fea48aa73f8f347cd
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 4efca269638c6dbecf4ea4a18525f12bdca1ade4eab236352ec38ed2d5fda44e
+main.rs e3c0b908f0af943f4ebeaa175b0910352e83452e7c2253b8c7d74b0c2e14b7f7
 reader.rs 8ce8b9818b76bb4f7af534ea336473d6bc86a229829130bc5040f7d4a9765fe1
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs eafeb37f06e607e66d5291d21c76e997cacbf1ca1005ac026fa633d4a9d53e3f
+s5.rs 3f1987e8975670252cc783ce71cd2f03482a69c5cf9c10aebe62fa6f46788117
 s5_close.rs e0c20ad6fe2b17db99559b9af33b6385b51657f829edef91fc336a0e845d5424
 s5_reg.rs 2e66d53abc10ba3b9f3322f66384d1f9e9a88485ec1a7643b0dbc9fa10c4fa85
+s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 3b3bcfdc2d411239fa84881bc61d14eec7b49acf7578bd1afa8228a53c1c775e
+witness.rs 13140ac23b1f3c4d1bf150236de8a1e3448f47058bfd4008b01d5eb131a20901
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -172,6 +173,7 @@ s5.rs|U5|call_chat:ingress|ctl_call_chat|S5_SUPER|-
 s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture,nexus_governed_control::host_session::close::CloseSeal,nexus_governed_control::host_session::SessionRequest|-
 s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
+s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
 const NON_SECTIONS: [&str; 9] = [
@@ -268,6 +270,7 @@ modreader;\n\
 mods5;\n\
 mods5_close;\n\
 mods5_r34;\n\
+mods5_r6;\n\
 mods5_reg;\n\
 modstore;\n\
 macro_rules!cell\n\
@@ -2602,6 +2605,11 @@ fn pause_findings(file: &str, source: &str) -> Vec<String> {
             ));
         }
     }
+    // U9b D7 (SB3E-R127.3 F-U9A-PAUSE, R130.1, R133 N4): a section never calls
+    // `Fixture::pause`, in any form; the token is refused (a closed identifier rule).
+    if t.contains(&"pause") {
+        found.push(format!("section {file}: a pause call (F-U9A-PAUSE)"));
+    }
     let callback = ["Action", "Pause", "Timeout", "timeout"];
     let mut named: Vec<&str> = t.iter().copied().filter(|x| callback.contains(x)).collect();
     named.sort_unstable();
@@ -2678,6 +2686,7 @@ s|enum Ack
 s|enum Hold
 h|const BROKER_SINKS
 h|const CLOSE_SINKS
+h|const HELD_SINKS
 h|struct Ran{id,nonce,result,passed,output}
 h|fn cell
 s|fn mission
@@ -3323,7 +3332,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
         "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
@@ -3403,7 +3412,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
     let journal = "Passive: collect reads the journal through journal(), not journal_view()";
     let cfg = "R57.6: host/tests/route_cells/s5_reg.rs: a cfg! other than cfg!(mother_route_seams): cfg!(test)";
     // `std::process` is built from parts so the host-access scan does not match this file.
-    let profile: Vec<(&str, &str, String, &str)> = vec![
+    let mut profile: Vec<(&str, &str, String, &str)> = vec![
         ("P-C3 a counted call copied", "s5_close.rs", drive, "a model call"),
         ("P-W5 a path through another section", "s5_r34.rs", "use super::s5_close::seal;\n".into(), "a path through s5_close"),
         ("P-T1 a closure callback", "s5_close.rs", arm.to_string() + &pause(concat!("timeout: |l| -> ! { std::", "process::abort() }")), callback),
@@ -3434,6 +3443,24 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("rule: collect reads store.commit", "s5_r34.rs", "fn collect_commits(broker: &[Entry]) -> usize {\n    broker.iter().filter(|e| e.point == \"store.commit\").count()\n}\n".into(), "Passive: collect_commits reads store.commit"),
         ("rule: an unlisted impl", "s5_r34.rs", "struct Z;\nimpl Z {\n    fn d(&self) {}\n}\n".into(), "an unlisted impl implZ"),
     ];
+    // U9b D7: a pause call in every section file, in each form (R102.3).
+    let calls = [
+        "f.pause(\"ingress.accept\")",
+        "Fixture::pause(f, \"ingress.accept\")",
+        "(f).pause(\"ingress.accept\")",
+        "{ let p = Fixture::pause; p(f, \"ingress.accept\") }",
+    ];
+    for file in ["s5_close.rs", "s5_reg.rs", "s5_r34.rs", "s5_r6.rs"] {
+        for call in calls {
+            let text = format!("fn d(f: &Fixture) {{\n    let _h = {call};\n}}\n");
+            profile.push((
+                "D7 a section pause call",
+                file,
+                text,
+                "a pause call (F-U9A-PAUSE)",
+            ));
+        }
+    }
     for (plant, file, text, expected) in &profile {
         let expected = match expected.starts_with(CELLS) {
             true => expected.to_string(),
@@ -3870,7 +3897,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";
