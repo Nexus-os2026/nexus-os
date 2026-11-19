@@ -559,7 +559,7 @@ fn production_hits_in(root: &std::path::Path, dirs: &[&str], needles: &[&str]) -
     }
     let mut hits = vec![];
     for f in files {
-        let rel = f.strip_prefix(&root).unwrap().to_string_lossy().to_string();
+        let rel = f.strip_prefix(root).unwrap().to_string_lossy().to_string();
         if rel == "mother/src/adapter/qm3_replay_tests.rs" {
             continue;
         }
