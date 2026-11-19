@@ -1678,13 +1678,14 @@ fn e_o10_proxy_variables_are_never_used() {
     let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
     let proxy_addr = proxy.local_addr().unwrap();
     let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
-    let proxied = Arc::new(AtomicUsize::new(0));
+    // Every connection the trap accepts, by the peer's address when it can
+    // still be read (an accept is recorded even when it cannot).
+    let proxied: Arc<Mutex<Vec<Option<SocketAddr>>>> = Arc::default();
     {
         let proxied = proxied.clone();
         std::thread::spawn(move || {
-            for stream in proxy.incoming() {
-                proxied.fetch_add(1, Ordering::SeqCst);
-                drop(stream);
+            for stream in proxy.incoming().flatten() {
+                proxied.lock().unwrap().push(stream.peer_addr().ok());
             }
         });
     }
@@ -1716,17 +1717,24 @@ fn e_o10_proxy_variables_are_never_used() {
         std::thread::yield_now();
     }
     let output = child.wait_with_output().unwrap();
-    // The trap first (v6 §8.2, P-Cq-18), synchronized: one raw control
-    // connection; the trap accepts serially, so any child connection was
-    // accepted before it. Exactly one accept means the child sent none.
-    drop(TcpStream::connect(proxy_addr).unwrap());
+    // The trap first (v6 §8.2, P-Cq-18), synchronized on a control: one raw
+    // connection, awaited by its own address. The trap accepts serially, so
+    // any child connection was accepted before it: the control must be the
+    // only one.
+    let control = TcpStream::connect(proxy_addr).unwrap();
+    let mine = Some(control.local_addr().unwrap());
     let deadline = std::time::Instant::now() + PATIENCE;
-    while proxied.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
+    while !proxied.lock().unwrap().contains(&mine) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the trap accepted the control"
+        );
         std::thread::yield_now();
     }
+    drop(control);
     assert_eq!(
-        proxied.load(Ordering::SeqCst),
-        1,
+        *proxied.lock().unwrap(),
+        [mine],
         "the proxy was not contacted (trap accepts == 0 before the control)"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
