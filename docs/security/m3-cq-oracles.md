@@ -293,6 +293,32 @@ F-4, F-5, G-1, PXY, PXY-child, N-3. Plants re-killed by these committed tests (C
 Ledger Cq1c-N5 (R162 f5): the `set_after_lease` allow in exchange.rs is redundant from here on. It stays until a unit
 whose allowlist covers exchange.rs removes it.
 
+## Cq-1c-ii: worker, ledger and N-2 amends (SB3E-R162)
+
+Second half of v6 Cq-1c (R162 f1), stacked on Cq-1c-i:
+- W = `kernel/src/coding_run/m2e_a2_tests.rs`: W-1 `cq_worker_pin_purpose_is_distinct` (pins of two real verified
+  PageBuilder and Judge transports on one listener), W-2 `cq_worker_bind_requires_n1` (closed: all ConfigMismatch; open:
+  PageBuilder and Judge PurposeMismatch; N1 worker control; no connection, no charge on each refusal), and the W-3
+  amend of `e_o13b_the_ledger_records_the_full_pin_by_digest` (literal `n1_worker`, exactly eight keys).
+- L: `p0b_ledger_schema_tests.rs` L-1 `cq_model_pinned_schema_accepts_closed_purposes` and L-2
+  `cq_model_pinned_schema_rejects_unknown_purpose`; `p0b_ledger_privacy_tests.rs` L-3 (the `run.model_pinned`
+  producer predicate requires `n1_worker`).
+- N-2: `kernel/tests/m2e_a2_guards.rs`
+  `e_o65_in_a_non_test_build_bind_and_a_conversation_call_refuse_before_any_charge_or_connection`. Ordinary N1 pair
+  ConfigMismatch with no charge or connection; ordinary Judge pair PurposeNotQualified (record-independent, v6 §6.7);
+  ordinary PageBuilder H.
+
+L-1 at 1c (R162 f3) is behavioural. Each `Purpose::code()` is emitted by `pin_facts` and admitted by `check`, and an
+exhaustive no-wildcard match maps every variant to its independent literal. The assertion that names `MODEL_PURPOSES`
+(the derived slice equals the literal set) moves to Cq-2a's register row, because Cq-2a adds `MODEL_PURPOSES`.
+P-Cq-16 is still killed by L-2.
+
+Expected at this head (inert), each on its named assertion: RED W-1 (`cq.w1 a purpose-only change is another pin`),
+W-2 (`cq.w2 open: PageBuilder`, after the closed subcases pass), W-3 (`cq.w3 purpose`), L-1 (`cq.l1 the pin facts
+carry page_builder`), L-3 (in `p0b_o12_scopes_snapshot_reads_edit_rejections_op_errors_and_the_model_pin_are_digests`
+and the sweep `p0b_o24_every_event_kind_has_a_schema_and_every_producer_runs_with_canaries`), N-2 (`closed N1 pair`).
+GREEN: L-2. W-1's plant P-Cq-11 and L's P-Cq-16/17 are owed to Cq-2a.
+
 ## Cq-0 results
 
 Oracle-add on the inert stubs: C0-1, C0-2 RED at their named assertions; C0-3 RED in its
