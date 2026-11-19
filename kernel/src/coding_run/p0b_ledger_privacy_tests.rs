@@ -1351,6 +1351,7 @@ pub(super) fn o12_runs_snapshots_reads_edits_and_pins(canary: &Canary) -> Vec<La
                 && p["endpoint_loopback"] == true
                 && p["endpoint_sha256"] == text_digest(&endpoint)
                 && p["model_sha256"] == text_digest(&model)
+                && p["purpose"] == "n1_worker"
         },
     ));
     expect.push(any(

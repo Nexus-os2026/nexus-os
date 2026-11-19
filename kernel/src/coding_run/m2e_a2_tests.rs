@@ -665,6 +665,121 @@ fn e_o13b_the_ledger_records_the_full_pin_by_digest() {
     );
     assert_eq!(p["provider"], json!("ollama"));
     assert_eq!(p["endpoint_loopback"], json!(true));
+    // W-3 (Cq): the purpose code, and exactly the eight pin facts.
+    assert_eq!(p["purpose"], json!("n1_worker"), "cq.w3 purpose");
+    let mut keys: Vec<&str> = p.as_object().unwrap().keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [
+            "config_sha256",
+            "digest",
+            "endpoint_loopback",
+            "endpoint_sha256",
+            "model_sha256",
+            "provider",
+            "purpose",
+            "runtime_sha256"
+        ],
+        "cq.w3 exactly the eight pin facts"
+    );
+}
+
+// ── M3-Cq W-1, W-2 (v6 §6.4) ────────────────────────────────────────────────
+
+fn spec_with(purpose: Purpose) -> ModelPinSpec {
+    ModelPinSpec { purpose, ..spec() }
+}
+
+#[test]
+fn cq_worker_pin_purpose_is_distinct() {
+    // Two real verified transports on the same listener, every pin field
+    // equal but the transport's purpose.
+    let fake = Fake::answering(&[]);
+    let page = ModelPin::of(&register(&fake, &spec_with(Purpose::PageBuilder)));
+    let judge = ModelPin::of(&register(&fake, &spec_with(Purpose::Judge)));
+    assert_eq!(
+        (
+            page.endpoint(),
+            page.model(),
+            page.digest(),
+            page.runtime(),
+            page.config_digest()
+        ),
+        (
+            judge.endpoint(),
+            judge.model(),
+            judge.digest(),
+            judge.runtime(),
+            judge.config_digest()
+        ),
+        "every other field is equal"
+    );
+    assert_ne!(page, judge, "cq.w1 a purpose-only change is another pin");
+}
+
+#[test]
+fn cq_worker_bind_requires_n1() {
+    let f = project();
+    let fake = Fake::answering(&[finish()]);
+    let transports = [Purpose::PageBuilder, Purpose::Judge, Purpose::N1Worker]
+        .map(|purpose| (purpose, register(&fake, &spec_with(purpose))));
+    let try_bind = |transport: &Arc<VerifiedOllama>, meter: Arc<Meter>| {
+        LocalOllama::bind(
+            transport.clone(),
+            meter,
+            Arc::new(Never::default()),
+            hour(),
+            private_watch(),
+        )
+    };
+    for (purpose, transport) in &transports {
+        let (before, meter) = (fake.connections(), Meter::new(&fake, None));
+        let bound = try_bind(transport, meter.clone());
+        assert_eq!(
+            bound.err(),
+            Some(ModelError::ConfigMismatch),
+            "cq.w2 closed: {purpose:?}"
+        );
+        assert_eq!(
+            fake.connections(),
+            before,
+            "cq.w2 closed {purpose:?}: no connection"
+        );
+        assert!(
+            meter.charges().is_empty(),
+            "cq.w2 closed {purpose:?}: no charge"
+        );
+    }
+    for (purpose, transport) in &transports[..2] {
+        let (before, meter) = (fake.connections(), Meter::new(&fake, None));
+        let bound = qualification_seam::open(|| try_bind(transport, meter.clone()));
+        assert_eq!(
+            bound.err(),
+            Some(ModelError::PurposeMismatch),
+            "cq.w2 open: {purpose:?}"
+        );
+        assert_eq!(
+            fake.connections(),
+            before,
+            "cq.w2 open {purpose:?}: no connection"
+        );
+        assert!(
+            meter.charges().is_empty(),
+            "cq.w2 open {purpose:?}: no charge"
+        );
+    }
+    let mut run = pinned_run(&f, ModelPin::of(&transports[2].1));
+    let model = bind(
+        &transports[2].1,
+        Meter::new(&fake, None),
+        hour(),
+        private_watch(),
+    );
+    assert!(
+        work(&mut run, &model, "task").is_ok(),
+        "cq.w2 the N1 worker control"
+    );
 }
 
 // ── E-O17: the call's timeout only shortens the bound deadline ──────────────

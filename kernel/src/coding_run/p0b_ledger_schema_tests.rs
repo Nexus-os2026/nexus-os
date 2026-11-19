@@ -468,3 +468,60 @@ fn p0b_schema_a_pin_records_whether_its_host_is_loopback() {
         assert_eq!(check(EventKind::ModelPinned, &facts), Ok(()));
     }
 }
+
+// ── M3-Cq L-1, L-2 (v6 §3.3, §6.4) ──────────────────────────────────────────
+
+/// The purpose codes as independent literals, by an exhaustive match with
+/// no wildcard: a new `Purpose` variant fails to build here.
+fn purpose_literal(purpose: crate::inference::Purpose) -> &'static str {
+    use crate::inference::Purpose;
+    match purpose {
+        Purpose::PageBuilder => "page_builder",
+        Purpose::N1Worker => "n1_worker",
+        Purpose::Judge => "judge",
+    }
+}
+
+#[test]
+fn cq_model_pinned_schema_accepts_closed_purposes() {
+    use crate::coding_run::local_model::pin_for_test_with_purpose;
+    use crate::inference::Purpose;
+    for purpose in [Purpose::PageBuilder, Purpose::N1Worker, Purpose::Judge] {
+        let literal = purpose_literal(purpose);
+        assert_eq!(purpose.code(), literal);
+        let facts = pin_facts(&pin_for_test_with_purpose(
+            "http://127.0.0.1:11434",
+            "m:1",
+            purpose,
+        ));
+        assert_eq!(
+            facts["purpose"], literal,
+            "cq.l1 the pin facts carry {literal}"
+        );
+        assert_eq!(
+            check(EventKind::ModelPinned, &facts),
+            Ok(()),
+            "cq.l1 the schema admits {literal}"
+        );
+    }
+}
+
+#[test]
+fn cq_model_pinned_schema_rejects_unknown_purpose() {
+    let valid = pin_facts(&pin_for_test_at("http://127.0.0.1:11434", "m:1"));
+    for bad in [
+        serde_json::json!("unknown"),
+        serde_json::json!(""),
+        serde_json::json!("N1Worker"),
+        serde_json::json!("page_builder_extra"),
+        serde_json::json!(1),
+    ] {
+        let mut facts = valid.clone();
+        facts["purpose"] = bad.clone();
+        assert_eq!(
+            check(EventKind::ModelPinned, &facts),
+            Err(LedgerFailure::Rejected),
+            "cq.l2 {bad}"
+        );
+    }
+}

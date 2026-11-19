@@ -191,15 +191,68 @@ fn e_o65_in_a_non_test_build_bind_and_a_conversation_call_refuse_before_any_char
     assert_eq!(*meter.0.lock().unwrap(), 0, "no charge");
     assert_eq!(connections.load(Ordering::SeqCst), before, "no connection");
 
-    // A1's qualified two-message kind is unaffected.
-    let pair = ModelRequest::new(
-        Purpose::N1Worker,
-        grammar::WORKER_SYSTEM_INSTRUCTION.to_string(),
-        "Owner task:\nx\n".to_string(),
-        grammar::worker_schema(),
-    )
-    .unwrap();
-    assert!(transport.call(&pair, &ctx).is_ok());
+    // CQ-R4 (N-2): an N1 pair is refused like a conversation while the
+    // route is shut, before any charge or connection.
+    let pair = |purpose| {
+        ModelRequest::new(
+            purpose,
+            grammar::WORKER_SYSTEM_INSTRUCTION.to_string(),
+            "Owner task:\nx\n".to_string(),
+            grammar::worker_schema(),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        transport.call(&pair(Purpose::N1Worker), &ctx).err(),
+        Some(ModelError::ConfigMismatch),
+        "closed N1 pair"
+    );
+    assert_eq!(*meter.0.lock().unwrap(), 0, "closed N1 pair: no charge");
+    assert_eq!(
+        connections.load(Ordering::SeqCst),
+        before,
+        "closed N1 pair: no connection"
+    );
+
+    // The ordinary path, record-independent (v6 §6.7): no record can hold a
+    // Judge identity, so a Judge pair is not qualified, before any I/O.
+    let ordinary = |purpose| {
+        Arc::new(
+            VerifiedOllama::verify(
+                LoopbackEndpoint::parse(&base).unwrap(),
+                &ModelPinSpec { purpose, ..spec() },
+                &Never,
+                &deadline,
+                &watch,
+            )
+            .unwrap(),
+        )
+    };
+    let judge = ordinary(Purpose::Judge);
+    let before = connections.load(Ordering::SeqCst);
+    assert_eq!(
+        judge.call(&pair(Purpose::Judge), &ctx).err(),
+        Some(ModelError::PurposeNotQualified),
+        "ordinary Judge pair"
+    );
+    assert_eq!(
+        *meter.0.lock().unwrap(),
+        0,
+        "ordinary Judge pair: no charge"
+    );
+    assert_eq!(
+        connections.load(Ordering::SeqCst),
+        before,
+        "ordinary Judge pair: no connection"
+    );
+
+    // H: the served pin for PageBuilder (the 256 floor before Cq-2a; the
+    // production record on the record base at Cq-2a).
+    let page = ordinary(Purpose::PageBuilder);
+    assert!(
+        page.call(&pair(Purpose::PageBuilder), &ctx).is_ok(),
+        "PageBuilder H"
+    );
     assert_eq!(*meter.0.lock().unwrap(), 1);
     assert_eq!(
         paths
