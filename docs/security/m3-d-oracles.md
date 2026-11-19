@@ -395,7 +395,8 @@ unanchored filter these controls were red; with the anchored one, green.
 Base main f0c19aae (SB-3 C1+C2+D1+D2, Cb0-Cb2 and Da/Db/Dc integrated).
 Rulings DD-R1 (m3d-mission-draft.md:551) and SB3E-R153; Step 0 at
 /home/nexus/.m2d/m3dd/step0-report.md. Test-only: two new adapter modules,
-declared under `#[cfg(test)]` at the end of adapter/mod.rs, plus the Cb1
+declared under `#[cfg(test)]` in adapter/mod.rs (inserted at :1408-1413,
+before two existing test module declarations; no non-test line moved), plus the Cb1
 carry in m3cb_lane_oracles.rs and the visibility of `bounded`.
 
 ## Claim limit (DD-R1 Q1, Q7)
@@ -436,11 +437,16 @@ accessor, and the native debt itself is B's evidence (SB-3B2-C
 
 ## DD-R1 STOP check
 
-Checked in O35 approve: the actual Builder's input is the consented
-snapshot (it validates against the contract, and its note and facts are the
-contract's), and the broker's File dialog shows `facts present as given:
-name, hours (1 lines), phone`, a line it prints only when the consent that
-admitted the File carried the page facts. Both hold at main: no STOP.
+Checked in O35 approve. Lane side: the actual PageBuilderLane validates its
+Builder input against the consented contract (page_builder/lane.rs:36-47)
+and fails the mission when the input is missing or not the consented
+snapshot, so the mission reaching AwaitingApproval (m3d_composed_oracles.rs:67-73)
+is the lane-side check. The observer's `bound` assertion (:170-171)
+recomputes the same validation and is a supporting assertion only: the
+lane's own refusal always fires first, so it cannot fail on its own.
+Broker side: the File dialog shows `facts present as given: name, hours
+(1 lines), phone`, a line it prints only when the consent that admitted the
+File carried the page facts. Both hold at main: no STOP.
 
 ## Oracles
 
@@ -484,16 +490,17 @@ is in neither the journal nor the private store.
 
 ## Dd mutation map (local scripted plants, restored by sha256)
 
-Kept: each is killed by its own named check (R97), measured on debbab39.
+Kept: each is killed by its own named check (R97), measured on ece4232d
+(evidence /home/nexus/.m2d/m3dd/evb/plants.out; same verdicts as on debbab39).
 
 | Plant | Mutation | Named kill |
 |---|---|---|
 | STOP-a | consent.rs: the confirmation carries no `page_facts` | O35 approve: the File dialog shows `facts: not checked (none in the consent)`, not the facts line |
-| STOP-b | page_inputs.rs `prepare`: no Builder input | O35 approve: the Builder input is not the consented snapshot |
+| STOP-b | page_inputs.rs `prepare`: no Builder input | O35 approve AwaitingApproval check (m3d_composed_oracles.rs:67-73): the actual lane fails the mission without a consented input; RED at :70, `Some(Failed)` (`bound`, :171, is a supporting assertion made redundant by the lane's validation) |
 | P-Dd-1 | model_calls.rs:502: accept `Replied` without `live()` | §11 late successful reply: `ok`, not `invalidated` |
 | P-Dd-7a | model_calls.rs:479: the debt latch never fires | §11 recording debt, Uncertain and Owed |
 | P-Dd-7b | adapter/mod.rs:556: Uncertain classified as Replied | §11 recording debt, Uncertain |
-| P-Dd-9 | `time.sleep(30)` in the Cb1 Python check | `native SQLite check exceeded its 10 s bound: python3 killed and reaped` at 10.05 s; on the unbounded base the same plant survives (passes after 30.1 s), which is why the bound is needed |
+| P-Dd-9 | `time.sleep(30)` in the Cb1 Python check | `native SQLite check exceeded its 10 s bound: python3 killed and reaped` at 10.22 s; on the unbounded base the same plant survives (passes after 30.09 s), which is why the bound is needed |
 
 Dropped, with the measured reason (SB3E-R153):
 
@@ -516,5 +523,8 @@ nexus-mother --lib`, `cargo fmt --all -- --check`, `cargo clippy -p
 nexus-mother -p nexus-mother-host --locked --all-targets -- -D warnings`, `git diff --check`.
 Then one full route_exit on the final head when the host is free, and CI
 plus audit on the PR. Results are in the Dd report, not here. Lane, guard
-and mother route rows neither read nor compile Dd's code (all of it is
-cfg(test)). A5's lexical rules read Dd's files and run inside route_exit.
+and mother route rows do not read Dd's files; lane and guard rows also do
+not compile its code (all of it is cfg(test)). The one `mother` row
+(`c1_s1_session_sources_have_no_model_route`) compiles the nexus-mother
+test build, Dd's modules included, but reads only governed-control
+host_session files and session_port.rs. A5's lexical rules read Dd's files and run inside route_exit.
