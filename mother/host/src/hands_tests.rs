@@ -1107,6 +1107,22 @@ fn m2ed_no_override_in_production_source() {
         "R155: the preflight runs in every build"
     );
     assert_eq!(source.matches("memory_preflight()").count(), 2);
+    // R175 N2: the shipped floor (37,748,736 kB) has no cfg, and the
+    // shipped-only sites are exactly the six M2e-D and M-5a ones.
+    assert_eq!(36 * 1024 * 1024, 37_748_736);
+    assert_eq!(
+        source
+            .matches("passes.\nconst MEMORY_FLOOR_KB: u64 = 36 * 1024 * 1024;\n")
+            .count(),
+        1,
+        "R175: the shipped floor"
+    );
+    assert_eq!(source.matches("MEMORY_FLOOR_KB").count(), 2);
+    assert_eq!(
+        source.matches("cfg(not(test))").count(),
+        6,
+        "R175: the shipped-only sites"
+    );
 }
 
 /// B2: every registration refusal blocks readiness; one attempt, no retry,
@@ -1865,7 +1881,10 @@ fn m5a_display_matches_contract() {
         return;
     }
     let test = "m5a_display_matches_contract";
-    let f = Fixture::new();
+    let mut f = Fixture::new();
+    // R175 N1: a folder name unlike the backend's fallback (`workspace`).
+    f.workspace = f.root.join("rosa-site");
+    std::fs::create_dir(&f.workspace).unwrap();
     let peer = peer(Serve::Healthy);
     let source = meminfo(&f, &mem_kb("44447352"));
     let goal = "Make a page\nmodel: name=forged";
@@ -1904,7 +1923,7 @@ fn m5a_display_matches_contract() {
         "facts: hours: Closed on Mondays".into(),
         "facts: phone: 555-0142".into(),
         nexus_mother::teaching::T3_FACTS.into(),
-        "folder: workspace".into(),
+        "folder: rosa-site".into(),
         format!("model: name={PIN_NAME} digest={PIN_DIGEST} identity={PIN_IDENTITY}"),
         "file: index.html".into(),
         nexus_mother::teaching::T2_PLAN.into(),
