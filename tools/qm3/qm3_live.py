@@ -557,11 +557,31 @@ def run_case(ctx, cid, base, scripted):
         replies = replies + [{"status": status, "path": rel}]
         post = replay_step(ctx["replay"], os.path.join(case_dir, "steps"),
                            {"shape": base, "markers": markers, "replies": replies, "scripted": scripted})
+        sent = sent_bodies(base, scripted, markers, calls)
+        if post["bodies"][:len(sent)] != sent or (post.get("next") is None and len(post["bodies"]) != len(sent)):
+            raise Abort("binding_failed", cid, n)
         if post.get("next") is None:
             return {"id": cid, "calls": calls, "outcome": post["outcome"],
                     "steps": {"shape": base, "markers": markers, "replies": replies, "scripted": scripted},
                     "bodies": post["bodies"]}
         correction = post["next"]["correction"]
+
+
+def sent_bodies(base, scripted, markers, calls):
+    """SB3E-R172 F5: every body the replay must show, in order: the scripted call 1 (QM-C), then each body
+    actually sent."""
+    head = [sha(chat_body(base, markers[0]))] if scripted is not None else []
+    return head + [c["body_sha256"] for c in calls]
+
+
+def consistent_case(replay, bundle, case):
+    """Section 6.3 step 2: the replay again gives the same outcome and every body hash."""
+    s = case["steps"]
+    if s is None:
+        return True
+    out = replay_step(replay, os.path.join(bundle, case["id"], "steps"), s)
+    return out["outcome"] == case["outcome"] and out["bodies"] == sent_bodies(s["shape"], s["scripted"],
+                                                                             s["markers"], case["calls"])
 
 
 class Abort(Exception):
@@ -625,8 +645,7 @@ def measure(args, meta, table, ledger, prior, run_id, bundle):
     except RuntimeError:
         return abort(ledger, run_id, "replay_failed"), 1
     low, fl = floor([c for c in cases if c["id"].startswith("QM-MIN-")])
-    consistent = all(c["steps"] is None or replay_step(args["replay"], os.path.join(bundle, c["id"], "steps"),
-                                                       c["steps"])["outcome"] == c["outcome"] for c in cases)
+    consistent = all(consistent_case(args["replay"], bundle, c) for c in cases)
     passed = all(not c["misses"] for c in cases) and fl is not None and consistent
     record = {"schema": "nexus.qm3.evidence.v1", "purpose": "page_builder", "mode": "binding", "run_id": run_id,
               "prior_runs": prior, "candidate": {"sha": args["candidate"], "ci_run": args["ci_run"],
@@ -698,7 +717,7 @@ def freplay(args):
             rows.append({"id": case["id"], "bodies_equal": False, "outcome_equal": False, "read_chat_at_f": False})
             ok = False
             continue
-        bodies_equal = out["bodies"][-len(case["calls"]):] == [c["body_sha256"] for c in case["calls"]]
+        bodies_equal = out["bodies"] == sent_bodies(last["shape"], last["scripted"], last["markers"], case["calls"])
         outcome_equal = out["outcome"] == case["outcome"]
         rows.append({"id": case["id"], "bodies_equal": bodies_equal, "outcome_equal": outcome_equal,
                      "read_chat_at_f": read_chat_accepted(out["outcome"])})

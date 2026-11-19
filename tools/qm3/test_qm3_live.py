@@ -261,6 +261,26 @@ class RunnerAndWatchdog(unittest.TestCase):
         self.assertIsNone(quiet.tripped)
 
 
+class Consistency(unittest.TestCase):
+    """SB3E-R172 F5: every body hash is compared, not only the outcome or the last bodies."""
+
+    def test_every_body_is_compared(self):
+        m0, m1 = "0a" * 16, "1b" * 16
+        calls = [{"body_sha256": q.sha(q.chat_body("MAX-A", m1, 2))}]
+        self.assertEqual(q.sent_bodies("MAX-A", 2, [m0, m1], calls),
+                         [q.sha(q.chat_body("MAX-A", m0)), calls[0]["body_sha256"]])
+        with tempfile.TemporaryDirectory() as d:
+            for bodies, want in ((["x"], True), (["extra", "x"], False), (["y"], False)):
+                replay = os.path.join(d, "replay")
+                with open(replay, "w", encoding="utf-8") as h:
+                    h.write(FAKE_REPLAY.replace("[@BODY@]", json.dumps(bodies)))
+                os.chmod(replay, 0o700)
+                os.makedirs(os.path.join(d, "QM-N1", "steps"), exist_ok=True)
+                case = {"id": "QM-N1", "calls": [{"body_sha256": "x"}], "outcome": {"kind": "file", "page_sha256": "p"},
+                        "steps": {"shape": "N", "markers": [m1], "replies": [], "scripted": None}}
+                self.assertEqual(q.consistent_case(replay, d, case), want, bodies)
+
+
 class Identity(unittest.TestCase):
     def test_gq5_replay_must_be_built_from_the_candidate(self):
         q.bound_replay({"built_from": "a" * 40}, "a" * 40)
