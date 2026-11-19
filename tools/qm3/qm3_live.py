@@ -283,9 +283,10 @@ def ledger_line(ledger, line):
         h.write(json.dumps(line, sort_keys=True, separators=(",", ":")) + "\n")
 
 
-def abort(ledger, run_id, code, case=None, call=None):
-    """Every ABORT keeps the partial bundle and writes its ledger line (section 8.3)."""
-    ledger_line(ledger, {"kind": "run", "run_id": run_id, "verdict": "ABORTED",
+def abort(ledger, run_id, code, case=None, call=None, missed=()):
+    """Every ABORT keeps the partial bundle and writes its ledger line (section 8.3); the line keeps the
+    cases already missed (SB3E-R173 R-N1)."""
+    ledger_line(ledger, {"kind": "run", "run_id": run_id, "verdict": "ABORTED", "missed": list(missed),
                          "abort": {"code": code, "case": case, "call": call}})
     return {"verdict": "ABORTED", "abort": {"code": code, "case": case, "call": call}}
 
@@ -462,6 +463,10 @@ def check_runner(ctx, cid, n):
         raise Abort("runner_changed", cid, n, now)
 
 
+class WatchdogDied(Exception):
+    """Not an Abort and not a RuntimeError: it escapes measure() and run() writes ABORTED harness_exception."""
+
+
 class Watchdog:
     """Q-4 (SB3E-R172 F4): during a live call, every second, MemAvailable >= 6 GiB and swap-in growth
     <= 1 GiB; a trip shuts the harness connection so the runtime cancels the request, then ABORTED."""
@@ -469,9 +474,21 @@ class Watchdog:
     def __init__(self, swap_start, read=None, interval=1.0):
         self.read = read or (lambda: (_meminfo(), (_swap_in() - swap_start) * 4))
         self.interval, self.conns, self.tripped, self.stop = interval, [], None, threading.Event()
+        self.died = None
         self.thread = threading.Thread(target=self.loop, daemon=True)
 
     def loop(self):
+        try:
+            self.watch()
+        except Exception as e:  # SB3E-R173 R-N3: a dead watchdog is seen by check(), never ignored
+            self.died = repr(e)
+
+    def check(self):
+        """Before and after each live call: a watchdog that died (not tripped) ends the run ABORTED."""
+        if self.tripped is None and (self.died is not None or not self.thread.is_alive()):
+            raise WatchdogDied(self.died)
+
+    def watch(self):
         while not self.stop.wait(self.interval):
             mem, swap = self.read()
             if mem < 6 * 1024 * 1024 or swap > 1024 * 1024:
@@ -564,11 +581,13 @@ def run_case(ctx, cid, base, scripted):
             h.write(body)
         start = time.monotonic()
         with Watchdog(ctx["swap_start"]) as dog:
+            dog.check()
             try:
                 status, raw = request("POST", "/api/chat", body, timeout=CALL_TIMEOUT, conns=dog.conns)
                 timeout = False
             except (TimeoutError, OSError):
                 status, raw, timeout = None, b"", True
+            dog.check()
         latency = int((time.monotonic() - start) * 1000)
         if dog.tripped:
             raise Abort("memory_watchdog", cid, n, dog.tripped)
@@ -650,16 +669,16 @@ def run(args, private):
     # request, and ABORTED for any exit that is not a verdict or an abort() line.
     ledger_line(ledger, {"kind": "run", "run_id": run_id, "verdict": "STARTED",
                          "start": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    missed = []
     try:
-        return measure(args, meta, table, ledger, prior, run_id, bundle)
+        return measure(args, meta, table, ledger, prior, run_id, bundle, missed)
     except BaseException as e:
-        code = "interrupted" if isinstance(e, KeyboardInterrupt) else "harness_exception"
-        ledger_line(ledger, {"kind": "run", "run_id": run_id, "verdict": "ABORTED",
-                             "abort": {"code": code, "case": None, "call": None}})
+        abort(ledger, run_id, "interrupted" if isinstance(e, KeyboardInterrupt) else "harness_exception",
+              missed=missed)
         raise
 
 
-def measure(args, meta, table, ledger, prior, run_id, bundle):
+def measure(args, meta, table, ledger, prior, run_id, bundle, missed):
     """The live part of run(): every return has written its ledger line (abort() or the verdict)."""
     root = args["root"]
     r = runtime()
@@ -667,20 +686,22 @@ def measure(args, meta, table, ledger, prior, run_id, bundle):
     print(f"QM3 PLAN cases={len(CASES)} calls<=54 bound={CALL_TIMEOUT}s", flush=True)
     ok, q = quiet(_swap_in())
     if not runtime_ok(r) or not ok or q["mem_available_kb"] < 36 * 1024 * 1024:
-        return abort(ledger, run_id, "preconditions"), 1
+        return abort(ledger, run_id, "preconditions", missed=missed), 1
     ctx = {"table": table, "bundle": bundle, "replay": args["replay"], "swap_start": _swap_in()}
     cases = []
     try:
         for cid, base, scripted in CASES:
             case = run_case(ctx, cid, base, scripted)
             case["misses"] = case_misses(case)
+            if case["misses"]:
+                missed.append(cid)
             print(f"QM3 CASE {cid} {'PASS' if not case['misses'] else 'MISS ' + ','.join(case['misses'])}", flush=True)
             cases.append(case)
         check_runner(ctx, "end", 0)
     except Abort as e:
-        return abort(ledger, run_id, e.code, e.case, e.call), 1
+        return abort(ledger, run_id, e.code, e.case, e.call, missed), 1
     except RuntimeError:
-        return abort(ledger, run_id, "replay_failed"), 1
+        return abort(ledger, run_id, "replay_failed", missed=missed), 1
     low, fl = floor([c for c in cases if c["id"].startswith("QM-MIN-")])
     consistent = all(consistent_case(args["replay"], bundle, c) for c in cases)
     passed = all(not c["misses"] for c in cases) and fl is not None and consistent
@@ -734,6 +755,13 @@ def freplay(args, private):
     with open(args["record"], "rb") as h:
         data = h.read()
     record = json.loads(data)
+    if bundle_sha256(args["bundle"]) != record.get("raw_bundle_sha256"):
+        # SB3E-R173 R-N4: a bundle that is not the recorded one is never replayed.
+        ledger_line(os.path.join(args["root"], "runs.jsonl"), {"kind": "freplay", "run_id": record.get("run_id"),
+                                                               "verdict": "REFUSED",
+                                                               "abort": {"code": "raw_bundle_sha256"}})
+        print("QM3 FREPLAY REFUSED the bundle differs from raw_bundle_sha256")
+        return 1
     rows, ok = [], True
     for case in record["cases"]:
         steps = os.path.join(args["bundle"], case["id"], "steps")
@@ -805,6 +833,18 @@ def confirm(args):
         with open(args["record"], "rb") as h:
             data = h.read()
         record = json.loads(data)
+        # C-4 (v2 section 11 O-5), read and checked BEFORE the binary starts (SB3E-R173 R-N5): the committed
+        # F-replay record is CONFIRMED for this evidence record. The golden CI run id is the operator's (the
+        # harness has no network); it is printed, not fetched.
+        with open(args["freplay"], "rb") as h:
+            fr = json.loads(h.read())
+        c4 = (fr.get("verdict") == "CONFIRMED" and fr.get("evidence_sha256") == sha(data)
+              and fr.get("run_id") == record.get("run_id"))
+        print(f"QM3 CONFIRM golden_ci={args.get('golden_ci')} freplay={fr.get('verdict')} {'PASS' if c4 else 'FAIL'}")
+        if not c4:
+            ledger_line(os.path.join(args["root"], "runs.jsonl"), {"kind": "confirm", "verdict": "REFUSED",
+                                                                   "abort": {"code": "freplay"}})
+            return 1
         home, work = os.path.join(tmp, "home"), os.path.join(tmp, "workspace")
         os.mkdir(home, 0o700)
         os.mkdir(work, 0o700)
@@ -835,14 +875,7 @@ def confirm(args):
     match = identity == record["frozen"]["identity_v2"] == IDENTITY_V2 and marker_absent and b"STARTUP REFUSED" not in seen
     print(f"QM3 CONFIRM identity={identity} record=QM3-PB-1:{sha(data)} "
           f"match={'yes' if match else 'no'} {'PASS' if match else 'FAIL'}")
-    # C-4 (v2 section 11 O-5): the committed F-replay record is CONFIRMED for this evidence record. The golden
-    # CI run id is the operator's (the harness has no network); it is printed, not fetched.
-    with open(args["freplay"], "rb") as h:
-        fr = json.loads(h.read())
-    c4 = fr.get("verdict") == "CONFIRMED" and fr.get("evidence_sha256") == sha(data) and fr.get("run_id") == record.get(
-        "run_id")
-    print(f"QM3 CONFIRM golden_ci={args.get('golden_ci')} freplay={fr.get('verdict')} {'PASS' if c4 else 'FAIL'}")
-    return 0 if match and c4 else 1
+    return 0 if match else 1
 
 
 def options(argv):

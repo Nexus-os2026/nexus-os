@@ -206,13 +206,18 @@ class FReplay(unittest.TestCase):
         with open(os.path.join(steps, "step-001.json.out"), "w", encoding="utf-8") as h:
             h.write("not a step\n")
         record = os.path.join(d, "evidence.json")
-        with open(record, "wb") as h:
-            h.write(q.canonical({"run_id": "ab" * 16, "floor": {"floor": 568}, "cases": [
-                {"id": "QM-N1", "calls": [{"body_sha256": body, "marker": "1c2d3e4f5a6b4c7d8e9fa0b1c2d3e4f5"}],
-                 "outcome": {"kind": "file", "page_sha256": "p"}}]}))
+        self.body = body
+        self.write_record(record, os.path.join(d, "bundle"))
         os.mkdir(os.path.join(d, "root"))
         return {"record": record, "bundle": os.path.join(d, "bundle"), "root": os.path.join(d, "root"),
                 "replay": replay, "replay_meta": meta, "candidate": "c" * 40, "harness_sha": q.sha_file(q.__file__)}
+
+    def write_record(self, record, bundle):
+        with open(record, "wb") as h:
+            h.write(q.canonical({"run_id": "ab" * 16, "floor": {"floor": 568}, "raw_bundle_sha256": q.bundle_sha256(
+                bundle), "cases": [{"id": "QM-N1", "calls": [{"body_sha256": self.body,
+                                                              "marker": "1c2d3e4f5a6b4c7d8e9fa0b1c2d3e4f5"}],
+                                    "outcome": {"kind": "file", "page_sha256": "p"}}]}))
 
     def test_freplay_confirms_a_recorded_bundle_and_blocks_a_broken_one(self):
         with tempfile.TemporaryDirectory() as d:
@@ -220,10 +225,16 @@ class FReplay(unittest.TestCase):
             self.assertEqual(q.freplay(args), 0)
             with open(os.path.join(args["root"], "freplay-" + "ab" * 16 + ".json"), encoding="utf-8") as h:
                 self.assertEqual(json.load(h)["verdict"], "CONFIRMED")
-            os.remove(os.path.join(args["bundle"], "QM-N1", "call1.reply"))
+            # SB3E-R173 R-N4: an edited bundle is refused before any replay.
+            reply = os.path.join(args["bundle"], "QM-N1", "call1.reply")
+            with open(reply, "w", encoding="utf-8") as h:
+                h.write('{"prompt_eval_count": 9999}')
+            self.assertEqual(q.freplay(args), 1)
+            os.remove(reply)
+            self.write_record(args["record"], args["bundle"])
             self.assertEqual(q.freplay(args), 1)
             with open(os.path.join(args["root"], "runs.jsonl"), encoding="utf-8") as h:
-                self.assertEqual([json.loads(x)["verdict"] for x in h], ["CONFIRMED", "BLOCKED"])
+                self.assertEqual([json.loads(x)["verdict"] for x in h], ["CONFIRMED", "REFUSED", "BLOCKED"])
 
 
 class RunnerAndWatchdog(unittest.TestCase):
@@ -258,7 +269,19 @@ class RunnerAndWatchdog(unittest.TestCase):
         self.assertEqual(dog.tripped, {"mem_available_kb": 1024, "swap_in_delta_kb": 0})
         with q.Watchdog(0, read=lambda: (64 * 1024 * 1024, 0), interval=0.01) as quiet:
             time.sleep(0.05)
+            quiet.check()
         self.assertIsNone(quiet.tripped)
+
+    def test_a_dead_watchdog_ends_the_run(self):
+        # SB3E-R173 R-N3: a /proc read that raises kills the thread; check() then refuses.
+        def broken():
+            raise OSError("proc")
+
+        self.assertFalse(issubclass(q.WatchdogDied, (q.Abort, RuntimeError)))
+        with q.Watchdog(0, read=broken, interval=0.01) as dog:
+            dog.thread.join(5)
+            with self.assertRaises(q.WatchdogDied):
+                dog.check()
 
 
 class Consistency(unittest.TestCase):
@@ -279,6 +302,16 @@ class Consistency(unittest.TestCase):
                 case = {"id": "QM-N1", "calls": [{"body_sha256": "x"}], "outcome": {"kind": "file", "page_sha256": "p"},
                         "steps": {"shape": "N", "markers": [m1], "replies": [], "scripted": None}}
                 self.assertEqual(q.consistent_case(replay, d, case), want, bodies)
+
+
+class AbortKeepsMisses(unittest.TestCase):
+    def test_an_abort_line_keeps_the_cases_already_missed(self):
+        # SB3E-R173 R-N1.
+        with tempfile.TemporaryDirectory() as d:
+            ledger = os.path.join(d, "runs.jsonl")
+            q.abort(ledger, "ab" * 16, "interrupted", missed=["QM-N2", "QM-S1"])
+            with open(ledger, encoding="utf-8") as h:
+                self.assertEqual(json.loads(h.read())["missed"], ["QM-N2", "QM-S1"])
 
 
 class Identity(unittest.TestCase):
@@ -353,20 +386,22 @@ class ConfirmC4(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             binary = os.path.join(d, "mother-hands")
             with open(binary, "w", encoding="utf-8") as h:
-                h.write(f"#!/bin/sh\nprintf 'MODEL VERIFIED name=a digest=b identity={q.IDENTITY_V2}\\nHANDS READY\\n'"
-                        "\nsleep 1\n")
+                h.write(f"#!/bin/sh\ntouch {d}/started\n"
+                        f"printf 'MODEL VERIFIED name=a digest=b identity={q.IDENTITY_V2}\\nHANDS READY\\n'\nsleep 1\n")
             os.chmod(binary, 0o700)
             record = os.path.join(d, "evidence.json")
             data = q.canonical({"run_id": "ab" * 16, "frozen": {"identity_v2": q.IDENTITY_V2}})
             with open(record, "wb") as h:
                 h.write(data)
-            for verdict, want in (("CONFIRMED", 0), ("BLOCKED", 1)):
+            for verdict, want in (("BLOCKED", 1), ("CONFIRMED", 0)):
                 fr = os.path.join(d, "freplay.json")
                 with open(fr, "wb") as h:
                     h.write(q.canonical({"run_id": "ab" * 16, "evidence_sha256": q.sha(data), "verdict": verdict}))
                 args = {"binary": binary, "artifact_sha": q.sha_file(binary), "record": record, "freplay": fr,
                         "golden_ci": "123", "root": d}
                 self.assertEqual(q.confirm(args), want, verdict)
+                # SB3E-R173 R-N5: the F-replay record is checked before the binary starts.
+                self.assertEqual(os.path.exists(os.path.join(d, "started")), verdict == "CONFIRMED", verdict)
 
 
 class NetworkAllowlist(unittest.TestCase):

@@ -19,8 +19,8 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 | `preflight` | O-1, read only: `/api/version`, `/api/status`, `/api/tags`, `/api/show`. One line `QM3 RUNTIME version=… cloud_disabled=… digest=… thinking_capability=…`, then PASS/FAIL per line | metadata only |
 | `run` | Phase M (O-2): the 31 cases of §6.1, once, top to bottom | local runtime |
 | `verify` | Recompute `evidence_sha256` from the committed record and `raw_bundle_sha256` from the bundle | none |
-| `freplay` | Phase R2: each case's final step replayed on the code head with the recorded replies. The step has no floor field, so F reaches it only through the production record | none |
-| `confirm` | Phase C (O-5): the binary's sha256 equals `--artifact-sha` (C-1, checked before it starts); it carries no measure marker (C-2); one registration-only startup under a PTY prints `MODEL VERIFIED … identity=` equal to the record's identity (C-3); the committed F-replay record (`--freplay`) is CONFIRMED for this evidence record (C-4). It types `quit`; no chat is made | metadata only (the binary's own registration) |
+| `freplay` | Phase R2: refused unless the bundle's sha256 equals the record's `raw_bundle_sha256` (SB3E-R173). Then each case's final step is replayed on the code head with the recorded replies. The step has no floor field, so F reaches it only through the production record | none |
+| `confirm` | Phase C (O-5): the binary's sha256 equals `--artifact-sha` (C-1, checked before it starts); it carries no measure marker (C-2); one registration-only startup under a PTY prints `MODEL VERIFIED … identity=` equal to the record's identity (C-3); the committed F-replay record (`--freplay`) is CONFIRMED for this evidence record (C-4, checked before the binary starts; SB3E-R173). It types `quit`; no chat is made | metadata only (the binary's own registration) |
 
 **G-Q5.** `run` and `freplay` refuse unless all three hold:
 - the harness file's sha256 equals `--harness-sha` (the frozen value recorded below);
@@ -29,7 +29,7 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 
 ### Per live call (§6.2)
 
-0. **Ledger START** (SB3E-R172 F2), before the first request: `{"kind":"run","verdict":"STARTED"}`. Any exit that is not a verdict or an abort line writes ABORTED (`interrupted` or `harness_exception`).
+0. **Ledger START** (SB3E-R172 F2), before the first request: `{"kind":"run","verdict":"STARTED"}`. Any exit that is not a verdict or an abort line writes ABORTED (`interrupted` or `harness_exception`). Every ABORTED line keeps the ids of the cases already missed (SB3E-R173).
 1. **Quiet.** No compiler process, load1 ≤ 4.0, MemAvailable ≥ 6 GiB, swap-in growth ≤ 1 GiB, no other client on :11434, no other loaded model, no Mother process. It waits up to 600 s; if the host is still not quiet, the run is ABORTED.
 2. **Runtime check.** It is the same as preflight, every call. Any change: ABORTED. **Q-8** (SB3E-R172 F4): after the first live call exactly one `llama-server` runner exists; its PID and `/proc` start time never change, checked before and after every call and at the end. Any change: ABORTED.
 3. **Marker.** A fresh uuid4 hex, different from the case's previous marker.
@@ -37,7 +37,7 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
    - Write the step file and run `qm3_step` (B1: equal body sha256, the same correction code).
    - B2: the masked hash equals the golden for its shape.
    - Any failure: ABORTED before sending.
-5. **Send.** `POST /api/chat` with a 180 s timeout. Keep the exact reply bytes. **Q-4 watchdog** (SB3E-R172 F4): during the call, every second, MemAvailable ≥ 6 GiB and swap-in growth ≤ 1 GiB; a trip shuts the connection (the runtime cancels the request) and the run is ABORTED.
+5. **Send.** `POST /api/chat` with a 180 s timeout. Keep the exact reply bytes. **Q-4 watchdog** (SB3E-R172 F4): during the call, every second, MemAvailable ≥ 6 GiB and swap-in growth ≤ 1 GiB; a trip shuts the connection (the runtime cancels the request) and the run is ABORTED. A watchdog that died (not tripped), checked before and after the call, also ends the run ABORTED (SB3E-R173).
    - **A timeout is a miss** (SB3E-R168): the case ends with outcome `live_timeout`, and the run becomes BLOCKED.
 6. **Decide.** Run `qm3_step` again with the reply appended. Its bodies must start with every body sent so far (SB3E-R172 F5), else ABORTED. `done` ends the case with the production outcome; `next` means the production lane would correct.
 7. **Scan.** Check the reply content for the case's forbidden tokens.
