@@ -136,7 +136,7 @@ W = `kernel/src/coding_run/m2e_a2_tests.rs`, L = `kernel/src/coding_run/p0b_ledg
 | W-1 | `cq_worker_pin_purpose_is_distinct` | W | pins from real same-endpoint PageBuilder/Judge transports differ only by purpose → unequal | RED | GREEN |
 | W-2 | `cq_worker_bind_requires_n1` | W | seam open: PageBuilder/Judge → `PurposeMismatch`, N1 binds and works; seam shut: all `ConfigMismatch`; Z per failed bind | RED | GREEN |
 | W-3 | `e_o13b_the_ledger_records_the_full_pin_by_digest` (amend) | W:614 | exact eight-key pin facts with literal `n1_worker` | RED | GREEN |
-| L-1 | `cq_model_pinned_schema_accepts_closed_purposes` | L | each literal code emitted and accepted; `MODEL_PURPOSES` equals the literal set; exhaustive no-wildcard match | RED | GREEN |
+| L-1 | `cq_model_pinned_schema_accepts_closed_purposes` | L | each literal code emitted and accepted; exhaustive no-wildcard match. The `MODEL_PURPOSES` equals-the-literal-set assertion is owed to Cq-2a, whose allowlist gains p0b_ledger_schema_tests.rs for it (R162 f3, R163) | RED | GREEN |
 | L-2 | `cq_model_pinned_schema_rejects_unknown_purpose` | L | "unknown", "", "N1Worker", "page_builder_extra", a number → `Rejected` | GREEN | GREEN |
 | L-3 | `o12_runs_snapshots_reads_edits_and_pins` producer (amend) | p0b_ledger_privacy_tests.rs:1346 | `run.model_pinned` requires `n1_worker`; canaries kept | RED | GREEN |
 | Cb-P | `cq_builder_declares_page_builder_without_wire_change` | mother/src/page_builder/oracles.rs | first and correction requests PageBuilder; :28-105 byte assertions unchanged | GREEN | GREEN |
