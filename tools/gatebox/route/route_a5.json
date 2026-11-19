@@ -21,6 +21,7 @@
  "seam_names": [
   "M",
   "owed_flush",
+  "route_bind",
   "route_ctx",
   "route_poison_coordinator",
   "route_poison_inner",
@@ -34,6 +35,9 @@
   "route_seams"
  ],
  "writers": [
+  "mother/host/src/terminal.rs|at|\"host.read\"|read_input",
+  "mother/host/src/terminal.rs|at|\"host.read\"|read_input",
+  "mother/host/src/terminal.rs|at|\"host.read\"|read_input",
   "crates/nexus-governed-control/src/authority/run.rs|at|\"bind.done\"|admit_session_inference",
   "crates/nexus-governed-control/src/authority/run.rs|at|\"model.attempt.checked\"|admit_session_attempt",
   "crates/nexus-governed-control/src/authority/run.rs|at|\"model.attempt.granted\"|admit_session_attempt",
@@ -106,7 +110,7 @@
   "mother/src/coordinator/model_calls.rs|at|\"mother.recheck\"|call",
   "mother/src/coordinator/model_calls.rs|at|\"mother.settle\"|settle"
  ],
- "signatures": {"crates/nexus-governed-control/src/broker/route_seams.rs": ["pub(crate)fnat(point:&'staticstr,ctx:Ctx<'_>){", "pub(crate)fnnote(reason:&'staticstr,ctx:Ctx<'_>){"], "mother/src/route_seams.rs": ["pub(crate)fnat(point:&'staticstr,ctx:Ctx){"]},
+ "signatures": {"crates/nexus-governed-control/src/broker/route_seams.rs": ["pub(crate)fnat(point:&'staticstr,ctx:Ctx<'_>){", "pub(crate)fnnote(reason:&'staticstr,ctx:Ctx<'_>){"], "mother/src/route_seams.rs": ["pub(crate)fnat(point:&'staticstr,ctx:Ctx){"], "mother/host/src/route_seams.rs": ["pub(crate)fnat(point:&'staticstr,read:Read){"]},
  "marked": [
   "S1|crates/nexus-governed-control/src/broker/route_seams.rs|at|module",
   "S1|crates/nexus-governed-control/src/broker/route_seams.rs|note|module",
@@ -118,7 +122,9 @@
   "S3-door|crates/nexus-governed-control/src/host_session/route_s3.rs|route_revoke_original_grant|local",
   "S3-port|mother/src/adapter/session_port.rs|route_revoke_original_grant|local",
   "S4b|mother/src/coordinator/lite.rs|route_poison_coordinator|local",
-  "S5|mother/src/route_seams.rs|at|module"
+  "S5|mother/src/route_seams.rs|at|module",
+  "S6|mother/host/src/terminal.rs|route_bind|local",
+  "S7|mother/host/src/route_seams.rs|at|module"
  ],
  "test_hooks": [
   "activate_for_test",
@@ -281,6 +287,8 @@
   "mother/src/page_builder/cb_oracles.rs": ["e9ac86919784ce5c7fbc807fc65e92554f492902497db5d100a698ab9f84badd", "92c3221e324b04fc6e25a20b0867ca9388c4996714d75de1e148c4e89f4a22a6", "60c142505eb20f34050d8d943d8a2caa64fac334240c3aa367b043a2de2108cf"]
  },
  "gated": {
+  "mother/host/src/lib.rs": ["22e6cf0a03e0373ef04ac3d3b53ec782b9e9f9db44dbb1e4c285ae6860320941"],
+  "mother/host/src/terminal.rs": ["df2003ba7312a89d5b0cf717fba84686bfd6f4dc0b2d0a1c3315e40df38cbb1a", "bdd5aabb7189bb4684f9ab370a5a7e4a6fa1a169c1f28003d2a934e1a9284382", "fb9a4338337a098215b04f8c64940f60c3395ec16610ed5aa8db67d37c4c54fc", "8280c28b0d71fb705ea4b4f36ac0f2f3420afc3182f13a6043e5e69fe16e5619", "a3b4416cfda2a5c5bfb2386ad88015fbc979c0bef67cfb2a35f20742cb7b35db"],
   "crates/nexus-governed-control/src/authority/run.rs": ["22b75d67b705e1ae86162f84310dd978461bb352dfcc404469fc43128142a1e2", "29ada610c6e9b28ddb7cf3fdf370a2efe2fc61299c5cf54b5c068be8cc73fbc8", "660f1fd4628b468c060a6a0f0e1d9363b12f366ce2c3353a5a92a5383db09b10", "97f62b46e6383f545a5c7bfdcfae740412b30cd3a4a6c44e1cb632a8ca2472c4", "560f0621baf809bb22dc6fc747433adb970ca3c68d7a3716d1e9d4e1b5b7a5f6", "6345a138924c33c688feb2f4c3bad1b85c63c1417703c8e70227c41ccabe4f40", "c37de08bc254383427230b78c0e2b867da337065c7df9ca4f0b6ea1d263ba236"],
   "crates/nexus-governed-control/src/broker.rs": ["25c8eb1c5b991a40b38fcb5d1705b6fabaa3bbb5638847ea49aa61802b487fd5"],
   "crates/nexus-governed-control/src/evidence_store.rs": ["6184713facc3909992d4ce2d2a7c2dc4fd3bbc809216da84db7abb4306410c7d", "ce61599d2d0897e952f619c8fade9c9392adeafb5fa3b5961251aaa2e990a0a4", "8c00261b128dd2cd1789b431734122019a50ad9e9bd45c65e76343bf0fb34228", "01b7bb19a5283e5de09212953324623c76625112808d6cfb5c1e5b2387f21bd0", "89f392ed86c0e2dca0bcca67df765d7d820c66fabf6c64815ca3dd2c80b214d4", "590a86a94ce5a0e79fc18166ac7987afe7eda2b6913f0b5ef92f9905d3ef5f67", "a4e9477feae9e977aee5990ccc9e366c58f55ccc7a7522cad76ee0eb5dd18c13", "df29444818a59e75d17ddf377377561cfe523fe7552d8986c72412cf3be02d51", "d75b47574b4ce61a33c39f3a6dee530dc74cd367c481bd5d2571c82b9fd17fd8", "f332a8fe5f74be02d32843f3908258d69704a6e25c1ad1c5f5a237e5fa23c1af", "400d6607c746e53cd8dc2907d03fe1ca18f713e0a62da4236be2b93f26739b50", "566819bf467a67e165d2362dbe142dbf20eb2e73309d0aaab45d1cd685ec53ec", "566dee93303f71a074b7bfb5be47e123c96f294eeca74fe9d484ed9cf43db99c", "9d2bea03f6e09bd9ba6a959a63acdbdbc479ce2d37da09fff584ad007008b9f6", "71d6e981303287bb35e5e533e753a9485d01502f74bb4eb43dc4855cb606477d", "f45e152aa13f98f543e93312057721f46ef52f6b3a6f0fdbc74b64175011020f"],
