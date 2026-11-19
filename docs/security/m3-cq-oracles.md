@@ -117,7 +117,7 @@ W = `kernel/src/coding_run/m2e_a2_tests.rs`, L = `kernel/src/coding_run/p0b_ledg
 | O-5 | `cq_qualification_binds_measured_identity` | K | name, manifest, runtime, seed, context each changed under PageBuilder, peer honest, registration succeeds; call → `PurposeNotQualified`, Z; original pin H | RED | GREEN |
 | O-6 | `cq_production_path_ignores_fixtures` | K | ordinary parse of a live STANDARD listener, ordinary-verify a **Judge** pin: verify Ok, call → `PurposeNotQualified`, Z, provenance `Frozen(None)`; typed verification of the same peer H and `Fixture` | RED | GREEN |
 | F-1 | `cq_expired_fixture_refuses_while_peer_serves` | F | expiry before `verify_fixture` and after; the server clone keeps serving; `Unavailable`, Z (`cq.no_accepts` first); live-owner H; raw connect to the clone afterwards proves it reachable | RED | GREEN |
-| F-2 | `cq_exchange_lease_outlives_owner` | F | pause after lease acquisition (cfg(test) hook), drop owner, `authority_alive_for_test()==true` before resume; second lease `Unavailable`; in-flight exchange completes; authority released after joined cleanup on every OS; rebind diagnostics Linux only; scope guard always releases | RED (liveness assertion, not a timeout) | GREEN |
+| F-2 | `cq_exchange_lease_outlives_owner` | F | pause on the call's CHAT exchange lease (its 4th: version, status, tags, chat; v6 §5.3 each exchange leases anew; R163), drop owner, `authority_alive_for_test()==true` before resume; while paused a second lease from another thread (a closed call on a second transport of the same fixture) is `Unavailable` with zero connection_events and charge_calls deltas; resume: the in-flight chat exchange completes Ok, every exchange thread joined, authority released; a later call `Unavailable` with Z; Linux-only diagnostic: the held listener cannot be rebound; scope guard always releases | RED on `cq.f2 the admitted exchange holds the authority after the owner drops` (not a timeout) | GREEN |
 | F-3 | `cq_fixture_provenance_is_marked` | F | typed instance `Fixture`, also after expiry; ordinary instance of Judge or the unrecorded pin `Frozen(None)` | RED | GREEN |
 | F-4 | `cq_accept_counter_counts_connect_without_request` | F | C exactly; H counts metadata/chat/charge/settlement | GREEN | GREEN |
 | F-5 | `cq_fixture_records_reject_duplicate_keys` | F | duplicate (purpose, digest), also with different floors → `InvalidInput`; distinct and EMPTY accepted; no mutation API | GREEN | GREEN |
@@ -185,7 +185,7 @@ sha256, control green again. A build error, unrelated lint or timeout is not a k
 | P-Cq-16 | `MODEL_PURPOSES` gains `"unknown"` | L-2: `"unknown"` rejected |
 | P-Cq-17 | `pin_facts` purpose → `"page_builder"` | W-3: exact `n1_worker` |
 | P-Cq-18 | `.no_proxy()` deleted (exchange.rs:279) | PXY: parent trap accepts 0 |
-| P-Cq-21 | fixture lease arm without the `live` check | F-2: second lease `Unavailable` |
+| P-Cq-21 | fixture lease arm without the `live` check | F-2 `cq.f2 a second lease after the drop is refused while the first is held`; owed to Cq-2a (the live-checked lease arm arrives there; R163) |
 | P-Cq-22 | `duplicate_keys` body → `false` | F-5: duplicate key → `InvalidInput` |
 | P-Cq-23 | route condition → `request.is_conversation() && !conversation_route_open()` | N-1: closed-seam exact-record N1 pair `ConfigMismatch`+Z |
 | P-Cq-24 | one fixture.rs attribute → `#[cfg(any(test, feature = "test-utils"))]` | G-1 part 1 |
