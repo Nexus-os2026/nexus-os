@@ -6,13 +6,20 @@
 //! the public `approve_file_confirmed`; Stop is Mother's own `stop`.
 //! Claim limit: composed O35 on an UNQUALIFIED fixture route only.
 use super::c1b_fake_ollama::{chat, Answer, Seen as Peer};
-use super::c1b_port_oracles::children;
+use super::c1b_port_oracles::{children, record_next};
+use super::m3cb_support::pause;
 use super::m3d_composed_support::*;
-use crate::journal::Event;
+use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
+use crate::journal::{Event, MemoryJournal};
+use crate::lane::Verdict;
 use crate::oracles::lite_support::FilesOwner;
-use crate::page_builder::cb_fixtures::{page, DRAFT};
+use crate::page_builder::cb_fixtures::{block, page, rejected, DRAFT};
 use crate::state::MissionState;
+use nexus_governed_control::authority::evidence::EndStatus;
+use nexus_governed_control::authority::file_session::FileSessionError;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const CASE: &str = "NEXUS_M3DD_CASE";
@@ -26,6 +33,7 @@ fn run(case: &str) {
     let (kind, arg) = case.split_once('/').unwrap_or((case, ""));
     match kind {
         "o35" => o35(arg),
+        "t11" => t11(arg),
         other => panic!("unknown case {other}"),
     }
 }
@@ -124,7 +132,7 @@ fn o35(arg: &str) {
             assert_eq!(p.tally(), (1, 1, 1), "charge recorded, never refunded");
             // F5: no accepted output, LaneReturned or File dispatch.
             let o = p.output();
-            assert!(matches!(o.verdict, crate::lane::Verdict::Fail { .. }) && o.effects.is_empty());
+            assert!(matches!(o.verdict, Verdict::Fail { .. }) && o.effects.is_empty());
             p.nothing_accepted();
             assert_eq!((p.count(is_receipt), p.verifier()), (0, 0), "publication 0");
             assert_eq!(p.native(), "recorded", "the conclusive native record");
@@ -240,4 +248,175 @@ fn pre_final_check(arg: &str) {
         assert_eq!((p.count(is_retained), p.f.dispatched()), (1, 1));
         assert_eq!(p.end(), "settled");
     }
+}
+
+// --------------------------------------------------- SB-3 §11 consumer table
+
+/// SB-3 §11 consumer rows on the session route, the actual Builder each
+/// time: first draft; malformed then valid (one correction); two malformed
+/// (exactly two caller entries and attempts); Stop between attempts; Stop
+/// during the correction after its charge; recording debt (F7, injected at
+/// the adapter through SB3D-R1 Q2, Uncertain and Owed; native debt is B's
+/// evidence); a late successful reply (F5); replay.
+#[test]
+fn m3dd_session_route_consumer_cases() {
+    children(
+        MODULE,
+        CASE,
+        "m3dd_session_route_consumer_cases",
+        &[
+            "t11/first",
+            "t11/malformed",
+            "t11/two",
+            "t11/between",
+            "t11/during",
+            "t11/debt-uncertain",
+            "t11/debt-owed",
+            "t11/late",
+            "t11/replay",
+        ],
+        run,
+    );
+}
+fn failed(p: &Page, code: &str) {
+    let o = p.output();
+    let want = Verdict::Fail {
+        reason: code.into(),
+    };
+    assert_eq!(o.verdict, want);
+    assert!(o.effects.is_empty());
+}
+fn t11(arg: &str) {
+    match arg {
+        "first" | "malformed" | "two" => drafts(arg),
+        "between" => {
+            let p = Page::new(vec![chat(&rejected(2)), chat(DRAFT)]);
+            let (pz, held) = pause();
+            p.seen.lock().unwrap().pause_call = Some((1, pz));
+            let adv = p.advance_bg();
+            held.reached();
+            assert_eq!(p.m.stop(p.id), Ok(MissionState::Stopped));
+            held.release();
+            let _ = within(&adv);
+            assert_eq!(p.results(), ["ok", "invalidated"]);
+            failed(&p, "model_invalidated");
+            assert_eq!(p.tally(), (2, 1, 1), "no correction chat or charge");
+            p.nothing_accepted();
+            assert_eq!(p.end(), "stop:owner");
+        }
+        "during" => {
+            let p = Page::new(vec![]);
+            let n = AtomicUsize::new(0);
+            p.f.fake.route(move |path| {
+                (path == "/api/chat").then(|| match n.fetch_add(1, Ordering::SeqCst) {
+                    0 => chat(&rejected(2)),
+                    _ => Answer::Hold,
+                })
+            });
+            let adv = p.advance_bg();
+            assert!(p.f.fake.wait(Peer::Request("/api/chat".into())));
+            assert!(p.f.fake.wait(Peer::Request("/api/chat".into())));
+            assert_eq!(p.f.charges(), 2, "the correction's charge");
+            assert_eq!(p.m.stop(p.id), Ok(MissionState::Stopped));
+            assert!(p.f.fake.wait(Peer::Closed("/api/chat".into())));
+            let _ = within(&adv);
+            assert_eq!(p.results(), ["ok", "failed:model_cancelled"]);
+            assert_eq!(p.tally(), (2, 2, 2), "charges recorded, never refunded");
+            p.nothing_accepted();
+            assert_eq!(p.end(), "stop:owner");
+        }
+        "debt-uncertain" | "debt-owed" => {
+            let p = Page::new(vec![chat(DRAFT)]);
+            let status = if arg == "debt-uncertain" {
+                EndStatus::Uncertain
+            } else {
+                EndStatus::Owed
+            };
+            record_next(p.f.home.port.inner_for_test(), status);
+            let advanced = within(&p.advance_bg());
+            assert_eq!(advanced.err(), Some(CoordinatorError::Recording));
+            assert_eq!(p.results(), ["record_unavailable"]);
+            failed(&p, "model_record_unavailable");
+            assert_eq!(p.tally(), (1, 1, 1), "no correction; the charge stands");
+            p.nothing_accepted();
+            let close = p.m.close();
+            assert_eq!(close, Err(CoordinatorError::Recording), "no clean close");
+            assert_eq!(p.end(), "block:broker_refused:evidence_unavailable");
+        }
+        "late" => {
+            let p = Page::new(vec![chat(DRAFT)]);
+            let (pz, held) = pause();
+            p.m.hooks_for_test().model_replied.arm(0, move || pz.hold());
+            let adv = p.advance_bg();
+            held.reached();
+            assert_eq!(p.m.stop(p.id), Ok(MissionState::Stopped));
+            held.release();
+            let _ = within(&adv);
+            assert_eq!(
+                p.results(),
+                ["invalidated"],
+                "the recorded reply is not used"
+            );
+            assert_eq!(p.tally(), (1, 1, 1));
+            assert_eq!(p.native(), "recorded", "the native record exists");
+            p.nothing_accepted();
+        }
+        "replay" => replay(),
+        _ => panic!("unknown t11 {arg}"),
+    }
+}
+fn drafts(arg: &str) {
+    let replies = match arg {
+        "first" => vec![chat(DRAFT)],
+        "malformed" => vec![chat(&rejected(2)), chat(DRAFT)],
+        _ => vec![chat(&rejected(2)), chat(&rejected(7))],
+    };
+    let p = Page::new(replies);
+    let _ = within(&p.advance_bg());
+    let n = if arg == "first" { 1 } else { 2 };
+    assert_eq!(p.tally(), (n, n, n), "caller entries, chats, charges");
+    if arg == "two" {
+        failed(&p, "model_draft_email");
+        p.nothing_accepted();
+        assert_eq!(p.end(), "fail:lane_fail:builder");
+        return;
+    }
+    assert_eq!(p.f.dispatched(), 1);
+    let state = p.m.state(p.id).unwrap();
+    assert_eq!(state, Some(MissionState::AwaitingApproval));
+    if arg == "malformed" {
+        let bodies = p.f.fake.bodies("/api/chat");
+        let v: serde_json::Value = serde_json::from_slice(&bodies[1]).unwrap();
+        let user = v["messages"][1]["content"].as_str().unwrap();
+        assert!(user.ends_with(&block(2)), "one correction");
+    }
+}
+/// A second coordinator over the same SessionPort and a copy of the journal
+/// is refused: no caller is restored and no metadata or chat is sent.
+fn replay() {
+    let p = Page::new(vec![]);
+    hold_chat(&p);
+    let adv = p.advance_bg();
+    assert!(p.f.fake.wait(Peer::Request("/api/chat".into())));
+    let peer = || ["/api/chat", "/api/tags", "/api/version"].map(|x| p.f.fake.count(x));
+    let before = (peer(), p.f.home.lines());
+    let copy = MemoryJournal::new();
+    copy.set_lines(before.1.clone());
+    let fresh = Arc::new(Mutex::new(Seen::default()));
+    let reopened = Coordinator::open(
+        copy.clone(),
+        p.f.home.port.clone(),
+        Lanes::new(lanes(&fresh)).unwrap(),
+        p.f.home.clock.clone(),
+        p.f.home.private(),
+    );
+    let refused = matches!(
+        reopened,
+        Err(CoordinatorError::FileSession(FileSessionError::Reopened))
+    );
+    assert!(refused, "reopen refused");
+    assert_eq!(fresh.lock().unwrap().calls, 0, "no restored caller");
+    assert_eq!((peer(), copy.lines()), before, "no new metadata or chat");
+    let _ = p.m.stop(p.id);
+    let _ = within(&adv);
 }
