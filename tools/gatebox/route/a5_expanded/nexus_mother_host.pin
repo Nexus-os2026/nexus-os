@@ -1,2 +1,397 @@
 # SB-3E A5 C2 pin (SB3E-R72): nexus_mother_host (mother/host/src/lib.rs), rustc -Zunpretty=expanded, shipped vs lane recipe.
 # Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's unit, bytes (tab-separated); then exactly that many bytes of text.
+=== ship	pub mod terminal	fn read_input ( shared : Arc < Shared > )	count 1	bytes 1819
+    fn read_input(shared: Arc<Shared>) {
+        let stdin = std::io::stdin();
+        let mut buffers = Buffers::default();
+        while !shared.input_end.load(Ordering::SeqCst) {
+            let boundary =
+                {
+                    let input = shared.input();
+                    (input.boundary !=
+                                input.acknowledged).then_some(input.boundary)
+                };
+            if boundary.is_some() { buffers.invalidate(); }
+            let mut fds = [PollFd::new(stdin.as_fd(), PollFlags::POLLIN)];
+            let ready =
+                match poll(&mut fds,
+                        if boundary.is_some() { 0u16 } else { 10u16 }) {
+                    Ok(n) => n,
+                    Err(nix::errno::Errno::EINTR) => continue,
+                    Err(_) => {
+                        shared.stop.press();
+                        shared.fail(Failure::Input);
+                        break;
+                    }
+                };
+            if ready == 0 {
+                if let Some(boundary) = boundary {
+                    shared.acknowledge(boundary);
+                }
+                continue;
+            }
+            let mut bytes = [0u8; 256];
+            match nix::unistd::read(stdin.as_raw_fd(), &mut bytes) {
+                Ok(0) => { shared.receive(Line::Eof, true); break; }
+                Ok(n) => {
+                    let mode = reader_state(&shared, boundary);
+                    route_read(&shared, &mut buffers, &bytes[..n], mode);
+                    if shared.ended() { break; }
+                }
+                Err(nix::errno::Errno::EINTR) => {}
+                Err(_) => {
+                    shared.stop.press();
+                    shared.fail(Failure::Input);
+                    break;
+                }
+            }
+        }
+    }
+=== lane		pub mod route_seams	count 1	bytes 10609
+pub mod route_seams {
+    //! SB-3E S7 (design 4.2, DA-S7R): the host reader's route seam, as S5.
+    //! Compiled only with `--cfg mother_route_seams`, which only the route lane's
+    //! wrapper sets; the shipped build has none. The writer `at` is crate-private
+    //! and called only at the three `host.read` arms of `terminal.rs`
+    //! `read_input`, on the reader thread after it has processed the value; the
+    //! harness may only `arm` and `drain_trace`. `at` returns nothing: it records
+    //! or pauses, and never returns into the reader with a value. It touches no
+    //! host resource itself: a pause's timeout is the harness's own sink.
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+    use std::sync::{Mutex, MutexGuard, PoisonError};
+    use std::time::{Duration, Instant};
+    /// S7's marker (SB3E-R9): the first statement of the writer's real body.
+    const M: &str = "nexus-mother-route-seam-S7";
+    /// The bounded wait of every pause (design 3.5).
+    const PATIENCE: Duration = Duration::from_secs(10);
+    /// Every point a harness may arm.
+    pub(crate) const POINTS: [&str; 1] = ["host.read"];
+    static ARMED: AtomicBool = AtomicBool::new(false);
+    static STATE: Mutex<State> =
+        Mutex::new(State {
+                tick: 0,
+                entries: Vec::new(),
+                pending: Vec::new(),
+            });
+    struct State {
+        tick: u64,
+        entries: Vec<Entry>,
+        pending: Vec<Pending>,
+    }
+    struct Pending {
+        id: u64,
+        point: &'static str,
+        ack: SyncSender<Entry>,
+        pause: (Receiver<()>, &'static str, Timeout),
+    }
+    /// Which arm of `read_input` processed the value.
+    pub enum Branch {
+
+        /// `Ok(n)`: `n` bytes went through `route_read`.
+        Data,
+
+        /// `Ok(0)`: end of input, after `receive(Eof)`.
+        Zero,
+
+        /// A read error, after press and fail.
+        Err,
+    }
+    #[automatically_derived]
+    #[doc(hidden)]
+    unsafe impl ::core::clone::TrivialClone for Branch { }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Branch {
+        #[inline]
+        fn clone(&self) -> Branch { *self }
+    }
+    #[automatically_derived]
+    impl ::core::marker::Copy for Branch { }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Branch {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::write_str(f,
+                match self {
+                    Branch::Data => "Data",
+                    Branch::Zero => "Zero",
+                    Branch::Err => "Err",
+                })
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Branch { }
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Branch {
+        #[inline]
+        fn eq(&self, other: &Branch) -> bool {
+            let __self_discr = ::core::intrinsics::discriminant_value(self);
+            let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+            __self_discr == __arg1_discr
+        }
+    }
+    #[automatically_derived]
+    impl ::core::cmp::Eq for Branch {
+        #[inline]
+        #[doc(hidden)]
+        #[coverage(off)]
+        fn assert_receiver_is_total_eq(&self) -> () {}
+    }
+    /// What the reader knew when it recorded.
+    pub(crate) struct Read {
+        n: usize,
+        eot: bool,
+        branch: Branch,
+    }
+    #[automatically_derived]
+    #[doc(hidden)]
+    unsafe impl ::core::clone::TrivialClone for Read { }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Read {
+        #[inline]
+        fn clone(&self) -> Read {
+            let _: ::core::clone::AssertParamIsClone<usize>;
+            let _: ::core::clone::AssertParamIsClone<bool>;
+            let _: ::core::clone::AssertParamIsClone<Branch>;
+            *self
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::Copy for Read { }
+    /// `Ok(n)`: the read's length and whether it held a Ctrl-D.
+    pub(crate) fn data(bytes: &[u8]) -> Read {
+        let (n, eot) = (bytes.len(), bytes.contains(&4));
+        Read { n, eot, branch: Branch::Data }
+    }
+    /// `Ok(0)` or an error: nothing was read.
+    pub(crate) fn end(branch: Branch) -> Read {
+        Read { n: 0, eot: false, branch }
+    }
+    /// One trace entry.
+    pub struct Entry {
+        pub tick: u64,
+        pub point: &'static str,
+        pub n: usize,
+        pub eot: bool,
+        pub branch: Branch,
+        /// The recording thread: the reader's own.
+        pub thread: std::thread::ThreadId,
+        /// When it was recorded (position evidence only).
+        pub instant: Instant,
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Entry {
+        #[inline]
+        fn clone(&self) -> Entry {
+            Entry {
+                tick: ::core::clone::Clone::clone(&self.tick),
+                point: ::core::clone::Clone::clone(&self.point),
+                n: ::core::clone::Clone::clone(&self.n),
+                eot: ::core::clone::Clone::clone(&self.eot),
+                branch: ::core::clone::Clone::clone(&self.branch),
+                thread: ::core::clone::Clone::clone(&self.thread),
+                instant: ::core::clone::Clone::clone(&self.instant),
+            }
+        }
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Entry {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            let names: &'static _ =
+                &["tick", "point", "n", "eot", "branch", "thread", "instant"];
+            let values: &[&dyn ::core::fmt::Debug] =
+                &[&self.tick, &self.point, &self.n, &self.eot, &self.branch,
+                            &self.thread, &&self.instant];
+            ::core::fmt::Formatter::debug_struct_fields_finish(f, "Entry",
+                names, values)
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Entry { }
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Entry {
+        #[inline]
+        fn eq(&self, other: &Entry) -> bool {
+            self.tick == other.tick && self.eot == other.eot &&
+                                self.point == other.point && self.n == other.n &&
+                        self.branch == other.branch && self.thread == other.thread
+                && self.instant == other.instant
+        }
+    }
+    #[automatically_derived]
+    impl ::core::cmp::Eq for Entry {
+        #[inline]
+        #[doc(hidden)]
+        #[coverage(off)]
+        fn assert_receiver_is_total_eq(&self) -> () {
+            let _: ::core::cmp::AssertParamIsEq<u64>;
+            let _: ::core::cmp::AssertParamIsEq<&'static str>;
+            let _: ::core::cmp::AssertParamIsEq<usize>;
+            let _: ::core::cmp::AssertParamIsEq<bool>;
+            let _: ::core::cmp::AssertParamIsEq<Branch>;
+            let _: ::core::cmp::AssertParamIsEq<std::thread::ThreadId>;
+            let _: ::core::cmp::AssertParamIsEq<Instant>;
+        }
+    }
+    /// A pause's timeout: given the `TIMEOUT <cell> <point>` line, the harness
+    /// records it and ends the process; it cannot return (`!`).
+    pub type Timeout = fn(&str) -> !;
+    /// What an armed point does. Every arming turns recording on.
+    pub enum Action {
+
+        /// Record only.
+        Trace,
+
+        /// At the first arrival: acknowledge, then block the reader until the
+        /// [`Held`] is dropped; not released within 10 s, `timeout` ends it.
+        Pause {
+            cell: &'static str,
+            timeout: Timeout,
+        },
+    }
+    /// One arming. Dropping it releases its pause, or disarms it if it has not
+    /// fired; that never panics.
+    pub struct Held {
+        pub acknowledged: Receiver<Entry>,
+        _release: Release,
+    }
+    struct Release(u64, SyncSender<()>);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            state().pending.retain(|p| p.id != self.0);
+            let _ = self.1.try_send(());
+        }
+    }
+    /// Arm `point` (one of [`POINTS`]) with `action`.
+    pub fn arm(point: &'static str, action: Action) -> Held {
+        if !POINTS.contains(&point) {
+            {
+                ::core::panicking::panic_fmt(format_args!("not a host route point: {0}",
+                        point));
+            }
+        };
+        let (ack, acknowledged) = sync_channel(1);
+        let (release, released) = sync_channel(1);
+        let mut s = state();
+        s.tick += 1;
+        let id = s.tick;
+        if let Action::Pause { cell, timeout } = action {
+            let pause = (released, cell, timeout);
+            s.pending.push(Pending { id, point, ack, pause });
+        }
+        ARMED.store(true, Ordering::SeqCst);
+        Held { acknowledged, _release: Release(id, release) }
+    }
+    /// Every entry recorded so far, in tick order; the trace is emptied.
+    pub fn drain_trace() -> Vec<Entry> {
+        std::mem::take(&mut state().entries)
+    }
+    /// A reader point. Unarmed, this is the marker and one relaxed load.
+    pub(crate) fn at(point: &'static str, read: Read) {
+        std::hint::black_box(M.as_bytes());
+        if !ARMED.load(Ordering::Relaxed) { return; }
+        fire(point, read);
+    }
+    fn state() -> MutexGuard<'static, State> {
+        STATE.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+    fn fire(point: &'static str, read: Read) {
+        let (entry, pending) =
+            {
+                let mut s = state();
+                s.tick += 1;
+                let entry =
+                    Entry {
+                        tick: s.tick,
+                        point,
+                        n: read.n,
+                        eot: read.eot,
+                        branch: read.branch,
+                        thread: std::thread::current().id(),
+                        instant: Instant::now(),
+                    };
+                s.entries.push(entry.clone());
+                let found = s.pending.iter().position(|p| p.point == point);
+                (entry, found.map(|i| s.pending.remove(i)))
+            };
+        let Some(pending) = pending else { return };
+        let acknowledged = pending.ack.try_send(entry).is_ok();
+        let (released, cell, timeout) = pending.pause;
+        if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
+            timeout(&::alloc::__export::must_use({
+                            ::alloc::fmt::format(format_args!("TIMEOUT {0} {1}", cell,
+                                    point))
+                        }));
+        }
+    }
+}
+=== lane	pub mod terminal	use crate :: route_seams	count 1	bytes 28
+    use crate::route_seams;
+=== lane	pub mod terminal > impl Terminal	pub fn route_bind ( & self , session : Arc < nexus_governed_control :: host_session :: HostSession > ) -> bool	count 1	bytes 476
+        /// SB-3E S6 (design 4.2, 4.3): bind stop recording to `session` as
+        /// production does once the home is open (hands.rs `StopRoute::bind`).
+        /// Route lane only.
+        pub fn route_bind(&self,
+            session: Arc<nexus_governed_control::host_session::HostSession>)
+            -> bool {
+            const M: &str = "nexus-mother-route-seam-S6";
+            std::hint::black_box(M.as_bytes());
+            self.shared.stop.bind(session)
+        }
+=== lane	pub mod terminal	fn read_input ( shared : Arc < Shared > )	count 1	bytes 2218
+    fn read_input(shared: Arc<Shared>) {
+        let stdin = std::io::stdin();
+        let mut buffers = Buffers::default();
+        while !shared.input_end.load(Ordering::SeqCst) {
+            let boundary =
+                {
+                    let input = shared.input();
+                    (input.boundary !=
+                                input.acknowledged).then_some(input.boundary)
+                };
+            if boundary.is_some() { buffers.invalidate(); }
+            let mut fds = [PollFd::new(stdin.as_fd(), PollFlags::POLLIN)];
+            let ready =
+                match poll(&mut fds,
+                        if boundary.is_some() { 0u16 } else { 10u16 }) {
+                    Ok(n) => n,
+                    Err(nix::errno::Errno::EINTR) => continue,
+                    Err(_) => {
+                        shared.stop.press();
+                        shared.fail(Failure::Input);
+                        break;
+                    }
+                };
+            if ready == 0 {
+                if let Some(boundary) = boundary {
+                    shared.acknowledge(boundary);
+                }
+                continue;
+            }
+            let mut bytes = [0u8; 256];
+            match nix::unistd::read(stdin.as_raw_fd(), &mut bytes) {
+                Ok(0) => {
+                    shared.receive(Line::Eof, true);
+                    route_seams::at("host.read",
+                        route_seams::end(route_seams::Branch::Zero));
+                    break;
+                }
+                Ok(n) => {
+                    let mode = reader_state(&shared, boundary);
+                    route_read(&shared, &mut buffers, &bytes[..n], mode);
+                    route_seams::at("host.read",
+                        route_seams::data(&bytes[..n]));
+                    if shared.ended() { break; }
+                }
+                Err(nix::errno::Errno::EINTR) => {}
+                Err(_) => {
+                    shared.stop.press();
+                    shared.fail(Failure::Input);
+                    route_seams::at("host.read",
+                        route_seams::end(route_seams::Branch::Err));
+                    break;
+                }
+            }
+        }
+    }
