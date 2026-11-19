@@ -518,6 +518,22 @@ def run(args):
     run_id = uuid.uuid4().hex
     bundle = os.path.join(root, run_id)
     os.makedirs(bundle, mode=0o700)
+    # SB3E-R172 F2: a started run always leaves a ledger line (v2 section 3.1): STARTED before the first
+    # request, and ABORTED for any exit that is not a verdict or an abort() line.
+    ledger_line(ledger, {"kind": "run", "run_id": run_id, "verdict": "STARTED",
+                         "start": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    try:
+        return measure(args, meta, table, ledger, prior, run_id, bundle)
+    except BaseException as e:
+        code = "interrupted" if isinstance(e, KeyboardInterrupt) else "harness_exception"
+        ledger_line(ledger, {"kind": "run", "run_id": run_id, "verdict": "ABORTED",
+                             "abort": {"code": code, "case": None, "call": None}})
+        raise
+
+
+def measure(args, meta, table, ledger, prior, run_id, bundle):
+    """The live part of run(): every return has written its ledger line (abort() or the verdict)."""
+    root = args["root"]
     r = runtime()
     print(f"QM3 PREFLIGHT candidate={args['candidate']} harness={args['harness_sha']} replay={meta['sha256']}")
     print(f"QM3 PLAN cases={len(CASES)} calls<=54 bound={CALL_TIMEOUT}s", flush=True)

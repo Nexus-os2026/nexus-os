@@ -135,6 +135,41 @@ class Ledger(unittest.TestCase):
                              [("ab" * 16, "ABORTED", "not_quiet")])
 
 
+class RunLedger(unittest.TestCase):
+    """SB3E-R172 F2: STARTED before the first request; any escaping exception writes ABORTED."""
+
+    def started_run(self, d, failure):
+        replay = os.path.join(d, "replay")
+        with open(replay, "wb") as h:
+            h.write(b"#!/bin/sh\nexit 101\n")
+        os.chmod(replay, 0o700)
+        meta = os.path.join(d, "replay.json")
+        with open(meta, "w", encoding="utf-8") as h:
+            json.dump({"sha256": q.sha_file(replay), "built_from": "a" * 40}, h)
+        args = {"harness_sha": q.sha_file(q.__file__), "replay_meta": meta, "replay": replay,
+                "candidate": "a" * 40, "root": os.path.join(d, "root"), "ci_run": "1"}
+
+        def boom():
+            raise failure
+
+        real, q.runtime = q.runtime, boom
+        try:
+            with self.assertRaises(type(failure)):
+                q.run(args)
+        finally:
+            q.runtime = real
+        with open(os.path.join(d, "root", "runs.jsonl"), encoding="utf-8") as h:
+            return [json.loads(x) for x in h]
+
+    def test_an_escaping_failure_leaves_started_then_aborted(self):
+        for failure, code in ((OSError("runtime down"), "harness_exception"), (KeyboardInterrupt(), "interrupted")):
+            with tempfile.TemporaryDirectory() as d:
+                lines = self.started_run(d, failure)
+                self.assertEqual([x["verdict"] for x in lines], ["STARTED", "ABORTED"])
+                self.assertEqual(lines[1]["abort"]["code"], code)
+                self.assertEqual(lines[0]["run_id"], lines[1]["run_id"])
+
+
 class Identity(unittest.TestCase):
     def test_gq5_replay_must_be_built_from_the_candidate(self):
         q.bound_replay({"built_from": "a" * 40}, "a" * 40)
