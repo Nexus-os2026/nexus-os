@@ -223,6 +223,44 @@ and ci.yml/audit.yml gates, every plant above one at a time; then R110.2 over ev
 row and one full route_exit on the final head (A7 lane = ship, A5 C2 included). Fresh-context
 review; Owner merge (kernel security core, D13).
 
+## Cq-1b-k: type and caller migration, inert enforcement (SB3E-R160)
+
+Base mother/cq1a 30498097. Measured at Step 0 (/home/nexus/.m2d/cq1bk/step0-report.md):
+- `ModelRequest::new(` gains a required purpose at all 23 sites outside route_cells (route_cells is Cq-2a).
+  `ModelPinSpec {` gains `purpose` at all 9 literals outside route_cells. Purpose is PageBuilder for Mother,
+  broker, session and hands.rs:77. It is N1Worker for the shared kernel and worker fakes and for m2e_a2_guards.
+- `ModelError` gains `PurposeNotQualified`, `PurposeMismatch`; CODES 24 → 26 (mod.rs:176). Broker
+  MODEL_CLASSES and authority REASONS gain `model_purpose_not_qualified`, `model_purpose_mismatch` after
+  `model_unsafe_delimiter`. Mother `BrokerClass` gains both before `Unknown`. `Purpose` is re-exported by the broker.
+- `ModelIdentity` carries purpose; the digest stays identity v1 until Cq-2a. `ModelPin` carries purpose, and
+  `ModelPin::of` deliberately sets N1Worker (P-Cq-11's mutant; W-1 is RED until Cq-2a).
+- Kernel fakes own FixtureListeners (STANDARD; the 16384 profile for n1_tests.rs:780). Gated keeps its
+  back and front owners. Verification goes through `verify_fixture`. `call`, `call_in_thread` and `call_with`
+  stay closed; one `call_with_open_n1` serves the 31 enumerated pair sites and n1_tests.rs:506. The seam opens
+  only on the calling thread (`observed_open_n1`, tests.rs:1516/:2200/:2265, sb1_tests.rs:303). The proxy child
+  owns its fixture; the parent passes only the role "1", bounds the child and checks the trap with one raw
+  connection.
+- Session: `model_tests::pin()`/CHAT are the production pin. `unrecorded_pin()` keeps qwen3:8b/"ab"x32 for
+  negatives. The Peer serves its pin, counts every accept before reading, and answers a synchronized
+  snapshot. That snapshot is installed here and first used in Cq-1d.
+
+Expected at this head (inert): N-5 (n1_tests.rs, e_o65_with_the_route_shut_...) RED at "closed N1 pair"
+(Ok instead of ConfigMismatch: the pair route is not enforced until Cq-2a). Every other existing test keeps
+its outcome.
+
+Cb source pin (R160 f1). `m3cb_marker_source_is_broker_only` hashes the whitespace-normalized body of
+`PageBuilderLane::invoke_in` (cb_oracles.rs:242-244). lane.rs:74 lies inside it and gains the purpose.
+Normalized before/after difference, measured: only the inserted argument `Purpose::PageBuilder,` and
+rustfmt's trailing `,` after `schema`; `match marker()` still occurs once. Re-pin
+`12eb4d612abfb323c3951e37c727e492b8217ceabd45af6b4f6c000b0924e0d6` →
+`13505ff08e4ee5938bd056d37613de244e0a70ab5595867cb8ed193304b388e3`. The test's own negative control (the
+`match marker()` replacement must not pin) is kept and runs green.
+
+Dead-code allows added here (R157 g3, R160 f4), each removed by its first-use unit: `unrecorded_pin`,
+`Peer::unrecorded`, `Peer::snapshot` (Cq-1d); `ModelRequest::cq_oversize_pair`,
+`pin_for_test_with_purpose` (Cq-1c). The Cq-1a allows on `FixtureListener::bind/endpoint/peer_listener/addr`
+and `verify_fixture` are redundant from this head on; Cq-2a removes them (R160 f2).
+
 ## Cq-0 results
 
 Oracle-add on the inert stubs: C0-1, C0-2 RED at their named assertions; C0-3 RED in its
