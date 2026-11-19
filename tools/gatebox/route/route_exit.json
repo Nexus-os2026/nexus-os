@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -54,6 +54,16 @@
    "locks::route_s4_poisons_the_pending_lock",
    "locks::route_s4_poisons_the_producers_lock",
    "locks::route_s4_poisons_the_run_table_lock",
+   "reader::route_reader_cr",
+   "reader::route_reader_crlf",
+   "reader::route_reader_eof",
+   "reader::route_reader_injected_eof_is_not_read",
+   "reader::route_reader_lf",
+   "reader::route_reader_master_close",
+   "reader::route_reader_partial_ctrl_d",
+   "reader::route_reader_read_failure",
+   "reader::route_reader_unarmed_records_nothing",
+   "reader::route_s6_binds_the_stop_route",
    "route_armed_panic_begins_an_unwind",
    "route_armed_pause_acknowledges_blocks_and_releases",
    "route_at_cannot_return_into_the_route",

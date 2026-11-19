@@ -35,6 +35,8 @@ pub mod legacy_terminal;
 mod page_display;
 #[cfg(target_os = "linux")]
 mod receipts;
+#[cfg(mother_route_seams)]
+pub mod route_seams;
 #[cfg(target_os = "linux")]
 mod session_home;
 #[cfg(target_os = "linux")]

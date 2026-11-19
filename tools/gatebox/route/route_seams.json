@@ -26,7 +26,9 @@
   {"name": "S3-door", "marker": "nexus-mother-route-seam-S3-door", "source": "crates/nexus-governed-control/src/host_session/route_s3.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
   {"name": "S3-port", "marker": "nexus-mother-route-seam-S3-port", "source": "mother/src/adapter/session_port.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
   {"name": "S4b", "marker": "nexus-mother-route-seam-S4b", "source": "mother/src/coordinator/lite.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
-  {"name": "S5", "marker": "nexus-mother-route-seam-S5", "source": "mother/src/route_seams.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "reachable"}}
+  {"name": "S5", "marker": "nexus-mother-route-seam-S5", "source": "mother/src/route_seams.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "reachable"}},
+  {"name": "S6", "marker": "nexus-mother-route-seam-S6", "source": "mother/host/src/terminal.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "unwired"}},
+  {"name": "S7", "marker": "nexus-mother-route-seam-S7", "source": "mother/host/src/route_seams.rs", "binaries": {"nexus-mother": "unwired", "mother-hands": "reachable"}}
  ],
  "ungates": {
   "S1": [
@@ -72,6 +74,16 @@
    {"file": "mother/src/coordinator.rs", "old": "            #[cfg(mother_route_seams)]\n            crate::route_seams::at(\n                \"mother.lane.prelock\",\n", "new": "                        crate::route_seams::at(\n                \"mother.lane.prelock\",\n"},
    {"file": "mother/src/coordinator.rs", "old": "                #[cfg(mother_route_seams)]\n                crate::route_seams::at(\n                    \"mother.lane.returned\",\n", "new": "                                crate::route_seams::at(\n                    \"mother.lane.returned\",\n"},
    {"file": "mother/src/adapter/mod.rs", "old": "        #[cfg(mother_route_seams)]\n        crate::route_seams::at(\n            \"mother.classify\",\n", "new": "                crate::route_seams::at(\n            \"mother.classify\",\n"}
+  ],
+  "S6": [
+   {"file": "mother/host/src/terminal.rs", "old": "    #[cfg(mother_route_seams)]\n    pub fn route_bind(", "new": "    pub fn route_bind("}
+  ],
+  "S7": [
+   {"file": "mother/host/src/lib.rs", "old": "#[cfg(mother_route_seams)]\npub mod route_seams;\n", "new": "pub mod route_seams;\n"},
+   {"file": "mother/host/src/terminal.rs", "old": "#[cfg(mother_route_seams)]\nuse crate::route_seams;\n", "new": "use crate::route_seams;\n"},
+   {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Zero));\n", "new": "                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Zero));\n"},
+   {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::data(&bytes[..n]));\n", "new": "                route_seams::at(\"host.read\", route_seams::data(&bytes[..n]));\n"},
+   {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Err));\n", "new": "                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Err));\n"}
   ]
  },
  "controls": [
@@ -86,6 +98,8 @@
   {"name": "ungate_and_call_S3_port", "binary": "mother-hands", "ungate": ["S3"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_mother::adapter::SessionPort>) {\n        s.route_revoke_original_grant();\n    }\n"}], "expect": ["S3-door", "S3-port"]},
   {"name": "ungate_and_call_S4b", "binary": "mother-hands", "ungate": ["S4b"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some(s) = std::hint::black_box(None::<&nexus_mother::coordinator::FileSession<nexus_mother::adapter::SessionPort>>) {\n        s.route_poison_coordinator();\n    }\n"}], "expect": ["S4b"]},
   {"name": "ungate_S5_sites", "binary": "mother-hands", "ungate": ["S5"], "edits": [], "expect": ["S5"]},
+  {"name": "ungate_and_call_S6_mother_hands", "binary": "mother-hands", "ungate": ["S6"], "edits": [{"file": "mother/host/src/bin/mother-hands.rs", "old": "fn main() -> ExitCode {\n", "new": "fn main() -> ExitCode {\n    if let Some((t, s)) = std::hint::black_box(None::<(&nexus_mother_host::terminal::Terminal, std::sync::Arc<nexus_governed_control::host_session::HostSession>)>) {\n        t.route_bind(s);\n    }\n"}], "expect": ["S6"]},
+  {"name": "ungate_S7_sites", "binary": "mother-hands", "ungate": ["S7"], "edits": [], "expect": ["S7"]},
   {"name": "near_miss_marker_is_not_matched", "binary": "nexus-mother", "ungate": ["S2"], "edits": [{"file": "mother/desktop/src/main.rs", "old": "fn main() -> std::process::ExitCode {\n", "new": "fn main() -> std::process::ExitCode {\n    if let Some(e) = std::hint::black_box(None::<&nexus_governed_control::evidence_store::PrimaryEvidence>) {\n        e.route_refuse_next(\"planted\", None);\n    }\n"}, {"file": "crates/nexus-governed-control/src/evidence_store.rs", "old": "const M: &str = \"nexus-mother-route-seam-S2\";", "new": "const M: &str = \"nexus-mother-route-seam-S4-sessiom\";"}], "expect": [], "expect_unknown": ["S4-sessiom"]}
  ]
 }
