@@ -9,6 +9,7 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 - **Isolation.** It is not part of any Cargo package, build script, installer or workflow (G-Q1, in the H1 replay tests).
 - **Network (G-Q3).** It speaks only to `127.0.0.1:11434` through one `http.client.HTTPConnection` site, on `/api/{version,status,tags,show,ps,chat}`.
 - **Subprocesses (G-Q3).** It runs subprocesses only with literal argv: `pgrep`, `ss`, `nvidia-smi --query-gpu`, the replay test binary and, in `confirm`, the installed binary.
+- **Confirm's program (ruled on G-Q3).** `confirm` may start exactly one more program: the installed binary at the path given to `--binary`. No other new program is allowed. Its sha256 is printed for C-1's comparison with the approved artifact; the harness does not itself compare it against an expected value.
 - **Environment.** It sets no variable, flag or file that a Mother binary reads. `QM3_STEP` is read only by the cfg(test) replay test binary (SB3E-R168).
 
 | Mode | What it does | Network |
