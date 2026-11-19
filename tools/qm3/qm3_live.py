@@ -22,6 +22,8 @@ import os
 import pty
 import re
 import select
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -294,16 +296,49 @@ def bound_replay(replay_meta, candidate):
         raise SystemExit("QM3 REFUSED replay built_from differs from --candidate")
 
 
-def bound_identity(args):
-    """G-Q5: the frozen harness, and the replay binary recorded at the freeze, built from the candidate."""
+def pinned(path, private):
+    """SB3E-R172 F6/D2: an absolute path with no symlink in it, a regular file opened once (O_NOFOLLOW); the
+    bytes hashed are copied to a 0700 private file, and that copy is what runs. No PATH lookup."""
+    if not os.path.isabs(path) or os.path.realpath(path) != os.path.normpath(path):
+        raise SystemExit("QM3 REFUSED a binary path must be absolute and hold no symlink")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise SystemExit("QM3 REFUSED a binary must be a regular file")
+        with os.fdopen(fd, "rb", closefd=False) as h:
+            blob = h.read()
+    finally:
+        os.close(fd)
+    copy = os.path.join(private, "bin-" + sha(blob)[:16])
+    with os.fdopen(os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o700), "wb") as h:
+        h.write(blob)
+    return copy, blob
+
+
+def bound_identity(args, private):
+    """G-Q5: the frozen harness, and the replay binary recorded at the freeze, built from the candidate.
+    Returns the meta and the private copy of exactly the hashed replay bytes (F6)."""
     if sha_file(os.path.abspath(__file__)) != args["harness_sha"]:
         raise SystemExit("QM3 REFUSED harness sha256 differs from the frozen value")
     with open(args["replay_meta"], encoding="utf-8") as h:
         meta = json.load(h)
     bound_replay(meta, args["candidate"])
-    if sha_file(args["replay"]) != meta.get("sha256"):
+    replay, blob = pinned(args["replay"], private)
+    if sha(blob) != meta.get("sha256"):
         raise SystemExit("QM3 REFUSED replay binary sha256 differs from its meta")
-    return meta
+    return meta, replay
+
+
+def with_private(mode):
+    """Run `mode(args)` with a 0700 private folder under the root for the pinned binary copy."""
+    def wrapped(args):
+        os.makedirs(args["root"], mode=0o700, exist_ok=True)
+        private = tempfile.mkdtemp(dir=args["root"], prefix=".bin-")
+        try:
+            return mode(args, private)
+        finally:
+            shutil.rmtree(private, ignore_errors=True)
+    return wrapped
 
 
 # The only network site (G-Q3): one loopback connection per request.
@@ -378,10 +413,10 @@ def _swap_in():
 
 
 def quiet(swap_start):
-    compilers = subprocess.run(["pgrep", "-x", "-c", "cargo|rustc|rustdoc|cc1|ld"], capture_output=True, text=True)
-    clients = subprocess.run(["ss", "-tnp", "state", "established", "( dport = :11434 )"],
+    compilers = subprocess.run(["/usr/bin/pgrep", "-x", "-c", "cargo|rustc|rustdoc|cc1|ld"], capture_output=True, text=True)
+    clients = subprocess.run(["/usr/bin/ss", "-tnp", "state", "established", "( dport = :11434 )"],
                              capture_output=True, text=True)
-    mother = subprocess.run(["pgrep", "-c", "-f", "mother-hands|nexus-mother"], capture_output=True, text=True)
+    mother = subprocess.run(["/usr/bin/pgrep", "-c", "-f", "mother-hands|nexus-mother"], capture_output=True, text=True)
     status, body = request("GET", "/api/ps")
     loaded = [m.get("name") for m in json.loads(body).get("models", [])] if status == 200 else ["?"]
     with open("/proc/loadavg", encoding="ascii") as h:
@@ -404,7 +439,7 @@ def starttime(pid):
 
 def runner_identity():
     """Q-8 (SB3E-R172 F4): the llama-server runner(s) as sorted [pid, start time] pairs (pgrep and /proc)."""
-    found = subprocess.run(["pgrep", "-x", "llama-server"], capture_output=True, text=True)
+    found = subprocess.run(["/usr/bin/pgrep", "-x", "llama-server"], capture_output=True, text=True)
     out = []
     for pid in found.stdout.split():
         try:
@@ -592,15 +627,17 @@ class Abort(Exception):
 
 def host():
     nproc = os.cpu_count()
-    gpu = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True)
+    gpu = subprocess.run(["/usr/bin/nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True)
     with open("/proc/meminfo", encoding="ascii") as h:
         mem = int(h.readline().split()[1])
     return {"nproc": nproc, "mem_total_kb": mem,
             "kernel": os.uname().release, "gpu": gpu.stdout.strip() if gpu.returncode == 0 else "unavailable"}
 
 
-def run(args):
-    meta = bound_identity(args)
+@with_private
+def run(args, private):
+    meta, replay = bound_identity(args, private)
+    args = dict(args, replay=replay)
     table = golden_table()
     root = args["root"]
     os.makedirs(root, mode=0o700, exist_ok=True)
@@ -688,10 +725,12 @@ def verify(record_path, bundle):
     return 0 if ok else 1
 
 
-def freplay(args):
+@with_private
+def freplay(args, private):
     """Phase R2: every case's step replayed on the code head with the recorded replies; F reaches it only
     through the production record (the step has no floor field). Any difference is BLOCKED."""
-    meta = bound_identity(args)
+    meta, replay = bound_identity(args, private)
+    args = dict(args, replay=replay)
     with open(args["record"], "rb") as h:
         data = h.read()
     record = json.loads(data)
@@ -747,22 +786,27 @@ def artifact_bound(args, blob):
 
 def confirm(args):
     """Phase C: the installed binary is the approved artifact (C-1), carries no measure marker (C-2), and one
-    registration-only startup prints the record's identity (C-3). It types `quit`; no chat is made."""
-    with open(args["binary"], "rb") as h:
-        blob = h.read()
-    if not artifact_bound(args, blob):
-        return 1
-    marker_absent = MEASURE_MARKER.encode() not in blob
-    print(f"QM3 CONFIRM binary={args['binary']} sha256={sha(blob)} measure_marker="
-          f"{'absent' if marker_absent else 'PRESENT'}")
-    with open(args["record"], "rb") as h:
-        record = json.loads(h.read())
+    registration-only startup prints the record's identity (C-3). It types `quit`; no chat is made. The bytes
+    hashed are the bytes started (SB3E-R172 D2): a 0700 private copy of the opened file."""
     seen = b""
     with tempfile.TemporaryDirectory() as tmp:
+        try:
+            installed, blob = pinned(args["binary"], tmp)
+        except (SystemExit, OSError):
+            ledger_line(os.path.join(args["root"], "runs.jsonl"), {"kind": "confirm", "verdict": "REFUSED",
+                                                                   "abort": {"code": "binary_path"}})
+            print("QM3 CONFIRM REFUSED the binary path is not an absolute, symlink-free regular file")
+            return 1
+        if not artifact_bound(args, blob):
+            return 1
+        marker_absent = MEASURE_MARKER.encode() not in blob
+        print(f"QM3 CONFIRM binary={args['binary']} sha256={sha(blob)} measure_marker="
+              f"{'absent' if marker_absent else 'PRESENT'}")
+        with open(args["record"], "rb") as h:
+            record = json.loads(h.read())
         home, work = os.path.join(tmp, "home"), os.path.join(tmp, "workspace")
         os.mkdir(home, 0o700)
         os.mkdir(work, 0o700)
-        installed = args["binary"]
         parent, child = pty.openpty()
         proc = subprocess.Popen([installed, "--home", home, "--workspace", work, "--mission", "one-page-site"],
                                 stdin=child, stdout=child, stderr=child, close_fds=True)
@@ -775,7 +819,10 @@ def confirm(args):
                     seen += os.read(parent, 4096)
                 except OSError:
                     break
-        os.write(parent, b"quit\n")
+        try:
+            os.write(parent, b"quit\n")
+        except OSError:
+            pass
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:

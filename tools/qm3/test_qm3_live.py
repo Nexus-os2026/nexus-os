@@ -290,7 +290,7 @@ class Identity(unittest.TestCase):
     def test_gq5_harness_sha_is_checked_first(self):
         with self.assertRaises(SystemExit):
             q.bound_identity({"harness_sha": "0" * 64, "replay_meta": "/nonexistent", "candidate": "a" * 40,
-                              "replay": "/nonexistent"})
+                              "replay": "/nonexistent"}, "/nonexistent")
 
 
 class Confirm(unittest.TestCase):
@@ -313,6 +313,37 @@ class Confirm(unittest.TestCase):
             with open(os.path.join(d, "runs.jsonl"), encoding="utf-8") as h:
                 lines = [json.loads(x) for x in h]
             self.assertEqual([(x["kind"], x["verdict"]) for x in lines], [("confirm", "REFUSED")])
+
+
+class Pinned(unittest.TestCase):
+    """SB3E-R172 F6/D2: the bytes hashed are the bytes run; no PATH lookup, no symlink, a regular file."""
+
+    def test_pinned_refuses_and_copies_exactly(self):
+        with tempfile.TemporaryDirectory() as d:
+            real = os.path.join(d, "replay")
+            with open(real, "wb") as h:
+                h.write(b"#!/bin/sh\nexit 0\n")
+            os.symlink(real, os.path.join(d, "link"))
+            os.mkdir(os.path.join(d, "dir"))
+            os.symlink(d, os.path.join(d, "via"))
+            private = os.path.join(d, "private")
+            os.mkdir(private, 0o700)
+            for bad in ("replay", "./replay", os.path.join(d, "link"), os.path.join(d, "dir"),
+                        os.path.join(d, "via", "replay")):
+                with self.assertRaises((SystemExit, OSError), msg=bad):
+                    q.pinned(bad, private)
+            copy, blob = q.pinned(real, private)
+            with open(copy, "rb") as h:
+                self.assertEqual((h.read(), blob), (b"#!/bin/sh\nexit 0\n",) * 2)
+            self.assertEqual(os.stat(copy).st_mode & 0o777, 0o700)
+            self.assertEqual(os.path.dirname(copy), private)
+
+    def test_confirm_refuses_a_bare_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(q.confirm({"binary": "mother-hands", "artifact_sha": "0" * 64, "record": "x",
+                                        "root": d}), 1)
+            with open(os.path.join(d, "runs.jsonl"), encoding="utf-8") as h:
+                self.assertEqual(json.loads(h.read())["abort"]["code"], "binary_path")
 
 
 class NetworkAllowlist(unittest.TestCase):
@@ -341,7 +372,9 @@ class NetworkAllowlist(unittest.TestCase):
                 for e in argv.elts[1:]:
                     self.assertTrue(isinstance(e, ast.Constant) or (isinstance(e, ast.Name)
                                                                     and e.id in ("home", "work")), ast.dump(e))
-        self.assertEqual(sorted(set(heads)), ["installed", "nvidia-smi", "pgrep", "replay", "ss"])
+        # SB3E-R172 F6: no PATH lookup; every literal program is absolute.
+        self.assertEqual(sorted(set(heads)), ["/usr/bin/nvidia-smi", "/usr/bin/pgrep", "/usr/bin/ss", "installed",
+                                              "replay"])
         self.assertNotIn("os.system", source())
 
 
