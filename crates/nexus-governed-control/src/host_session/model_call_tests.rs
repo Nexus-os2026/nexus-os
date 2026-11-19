@@ -118,6 +118,15 @@ impl Bind {
         Self::build(None, Some(endpoint.to_owned()), true)
     }
     fn build(peer: Option<Peer>, endpoint: Option<String>, files: bool) -> Self {
+        Self::build_spec(peer, endpoint, files, &pin())
+    }
+    /// M3-Cq: registered with `spec` (a Judge registration of the served pin).
+    fn build_spec(
+        peer: Option<Peer>,
+        endpoint: Option<String>,
+        files: bool,
+        spec: &crate::inference::ModelPinSpec,
+    ) -> Self {
         assert!(crate::files::make_non_dumpable());
         let root = crate::harness_tests::temp_root("sb3a-bind");
         let selected = crate::harness_tests::temp_root("sb3a-workspace");
@@ -142,10 +151,10 @@ impl Bind {
         session.bootstrap_workspace(&workspace, &[]).unwrap();
         let identity = match &endpoint {
             Some(endpoint) => {
-                let view = session.register_model_private(endpoint, &pin()).unwrap();
+                let view = session.register_model_private(endpoint, spec).unwrap();
                 hex::decode(view.identity).unwrap().try_into().unwrap()
             }
-            None => ModelIdentity::from_spec(&pin()).unwrap().digest(),
+            None => ModelIdentity::from_spec(spec).unwrap().digest(),
         };
         session.finish_bootstrap().unwrap();
         let q = session.ingress().accept(CommandKind::Run, 1).unwrap();
@@ -2437,6 +2446,8 @@ const RESTRICT: [&str; 4] = [
 
 #[derive(Default)]
 pub(super) struct Meter {
+    /// Every invocation of `charge`, refused ones included (M3-Cq Z).
+    calls: AtomicU32,
     charges: AtomicU32,
     settles: AtomicU32,
     refuse: AtomicBool,
@@ -2448,6 +2459,7 @@ pub(super) struct Meter {
 }
 impl CallMeter for Meter {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
         if let Some(hook) = &*self.at_entry.lock().unwrap() {
             hook();
         }
@@ -5608,4 +5620,322 @@ fn join_scope<'a>(files: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
         }
     }
     found
+}
+
+// ── M3-Cq: broker and SB-3 session oracles (v6 §6.5, §6.7) ──────────────────
+
+fn cq_spec(purpose: Purpose) -> crate::inference::ModelPinSpec {
+    crate::inference::ModelPinSpec { purpose, ..pin() }
+}
+
+fn cq_request(purpose: Purpose) -> ModelRequest {
+    let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
+    ModelRequest::new(purpose, "SB3B system".into(), "SB3B prompt".into(), schema).unwrap()
+}
+
+impl Call {
+    /// A bound original door whose session registered `spec` on the
+    /// production peer (the served pin).
+    fn for_spec(spec: crate::inference::ModelPinSpec) -> Self {
+        let peer = Peer::chat(None, None);
+        let endpoint = Some(peer.endpoint.clone());
+        Self::bound(Bind::build_spec(Some(peer), endpoint, true, &spec))
+    }
+    fn call_as(&self, request: &ModelRequest) -> Result<ModelCallOutcome, &'static str> {
+        let observer = self.owner.observer();
+        invoke(&self.b.door, self.b.run, request, &self.meter, &observer)
+    }
+    /// Z's observations: (peer accepts, peer requests, charge calls, settles).
+    fn z_obs(&self) -> (usize, usize, u32, u32) {
+        let (accepts, requests) = self.b.peer().snapshot();
+        let m = &self.meter;
+        (
+            accepts,
+            requests,
+            m.calls.load(Ordering::SeqCst),
+            m.settles.load(Ordering::SeqCst),
+        )
+    }
+}
+
+#[track_caller]
+fn cq_z(before: (usize, usize, u32, u32), after: (usize, usize, u32, u32)) {
+    assert_eq!(after.0, before.0, "cq.no_accepts");
+    assert_eq!(after.1, before.1, "cq.no_metadata/no_chat");
+    assert_eq!(after.2, before.2, "cq.no_charge_calls");
+    assert_eq!(after.3, before.3, "cq.no_settlements");
+}
+
+/// The two refusals (v6 §6.7): not qualified on a Judge registration of
+/// the served pin; the mismatch on the PageBuilder registration with a
+/// Judge request.
+fn cq_refusals() -> [(&'static str, Purpose, Purpose, &'static str); 2] {
+    [
+        (
+            "not qualified",
+            Purpose::Judge,
+            Purpose::Judge,
+            "model_purpose_not_qualified",
+        ),
+        (
+            "mismatch",
+            Purpose::PageBuilder,
+            Purpose::Judge,
+            "model_purpose_mismatch",
+        ),
+    ]
+}
+
+/// B-2: an admitted purpose refusal consumes one attempt and one native
+/// result, charges nothing, and leaves the slot conclusive.
+#[test]
+fn cq_session_refusal_attempt_accounting() {
+    for (what, registered, asked, want) in cq_refusals() {
+        let f = Call::for_spec(cq_spec(registered));
+        let (attempts, pins) = f.counts();
+        let before = f.z_obs();
+        let outcome = f.call_as(&cq_request(asked)).expect("an admitted attempt");
+        assert_eq!(class(&outcome), want, "cq.b2 {what}: purpose outcome");
+        cq_z(before, f.z_obs());
+        assert!(recorded(&outcome), "{what}: recorded");
+        one_correlated_record(&f, &outcome);
+        assert_eq!(
+            f.counts(),
+            (attempts + 1, pins),
+            "{what}: one attempt, pin back to baseline"
+        );
+        let o = f.obligations();
+        assert!(
+            !o.active && o.owner_complete && o.child_complete,
+            "{what}: slot conclusive"
+        );
+        let again = f.call_as(&cq_request(asked)).expect("a fresh invocation");
+        assert_eq!(class(&again), want, "{what}: the next invocation works");
+    }
+    let h = Call::new();
+    let outcome = h.call().expect("H");
+    assert!(outcome.result().is_ok() && recorded(&outcome), "H");
+}
+
+/// B-3: eight admitted not-qualified refusals, never refunded; the ninth is
+/// OverBudget before any attempt or record.
+#[test]
+fn cq_session_purpose_refusals_exhaust_attempts() {
+    let f = Call::for_spec(cq_spec(Purpose::Judge));
+    for n in 1..=8u32 {
+        let before = f.z_obs();
+        let outcome = f
+            .call_as(&cq_request(Purpose::Judge))
+            .expect("an admitted attempt");
+        assert_eq!(
+            class(&outcome),
+            "model_purpose_not_qualified",
+            "cq.b3 refusal {n}"
+        );
+        cq_z(before, f.z_obs());
+        assert_eq!(
+            f.counts(),
+            (n, 0),
+            "attempt {n} counted, never refunded, pin released"
+        );
+        assert_eq!(f.records(), n as usize, "record {n}");
+    }
+    let before = (f.z_obs(), f.records());
+    assert_eq!(
+        f.call_as(&cq_request(Purpose::Judge)).map(|_| ()),
+        Err("model_over_budget"),
+        "ninth"
+    );
+    assert_eq!(
+        (f.z_obs(), f.records()),
+        before,
+        "ninth: no attempt, record or charge"
+    );
+}
+
+/// B-4: a failed record of a purpose refusal keeps the debt (Owed or
+/// Uncertain) and the exact refusal; the session then halts.
+#[test]
+fn cq_session_purpose_refusal_record_failure_keeps_debt() {
+    for failure in ["owed", "uncertain"] {
+        let f = Call::for_spec(cq_spec(Purpose::Judge));
+        let (primary, ran) = (f.b.primary.clone(), Arc::new(AtomicUsize::new(0)));
+        let count = ran.clone();
+        f.hook("model.attempt.record.before", 0, move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            match failure {
+                "owed" => primary.store().refuse_inserts(true),
+                _ => primary.store().simulate_crash(),
+            }
+        });
+        let before = f.z_obs();
+        let outcome = f
+            .call_as(&cq_request(Purpose::Judge))
+            .expect("an admitted attempt");
+        assert_eq!(
+            class(&outcome),
+            "model_purpose_not_qualified",
+            "cq.b4 {failure}: the refusal is kept"
+        );
+        assert_eq!(ran.load(Ordering::SeqCst), 1, "the hook ran once");
+        let exact = match failure {
+            "owed" => matches!(outcome.record(), EndStatus::Owed),
+            _ => matches!(outcome.record(), EndStatus::Uncertain),
+        };
+        assert!(exact, "{failure}: the exact end status");
+        cq_z(before, f.z_obs());
+        assert_eq!(f.records(), 0, "{failure}: no durable model_call row");
+        assert_eq!(f.counts(), (1, 1), "{failure}: one attempt and pin owed");
+        let o = f.obligations();
+        assert!(
+            o.child_complete && !o.owner_complete && o.active && o.uncertain,
+            "{failure}: debt latched"
+        );
+        assert_eq!(f.latched(), (true, true), "{failure}: FAILED latched");
+        if failure == "owed" {
+            assert_eq!(
+                f.b.primary.store().owed_bodies().len(),
+                1,
+                "one owed record"
+            );
+        }
+        let before = f.z_obs();
+        assert_eq!(
+            f.call_as(&cq_request(Purpose::Judge)).map(|_| ()),
+            Err("halted"),
+            "{failure}: halted"
+        );
+        cq_z(before, f.z_obs());
+    }
+}
+
+const CQ_V1: &str = "4d7211f035868b327c0e10f2bc23155a7d492d7beecc5b505edfa373db82f9a4";
+const CQ_V2: [(Purpose, &str); 3] = [
+    (
+        Purpose::PageBuilder,
+        "c5b838e3070d2ffcfb20f15e4420cca44c4f17456ff08a2232c0cd2a91c5b978",
+    ),
+    (
+        Purpose::N1Worker,
+        "5fad3aa48de2db319cb39dc9659aa54eeb75807c3ec5c88f2174adc010df9c9c",
+    ),
+    (
+        Purpose::Judge,
+        "b46c2ff5a58505f7f8a01cbb24a50818683dc1ad51a2ec55733aec506a008584",
+    ),
+];
+
+/// A fresh, unbound session that registered the served pin for `purpose`.
+fn cq_unbound(purpose: Purpose) -> Bind {
+    let peer = Peer::chat(None, None);
+    let endpoint = Some(peer.endpoint.clone());
+    Bind::build_spec(Some(peer), endpoint, true, &cq_spec(purpose))
+}
+
+fn cq_bind_with(b: &Bind, hex_identity: &str) -> Result<(), &'static str> {
+    let identity: [u8; 32] = hex::decode(hex_identity).unwrap().try_into().unwrap();
+    b.door
+        .bind_inference_private(b.run, HASH, LABEL, identity)
+        .map_err(|e| e.class())
+}
+
+/// S-ID1: an independent v1 expected identity never admits; the exact v2
+/// identity of the registered purpose does.
+#[test]
+fn cq_session_rejects_legacy_expected_identity() {
+    for (purpose, v2) in CQ_V2 {
+        let b = cq_unbound(purpose);
+        let accounting = b.runs().model_accounting(b.run);
+        assert_eq!(
+            cq_bind_with(&b, CQ_V1),
+            Err("model_identity_mismatch"),
+            "cq.sid1 {purpose:?}: v1 refused"
+        );
+        assert!(b.bound().is_none(), "{purpose:?}: no binding");
+        assert_eq!(
+            b.runs().model_accounting(b.run),
+            accounting,
+            "{purpose:?}: no attempt"
+        );
+        assert_eq!(
+            cq_bind_with(&b, v2),
+            Ok(()),
+            "cq.sid1 {purpose:?}: exact v2 admits"
+        );
+    }
+}
+
+/// S-ID2: the other purposes' v2 identities never admit; the correct one
+/// does; then PageBuilder is H, Judge is not qualified, an N1 pair closed.
+#[test]
+fn cq_session_rejects_other_purpose_expected_identity() {
+    for (purpose, v2) in CQ_V2 {
+        let b = cq_unbound(purpose);
+        for (other, wrong) in CQ_V2.iter().filter(|(p, _)| *p != purpose) {
+            assert_eq!(
+                cq_bind_with(&b, wrong),
+                Err("model_identity_mismatch"),
+                "{purpose:?}: {other:?} v2 refused"
+            );
+            assert!(b.bound().is_none(), "{purpose:?}: no binding");
+        }
+        assert_eq!(
+            cq_bind_with(&b, v2),
+            Ok(()),
+            "cq.sid2 {purpose:?}: correct v2 admits"
+        );
+    }
+    let page = Call::for_spec(cq_spec(Purpose::PageBuilder));
+    let outcome = page.call_as(&cq_request(Purpose::PageBuilder)).expect("H");
+    assert!(outcome.result().is_ok(), "PageBuilder H");
+    let judge = Call::for_spec(cq_spec(Purpose::Judge));
+    let before = judge.z_obs();
+    let outcome = judge.call_as(&cq_request(Purpose::Judge)).expect("attempt");
+    assert_eq!(
+        class(&outcome),
+        "model_purpose_not_qualified",
+        "Judge refusal"
+    );
+    cq_z(before, judge.z_obs());
+    let worker = Call::for_spec(cq_spec(Purpose::N1Worker));
+    let before = worker.z_obs();
+    let outcome = worker
+        .call_as(&cq_request(Purpose::N1Worker))
+        .expect("attempt");
+    assert_eq!(class(&outcome), "model_config_mismatch", "N1 pair closed");
+    cq_z(before, worker.z_obs());
+}
+
+/// N-4 (session): an admitted N1 pair consumes one attempt and returns
+/// model_config_mismatch with Z, record-independently.
+#[test]
+fn cq_broker_and_session_n1_pair_stays_closed() {
+    let f = Call::new();
+    let (attempts, _) = f.counts();
+    let before = f.z_obs();
+    let outcome = f
+        .call_as(&cq_request(Purpose::N1Worker))
+        .expect("an admitted attempt");
+    assert_eq!(
+        class(&outcome),
+        "model_config_mismatch",
+        "cq.n4 session N1 pair"
+    );
+    cq_z(before, f.z_obs());
+    assert_eq!(f.counts().0, attempts + 1, "one attempt");
+    one_correlated_record(&f, &outcome);
+    let judge = Call::for_spec(cq_spec(Purpose::Judge));
+    let outcome = judge
+        .call_as(&cq_request(Purpose::PageBuilder))
+        .expect("attempt");
+    assert_eq!(
+        class(&outcome),
+        "model_purpose_not_qualified",
+        "PageBuilder on a Judge registration"
+    );
+    let page = Call::new();
+    assert!(
+        page.call().is_ok_and(|o| o.result().is_ok()),
+        "PageBuilder H"
+    );
 }

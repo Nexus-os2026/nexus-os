@@ -1260,3 +1260,40 @@ impl WorkingDetail {
         }
     }
 }
+
+#[cfg(test)]
+mod cq_tests {
+    use super::BrokerClass;
+    use nexus_governed_control::inference::ModelError;
+
+    /// M-1 (M3-Cq): both purpose classes and every earlier class round-trip
+    /// through code and parse; every broker model class is in the registry.
+    #[test]
+    fn cq_broker_class_round_trip() {
+        for class in BrokerClass::ALL {
+            assert_eq!(
+                BrokerClass::parse(class.code()),
+                Some(*class),
+                "{}",
+                class.code()
+            );
+        }
+        for (class, code) in [
+            (
+                BrokerClass::ModelPurposeNotQualified,
+                "model_purpose_not_qualified",
+            ),
+            (BrokerClass::ModelPurposeMismatch, "model_purpose_mismatch"),
+        ] {
+            assert_eq!(class.code(), code, "cq.m1 code");
+            assert_eq!(BrokerClass::parse(code), Some(class), "cq.m1 parse");
+        }
+        for code in ModelError::CODES {
+            let class = format!("model_{code}");
+            assert!(
+                BrokerClass::parse(&class).is_some(),
+                "cq.m1 broker class {class} is registered"
+            );
+        }
+    }
+}

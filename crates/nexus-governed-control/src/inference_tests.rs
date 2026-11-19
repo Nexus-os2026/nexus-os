@@ -149,6 +149,8 @@ struct Fake {
     addr: SocketAddr,
     events: Receiver<Event>,
     log: Arc<Mutex<Vec<String>>>,
+    /// Every accepted connection, counted before any byte is read.
+    accepts: Arc<AtomicUsize>,
     route: Arc<Mutex<Route>>,
 }
 
@@ -190,11 +192,13 @@ impl Fake {
         let log: Arc<Mutex<Vec<String>>> = Arc::default();
         let route: Route = Arc::new(healthy);
         let route = Arc::new(Mutex::new(route));
+        let accepts = Arc::new(AtomicUsize::new(0));
         {
-            let (log, route) = (log.clone(), route.clone());
+            let (log, route, accepted) = (log.clone(), route.clone(), accepts.clone());
             std::thread::spawn(move || {
                 for stream in listener.incoming() {
                     let Ok(stream) = stream else { return };
+                    accepted.fetch_add(1, Ordering::SeqCst);
                     let (tx, log, route) = (tx.clone(), log.clone(), route.clone());
                     std::thread::spawn(move || serve(stream, &tx, &log, &route));
                 }
@@ -204,8 +208,13 @@ impl Fake {
             addr,
             events,
             log,
+            accepts,
             route,
         }
+    }
+
+    fn accepts(&self) -> usize {
+        self.accepts.load(Ordering::SeqCst)
     }
 
     fn endpoint(&self) -> String {
@@ -364,6 +373,8 @@ type Hook = Box<dyn Fn() + Send + Sync>;
 /// settlements, refuses when told to, and runs `during` inside `charge`.
 #[derive(Default)]
 struct Meter {
+    /// Every invocation of `charge`, refused ones included.
+    calls: AtomicU32,
     charged: AtomicU32,
     settled: Mutex<Vec<u32>>,
     refuse: Option<MeterRefusal>,
@@ -393,6 +404,7 @@ impl Meter {
 
 impl CallMeter for Meter {
     fn charge(&self) -> Result<Charged, MeterRefusal> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
         if let Some(during) = self.during.lock().unwrap().as_ref() {
             during();
         }
@@ -1786,4 +1798,177 @@ fn pr75_d2_yeses_that_disagree_on_facts_admit_no_inference() {
         .admit_inference(run, HASH, &label(2), identity())
         .expect("agreeing yeses admit");
     assert_eq!(f.admission(run).map(|a| a.request), Some(label(2)));
+}
+
+// ---------------------------------------------------------------- M3-Cq (v6 §6.5)
+
+fn spec_for(purpose: Purpose) -> ModelPinSpec {
+    ModelPinSpec { purpose, ..spec() }
+}
+
+fn request_for(purpose: Purpose, user: &str) -> ModelRequest {
+    ModelRequest::new(
+        purpose,
+        "You draft one file.".into(),
+        user.into(),
+        grammar::worker_schema(),
+    )
+    .unwrap()
+}
+
+impl Fx {
+    /// [`Fx::bare`] with `spec` registered.
+    fn registered(spec: ModelPinSpec) -> Self {
+        let f = Self::bare();
+        f.gov
+            .register_local_model(&f.fake.endpoint(), spec)
+            .expect("registers");
+        f
+    }
+
+    /// A run of the main door, admitted to (HASH, label(n)) for `identity`.
+    fn admitted_for(&self, n: u32, identity: [u8; 32]) -> RunId {
+        self.consent(&self.door, HASH, &label(n));
+        let run = self.door.open_run().unwrap();
+        self.door
+            .admit_inference(run, HASH, &label(n), identity)
+            .expect("admitted");
+        run
+    }
+
+    fn call_as(&self, run: RunId, request: &ModelRequest, meter: &Meter) -> &'static str {
+        class(
+            self.door
+                .model_call(run, request, meter, &Deadline::default())
+                .and_then(ModelCallOutcome::into_result),
+        )
+    }
+}
+
+/// (accepts, requests, charge calls, settlements) for Z.
+fn observed(f: &Fx, meter: &Meter) -> (usize, usize, u32, usize) {
+    (
+        f.fake.accepts(),
+        f.fake.total(),
+        meter.calls.load(Ordering::SeqCst),
+        meter.settled().len(),
+    )
+}
+
+#[track_caller]
+fn assert_z(before: (usize, usize, u32, usize), after: (usize, usize, u32, usize)) {
+    assert_eq!(after.0, before.0, "cq.no_accepts");
+    assert_eq!(after.1, before.1, "cq.no_metadata/no_chat");
+    assert_eq!(after.2, before.2, "cq.no_charge_calls");
+    assert_eq!(after.3, before.3, "cq.no_settlements");
+}
+
+/// One refused call: its class, Z, one model_call record with the outcome,
+/// no call index, and no canary or model name in any record.
+#[track_caller]
+fn refused_once(f: &Fx, run: RunId, request: &ModelRequest, want: &str) {
+    const CANARY: &str = "CQ-B1-PROMPT-CANARY";
+    let meter = Meter::new();
+    let before = observed(f, &meter);
+    let got = f.call_as(run, request, &meter);
+    assert_eq!(got, want, "cq.class {want}");
+    assert_z(before, observed(f, &meter));
+    let records = f.calls_of(run);
+    assert_eq!(records.len(), 1, "exactly one model_call record");
+    assert_eq!(
+        detail(&records[0], "outcome"),
+        want.strip_prefix("model_"),
+        "record outcome"
+    );
+    assert_eq!(detail(&records[0], "call"), None, "no charge index");
+    for record in f.history.records() {
+        for (_, value) in &record.detail {
+            assert!(
+                !value.contains(CANARY) && !value.contains(NAME),
+                "content-free records"
+            );
+        }
+    }
+}
+
+#[track_caller]
+fn healthy_once(f: &Fx, run: RunId) {
+    let meter = Meter::new();
+    let (accepts, chats) = (f.fake.accepts(), f.fake.count("/api/chat"));
+    assert_eq!(
+        f.call_as(
+            run,
+            &request_for(Purpose::PageBuilder, "Rosa's bakery."),
+            &meter
+        ),
+        "ok",
+        "H"
+    );
+    assert_eq!(
+        (
+            f.fake.accepts() - accepts,
+            f.fake.count("/api/chat") - chats
+        ),
+        (4, 1),
+        "H: 3 metadata + chat"
+    );
+    assert_eq!(
+        (meter.charged(), meter.settled()),
+        (1, vec![1]),
+        "H: one charge, settled"
+    );
+}
+
+/// B-1: both transport purpose refusals through the real ordinary broker.
+#[test]
+fn cq_purpose_refusals_propagate_content_free() {
+    const CANARY: &str = "CQ-B1-PROMPT-CANARY";
+    // Not qualified: a Judge registration of the served pin (v6 §6.7 item 1).
+    let judge = spec_for(Purpose::Judge);
+    let identity = ModelIdentity::from_spec(&judge).unwrap().digest();
+    let f = Fx::registered(judge);
+    let run = f.admitted_for(1, identity);
+    refused_once(
+        &f,
+        run,
+        &request_for(Purpose::Judge, CANARY),
+        "model_purpose_not_qualified",
+    );
+    // Mismatch: the PageBuilder registration and a Judge request (§6.7 item 2).
+    let f = Fx::new();
+    let run = f.admitted(&f.door, 1);
+    refused_once(
+        &f,
+        run,
+        &request_for(Purpose::Judge, CANARY),
+        "model_purpose_mismatch",
+    );
+    // H in a fresh admitted run.
+    let run = f.admitted(&f.door, 2);
+    healthy_once(&f, run);
+}
+
+/// N-4 (broker): an admitted N1 pair stays closed, record-independently.
+#[test]
+fn cq_broker_and_session_n1_pair_stays_closed() {
+    let f = Fx::new();
+    let run = f.admitted(&f.door, 1);
+    refused_once(
+        &f,
+        run,
+        &request_for(Purpose::N1Worker, "x"),
+        "model_config_mismatch",
+    );
+    let judge = spec_for(Purpose::Judge);
+    let identity = ModelIdentity::from_spec(&judge).unwrap().digest();
+    let g = Fx::registered(judge);
+    let run = g.admitted_for(1, identity);
+    refused_once(
+        &g,
+        run,
+        &request_for(Purpose::PageBuilder, "x"),
+        "model_purpose_not_qualified",
+    );
+    let run = f.admitted(&f.door, 2);
+    healthy_once(&f, run);
 }

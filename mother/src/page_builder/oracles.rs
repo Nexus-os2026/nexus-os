@@ -24,6 +24,24 @@ fn request(
 ) -> ModelRequest {
     render_request(f, n, MARKER, correction).unwrap()
 }
+/// Cb-P (M3-Cq): the first and the correction request declare PageBuilder;
+/// the frozen texts, schema and size (below) are unchanged.
+#[test]
+fn cq_builder_declares_page_builder_without_wire_change() {
+    let first = request(&minimal(), &note("a"), None);
+    let correction = request(&minimal(), &note("a"), Some(DraftCode::Markup));
+    assert_eq!(
+        first.purpose(),
+        Purpose::PageBuilder,
+        "cq.cbp first request"
+    );
+    assert_eq!(
+        correction.purpose(),
+        Purpose::PageBuilder,
+        "cq.cbp correction request"
+    );
+    assert_eq!(first.rendered_bytes(), 1301, "the frozen size is unchanged");
+}
 #[test]
 fn m3c_frozen_fixture_hashes() {
     assert_eq!(
