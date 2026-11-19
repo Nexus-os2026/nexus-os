@@ -50,8 +50,9 @@ fn cq_expired_fixture_refuses_while_peer_serves() {
         Some(ModelError::Unavailable),
         "cq.f1 expired before verify"
     );
+    let raw = fake.connections();
     drop(TcpStream::connect(fake.addr).unwrap());
-    accepted(&fake, before.accepts + 1);
+    accepted(&fake, raw + 1);
 
     // Expired after a verification made while the owner was alive.
     let mut fake = Fake::healthy();
@@ -75,17 +76,22 @@ fn cq_expired_fixture_refuses_while_peer_serves() {
         Err(ModelError::Unavailable),
         "cq.f1 expired after verify"
     );
+    let raw = fake.connections();
     drop(TcpStream::connect(fake.addr).unwrap());
-    accepted(&fake, before.accepts + 1);
+    accepted(&fake, raw + 1);
 }
 
 // ── F-2 ─────────────────────────────────────────────────────────────────────
+
+/// The lease each exchange of one call takes: version, status, tags, chat.
+const CHAT_LEASE: usize = 4;
 
 #[test]
 fn cq_exchange_lease_outlives_owner() {
     let mut fake = Fake::healthy();
     let ctx = Ctx::new();
     let transport = registered(&fake, &ctx, spec_for(Purpose::PageBuilder));
+    let second = registered(&fake, &ctx, spec_for(Purpose::PageBuilder));
     let observer = fake.endpoint();
     let (paused_tx, paused) = mpsc::channel::<()>();
     let (resume, resume_rx) = mpsc::channel::<()>();
@@ -93,9 +99,10 @@ fn cq_exchange_lease_outlives_owner() {
     let (t, c) = (transport.clone(), ctx.clone());
     let rx = in_thread(
         move || {
-            let fired = AtomicBool::new(false);
+            // Pause on the chat, the call's last exchange (v6 §5.3: one lease each).
+            let leases = AtomicUsize::new(0);
             seams::set_after_lease(Some(Box::new(move || {
-                if !fired.swap(true, Ordering::SeqCst) {
+                if leases.fetch_add(1, Ordering::SeqCst) + 1 == CHAT_LEASE {
                     let _ = paused_tx.send(());
                     let _ = resume_rx.lock().unwrap().recv_timeout(PATIENCE);
                 }
@@ -108,7 +115,7 @@ fn cq_exchange_lease_outlives_owner() {
     );
     paused
         .recv_timeout(PATIENCE)
-        .expect("the lease hook was reached");
+        .expect("the chat exchange's lease hook was reached");
     // Scope guard: the paused exchange is always released.
     struct Release(mpsc::Sender<()>);
     impl Drop for Release {
@@ -119,6 +126,19 @@ fn cq_exchange_lease_outlives_owner() {
     let release = Release(resume);
     fake.expire();
     let alive = observer.authority_alive_for_test();
+    // A second lease from another thread while the paused one holds the Arc:
+    // refused before any connection or charge (P-Cq-21's killer).
+    let before = snapshot(&fake, &ctx);
+    let other = done(&call_with(
+        &second,
+        &ctx,
+        pair(Purpose::PageBuilder),
+        ctx.watch.clone(),
+        None,
+    ));
+    let after = snapshot(&fake, &ctx);
+    #[cfg(target_os = "linux")]
+    let rebound = TcpListener::bind(fake.addr).is_ok();
     drop(release);
     let outcome = done(&rx);
     assert!(
@@ -126,9 +146,27 @@ fn cq_exchange_lease_outlives_owner() {
         "cq.f2 the admitted exchange holds the authority after the owner drops"
     );
     assert_eq!(
+        other.code(),
+        Err(ModelError::Unavailable),
+        "cq.f2 a second lease after the drop is refused while the first is held"
+    );
+    assert_eq!(
+        after.connection_events, before.connection_events,
+        "cq.f2 second lease: no connection"
+    );
+    assert_eq!(
+        after.charge_calls, before.charge_calls,
+        "cq.f2 second lease: no charge call"
+    );
+    #[cfg(target_os = "linux")]
+    assert!(
+        !rebound,
+        "cq.f2 (Linux diagnostic) the held listener cannot be rebound"
+    );
+    assert_eq!(
         outcome.code(),
         Ok(()),
-        "cq.f2 the admitted exchange completes"
+        "cq.f2 the in-flight chat exchange completes"
     );
     assert_eq!(outcome.live, 0, "cq.f2 every exchange thread joined");
     assert!(
@@ -139,7 +177,7 @@ fn cq_exchange_lease_outlives_owner() {
     assert_eq!(
         closed(&transport, &ctx, pair(Purpose::PageBuilder)).code(),
         Err(ModelError::Unavailable),
-        "cq.f2 a later exchange after the drop is refused"
+        "cq.f2 a later call after the drop is refused"
     );
     assert_z(before, snapshot(&fake, &ctx));
 }
@@ -195,8 +233,9 @@ fn cq_accept_counter_counts_connect_without_request() {
     let transport = registered(&fake, &ctx, spec_for(Purpose::PageBuilder));
     let before = snapshot(&fake, &ctx);
     // C: a raw connect without any HTTP request.
+    let raw = fake.connections();
     drop(TcpStream::connect(fake.addr).unwrap());
-    accepted(&fake, before.accepts + 1);
+    accepted(&fake, raw + 1);
     let after = snapshot(&fake, &ctx);
     assert_eq!(after.accepts, before.accepts + 1, "cq.c accepts +1");
     assert_eq!(
