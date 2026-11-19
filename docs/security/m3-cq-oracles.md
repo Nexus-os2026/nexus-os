@@ -320,6 +320,40 @@ carry page_builder`), L-3 (in `p0b_o12_scopes_snapshot_reads_edit_rejections_op_
 and the sweep `p0b_o24_every_event_kind_has_a_schema_and_every_producer_runs_with_canaries`), N-2 (`closed N1 pair`).
 GREEN: L-2. W-1's plant P-Cq-11 and L's P-Cq-16/17 are owed to Cq-2a.
 
+## Cq-1d: broker, session and Mother oracles (SB3E-R164)
+
+Stacked on mother/cq1c-ii. Files: B = `crates/nexus-governed-control/src/inference_tests.rs`, A =
+`crates/nexus-governed-control/src/host_session/model_call_tests.rs`, `mother/src/evidence.rs` (M-1),
+`mother/src/page_builder/oracles.rs` (Cb-P). Identities follow v6 §6.7: not-qualified negatives use a Judge
+registration of the served pin; the only PurposeMismatch above the kernel is the PageBuilder registration with a
+Judge request; positives use the production pin for PageBuilder.
+
+Accounting hooks re-anchored at Step 0 (03abde2c): `impl Call` model_call_tests.rs:2530; `model_call_private`
+host_session/model.rs:937; `model.attempt.record.before` model.rs:488-491; `owed_bodies` evidence_store.rs:1528;
+`simulate_crash` :1536; `refuse_inserts` :1543; `sb3_unsettled_recorded_call_is_uncertain` model_call_tests.rs:3504;
+P-Cq-12 site authority/run.rs:2149 in `admit_session_attempt` (:2049); P-Cq-8 site broker inference.rs:514.
+
+Z (R162 f4, R164 f2): the broker test Fake counts every accept; the broker and session test meters count every
+`charge` invocation, refused ones included; the session side reads `Peer::snapshot()`'s synchronized accept and request
+counts. Labels: `cq.no_accepts`, `cq.no_metadata/no_chat`, `cq.no_charge_calls`, `cq.no_settlements`.
+
+Oracles and expected outcomes at this inert head (each RED on its named assertion):
+- B-1 `cq_purpose_refusals_propagate_content_free`: RED (`cq.class model_purpose_not_qualified`, ok).
+- N-4 `cq_broker_and_session_n1_pair_stays_closed` (B and A): RED (`cq.class model_config_mismatch` /
+  `cq.n4 session N1 pair`, ok).
+- B-2 `cq_session_refusal_attempt_accounting`: RED (`cq.b2 not qualified: purpose outcome`).
+- B-3 `cq_session_purpose_refusals_exhaust_attempts`: RED (`cq.b3 refusal 1`).
+- B-4 `cq_session_purpose_refusal_record_failure_keeps_debt`: RED (`cq.b4 owed: the refusal is kept`).
+- S-ID1 `cq_session_rejects_legacy_expected_identity`: RED (`cq.sid1 PageBuilder: v1 refused`, Ok).
+- S-ID2 `cq_session_rejects_other_purpose_expected_identity`: RED at `cq.sid2 PageBuilder: correct v2 admits`, after the
+  wrong-v2 negatives pass.
+- M-1 `cq_broker_class_round_trip`: GREEN. Cb-P `cq_builder_declares_page_builder_without_wire_change`: GREEN.
+
+Plants (R164 f1): the named kills of P-Cq-8 (B-1 class) and P-Cq-12 (B-2 attempts, B-3 boundary) are owed to Cq-2a,
+because their oracles fail first on the inert REDs. Today the existing GREEN tests
+`every_model_class_is_its_kernel_code_and_a_registered_reason` (P-Cq-8) and
+`sb3_attempt_ceiling_is_eight_on_the_original_run` (P-Cq-12) kill them.
+
 ## Cq-0 results
 
 Oracle-add on the inert stubs: C0-1, C0-2 RED at their named assertions; C0-3 RED in its
