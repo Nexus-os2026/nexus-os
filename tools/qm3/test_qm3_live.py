@@ -104,9 +104,19 @@ class Rules(unittest.TestCase):
         self.assertEqual(q.case_misses(self.case("QM-S1", "fail", "model_out_of_scope")), [])
         self.assertEqual(q.case_misses(self.case("QM-MAX-A", count=3783, rendered=3686)), ["max"])
         self.assertEqual(q.case_misses(self.case("QM-MAX-C", "fail", "model_draft_email", 3700, 3686)), [])
-        self.assertEqual(q.case_misses(self.case("QM-MAX-C", "fail", "assembler_fault", 3700, 3686)), ["max_c"])
+        self.assertEqual(q.case_misses(self.case("QM-MAX-C", "fail", "assembler_fault", 3700, 3686)),
+                         ["read_chat", "max_c"])
         self.assertEqual(q.case_misses(self.case("QM-C3", "fail", "model_not_one_object", 3700, 3760)), ["c_case"])
         self.assertEqual(q.case_misses(self.case("QM-N2", latency_ms=180001)), ["latency"])
+
+    def test_a_read_chat_refusal_is_a_miss(self):
+        # SB3E-R172 F1: a C case whose live reply production read_chat refused never passes.
+        for code in ("model_truncated", "model_thinking_leaked", "model_tool_calls", "model_malformed",
+                     "model_empty_content"):
+            self.assertIn("read_chat", q.case_misses(self.case("QM-C3", "fail", code, 100, 3760)), code)
+        self.assertIn("read_chat", q.case_misses(self.case("QM-C3", "other", None, 3700, 3760)))
+        self.assertEqual(q.case_misses(self.case("QM-C3", "fail", "model_draft_email", 3700, 3760)), [])
+        self.assertTrue(q.read_chat_accepted({"kind": "fail", "code": "model_out_of_scope"}))
 
     def test_live_timeout_is_a_miss(self):
         miss = self.case("QM-N3", "fail", "live_timeout", None, timeout=True, http_status=None)
