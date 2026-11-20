@@ -5,7 +5,7 @@ Production file: `mother/host/src/hands.rs`. Oracles: `mother/host/src/hands_tes
 
 ## What M2e-D adds
 
-`mother-hands --home <abs> --workspace <abs> --mission one-page-site` selects the model mode. No other argument may be added in this mode (`invalid_arguments`). Without `--mission`, argument parsing and behaviour are unchanged.
+`mother-hands --home <abs> --workspace <abs> --mission one-page-site` selects the model mode. No other argument may be added in this mode (`invalid_arguments`), except the page flags `--notes <abs> --facts <abs> [--goal <abs>]` that M-5a adds (SB3E-R152, R155; register `docs/security/m3-e-oracles.md`, M-5a). Without `--mission`, argument parsing and behaviour are unchanged.
 
 In model mode the startup worker runs the Bootstrap chain hold → workspace → `HostSession::register_local_model(ENDPOINT, qualified_pin())` → `finish_bootstrap`. Every step is inside the same `and_then` chain:
 
@@ -14,6 +14,7 @@ In model mode the startup worker runs the Bootstrap chain hold → workspace →
 - Any registration refusal prints `STARTUP REFUSED model_registration_refused` and fails the session (unless shutdown has already begun). `finish_bootstrap`, the only setter of READY (`host_session.rs:864`), is never called after a refusal.
 - After `finish_bootstrap` is `Ok`, the host prints the backend's verified view only: `MODEL VERIFIED name=… digest=… identity=…`. It then prints `Model verified; the page mission is not available in this build. No model call is made.` and `HANDS READY`.
 - `run` is refused in the main loop with `page_mission_unavailable`. No producer, lane, contract, `SessionPort` or mission is created, and `Runtime::run` (a pinned region) is unchanged.
+- M-5a: the page inputs are read before registration and `PAGE INPUTS` follows `MODEL VERIFIED`; before the refusal the page `run` runs the memory preflight, the goal and the preview, built from a contract value that is never dispatched. Still no producer, lane, `SessionPort` or mission, and `Runtime::run` is byte-identical.
 
 ## Security claims (AGENTS §6.1, §6.2, §6.6)
 
@@ -58,7 +59,7 @@ The child's exit status is `run`'s outcome (0 true, 17 false).
 |---|---|---|
 | `m2ed_mode_parse_and_run_refused` | B0: five refused argument lists (no home opened); `run` refused in model mode; no dialogue, lane or chat | P8 |
 | `m2ed_registration_precedes_readiness` | B1: peer paths exactly `/api/version,/api/status,/api/tags,/api/show`; `MODEL VERIFIED` with the frozen identity `4d7211f035868b327c0e10f2bc23155a7d492d7beecc5b505edfa373db82f9a4`, before readiness; `record=recorded` | P2, P3, P5, P5b |
-| `m2ed_no_override_in_production_source` | B1c (static): `hands.rs` contains no `env` text at all; one `#[cfg(not(test))]` endpoint binding to `ENDPOINT`; one registration call | P6 |
+| `m2ed_no_override_in_production_source` | B1c (static): `hands.rs` contains no `env` text at all; one `#[cfg(not(test))]` endpoint binding to `ENDPOINT`; one registration call. M-5a adds: one `#[cfg(not(test))]` meminfo source, the literal `/proc/meminfo`; the preflight call in every build; the shipped floor with no cfg and exactly 6 `cfg(not(test))` sites (R175) | P6; P-5a8 to P-5a12 (M-5a) |
 | `m2ed_registration_failure_blocks_readiness` | B2: wrong version, cloud enabled, digest absent, no listener, Stop during a held `/api/show`. Each: one exact refusal, the exact peer paths (no retry), no verified view or model readiness, `record=not_required`. Assertions read the transcript after exit | P1, P10 |
 | `m2ed_h3_held_registration_fallback` | B3a H3-R | P9, P9b |
 | `m2ed_h3_open_request_cancelled_at_quit` | B3b H3-C (control) | (control) |
@@ -83,9 +84,12 @@ The child's exit status is `run`'s outcome (0 true, 17 false).
 
 Equivalent mutant, not planted: printing the constant pin's identity instead of the backend view's identity is equivalent while verification holds.
 
+U17-N2 (SB3E-R138): the plant "`MODEL VERIFIED` printed before `finish_bootstrap` is `Ok`" is M-5a's P-5a7, killed by `m2ed_no_verified_line_without_readiness`; N5's exact X1 refusal is M-5a's P-N5 (register `m3-e-oracles.md`, M-5a).
+
 ## Not claimed
 
 - The shipped binary's fixed endpoint is checked statically only (B1c). No test runs the shipped binary in model mode, because it would contact whatever listens on `127.0.0.1:11434`. The literal binary differential is U22.
-- Registration against a loopback fake runtime is not model qualification or installed presence (Q-M3), not memory sufficiency (E-O50 `host_memory_low`, deferred to M-5, R131.4) and not OS containment of the runtime.
+- Registration against a loopback fake runtime is not model qualification or installed presence (Q-M3), not memory sufficiency (E-O50 `host_memory_low`: the page `run`'s preflight, M-5a, R131.4) and not OS containment of the runtime.
 - No page mission, lane, chat or model call exists in model mode. M2e-D's H3 with an actual page chat is M-5.
 - No cell, table, register, inventory or Gate Box data changes. The T7 registration row is deferred to U22 (R134.2).
+- F-U17-LATE-REPORT (SB3E-R136.2, R138 N1): after a refused registration, the unclean close report (the unknown `CLOSE MODEL` line) may reach the PTY only after the process exits. B2 does not require that line; it still refuses any affirmative `CLOSE MODEL` line. H3-R and H3-C (input failure) pin the unknown line. Recorded, not fixed (M-Q6, text only).

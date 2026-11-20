@@ -511,3 +511,128 @@ effect. The host names each gap by kind (`unavailable:`, `missing:`,
 
 The M-3b display fixture (`asked`) is amended (oracle-amend) to journal the File dispatch
 before the pending approval, as the coordinator does; no assertion changed.
+
+## M-5a — page inputs, memory preflight, goal and pre-consent preview
+
+Code: `mother/host/src/hands.rs` (`parse`, the startup worker, the main-loop
+page `run`, `memory_preflight`, `page_preview`), `mother/src/page_mission.rs`
+(new: `page_contract`, `preview`), one module line in `mother/src/lib.rs`.
+Tests: the `m5a_*` and `m2ed_*` oracles in `mother/host/src/hands_tests.rs`
+(the U17 child harness: production `hands::run` in a child on a real PTY,
+real `HostSession`, store and kernel transport, loopback fake runtime) and
+the unit test in `page_mission.rs`. Rulings SB3E-R152, R155. Mission:
+`m5-mission-draft.md` M-5a parts as corrected by R155. Linux only.
+
+Citations corrected by R155 (Step 0 a1–a7): A-6/A-7 cite SB3E-R138
+(`sb3c2-rulings.md:1423`), not R136; the pinned lib.rs region is
+`route_seams_guard.pins:110-113` and includes `pub mod state;`; `Config`
+hands.rs:64-70; `MissionContract` contract.rs:92-116, `Budget` :63-70,
+`ModelChoice` :121-125; `parse_page_args` inputs.rs:356-384,
+`read_page_inputs` :408-430; the endpoint seam hands.rs:1130-1131; the
+M2e-D constants hands_tests.rs:700-713.
+
+### Frozen behaviour (R155)
+
+- **Grammar (A-1, M-Q11).** Page mode is exactly `--home --workspace
+  --mission one-page-site --notes <abs> --facts <abs> [--goal <abs>]`. Hands'
+  own check runs first (`--mission` other than `one-page-site`:
+  `invalid_arguments`); the page flags then go through
+  `inputs::parse_page_args` (its codes, no new code). File mode refuses
+  `--notes`, `--facts` and `--goal` (`invalid_arguments`). No default path,
+  no override flag or variable.
+- **Snapshot (A-2, M3-O43).** `read_page_inputs` runs once in the startup
+  worker, after the workspace and before registration. A refusal prints
+  `INPUT REFUSED <kind> <code>` (plus ` (facts file line N)` for a facts
+  line) and `STARTUP REFUSED page_inputs_refused`: no registration request,
+  no readiness, no fallback to file mode. After `finish_bootstrap` is `Ok`:
+  `MODEL VERIFIED …`, then `PAGE INPUTS notes_sha256=… facts_sha256=…
+  goal=<sha256 or typed>` (raw file bytes). The snapshot and the verified
+  view are kept in a `OnceLock` (no new struct field; sb2_close_tests.rs
+  unchanged); the page `run` never reads the files again.
+- **Memory preflight (A-3, M-Q4, R131.4, E-O50).** First step of the page
+  `run`, before the goal, the contract and any producer. The shipped build
+  reads only `/proc/meminfo` through `adapter::input_files` (8 KiB cap, no
+  scan exemption). Exactly one `MemAvailable:` line, spaces, decimal digits,
+  ` kB`, `u64`, checked ×1024. Below 37,748,736 kB: `REFUSED host_memory_low`;
+  any missing, duplicate, malformed or overflowing value, or an unreadable
+  file: `REFUSED host_memory_unavailable`. The source seam
+  (`hands_tests::meminfo_source`) is `#[cfg(test)]` only; hands.rs names no
+  `env` (B1c).
+- **Goal (A-4, M-Q5).** The `--goal` snapshot is shown with `goal_display`
+  and typed mode is never entered. Otherwise `read_typed_goal` with a 300 s
+  deadline (`#[cfg(test)]` wait seam `hands_tests::goal_wait`). Any goal
+  error prints `REFUSED <code>`; nothing is created; `run` may be typed
+  again. `goal_already_given` is not reachable on this path and is not
+  claimed here (it stays the M-3a property).
+- **Preview (A-5).** `page_mission::page_contract` (pure data: the goal, the
+  snapshot's note and facts, the backend's folder name, the verified view)
+  must pass `validate_for_consent`; `page_mission::preview` renders only that
+  contract, escaped, through `page_display::page_text` and `Shared::send`:
+  `PAGE PREVIEW`, goal, goal bytes and sha256, note bytes and sha256, facts
+  lines, T3, `folder: <name>`, one `model:` line, `file: index.html`, T2,
+  V0–V5, `forbidden: network, process, model_tool, spend`, `budget: 1800000
+  ms, 9 lane invocations, money 0`. Then, in M-5a, still `REFUSED
+  page_mission_unavailable`.
+- **Readiness (A-6, U17-N2).** `MODEL VERIFIED` and `PAGE INPUTS` are printed
+  only when the whole chain, `finish_bootstrap` included, is `Ok`.
+
+### Oracles
+
+| Oracle | Required assertions |
+|---|---|
+| `m5a_page_args_exact` (A-1) | 13 refused lists (relative notes, facts or goal; missing facts or notes; bare mission; valueless `--goal`; duplicate `--notes`; unknown flag; `--name` in page mode; `--notes`/`--facts` in file mode; `other-page`): exit 17, the exact code, no `SOURCES`, no home. |
+| `m5a_inputs_hashed_as_parsed` (A-2, M3-O43) | `PAGE INPUTS` equals the SHA-256 of the fixture bytes, with and without a goal file; held variant: both files rewritten while the worker is held after the read, the printed digests are still the snapshot's; missing, final link and facts grammar: the exact `INPUT REFUSED` line, one `STARTUP REFUSED`, no verified line or readiness, 0 peer requests, exit 17. |
+| `m2ed_fixed_pin_memory_and_no_override` (A-3, E-O50) | One child, ten `run`s with the seam file rewritten: 37,748,735 kB `host_memory_low`; 37,748,736 and above reach the preview; missing line, non-decimal, no ` kB`, u64::MAX kB, more than u64, a duplicate line and a missing file `host_memory_unavailable`. A refusal shows no goal and no preview; the peer saw the four registration paths only. |
+| `m5a_memory_preflight_reads_the_real_meminfo` (A-3, real driver) | No seam: the real file is read and parsed, so the outcome is the preview or `host_memory_low`, never `host_memory_unavailable`. |
+| `m5a_goal_file_or_typed` (A-4) | File goal: `goal_display`, no `INPUT READY`, no prompt. Typed: the real reader, the goal display, the preview's goal line. A second `run` left untyped: `REFUSED goal_timed_out`, no preview. |
+| `m5a_display_matches_contract` (A-5) | Every preview line equals the expected field from the snapshot and the verified view (goal LF shown as `\n`, one `model:` line, frozen pin identity, the workspace folder `rosa-site`, unlike the backend's fallback name: R175 N1); both files rewritten after readiness, the preview is still the snapshot's; no chat. |
+| `m2ed_no_verified_line_without_readiness` (A-6) | Worker held after a successful registration; a real `stop`, then release: `STARTUP REFUSED readiness_refused`, `record=recorded`, `model_registered` committed, no `MODEL VERIFIED`, no `PAGE INPUTS`, Emergency readiness text. |
+| `m2ed_x1_death_restart_report_only` (A-7, N5) | Amended: the restart's `run` gives exactly `RESULT: request refused; no new operation was admitted.\nREFUSED request_unavailable\n`. |
+| `m2ed_no_override_in_production_source` (B1c, R155) | Amended: one `#[cfg(not(test))]` meminfo source binding to the literal `/proc/meminfo` (the only occurrence); one `#[cfg(test)]` `meminfo_source()` binding; the preflight call directly after the page check, in every build. R175 N2: `const MEMORY_FLOOR_KB: u64 = 36 * 1024 * 1024;` (37,748,736 kB) once, with no cfg attribute; exactly 6 `cfg(not(test))` sites in hands.rs. |
+| `m2ed_mode_parse_and_run_refused`, `m2ed_registration_precedes_readiness` and five other M2e-D oracles | Oracle-amend: page mode now needs `--notes --facts`; B0's model-mode `run` uses a goal file and the seam; B1 expects the `PAGE INPUTS` line after `MODEL VERIFIED`. No assertion is weakened. |
+| `m5a_page_contract_is_the_fixed_contract` (unit) | The contract passes `validate_for_consent`; budget 1,800,000 / 9 / 0; `index.html`; `page_criteria()`; the four forbidden effects; File not forbidden. |
+
+### Plants (each temporary, killed at its named assertion, never committed)
+
+| Plant | Mutation | Killing oracle (named assertion) |
+|---|---|---|
+| P-5a1 | page mode accepts a relative `--notes` | args: the exact code `absolute_path_required` for the relative-notes list |
+| P-5a2 | the printed notes digest from a second read | inputs: the held variant's `PAGE INPUTS` line |
+| P-5a3 | the preflight accepts 1 kB below the floor | E-O50: expect `REFUSED host_memory_low` |
+| P-5a3b | the goal before the preflight | E-O50: a refusal shows no goal |
+| P-5a4 | a missing `MemAvailable` line passes | E-O50: expect `REFUSED host_memory_unavailable` |
+| P-5a5 | typed mode although a goal file is given | goal: the file-goal case's expect of `REFUSED page_mission_unavailable` (the prompt waits instead) |
+| P-5a6 | the preview's facts re-read at `run` | display: the line-by-line preview comparison |
+| P-5a7 | `MODEL VERIFIED` printed before `finish_bootstrap` is `Ok` (U17-N2) | N2: no `MODEL VERIFIED` |
+| P-N5 | the model `run` check moved before the restart's terminal refusal | X1: expect the exact `REFUSED request_unavailable` |
+| P-5a8 | the shipped meminfo source read from the process environment (R155) | B1c: `hands.rs names env` |
+| P-5a9 | the shipped meminfo source is another file (R155) | B1c: `R155: the shipped meminfo source` |
+| P-5a10 | the preflight call compiled in tests only (R155) | B1c: `R155: the preflight runs in every build` |
+| P-5a11 | a shipped-only floor of 0 beside the cfg(test) real one (R175 N2) | B1c: `R175: the shipped floor` |
+| P-5a12 | a shipped-only `return Ok(())` at the top of the preflight (R175 N2) | B1c: `R175: the shipped-only sites` |
+| P-5a13 | the folder hard-coded to the fallback name `workspace` (R175 N1) | display: the line-by-line preview comparison |
+
+Measured on the final head (one whole run per plant, plant applied: host lib,
+`session_oracles`, `session_sealing`, `session_model_bridge`, Mother's
+`route_seams_guard` and `adapter::scan`). Every failing test (R97 list):
+P-5a3b also fails B1c; P-5a5 also fails B0, A-3 (seam and real file) and
+A-5; P-N5 also fails B2, A-3 (seam and real file), A-4 and A-5; every other
+plant fails only its named oracle. P-5a8 to P-5a12 compile in a non-test
+build (`cargo check`). P-5a8 to P-5a13 were run again after R175's change
+to B1c and A-5: each fails only its named oracle. Not counted: B2 also failed once under
+P-5a10, whose test build equals the head's. That is the pre-existing B2
+race: `run` is read before the worker's `fail()` and is answered by the
+model branch, as at the base (ledger F-M5A-B2-RACE).
+
+### Not claimed
+
+- The backend exposes no canonical workspace path; the preview shows the
+  backend's folder name only (`WorkspaceInfo.name`, R155).
+- The Builder's two-model-call cap is a lane property and moves to M-5b.
+- The shipped build's meminfo source is checked statically (B1c, P-5a8–10).
+  No test runs the shipped binary in page mode: registration needs the
+  fixed endpoint before `run`.
+- The real-meminfo oracle measures this host; it does not prove that a CI
+  runner has 36 GiB.
+- No lane, contract dispatch, consent, chat or model call: the page `run` is
+  still refused, so M-5a activates nothing (R94.9).
