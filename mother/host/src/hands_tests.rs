@@ -702,6 +702,46 @@ const M2ED_ARGS: &str = "M2ED_ARGS";
 const M2ED_ENDPOINT: &str = "M2ED_ENDPOINT";
 const M2ED_SOCKET: &str = "M2ED_SOCKET";
 const MODEL_MODE: &str = "--mission\none-page-site";
+const M2ED_MEMINFO: &str = "M2ED_MEMINFO";
+const M2ED_GOAL_WAIT: &str = "M2ED_GOAL_WAIT_MS";
+const NOTES: &[u8] = b"Fresh bread every morning.\n";
+const FACTS: &[u8] =
+    b"name: Rosa's Bakery\nhours: Tuesday to Sunday, 7am to 3pm\nhours: Closed on Mondays\nphone: 555-0142\n";
+/// M-5a: the page flags over fixture files written beside the home.
+fn page_mode(f: &Fixture) -> String {
+    page_mode_with(f, None)
+}
+fn page_mode_with(f: &Fixture, goal: Option<&[u8]>) -> String {
+    let (notes, facts) = (f.root.join("notes.txt"), f.root.join("facts.txt"));
+    std::fs::write(&notes, NOTES).unwrap();
+    std::fs::write(&facts, FACTS).unwrap();
+    let mut mode = format!(
+        "{MODEL_MODE}\n--notes\n{}\n--facts\n{}",
+        notes.display(),
+        facts.display()
+    );
+    if let Some(bytes) = goal {
+        let file = f.root.join("goal.txt");
+        std::fs::write(&file, bytes).unwrap();
+        mode.push_str(&format!("\n--goal\n{}", file.display()));
+    }
+    mode
+}
+/// M-5a: the `#[cfg(test)]` source of the memory preflight (hands.rs).
+/// Unset is the real `/proc/meminfo`.
+pub(crate) fn meminfo_source() -> std::path::PathBuf {
+    std::env::var_os(M2ED_MEMINFO).map_or_else(|| "/proc/meminfo".into(), Into::into)
+}
+/// M-5a: the `#[cfg(test)]` typed-goal wait (hands.rs); unset is 300 s.
+pub(crate) fn goal_wait() -> std::time::Duration {
+    std::env::var(M2ED_GOAL_WAIT)
+        .ok()
+        .and_then(|ms| ms.parse().ok())
+        .map_or(
+            std::time::Duration::from_secs(300),
+            std::time::Duration::from_millis,
+        )
+}
 const FILE_MODE: &str = "--name\nhello.txt\n--text\noracle";
 const PIN_NAME: &str = "qwen3.6:35b-a3b";
 const PIN_DIGEST: &str = "a7eb95c53bcf96b4bdd008d0fab4a5dac88047d9c1a7a9ab88ed453423fbd87c";
@@ -946,7 +986,15 @@ fn m2ed_mode_parse_and_run_refused() {
     }
     assert!(!f.home.exists(), "a refused argument list opens no home");
     let peer = peer(Serve::Healthy);
-    let mut p = Pty::start(m2ed(&f, test, &peer.endpoint, MODEL_MODE));
+    let source = meminfo(&f, &mem_kb("44447352"));
+    let mut command = m2ed(
+        &f,
+        test,
+        &peer.endpoint,
+        &page_mode_with(&f, Some(b"Make a page")),
+    );
+    command.env(M2ED_MEMINFO, &source);
+    let mut p = Pty::start(command);
     p.expect(MODEL_READY);
     p.line("run");
     p.expect(
@@ -972,7 +1020,7 @@ fn m2ed_registration_precedes_readiness() {
     let f = Fixture::new();
     let peer = peer(Serve::Healthy);
     let test = "m2ed_registration_precedes_readiness";
-    let mut p = Pty::start(m2ed(&f, test, &peer.endpoint, MODEL_MODE));
+    let mut p = Pty::start(m2ed(&f, test, &peer.endpoint, &page_mode(&f)));
     let before = p.expect("MODEL VERIFIED ");
     assert!(!before.contains("HANDS READY"), "{}", p.output);
     let view = p.expect("\n");
@@ -981,6 +1029,7 @@ fn m2ed_registration_precedes_readiness() {
         format!("name={PIN_NAME} digest={PIN_DIGEST} identity={PIN_IDENTITY}\n"),
         "B1: the verified identity is the frozen pin's"
     );
+    assert!(p.expect("\n").starts_with("PAGE INPUTS "), "{}", p.output);
     assert_eq!(p.expect(MODEL_READY), MODEL_READY, "{}", p.output);
     assert_eq!(peer.paths(), MODEL_PATHS, "{}", p.output);
     p.line("quit");
@@ -1002,8 +1051,8 @@ fn m2ed_registration_precedes_readiness() {
     f.empty();
 }
 
-/// B1c (static): no flag, variable or file chooses the endpoint or pin in
-/// a non-test build. hands.rs has no `env` text at all.
+/// B1c (static): no flag, variable or file chooses the endpoint, the pin or
+/// the meminfo source in a non-test build. hands.rs has no `env` text at all.
 #[test]
 fn m2ed_no_override_in_production_source() {
     let source =
@@ -1031,6 +1080,49 @@ fn m2ed_no_override_in_production_source() {
     );
     assert_eq!(source.matches("qualified_pin()").count(), 2);
     assert_eq!(source.matches("model_endpoint()").count(), 1);
+    // M-5a (SB3E-R155): the shipped preflight reads only the fixed file; the
+    // meminfo seam is `#[cfg(test)]` only; the preflight call is unconditional.
+    assert_eq!(
+        source
+            .matches(
+                "#[cfg(not(test))]\n    let source = std::path::PathBuf::from(\"/proc/meminfo\");"
+            )
+            .count(),
+        1,
+        "R155: the shipped meminfo source"
+    );
+    assert_eq!(source.matches("/proc/meminfo").count(), 1);
+    assert_eq!(
+        source
+            .matches("#[cfg(test)]\n    let source = hands_tests::meminfo_source();")
+            .count(),
+        1
+    );
+    assert_eq!(source.matches("meminfo_source()").count(), 1);
+    assert_eq!(
+        source
+            .matches("ok_or(\"page_mission_unavailable\")?;\n    memory_preflight()?;\n")
+            .count(),
+        1,
+        "R155: the preflight runs in every build"
+    );
+    assert_eq!(source.matches("memory_preflight()").count(), 2);
+    // R175 N2: the shipped floor (37,748,736 kB) has no cfg, and the
+    // shipped-only sites are exactly the six M2e-D and M-5a ones.
+    assert_eq!(36 * 1024 * 1024, 37_748_736);
+    assert_eq!(
+        source
+            .matches("passes.\nconst MEMORY_FLOOR_KB: u64 = 36 * 1024 * 1024;\n")
+            .count(),
+        1,
+        "R175: the shipped floor"
+    );
+    assert_eq!(source.matches("MEMORY_FLOOR_KB").count(), 2);
+    assert_eq!(
+        source.matches("cfg(not(test))").count(),
+        6,
+        "R175: the shipped-only sites"
+    );
 }
 
 /// B2: every registration refusal blocks readiness; one attempt, no retry,
@@ -1062,7 +1154,7 @@ fn m2ed_registration_failure_blocks_readiness() {
         let endpoint = peer
             .as_ref()
             .map_or_else(refused_endpoint, |p| p.endpoint.clone());
-        let mut p = Pty::start(m2ed(&f, test, &endpoint, MODEL_MODE));
+        let mut p = Pty::start(m2ed(&f, test, &endpoint, &page_mode(&f)));
         let stop = class == "stop_during_show";
         if let (true, Some(peer)) = (stop, &peer) {
             assert!(matches!(peer.event(), PeerEvent::ShowHeld));
@@ -1182,7 +1274,7 @@ fn m2ed_h3_held_registration_fallback() {
         &f,
         "m2ed_h3_held_registration_fallback",
         &peer.endpoint,
-        MODEL_MODE,
+        &page_mode(&f),
     );
     fault.attach(&f, &mut command);
     command.env(M2ED_SOCKET, &socket);
@@ -1277,7 +1369,7 @@ fn m2ed_h3_open_request_cancelled_at_quit() {
         } else {
             peer(Serve::HoldShow)
         };
-        let mut command = m2ed(&f, test, &peer.endpoint, MODEL_MODE);
+        let mut command = m2ed(&f, test, &peer.endpoint, &page_mode(&f));
         if failure {
             fault.attach(&f, &mut command);
         }
@@ -1354,7 +1446,7 @@ fn m2ed_x1_death_restart_report_only() {
             _ => (Serve::Healthy, None),
         };
         let first = armed_peer(serve, arm);
-        let mut command = m2ed(&f, test, &first.endpoint, MODEL_MODE);
+        let mut command = m2ed(&f, test, &first.endpoint, &page_mode(&f));
         if barrier == "append_held" {
             fault.attach(&f, &mut command);
         }
@@ -1377,10 +1469,10 @@ fn m2ed_x1_death_restart_report_only() {
         drop(p);
         for restart in 1..=2 {
             let counter = peer(Serve::Healthy);
-            let mut q = Pty::start(m2ed(&f, test, &counter.endpoint, MODEL_MODE));
+            let mut q = Pty::start(m2ed(&f, test, &counter.endpoint, &page_mode(&f)));
             q.expect("HANDS REPORT ONLY");
             q.line("run");
-            q.expect("REFUSED");
+            q.expect("RESULT: request refused; no new operation was admitted.\nREFUSED request_unavailable\n");
             q.line("quit");
             let status = q.finish();
             let out = &q.output;
@@ -1418,4 +1510,507 @@ fn m2ed_x1_death_restart_report_only() {
         }
         f.empty();
     }
+}
+
+// M-5a (SB3E-R152, R155; register docs/security/m3-e-oracles.md): page
+// inputs, the memory preflight, the goal and the pre-consent preview. Same
+// child harness; test-only parts: `meminfo_source`, `goal_wait` and the
+// `review2_startup("readiness")` hold.
+const PREVIEW: &str = "PAGE PREVIEW\n";
+const UNAVAILABLE: &str =
+    "RESULT: request refused; no new operation was admitted.\nREFUSED page_mission_unavailable\n";
+fn hex_of(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    crate::inputs::sha256_hex(&sha2::Sha256::digest(bytes).into())
+}
+fn meminfo(f: &Fixture, body: &str) -> std::path::PathBuf {
+    let file = f.root.join("meminfo");
+    std::fs::write(&file, body).unwrap();
+    file
+}
+fn mem_kb(kb: &str) -> String {
+    format!("MemTotal:       64024840 kB\nMemFree:         1000000 kB\nMemAvailable:   {kb} kB\nBuffers:          100 kB\n")
+}
+
+/// A-1 (m5a_page_args_exact): each page-flag refusal, its fixed code, no home.
+#[test]
+fn m5a_page_args_exact() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m5a_page_args_exact";
+    let f = Fixture::new();
+    let good = page_mode(&f);
+    let n = f.root.join("notes.txt").display().to_string();
+    let fa = f.root.join("facts.txt").display().to_string();
+    let cases: Vec<(String, &str)> = vec![
+        (
+            format!("{MODEL_MODE}\n--notes\nnotes.txt\n--facts\n{fa}"),
+            "absolute_path_required",
+        ),
+        (
+            format!("{MODEL_MODE}\n--notes\n{n}\n--facts\nfacts.txt"),
+            "absolute_path_required",
+        ),
+        (format!("{MODEL_MODE}\n--notes\n{n}"), "facts_required"),
+        (format!("{MODEL_MODE}\n--facts\n{fa}"), "notes_required"),
+        (MODEL_MODE.to_string(), "notes_required"),
+        (format!("{good}\n--goal"), "missing_value"),
+        (
+            format!("{good}\n--goal\ngoal.txt"),
+            "absolute_path_required",
+        ),
+        (format!("{good}\n--notes\n{n}"), "invalid_arguments"),
+        (format!("{good}\n--color\nred"), "invalid_arguments"),
+        (format!("{good}\n--name\nhello.txt"), "invalid_arguments"),
+        (
+            format!("--notes\n{n}\n--name\nhello.txt\n--text\noracle"),
+            "invalid_arguments",
+        ),
+        (
+            format!("--facts\n{fa}\n--name\nhello.txt\n--text\noracle"),
+            "invalid_arguments",
+        ),
+        ("--mission\nother-page".to_string(), "invalid_arguments"),
+    ];
+    for (mode, code) in cases {
+        let mut p = Pty::start(m2ed(&f, test, "", &mode));
+        let status = p.finish();
+        assert_eq!(status.code(), Some(17), "{mode:?}: {}", p.output);
+        assert!(
+            p.output.contains(&format!("{code}\n")),
+            "{mode:?}: {code}: {}",
+            p.output
+        );
+        assert!(!p.output.contains("SOURCES"), "{mode:?}: {}", p.output);
+    }
+    assert!(!f.home.exists(), "a refused argument list opens no home");
+}
+
+/// A-2 (m5a_inputs_hashed_as_parsed, M3-O43): the startup hashes are those
+/// of the bytes parsed; a refused input gives no readiness and no request.
+#[test]
+fn m5a_inputs_hashed_as_parsed() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m5a_inputs_hashed_as_parsed";
+    for goal in [None, Some(&b"Make a page for my bakery\n"[..])] {
+        let f = Fixture::new();
+        let peer = peer(Serve::Healthy);
+        let mut p = Pty::start(m2ed(&f, test, &peer.endpoint, &page_mode_with(&f, goal)));
+        p.expect("MODEL VERIFIED ");
+        p.expect("\n");
+        let line = p.expect("\n");
+        let want = format!(
+            "PAGE INPUTS notes_sha256={} facts_sha256={} goal={}\n",
+            hex_of(NOTES),
+            hex_of(FACTS),
+            goal.map_or("typed".into(), hex_of)
+        );
+        assert_eq!(line, want, "{}", p.output);
+        p.expect(MODEL_READY);
+        p.line("quit");
+        p.expect("SESSION CLOSED recorded\n");
+        assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+        f.empty();
+    }
+    {
+        use std::io::{Read, Write};
+        use std::os::fd::AsFd;
+        use std::os::linux::net::SocketAddrExt;
+        use std::os::unix::net::{SocketAddr, UnixListener};
+        let f = Fixture::new();
+        let peer = peer(Serve::Healthy);
+        let socket = format!("m5a.o43.{}", std::process::id());
+        let listener =
+            UnixListener::bind_addr(&SocketAddr::from_abstract_name(socket.as_bytes()).unwrap())
+                .unwrap();
+        let mut command = m2ed(&f, test, &peer.endpoint, &page_mode(&f));
+        command
+            .env(REVIEW2, "readiness")
+            .env("M2DD_REVIEW2_SOCKET", &socket);
+        let mut p = Pty::start(command);
+        let mut fds = [nix::poll::PollFd::new(
+            listener.as_fd(),
+            nix::poll::PollFlags::POLLIN,
+        )];
+        assert_eq!(nix::poll::poll(&mut fds, 10000u16).unwrap(), 1);
+        let (mut held, _) = listener.accept().unwrap();
+        held.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .unwrap();
+        let mut hello = [0];
+        held.read_exact(&mut hello).unwrap();
+        std::fs::write(f.root.join("notes.txt"), b"Changed while held.\n").unwrap();
+        std::fs::write(
+            f.root.join("facts.txt"),
+            b"name: Other\nhours: a\nphone: 1234567\n",
+        )
+        .unwrap();
+        held.write_all(b"R").unwrap();
+        p.expect("MODEL VERIFIED ");
+        p.expect("\n");
+        let line = p.expect("\n");
+        let want = format!(
+            "PAGE INPUTS notes_sha256={} facts_sha256={} goal=typed\n",
+            hex_of(NOTES),
+            hex_of(FACTS)
+        );
+        assert_eq!(line, want, "held: {}", p.output);
+        p.expect(MODEL_READY);
+        p.line("quit");
+        p.expect("SESSION CLOSED recorded\n");
+        assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+        f.empty();
+    }
+    // Refused inputs: missing, a final link, a facts grammar error.
+    for (case, want) in [
+        ("missing", "INPUT REFUSED notes input_unavailable\n"),
+        ("link", "INPUT REFUSED notes input_link\n"),
+        (
+            "facts",
+            "INPUT REFUSED facts facts_file_invalid (facts file line 1)\n",
+        ),
+    ] {
+        let f = Fixture::new();
+        let peer = peer(Serve::Healthy);
+        let mode = page_mode(&f);
+        let notes = f.root.join("notes.txt");
+        match case {
+            "missing" => std::fs::remove_file(&notes).unwrap(),
+            "link" => {
+                std::fs::remove_file(&notes).unwrap();
+                std::os::unix::fs::symlink(f.root.join("facts.txt"), &notes).unwrap();
+            }
+            _ => std::fs::write(f.root.join("facts.txt"), b"hours: a\n").unwrap(),
+        }
+        let mut p = Pty::start(m2ed(&f, test, &peer.endpoint, &mode));
+        p.expect("STARTUP REFUSED page_inputs_refused\n");
+        let status = p.finish();
+        let out = &p.output;
+        assert!(out.contains(want), "{case}: {out}");
+        assert_eq!(out.matches("STARTUP REFUSED ").count(), 1, "{case}: {out}");
+        for absent in [
+            "MODEL VERIFIED",
+            "PAGE INPUTS",
+            "HANDS READY",
+            "Model verified;",
+        ] {
+            assert!(!out.contains(absent), "{case}: {absent:?}: {out}");
+        }
+        assert_eq!(peer.paths(), Vec::<String>::new(), "{case}: no request");
+        assert_eq!(status.code(), Some(17), "{case}: {out}");
+        f.empty();
+    }
+}
+
+/// A-3 (E-O50 in the R131.4 form): the memory preflight at page `run`.
+#[test]
+fn m2ed_fixed_pin_memory_and_no_override() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m2ed_fixed_pin_memory_and_no_override";
+    let f = Fixture::new();
+    let peer = peer(Serve::Healthy);
+    let source = meminfo(&f, &mem_kb("37748736"));
+    let mut command = m2ed(
+        &f,
+        test,
+        &peer.endpoint,
+        &page_mode_with(&f, Some(b"Make a page")),
+    );
+    command.env(M2ED_MEMINFO, &source);
+    let mut p = Pty::start(command);
+    p.expect(MODEL_READY);
+    let cases: [(String, &str); 9] = [
+        (mem_kb("37748735"), "host_memory_low"),
+        (mem_kb("37748736"), "ok"),
+        (mem_kb("44447352"), "ok"),
+        (
+            "MemTotal:       64024840 kB\n".into(),
+            "host_memory_unavailable",
+        ),
+        (mem_kb("3774873x"), "host_memory_unavailable"),
+        (
+            "MemAvailable:   37748736\n".into(),
+            "host_memory_unavailable",
+        ),
+        (mem_kb("18446744073709551615"), "host_memory_unavailable"),
+        (mem_kb("99999999999999999999"), "host_memory_unavailable"),
+        (
+            format!("{}MemAvailable:   37748736 kB\n", mem_kb("37748736")),
+            "host_memory_unavailable",
+        ),
+    ];
+    for (body, want) in cases.iter().chain([(String::new(), "missing")].iter()) {
+        if *want == "missing" {
+            std::fs::remove_file(&source).unwrap();
+        } else {
+            std::fs::write(&source, body).unwrap();
+        }
+        p.line("run");
+        if *want == "ok" {
+            p.expect(PREVIEW);
+            p.expect(UNAVAILABLE);
+        } else {
+            let code = if *want == "missing" {
+                "host_memory_unavailable"
+            } else {
+                want
+            };
+            let shown = p.expect(&format!(
+                "RESULT: request refused; no new operation was admitted.\nREFUSED {code}\n"
+            ));
+            assert!(!shown.contains(PREVIEW), "{body:?}: no preview: {shown}");
+            assert!(!shown.contains("goal: "), "{body:?}: no goal: {shown}");
+        }
+    }
+    p.line("quit");
+    p.expect("SESSION CLOSED recorded\n");
+    assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+    assert_eq!(peer.paths(), MODEL_PATHS, "no chat, no further request");
+    f.empty();
+}
+
+/// A-3 real driver: the real /proc/meminfo is read and parsed (either
+/// outcome is a measurement, never `host_memory_unavailable`).
+#[test]
+fn m5a_memory_preflight_reads_the_real_meminfo() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m5a_memory_preflight_reads_the_real_meminfo";
+    let f = Fixture::new();
+    let peer = peer(Serve::Healthy);
+    let mut p = Pty::start(m2ed(
+        &f,
+        test,
+        &peer.endpoint,
+        &page_mode_with(&f, Some(b"Make a page")),
+    ));
+    p.expect(MODEL_READY);
+    p.line("run");
+    let shown = p.expect("REFUSED ");
+    let code = p.expect("\n");
+    assert!(
+        code == "page_mission_unavailable\n" && shown.contains(PREVIEW)
+            || code == "host_memory_low\n" && !shown.contains(PREVIEW),
+        "{code:?}: {shown}"
+    );
+    println!("M5A REAL MEMINFO {}", code.trim_end());
+    p.line("quit");
+    p.expect("SESSION CLOSED recorded\n");
+    assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+    f.empty();
+}
+
+/// A-4 (m5a_goal_file_or_typed): a goal file is shown and typed mode is
+/// never entered; otherwise the real typed reader; timeout gives no goal.
+#[test]
+fn m5a_goal_file_or_typed() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m5a_goal_file_or_typed";
+    let high = mem_kb("44447352");
+    // File goal: displayed through T1, never the typed prompt.
+    let f = Fixture::new();
+    let peer = peer(Serve::Healthy);
+    let source = meminfo(&f, &high);
+    let mut command = m2ed(
+        &f,
+        test,
+        &peer.endpoint,
+        &page_mode_with(&f, Some(b"Make a page\n")),
+    );
+    command.env(M2ED_MEMINFO, &source);
+    let mut p = Pty::start(command);
+    p.expect(MODEL_READY);
+    p.line("run");
+    let shown = p.expect(UNAVAILABLE);
+    assert!(
+        shown.contains(&crate::goal_input::goal_display("Make a page")),
+        "{shown}"
+    );
+    assert!(!shown.contains("INPUT READY"), "{shown}");
+    assert!(!shown.contains(crate::goal_input::GOAL_PROMPT), "{shown}");
+    p.line("quit");
+    p.expect("SESSION CLOSED recorded\n");
+    assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+    // Typed goal, then a timed-out read (no goal, no preview).
+    let f = Fixture::new();
+    let source = meminfo(&f, &high);
+    let mut command = m2ed(&f, test, &peer.endpoint, &page_mode(&f));
+    command
+        .env(M2ED_MEMINFO, &source)
+        .env(M2ED_GOAL_WAIT, "5000");
+    let mut p = Pty::start(command);
+    p.expect(MODEL_READY);
+    p.line("run");
+    p.expect("INPUT READY\n");
+    p.line("Make a page for my bakery");
+    let shown = p.expect(UNAVAILABLE);
+    assert!(
+        shown.contains(&crate::goal_input::goal_display(
+            "Make a page for my bakery"
+        )),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("goal: Make a page for my bakery\n"),
+        "{shown}"
+    );
+    p.line("run");
+    p.expect("INPUT READY\n");
+    let shown = p.expect(
+        "RESULT: request refused; no new operation was admitted.\nREFUSED goal_timed_out\n",
+    );
+    assert!(!shown.contains(PREVIEW), "{shown}");
+    p.line("quit");
+    p.expect("SESSION CLOSED recorded\n");
+    assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+    f.empty();
+}
+
+/// A-5 (m5a_display_matches_contract): each preview line from the real
+/// snapshot and view; a goal LF is a visible escape, never a line.
+#[test]
+fn m5a_display_matches_contract() {
+    if m2ed_child() {
+        return;
+    }
+    let test = "m5a_display_matches_contract";
+    let mut f = Fixture::new();
+    // R175 N1: a folder name unlike the backend's fallback (`workspace`).
+    f.workspace = f.root.join("rosa-site");
+    std::fs::create_dir(&f.workspace).unwrap();
+    let peer = peer(Serve::Healthy);
+    let source = meminfo(&f, &mem_kb("44447352"));
+    let goal = "Make a page\nmodel: name=forged";
+    let mut command = m2ed(
+        &f,
+        test,
+        &peer.endpoint,
+        &page_mode_with(&f, Some(goal.as_bytes())),
+    );
+    command.env(M2ED_MEMINFO, &source);
+    let mut p = Pty::start(command);
+    p.expect(MODEL_READY);
+    std::fs::write(
+        f.root.join("facts.txt"),
+        b"name: Other\nhours: a\nphone: 1234567\n",
+    )
+    .unwrap();
+    std::fs::write(f.root.join("notes.txt"), b"Changed after the snapshot.\n").unwrap();
+    p.line("run");
+    p.expect(PREVIEW);
+    let shown = p.expect(UNAVAILABLE);
+    let mut want = vec![
+        "goal: Make a page\\nmodel: name=forged".to_string(),
+        format!(
+            "goal: {} bytes, sha256 {}",
+            goal.len(),
+            hex_of(goal.as_bytes())
+        ),
+        format!(
+            "note notes: {} bytes, sha256 {}",
+            NOTES.len() - 1,
+            hex_of(&NOTES[..NOTES.len() - 1])
+        ),
+        "facts: name: Rosa's Bakery".into(),
+        "facts: hours: Tuesday to Sunday, 7am to 3pm".into(),
+        "facts: hours: Closed on Mondays".into(),
+        "facts: phone: 555-0142".into(),
+        nexus_mother::teaching::T3_FACTS.into(),
+        "folder: rosa-site".into(),
+        format!("model: name={PIN_NAME} digest={PIN_DIGEST} identity={PIN_IDENTITY}"),
+        "file: index.html".into(),
+        nexus_mother::teaching::T2_PLAN.into(),
+    ];
+    for c in nexus_mother::page_inputs::page_criteria() {
+        want.push(format!("check {}: {}", c.id, c.text));
+    }
+    want.push("forbidden: network, process, model_tool, spend".into());
+    want.push("budget: 1800000 ms, 9 lane invocations, money 0".into());
+    let lines: Vec<&str> = shown.lines().collect();
+    assert_eq!(
+        lines[..want.len()],
+        want.iter().map(String::as_str).collect::<Vec<_>>()[..],
+        "{shown}"
+    );
+    let models = shown.lines().filter(|l| l.starts_with("model: ")).count();
+    assert_eq!(models, 1, "one model line: {shown}");
+    p.line("quit");
+    p.expect("SESSION CLOSED recorded\n");
+    assert_eq!(p.finish().code(), Some(0), "{}", p.output);
+    assert_eq!(peer.paths(), MODEL_PATHS, "no chat");
+    f.empty();
+}
+
+/// A-6 (U17-N2): registration succeeded, `finish_bootstrap` refused (a real
+/// Stop while the worker is held before readiness): no MODEL VERIFIED.
+#[test]
+fn m2ed_no_verified_line_without_readiness() {
+    use std::io::{Read, Write};
+    use std::os::fd::AsFd;
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::{SocketAddr, UnixListener};
+    if m2ed_child() {
+        return;
+    }
+    let test = "m2ed_no_verified_line_without_readiness";
+    let f = Fixture::new();
+    let peer = peer(Serve::Healthy);
+    let socket = format!("m5a.n2.{}", std::process::id());
+    let listener =
+        UnixListener::bind_addr(&SocketAddr::from_abstract_name(socket.as_bytes()).unwrap())
+            .unwrap();
+    let mut command = m2ed(&f, test, &peer.endpoint, &page_mode(&f));
+    command
+        .env(REVIEW2, "readiness")
+        .env("M2DD_REVIEW2_SOCKET", &socket);
+    let mut p = Pty::start(command);
+    let mut fds = [nix::poll::PollFd::new(
+        listener.as_fd(),
+        nix::poll::PollFlags::POLLIN,
+    )];
+    assert_eq!(nix::poll::poll(&mut fds, 10000u16).unwrap(), 1);
+    let (mut held, _) = listener.accept().unwrap();
+    held.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .unwrap();
+    let mut hello = [0];
+    held.read_exact(&mut hello).unwrap();
+    assert_eq!(hello, [b'H']);
+    assert_eq!(
+        peer.paths(),
+        MODEL_PATHS,
+        "registration's requests are done"
+    );
+    p.line("stop");
+    p.expect("STOP REQUEST RECEIVED");
+    held.write_all(b"R").unwrap();
+    p.expect("STARTUP REFUSED readiness_refused\n");
+    p.expect("HANDS READY\n");
+    p.line("quit");
+    let status = p.finish();
+    let out = &p.output;
+    for absent in ["MODEL VERIFIED", "PAGE INPUTS", "Model verified;"] {
+        assert!(!out.contains(absent), "{absent:?}: {out}");
+    }
+    assert!(
+        out.contains("Report only; no work authority is available.\nHANDS READY\n"),
+        "{out}"
+    );
+    assert_eq!(
+        line_of(out, "M2ED OBLIGATIONS "),
+        Some("operation=registration active=false owner_complete=true child_complete=true record=recorded uncertain=false"),
+        "registration succeeded: {out}"
+    );
+    assert!(
+        line_of(out, "M2ED PHASES ").is_some_and(|l| l.contains("model_registered")),
+        "{out}"
+    );
+    println!("M5A N2 exit={:?}", status.code());
+    f.empty();
 }

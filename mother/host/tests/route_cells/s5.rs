@@ -1326,6 +1326,9 @@ pub(super) const CLOSE_SINKS: [&str; 6] = [
     "producer_join",
     "seal",
 ];
+/// U9b (SB3E-R130.1, R135.3 Q6): the sinks of the table's `d_quit` and
+/// `d_stop` rows, which `collect_close` also collects (`CLOSE_POINTS`).
+pub(super) const HELD_SINKS: [&str; 2] = ["close_restrict", "emergency_restrict"];
 /// W0b B1', B2', U9a M1: the one collection of cell `id`, as `cell` judges it:
 /// its own findings, its driver's facts unchanged, its row this cell's (the
 /// slug is lowercase, the value keeps its case), and its collector the row's
@@ -1370,7 +1373,8 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
         found.push(format!("collect: {sink} collected by collect_reg {reg}"));
     }
     let close = *collector == "collect_close";
-    if close != CLOSE_SINKS.contains(&sink) {
+    let held = CLOSE_SINKS.contains(&sink) || HELD_SINKS.contains(&sink);
+    if close != held {
         found.push(format!(
             "collect: {sink} collected by collect_close {close}"
         ));
@@ -2189,13 +2193,16 @@ use nexus_governed_control::host_session::SessionRequest;
 
 /// M4: each d_close sink's held point (close.rs:271, 232, 205 (the first
 /// arrival), 524, 49, 367-370); only `closed` arms one.
-const CLOSE_POINTS: [(&str, &str); 6] = [
+const CLOSE_POINTS: [(&str, &str); 8] = [
     ("close_obligations", "close.obligations"),
     ("delivery", "close.delivery"),
     ("mother_end", "close.mother_end"),
     ("primary_end", "close.primary"),
     ("producer_join", "producer.join"),
     ("seal", "close.seal"),
+    // U9b (SB3E-R130.1): the held sinks' points (h:1695-1698, 1642).
+    ("close_restrict", "ingress.accept"),
+    ("emergency_restrict", "ingress.emergency"),
 ];
 /// M6: the opening, `opened` only (Bootstrap, h:141-144) or `start`'s Mother.
 pub(super) enum Setup {
@@ -2281,14 +2288,15 @@ pub(super) fn closed<S: Send, R: Send>(
         Setup::Bootstrap => (bootstrap(f), false),
     };
     let point = CLOSE_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1);
-    let point = point.expect("closed: a d_close sink");
+    let point = point.expect("closed: a held sink");
     let s = prefix(&mut c);
     let state = |c: &Close| format!("{:?}", c.o.session.state());
     let (control, before, mut findings) = (value == "none", state(&c), Vec::new());
-    // SB3E-R117.3 Q3: the values that precede every arrival at their point.
+    // SB3E-R117.3 Q3 (R135.3: 599): the values that precede every arrival at their point.
     let q3 = [
         ("close_obligations", "Bootstrap"),
         ("producer_join", "ClosingNormal"),
+        ("emergency_restrict", "Bootstrap"),
     ];
     match mode {
         _ if control => {}
@@ -2303,14 +2311,15 @@ pub(super) fn closed<S: Send, R: Send>(
     }
     let c = &c;
     let held = f.pause(point);
-    let (after, (result, r)) = std::thread::scope(|scope| {
-        let worker = scope.spawn(move || sink(c, s));
+    let (after, (worker, (result, r))) = std::thread::scope(|scope| {
+        let worker = scope.spawn(move || (std::thread::current().id(), sink(c, s)));
         let after = held.acknowledged.recv_timeout(PATIENCE).ok().map(|ack| {
             let acked = Instant::now();
             reopen();
+            let at = state(c);
             apply(c);
             let late = c.o.ingress.close_deadline().is_some() && acked.elapsed() >= SHUTDOWN_PAUSE;
-            (ack, state(c), late.then(|| acked.elapsed()))
+            (ack, at, state(c), late.then(|| acked.elapsed()))
         });
         drop(held);
         (after, worker.join().unwrap())
@@ -2320,7 +2329,19 @@ pub(super) fn closed<S: Send, R: Send>(
             findings.push(format!("closed: {point} not acknowledged"));
             None
         }
-        Some((ack, after, late)) => {
+        Some((ack, at, after, late)) => {
+            // U9b D8 (SB3E-R135.1, F-S0-1): the hold is the sink's own call.
+            if ack.thread != worker {
+                findings.push(format!(
+                    "closed: {point} acknowledged off the sink's worker"
+                ));
+            }
+            // U9b D5 (SB3E-R127.3 F-U9A-PAUSE): `Paused`, the state is not yet
+            // `value` at the hold (outside Q3); else it came before the apply.
+            let early = !control && at == value && !q3.contains(&(row.0, value));
+            if let (Mode::Paused, true) = (&mode, early) {
+                findings.push(format!("value: state {at} at the hold, before the apply"));
+            }
             if let Some(late) = late {
                 findings.push(format!(
                     "closed: released after {late:?}, not within {SHUTDOWN_PAUSE:?}"
@@ -2582,8 +2603,13 @@ fn route_s5_close_window_opens_at_the_hold() {
 // applies the value while held and checks its effect (F-R3), records when
 // (APPLIED) and collects (`collect_reg`), every check in the kept facts (F-R5).
 /// R1 (R100.2, R101.3: points are compared only with `REG_POINTS` and the
-/// literal lists): each d_register sink's held point (model.rs:301).
-const REG_POINTS: [(&str, &str); 1] = [("registration_record", "model.record.before")];
+/// literal lists): each d_register sink's held point (model.rs:301, 122) and
+/// the d_bootstrap sink's (host_session.rs:858; SEAM-1).
+const REG_POINTS: [(&str, &str); 3] = [
+    ("registration_record", "model.record.before"),
+    ("registration_reserve", "reg.reserve"),
+    ("registration_readiness", "reg.ready"),
+];
 /// R2: the registration-time reductions, lock-free (design 4.4 `free`), each
 /// with its effect checked while the hold stands; the findings.
 fn reg_apply(o: &Opened, value: &str) -> Vec<String> {
@@ -2645,12 +2671,15 @@ fn reg_ack(
 /// worker starts, which borrows only the session and the endpoint (R125.2
 /// F-2); at the bounded acknowledgement `reg_apply`, then APPLIED, then the
 /// release within `SHUTDOWN_PAUSE`; the worker joined; then `collect_reg`.
+/// SEAM-1: at `reg.ready` (d_bootstrap) an unheld registration and the
+/// workspace come first (h:821, 845-849) and the worker is `finish_bootstrap`;
+/// the window opens at the acknowledgement (F-R4, as `reopen`).
 pub(super) fn registered(
     f: &Fixture,
     row: (&'static str, &'static str),
     value: &'static str,
 ) -> Facts {
-    let b = open_broker(f);
+    let mut b = open_broker(f);
     let Some(point) = REG_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1) else {
         let missing = vec![format!("registered: {} has no d_register point", row.0)];
         let held = (Vec::new(), Vec::new());
@@ -2659,12 +2688,27 @@ pub(super) fn registered(
     *APPLIED.lock().unwrap() = None;
     let (session, endpoint) = (&b.o.session, b.endpoint.as_str());
     let mut findings = Vec::new();
+    let ready = point == "reg.ready";
+    if ready {
+        let workspace = f.0.join("workspace");
+        let made = std::fs::DirBuilder::new().mode(0o700).create(&workspace);
+        let first = session.register_local_model(endpoint, spec()).map(|_| ());
+        let room = session.bootstrap_workspace(&workspace, &[]).map(|_| ());
+        if made.is_err() || first.is_err() || room.is_err() {
+            findings.push(format!(
+                "registered: d_bootstrap {made:?} {first:?} {room:?}"
+            ));
+        }
+    }
     let held = f.pause(point);
-    let (ack, result) = std::thread::scope(|scope| {
-        let worker =
-            scope.spawn(move || session.register_local_model(endpoint, spec()).map(|_| ()));
+    let (ack, since, result) = std::thread::scope(|scope| {
+        let worker = scope.spawn(move || match ready {
+            true => session.finish_bootstrap(),
+            false => session.register_local_model(endpoint, spec()).map(|_| ()),
+        });
         let thread = worker.thread().id();
         let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
+        let since = (b.native.records().len(), b.peer.lock().unwrap().len());
         match reg_ack(ack.as_ref(), point, session.identity(), thread) {
             Ok(()) => {
                 let at = Instant::now();
@@ -2682,8 +2726,9 @@ pub(super) fn registered(
             Err(e) => findings.push(e),
         }
         drop(held);
-        (ack, worker.join().unwrap())
+        (ack, since, worker.join().unwrap())
     });
+    b.since = since;
     println!("WITNESS registered {value}: the registration {result:?}");
     let (applied, acks) = (APPLIED.lock().unwrap().take(), ack.map(Ack::S1));
     let held = (vec![point], acks.into_iter().collect());
@@ -2754,5 +2799,47 @@ fn route_s5_registered_refuses_an_unreduced_value() {
         let kept = found.iter().any(|x| x == want);
         assert!(kept, "F-R5: verdict lost the kept finding: {found:?}");
         println!("WITNESS registered: erased, verdict {found:?}");
+    });
+}
+/// SEAM-1 (d_bootstrap): the readiness control's acknowledgement is
+/// `reg.ready` on `finish_bootstrap`'s worker, after the unheld
+/// registration's record commit; that record precedes the window, which
+/// opens at the acknowledgement (F-R4), so none is collected.
+#[test]
+fn route_s5_registered_bootstraps_then_holds_ready() {
+    child("s5::route_s5_registered_bootstraps_then_holds_ready", |f| {
+        let facts = registered(f, ("registration_readiness", "ingress"), "none");
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("no acknowledgement")
+        };
+        assert_eq!(ack.point, "reg.ready");
+        let record = |e: &&s1::Entry| e.phase.as_deref() == Some("model_registered");
+        let commit = facts.broker.iter().rfind(record);
+        let before = commit.is_some_and(|c| c.tick < ack.tick && c.thread != ack.thread);
+        assert!(
+            before,
+            "the registration is not before the hold: {commit:?}"
+        );
+        assert!(facts.native.is_empty(), "window: {:?}", facts.native);
+    });
+}
+/// SEAM-1: the reserve refusal's note is the worker's, after the
+/// acknowledgement, and nothing is collected before or after the hold.
+#[test]
+fn route_s5_registered_notes_the_refused_reserve() {
+    child("s5::route_s5_registered_notes_the_refused_reserve", |f| {
+        let facts = registered(f, ("registration_reserve", "ingress"), "fatal");
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("no acknowledgement")
+        };
+        let notes: Vec<&s1::Entry> = facts.broker.iter().filter(|e| e.note).collect();
+        let [note] = notes[..] else {
+            panic!("notes: {notes:?}")
+        };
+        let own = (note.point, note.thread, note.tick > ack.tick);
+        assert_eq!(own, ("reg:scope_admit", ack.thread, true));
+        assert!(facts.native.is_empty(), "window: {:?}", facts.native);
     });
 }

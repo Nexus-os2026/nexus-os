@@ -139,6 +139,8 @@ pub(super) fn reserve(core: &Arc<Core>, scope: &Arc<RequestScope>) -> Result<Own
         || !scope.core.ptr_eq(&Arc::downgrade(core))
         || scope.admit(&core.cell).is_err()
     {
+        #[cfg(mother_route_seams)]
+        route_seams::note("reg:scope_admit", scope.route_ctx());
         return Err(SessionError::Restricted);
     }
     s.active = true;
