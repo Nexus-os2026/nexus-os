@@ -98,6 +98,25 @@
                 }
                 Ok(())
             }
+=== ship	pub mod host_session > impl HostSession	pub fn finish_bootstrap ( & self ) -> Result < ( ) , SessionError >	count 1	bytes 918
+        /// Last bootstrap transition, invoked by the trusted host only after its
+        /// three-source report has succeeded. A late result never installs ready.
+        pub fn finish_bootstrap(&self) -> Result<(), SessionError> {
+            self.startup_report().require_ready()?;
+            if self.control.authority().recovery_required() ||
+                        !self.recovery_report()?.is_empty() ||
+                    self.control.workspace().is_none() {
+                return Err(SessionError::Restricted);
+            }
+            let _producers =
+                self.core.producers.try_lock().map_err(|_|
+                            SessionError::Unavailable)?;
+            if !self.core.model.ready()? {
+                return Err(SessionError::Restricted);
+            }
+            self.core.cell.session_compare(0,
+                    READY).map_err(|_| { SessionError::Restricted })
+        }
 === lane	pub mod authority > pub mod run	use crate :: broker :: route_seams ::	count 1	bytes 53
         use crate::broker::route_seams::{self, Ctx};
 === lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn route_poison_runs ( & self )	count 1	bytes 771
@@ -1290,7 +1309,7 @@
                     EndStatus::Uncertain => Err(SessionError::Unavailable),
                 }
             }
-=== lane	pub mod host_session > mod model	pub ( super ) fn reserve ( core : & Arc < Core > , scope : & Arc < RequestScope > ) -> Result < Owner , SessionError >	count 1	bytes 1339
+=== lane	pub mod host_session > mod model	pub ( super ) fn reserve ( core : & Arc < Core > , scope : & Arc < RequestScope > ) -> Result < Owner , SessionError >	count 1	bytes 1412
         pub(super) fn reserve(core: &Arc<Core>, scope: &Arc<RequestScope>)
             -> Result<Owner, SessionError> {
             route_seams::at("reg.reserve", scope.route_ctx());
@@ -1311,6 +1330,7 @@
                                 } || scope.session != core.identity ||
                         !scope.core.ptr_eq(&Arc::downgrade(core)) ||
                     scope.admit(&core.cell).is_err() {
+                route_seams::note("reg:scope_admit", scope.route_ctx());
                 return Err(SessionError::Restricted);
             }
             s.active = true;
@@ -1885,7 +1905,7 @@
             }
         }
     }
-=== lane	pub mod host_session > impl HostSession	pub fn finish_bootstrap ( & self ) -> Result < ( ) , SessionError >	count 1	bytes 990
+=== lane	pub mod host_session > impl HostSession	pub fn finish_bootstrap ( & self ) -> Result < ( ) , SessionError >	count 1	bytes 1183
         /// Last bootstrap transition, invoked by the trusted host only after its
         /// three-source report has succeeded. A late result never installs ready.
         pub fn finish_bootstrap(&self) -> Result<(), SessionError> {
@@ -1903,7 +1923,12 @@
                 return Err(SessionError::Restricted);
             }
             self.core.cell.session_compare(0,
-                    READY).map_err(|_| SessionError::Restricted)
+                    READY).map_err(|_|
+                    {
+                        route_seams::note("reg:word_compare",
+                            self.bootstrap.scope.route_ctx());
+                        SessionError::Restricted
+                    })
         }
 === lane	pub mod host_session > impl SessionDoor	pub fn cancel_run ( & self , run : crate :: authority :: ids :: RunId ) -> Result < crate :: governed :: RecordBatch , SessionFailure >	count 1	bytes 938
         pub fn cancel_run(&self, run: crate::authority::ids::RunId)

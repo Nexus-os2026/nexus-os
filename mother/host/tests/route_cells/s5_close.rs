@@ -195,9 +195,9 @@ pub(super) fn ctl_mother_end(f: &Fixture) -> Facts {
     mother_end(f, "none", Upto::Seal)
 }
 
-/// `close_primary` (close.rs:522-549), held at close.primary: the control
-/// only (row 642 is in the readiness ledger, SB3E-R123.1).
-pub(super) fn ctl_primary_end(f: &Fixture) -> Facts {
+/// `close_primary` (close.rs:522-549), held at close.primary: row 642
+/// (SEAM-1 T2, SB3E-R139) and the control.
+fn primary_end(f: &Fixture, value: &'static str) -> Facts {
     let row = ("primary_end", "lifecycle");
     let prefix = |c: &mut Close| through(c, Upto::Observe).seal;
     let sink = |c: &Close, seal: Option<CloseSeal>| match seal {
@@ -208,7 +208,7 @@ pub(super) fn ctl_primary_end(f: &Fixture) -> Facts {
         f,
         Setup::Mother,
         row,
-        "none",
+        value,
         Mode::Armed,
         Ok(()),
         prefix,
@@ -216,6 +216,12 @@ pub(super) fn ctl_primary_end(f: &Fixture) -> Facts {
         nothing,
     )
     .0
+}
+pub(super) fn primary_end_sealedfinalizing(f: &Fixture) -> Facts {
+    primary_end(f, "SealedFinalizing")
+}
+pub(super) fn ctl_primary_end(f: &Fixture) -> Facts {
+    primary_end(f, "none")
 }
 
 /// `settle_close_resources` (h:1017-1038): its close operation's join

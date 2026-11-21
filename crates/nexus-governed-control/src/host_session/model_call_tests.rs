@@ -1452,7 +1452,10 @@ fn sb3e_route_seams_are_route_only() {
 /// the store's COMMIT error note (SB3E-R12.3) and S2's refusal note (U4).
 const ROUTE_SITES: &str = "\
 host_session/model.rs: >pub(super)fnreserve(core:&Arc<Core>,scope:&Arc<RequestScope>)->Result<O\
-wner,SessionError>{ at(reg.reserve,scope.route_ctx());¦ionError>{¦let_produc >fnadmission(&self\
+wner,SessionError>{ at(reg.reserve,scope.route_ctx());¦ionError>{¦let_produc +if!matches!(scope.k\
+ind,ScopeKind::Bootstrap)||scope.session!=core.identity||!scope.core.ptr_eq(&Arc::downgrade(core)\
+)||scope.admit(&core.cell).is_err(){ note(reg:scope_admit,scope.route_ctx());¦.is_err(){¦returnEr\
+r( >fnadmission(&self\
 ,state:&State)->Result<(),ModelError>{>implRegistrationGate<'_>{ at(model.gate.checked,self.sco\
 pe.route_ctx());¦e.cell),);¦self.scope >fnadmit_request(&self,kind:RequestKind)->Result<(),Mode\
 lError>{>implCallCancelforRegistrationGate<'_>{ at(model.gate.before,self.scope.route_ctx().kin\
@@ -1495,7 +1498,9 @@ nErr( = at(model.call.admitted,self.route_ctx(kind));¦e.cell),);¦ifkind==Re >f
 elf,kind:RequestKind)->Result<(),ModelError>{>implCallCancelforCallGate<'_>{ at(call.gate,self.\
 route_ctx(kind));¦try(kind);¦letadmitte
 host_session.rs: >pubfnfinish_bootstrap(&self)->Result<(),SessionError>{>implHostSession{ at(re\
-g.ready,self.bootstrap.scope.route_ctx());¦ailable)?;¦if!self.co >pubfncancel_run(&self,run:cra\
+g.ready,self.bootstrap.scope.route_ctx());¦ailable)?;¦if!self.co +self.core.cell.session_compare(\
+0,READY).map_err(|_|{ note(reg:word_compare,self.bootstrap.scope.route_ctx());¦p_err(|_|{¦Session\
+Err >pubfncancel_run(&self,run:cra\
 te::authority::ids::RunId,)->Result<crate::governed::RecordBatch,SessionFailure>{>implSessionDo\
 or{ at(door.cancel_run,self.context.scope.route_ctx().run(run));¦nFailure>{¦letcall=cl >pubfnha\
 lt(&self,reason:crate::governed::HaltReason,)->Result<crate::governed::RecordBatch,SessionFailu\

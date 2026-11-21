@@ -859,10 +859,11 @@ impl HostSession {
         if !self.core.model.ready()? {
             return Err(SessionError::Restricted);
         }
-        self.core
-            .cell
-            .session_compare(0, READY)
-            .map_err(|_| SessionError::Restricted)
+        self.core.cell.session_compare(0, READY).map_err(|_| {
+            #[cfg(mother_route_seams)]
+            route_seams::note("reg:word_compare", self.bootstrap.scope.route_ctx());
+            SessionError::Restricted
+        })
     }
 
     pub fn workspace(&self) -> Option<crate::files::WorkspaceInfo> {
