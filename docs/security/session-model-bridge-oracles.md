@@ -1630,3 +1630,56 @@ the exact-head receipt check runs them; the Architect adds the D1 file to
 
 Twelve `open:D2` cells are now `x:`; 645 stay `open:D2` and 33 move to `open:M2e-D`.
 Limits and plants: [`sb3-d2-oracles.md`](sb3-d2-oracles.md). Section 14.13 still governs.
+
+### 14.17 SB-3E U21a: close_report (SB3E-R197, R199)
+
+`Runtime::close_report` (`mother/host/src/hands.rs:757-819`) runs only on the
+`hands-close` worker. U21a adds its S7 hold point (entry, three bound branch records and
+the exit, all `#[cfg(mother_route_seams)]` whole statements) and credits the five set-B
+rows the Owner can cause from the terminal: R9 close_report lifecycle SealedFinalizing
+(Owner `quit`) and ClosingRestricted (`run`, `stop`, `quit`: the seal is refused), fault
+none, schedule before and schedule after (`quit`), each through production `hands::run`
+in its lane child on a pty the child owns (`route_cells/report.rs`, `s5_report.rs`).
+
+The production order the dispositions below rest on, all at this tree:
+
+| # | Fact | Citation |
+|---|---|---|
+| O1 | The reader is joined (`stop_reader`) before the worker can spawn; the spawn needs `reader_done` | `hands.rs:1390`, `:1401-1418`; `terminal.rs:1204-1217` |
+| O2 | The spawn needs `!ingress.failed()` and a Quit request | `hands.rs:1406-1408` |
+| O3 | `close` consumes the FileSession (`prepare_session_end(self)`) before close_report | `hands.rs:723-729`; `mother/src/coordinator/session_close.rs:56` |
+| O4 | Authority settles, revoking every grant, before close_report on both paths | `hands.rs:736-739`, `:753-754`; `crates/nexus-governed-control/src/governed.rs:562-566` |
+| O5 | A revoke does not check an earlier one; expiry needs an unrevoked grant | `crates/nexus-governed-control/src/authority/policy.rs:396-409`, `:467-475` |
+| O6 | The host has no signal handler; Ctrl-C is a byte | `mother/host/src/` (no `signal`/`sigaction`) |
+
+One guard enforces O1, O2, O4 and the hold reasons below: `order_findings` in
+`mother/src/oracles/route_seams_guard.rs` (route sites test), with plants
+`u21a_p8`-`u21a_p12` (route_plants.json). If it fails, every row below reopens as set B.
+
+**TR-1, unreachable by production order (table status `hold:unreachable_by_production_order`, never a credit).**
+
+| Row | Cell | Reason |
+|---|---|---|
+| x:222-224 | ingress CR, LF, CRLF | O1, O6: no byte can be read while close_report runs; `ack=read` cannot be produced |
+| x:232 | ingress budget | O3: the mission whose budget fires no longer exists; a `paused@` hold cannot last its 300 s inside the 3 s close (`close.rs:99-111`) |
+| x:233 | ingress grant_revocation | O4, O5: the grant is already revoked; the value would add a record against the frozen `+0` or prove nothing |
+| x:234 | ingress grant_expiry | O4, O5: at close_report the original grant reads revoked, not expired |
+
+**W1-type, no production caller at close_report (R199 Q-U21-4), each a static proof plus the guard above.**
+
+| Row | Value | Static proof |
+|---|---|---|
+| x:225 | original_cell_unscheduled | The door's halt view is reached only through the door, consumed by `SessionPort::new` (`hands.rs:236`); no Owner input reaches the session (O1, O6) |
+| x:226 | repeated | `emergency` comes only from the reader's Stop (O1, O6) |
+| x:227 | mission_stop | O3: no FileSession exists to stop |
+| x:228 | stop_all | O3 |
+| x:229 | door_fence | Its only production caller is the coordinator's stop path (`mother/src/coordinator.rs:1119`), consumed by O3; S8 is deferred |
+| x:230 | fatal | `fail` is not called by any production actor once the worker runs: the reader, work and stop workers are joined (`hands.rs:1390-1398`) and the main thread waits in `join` |
+| x:231 | quit | O1: a second Quit cannot be read |
+
+**Ledger by key, not credited:** x:579 ClosingNormal and x:582 ClosedUnclean (a store
+fault driver in a `hands::run` child, W3); x:762 poison (a session handle amendment,
+W3); x:763 panic (W3; the S7 Panic action and its control
+`report::route_report_panic_unwinds_the_close_worker` land in U21a). Readiness is keyed
+on the File-mode Normal line (`hands.rs:1294-1295`), never the bare ready literal;
+model-mode equivalence for close_report is M-7's ledger item (R199 Q-U21-2).

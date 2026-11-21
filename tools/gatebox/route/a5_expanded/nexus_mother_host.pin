@@ -47,16 +47,101 @@
             }
         }
     }
-=== lane		pub mod route_seams	count 1	bytes 10609
+=== lane	pub mod hands	use crate :: route_seams	count 1	bytes 110
+    //! Deterministic, one-mission Hands host. Raw Owner handles never escape it.
+    use crate::route_seams;
+=== lane	pub mod hands > impl Runtime	fn close_report ( & self , stage : & str ) -> String	count 1	bytes 4757
+        fn close_report(&self, stage: &str) -> String {
+            route_seams::at("host.close_report",
+                route_seams::report(&self.home.session, stage, None, None));
+            let mut report =
+                ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("CLOSE FAILED stage={0}\n",
+                                stage))
+                    });
+            let resources = self.home.session.resource_obligations();
+            route_seams::at("host.close_report.resources",
+                route_seams::report(&self.home.session, stage,
+                    Some(resources.is_ok()), None));
+            match resources {
+                Ok(r) =>
+                    report.push_str(&::alloc::__export::must_use({
+                                    ::alloc::fmt::format(format_args!("CLOSE OBLIGATIONS reservations_unresolved={0} uncertain={1} private={2} private_unresolved={3}\n",
+                                            r.unresolved, r.uncertain, r.private, r.private_unresolved))
+                                })),
+                Err(_) => report.push_str(CLOSE_UNKNOWN),
+            }
+            let inventory = self.home.session.inventory();
+            route_seams::at("host.close_report.inventory",
+                route_seams::report(&self.home.session, stage,
+                    Some(inventory.is_ok()), None));
+            match inventory {
+                Ok(inventory) => {
+                    for e in inventory.entries {
+                        report.push_str(&::alloc::__export::must_use({
+                                        ::alloc::fmt::format(format_args!("CLOSE RESOURCE request={0} in_flight={1} uncertain={2} discharged={3} staging_absent={4} private_finalization_established={5} parent_synced={6} grants_closed={7} cleanup_recorded={8} intentionally_retained={9}\n",
+                                                e.request, e.in_flight, e.uncertain, e.discharged,
+                                                e.staging_absent, e.private_finalization_established,
+                                                e.parent_synced, e.grants_closed, e.cleanup_recorded,
+                                                e.intentionally_retained))
+                                    }));
+                    }
+                }
+                Err(_) => report.push_str(CLOSE_UNKNOWN),
+            }
+            let model = self.home.session.close_obligations();
+            route_seams::at("host.close_report.model",
+                route_seams::report(&self.home.session, stage,
+                    Some(model.is_ok()), None));
+            report.push_str(&model_report(model.as_ref().ok().map(|o|
+                                o.model)));
+            match model {
+                Ok(o) =>
+                    report.push_str(&::alloc::__export::must_use({
+                                    ::alloc::fmt::format(format_args!("CLOSE AUTHORITY closed={0} actions_unacknowledged={1} producers_live={2} producers_lost={3} halt_pending={4} halt_owed={5} halt_uncertain={6} halt_lost={7}\n",
+                                            o.authority_closed, o.actions_unacknowledged,
+                                            o.producers_live, o.producers_lost, o.halt.pending,
+                                            o.halt.owed, o.halt.uncertain, o.halt.lost))
+                                })),
+                Err(_) => report.push_str("CLOSE AUTHORITY unknown\n"),
+            }
+            match self.home.session.stop_obligations() {
+                Ok(o) =>
+                    report.push_str(&::alloc::__export::must_use({
+                                    ::alloc::fmt::format(format_args!("CLOSE STOP received={0} recorded={1} pending={2} in_flight={3} owed={4} uncertain={5} failed={6} overflowed={7}\n",
+                                            o.received, o.recorded, o.pending, o.in_flight, o.owed,
+                                            o.uncertain, o.failed, o.overflowed))
+                                })),
+                Err(_) => report.push_str("CLOSE STOP unknown\n"),
+            }
+            let h = self.home.evidence_health();
+            report.push_str(&::alloc::__export::must_use({
+                            ::alloc::fmt::format(format_args!("CLOSE PRIMARY latched={0} owed={1} recovery_required={2} unsettled={3} unclean_sessions={4}\n",
+                                    h.latched, h.owed, h.recovery_required, h.unsettled,
+                                    h.unclean_sessions))
+                        }));
+            route_seams::at("host.close_report.string",
+                route_seams::report(&self.home.session, stage, None,
+                    Some(&report)));
+            report
+        }
+=== lane		pub mod route_seams	count 1	bytes 14190
 pub mod route_seams {
-    //! SB-3E S7 (design 4.2, DA-S7R): the host reader's route seam, as S5.
+    //! SB-3E S7 (design 4.2, DA-S7R): the host's route seam, as S5.
     //! Compiled only with `--cfg mother_route_seams`, which only the route lane's
     //! wrapper sets; the shipped build has none. The writer `at` is crate-private
     //! and called only at the three `host.read` arms of `terminal.rs`
-    //! `read_input`, on the reader thread after it has processed the value; the
-    //! harness may only `arm` and `drain_trace`. `at` returns nothing: it records
-    //! or pauses, and never returns into the reader with a value. It touches no
-    //! host resource itself: a pause's timeout is the harness's own sink.
+    //! `read_input`, on the reader thread after it has processed the value, and
+    //! (U21a, SB3E-R197, R199) in `hands.rs` `Runtime::close_report`, on the
+    //! close worker: its entry, one record per bound observation branch (an
+    //! entry, never a note) and its exit with the report. The harness may only
+    //! `arm` and `drain_trace`. `at` returns nothing: it records, pauses or
+    //! begins an unwind, and never returns into the host with a value. It
+    //! touches no host resource itself: a pause's timeout is the harness's own
+    //! sink.
+    use nexus_governed_control::host_session::{
+        HostSession, SessionIdentity, SessionState,
+    };
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
     use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -66,7 +151,10 @@ pub mod route_seams {
     /// The bounded wait of every pause (design 3.5).
     const PATIENCE: Duration = Duration::from_secs(10);
     /// Every point a harness may arm.
-    pub(crate) const POINTS: [&str; 1] = ["host.read"];
+    pub(crate) const POINTS: [&str; 6] =
+        ["host.close_report", "host.close_report.inventory",
+                "host.close_report.model", "host.close_report.resources",
+                "host.close_report.string", "host.read"];
     static ARMED: AtomicBool = AtomicBool::new(false);
     static STATE: Mutex<State> =
         Mutex::new(State {
@@ -83,7 +171,8 @@ pub mod route_seams {
         id: u64,
         point: &'static str,
         ack: SyncSender<Entry>,
-        pause: (Receiver<()>, &'static str, Timeout),
+        /// `None`: an armed panic.
+        pause: Option<(Receiver<()>, &'static str, Timeout)>,
     }
     /// Which arm of `read_input` processed the value.
     pub enum Branch {
@@ -96,6 +185,9 @@ pub mod route_seams {
 
         /// A read error, after press and fail.
         Err,
+
+        /// U21a: a `close_report` point (no read).
+        Report,
     }
     #[automatically_derived]
     #[doc(hidden)]
@@ -116,6 +208,7 @@ pub mod route_seams {
                     Branch::Data => "Data",
                     Branch::Zero => "Zero",
                     Branch::Err => "Err",
+                    Branch::Report => "Report",
                 })
         }
     }
@@ -137,35 +230,50 @@ pub mod route_seams {
         #[coverage(off)]
         fn assert_receiver_is_total_eq(&self) -> () {}
     }
-    /// What the reader knew when it recorded.
+    /// What the recording host code knew: the reader's read, or (U21a) the
+    /// close worker's session, its state, the report's stage, a branch's
+    /// outcome and, at the exit, the report.
     pub(crate) struct Read {
         n: usize,
         eot: bool,
         branch: Branch,
+        report: Option<Report>,
     }
-    #[automatically_derived]
-    #[doc(hidden)]
-    unsafe impl ::core::clone::TrivialClone for Read { }
-    #[automatically_derived]
-    impl ::core::clone::Clone for Read {
-        #[inline]
-        fn clone(&self) -> Read {
-            let _: ::core::clone::AssertParamIsClone<usize>;
-            let _: ::core::clone::AssertParamIsClone<bool>;
-            let _: ::core::clone::AssertParamIsClone<Branch>;
-            *self
-        }
+    struct Report {
+        session: SessionIdentity,
+        state: SessionState,
+        stage: String,
+        known: Option<bool>,
+        text: Option<String>,
     }
-    #[automatically_derived]
-    impl ::core::marker::Copy for Read { }
     /// `Ok(n)`: the read's length and whether it held a Ctrl-D.
     pub(crate) fn data(bytes: &[u8]) -> Read {
         let (n, eot) = (bytes.len(), bytes.contains(&4));
-        Read { n, eot, branch: Branch::Data }
+        Read { n, eot, branch: Branch::Data, report: None }
     }
     /// `Ok(0)` or an error: nothing was read.
     pub(crate) fn end(branch: Branch) -> Read {
-        Read { n: 0, eot: false, branch }
+        Read { n: 0, eot: false, branch, report: None }
+    }
+    /// U21a: a `close_report` point of `session`'s close worker: its state now,
+    /// the report's `stage`, a branch's outcome (`Ok`: `Some(true)`) and, at the
+    /// exit, the report text.
+    pub(crate) fn report(session: &HostSession, stage: &str,
+        known: Option<bool>, text: Option<&str>) -> Read {
+        let report =
+            Report {
+                session: session.identity(),
+                state: session.state(),
+                stage: stage.to_owned(),
+                known,
+                text: text.map(str::to_owned),
+            };
+        Read {
+            n: 0,
+            eot: false,
+            branch: Branch::Report,
+            report: Some(report),
+        }
     }
     /// One trace entry.
     pub struct Entry {
@@ -174,7 +282,14 @@ pub mod route_seams {
         pub n: usize,
         pub eot: bool,
         pub branch: Branch,
-        /// The recording thread: the reader's own.
+        /// U21a: a `close_report` point's session, state, stage, branch outcome
+        /// and (exit) report; `None` at `host.read`.
+        pub session: Option<SessionIdentity>,
+        pub state: Option<SessionState>,
+        pub stage: Option<String>,
+        pub known: Option<bool>,
+        pub text: Option<String>,
+        /// The recording thread: the reader's or the close worker's own.
         pub thread: std::thread::ThreadId,
         /// When it was recorded (position evidence only).
         pub instant: Instant,
@@ -189,6 +304,11 @@ pub mod route_seams {
                 n: ::core::clone::Clone::clone(&self.n),
                 eot: ::core::clone::Clone::clone(&self.eot),
                 branch: ::core::clone::Clone::clone(&self.branch),
+                session: ::core::clone::Clone::clone(&self.session),
+                state: ::core::clone::Clone::clone(&self.state),
+                stage: ::core::clone::Clone::clone(&self.stage),
+                known: ::core::clone::Clone::clone(&self.known),
+                text: ::core::clone::Clone::clone(&self.text),
                 thread: ::core::clone::Clone::clone(&self.thread),
                 instant: ::core::clone::Clone::clone(&self.instant),
             }
@@ -199,10 +319,12 @@ pub mod route_seams {
         #[inline]
         fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
             let names: &'static _ =
-                &["tick", "point", "n", "eot", "branch", "thread", "instant"];
+                &["tick", "point", "n", "eot", "branch", "session", "state",
+                            "stage", "known", "text", "thread", "instant"];
             let values: &[&dyn ::core::fmt::Debug] =
                 &[&self.tick, &self.point, &self.n, &self.eot, &self.branch,
-                            &self.thread, &&self.instant];
+                            &self.session, &self.state, &self.stage, &self.known,
+                            &self.text, &self.thread, &&self.instant];
             ::core::fmt::Formatter::debug_struct_fields_finish(f, "Entry",
                 names, values)
         }
@@ -214,9 +336,11 @@ pub mod route_seams {
         #[inline]
         fn eq(&self, other: &Entry) -> bool {
             self.tick == other.tick && self.eot == other.eot &&
-                                self.point == other.point && self.n == other.n &&
-                        self.branch == other.branch && self.thread == other.thread
-                && self.instant == other.instant
+                                                    self.point == other.point && self.n == other.n &&
+                                            self.branch == other.branch && self.session == other.session
+                                    && self.state == other.state && self.stage == other.stage &&
+                            self.known == other.known && self.text == other.text &&
+                    self.thread == other.thread && self.instant == other.instant
         }
     }
     #[automatically_derived]
@@ -230,6 +354,11 @@ pub mod route_seams {
             let _: ::core::cmp::AssertParamIsEq<usize>;
             let _: ::core::cmp::AssertParamIsEq<bool>;
             let _: ::core::cmp::AssertParamIsEq<Branch>;
+            let _: ::core::cmp::AssertParamIsEq<Option<SessionIdentity>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<SessionState>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<String>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<bool>>;
+            let _: ::core::cmp::AssertParamIsEq<Option<String>>;
             let _: ::core::cmp::AssertParamIsEq<std::thread::ThreadId>;
             let _: ::core::cmp::AssertParamIsEq<Instant>;
         }
@@ -249,6 +378,10 @@ pub mod route_seams {
             cell: &'static str,
             timeout: Timeout,
         },
+
+        /// U21a (SB3E-R140 Q3): at the first arrival, acknowledge, then begin
+        /// an unwind.
+        Panic,
     }
     /// One arming. Dropping it releases its pause, or disarms it if it has not
     /// fired; that never panics.
@@ -276,8 +409,14 @@ pub mod route_seams {
         let mut s = state();
         s.tick += 1;
         let id = s.tick;
-        if let Action::Pause { cell, timeout } = action {
-            let pause = (released, cell, timeout);
+        let pause =
+            match action {
+                Action::Trace => None,
+                Action::Pause { cell, timeout } =>
+                    Some(Some((released, cell, timeout))),
+                Action::Panic => Some(None),
+            };
+        if let Some(pause) = pause {
             s.pending.push(Pending { id, point, ack, pause });
         }
         ARMED.store(true, Ordering::SeqCst);
@@ -301,6 +440,7 @@ pub mod route_seams {
             {
                 let mut s = state();
                 s.tick += 1;
+                let report = read.report;
                 let entry =
                     Entry {
                         tick: s.tick,
@@ -308,6 +448,11 @@ pub mod route_seams {
                         n: read.n,
                         eot: read.eot,
                         branch: read.branch,
+                        session: report.as_ref().map(|r| r.session),
+                        state: report.as_ref().map(|r| r.state),
+                        stage: report.as_ref().map(|r| r.stage.clone()),
+                        known: report.as_ref().and_then(|r| r.known),
+                        text: report.and_then(|r| r.text),
                         thread: std::thread::current().id(),
                         instant: Instant::now(),
                     };
@@ -317,7 +462,13 @@ pub mod route_seams {
             };
         let Some(pending) = pending else { return };
         let acknowledged = pending.ack.try_send(entry).is_ok();
-        let (released, cell, timeout) = pending.pause;
+        let Some((released, cell, timeout)) =
+            pending.pause else {
+                {
+                    ::core::panicking::panic_fmt(format_args!("route seam S7: armed panic at {0}",
+                            point));
+                };
+            };
         if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
             timeout(&::alloc::__export::must_use({
                             ::alloc::fmt::format(format_args!("TIMEOUT {0} {1}", cell,
@@ -326,7 +477,7 @@ pub mod route_seams {
         }
     }
 }
-=== lane	pub mod terminal	use crate :: route_seams	count 1	bytes 28
+=== lane	pub mod terminal	use crate :: route_seams	count 2	bytes 28
     use crate::route_seams;
 === lane	pub mod terminal > impl Terminal	pub fn route_bind ( & self , session : Arc < nexus_governed_control :: host_session :: HostSession > ) -> bool	count 1	bytes 476
         /// SB-3E S6 (design 4.2, 4.3): bind stop recording to `session` as

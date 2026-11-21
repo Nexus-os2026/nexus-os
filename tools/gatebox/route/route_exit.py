@@ -65,7 +65,7 @@ os.execv(sys.argv[1], sys.argv[1:])
 CONTROLS = {"a1_controls": 30, "a2_controls": 45, "a3_controls": 29, "a7_controls": 109,  # a3 27->29: SB3E-R150, R28.1.1, U18 P10 (S6, S7 A3 controls)
             # SB3E-R72: A5's 46 lexical plants + 4 new (lone CR, three include rows) + 21 expanded plants + 9 capture controls;
             # R75: + 3 expanded plants (C string before a hook, twice; `..` after a link) + 2 (pin order, whole-unit fallback).
-            "a5_controls": 85}
+            "a5_controls": 87}  # U21a: + 2 lexical plants (hands.rs close_report cfg, writer import)
 
 
 def sha256(data):
