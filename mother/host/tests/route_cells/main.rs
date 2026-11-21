@@ -104,6 +104,34 @@ macro_rules! cells {
     (r0 registration_readiness ingress fatal; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_fatal, r0 registration_readiness ingress fatal, s5_reg::readiness_fatal); cells! { $($rest)* } };
     (r0 registration_readiness ingress quit; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_quit, r0 registration_readiness ingress quit, s5_reg::readiness_quit); cells! { $($rest)* } };
     (r9 primary_end lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_primary_end_lifecycle_sealedfinalizing, r9 primary_end lifecycle SealedFinalizing, s5_close::primary_end_sealedfinalizing); cells! { $($rest)* } };
+    (r0 registration_reserve lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_lifecycle_emergency, r0 registration_reserve lifecycle Emergency, s5_reg::reserve_emergency); cells! { $($rest)* } };
+    (r0 registration_reserve lifecycle Failed; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_lifecycle_failed, r0 registration_reserve lifecycle Failed, s5_reg::reserve_failed); cells! { $($rest)* } };
+    (r0 registration_reserve lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_lifecycle_closingnormal, r0 registration_reserve lifecycle ClosingNormal, s5_reg::reserve_closingnormal); cells! { $($rest)* } };
+    (r0 registration_reserve lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_lifecycle_closingrestricted, r0 registration_reserve lifecycle ClosingRestricted, s5_reg::reserve_closingrestricted); cells! { $($rest)* } };
+    (r0 registration_record lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r0_registration_record_lifecycle_emergency, r0 registration_record lifecycle Emergency, s5_reg::record_emergency); cells! { $($rest)* } };
+    (r0 registration_record lifecycle Failed; $($rest:tt)*) => { cell!(rc_r0_registration_record_lifecycle_failed, r0 registration_record lifecycle Failed, s5_reg::record_failed); cells! { $($rest)* } };
+    (r0 registration_record lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r0_registration_record_lifecycle_closingnormal, r0 registration_record lifecycle ClosingNormal, s5_reg::record_closingnormal); cells! { $($rest)* } };
+    (r0 registration_record lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r0_registration_record_lifecycle_closingrestricted, r0 registration_record lifecycle ClosingRestricted, s5_reg::record_closingrestricted); cells! { $($rest)* } };
+    (r0 registration_readiness lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_lifecycle_emergency, r0 registration_readiness lifecycle Emergency, s5_reg::readiness_emergency); cells! { $($rest)* } };
+    (r0 registration_readiness lifecycle Failed; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_lifecycle_failed, r0 registration_readiness lifecycle Failed, s5_reg::readiness_failed); cells! { $($rest)* } };
+    (r0 registration_readiness lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_lifecycle_closingnormal, r0 registration_readiness lifecycle ClosingNormal, s5_reg::readiness_closingnormal); cells! { $($rest)* } };
+    (r0 registration_readiness lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_lifecycle_closingrestricted, r0 registration_readiness lifecycle ClosingRestricted, s5_reg::readiness_closingrestricted); cells! { $($rest)* } };
+    (r5 call_chat lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r5_call_chat_lifecycle_emergency, r5 call_chat lifecycle Emergency, s5::chat_emergency); cells! { $($rest)* } };
+    (r5 call_chat lifecycle Failed; $($rest:tt)*) => { cell!(rc_r5_call_chat_lifecycle_failed, r5 call_chat lifecycle Failed, s5::chat_failed); cells! { $($rest)* } };
+    (r5 call_chat lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r5_call_chat_lifecycle_closingnormal, r5 call_chat lifecycle ClosingNormal, s5::chat_closingnormal); cells! { $($rest)* } };
+    (r5 call_chat lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r5_call_chat_lifecycle_closingrestricted, r5 call_chat lifecycle ClosingRestricted, s5::chat_closingrestricted); cells! { $($rest)* } };
+    (r5 call_chat ingress CR; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_cr, r5 call_chat ingress CR, s5::chat_cr); cells! { $($rest)* } };
+    (r5 call_chat ingress LF; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_lf, r5 call_chat ingress LF, s5::chat_lf); cells! { $($rest)* } };
+    (r5 call_chat ingress CRLF; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_crlf, r5 call_chat ingress CRLF, s5::chat_crlf); cells! { $($rest)* } };
+    (r5 call_chat ingress EOF; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_eof, r5 call_chat ingress EOF, s5::chat_eof); cells! { $($rest)* } };
+    (r5 call_chat ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_partial_ctrl_d, r5 call_chat ingress partial_Ctrl_D, s5::chat_partial_ctrl_d); cells! { $($rest)* } };
+    (r5 call_chat ingress master_close; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_master_close, r5 call_chat ingress master_close, s5::chat_master_close); cells! { $($rest)* } };
+    (r0 registration_record ingress CR; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_cr, r0 registration_record ingress CR, s5_reg::record_cr); cells! { $($rest)* } };
+    (r0 registration_record ingress LF; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_lf, r0 registration_record ingress LF, s5_reg::record_lf); cells! { $($rest)* } };
+    (r0 registration_record ingress CRLF; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_crlf, r0 registration_record ingress CRLF, s5_reg::record_crlf); cells! { $($rest)* } };
+    (r0 registration_record ingress EOF; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_eof, r0 registration_record ingress EOF, s5_reg::record_eof); cells! { $($rest)* } };
+    (r0 registration_record ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_partial_ctrl_d, r0 registration_record ingress partial_Ctrl_D, s5_reg::record_partial_ctrl_d); cells! { $($rest)* } };
+    (r0 registration_record ingress master_close; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_master_close, r0 registration_record ingress master_close, s5_reg::record_master_close); cells! { $($rest)* } };
 }
 // The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
 // check-citations.py): rustfmt does not reformat it.
@@ -192,7 +220,8 @@ impl Drop for Fixture {
     }
 }
 struct Opened {
-    session: HostSession,
+    /// U19a: shared, so the reader's Stop route binds to it (terminal.rs:1115-1122).
+    session: Arc<HostSession>,
     ingress: SessionIngress,
     evidence: Arc<PrimaryEvidence>,
 }
@@ -220,7 +249,7 @@ impl Fixture {
         .unwrap();
         assert!(session.startup_report().ready());
         Opened {
-            session,
+            session: Arc::new(session),
             ingress,
             evidence,
         }

@@ -5,7 +5,7 @@
 //! lane is a driver-owned `RecordingLane` (A.4 item 3). `credit` is the A.2
 //! item 4/5, A.3 and A.4 check over the driver's own facts and both traces.
 // SB3E-R42.4: the parent's items by name, the guard's allow-list; no glob.
-use super::{child, fake_ollama, spec, Fixture, Opened, CHILD, DIGEST, NAME, PATIENCE};
+use super::{child, fake_ollama, reader, spec, Fixture, Opened, CHILD, DIGEST, NAME, PATIENCE};
 use nexus_governed_control::authority::approval::ResumeConfirmation;
 use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation,
@@ -31,6 +31,8 @@ use nexus_mother::journal::{Entry as Journaled, MissionId};
 use nexus_mother::lane::{InvocationId, Lane, LaneContext, LaneIdentity, LaneInput, LaneOutput};
 use nexus_mother::lane::{LaneRole, ScriptedLane, Verdict};
 use nexus_mother::route_seams as s5;
+use nexus_mother_host::route_seams as s7;
+use nexus_mother_host::terminal::Terminal;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -1236,7 +1238,7 @@ fn opened(f: &Fixture) -> (Opened, Arc<MemoryEvidence>) {
     .unwrap();
     assert!(session.startup_report().ready());
     let o = Opened {
-        session,
+        session: Arc::new(session),
         ingress,
         evidence,
     };
@@ -1276,6 +1278,18 @@ pub(super) struct Facts {
     /// fail the child after its record is written, so the parent still
     /// compares the witness and names its fields (P-CELL attribution).
     pub(super) findings: Vec<String>,
+    /// U19a: the reader's facts when the value was typed (`ack=read`).
+    pub(super) read: Option<Read>,
+}
+/// U19a (U18 binding note 1): what production's reader did with a typed
+/// value: the reader value (`reader::read_ack`'s), the S7 trace, the pty's
+/// echo, and since when (after the hold's acknowledgement).
+#[derive(Clone)]
+pub(super) struct Read {
+    pub(super) value: &'static str,
+    pub(super) trace: Vec<s7::Entry>,
+    pub(super) echo: Vec<u8>,
+    pub(super) since: Instant,
 }
 
 /// W0b A2: an acknowledgement, and a standing hold, of S1 or of S5.
@@ -1596,6 +1610,8 @@ static SOURCES: Mutex<Option<Sources>> = Mutex::new(None);
 /// W0b N-b: when s5's own applier applied the cell's value (`driven`); a
 /// section can neither supply nor change it.
 static APPLIED: Mutex<Option<Instant>> = Mutex::new(None);
+/// U19a: the reader's facts of the value s5's own composition typed (`Reading`).
+static READ: Mutex<Option<Read>> = Mutex::new(None);
 /// The Mother journal's entries, read from its file (no handle is opened).
 fn journal_at(path: &std::path::Path) -> Result<Vec<Journaled>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("journal: {:?}", e.kind()))?;
@@ -1634,6 +1650,7 @@ pub(super) fn start(f: &Fixture) -> Start {
         _traces: traces,
     });
     *APPLIED.lock().unwrap() = None;
+    *READ.lock().unwrap() = None;
     Start { o, mother }
 }
 /// A held cell: the chained hold of `chain`, `apply` while the last
@@ -1772,6 +1789,73 @@ pub(super) fn quit(f: &Fixture) -> Facts {
         let accepted = o.ingress.accept(CommandKind::Quit, 2);
         accepted.map(|_| ()).map_err(|e| format!("{e:?}"))
     })
+}
+/// U19a (set B, SB3E-R196.1): rows 534-537, ord 4's chat held at
+/// `call.gate`, the state reached while it stands (as `fatal` and `quit`).
+const CALL_GATE: Chain = Chain {
+    row: ("call_chat", "lifecycle"),
+    anchor: Anchor::Mother("mother.charge.entry"),
+    points: &["call.gate"],
+};
+fn pressed(o: &Opened) -> Result<(), String> {
+    let pressed = o.ingress.emergency();
+    pressed.map(|_| ()).map_err(|e| format!("{e:?}"))
+}
+fn quit_two(o: &Opened) -> Result<(), String> {
+    let accepted = o.ingress.accept(CommandKind::Quit, 2);
+    accepted.map(|_| ()).map_err(|e| format!("{e:?}"))
+}
+pub(super) fn chat_emergency(f: &Fixture) -> Facts {
+    shutdown(f, "Emergency", &CALL_GATE, &REFUSED, pressed)
+}
+pub(super) fn chat_failed(f: &Fixture) -> Facts {
+    shutdown(f, "Failed", &CALL_GATE, &REFUSED, |o| {
+        o.ingress.fail();
+        Ok(())
+    })
+}
+pub(super) fn chat_closingnormal(f: &Fixture) -> Facts {
+    shutdown(f, "ClosingNormal", &CALL_GATE, &REFUSED, quit_two)
+}
+pub(super) fn chat_closingrestricted(f: &Fixture) -> Facts {
+    shutdown(f, "ClosingRestricted", &CALL_GATE, &REFUSED, |o| {
+        quit_two(o).and_then(|()| pressed(o))
+    })
+}
+/// U19a (SB3E-R196.2, R198): rows 86-91 (`stop` CR, LF, CRLF; Ctrl-D; a word
+/// then Ctrl-D; the master closed), the value typed into production's
+/// reader (`Reading`, opened over the cell's session while ord 4's chat is
+/// held at `model.call.observed`), then the chat released; the terminal is
+/// finished before `collect` reads anything.
+fn typed_chat(f: &Fixture, value: &'static str, typed: &'static str) -> Facts {
+    let (mut facts, _, found) = driven(f, value, &U5, &REFUSED, |o, _, held, _| {
+        let reading = Reading::open(o);
+        let barriers = reading.typed(typed);
+        drop(held);
+        reading.close(typed, barriers)
+    });
+    for finding in found {
+        later(&mut facts, finding);
+    }
+    facts
+}
+pub(super) fn chat_cr(f: &Fixture) -> Facts {
+    typed_chat(f, "CR", "stop0d")
+}
+pub(super) fn chat_lf(f: &Fixture) -> Facts {
+    typed_chat(f, "LF", "stop0a")
+}
+pub(super) fn chat_crlf(f: &Fixture) -> Facts {
+    typed_chat(f, "CRLF", "stop0d0a")
+}
+pub(super) fn chat_eof(f: &Fixture) -> Facts {
+    typed_chat(f, "EOF", "04")
+}
+pub(super) fn chat_partial_ctrl_d(f: &Fixture) -> Facts {
+    typed_chat(f, "partial_Ctrl_D", "partial+04")
+}
+pub(super) fn chat_master_close(f: &Fixture) -> Facts {
+    typed_chat(f, "master_close", "master_close")
 }
 /// 6.1: `apply`, then the chat released within `SHUTDOWN_PAUSE` (W0b B2: at
 /// `chain`'s last point, under `row`).
@@ -2006,6 +2090,7 @@ pub(super) fn collect(
         native: s.native.records()[s.since.1..].to_vec(),
         peer: s.peer.lock().unwrap()[s.since.2..].to_vec(),
         findings,
+        read: READ.lock().unwrap().take(),
     };
     KEPT.lock().unwrap().push(("collect", facts.clone()));
     facts
@@ -2082,6 +2167,7 @@ fn collect_reg(
         native: b.native.records()[b.since.0..].to_vec(),
         peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
         findings,
+        read: READ.lock().unwrap().take(),
     };
     KEPT.lock().unwrap().push((tag, facts.clone()));
     facts
@@ -2253,6 +2339,7 @@ fn bootstrap(f: &Fixture) -> Close {
         _traces: traces,
     });
     *APPLIED.lock().unwrap() = None;
+    *READ.lock().unwrap() = None;
     Close { o, mother: None }
 }
 /// M3: the window opens at the hold's acknowledgement, before any apply.
@@ -2446,6 +2533,7 @@ fn collect_close(
         native,
         peer,
         findings,
+        read: None,
     };
     KEPT.lock().unwrap().push(("collect_close", facts.clone()));
     facts
@@ -2611,24 +2699,24 @@ const REG_POINTS: [(&str, &str); 3] = [
     ("registration_readiness", "reg.ready"),
 ];
 /// R2: the registration-time reductions, lock-free (design 4.4 `free`), each
-/// with its effect checked while the hold stands; the findings.
+/// with its effect checked while the hold stands; the findings. U19a: the
+/// lifecycle values reached while held (set B, SB3E-R196.1).
 fn reg_apply(o: &Opened, value: &str) -> Vec<String> {
+    let text = |r: Result<(), _>| format!("{r:?}");
+    let quit = || text(o.ingress.accept(CommandKind::Quit, 1).map(|_| ()));
+    let press = || text(o.ingress.emergency().map(|_| ()));
     let (want, results): (&str, Vec<String>) = match value {
         "none" => return Vec::new(),
-        "repeated" => {
-            let results = [o.ingress.emergency(), o.ingress.emergency()];
-            (
-                "Emergency",
-                results.map(|r| format!("{:?}", r.map(|_| ()))).to_vec(),
-            )
-        }
-        "fatal" => {
+        "repeated" => ("Emergency", vec![press(), press()]),
+        "Emergency" => ("Emergency", vec![press()]),
+        "fatal" | "Failed" => {
             o.ingress.fail();
             ("Failed", Vec::new())
         }
-        "quit" => {
-            let accepted = o.ingress.accept(CommandKind::Quit, 1);
-            ("ClosingNormal", vec![format!("{:?}", accepted.map(|_| ()))])
+        "quit" | "ClosingNormal" => ("ClosingNormal", vec![quit()]),
+        "ClosingRestricted" => {
+            let quit = quit();
+            ("ClosingRestricted", vec![quit, press()])
         }
         _ => {
             return vec![format!(
@@ -2667,17 +2755,138 @@ fn reg_ack(
         )),
     }
 }
+/// U19a C1 (SB3E-R194): the sink's own result must be one of `want`, as
+/// `closed` checks its sink's (s5.rs `closed`); a finding otherwise.
+fn sink_result<T, E: std::fmt::Debug>(
+    result: &Result<T, E>,
+    want: &[Result<(), &str>],
+    findings: &mut Vec<String>,
+) {
+    let shown = |r: &Result<(), &str>| r.map_or_else(|e| format!("Err({e})"), |()| "Ok".into());
+    let got = match result {
+        Ok(_) => "Ok".to_string(),
+        Err(e) => format!("Err({e:?})"),
+    };
+    let want: Vec<String> = want.iter().map(shown).collect();
+    if !want.contains(&got) {
+        findings.push(format!("registered: the sink returned {got}, not {want:?}"));
+    }
+}
+/// U19a (U18 B4-B6, SB3E-R106.3): production's reader composed here, over the
+/// cell's ingress, as hands.rs composes it: the pty, `Terminal::open`, then
+/// the Stop route bound to the session (hands.rs:1092, 1130; S6).
+struct Reading {
+    terminal: Terminal,
+    tty: reader::Tty,
+    clock: reader::Clock,
+}
+impl Reading {
+    fn open(o: &Opened) -> Self {
+        let clock = reader::Clock::new();
+        let tty = reader::Tty::open();
+        let terminal = Terminal::open(o.ingress.clone()).expect("Terminal::open on the pty");
+        assert!(terminal.route_bind(o.session.clone()), "S6: binds once");
+        Reading {
+            terminal,
+            tty,
+            clock,
+        }
+    }
+    /// The reader value typed while the hold stands, each chunk behind its
+    /// barrier; `since` is taken first, after the hold's acknowledgement.
+    fn typed(&self, value: &'static str) -> (Vec<Option<s7::Entry>>, Instant, usize) {
+        drop(s7::drain_trace());
+        let (since, mark) = (Instant::now(), self.tty.len());
+        let acks = reader::write_value(&self.tty, &self.clock, value);
+        (acks, since, mark)
+    }
+    /// The negative control's value: a press through the public ingress, by
+    /// the harness, with nothing typed (des:474).
+    fn pressed(&self, o: &Opened) -> (Vec<Option<s7::Entry>>, Instant, usize) {
+        let (since, mark) = (Instant::now(), self.tty.len());
+        let _ = o.ingress.emergency();
+        (Vec::new(), since, mark)
+    }
+    /// After the release: the terminal finished (its reader and Stop reporter
+    /// joined, U18 F1) before any trace is read; the reader's facts kept for
+    /// the collection; a barrier that is not the trace's is a finding.
+    fn close(
+        mut self,
+        value: &'static str,
+        typed: (Vec<Option<s7::Entry>>, Instant, usize),
+    ) -> Vec<String> {
+        let (acks, since, mark) = typed;
+        let finished = self.terminal.finish(Instant::now() + self.clock.left());
+        // U18 F2, N3: with the master closed, the writer cannot drain.
+        let finished = finished || value == "master_close";
+        self.tty.settle(&self.clock);
+        let (echo, trace) = (self.tty.since(mark), s7::drain_trace());
+        drop(self);
+        let mut findings = Vec::new();
+        let read: Vec<&s7::Entry> = trace.iter().filter(|e| e.point == "host.read").collect();
+        let barriers: Vec<&s7::Entry> = acks.iter().flatten().collect();
+        if !finished || barriers.len() != acks.len() || barriers != read {
+            findings.push(format!("read: finished {finished}, barriers {barriers:?}"));
+        }
+        *READ.lock().unwrap() = Some(Read {
+            value,
+            trace,
+            echo,
+            since,
+        });
+        findings
+    }
+}
+/// How the value reaches the held point: s5 applies it, or it is typed into
+/// production's reader (U19a, `ack=read`).
+#[derive(Clone, Copy)]
+enum Value {
+    Held,
+    Typed(&'static str),
+    Pressed(&'static str),
+}
 /// R3: the d_register driver. `open_broker`; the row's point armed before the
 /// worker starts, which borrows only the session and the endpoint (R125.2
 /// F-2); at the bounded acknowledgement `reg_apply`, then APPLIED, then the
 /// release within `SHUTDOWN_PAUSE`; the worker joined; then `collect_reg`.
 /// SEAM-1: at `reg.ready` (d_bootstrap) an unheld registration and the
 /// workspace come first (h:821, 845-849) and the worker is `finish_bootstrap`;
-/// the window opens at the acknowledgement (F-R4, as `reopen`).
+/// the window opens at the acknowledgement (F-R4, as `reopen`). U19a C1: the
+/// worker's result is one of `want`.
 pub(super) fn registered(
     f: &Fixture,
     row: (&'static str, &'static str),
     value: &'static str,
+    want: &[Result<(), &str>],
+) -> Facts {
+    reg_drive(f, row, value, Value::Held, want)
+}
+/// U19a: `registered` with `value` typed into production's reader as the
+/// reader value `typed` (reader.rs `write_value`) while the point is held.
+pub(super) fn read_registered(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, &'static str),
+    want: &[Result<(), &str>],
+) -> Facts {
+    reg_drive(f, row, value, Value::Typed(typed), want)
+}
+/// U19a negative control: `read_registered`'s composition and facts, the
+/// press made through the public ingress instead of typed.
+pub(super) fn pressed_registered(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, &'static str),
+    want: &[Result<(), &str>],
+) -> Facts {
+    reg_drive(f, row, value, Value::Pressed(typed), want)
+}
+fn reg_drive(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    how: Value,
+    want: &[Result<(), &str>],
 ) -> Facts {
     let mut b = open_broker(f);
     let Some(point) = REG_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1) else {
@@ -2686,6 +2895,11 @@ pub(super) fn registered(
         return collect_reg(&b, held, (row, value), (None, missing), "collect_reg");
     };
     *APPLIED.lock().unwrap() = None;
+    *READ.lock().unwrap() = None;
+    let reading = match how {
+        Value::Typed(_) | Value::Pressed(_) => Some(Reading::open(&b.o)),
+        Value::Held => None,
+    };
     let (session, endpoint) = (&b.o.session, b.endpoint.as_str());
     let mut findings = Vec::new();
     let ready = point == "reg.ready";
@@ -2701,7 +2915,7 @@ pub(super) fn registered(
         }
     }
     let held = f.pause(point);
-    let (ack, since, result) = std::thread::scope(|scope| {
+    let (ack, since, result, typed) = std::thread::scope(|scope| {
         let worker = scope.spawn(move || match ready {
             true => session.finish_bootstrap(),
             false => session.register_local_model(endpoint, spec()).map(|_| ()),
@@ -2709,10 +2923,15 @@ pub(super) fn registered(
         let thread = worker.thread().id();
         let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
         let since = (b.native.records().len(), b.peer.lock().unwrap().len());
+        let mut typed = None;
         match reg_ack(ack.as_ref(), point, session.identity(), thread) {
             Ok(()) => {
                 let at = Instant::now();
-                findings.extend(reg_apply(&b.o, value));
+                match (how, &reading) {
+                    (Value::Typed(v), Some(r)) => typed = Some(r.typed(v)),
+                    (Value::Pressed(_), Some(r)) => typed = Some(r.pressed(&b.o)),
+                    _ => findings.extend(reg_apply(&b.o, value)),
+                }
                 if value != "none" {
                     *APPLIED.lock().unwrap() = Some(Instant::now());
                 }
@@ -2726,10 +2945,15 @@ pub(super) fn registered(
             Err(e) => findings.push(e),
         }
         drop(held);
-        (ack, since, worker.join().unwrap())
+        (ack, since, worker.join().unwrap(), typed)
     });
     b.since = since;
+    if let (Value::Typed(v) | Value::Pressed(v), Some(r)) = (how, reading) {
+        let typed = typed.unwrap_or_else(|| (Vec::new(), Instant::now(), 0));
+        findings.extend(r.close(v, typed));
+    }
     println!("WITNESS registered {value}: the registration {result:?}");
+    sink_result(&result, want, &mut findings);
     let (applied, acks) = (APPLIED.lock().unwrap().take(), ack.map(Ack::S1));
     let held = (vec![point], acks.into_iter().collect());
     let mut facts = collect_reg(&b, held, (row, value), (applied, findings), "collect_reg");
@@ -2750,7 +2974,12 @@ pub(super) fn registered(
 #[test]
 fn route_s5_registered_applies_and_collects() {
     child("s5::route_s5_registered_applies_and_collects", |f| {
-        let facts = registered(f, ("registration_record", "ingress"), "repeated");
+        let facts = registered(
+            f,
+            ("registration_record", "ingress"),
+            "repeated",
+            &[Err("Backend(\"model_cancelled\")")],
+        );
         let kept = std::mem::take(&mut *KEPT.lock().unwrap());
         let [(tag, kept)] = &kept[..] else {
             panic!("R5: {} collections", kept.len())
@@ -2789,7 +3018,7 @@ fn route_s5_registered_applies_and_collects() {
 #[test]
 fn route_s5_registered_refuses_an_unreduced_value() {
     child("s5::route_s5_registered_refuses_an_unreduced_value", |f| {
-        let facts = registered(f, ("registration_record", "ingress"), "stop_all");
+        let facts = registered(f, ("registration_record", "ingress"), "stop_all", &[Ok(())]);
         let want = "registered: no registration-time reduction for stop_all";
         assert_eq!(facts.findings, [want], "R5: the unreduced value");
         let mut erased = facts.clone();
@@ -2808,7 +3037,7 @@ fn route_s5_registered_refuses_an_unreduced_value() {
 #[test]
 fn route_s5_registered_bootstraps_then_holds_ready() {
     child("s5::route_s5_registered_bootstraps_then_holds_ready", |f| {
-        let facts = registered(f, ("registration_readiness", "ingress"), "none");
+        let facts = registered(f, ("registration_readiness", "ingress"), "none", &[Ok(())]);
         assert!(facts.findings.is_empty(), "{:?}", facts.findings);
         let Some(Ack::S1(ack)) = facts.acks.first() else {
             panic!("no acknowledgement")
@@ -2829,7 +3058,12 @@ fn route_s5_registered_bootstraps_then_holds_ready() {
 #[test]
 fn route_s5_registered_notes_the_refused_reserve() {
     child("s5::route_s5_registered_notes_the_refused_reserve", |f| {
-        let facts = registered(f, ("registration_reserve", "ingress"), "fatal");
+        let facts = registered(
+            f,
+            ("registration_reserve", "ingress"),
+            "fatal",
+            &[Err("Restricted")],
+        );
         assert!(facts.findings.is_empty(), "{:?}", facts.findings);
         let Some(Ack::S1(ack)) = facts.acks.first() else {
             panic!("no acknowledgement")

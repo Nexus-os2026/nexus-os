@@ -1688,8 +1688,8 @@ seal|8||sb3_matrix_r3_cas_before|primitive
 seal|9||R0|oracle/plant
 call_chat|10||MP-SB-2|oracle/plant
 seal|6|||malformed row
-call_chat|4|Failed,||omitted
-call_chat|5|CR,||omitted
+call_chat|4|;Failed=x:rc_r5_call_chat_lifecycle_failed||omitted
+call_chat|5|;CR=x:rc_r5_call_chat_ingress_cr||omitted
 call_chat|6|none,||omitted
 call_chat|7|;after=c:sb3_matrix_r5_cas_after||omitted
 call_chat|5|quit=|quit,escape=|unknown value escape
@@ -2090,13 +2090,13 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (77, 0, 622, 1, 33),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five and SEAM-1's seven credited cells: {summary:?}"
+        (105, 0, 602, 1, 33),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven and U19a's 28 credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
-        217,
-        "quit, fatal, six U9a cells and SEAM-1's primary_end SealedFinalizing moved to x:rc_"
+        209,
+        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing and U19a's 534-537, 86-88 and 665 moved to x:rc_"
     );
 }
 
@@ -2106,8 +2106,9 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// registration_record ingress cells. U9b (SB3E-R135): the five R6 held-sink
 /// lifecycle cells. SEAM-1 (SB3E-R139): the three registration_reserve and
 /// three registration_readiness ingress cells, and the R9 primary_end
-/// lifecycle cell (row 642).
-const CREDITED: [&str; 32] = [
+/// lifecycle cell (row 642). U19a (SB3E-R198): the sixteen set-B lifecycle
+/// cells reached while held and twelve byte cells typed into the reader.
+const CREDITED: [&str; 60] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2140,6 +2141,34 @@ const CREDITED: [&str; 32] = [
     "r0/registration_readiness/ingress/fatal",
     "r0/registration_readiness/ingress/quit",
     "r9/primary_end/lifecycle/SealedFinalizing",
+    "r0/registration_reserve/lifecycle/Emergency",
+    "r0/registration_reserve/lifecycle/Failed",
+    "r0/registration_reserve/lifecycle/ClosingNormal",
+    "r0/registration_reserve/lifecycle/ClosingRestricted",
+    "r0/registration_record/lifecycle/Emergency",
+    "r0/registration_record/lifecycle/Failed",
+    "r0/registration_record/lifecycle/ClosingNormal",
+    "r0/registration_record/lifecycle/ClosingRestricted",
+    "r0/registration_readiness/lifecycle/Emergency",
+    "r0/registration_readiness/lifecycle/Failed",
+    "r0/registration_readiness/lifecycle/ClosingNormal",
+    "r0/registration_readiness/lifecycle/ClosingRestricted",
+    "r5/call_chat/lifecycle/Emergency",
+    "r5/call_chat/lifecycle/Failed",
+    "r5/call_chat/lifecycle/ClosingNormal",
+    "r5/call_chat/lifecycle/ClosingRestricted",
+    "r5/call_chat/ingress/CR",
+    "r5/call_chat/ingress/LF",
+    "r5/call_chat/ingress/CRLF",
+    "r5/call_chat/ingress/EOF",
+    "r5/call_chat/ingress/partial_Ctrl_D",
+    "r5/call_chat/ingress/master_close",
+    "r0/registration_record/ingress/CR",
+    "r0/registration_record/ingress/LF",
+    "r0/registration_record/ingress/CRLF",
+    "r0/registration_record/ingress/EOF",
+    "r0/registration_record/ingress/partial_Ctrl_D",
+    "r0/registration_record/ingress/master_close",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own
