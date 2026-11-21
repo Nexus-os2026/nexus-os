@@ -144,8 +144,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "4ce044d9a12dde76824fc746f2be3ece9133640055c1c85f96ad8c002e330c08";
-const MUTANTS: usize = 1486;
+const PINS_SHA256: &str = "f4d03db4575e6b0042e16cbac6427d90ef891e2d916a337daeb990c29428da5b";
+const MUTANTS: usize = 1739;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -154,19 +154,19 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs cc89f8799cdfa209665ed12834cde85cfe27e8679f7f27487a426a2fc806931d
+cells.rs 863b9ff97997c5ae2b7627145ca57f922da8288cbad79b11e090def70bbd937a
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs fd093818d688f24c061e19b45804a32b38658925153545e999f46236986f5369
-reader.rs 8ce8b9818b76bb4f7af534ea336473d6bc86a229829130bc5040f7d4a9765fe1
+main.rs 7bddac05a1a8599f3c42dee229bb33b66d75532edacaa87c51e98e480aeb43a6
+reader.rs 6afe8594053ce320a954501ab429d78c48e0cd6c85387e8ddb4d73ddb6ef86f6
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 6581dbafc7f3cecdbda6831ed5da6987abe5de6fb8289444d8d6b283efe57e6c
+s5.rs 12ba1fc55d6ce950723a66c9fb2a14e9eb00316e542d72f8134a9e6753c03249
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
-s5_reg.rs 918c258697d0a0a52aa41693f7feb343a38ccd6dac61e94a69651a8475d5e6ac
+s5_reg.rs d12c3d1eeef6cbc58c620fa7648edf6dba3fdd28a06a419263b8dfa45b743a43
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 9f946edeb14b0cdb0e16224b16af76270b303d6429f1bd04b56d068c400f204a
+witness.rs 9fc34511a9cc8a886fd698f4873d996007d9159db8ff7d373c2a2a109404f397
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 report.rs 7340ef6e54425d9655e70be86370e09d0db18615236c02a73655b272089423fd
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
@@ -182,9 +182,9 @@ fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
 /// is the first row; its imports are `S5_SUPER` (G-S3, in `s5_findings`). A
 /// stub's lists are empty: its unit fills them.
 const S5_SECTIONS: &str = "\
-s5.rs|U5|call_chat:ingress|ctl_call_chat|S5_SUPER|-
+s5.rs|U5|call_chat:ingress,call_chat:lifecycle|ctl_call_chat|S5_SUPER|-
 s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture,nexus_governed_control::host_session::close::CloseSeal,nexus_governed_control::host_session::SessionRequest|-
-s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::registered,super::s5::Facts,super::Fixture|-
+s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress,registration_reserve:lifecycle,registration_record:lifecycle,registration_readiness:lifecycle|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
 s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
 s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
@@ -338,9 +338,10 @@ host/tests/route_cells/report.rs|implDropforTty\n\
 host/tests/route_cells/store.rs|impl<T>Faulted<T>\n\
 ";
 /// SB3E-R42.4 (G-S3): `s5.rs`'s one import from its parent, by name.
-const S5_SUPER: [&str; 9] = [
+const S5_SUPER: [&str; 10] = [
     "child",
     "fake_ollama",
+    "reader",
     "spec",
     "Fixture",
     "Opened",
@@ -2761,7 +2762,8 @@ s|type Roles
 s|fn sessions
 s|const HELD
 s|const REFUSED
-s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,host,journal,native,peer,findings}
+s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,host,journal,native,peer,findings,read}
+h|struct Read{value,trace,echo,since}
 s|enum Ack
 s|enum Hold
 h|const BROKER_SINKS
@@ -2786,6 +2788,16 @@ h|fn mission_stop
 h|fn stop_all
 h|fn fatal
 h|fn quit
+h|fn chat_emergency
+h|fn chat_failed
+h|fn chat_closingnormal
+h|fn chat_closingrestricted
+h|fn chat_cr
+h|fn chat_lf
+h|fn chat_crlf
+h|fn chat_eof
+h|fn chat_partial_ctrl_d
+h|fn chat_master_close
 s|fn shutdown
 s|fn stop
 h|fn ord3_quit
@@ -2801,6 +2813,8 @@ s|struct Close{o,mother}
 s|fn accept_quit
 s|fn closed
 s|fn registered
+s|fn read_registered
+h|fn pressed_registered
 s|fn collect_report
 ";
 /// The one export that hands out a composed type (`T7_TYPES`): by value.
@@ -3647,7 +3661,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("F3a a br#\"store.commit\"#", "s5_r34.rs", "super::Entry", hashes.into(), &["Passive: collect_native reads store.commit"]),
         ("F3b Codex's brace in a return type", "s5_r34.rs", "super::Entry", braced.into(), &["a brace in the signature of fn collect_native"]),
         ("note 4 two braced super imports", "s5_r34.rs", "super::Entry,super::PATIENCE", two.into(), &["more than one super:: import"]),
-        ("F2 control: Vec::<u8>::new() is no qualified-self path", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d() {\n    let _ = Vec::<u8>::new();\n}\n".into(), &[]),
+        ("F2 control: Vec::<u8>::new() is no qualified-self path", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn d() {\n    let _ = Vec::<u8>::new();\n}\n".into(), &[]),
         ("F3b control: a plain signature", "s5_r34.rs", "super::Entry", "use super::Entry;\nfn collect_native(broker: &[Entry]) -> usize {\n    broker.len()\n}\n".into(), &[]),
     ];
     for (plant, file, imports, text, expected) in fixed {
@@ -3693,12 +3707,12 @@ fn sb3e_s5_sections_are_the_closed_list() {
         ("R2 F2 after return", "s5_reg.rs", "-", "fn d() -> usize {\n    return <[u8]>::len(&[]);\n}\n".into(), vec![q, &ret]),
         ("R2 F2 after an attribute, in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ #[allow(unused)] <[[u8; { (2 > 1) as usize }]]>::len(&[]); 0 }>();\n}\n".into(), vec![&attr]),
         ("R2 F2 after for, in a turbofish block", "s5_reg.rs", "-", "fn d() {\n    let _ = f::<{ for <[u8; { (2 > 1) as usize }]>::C in [] {} 0 }>();\n}\n".into(), vec![&fored]),
-        ("R2 F2 control: a[0] < b", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: [u8; 1], b: u8) -> bool {\n    a[0] < b\n}\n".into(), vec![]),
-        ("R2 F2 control: Vec::<[u8; 0]>::new()", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d() {\n    let _ = Vec::<[u8; 0]>::new();\n}\n".into(), vec![]),
-        ("R2 F2 control: a < b, a > b, a >= b, a <= b", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: u8, b: u8) -> bool {\n    a < b || a > b || a >= b || a <= b\n}\n".into(), vec![]),
-        ("R2 F2 control: -> and => and >>", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: u8) -> u8 {\n    let f = |x: u8| -> u8 { x >> 1 };\n    match a {\n        _ => f(a),\n    }\n}\n".into(), vec![]),
-        ("R2 F2 control: generics and turbofish >>", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn g<T: Into<u8>>(t: T) -> Vec<u8> {\n    let v: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();\n    let _ = v.into_iter().collect::<Vec<Vec<u8>>>();\n    vec![t.into()]\n}\n".into(), vec![]),
-        ("R2 F2 control: for<'a>", "s5_reg.rs", "super::s5::registered,super::s5::Facts,super::Fixture", "fn h<F>(_: F)\nwhere\n    F: for<'a> Fn(&'a u8),\n{\n}\n".into(), vec![]),
+        ("R2 F2 control: a[0] < b", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: [u8; 1], b: u8) -> bool {\n    a[0] < b\n}\n".into(), vec![]),
+        ("R2 F2 control: Vec::<[u8; 0]>::new()", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn d() {\n    let _ = Vec::<[u8; 0]>::new();\n}\n".into(), vec![]),
+        ("R2 F2 control: a < b, a > b, a >= b, a <= b", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: u8, b: u8) -> bool {\n    a < b || a > b || a >= b || a <= b\n}\n".into(), vec![]),
+        ("R2 F2 control: -> and => and >>", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn d(a: u8) -> u8 {\n    let f = |x: u8| -> u8 { x >> 1 };\n    match a {\n        _ => f(a),\n    }\n}\n".into(), vec![]),
+        ("R2 F2 control: generics and turbofish >>", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn g<T: Into<u8>>(t: T) -> Vec<u8> {\n    let v: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();\n    let _ = v.into_iter().collect::<Vec<Vec<u8>>>();\n    vec![t.into()]\n}\n".into(), vec![]),
+        ("R2 F2 control: for<'a>", "s5_reg.rs", "super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture", "fn h<F>(_: F)\nwhere\n    F: for<'a> Fn(&'a u8),\n{\n}\n".into(), vec![]),
         ("R2 F3a \"store.\\x63ommit\"", "s5_r34.rs", "super::Entry", collect(r#""store.\x63ommit""#), vec![commit]),
         ("R2 F3a \"store.\\u{63}ommit\"", "s5_r34.rs", "super::Entry", collect(r#""store.\u{63}ommit""#), vec![commit]),
         ("R2 F3a a backslash-newline", "s5_r34.rs", "super::Entry", collect("\"store.\\\n        commit\""), vec![commit]),
@@ -3995,7 +4009,7 @@ fn sb3e_w0b_compact_arms() {
         ("B5 a control in no section row", swap(main, terminal, "    () => { ctl!(ctl_other, call_chat ingress, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_other is listed by no section".into()),
         ("C1 a control of the old shape", swap(main, terminal, "    () => { ctl!(ctl_call_chat, s5::ctl_call_chat); };\n"), "U5 macro: the control ctl_call_chat,s5::ctl_call_chat is not ctl!(<control>, <sink> <dim>, <stem>::<fn>)".into()),
         ("C1 a control named for another sink", swap(main, terminal, "    () => { ctl!(ctl_call_chat, seal lifecycle, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_call_chat is not ctl_<sink> of seal:lifecycle, owned by its section".into()),
-        ("C1 a pair its section does not own", swap(main, terminal, "    () => { ctl!(ctl_call_chat, call_chat lifecycle, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_call_chat is not ctl_<sink> of call_chat:lifecycle, owned by its section".into()),
+        ("C1 a pair its section does not own", swap(main, terminal, "    () => { ctl!(ctl_call_chat, call_chat fault, s5::ctl_call_chat); };\n"), "S5 sections: the control ctl_call_chat is not ctl_<sink> of call_chat:fault, owned by its section".into()),
         ("B5 a duplicate arm", swap(main, quit, &format!("{quit}{quit}")), format!("{slug} appears twice")),
         ("B5 an arm defining no test", arm(again), format!("{slug} defines []")),
         ("B5 an arm with zero drivers", arm(&format!("cell!(rc_r5_call_chat_ingress_quit, r5 call_chat ingress quit); {again}")), format!("{slug} has 0 drivers")),

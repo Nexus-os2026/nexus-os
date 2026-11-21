@@ -108,7 +108,7 @@ fn records(owned: Scenario, diag: &str, case: &str) {
 }
 /// Run `cmd` with a bounded lifetime: on expiry the child is killed and
 /// reaped, and the test fails. Its small output is read after exit (Cb2-R2).
-fn bounded(cmd: &mut std::process::Command) -> std::process::Output {
+pub(super) fn bounded(cmd: &mut std::process::Command) -> std::process::Output {
     use std::io::Read;
     use std::process::Stdio;
     use std::time::{Duration, Instant};
