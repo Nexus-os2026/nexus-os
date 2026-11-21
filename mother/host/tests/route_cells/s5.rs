@@ -2920,6 +2920,21 @@ pub(super) fn collect_report(
     if running == "none" {
         findings.push("collect_report: no running cell".into());
     }
+    // R199 Q-U21-2 (R202 C1): readiness is the File-mode Normal line
+    // (report.rs) and the session's own S1 `reg.ready` (finish_bootstrap,
+    // host_session.rs:858), with no `reg:word_compare` refusal note.
+    let of_s = |e: &&s1::Entry| e.session == Some(session);
+    let ready = broker
+        .iter()
+        .filter(of_s)
+        .any(|e| e.point == "reg.ready" && !e.note);
+    let refused = broker
+        .iter()
+        .filter(of_s)
+        .any(|e| e.point == "reg:word_compare");
+    if !ready || refused {
+        findings.push(format!("ready: S1 reg.ready {ready}, refused {refused}"));
+    }
     let window = journal_at(journal).map(|mut j| j.split_off(since.min(j.len())));
     let window = window.unwrap_or_else(|e| {
         findings.push(e);
