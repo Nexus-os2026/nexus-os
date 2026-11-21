@@ -389,3 +389,142 @@ unanchored filter these controls were red; with the anchored one, green.
 | MP-M3-12 drop an OPEN line | m3d_teaching_goldens_and_claims_guard, m3d_explain_uses_only_journaled_checks |
 | MP-M3-19 ban the mandatory LABEL_PASSED | m3d_teaching_goldens_and_claims_guard |
 | MP-M3-22 restore v1 T12 | m3d_teaching_goldens_and_claims_guard |
+
+# M3-Dd oracle register: composed M3-O35 on the session route
+
+Base main f0c19aae (SB-3 C1+C2+D1+D2, Cb0-Cb2 and Da/Db/Dc integrated).
+Rulings DD-R1 (m3d-mission-draft.md:551) and SB3E-R153; Step 0 at
+/home/nexus/.m2d/m3dd/step0-report.md. Test-only: two new adapter modules,
+declared under `#[cfg(test)]` in adapter/mod.rs (inserted at :1408-1413,
+before two existing test module declarations; no non-test line moved), plus the Cb1
+carry in m3cb_lane_oracles.rs and the visibility of `bounded`.
+
+## Claim limit (DD-R1 Q1, Q7)
+
+Composed O35 on an UNQUALIFIED fixture route only. The model is registered
+through the public R0 (`Fixture::with_model`) on a fake loopback peer; the
+only model floor is the provisional `SCAFFOLD_FLOOR = 256`, which is not
+evidence. This is not Q-M3, not live, not U7 production wiring, not U11's
+PTY terminal and not installed acceptance. OBLIGATION: re-run these oracles
+on the Cq-2 composed SHA with Cq-1b's fixture registration and STANDARD
+session records.
+
+## Route and harness
+
+PageBuilderLane -> C1 Caller -> SessionPort -> session broker -> fake peer
+-> session File -> Db proof -> Dc PageVerifierLane, all real. The fixture is
+`SFx::new()` (TH-R1 B fresh owned home). Each case runs in its own child
+process through `c1b_port_oracles::children` (bounded wait, kill and reap,
+`case-ok` marker); D2's private `watched` is not copied (SB3E-R153).
+
+Scripted parts: the peer's replies; the Owner's File answer, given by the
+existing oracles confirmers (`FilesOwner`, which keeps each File dialog, or
+`No`) through the public `HostSession::approve_file_confirmed` (DD-R1 Q2:
+scripted confirmers plus session ingress are O35's "scripted terminal");
+Mother's own `stop`; the existing `CoordinatorHooks` `file_before_lane`,
+`file_after_perform_check` and `model_replied` (DD-R1 Q5). Mission consent
+on this route goes to the fixture's Owner, so `m2c_confirmers::answering`
+decides nothing here and is not relied on. scan.rs:404 keeps every
+confirmer under src/oracles; Dd defines none.
+
+Native attempt counts are read as the broker's native record state
+(`close_obligations().model.record`): the open session holds the primary
+evidence store EXCLUSIVE (Step 0 measured `database is locked`) and the
+fixture removes its home on Drop. Native record debt is unreachable from
+Mother; Uncertain/Owed are injected at the adapter through the SB3D-R1 Q2
+accessor, and the native debt itself is B's evidence (SB-3B2-C
+`seal/owed`, SB-3B2-M `settled:ok:uncertain`) (DD-R1 Q4).
+
+## DD-R1 STOP check
+
+Checked in O35 approve. Lane side: the actual PageBuilderLane validates its
+Builder input against the consented contract (page_builder/lane.rs:36-47)
+and fails the mission when the input is missing or not the consented
+snapshot, so the mission reaching AwaitingApproval (m3d_composed_oracles.rs:67-73)
+is the lane-side check. The observer's `bound` assertion (:170-171)
+recomputes the same validation and is a supporting assertion only: the
+lane's own refusal always fires first, so it cannot fail on its own.
+Broker side: the File dialog shows `facts present as given: name, hours
+(1 lines), phone`, a line it prints only when the consent that admitted the
+File carried the page facts. Both hold at main: no STOP.
+
+## Oracles
+
+| Oracle | Test | Cases |
+|---|---|---|
+| O35 | `m3d_session_composed_approve_decline_and_stop` | approve, decline, held-chat, pre-lane, pre-perform, final |
+| SB-3 §11 consumer table | `m3dd_session_route_consumer_cases` | first, malformed, two, between, during, debt-uncertain, debt-owed, late, replay |
+| Cb1 bound (Cb2-R2 carry) | `m3cb_needles_and_transport_failures_do_not_retry` (transport/pre) | the native SQLite read runs through `bounded` |
+
+O35 literal outcomes:
+- approve: caller/chat/charge 1/1/1, C1 `ok`, native record `recorded`; one
+  File dialog; Done; index.html equals the assembled page; one retained
+  deliverable and one dispatch; one PublicationReceipt whose sha256 is the
+  written bytes, with policy, not overtaken; one VerificationRecorded with
+  v0..v5 all `pass`; one Verifier call; the explanation carries T11.
+- decline: end `action_denied`; no page, receipt, verification or Verifier
+  call; the charge stays recorded.
+- held-chat Stop: the held chat is cancelled (`failed:model_cancelled`);
+  1/1/1; the lane failed with no effects; no LaneReturned, dispatch, page or
+  content in the journal or private store (F5); native record `recorded`;
+  end `stop:owner`.
+- pre-final-check Stop at `file_before_lane`: 0/0/0, end `stop:owner`; at
+  `file_after_perform_check`: 1/1/1, the page retained and staged, end
+  `settled`. Both: advance refused, nothing left to approve, no page,
+  receipt or Verifier call.
+- final-check wins (Stop after the broker's final check and publication):
+  Stop returns Blocked; exactly one receipt, overtaken, its sha256 the
+  written bytes; end `settled`; no Verifier call or verification; the charge
+  stays recorded.
+
+§11 rows: first 1/1/1 and AwaitingApproval; malformed then valid 2/2/2 with
+one correction block; two malformed exactly 2/2/2, `model_draft_email`;
+Stop between attempts `ok, invalidated` with 2/1/1; Stop during the
+correction after its charge `ok, model_cancelled` with 2/2/2; recording
+debt (F7) `record_unavailable`, 1/1/1, `model_record_unavailable`, advance
+and close refused `Recording`, end `block:broker_refused:evidence_unavailable`;
+late successful reply (F5) `invalidated`, 1/1/1, native `recorded`; replay:
+a second coordinator on the same port is refused `Reopened`, no caller,
+metadata or chat. Every withholding row also checks that the reply's content
+is in neither the journal nor the private store.
+
+## Dd mutation map (local scripted plants, restored by sha256)
+
+Kept: each is killed by its own named check (R97), measured on ece4232d
+(evidence /home/nexus/.m2d/m3dd/evb/plants.out; same verdicts as on debbab39).
+
+| Plant | Mutation | Named kill |
+|---|---|---|
+| STOP-a | consent.rs: the confirmation carries no `page_facts` | O35 approve: the File dialog shows `facts: not checked (none in the consent)`, not the facts line |
+| STOP-b | page_inputs.rs `prepare`: no Builder input | O35 approve AwaitingApproval check (m3d_composed_oracles.rs:67-73): the actual lane fails the mission without a consented input; RED at :70, `Some(Failed)` (`bound`, :171, is a supporting assertion made redundant by the lane's validation) |
+| P-Dd-1 | model_calls.rs:502: accept `Replied` without `live()` | §11 late successful reply: `ok`, not `invalidated` |
+| P-Dd-7a | model_calls.rs:479: the debt latch never fires | §11 recording debt, Uncertain and Owed |
+| P-Dd-7b | adapter/mod.rs:556: Uncertain classified as Replied | §11 recording debt, Uncertain |
+| P-Dd-9 | `time.sleep(30)` in the Cb1 Python check | `native SQLite check exceeded its 10 s bound: python3 killed and reaped` at 10.22 s; on the unbounded base the same plant survives (passes after 30.09 s), which is why the bound is needed |
+
+Dropped, with the measured reason (SB3E-R153):
+
+| Plant | Reason |
+|---|---|
+| P-Dd-1 on held-chat | not a killer: the held chat is cancelled, never Replied (survives there); the late row is its killer |
+| P-Dd-2 | MP-M3-10 at page_proof.rs:346 survives decline and final-check wins: Denied and Stop end the mission before any Verifier lane. Re-sited at coordinator.rs:1738 (Denied read as Approved) it dies on the harness's `state().unwrap()` (`Broker(EvidenceUnavailable)`), not on "verifier calls 0". MP-M3-10 stays covered by Dc's O34 |
+| P-Dd-3 | removing `file_boundary` before `perform_file` (coordinator.rs:2185) survives both pre-final-check points: after Stop nothing is left to approve and the reservation is re-checked |
+| P-Dd-4 | no site at main: final-check wins ends Blocked before any Verifier, so there is nothing to re-run |
+| P-Dd-5 | no refund path at main: charges are journal lines; an in-memory decrement on a terminal mission is unobservable |
+| P-Dd-6 | lane.rs:56 `0..2` -> `0..3` survives: the Builder stops after two attempts (page_builder/mod.rs:159). The reverse plant there dies on the failure code (`assembler_fault`), not on the caller count, because lane.rs:56 still bounds it |
+| P-Dd-8 | dropped by SB3E-R153 (no plant site measured at Step 0) |
+
+## Gates
+
+Local, on the final head: the Dd oracles 10 times each; R110.2 (SB3E-R153,
+R134.5): the 146 route plant rows whose tests read Mother's sources (105
+mbin + 41 mguard, route_plants.py `--only`), the full `cargo test -p
+nexus-mother --lib`, `cargo fmt --all -- --check`, `cargo clippy -p
+nexus-mother -p nexus-mother-host --locked --all-targets -- -D warnings`, `git diff --check`.
+Then one full route_exit on the final head when the host is free, and CI
+plus audit on the PR. Results are in the Dd report, not here. Lane, guard
+and mother route rows do not read Dd's files; lane and guard rows also do
+not compile its code (all of it is cfg(test)). The one `mother` row
+(`c1_s1_session_sources_have_no_model_route`) compiles the nexus-mother
+test build, Dd's modules included, but reads only governed-control
+host_session files and session_port.rs. A5's lexical rules read Dd's files and run inside route_exit.
