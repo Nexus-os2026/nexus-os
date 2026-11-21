@@ -1834,9 +1834,7 @@ fn typed_chat(f: &Fixture, value: &'static str, typed: &'static str) -> Facts {
         drop(held);
         reading.close(typed, barriers)
     });
-    for finding in found {
-        later(&mut facts, finding);
-    }
+    found.into_iter().for_each(|x| later(&mut facts, x));
     facts
 }
 pub(super) fn chat_cr(f: &Fixture) -> Facts {
