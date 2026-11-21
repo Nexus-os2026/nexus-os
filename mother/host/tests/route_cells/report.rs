@@ -207,6 +207,26 @@ fn timeout(line: &str) -> ! {
     std::process::abort()
 }
 
+/// File mode's arguments in the child's root: `home` (made by `hands::run`)
+/// and a fresh 0700 `workspace`.
+fn file_mode(f: &Fixture, text: &str) -> Vec<String> {
+    let workspace = f.0.join("workspace");
+    let mut dir = std::fs::DirBuilder::new();
+    dir.mode(0o700).create(&workspace).unwrap();
+    let path = |p: PathBuf| p.to_string_lossy().into_owned();
+    let (home, workspace) = (path(f.0.join("home")), path(workspace));
+    let words = [
+        "--home",
+        &home,
+        "--workspace",
+        &workspace,
+        "--name",
+        "hello.txt",
+        "--text",
+        text,
+    ];
+    words.map(String::from).to_vec()
+}
 /// Answers one confirmation: its fresh code, then the code typed.
 fn answer(tty: &Tty, at: usize, findings: &mut Vec<String>) -> usize {
     let Some(code_at) = tty.wait_for(at, "Answer code: ", PATIENCE) else {
@@ -234,23 +254,8 @@ fn answer(tty: &Tty, at: usize, findings: &mut Vec<String>) -> usize {
 /// joined (bounded). Nothing is drained here.
 pub(super) fn reached(f: &Fixture, owner: Owner, point: &'static str, hold: Hold) -> Reached {
     let mut findings = Vec::new();
-    let workspace = f.0.join("workspace");
-    std::fs::DirBuilder::new()
-        .mode(0o700)
-        .create(&workspace)
-        .unwrap();
-    let home = f.0.join("home");
-    let journal = home.join("mother-journal.jsonl");
-    let args: Vec<String> = vec![
-        "--home".into(),
-        home.to_string_lossy().into_owned(),
-        "--workspace".into(),
-        workspace.to_string_lossy().into_owned(),
-        "--name".into(),
-        "hello.txt".into(),
-        "--text".into(),
-        "U21a close report\n".into(),
-    ];
+    let journal = f.0.join("home/mother-journal.jsonl");
+    let args = file_mode(f, "U21a close report\n");
     let tty = Tty::open();
     let traced = s1::arm("reg.reserve", s1::Action::Trace);
     drop((s1::drain_trace(), s7::drain_trace()));
@@ -357,20 +362,7 @@ fn route_report_unarmed_records_nothing() {
         "report::route_report_unarmed_records_nothing",
         |_| Vec::new(),
         |f| {
-            let workspace = f.0.join("workspace");
-            let mut dir = std::fs::DirBuilder::new();
-            dir.mode(0o700).create(&workspace).unwrap();
-            let home = f.0.join("home");
-            let args: Vec<String> = vec![
-                "--home".into(),
-                home.to_string_lossy().into_owned(),
-                "--workspace".into(),
-                workspace.to_string_lossy().into_owned(),
-                "--name".into(),
-                "hello.txt".into(),
-                "--text".into(),
-                "U21a unarmed\n".into(),
-            ];
+            let args = file_mode(f, "U21a unarmed\n");
             let tty = Tty::open();
             let run = std::thread::spawn(move || nexus_mother_host::hands::run(args.into_iter()));
             let ready = tty.wait_for(0, NORMAL, PATIENCE);
@@ -453,19 +445,7 @@ fn route_report_unreleased_hold_times_out_and_aborts() {
                 timeout,
             },
         );
-        let workspace = f.0.join("workspace");
-        let mut dir = std::fs::DirBuilder::new();
-        dir.mode(0o700).create(&workspace).unwrap();
-        let args: Vec<String> = vec![
-            "--home".into(),
-            f.0.join("home").to_string_lossy().into_owned(),
-            "--workspace".into(),
-            workspace.to_string_lossy().into_owned(),
-            "--name".into(),
-            "hello.txt".into(),
-            "--text".into(),
-            "U21a unreleased\n".into(),
-        ];
+        let args = file_mode(&f, "U21a unreleased\n");
         let _run = std::thread::spawn(move || nexus_mother_host::hands::run(args.into_iter()));
         let _ = tty.wait_for(0, NORMAL, PATIENCE);
         let _ = tty.write(b"quit\r");
