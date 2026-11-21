@@ -144,8 +144,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "f4d03db4575e6b0042e16cbac6427d90ef891e2d916a337daeb990c29428da5b";
-const MUTANTS: usize = 1739;
+const PINS_SHA256: &str = "085946eaef1db023decdf0b4c026c72c98aebe0968e82c189e69610a0c3b0ca3";
+const MUTANTS: usize = 1848;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -154,19 +154,19 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 863b9ff97997c5ae2b7627145ca57f922da8288cbad79b11e090def70bbd937a
+cells.rs a96c7577e8e9fa07401cf4004468027f97ea7681216e2330788e55d8dd6e9040
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 7bddac05a1a8599f3c42dee229bb33b66d75532edacaa87c51e98e480aeb43a6
+main.rs 898d35e35d308cbf920923e67f70575298ddd5d7f13c60c7b60a422c883005f2
 reader.rs 6afe8594053ce320a954501ab429d78c48e0cd6c85387e8ddb4d73ddb6ef86f6
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 12ba1fc55d6ce950723a66c9fb2a14e9eb00316e542d72f8134a9e6753c03249
+s5.rs c776bdbd6f224768de4e8a6c4ab140e005cb5999fdf4cbf952d50cca232a35c0
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
 s5_reg.rs d12c3d1eeef6cbc58c620fa7648edf6dba3fdd28a06a419263b8dfa45b743a43
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 9fc34511a9cc8a886fd698f4873d996007d9159db8ff7d373c2a2a109404f397
+witness.rs 786096b6179650fbe7b83a09a0e25e82a51bbc6547167944d0ece51163214b7a
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 report.rs 7340ef6e54425d9655e70be86370e09d0db18615236c02a73655b272089423fd
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
