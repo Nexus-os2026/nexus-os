@@ -873,6 +873,11 @@ fn ledger(v: &View, text: &str) -> Obs {
             "commit" => commits(true),
             _ => v.f.journal.len() + v.f.native.len(),
         };
+        // U19a TR-1 (SB3E-R202 S1): the Stop record stands for the whole window, as `+0:all` did.
+        let whole = v.f.journal.len() + v.f.native.len();
+        if event == "emergency_stop" && n != whole {
+            return Ok(format!("+{n}:{event}[{tag}] of {whole}"));
+        }
         Ok(format!("+{n}:{event}[{tag}]"))
     });
     Ok(shown.collect::<Result<Vec<_>, _>>()?.join(","))
@@ -2018,4 +2023,20 @@ fn route_s5_public_press_is_not_read() {
             "the press refused nothing: {diffs}"
         );
     });
+}
+/// SB3E-R202 S1 (renderer layer, row 441): a stray non-Stop record fails `ledger`.
+#[test]
+fn witness_control_tr1_stray_record_fails_the_ledger() {
+    let name = "witness::witness_control_tr1_stray_record_fails_the_ledger";
+    let row = ("registration_reserve", "ingress", "CR");
+    differs_at(name, "ctl_tr1_stray", tr1_stray, row, &["ledger"]);
+}
+fn tr1_stray(f: &super::Fixture) -> Facts {
+    let refused: [Result<(), &str>; 1] = [Err("Restricted")];
+    let row = ("registration_reserve", "ingress");
+    let mut facts = super::s5::read_registered(f, row, ("CR", "stop0d"), &refused);
+    let mut stray = facts.native.first().cloned().expect("the Stop record");
+    stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
+    facts.native.push(stray);
+    facts
 }

@@ -271,9 +271,8 @@ fn chunks(value: &str) -> Vec<(usize, bool, Branch)> {
 /// B7: each chunk has exactly one S7 `host.read` acknowledgement after
 /// `since`, equal to it. A press value's S1 `ingress.emergency` is the
 /// reader's own: on the last acknowledgement's thread, not after it. A
-/// terminator echoes exactly one CRLF and reaches no ingress. A `stop` line
-/// (U19a, SB3E-R198 F-S0-2) echoes `stop` CRLF and is a press value: exactly
-/// one `ingress.emergency` after `since`, the reader's own. Nothing here
+/// terminator echoes exactly one CRLF and reaches no ingress; a `stop` line
+/// (U19a, F-S0-2) echoes `stop` CRLF and is a press value. Nothing here
 /// accepts a command. Findings are `read: ...`.
 pub(super) fn read_ack(
     value: &str,

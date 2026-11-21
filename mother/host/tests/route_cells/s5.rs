@@ -1861,7 +1861,19 @@ pub(super) fn shutdown(
 ) -> Facts {
     let (mut facts, _, (result, released)) = driven(f, value, chain, row, |o, _, held, _| {
         let at = Instant::now();
-        let result = apply(o);
+        // SB3E-R202 S2: the value's state, read while held (as `reg_apply`).
+        let want = match value {
+            "fatal" => "Failed",
+            "quit" => "ClosingNormal",
+            state => state,
+        };
+        let result = apply(o).and_then(|()| {
+            let state = format!("{:?}", o.session.state());
+            match state == want {
+                true => Ok(()),
+                false => Err(format!("state {state}, not {want}")),
+            }
+        });
         drop(held);
         (result, at.elapsed())
     });

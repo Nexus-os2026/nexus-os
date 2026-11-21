@@ -4,9 +4,8 @@
 // row's literals; s5 holds the point, applies the value and collects.
 // SEAM-1 (SB3E-R139): the registration_reserve rows 449, 451, 452 and the
 // registration_readiness rows 425, 427, 428 and their controls, the same way.
-// U19a (SB3E-R196, R198): each call names the sink result it must return
-// (C1, SB3E-R194); the lifecycle rows reached while held; the byte rows typed
-// into production's reader through `read_registered`.
+// U19a (SB3E-R196, R198): each call names its sink result (C1); lifecycle rows
+// 673-676, 667-670, 665, 659-661 held; byte rows 429-434, 441-446, 417-422 typed.
 use super::{
     s5::{read_registered, registered, Facts},
     Fixture,
@@ -75,7 +74,6 @@ pub(super) fn readiness_quit(f: &Fixture) -> Facts {
 pub(super) fn ctl_registration_readiness(f: &Fixture) -> Facts {
     registered(f, READY, "none", PASSED)
 }
-/// Rows 673-676: each state reached while `reg.reserve` is held.
 pub(super) fn reserve_emergency(f: &Fixture) -> Facts {
     registered(f, RESERVE_L, "Emergency", REFUSED)
 }
@@ -88,7 +86,6 @@ pub(super) fn reserve_closingnormal(f: &Fixture) -> Facts {
 pub(super) fn reserve_closingrestricted(f: &Fixture) -> Facts {
     registered(f, RESERVE_L, "ClosingRestricted", REFUSED)
 }
-/// Rows 667-670: each state reached while the record is held.
 pub(super) fn record_emergency(f: &Fixture) -> Facts {
     registered(f, RECORD_L, "Emergency", CANCELLED)
 }
@@ -101,7 +98,6 @@ pub(super) fn record_closingnormal(f: &Fixture) -> Facts {
 pub(super) fn record_closingrestricted(f: &Fixture) -> Facts {
     registered(f, RECORD_L, "ClosingRestricted", CANCELLED)
 }
-/// Rows 665, 659-661: each state reached while `reg.ready` is held.
 pub(super) fn readiness_emergency(f: &Fixture) -> Facts {
     registered(f, READY_L, "Emergency", REFUSED)
 }
@@ -114,8 +110,6 @@ pub(super) fn readiness_closingnormal(f: &Fixture) -> Facts {
 pub(super) fn readiness_closingrestricted(f: &Fixture) -> Facts {
     registered(f, READY_L, "ClosingRestricted", REFUSED)
 }
-/// Rows 429-434: each byte typed while the record is held (`stop` and a
-/// terminator for CR, LF and CRLF, SB3E-R196.2).
 pub(super) fn record_cr(f: &Fixture) -> Facts {
     read_registered(f, RECORD, ("CR", "stop0d"), STOPPED)
 }
@@ -134,7 +128,6 @@ pub(super) fn record_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn record_master_close(f: &Fixture) -> Facts {
     read_registered(f, RECORD, ("master_close", "master_close"), STOPPED)
 }
-/// TR-1 rows 441-446 (SB3E-R198): each byte typed while `reg.reserve` is held.
 pub(super) fn reserve_cr(f: &Fixture) -> Facts {
     read_registered(f, RESERVE, ("CR", "stop0d"), REFUSED)
 }
@@ -153,7 +146,6 @@ pub(super) fn reserve_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn reserve_master_close(f: &Fixture) -> Facts {
     read_registered(f, RESERVE, ("master_close", "master_close"), REFUSED)
 }
-/// TR-1 rows 417-422 (SB3E-R198): each byte typed while `reg.ready` is held.
 pub(super) fn readiness_cr(f: &Fixture) -> Facts {
     read_registered(f, READY, ("CR", "stop0d"), REFUSED)
 }

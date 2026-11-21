@@ -2106,9 +2106,7 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// registration_record ingress cells. U9b (SB3E-R135): the five R6 held-sink
 /// lifecycle cells. SEAM-1 (SB3E-R139): the three registration_reserve and
 /// three registration_readiness ingress cells, and the R9 primary_end
-/// lifecycle cell (row 642). U19a (SB3E-R198): the sixteen set-B lifecycle
-/// cells reached while held and twelve byte cells typed into the reader;
-/// TR-1 (SB3E-R198): the twelve reserve and readiness byte cells.
+/// lifecycle cell (row 642). U19a (SB3E-R198): sixteen lifecycle and 24 byte cells.
 const CREDITED: [&str; 72] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
