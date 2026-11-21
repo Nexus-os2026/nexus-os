@@ -134,3 +134,41 @@ pub(super) fn record_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn record_master_close(f: &Fixture) -> Facts {
     read_registered(f, RECORD, ("master_close", "master_close"), STOPPED)
 }
+/// TR-1 rows 441-446 (SB3E-R198): each byte typed while `reg.reserve` is held.
+pub(super) fn reserve_cr(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("CR", "stop0d"), REFUSED)
+}
+pub(super) fn reserve_lf(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("LF", "stop0a"), REFUSED)
+}
+pub(super) fn reserve_crlf(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("CRLF", "stop0d0a"), REFUSED)
+}
+pub(super) fn reserve_eof(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("EOF", "04"), REFUSED)
+}
+pub(super) fn reserve_partial_ctrl_d(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("partial_Ctrl_D", "partial+04"), REFUSED)
+}
+pub(super) fn reserve_master_close(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("master_close", "master_close"), REFUSED)
+}
+/// TR-1 rows 417-422 (SB3E-R198): each byte typed while `reg.ready` is held.
+pub(super) fn readiness_cr(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("CR", "stop0d"), REFUSED)
+}
+pub(super) fn readiness_lf(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("LF", "stop0a"), REFUSED)
+}
+pub(super) fn readiness_crlf(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("CRLF", "stop0d0a"), REFUSED)
+}
+pub(super) fn readiness_eof(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("EOF", "04"), REFUSED)
+}
+pub(super) fn readiness_partial_ctrl_d(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("partial_Ctrl_D", "partial+04"), REFUSED)
+}
+pub(super) fn readiness_master_close(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("master_close", "master_close"), REFUSED)
+}

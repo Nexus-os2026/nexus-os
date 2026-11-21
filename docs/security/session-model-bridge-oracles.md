@@ -1630,3 +1630,24 @@ the exact-head receipt check runs them; the Architect adds the D1 file to
 
 Twelve `open:D2` cells are now `x:`; 645 stay `open:D2` and 33 move to `open:M2e-D`.
 Limits and plants: [`sb3-d2-oracles.md`](sb3-d2-oracles.md). Section 14.13 still governs.
+
+### 14.17 SB-3E U19a TR-1: the reserve and readiness byte ledgers (SB3E-R198)
+
+Production binds the Stop route to the session before registration
+(`mother/host/src/hands.rs:1130`, `startup_screen.stop.bind(home.session.clone())`).
+A Stop or end of input read by the reader then dispatches a stop worker
+(`mother/host/src/stop.rs:92-99` returns early only when unbound), whose stop
+effects write one `emergency_stop` record of the session
+(`crates/nexus-governed-control/src/authority/mod.rs:1072-1080`), inside a held
+registration's window. The frozen `ledger=+0:all[s=S]` was reachable only by an
+unbound reader, not production's composition (U19a Step 0 F-S0-1: bound `+1`,
+unbound `+0`, 10/10 each). TR-1 changes only the `ledger` field of twelve rows,
+`+0:all[s=S]` -> `+1:emergency_stop[s=S]`: model-bridge-expect.tsv lines 417-422
+(R0 registration_readiness ingress CR, LF, CRLF, EOF, partial_Ctrl_D,
+master_close) and 441-446 (R0 registration_reserve ingress, the same six values).
+Every other field and column is unchanged. The ledger grammar gains
+`emergency_stop=s` (`all` stays `+0` only). Review note: the delta counts
+`emergency_stop` records of S; unlike `+0:all` it does not by itself refuse an
+extra record of another phase; `out` and `branch` still bind the refusal.
+EXPECT_SHA256 `ca1cfcc7...` -> `7e9c34b5...`. The read_failure rows (423, 447)
+keep `+0` and wait for GB4b (R46.3).

@@ -133,8 +133,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "c6e1582261d8eba82424a4e9cd047ebd99ad142d2a8c7cd8c00adabca28c8092";
-const MUTANTS: usize = 1631;
+const PINS_SHA256: &str = "f4d03db4575e6b0042e16cbac6427d90ef891e2d916a337daeb990c29428da5b";
+const MUTANTS: usize = 1739;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -143,16 +143,16 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs d239a9e9f02e9167251233675cf317c638c2f6fc17ee6cdf062949ce55fb1431
+cells.rs 863b9ff97997c5ae2b7627145ca57f922da8288cbad79b11e090def70bbd937a
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs e1d8bc042590ca330729c2f6a896bd37c650285437a72ccc37194d57afc809f1
+main.rs 7bddac05a1a8599f3c42dee229bb33b66d75532edacaa87c51e98e480aeb43a6
 reader.rs 4e7aa1cc24bf31c8dcd9dfbc1f0b53d0e80c36f73f51b0cd03af27e95f8e1ac2
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
 s5.rs a4b4b25f6b329bedff95f9807795a39eed6916cbd21e0aae3de949a9088b49d4
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
-s5_reg.rs 934b4ef47ed30326b804e65bf39bd30d3d45c37c14a584b19451621851cbd4f5
+s5_reg.rs 2fb7a4121fc23960b0724347592f6e4b56c2c5de33ea72e07119ec66ef345f00
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
 witness.rs 391a864b223dffdee53ca3888f2ca82386366eff769bfff1370ceea4ebe4feb0

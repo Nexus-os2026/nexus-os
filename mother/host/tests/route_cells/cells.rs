@@ -71,4 +71,16 @@ cells! {
     r0 registration_record ingress EOF;
     r0 registration_record ingress partial_Ctrl_D;
     r0 registration_record ingress master_close;
+    r0 registration_reserve ingress CR;
+    r0 registration_reserve ingress LF;
+    r0 registration_reserve ingress CRLF;
+    r0 registration_reserve ingress EOF;
+    r0 registration_reserve ingress partial_Ctrl_D;
+    r0 registration_reserve ingress master_close;
+    r0 registration_readiness ingress CR;
+    r0 registration_readiness ingress LF;
+    r0 registration_readiness ingress CRLF;
+    r0 registration_readiness ingress EOF;
+    r0 registration_readiness ingress partial_Ctrl_D;
+    r0 registration_readiness ingress master_close;
 }
