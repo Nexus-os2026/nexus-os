@@ -32,12 +32,12 @@ type Transcript = Arc<(Mutex<Vec<u8>>, Condvar)>;
 
 /// One child's clock: each wait gets at most PATIENCE and never past the
 /// child's end; a spent budget panics naming the phase. Phases go to fd 2.
-struct Clock {
+pub(super) struct Clock {
     start: Instant,
     phase: Mutex<&'static str>,
 }
 impl Clock {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let phase = Mutex::new("start");
         Self {
             start: Instant::now(),
@@ -48,7 +48,7 @@ impl Clock {
         *self.phase.lock().unwrap() = phase;
         eprintln!("U18PHASE {phase} {}ms", self.start.elapsed().as_millis());
     }
-    fn left(&self) -> Duration {
+    pub(super) fn left(&self) -> Duration {
         let left = (self.start + BUDGET).saturating_duration_since(Instant::now());
         let phase = *self.phase.lock().unwrap();
         assert!(!left.is_zero(), "reader: deadline in phase {phase}");
@@ -59,14 +59,14 @@ impl Clock {
 /// B4: the pty's slave is fd 0 and fd 1 (fd 2 is never touched). The drain
 /// thread alone owns the one master fd and serves write and close requests
 /// between its bounded polls (review F3: no caller waits behind a poll).
-struct Tty {
+pub(super) struct Tty {
     requests: SyncSender<Request>,
     transcript: Transcript,
     drain: Option<std::thread::JoinHandle<()>>,
     saved: Option<(OwnedFd, OwnedFd)>,
 }
 impl Tty {
-    fn open() -> Self {
+    pub(super) fn open() -> Self {
         std::io::stdout().flush().unwrap();
         let saved_in = std::io::stdin().as_fd().try_clone_to_owned().unwrap();
         let saved_out = std::io::stdout().as_fd().try_clone_to_owned().unwrap();
@@ -98,10 +98,10 @@ impl Tty {
     fn close_master(&self) {
         assert!(self.request(Op::Close), "bounded master close");
     }
-    fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.transcript.0.lock().unwrap().len()
     }
-    fn since(&self, at: usize) -> Vec<u8> {
+    pub(super) fn since(&self, at: usize) -> Vec<u8> {
         self.transcript.0.lock().unwrap()[at..].to_vec()
     }
     fn wait_for(&self, clock: &Clock, at: usize, needle: &[u8]) -> bool {
@@ -121,7 +121,7 @@ impl Tty {
     }
     /// After `Terminal::finish` (every queued frame written): drained until
     /// one 100 ms quiet poll, bounded.
-    fn settle(&self, clock: &Clock) {
+    pub(super) fn settle(&self, clock: &Clock) {
         let deadline = Instant::now() + clock.left();
         let (lock, changed) = &*self.transcript;
         let mut seen = lock.lock().unwrap();
@@ -202,7 +202,7 @@ fn compose(f: &Fixture) -> Reader {
     let o = f.open();
     let tty = Tty::open();
     let terminal = Terminal::open(o.ingress.clone()).expect("Terminal::open on the pty");
-    let session = Arc::new(o.session);
+    let session = o.session.clone();
     assert!(terminal.route_bind(session.clone()), "S6: binds once");
     let workspace = f.0.join("workspace");
     let mut dir = std::fs::DirBuilder::new();
@@ -257,6 +257,9 @@ fn chunks(value: &str) -> Vec<(usize, bool, Branch)> {
     match value {
         "0d" | "0a" => vec![(1, false, Branch::Data)],
         "0d0a" => vec![(2, false, Branch::Data)],
+        // U19a (SB3E-R196.2): the typed `stop` line, ended by CR, LF or CRLF.
+        "stop0d" | "stop0a" => vec![(5, false, Branch::Data)],
+        "stop0d0a" => vec![(6, false, Branch::Data)],
         "04" => vec![(1, true, Branch::Data)],
         "partial+04" => vec![(4, false, Branch::Data), (1, true, Branch::Data)],
         "master_close" => vec![(0, false, Branch::Zero)],
@@ -268,7 +271,8 @@ fn chunks(value: &str) -> Vec<(usize, bool, Branch)> {
 /// B7: each chunk has exactly one S7 `host.read` acknowledgement after
 /// `since`, equal to it. A press value's S1 `ingress.emergency` is the
 /// reader's own: on the last acknowledgement's thread, not after it. A
-/// terminator echoes exactly one CRLF and reaches no ingress. Nothing here
+/// terminator echoes exactly one CRLF and reaches no ingress; a `stop` line
+/// (U19a, F-S0-2) echoes `stop` CRLF and is a press value. Nothing here
 /// accepts a command. Findings are `read: ...`.
 pub(super) fn read_ack(
     value: &str,
@@ -319,6 +323,10 @@ pub(super) fn read_ack(
             (false, _) => Err(format!("read: {} ingress entries", ingress.len())),
             (true, false) => Err(format!("read: echo {:?}", String::from_utf8_lossy(echo))),
         };
+    }
+    let line = echo.windows(6).any(|w| w == b"stop\r\n");
+    if value.starts_with("stop") && !line {
+        return Err(format!("read: echo {:?}", String::from_utf8_lossy(echo)));
     }
     let last = &acks[acks.len() - 1];
     match ingress[..] {
@@ -372,12 +380,19 @@ fn apply(f: &Fixture, drive: impl FnOnce(&Reader) -> Vec<Option<s7::Entry>>) -> 
 
 /// B6: the seven reader appliers, one chunk barrier each.
 fn applier(value: &'static str) -> impl FnOnce(&Reader) -> Vec<Option<s7::Entry>> {
-    move |r| {
-        let (tty, clock) = (&r.tty, &r.clock);
+    move |r| write_value(&r.tty, &r.clock, value)
+}
+/// U19a: the appliers' table, for s5's composition too, with the typed
+/// `stop` lines (SB3E-R196.2).
+pub(super) fn write_value(tty: &Tty, clock: &Clock, value: &str) -> Vec<Option<s7::Entry>> {
+    {
         match value {
             "0d" => vec![acked(clock, || tty.write(b"\r"))],
             "0a" => vec![acked(clock, || tty.write(b"\n"))],
             "0d0a" => vec![acked(clock, || tty.write(b"\r\n"))],
+            "stop0d" => vec![acked(clock, || tty.write(b"stop\r"))],
+            "stop0a" => vec![acked(clock, || tty.write(b"stop\n"))],
+            "stop0d0a" => vec![acked(clock, || tty.write(b"stop\r\n"))],
             "04" => vec![acked(clock, || tty.write(b"\x04"))],
             // Q4: a whole command word without its terminator, then EOF.
             "partial+04" => {

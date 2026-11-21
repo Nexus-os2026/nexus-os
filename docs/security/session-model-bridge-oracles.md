@@ -1630,3 +1630,25 @@ the exact-head receipt check runs them; the Architect adds the D1 file to
 
 Twelve `open:D2` cells are now `x:`; 645 stay `open:D2` and 33 move to `open:M2e-D`.
 Limits and plants: [`sb3-d2-oracles.md`](sb3-d2-oracles.md). Section 14.13 still governs.
+
+### 14.17 SB-3E U19a TR-1: the reserve and readiness byte ledgers (SB3E-R198)
+
+Production binds the Stop route before registration (`mother/host/src/hands.rs:1130`),
+so a Stop or end of input read by the reader dispatches a stop worker
+(`mother/host/src/stop.rs:92-99` returns early only when unbound) whose stop effects
+write one `emergency_stop` record of the session
+(`crates/nexus-governed-control/src/authority/mod.rs:1072-1080`) inside the held
+registration's window. The frozen `ledger=+0:all[s=S]` held only for an unbound reader
+(U19a Step 0 F-S0-1, 10/10 each way). TR-1 changes only that field, to
+`+1:emergency_stop[s=S]`, in model-bridge-expect.tsv lines 417-422 (R0
+registration_readiness ingress CR, LF, CRLF, EOF, partial_Ctrl_D, master_close) and
+441-446 (R0 registration_reserve ingress, the same six). The grammar gains
+`emergency_stop=s`. SB3E-R202 S1: `+n:emergency_stop` renders only when n is the whole
+window (journal and native), else `.. of <whole>`, so a stray record of another phase
+fails the row as `+0:all` did (a renderer-layer control and a plant hold it).
+EXPECT_SHA256 `ca1cfcc7...` -> `7e9c34b5...`. Rows 423 and 447 (read_failure) keep `+0`
+and wait for GB4b (R46.3). Also disclosed: the CR/LF/CRLF `apply` column keeps
+`reader:0d`/`0a`/`0d0a` (the verifier's BYTE_APPLY) and means, per SB3E-R196.2, `stop`
+and that terminator, as the drivers type it (a table pass is on the ledger); and
+`deadline_fired` now counts only the lapse notes `refused:1.expired`/`.judged`
+(`.cancelled` is never a lapse, host_session.rs:134-136), a witness rule for every cell.

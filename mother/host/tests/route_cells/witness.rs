@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 16] = [
+const TOKENS: [Token; 17] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -75,6 +75,8 @@ const TOKENS: [Token; 16] = [
     ("note:scope_admit", "reg:scope_admit", note_at),
     ("h:838", "reg.ready", acked),
     ("note:word_compare", "reg:word_compare", note_at),
+    // U19a (rows 534-537): the chat gate's word-moved note (model.rs:788).
+    ("note:1", "refused:1.cancelled", note_at),
 ];
 /// U9a: the admitted entry at `point` that is the cell's acknowledgement.
 fn acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
@@ -115,12 +117,14 @@ fn after_acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
 /// captured the sources (s5.rs `start`'s `since`), or for `collect_close` and
 /// `registered` since the hold's acknowledgement (U9a M3, SEAM-1; SB3E-R6.3's
 /// empty delta is `+0:all[s=S]`).
-const LEDGER: [(&str, &str); 7] = [
+const LEDGER: [(&str, &str); 8] = [
     ("ModelCallCharged", "journal"),
     ("LaneReturned", "journal"),
     ("SessionClosed", "journal"),
     ("model_call", "native"),
     ("model_registered", "native"),
+    // U19a TR-1 (SB3E-R198): the Stop record of the reader's bound Stop route.
+    ("emergency_stop", "native"),
     ("session_closed", "commit"),
     ("all", "all"),
 ];
@@ -136,6 +140,7 @@ model.call.observed|s q run att kind ord|host_session/model.rs:893-899
 model.call.admitted|s q run att kind ord|host_session/model.rs:893-899
 refused:8.cas|s q run att kind ord|host_session/model.rs:849, 893-899
 refused:1.expired|s q run att kind ord|host_session/model.rs:771, 893-899
+refused:1.cancelled|s q run att kind ord|host_session/model.rs:788, 893-899
 model.attempt.record.before|s run att|host_session/model.rs:519-523
 complete|s run att|host_session/model.rs:519-523
 mother.charge.entry|s q inv|mother coordinator/model_calls.rs:203-206, 216
@@ -694,10 +699,22 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
     let answered =
         !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers);
     let first = f.acks.iter().map(|a| of(a).instant).min();
-    let ack = match (answered, f.applied.zip(first)) {
-        (true, Some((at, first))) if at < first => "armed".to_string(),
-        (true, _) => "held".to_string(),
-        (false, _) => {
+    // U19a (U18 note 1, SB3E-R198 F-S0-2): `read` only from `read_ack` Ok, its
+    // window opening after every hold's acknowledgement; else `unread[..]`.
+    let last = f.acks.iter().map(|a| of(a).instant).max();
+    let read = f
+        .read
+        .as_ref()
+        .map(|r| match last.is_some_and(|l| l <= r.since) {
+            true => super::reader::read_ack(r.value, &r.trace, &f.broker, &r.echo, r.since),
+            false => Err("read: before the hold".into()),
+        });
+    let ack = match (answered, read, f.applied.zip(first)) {
+        (true, Some(Ok(_)), _) => "read".to_string(),
+        (true, Some(Err(e)), _) => format!("unread[{e}]"),
+        (true, None, Some((at, first))) if at < first => "armed".to_string(),
+        (true, _, _) => "held".to_string(),
+        (false, _, _) => {
             let shown = f.acks.iter().map(of).map(|a| (a.point, a.kind, a.ord));
             format!("unanswered{:?}", shown.collect::<Vec<_>>())
         }
@@ -856,6 +873,11 @@ fn ledger(v: &View, text: &str) -> Obs {
             "commit" => commits(true),
             _ => v.f.journal.len() + v.f.native.len(),
         };
+        // U19a TR-1 (SB3E-R202 S1): the Stop record stands for the whole window, as `+0:all` did.
+        let whole = v.f.journal.len() + v.f.native.len();
+        if event == "emergency_stop" && n != whole {
+            return Ok(format!("+{n}:{event}[{tag}] of {whole}"));
+        }
         Ok(format!("+{n}:{event}[{tag}]"))
     });
     Ok(shown.collect::<Result<Vec<_>, _>>()?.join(","))
@@ -903,10 +925,13 @@ fn deadline(v: &View, noted: &[&str]) -> Obs {
     if (v.b.run.is_none() || v.b.att.is_none()) && v.f.native.iter().any(|r| call(&r)) {
         return Err(Unbound);
     }
+    // U19a: a lapse is noted `.expired` or `.judged` (model.rs:773, 781);
+    // `.cancelled` is never one (host_session.rs:134-136 returns `Expired`
+    // before any other refusal).
     let expired: Vec<&str> = noted
         .iter()
         .copied()
-        .filter(|n| n.starts_with("refused:1"))
+        .filter(|n| ["refused:1.expired", "refused:1.judged"].contains(n))
         .collect();
     let attempt = |r: &&nexus_governed_control::authority::evidence::EvidenceRecord| attempt(v, r);
     let mut outcomes =
@@ -1676,6 +1701,7 @@ fn refused() -> Facts {
         native: Vec::new(),
         peer: Vec::new(),
         findings: Vec::new(),
+        read: None,
     }
 }
 
@@ -1785,7 +1811,12 @@ fn witness_control_registration_other_session_fails_in_entry_and_check() {
     );
 }
 fn reg_other_session(f: &super::Fixture) -> Facts {
-    let mut facts = super::s5::registered(f, ("registration_record", "ingress"), "quit");
+    let mut facts = super::s5::registered(
+        f,
+        ("registration_record", "ingress"),
+        "quit",
+        &[Err("Backend(\"model_cancelled\")")],
+    );
     let other = nexus_governed_control::host_session::SessionSeed::new().unwrap();
     facts.session = other.identity();
     facts
@@ -1803,7 +1834,12 @@ fn witness_control_registration_other_request_unbinds_the_ledger() {
     );
 }
 fn reg_other_request(f: &super::Fixture) -> Facts {
-    let mut facts = super::s5::registered(f, ("registration_record", "ingress"), "quit");
+    let mut facts = super::s5::registered(
+        f,
+        ("registration_record", "ingress"),
+        "quit",
+        &[Err("Backend(\"model_cancelled\")")],
+    );
     let record = facts
         .broker
         .iter()
@@ -1962,5 +1998,45 @@ fn end_before(f: &super::Fixture) -> Facts {
     let mut facts = end_run(f);
     let end = |e: &&mut s1::Entry| e.phase.as_deref() == Some("session_closed");
     facts.broker.iter_mut().filter(end).for_each(|e| e.tick = 0);
+    facts
+}
+
+/// U19a negative control (des:474, SB3E-R198 F-S0-2): a press made through
+/// the public ingress while `reg.reserve` is held, with the reader's facts
+/// claimed for the `stop` CR line, refuses the registration but is never
+/// `ack=read`.
+#[test]
+fn route_s5_public_press_is_not_read() {
+    super::child("witness::route_s5_public_press_is_not_read", |f| {
+        let (row, value) = (("registration_reserve", "ingress"), ("CR", "stop0d"));
+        let refused: [Result<(), &str>; 1] = [Err("Restricted")];
+        let facts = super::s5::pressed_registered(f, row, value, &refused);
+        let got = render(&facts);
+        println!("WITNESS public press: {got}");
+        let want = frozen(row.0, row.1, value.0).expect("row 441");
+        let diffs = compare(want, &got).join("; ");
+        assert!(diffs.contains("value: expected"), "{diffs}");
+        let unread = "CR@reg.reserve ack=unread[read: no host.read acknowledgement] won=value";
+        assert!(got.contains(unread), "{got}");
+        assert!(
+            !diffs.contains("out:"),
+            "the press refused nothing: {diffs}"
+        );
+    });
+}
+/// SB3E-R202 S1 (renderer layer, row 441): a stray non-Stop record fails `ledger`.
+#[test]
+fn witness_control_tr1_stray_record_fails_the_ledger() {
+    let name = "witness::witness_control_tr1_stray_record_fails_the_ledger";
+    let row = ("registration_reserve", "ingress", "CR");
+    differs_at(name, "ctl_tr1_stray", tr1_stray, row, &["ledger"]);
+}
+fn tr1_stray(f: &super::Fixture) -> Facts {
+    let refused: [Result<(), &str>; 1] = [Err("Restricted")];
+    let row = ("registration_reserve", "ingress");
+    let mut facts = super::s5::read_registered(f, row, ("CR", "stop0d"), &refused);
+    let mut stray = facts.native.first().cloned().expect("the Stop record");
+    stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
+    facts.native.push(stray);
     facts
 }
