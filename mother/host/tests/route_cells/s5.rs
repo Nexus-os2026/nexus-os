@@ -1281,9 +1281,8 @@ pub(super) struct Facts {
     /// U19a: the reader's facts when the value was typed (`ack=read`).
     pub(super) read: Option<Read>,
 }
-/// U19a (U18 binding note 1): what production's reader did with a typed
-/// value: the reader value (`reader::read_ack`'s), the S7 trace, the pty's
-/// echo, and since when (after the hold's acknowledgement).
+/// U19a (U18 binding note 1): the reader value (`read_ack`'s), the S7 trace,
+/// the pty's echo, and since when (after the hold's acknowledgement).
 #[derive(Clone)]
 pub(super) struct Read {
     pub(super) value: &'static str,
@@ -1790,8 +1789,7 @@ pub(super) fn quit(f: &Fixture) -> Facts {
         accepted.map(|_| ()).map_err(|e| format!("{e:?}"))
     })
 }
-/// U19a (set B, SB3E-R196.1): rows 534-537, ord 4's chat held at
-/// `call.gate`, the state reached while it stands (as `fatal` and `quit`).
+/// U19a: rows 534-537, the state reached while ord 4's `call.gate` is held.
 const CALL_GATE: Chain = Chain {
     row: ("call_chat", "lifecycle"),
     anchor: Anchor::Mother("mother.charge.entry"),
@@ -1822,11 +1820,8 @@ pub(super) fn chat_closingrestricted(f: &Fixture) -> Facts {
         quit_two(o).and_then(|()| pressed(o))
     })
 }
-/// U19a (SB3E-R196.2, R198): rows 86-91 (`stop` CR, LF, CRLF; Ctrl-D; a word
-/// then Ctrl-D; the master closed), the value typed into production's
-/// reader (`Reading`, opened over the cell's session while ord 4's chat is
-/// held at `model.call.observed`), then the chat released; the terminal is
-/// finished before `collect` reads anything.
+/// U19a: rows 86-91, the value typed into `Reading` (opened while ord 4's
+/// chat is held at `model.call.observed`), then the chat released.
 fn typed_chat(f: &Fixture, value: &'static str, typed: &'static str) -> Facts {
     let (mut facts, _, found) = driven(f, value, &U5, &REFUSED, |o, _, held, _| {
         let reading = Reading::open(o);
@@ -2753,8 +2748,7 @@ fn reg_ack(
         )),
     }
 }
-/// U19a C1 (SB3E-R194): the sink's own result must be one of `want`, as
-/// `closed` checks its sink's (s5.rs `closed`); a finding otherwise.
+/// U19a C1 (SB3E-R194): the sink's own result is one of `want`, as in `closed`.
 fn sink_result<T, E: std::fmt::Debug>(
     result: &Result<T, E>,
     want: &[Result<(), &str>],
@@ -2790,24 +2784,20 @@ impl Reading {
             clock,
         }
     }
-    /// The reader value typed while the hold stands, each chunk behind its
-    /// barrier; `since` is taken first, after the hold's acknowledgement.
+    /// The value typed, each chunk behind its barrier; `since` taken first.
     fn typed(&self, value: &'static str) -> (Vec<Option<s7::Entry>>, Instant, usize) {
         drop(s7::drain_trace());
         let (since, mark) = (Instant::now(), self.tty.len());
         let acks = reader::write_value(&self.tty, &self.clock, value);
         (acks, since, mark)
     }
-    /// The negative control's value: a press through the public ingress, by
-    /// the harness, with nothing typed (des:474).
+    /// The negative control: a public-ingress press, nothing typed (des:474).
     fn pressed(&self, o: &Opened) -> (Vec<Option<s7::Entry>>, Instant, usize) {
         let (since, mark) = (Instant::now(), self.tty.len());
         let _ = o.ingress.emergency();
         (Vec::new(), since, mark)
     }
-    /// After the release: the terminal finished (its reader and Stop reporter
-    /// joined, U18 F1) before any trace is read; the reader's facts kept for
-    /// the collection; a barrier that is not the trace's is a finding.
+    /// The terminal finished before any trace is read (U18 F1); the facts kept.
     fn close(
         mut self,
         value: &'static str,
@@ -2835,8 +2825,7 @@ impl Reading {
         findings
     }
 }
-/// How the value reaches the held point: s5 applies it, or it is typed into
-/// production's reader (U19a, `ack=read`).
+/// How the value reaches the held point: applied by s5, typed, or pressed.
 #[derive(Clone, Copy)]
 enum Value {
     Held,
@@ -2859,8 +2848,7 @@ pub(super) fn registered(
 ) -> Facts {
     reg_drive(f, row, value, Value::Held, want)
 }
-/// U19a: `registered` with `value` typed into production's reader as the
-/// reader value `typed` (reader.rs `write_value`) while the point is held.
+/// U19a: `registered` with the reader value `typed` typed while held.
 pub(super) fn read_registered(
     f: &Fixture,
     row: (&'static str, &'static str),

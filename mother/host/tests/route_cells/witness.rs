@@ -75,8 +75,7 @@ const TOKENS: [Token; 17] = [
     ("note:scope_admit", "reg:scope_admit", note_at),
     ("h:838", "reg.ready", acked),
     ("note:word_compare", "reg:word_compare", note_at),
-    // U19a (rows 534-537): the chat gate's refusal note when the session
-    // word moved while held (model.rs:788).
+    // U19a (rows 534-537): the chat gate's word-moved note (model.rs:788).
     ("note:1", "refused:1.cancelled", note_at),
 ];
 /// U9a: the admitted entry at `point` that is the cell's acknowledgement.
@@ -700,9 +699,8 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
     let answered =
         !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers);
     let first = f.acks.iter().map(|a| of(a).instant).min();
-    // U19a (U18 binding note 1, SB3E-R198 F-S0-2): a typed value is `read`
-    // only when `read_ack` holds over the reader's facts, its window opening
-    // after every hold's acknowledgement; anything else is `unread[..]`.
+    // U19a (U18 note 1, SB3E-R198 F-S0-2): `read` only from `read_ack` Ok, its
+    // window opening after every hold's acknowledgement; else `unread[..]`.
     let last = f.acks.iter().map(|a| of(a).instant).max();
     let read = f
         .read
