@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -160,6 +160,7 @@
    "witness::witness_control_quit_other_session_fails_in_entry_and_check",
    "witness::witness_control_registration_other_request_unbinds_the_ledger",
    "witness::witness_control_registration_other_session_fails_in_entry_and_check",
+   "witness::witness_control_tr1_stray_record_fails_the_ledger",
    "witness::witness_native_ledger_binds_by_fixture_and_request",
    "witness::witness_renderer_controls_each_differ",
    "witness::witness_result_records_each_refused",
@@ -167,13 +168,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "e95c834a6a1cac8889d51c9a50c93bc06316dadc3f056b408b89aa6ac1a64c61"
+  "sha256": "5dd82e633455624a208a650a0b2bab6ca24df8c91f8579cdfcdfada48bd43144"
  },
  "plants": {
-  "count": 379,
-  "names_sha256": "6d30b16d25114a33af25565120d4364382e388f50d34208dae54a9d77319fd68",
+  "count": 381,
+  "names_sha256": "05767dad112bbb27a1f0990f799cd2a5c76a0071e786880deb5d9bdff56eb3f9",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "1d232b8baf87ec24edfa5c8e95a930846eb18cc1b4621e8bf338e86d2fa5064a"
+  "file_sha256": "84ed60671cfa08fbe251bda195e05fb6bf8cf3ca2b72d33283b87a03e971a502"
  }
 }
