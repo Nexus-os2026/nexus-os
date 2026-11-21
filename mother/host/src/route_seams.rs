@@ -1,14 +1,19 @@
-//! SB-3E S7 (design 4.2, DA-S7R): the host reader's route seam, as S5.
+//! SB-3E S7 (design 4.2, DA-S7R): the host's route seam, as S5.
 //! Compiled only with `--cfg mother_route_seams`, which only the route lane's
 //! wrapper sets; the shipped build has none. The writer `at` is crate-private
 //! and called only at the three `host.read` arms of `terminal.rs`
-//! `read_input`, on the reader thread after it has processed the value; the
-//! harness may only `arm` and `drain_trace`. `at` returns nothing: it records
-//! or pauses, and never returns into the reader with a value. It touches no
-//! host resource itself: a pause's timeout is the harness's own sink.
+//! `read_input`, on the reader thread after it has processed the value, and
+//! (U21a, SB3E-R197, R199) in `hands.rs` `Runtime::close_report`, on the
+//! close worker: its entry, one record per bound observation branch (an
+//! entry, never a note) and its exit with the report. The harness may only
+//! `arm` and `drain_trace`. `at` returns nothing: it records, pauses or
+//! begins an unwind, and never returns into the host with a value. It
+//! touches no host resource itself: a pause's timeout is the harness's own
+//! sink.
 #[cfg(not(target_os = "linux"))]
 compile_error!("mother_route_seams: the route seams are Linux-only");
 
+use nexus_governed_control::host_session::{HostSession, SessionIdentity, SessionState};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -19,7 +24,14 @@ const M: &str = "nexus-mother-route-seam-S7";
 /// The bounded wait of every pause (design 3.5).
 const PATIENCE: Duration = Duration::from_secs(10);
 /// Every point a harness may arm.
-pub(crate) const POINTS: [&str; 1] = ["host.read"];
+pub(crate) const POINTS: [&str; 6] = [
+    "host.close_report",
+    "host.close_report.inventory",
+    "host.close_report.model",
+    "host.close_report.resources",
+    "host.close_report.string",
+    "host.read",
+];
 
 static ARMED: AtomicBool = AtomicBool::new(false);
 static STATE: Mutex<State> = Mutex::new(State {
@@ -37,7 +49,8 @@ struct Pending {
     id: u64,
     point: &'static str,
     ack: SyncSender<Entry>,
-    pause: (Receiver<()>, &'static str, Timeout),
+    /// `None`: an armed panic.
+    pause: Option<(Receiver<()>, &'static str, Timeout)>,
 }
 
 /// Which arm of `read_input` processed the value.
@@ -49,14 +62,25 @@ pub enum Branch {
     Zero,
     /// A read error, after press and fail.
     Err,
+    /// U21a: a `close_report` point (no read).
+    Report,
 }
 
-/// What the reader knew when it recorded.
-#[derive(Clone, Copy)]
+/// What the recording host code knew: the reader's read, or (U21a) the
+/// close worker's session, its state, the report's stage, a branch's
+/// outcome and, at the exit, the report.
 pub(crate) struct Read {
     n: usize,
     eot: bool,
     branch: Branch,
+    report: Option<Report>,
+}
+struct Report {
+    session: SessionIdentity,
+    state: SessionState,
+    stage: String,
+    known: Option<bool>,
+    text: Option<String>,
 }
 /// `Ok(n)`: the read's length and whether it held a Ctrl-D.
 pub(crate) fn data(bytes: &[u8]) -> Read {
@@ -65,6 +89,7 @@ pub(crate) fn data(bytes: &[u8]) -> Read {
         n,
         eot,
         branch: Branch::Data,
+        report: None,
     }
 }
 /// `Ok(0)` or an error: nothing was read.
@@ -73,6 +98,30 @@ pub(crate) fn end(branch: Branch) -> Read {
         n: 0,
         eot: false,
         branch,
+        report: None,
+    }
+}
+/// U21a: a `close_report` point of `session`'s close worker: its state now,
+/// the report's `stage`, a branch's outcome (`Ok`: `Some(true)`) and, at the
+/// exit, the report text.
+pub(crate) fn report(
+    session: &HostSession,
+    stage: &str,
+    known: Option<bool>,
+    text: Option<&str>,
+) -> Read {
+    let report = Report {
+        session: session.identity(),
+        state: session.state(),
+        stage: stage.to_owned(),
+        known,
+        text: text.map(str::to_owned),
+    };
+    Read {
+        n: 0,
+        eot: false,
+        branch: Branch::Report,
+        report: Some(report),
     }
 }
 
@@ -84,7 +133,14 @@ pub struct Entry {
     pub n: usize,
     pub eot: bool,
     pub branch: Branch,
-    /// The recording thread: the reader's own.
+    /// U21a: a `close_report` point's session, state, stage, branch outcome
+    /// and (exit) report; `None` at `host.read`.
+    pub session: Option<SessionIdentity>,
+    pub state: Option<SessionState>,
+    pub stage: Option<String>,
+    pub known: Option<bool>,
+    pub text: Option<String>,
+    /// The recording thread: the reader's or the close worker's own.
     pub thread: std::thread::ThreadId,
     /// When it was recorded (position evidence only).
     pub instant: Instant,
@@ -104,6 +160,9 @@ pub enum Action {
         cell: &'static str,
         timeout: Timeout,
     },
+    /// U21a (SB3E-R140 Q3): at the first arrival, acknowledge, then begin
+    /// an unwind.
+    Panic,
 }
 
 /// One arming. Dropping it releases its pause, or disarms it if it has not
@@ -128,8 +187,12 @@ pub fn arm(point: &'static str, action: Action) -> Held {
     let mut s = state();
     s.tick += 1;
     let id = s.tick;
-    if let Action::Pause { cell, timeout } = action {
-        let pause = (released, cell, timeout);
+    let pause = match action {
+        Action::Trace => None,
+        Action::Pause { cell, timeout } => Some(Some((released, cell, timeout))),
+        Action::Panic => Some(None),
+    };
+    if let Some(pause) = pause {
         s.pending.push(Pending {
             id,
             point,
@@ -166,12 +229,18 @@ fn fire(point: &'static str, read: Read) {
     let (entry, pending) = {
         let mut s = state();
         s.tick += 1;
+        let report = read.report;
         let entry = Entry {
             tick: s.tick,
             point,
             n: read.n,
             eot: read.eot,
             branch: read.branch,
+            session: report.as_ref().map(|r| r.session),
+            state: report.as_ref().map(|r| r.state),
+            stage: report.as_ref().map(|r| r.stage.clone()),
+            known: report.as_ref().and_then(|r| r.known),
+            text: report.and_then(|r| r.text),
             thread: std::thread::current().id(),
             instant: Instant::now(),
         };
@@ -181,7 +250,9 @@ fn fire(point: &'static str, read: Read) {
     };
     let Some(pending) = pending else { return };
     let acknowledged = pending.ack.try_send(entry).is_ok();
-    let (released, cell, timeout) = pending.pause;
+    let Some((released, cell, timeout)) = pending.pause else {
+        panic!("route seam S7: armed panic at {point}");
+    };
     if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
         timeout(&format!("TIMEOUT {cell} {point}"));
     }

@@ -1,4 +1,6 @@
 //! Deterministic, one-mission Hands host. Raw Owner handles never escape it.
+#[cfg(mother_route_seams)]
+use crate::route_seams;
 use crate::session_home::SessionServices;
 use crate::terminal::{Shared, Terminal};
 use nexus_governed_control::authority::clock::SystemClock;
@@ -753,12 +755,22 @@ impl Runtime {
         }
     }
     fn close_report(&self, stage: &str) -> String {
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "host.close_report",
+            route_seams::report(&self.home.session, stage, None, None),
+        );
         // This runs only on the bounded close worker, never on the deadline
         // delivery path. A held observer yields an explicit unknown report.
         let mut report = format!("CLOSE FAILED stage={stage}\n");
         let resources = self.home.session.resource_obligations();
         #[cfg(test)]
         let resources = sb2_close_tests::observed(0, resources);
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "host.close_report.resources",
+            route_seams::report(&self.home.session, stage, Some(resources.is_ok()), None),
+        );
         match resources {
             Ok(r) => report.push_str(&format!("CLOSE OBLIGATIONS reservations_unresolved={} uncertain={} private={} private_unresolved={}\n", r.unresolved, r.uncertain, r.private, r.private_unresolved)),
             Err(_) => report.push_str(CLOSE_UNKNOWN),
@@ -766,6 +778,11 @@ impl Runtime {
         let inventory = self.home.session.inventory();
         #[cfg(test)]
         let inventory = sb2_close_tests::observed(1, inventory);
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "host.close_report.inventory",
+            route_seams::report(&self.home.session, stage, Some(inventory.is_ok()), None),
+        );
         match inventory {
             Ok(inventory) => {
                 for e in inventory.entries {
@@ -777,6 +794,11 @@ impl Runtime {
         let model = self.home.session.close_obligations();
         #[cfg(test)]
         let model = sb2_close_tests::observed(2, model);
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "host.close_report.model",
+            route_seams::report(&self.home.session, stage, Some(model.is_ok()), None),
+        );
         report.push_str(&model_report(model.as_ref().ok().map(|o| o.model)));
         match model {
             Ok(o) => report.push_str(&format!("CLOSE AUTHORITY closed={} actions_unacknowledged={} producers_live={} producers_lost={} halt_pending={} halt_owed={} halt_uncertain={} halt_lost={}\n", o.authority_closed, o.actions_unacknowledged, o.producers_live, o.producers_lost, o.halt.pending, o.halt.owed, o.halt.uncertain, o.halt.lost)),
@@ -788,6 +810,11 @@ impl Runtime {
         }
         let h = self.home.evidence_health();
         report.push_str(&format!("CLOSE PRIMARY latched={} owed={} recovery_required={} unsettled={} unclean_sessions={}\n", h.latched, h.owed, h.recovery_required, h.unsettled, h.unclean_sessions));
+        #[cfg(mother_route_seams)]
+        route_seams::at(
+            "host.close_report.string",
+            route_seams::report(&self.home.session, stage, None, Some(&report)),
+        );
         report
     }
 }
