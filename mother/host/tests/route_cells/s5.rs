@@ -31,6 +31,7 @@ use nexus_mother::journal::{Entry as Journaled, MissionId};
 use nexus_mother::lane::{InvocationId, Lane, LaneContext, LaneIdentity, LaneInput, LaneOutput};
 use nexus_mother::lane::{LaneRole, ScriptedLane, Verdict};
 use nexus_mother::route_seams as s5;
+use nexus_mother_host::route_seams as s7;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -1265,6 +1266,8 @@ pub(super) struct Facts {
     pub(super) applied: Option<Instant>,
     pub(super) broker: Vec<s1::Entry>,
     pub(super) mother: Vec<s5::Entry>,
+    /// U21a: the host's S7 entries (a `close_report` cell's; else none).
+    pub(super) host: Vec<s7::Entry>,
     /// The journal's entries in the window, read from its file (R1-2): since
     /// `start` captured the sources (`collect`), or since the hold (`collect_close`).
     pub(super) journal: Vec<Journaled>,
@@ -1283,6 +1286,8 @@ pub(super) struct Facts {
 pub(super) enum Ack {
     S1(s1::Entry),
     S5(s5::Entry),
+    /// U21a: an S7 `close_report` acknowledgement.
+    S7(s7::Entry),
 }
 // Held only to stand until dropped (its drop releases the hold).
 #[allow(dead_code)]
@@ -1377,6 +1382,13 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
     if close != held {
         found.push(format!(
             "collect: {sink} collected by collect_close {close}"
+        ));
+    }
+    // U21a: `collect_report` exactly for the `close_report` rows.
+    let report = *collector == "collect_report";
+    if report != (sink == "close_report") {
+        found.push(format!(
+            "collect: {sink} collected by collect_report {report}"
         ));
     }
     found
@@ -2002,6 +2014,7 @@ pub(super) fn collect(
         applied: APPLIED.lock().unwrap().take(),
         broker,
         mother: trace,
+        host: Vec::new(),
         journal: journal.get(s.since.0..).unwrap_or_default().to_vec(),
         native: s.native.records()[s.since.1..].to_vec(),
         peer: s.peer.lock().unwrap()[s.since.2..].to_vec(),
@@ -2078,6 +2091,7 @@ fn collect_reg(
         applied,
         broker,
         mother: Vec::new(),
+        host: Vec::new(),
         journal: Vec::new(),
         native: b.native.records()[b.since.0..].to_vec(),
         peer: b.peer.lock().unwrap()[b.since.1..].to_vec(),
@@ -2442,6 +2456,7 @@ fn collect_close(
         applied,
         broker,
         mother,
+        host: Vec::new(),
         journal: window,
         native,
         peer,
@@ -2842,4 +2857,104 @@ fn route_s5_registered_notes_the_refused_reserve() {
         assert_eq!(own, ("reg:scope_admit", ack.thread, true));
         assert!(facts.native.is_empty(), "window: {:?}", facts.native);
     });
+}
+
+/// U21a (SB3E-R197, R199): the passive `close_report` collection, once the
+/// `hands::run` thread is joined: both traces drained; S and Q are the
+/// close worker's own `close.seal` (S1, before the acknowledgement on its
+/// thread, close.rs:367-369); the acknowledgement is production's S7 entry
+/// on that worker (not the harness's or the run's thread), of S, in
+/// `want`'s state and stage (a `lifecycle` row's value is that state); no
+/// `host.read` after it (the reader is joined before the close worker,
+/// hands.rs `run`); the journal from its file since the acknowledgement,
+/// and no native projection (the window's primary records are its S1
+/// commits, witness.rs `ledger`).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn collect_report(
+    point: &'static str,
+    ack: Option<s7::Entry>,
+    (run, test): (ThreadId, ThreadId),
+    (journal, since): (&std::path::Path, usize),
+    (cell, value): ((&'static str, &'static str), &'static str),
+    (state, stage): (&'static str, &'static str),
+    mut findings: Vec<String>,
+) -> Facts {
+    let (broker, host) = (s1::drain_trace(), s7::drain_trace());
+    let running = *RUNNING.lock().unwrap();
+    let seal = |a: &s7::Entry| {
+        let own = |e: &&s1::Entry| e.point == "close.seal" && e.thread == a.thread;
+        broker.iter().rfind(own).filter(|e| e.instant < a.instant)
+    };
+    let sealed = ack.as_ref().and_then(seal);
+    if ack.is_some() && sealed.is_none() {
+        findings.push("report: no close.seal on the close worker".into());
+    }
+    let any = || broker.iter().rfind(|e| e.point == "close.seal");
+    let sealed = sealed.or_else(any);
+    let identity = sealed.and_then(|e| Some((e.session?, e.request?)));
+    let (session, request) = identity.expect("collect_report: no close.seal of the session");
+    match &ack {
+        None => findings.push(format!("report: {point} not acknowledged")),
+        Some(a) => {
+            if a.thread == run || a.thread == test {
+                findings.push(format!("report: {point} acknowledged off the close worker"));
+            }
+            if a.session != Some(session) {
+                findings.push(format!("report: {point} of another session"));
+            }
+            let at = a.state.map_or("none".to_string(), |s| format!("{s:?}"));
+            let lifecycle = cell.1 == "lifecycle" && value != "none";
+            if at != state || lifecycle && value != state {
+                findings.push(format!("value: state {at} at the hold, not {state}"));
+            }
+            if a.stage.as_deref() != Some(stage) {
+                let got = a.stage.as_deref().unwrap_or("none");
+                findings.push(format!("stage: {got}, not {stage}"));
+            }
+            let read = |e: &&s7::Entry| e.point == "host.read" && e.instant > a.instant;
+            if host.iter().any(|e| read(&e)) {
+                findings.push("report: a host.read after the hold (a live reader)".into());
+            }
+        }
+    }
+    if running == "none" {
+        findings.push("collect_report: no running cell".into());
+    }
+    let window = journal_at(journal).map(|mut j| j.split_off(since.min(j.len())));
+    let window = window.unwrap_or_else(|e| {
+        findings.push(e);
+        Vec::new()
+    });
+    // The window opens at the acknowledgement: the broker's records and
+    // notes since (the route's own S7 entries, the hold's sink, stay whole).
+    let since_ack = |at: Instant| ack.as_ref().is_none_or(|a| at >= a.instant);
+    let broker: Vec<s1::Entry> = broker
+        .into_iter()
+        .filter(|e| since_ack(e.instant))
+        .collect();
+    let events: Vec<String> = window.iter().map(|e| format!("{:?}", e.event)).collect();
+    println!(
+        "WITNESS report window: journal {events:?}, host {}",
+        host.len()
+    );
+    let facts = Facts {
+        session,
+        request,
+        recorded: Vec::new(),
+        claim: None,
+        points: vec![point],
+        acks: ack.into_iter().map(Ack::S7).collect(),
+        value,
+        row: cell,
+        applied: None,
+        broker,
+        mother: Vec::new(),
+        host,
+        journal: window,
+        native: Vec::new(),
+        peer: Vec::new(),
+        findings,
+    };
+    KEPT.lock().unwrap().push(("collect_report", facts.clone()));
+    facts
 }

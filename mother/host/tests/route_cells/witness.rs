@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 16] = [
+const TOKENS: [Token; 18] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -75,7 +75,48 @@ const TOKENS: [Token; 16] = [
     ("note:scope_admit", "reg:scope_admit", note_at),
     ("h:838", "reg.ready", acked),
     ("note:word_compare", "reg:word_compare", note_at),
+    // U21a (SB3E-R199 Q-U21-1): close_report's check, its bound branch
+    // records (entries, not notes) then its exit with the report; and its
+    // exit point `string` (hands.rs `close_report`).
+    ("note", "host.close_report.string", reported),
+    ("string", "host.close_report.string", acked),
 ];
+/// U21a (SB3E-R199 Q-U21-1): the admitted S7 `host.close_report` entry of
+/// S, then on its thread, in order, the `resources`, `inventory` and `model`
+/// branch records, each `Ok`, and the exit at `point` whose report holds no
+/// `unknown` (so the stop and primary observations were known too). The
+/// records are entries (`note: false`): `branch` stays `none`.
+fn reported<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let at = |p: &str, e: &Seen| !e.s1 && !e.note && e.point == p && admitted(v, e, tag);
+    let host = |e: &Seen| {
+        v.f.host
+            .iter()
+            .find(|h| h.tick == e.tick && h.point == e.point)
+    };
+    let entry = *v.seen.iter().find(|e| at("host.close_report", e))?;
+    let branches = [
+        "host.close_report.resources",
+        "host.close_report.inventory",
+        "host.close_report.model",
+    ];
+    let mut last = entry;
+    for p in branches.into_iter().chain([point]) {
+        let after = |e: &&Seen| at(p, e) && e.thread == entry.thread && e.tick > last.tick;
+        last = *v.seen.iter().find(after)?;
+        let record = host(&last)?;
+        let known = match p == point {
+            true => record
+                .text
+                .as_deref()
+                .is_some_and(|t| !t.contains("unknown")),
+            false => record.known == Some(true),
+        };
+        if !known {
+            return None;
+        }
+    }
+    Some(last)
+}
 /// U9a: the admitted entry at `point` that is the cell's acknowledgement.
 fn acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
     let ack = |e: &&Seen| v.f.acks.iter().any(|a| of(a) == **e);
@@ -158,6 +199,11 @@ close.seal|s q|host_session/close.rs:367-369
 seal:stop|s|host_session/close.rs:407
 ingress.accept|s q|host_session.rs:1695-1698
 ingress.emergency|s|host_session.rs:1642
+host.close_report|s|host hands.rs close_report entry; route_seams.rs report
+host.close_report.resources|s|host hands.rs close_report resources branch; route_seams.rs report
+host.close_report.inventory|s|host hands.rs close_report inventory branch; route_seams.rs report
+host.close_report.model|s|host hands.rs close_report model branch; route_seams.rs report
+host.close_report.string|s|host hands.rs close_report exit; route_seams.rs report
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -265,10 +311,30 @@ fn of5(e: &nexus_mother::route_seams::Entry) -> Seen<'_> {
         instant: e.instant,
     }
 }
+/// U21a: an S7 `close_report` entry (its session only; never a note).
+fn of7(e: &nexus_mother_host::route_seams::Entry) -> Seen<'_> {
+    Seen {
+        point: e.point,
+        note: false,
+        s1: false,
+        tick: e.tick,
+        s: e.session,
+        q: None,
+        run: None,
+        inv: None,
+        att: None,
+        kind: None,
+        ord: None,
+        foreign: false,
+        thread: e.thread,
+        instant: e.instant,
+    }
+}
 fn of(a: &Ack) -> Seen<'_> {
     match a {
         Ack::S1(e) => of1(e),
         Ack::S5(e) => of5(e),
+        Ack::S7(e) => of7(e),
     }
 }
 /// Key `k` of `e`: whether it was recorded, and whether it equals the bound
@@ -356,7 +422,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 12] = [
+const CONTROLS: [(&str, &str, &str); 13] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -369,7 +435,13 @@ const CONTROLS: [(&str, &str, &str); 12] = [
     ("emergency_restrict", "lifecycle", HELD_CONTROLS[1]),
     ("registration_reserve", "ingress", RESERVE_CONTROL),
     ("registration_readiness", "ingress", READY_CONTROL),
+    ("close_report", "lifecycle", REPORT_CONTROL),
 ];
+/// U21a: the close_report control, `quit` held at the entry with no value:
+/// the credited rows' text with `none`.
+const REPORT_CONTROL: &str = "entry=host.close_report[s=S];check=note[s=S];\
+value=none@host.close_report ack=held won=route;out=passed@note;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
 /// U9b (SB3E-R135.3 Q8): the held-sink controls as measured at U9b Step 0,
 /// 20/20 each: the credited rows' text with no value.
 const HELD_CONTROLS: [&str; 2] = [
@@ -431,6 +503,9 @@ fn frozen(sink: &str, dim: &str, value: &str) -> Option<&'static str> {
 struct Shape {
     fields: Vec<(&'static str, &'static str)>,
     group: Option<&'static str>,
+    /// U21a: a `before@` row with value `none`: nothing is applied at its
+    /// acknowledged point, so `ack` renders `none`.
+    armed_none: bool,
 }
 /// The shape of `witness` (fields split at `;`; a tag holds none), or the
 /// first field that is not in `ORDER`'s order.
@@ -447,7 +522,12 @@ fn shape(witness: &'static str, exec: &'static str) -> Result<Shape, String> {
         }
     }
     let group = exec.strip_prefix("g:");
-    Ok(Shape { fields, group })
+    let armed_none = false;
+    Ok(Shape {
+        fields,
+        group,
+        armed_none,
+    })
 }
 /// The keys of the first identity tag in `text` (`[s=S q=Q ..]`), checked to
 /// be an ordered subset of `KEYS`, each with its row value.
@@ -505,6 +585,7 @@ fn view<'a>(f: &'a Facts, group: String, t: &'a Tables<'a>) -> View<'a> {
         .iter()
         .map(of1)
         .chain(f.mother.iter().map(of5))
+        .chain(f.host.iter().map(of7))
         .collect();
     View {
         f,
@@ -615,14 +696,17 @@ fn render_in(f: &Facts, t: &Tables, controls: &[(&str, &str, &'static str)]) -> 
         .iter()
         .find(|c| (c.0, c.1) == (sink, dim) && f.value == "none");
     let found = match control {
-        Some(c) => Some((c.2, "own")),
-        None => row(sink, dim, f.value).map(|c| (c[13], c[10])),
+        Some(c) => Some((c.2, "own", "")),
+        None => row(sink, dim, f.value).map(|c| (c[13], c[10], c[11])),
     };
-    let Some((witness, exec)) = found else {
+    let Some((witness, exec, apply)) = found else {
         return format!("no row {sink}/{dim}/{}", f.value);
     };
     match shape(witness, exec) {
-        Ok(shape) => rendered(f, &shape, t),
+        Ok(mut shape) => {
+            shape.armed_none = f.value == "none" && apply.starts_with("before@");
+            rendered(f, &shape, t)
+        }
         Err(e) => format!("unrenderable row {sink}/{dim}/{}: {e}", f.value),
     }
 }
@@ -686,15 +770,19 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
     // point, admitted under the entry tag, the very trace entry; `held` if
     // the value came while every one stood, `armed` if set before the first.
     let held = f.points.last().copied().unwrap_or("none");
+    // U21a: a held point named by its `TOKENS` row (`string`) answers there.
     let answers = |(a, point): (&Ack, &&str)| {
         let a = of(a);
-        a.point == *point && !a.note && admitted(v, &a, tag) && v.seen.contains(&a)
+        let named = v.t.tokens.iter().find(|x| x.0 == *point);
+        let point: &str = named.map_or(point, |x| x.1);
+        a.point == point && !a.note && admitted(v, &a, tag) && v.seen.contains(&a)
     };
     let pairs = f.acks.iter().zip(&f.points);
     let answered =
         !f.acks.is_empty() && f.acks.len() == f.points.len() && pairs.clone().all(answers);
     let first = f.acks.iter().map(|a| of(a).instant).min();
     let ack = match (answered, f.applied.zip(first)) {
+        (true, _) if shape.armed_none => "none".to_string(),
         (true, Some((at, first))) if at < first => "armed".to_string(),
         (true, _) => "held".to_string(),
         (false, _) => {
@@ -845,7 +933,7 @@ fn ledger(v: &View, text: &str) -> Obs {
                     .count()
             }
             "commit" => commits(false),
-            _ => v.f.journal.len() + v.f.native.len(),
+            _ => v.f.journal.len() + v.f.native.len() + host_commits(v),
         };
         if unbound && candidates > 0 {
             return Err(Unbound);
@@ -854,11 +942,25 @@ fn ledger(v: &View, text: &str) -> Obs {
             "journal" => v.f.journal.iter().filter(by_inv).count(),
             "native" => v.f.native.iter().filter(native).count(),
             "commit" => commits(true),
-            _ => v.f.journal.len() + v.f.native.len(),
+            _ => v.f.journal.len() + v.f.native.len() + host_commits(v),
         };
         Ok(format!("+{n}:{event}[{tag}]"))
     });
     Ok(shown.collect::<Result<Vec<_>, _>>()?.join(","))
+}
+/// U21a: a `close_report` cell's primary records in its window, with no
+/// projection in a `hands::run` child: its S1 commits after its S7
+/// acknowledgement (0 for every other cell).
+fn host_commits(v: &View) -> usize {
+    let s7 = |a: &Ack| match a {
+        Ack::S7(e) => Some(e.instant),
+        _ => None,
+    };
+    let Some(first) = v.f.acks.iter().find_map(s7) else {
+        return 0;
+    };
+    let commit = |e: &&s1::Entry| e.point == "store.commit" && !e.note && e.instant > first;
+    v.f.broker.iter().filter(commit).count()
 }
 /// An attempt site of the bound attempt, admitted (A.1: session, run and
 /// attempt, no request). R1-1: a site of S with the attempt unbound is
@@ -1158,7 +1260,8 @@ fn coverage() {
     for t in &tags {
         println!("WITNESS B1 tag set [{}] group={}", t.0, t.1);
     }
-    assert_eq!(rows, 794, "every row with a witness");
+    // U21a (SB3E-R197 TR-1): six close_report rows are held (no witness).
+    assert_eq!(rows, 788, "every row with a witness");
     // W0b B2', U6a-1: `collect_reg`'s sinks are exactly the no-Mother drivers' rows.
     let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
     let no_mother = |c: &Vec<&str>| ["d_register", "d_bootstrap"].contains(&c[6]);
@@ -1433,6 +1536,7 @@ fn renderer_level() {
             .map(|a| match a {
                 Ack::S1(e) => e.point,
                 Ack::S5(e) => e.point,
+                Ack::S7(e) => e.point,
             })
             .collect();
         let first = f.acks.first().map(|a| of(a).instant);
@@ -1672,6 +1776,7 @@ fn refused() -> Facts {
         applied: Some(std::time::Instant::now()),
         broker,
         mother: vec![charge],
+        host: Vec::new(),
         journal: Vec::new(),
         native: Vec::new(),
         peer: Vec::new(),

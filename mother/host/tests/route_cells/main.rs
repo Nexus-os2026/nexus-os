@@ -26,11 +26,13 @@ use std::time::{Duration, Instant};
 mod grant;
 mod locks;
 mod reader;
+mod report;
 mod s5;
 mod s5_close;
 mod s5_r34;
 mod s5_r6;
 mod s5_reg;
+mod s5_report;
 mod store;
 /// W0b B5 (SB3E-R94.2): one credited cell's test, built only from its arm's
 /// own literals: exactly one `#[test] fn`, one driver call through the cell
@@ -71,7 +73,7 @@ macro_rules! ctl {
 /// route, sink, dim, value and driver (`macro_rules!` cannot build
 /// `rc_<slug>`, so the arm writes it). An entry with no arm fails to compile.
 macro_rules! cells {
-    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };
+    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); };
     (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_original_cell_unscheduled, r5 call_chat ingress original_cell_unscheduled, s5::original_cell_unscheduled); cells! { $($rest)* } };
     (r5 call_chat ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_repeated, r5 call_chat ingress repeated, s5::repeated); cells! { $($rest)* } };
     (r5 call_chat ingress mission_stop; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_mission_stop, r5 call_chat ingress mission_stop, s5::mission_stop); cells! { $($rest)* } };
@@ -104,6 +106,11 @@ macro_rules! cells {
     (r0 registration_readiness ingress fatal; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_fatal, r0 registration_readiness ingress fatal, s5_reg::readiness_fatal); cells! { $($rest)* } };
     (r0 registration_readiness ingress quit; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_quit, r0 registration_readiness ingress quit, s5_reg::readiness_quit); cells! { $($rest)* } };
     (r9 primary_end lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_primary_end_lifecycle_sealedfinalizing, r9 primary_end lifecycle SealedFinalizing, s5_close::primary_end_sealedfinalizing); cells! { $($rest)* } };
+    (r9 close_report lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_close_report_lifecycle_sealedfinalizing, r9 close_report lifecycle SealedFinalizing, s5_report::sealedfinalizing); cells! { $($rest)* } };
+    (r9 close_report lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r9_close_report_lifecycle_closingrestricted, r9 close_report lifecycle ClosingRestricted, s5_report::closingrestricted); cells! { $($rest)* } };
+    (r9 close_report fault none; $($rest:tt)*) => { cell!(rc_r9_close_report_fault_none, r9 close_report fault none, s5_report::fault_none); cells! { $($rest)* } };
+    (r9 close_report schedule before; $($rest:tt)*) => { cell!(rc_r9_close_report_schedule_before, r9 close_report schedule before, s5_report::schedule_before); cells! { $($rest)* } };
+    (r9 close_report schedule after; $($rest:tt)*) => { cell!(rc_r9_close_report_schedule_after, r9 close_report schedule after, s5_report::schedule_after); cells! { $($rest)* } };
 }
 // The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
 // check-citations.py): rustfmt does not reformat it.

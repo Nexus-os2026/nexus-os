@@ -71,6 +71,17 @@ const HOOKS: [(&str, &str); 5] = [
 ];
 /// Every route name's site: `file: [fn ]name < enclosing chain` (as AM-2 B.2).
 const SITES: &str = "\
+host/src/hands.rs: route_seams < \n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
+host/src/hands.rs: route_seams < fnclose_report(&self,stage:&str)->String{>implRuntime{\n\
 host/src/lib.rs: route_seams < \n\
 host/src/terminal.rs: route_seams < \n\
 host/src/terminal.rs: fn route_bind < implTerminal{\n\
@@ -133,8 +144,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "d2d99113967dfc4b1bbd48ae60c8648c732d7b1990a18a76ef1ffa9c6dc109b1";
-const MUTANTS: usize = 1377;
+const PINS_SHA256: &str = "4ce044d9a12dde76824fc746f2be3ece9133640055c1c85f96ad8c002e330c08";
+const MUTANTS: usize = 1486;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -143,20 +154,22 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 10580c7d1e02433fca1b88b5fcf476c43586f6de6657f6be506336df6495f319
+cells.rs cc89f8799cdfa209665ed12834cde85cfe27e8679f7f27487a426a2fc806931d
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 1bd539a0b66344fc13e34b1d9e2ee7153e56b273061826c89b2956314e75acd7
+main.rs fd093818d688f24c061e19b45804a32b38658925153545e999f46236986f5369
 reader.rs 8ce8b9818b76bb4f7af534ea336473d6bc86a229829130bc5040f7d4a9765fe1
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 4a95ad1c74fdbd1eaa1b3eb72446fe85c8202921d5508e562786f7e1db2fae49
+s5.rs 00a2713f18fb4483f9b631c2410fbd7019fb9dd2a3566d2a6dc6e9c040547fa1
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
 s5_reg.rs 918c258697d0a0a52aa41693f7feb343a38ccd6dac61e94a69651a8475d5e6ac
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 6dd11a95a06b1537a194c8fde6ac992af88ae2985c2a905ecab82d15bab1c120
+witness.rs 9f946edeb14b0cdb0e16224b16af76270b303d6429f1bd04b56d068c400f204a
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
+report.rs eabea0c6a7b9d5fff4340ec064bd617e5ff1c4078e5404d24642a8ae8fb8f6e7
+s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
     ROUTE_CELLS.lines().filter_map(|l| l.split_once(' '))
@@ -174,14 +187,16 @@ s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecy
 s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
 s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
+s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
-const NON_SECTIONS: [&str; 9] = [
+const NON_SECTIONS: [&str; 10] = [
     "cells.rs",
     "grant.rs",
     "locks.rs",
     "main.rs",
     "reader.rs",
+    "report.rs",
     "route_fsync.c",
     "route_read.c",
     "store.rs",
@@ -267,11 +282,13 @@ usestd::time::{Duration,Instant};\n\
 modgrant;\n\
 modlocks;\n\
 modreader;\n\
+modreport;\n\
 mods5;\n\
 mods5_close;\n\
 mods5_r34;\n\
 mods5_r6;\n\
 mods5_reg;\n\
+mods5_report;\n\
 modstore;\n\
 macro_rules!cell\n\
 macro_rules!ctl\n\
@@ -316,6 +333,8 @@ host/tests/route_cells/main.rs|implControlConfirmerforOwner\n\
 host/tests/route_cells/reader.rs|implClock\n\
 host/tests/route_cells/reader.rs|implTty\n\
 host/tests/route_cells/reader.rs|implDropforTty\n\
+host/tests/route_cells/report.rs|implTty\n\
+host/tests/route_cells/report.rs|implDropforTty\n\
 host/tests/route_cells/store.rs|impl<T>Faulted<T>\n\
 ";
 /// SB3E-R42.4 (G-S3): `s5.rs`'s one import from its parent, by name.
@@ -1000,7 +1019,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     }
     reached.sort();
     reached.dedup();
-    let points = host.split("POINTS: [&str; 1] = [").nth(1).unwrap_or("");
+    let points = host.split("POINTS: [&str; 6] = [").nth(1).unwrap_or("");
     let points = points.split("];").next().unwrap_or("");
     let points: Vec<String> = points
         .split('"')
@@ -1050,8 +1069,67 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     more.extend(macro_findings(text(sources, &main), text(sources, &cells)));
     more.extend(t7_findings(sources));
     more.extend(reader_timeout_findings(text(sources, READER)));
+    more.extend(order_findings(text(sources, "host/src/hands.rs")));
     for finding in more {
         check(false, finding);
+    }
+    found
+}
+/// U21a (SB3E-R197 TR-1, R199 Q-U21-4): the production order that makes
+/// the close_report rows x:222-234 unreachable and keeps the 11 hold rows'
+/// reasons, over `hands.rs`'s tokens (no comment or whitespace): the reader
+/// is joined before the `hands-close` worker spawns, the spawn is under
+/// `!ingress.failed()` and the Quit request, `finish_delivery` follows the
+/// worker's join, and authority settles before `close_report` runs. A
+/// change to any of these reopens those rows (set B).
+fn order_findings(hands: &str) -> Vec<String> {
+    if tokens(hands).is_err() {
+        return vec!["order: host/src/hands.rs does not tokenize".into()];
+    }
+    let code: String = lex(hands).concat();
+    let once = |pat: &str| {
+        (code.matches(pat).count() == 1)
+            .then(|| code.find(pat))
+            .flatten()
+    };
+    let stop = once("letreader_done=terminal.stop_reader(producers_until);");
+    let cond = once(
+        "ifreader_done&&work_done&&stops_done&&producers_done&&!screen.ended()&&!ingress.failed(){",
+    );
+    let quit = once("ifletSome(request)=request{letowned=std::mem::ManuallyDrop::new(runtime);");
+    let spawn = once(".name(\"hands-close\".into())");
+    let join = once("join(&mutclose,producers_until,&screen)");
+    let finish = once("seal.finish_delivery()");
+    let settle = once(".settle_close_authority(&request)");
+    let sealed = once("(Some(seal),self.close_report(\"delivery_pending\"))");
+    let refused = once("(None,self.close_report(stage))");
+    let before = |a: Option<usize>, b: Option<usize>| a.zip(b).is_some_and(|(a, b)| a < b);
+    let mut found = Vec::new();
+    for (ok, what) in [
+        (
+            before(stop, spawn),
+            "the reader is not joined before hands-close spawns",
+        ),
+        (
+            before(stop, cond) && before(cond, quit),
+            "hands-close is not under !ingress.failed()",
+        ),
+        (
+            before(quit, spawn),
+            "hands-close is not under the Quit request",
+        ),
+        (
+            before(spawn, join) && before(join, finish),
+            "finish_delivery is not after the close join",
+        ),
+        (
+            before(settle, sealed) && before(settle, refused),
+            "authority does not settle before close_report",
+        ),
+    ] {
+        if !ok {
+            found.push(format!("order: {what}"));
+        }
     }
     found
 }
@@ -2292,11 +2370,13 @@ fn reach_findings(rows: &[Row], harness: &[(&str, &str)]) -> Vec<String> {
             let after = |w: &[&str]| i >= 3 && t[i - 3..i] == *w;
             let entry = t.get(i + 1..i + 4) == Some(&[":", ":", "Entry"][..]);
             let entry = entry && t.get(i + 4) != Some(&":");
-            let host = *file == "reader.rs" && after(&["nexus_mother_host", ":", ":"]);
-            if !(host
-                || after(&["broker", ":", ":"])
-                || after(&["nexus_mother", ":", ":"]) && entry)
-            {
+            // U18 (F-S0-1 (b)) and U21a: the two host drivers reach S7.
+            let driver = ["reader.rs", "report.rs"].contains(file);
+            let host = driver && after(&["nexus_mother_host", ":", ":"]);
+            // U21a: S7's entry type, as S5's, by its type path only.
+            let typed =
+                after(&["nexus_mother", ":", ":"]) || after(&["nexus_mother_host", ":", ":"]);
+            if !(host || after(&["broker", ":", ":"]) || typed && entry) {
                 found.push(format!(
                     "S5 sections: {file} reaches nexus_mother::route_seams other than as ::Entry"
                 ));
@@ -2681,7 +2761,7 @@ s|type Roles
 s|fn sessions
 s|const HELD
 s|const REFUSED
-s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,journal,native,peer,findings}
+s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,host,journal,native,peer,findings}
 s|enum Ack
 s|enum Hold
 h|const BROKER_SINKS
@@ -2721,6 +2801,7 @@ s|struct Close{o,mother}
 s|fn accept_quit
 s|fn closed
 s|fn registered
+s|fn collect_report
 ";
 /// The one export that hands out a composed type (`T7_TYPES`): by value.
 const S5_BY_VALUE: &str = "Mother.m";
@@ -3332,7 +3413,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
         "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
@@ -3897,7 +3978,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";
