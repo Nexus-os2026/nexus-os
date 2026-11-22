@@ -213,7 +213,7 @@ reg.ready|s q ord=4|host_session.rs:858 (after the 4 metadata gates)
 reg:scope_admit|s q|host_session/model.rs:142; host_session.rs:89-91
 reg:word_compare|s q ord=4|host_session.rs:865 (after the 4 metadata gates); 89-91
 reg.admission|s q ord=4|host_session/model.rs:325 (after the 4 metadata gates); host_session.rs:89-91
-model.gate.before|s q kind=metadata ord|host_session/model.rs:263; broker/route_seams.rs:127-131
+model.gate.before|s q kind=metadata ord|host_session/model.rs:263; broker/route_seams.rs:128-132
 model.gate.checked|s q ord|host_session/model.rs:243; host_session.rs:89-91
 reg:cas|s q ord|host_session/model.rs:247; host_session.rs:89-91
 close.obligations|s|host_session/close.rs:271

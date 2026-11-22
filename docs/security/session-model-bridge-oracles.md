@@ -1797,7 +1797,8 @@ path (s5.rs `reg_drive`).
   498-499, 680, 685, 690, 695, 829, 831-832, 834-835, 837-838, 840, 897-904): the entry tag
   `kind=<name>` → `kind=metadata`, and the check tag loses its `kind` key; the ord is kept.
   The table verifier binds the identity per sink (session_model_bridge.rs `expected_identity`,
-  `check_identity`), so the sink's rows change together. S1 records only `chat` or `metadata` (route_seams.rs:127-131),
+  `check_identity`), so the sink's rows change together. S1 records only `chat` or
+  `metadata` (route_seams.rs:128-132),
   and a held-and-refused request is never sent (exchange.rs:295), so its name is not
   observable. **The request name of a row comes from its ord in the kernel's fixed metadata
   sequence, not from an observation:** ord 1 `/api/version` (ollama.rs:249), ord 2

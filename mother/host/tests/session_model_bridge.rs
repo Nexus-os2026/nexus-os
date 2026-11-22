@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "4216bb2182f20a3ec8ec4d3cb0f7ce5bde55c274033a52b7909608bca377a465";
+const EXPECT_SHA256: &str = "2818e080635f8e8d6240e57c56689009c640e688e2e0ba3235a328b52738eeba";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -582,7 +582,7 @@ fn expected_identity(row: &[String]) -> Result<String, String> {
         .collect();
     if let Some((kind, ordinal)) = gate_ordinal(&row[1]) {
         // SB3E-R216.1 F-B1 (TR-1): S1 records a registration gate's kind as
-        // `metadata` (route_seams.rs:127-131); its name is the ord's.
+        // `metadata` (route_seams.rs:128-132); its name is the ord's.
         let kind = match row[1].starts_with("registration_") {
             true => "metadata",
             false => kind,
