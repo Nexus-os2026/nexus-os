@@ -5,8 +5,9 @@
 // (SB3E-R120.1), U9b's five R6 held-sink lifecycle cells (SB3E-R135) and
 // SEAM-1's three registration_reserve and three registration_readiness
 // ingress cells and the R9 primary_end lifecycle cell (SB3E-R139), and
-// U21a's five R9 close_report cells (SB3E-R197, R199) and U19b-1's twelve
-// R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216). The
+// U21a's five R9 close_report cells (SB3E-R197, R199), U19b-1's twelve
+// R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216) and
+// U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217). The
 // route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
@@ -134,4 +135,40 @@ cells! {
     r5 registration_show ingress master_close;
     r5 registration_show ingress repeated;
     r5 registration_show ingress quit;
+    r5 call_version ingress CR;
+    r5 call_version ingress LF;
+    r5 call_version ingress CRLF;
+    r5 call_version ingress EOF;
+    r5 call_version ingress partial_Ctrl_D;
+    r5 call_version ingress master_close;
+    r5 call_version ingress repeated;
+    r5 call_version ingress quit;
+    r5 call_version lifecycle Emergency;
+    r5 call_version lifecycle Failed;
+    r5 call_version lifecycle ClosingNormal;
+    r5 call_version lifecycle ClosingRestricted;
+    r5 call_status ingress CR;
+    r5 call_status ingress LF;
+    r5 call_status ingress CRLF;
+    r5 call_status ingress EOF;
+    r5 call_status ingress partial_Ctrl_D;
+    r5 call_status ingress master_close;
+    r5 call_status ingress repeated;
+    r5 call_status ingress quit;
+    r5 call_status lifecycle Emergency;
+    r5 call_status lifecycle Failed;
+    r5 call_status lifecycle ClosingNormal;
+    r5 call_status lifecycle ClosingRestricted;
+    r5 call_tags ingress CR;
+    r5 call_tags ingress LF;
+    r5 call_tags ingress CRLF;
+    r5 call_tags ingress EOF;
+    r5 call_tags ingress partial_Ctrl_D;
+    r5 call_tags ingress master_close;
+    r5 call_tags ingress repeated;
+    r5 call_tags ingress quit;
+    r5 call_tags lifecycle Emergency;
+    r5 call_tags lifecycle Failed;
+    r5 call_tags lifecycle ClosingNormal;
+    r5 call_tags lifecycle ClosingRestricted;
 }

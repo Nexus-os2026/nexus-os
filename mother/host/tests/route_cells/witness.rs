@@ -44,12 +44,14 @@ type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
 const TOKENS: [Token; 23] = [
     // model.call.observed, then on its thread exactly the note
-    // refused:8.cas, with no ord-4 model.call.admitted.
-    ("CAS:m:774", "model.call.observed", |v, _, _| {
-        cas(v).map(|(o, _)| o)
+    // refused:8.cas, with no model.call.admitted of the row's ord.
+    ("CAS:m:774", "model.call.observed", |v, _, tag| {
+        cas(v, tag).map(|(o, _)| o)
     }),
     // exactly the note refused:8.cas (refused:8.capacity is not it).
-    ("note:8", "refused:8.cas", |v, _, _| cas(v).map(|(_, n)| n)),
+    ("note:8", "refused:8.cas", |v, _, tag| {
+        cas(v, tag).map(|(_, n)| n)
+    }),
     // U9a (d_close): the acknowledged entry at the row's point (close.rs:271,
     // 232, 524, 49, 367-370), the next close.mother_end of S after it on its
     // thread (observe_mother_end, close.rs:499; Q11), and the seal's stop note
@@ -238,6 +240,7 @@ host.close_report.string|s|host hands.rs close_report exit; route_seams.rs repor
 const CORRELATIONS: &str = "\
 inv|call.gate model.call.sampled model.call.observed model.call.admitted|charge|AM-2 A.4: the call's mother.charge.entry of the Builder (model_calls.rs:216)
 inv|attempt.slot model.attempt.reserved|prelock|the Builder's mother.lane.prelock of S and Q (mother coordinator.rs:1978-1983)
+inv|call.gate model.call.sampled model.call.observed model.call.admitted|recheck|U19b-2 (SB3E-R216 F6): a call refused before its charge, the Builder's mother.recheck of S and Q (model_calls.rs:491)
 q|attempt.slot model.attempt.reserved|gate|the run's later call.gate of S and Q (host_session/model.rs:883, 893-899)
 att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs credit, A.3)
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
@@ -252,7 +255,8 @@ fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
     let builder = e.is_some_and(|e| e.inv.is_some() && e.inv == v.b.inv);
     match name {
         "charge" => v.inv,
-        "prelock" => prelocked(v),
+        "prelock" => builders(v, "mother.lane.prelock"),
+        "recheck" => builders(v, "mother.recheck"),
         "gate" => gated(v, run),
         "claim" => v.b.att.is_some() && run.is_some() && run == v.b.run,
         "sites" => builder && v.b.att.is_some(),
@@ -421,9 +425,9 @@ fn bound(v: &View, e: Option<&Seen>, point: &str, k: &str) -> bool {
     let carries = |r: &Vec<&str>| r[0] == k && r[1].split(' ').any(|p| p == point);
     rows.filter(carries).any(|r| carried(r[2], v, e))
 }
-/// The Builder's `mother.lane.prelock` of S and Q (its invocation).
-fn prelocked(v: &View) -> bool {
-    let at = |m: &&Seen| !m.s1 && m.point == "mother.lane.prelock" && m.inv.is_some();
+/// The Builder's S5 entry at `point` of S and Q (its invocation).
+fn builders(v: &View, point: &str) -> bool {
+    let at = |m: &&Seen| !m.s1 && m.point == point && m.inv.is_some();
     v.seen
         .iter()
         .filter(at)
@@ -448,7 +452,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 18] = [
+const CONTROLS: [(&str, &str, &str); 21] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -467,6 +471,28 @@ const CONTROLS: [(&str, &str, &str); 18] = [
     ("registration_status", "ingress", GATE_CONTROLS[1]),
     ("registration_tags", "ingress", GATE_CONTROLS[2]),
     ("registration_show", "ingress", GATE_CONTROLS[3]),
+    ("call_version", "ingress", CALL_CONTROLS[0]),
+    ("call_status", "ingress", CALL_CONTROLS[1]),
+    ("call_tags", "ingress", CALL_CONTROLS[2]),
+];
+/// U19b-2 (SB3E-R217): the call controls, each held at its own ord of
+/// `model.call.observed` and released: the call completes (`charge_append=1`).
+const CALL_CONTROLS: [&str; 3] = [
+    "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=metadata ord=1];\
+check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT ord=1];\
+value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
+ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=charge_append=1,lane_returned=1;deadline_fired=none",
+    "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=metadata ord=2];\
+check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT ord=2];\
+value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
+ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=charge_append=1,lane_returned=1;deadline_fired=none",
+    "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=metadata ord=3];\
+check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT ord=3];\
+value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
+ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=charge_append=1,lane_returned=1;deadline_fired=none",
 ];
 /// U21a: the close_report control, `quit` held at the entry with no value:
 /// the credited rows' text with `none`.
@@ -671,12 +697,12 @@ fn notes<'a>(v: &View<'a>, tag: (Option<&str>, Option<u64>)) -> Vec<Seen<'a>> {
 }
 /// `TOKENS[0]` and `[1]`: the observed entry, then on its thread, later,
 /// exactly one note of this identity and ordinal, `refused:8.cas`, of the
-/// chat (kind `chat`, R88.1); no `model.call.admitted` of it.
-fn cas<'a>(v: &View<'a>) -> Option<(Seen<'a>, Seen<'a>)> {
-    let chat = (Some("chat"), Some(4));
-    let o = first_at(v, "model.call.observed", chat)?;
-    let admitted = first_at(v, "model.call.admitted", chat);
-    let [note] = notes(v, chat)[..] else {
+/// row's request (R88.1: the tag's kind and ord; U5's chat, U19b-2's ords
+/// 1-3); no `model.call.admitted` of it.
+fn cas<'a>(v: &View<'a>, tag: Tag) -> Option<(Seen<'a>, Seen<'a>)> {
+    let o = first_at(v, "model.call.observed", tag)?;
+    let admitted = first_at(v, "model.call.admitted", tag);
+    let [note] = notes(v, tag)[..] else {
         return None;
     };
     let ok = note.point == "refused:8.cas"
@@ -1060,7 +1086,13 @@ fn window(v: &View) -> Obs {
 fn next(v: &View, text: &str) -> Obs {
     let lane = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { .. });
     let returned = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { invocation, .. } if Some(invocation) == v.b.inv);
-    if v.b.inv.is_none() && v.f.journal.iter().any(|e| lane(&e)) {
+    // U19b-2 (SB3E-R216 F6): `charge_append` counts the next sink's entries
+    // (`mother.charge.entry`, model_calls.rs:216) of the Builder, S and Q.
+    let charge = |m: &&Seen| !m.s1 && m.point == "mother.charge.entry";
+    let charges = || v.seen.iter().filter(charge);
+    let ours = |m: &&Seen| m.inv == v.b.inv && m.s == Some(v.b.s) && m.q == Some(v.b.q);
+    let unbound = v.f.journal.iter().any(|e| lane(&e)) || charges().next().is_some();
+    if v.b.inv.is_none() && unbound {
         return Err(Unbound);
     }
     let keys = text.split(',').map(|kv| kv.split('=').next().unwrap_or(""));
@@ -1069,6 +1101,7 @@ fn next(v: &View, text: &str) -> Obs {
             "lane_returned={}",
             v.f.journal.iter().filter(returned).count()
         ),
+        "charge_append" => format!("charge_append={}", charges().filter(ours).count()),
         other => format!("{other}=unbuilt"),
     });
     Ok(shown.collect::<Vec<_>>().join(","))

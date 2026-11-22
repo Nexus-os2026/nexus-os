@@ -5,6 +5,8 @@
 //! through its public API; the harness can arm and drain, never write.
 #![cfg(all(target_os = "linux", mother_route_seams))]
 #![deny(unsafe_code)]
+// U19b-2: the manifest's 157 entries nest `cells!` past the default 128.
+#![recursion_limit = "256"]
 use nexus_governed_control::authority::approval::*;
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::ids::RunId;
@@ -28,6 +30,7 @@ mod locks;
 mod reader;
 mod report;
 mod s5;
+mod s5_call_b;
 mod s5_close;
 mod s5_r34;
 mod s5_r6;
@@ -73,7 +76,7 @@ macro_rules! ctl {
 /// route, sink, dim, value and driver (`macro_rules!` cannot build
 /// `rc_<slug>`, so the arm writes it). An entry with no arm fails to compile.
 macro_rules! cells {
-    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); };
+    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); };
     (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_original_cell_unscheduled, r5 call_chat ingress original_cell_unscheduled, s5::original_cell_unscheduled); cells! { $($rest)* } };
     (r5 call_chat ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_repeated, r5 call_chat ingress repeated, s5::repeated); cells! { $($rest)* } };
     (r5 call_chat ingress mission_stop; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_mission_stop, r5 call_chat ingress mission_stop, s5::mission_stop); cells! { $($rest)* } };
@@ -195,6 +198,42 @@ macro_rules! cells {
     (r5 registration_show ingress master_close; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_master_close, r5 registration_show ingress master_close, s5_reg::show_master_close); cells! { $($rest)* } };
     (r5 registration_show ingress repeated; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_repeated, r5 registration_show ingress repeated, s5_reg::show_repeated); cells! { $($rest)* } };
     (r5 registration_show ingress quit; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_quit, r5 registration_show ingress quit, s5_reg::show_quit); cells! { $($rest)* } };
+    (r5 call_version ingress CR; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_cr, r5 call_version ingress CR, s5_call_b::version_cr); cells! { $($rest)* } };
+    (r5 call_version ingress LF; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_lf, r5 call_version ingress LF, s5_call_b::version_lf); cells! { $($rest)* } };
+    (r5 call_version ingress CRLF; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_crlf, r5 call_version ingress CRLF, s5_call_b::version_crlf); cells! { $($rest)* } };
+    (r5 call_version ingress EOF; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_eof, r5 call_version ingress EOF, s5_call_b::version_eof); cells! { $($rest)* } };
+    (r5 call_version ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_partial_ctrl_d, r5 call_version ingress partial_Ctrl_D, s5_call_b::version_partial_ctrl_d); cells! { $($rest)* } };
+    (r5 call_version ingress master_close; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_master_close, r5 call_version ingress master_close, s5_call_b::version_master_close); cells! { $($rest)* } };
+    (r5 call_version ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_repeated, r5 call_version ingress repeated, s5_call_b::version_repeated); cells! { $($rest)* } };
+    (r5 call_version ingress quit; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_quit, r5 call_version ingress quit, s5_call_b::version_quit); cells! { $($rest)* } };
+    (r5 call_version lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r5_call_version_lifecycle_emergency, r5 call_version lifecycle Emergency, s5_call_b::version_emergency); cells! { $($rest)* } };
+    (r5 call_version lifecycle Failed; $($rest:tt)*) => { cell!(rc_r5_call_version_lifecycle_failed, r5 call_version lifecycle Failed, s5_call_b::version_failed); cells! { $($rest)* } };
+    (r5 call_version lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r5_call_version_lifecycle_closingnormal, r5 call_version lifecycle ClosingNormal, s5_call_b::version_closingnormal); cells! { $($rest)* } };
+    (r5 call_version lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r5_call_version_lifecycle_closingrestricted, r5 call_version lifecycle ClosingRestricted, s5_call_b::version_closingrestricted); cells! { $($rest)* } };
+    (r5 call_status ingress CR; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_cr, r5 call_status ingress CR, s5_call_b::status_cr); cells! { $($rest)* } };
+    (r5 call_status ingress LF; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_lf, r5 call_status ingress LF, s5_call_b::status_lf); cells! { $($rest)* } };
+    (r5 call_status ingress CRLF; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_crlf, r5 call_status ingress CRLF, s5_call_b::status_crlf); cells! { $($rest)* } };
+    (r5 call_status ingress EOF; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_eof, r5 call_status ingress EOF, s5_call_b::status_eof); cells! { $($rest)* } };
+    (r5 call_status ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_partial_ctrl_d, r5 call_status ingress partial_Ctrl_D, s5_call_b::status_partial_ctrl_d); cells! { $($rest)* } };
+    (r5 call_status ingress master_close; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_master_close, r5 call_status ingress master_close, s5_call_b::status_master_close); cells! { $($rest)* } };
+    (r5 call_status ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_repeated, r5 call_status ingress repeated, s5_call_b::status_repeated); cells! { $($rest)* } };
+    (r5 call_status ingress quit; $($rest:tt)*) => { cell!(rc_r5_call_status_ingress_quit, r5 call_status ingress quit, s5_call_b::status_quit); cells! { $($rest)* } };
+    (r5 call_status lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r5_call_status_lifecycle_emergency, r5 call_status lifecycle Emergency, s5_call_b::status_emergency); cells! { $($rest)* } };
+    (r5 call_status lifecycle Failed; $($rest:tt)*) => { cell!(rc_r5_call_status_lifecycle_failed, r5 call_status lifecycle Failed, s5_call_b::status_failed); cells! { $($rest)* } };
+    (r5 call_status lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r5_call_status_lifecycle_closingnormal, r5 call_status lifecycle ClosingNormal, s5_call_b::status_closingnormal); cells! { $($rest)* } };
+    (r5 call_status lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r5_call_status_lifecycle_closingrestricted, r5 call_status lifecycle ClosingRestricted, s5_call_b::status_closingrestricted); cells! { $($rest)* } };
+    (r5 call_tags ingress CR; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_cr, r5 call_tags ingress CR, s5_call_b::tags_cr); cells! { $($rest)* } };
+    (r5 call_tags ingress LF; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_lf, r5 call_tags ingress LF, s5_call_b::tags_lf); cells! { $($rest)* } };
+    (r5 call_tags ingress CRLF; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_crlf, r5 call_tags ingress CRLF, s5_call_b::tags_crlf); cells! { $($rest)* } };
+    (r5 call_tags ingress EOF; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_eof, r5 call_tags ingress EOF, s5_call_b::tags_eof); cells! { $($rest)* } };
+    (r5 call_tags ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_partial_ctrl_d, r5 call_tags ingress partial_Ctrl_D, s5_call_b::tags_partial_ctrl_d); cells! { $($rest)* } };
+    (r5 call_tags ingress master_close; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_master_close, r5 call_tags ingress master_close, s5_call_b::tags_master_close); cells! { $($rest)* } };
+    (r5 call_tags ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_repeated, r5 call_tags ingress repeated, s5_call_b::tags_repeated); cells! { $($rest)* } };
+    (r5 call_tags ingress quit; $($rest:tt)*) => { cell!(rc_r5_call_tags_ingress_quit, r5 call_tags ingress quit, s5_call_b::tags_quit); cells! { $($rest)* } };
+    (r5 call_tags lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r5_call_tags_lifecycle_emergency, r5 call_tags lifecycle Emergency, s5_call_b::tags_emergency); cells! { $($rest)* } };
+    (r5 call_tags lifecycle Failed; $($rest:tt)*) => { cell!(rc_r5_call_tags_lifecycle_failed, r5 call_tags lifecycle Failed, s5_call_b::tags_failed); cells! { $($rest)* } };
+    (r5 call_tags lifecycle ClosingNormal; $($rest:tt)*) => { cell!(rc_r5_call_tags_lifecycle_closingnormal, r5 call_tags lifecycle ClosingNormal, s5_call_b::tags_closingnormal); cells! { $($rest)* } };
+    (r5 call_tags lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r5_call_tags_lifecycle_closingrestricted, r5 call_tags lifecycle ClosingRestricted, s5_call_b::tags_closingrestricted); cells! { $($rest)* } };
 }
 // The manifest's text form is fixed by its two parsers (session_model_bridge.rs,
 // check-citations.py): rustfmt does not reformat it.

@@ -577,24 +577,21 @@ fn expected_identity(row: &[String]) -> Result<String, String> {
         })
         .collect();
     if let Some((kind, ordinal)) = gate_ordinal(&row[1]) {
-        // SB3E-R216.1 F-B1 (TR-1): S1 records a registration gate's kind as
-        // `metadata` (route_seams.rs:127-131); its name is the ord's.
-        let kind = match row[1].starts_with("registration_") {
-            true => "metadata",
-            false => kind,
+        // SB3E-R216.1 F-B1 (TR-1): S1 records every gate's kind but the
+        // chat's as `metadata` (route_seams.rs:128-132); its name is the
+        // ord's (U19b-1: registration; U19b-2: call ords 1-3).
+        let kind = match row[1] == "call_chat" {
+            true => kind,
+            false => "metadata",
         };
         parts.push(format!("kind={kind} ord={ordinal}"));
     }
     Ok(parts.join(" "))
 }
-/// SB3E-R216.1 F-B1: the check's identity; `model.gate.checked` records no
-/// kind, so a registration gate row's check carries none.
+/// SB3E-R216.1 F-B1: the check's identity; a metadata gate row's check
+/// carries no kind (its request is not observed; U19b-2: the call rows too).
 fn check_identity(row: &[String]) -> Result<String, String> {
-    let identity = expected_identity(row)?;
-    Ok(match row[1].starts_with("registration_") {
-        true => identity.replacen(" kind=metadata", "", 1),
-        false => identity,
-    })
+    Ok(expected_identity(row)?.replacen(" kind=metadata", "", 1))
 }
 /// Splits on `,` and drops nothing: a 4.4 column's literal point tokens.
 fn tokens(column: &str) -> Vec<&str> {

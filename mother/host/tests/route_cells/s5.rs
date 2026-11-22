@@ -1680,6 +1680,7 @@ pub(super) fn driven<R>(
         *APPLIED.lock().unwrap() = Some(Instant::now());
         apply(o, m, held, chat)
     });
+    *STEPS.lock().unwrap() = steps.clone();
     println!("WITNESS {value}: the advance {steps:?}");
     let facts = collect((chain.anchor_point(), acks), (chain.row, value), row);
     (facts, steps, applied)
@@ -1834,7 +1835,16 @@ pub(super) fn chat_closingrestricted(f: &Fixture) -> Facts {
 /// U19a: rows 86-91, the value typed into `Reading` (opened while ord 4's
 /// chat is held at `model.call.observed`), then the chat released.
 fn typed_chat(f: &Fixture, value: &'static str, typed: &'static str) -> Facts {
-    let (mut facts, _, found) = driven(f, value, &U5, &REFUSED, |o, _, held, _| {
+    typed_at(f, (value, typed), &U5, &REFUSED)
+}
+/// U19b-2: `typed_chat` at `chain`'s last point, under `row`.
+fn typed_at(
+    f: &Fixture,
+    (value, typed): (&'static str, &'static str),
+    chain: &Chain,
+    row: &Expect,
+) -> Facts {
+    let (mut facts, _, found) = driven(f, value, chain, row, |o, _, held, _| {
         let reading = Reading::open(o);
         let barriers = reading.typed(typed);
         drop(held);
@@ -2071,7 +2081,7 @@ pub(super) fn collect(
         cfg!(mother_route_seams),
         d.session,
         &d,
-        claim,
+        (claim, row.profile.call_gate),
         &broker,
         &trace,
     );
@@ -2221,7 +2231,7 @@ fn t6(
     cfg: bool,
     session: SessionIdentity,
     d: &Driver,
-    claim: Option<(RunId, u32)>,
+    (claim, n): (Option<(RunId, u32)>, usize),
     broker: &[s1::Entry],
     trace: &[s5::Entry],
 ) -> Result<(), &'static str> {
@@ -2239,15 +2249,22 @@ fn t6(
     }
     let builder = d.recorded.iter().find(|r| r.0 == LaneRole::Builder);
     let builder = builder.map(|r| r.1);
+    // U19b-2 (SB3E-R216 F6): a call refused at ord n < 4 (its profile's
+    // gates) makes no chat and no charge: its ord-n metadata gate, and the
+    // Builder's `mother.recheck` (model_calls.rs:491).
+    let (kind, point) = match n {
+        4 => ("chat", "mother.charge.entry"),
+        _ => ("metadata", "mother.recheck"),
+    };
     let chat = |e: &s1::Entry| {
         e.session == Some(session)
             && e.request == Some(d.request)
             && e.run.zip(e.attempt) == claim
-            && e.kind == Some("chat")
-            && e.request_ordinal == Some(4)
+            && e.kind == Some(kind)
+            && e.request_ordinal == Some(n as u64)
     };
     let charged = |e: &s5::Entry| {
-        e.point == "mother.charge.entry"
+        e.point == point
             && e.session == Some(session)
             && e.request == Some(d.request)
             && e.invocation == builder
@@ -3304,5 +3321,96 @@ pub(super) fn collect_report(
         read: None,
     };
     KEPT.lock().unwrap().push(("collect_report", facts.clone()));
+    facts
+}
+
+// U19b-2 (SB3E-R216 F1, F6; R217): the R5 call rows refused at ords 1-3,
+// harness composition until M-5b (F1: production makes no model call,
+// hands.rs:1312-1323). A call's ords 1-3 are `check_runtime`'s metadata
+// requests (ollama.rs:137, 249, 265, 285), before its charge (:138).
+const CALL_ORDS: [(&str, usize); 3] = [("call_version", 1), ("call_status", 2), ("call_tags", 3)];
+/// F6: a call refused at ord `n` < 4: `REFUSED`'s path with `n` gates and no
+/// charge or settle (model_calls.rs:216, 307), so no charge position.
+const fn refused_at(n: usize) -> Expect {
+    let profile = Profile {
+        call_gate: n,
+        ..REFUSED.profile
+    };
+    let multiplicity = [
+        ("mother.charge.entry", 0),
+        ("mother.charge", 0),
+        ("mother.charge.ok", 0),
+        ("mother.settle", 0),
+    ];
+    Expect {
+        profile,
+        multiplicity,
+        position: None,
+        ..REFUSED
+    }
+}
+/// C1 (SB3E-R194, R217): the steps of the advance `driven` ran last.
+static STEPS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// U19b-2: a call row's value applied while its ord is held from the call's
+/// first arrival (as `ord3_quit`): an ingress row at `model.call.observed`, a
+/// lifecycle row at `call.gate`, under the ord-n profile; the control `none`
+/// under `HELD`. C1: the advance's last step is one of `want`.
+pub(super) fn called(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    want: &[&str],
+) -> Facts {
+    call_drive(f, row, (value, None), want)
+}
+/// U19b-2: `called` with the reader value `typed` typed while held.
+pub(super) fn read_called(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, &'static str),
+    want: &[&str],
+) -> Facts {
+    call_drive(f, row, (value, Some(typed)), want)
+}
+fn call_drive(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: &[&str],
+) -> Facts {
+    let n = CALL_ORDS.iter().find(|c| c.0 == row.0).map(|c| c.1);
+    let n = n.unwrap_or_else(|| panic!("called: {} has no call ord", row.0));
+    let points: &'static [&'static str] = match row.1 {
+        "lifecycle" => &["call.gate"],
+        _ => &OBSERVED,
+    };
+    let (anchor, expect) = (Anchor::Arrival(n), refused_at(n));
+    let chain = Chain {
+        row,
+        anchor,
+        points,
+    };
+    let mut facts = match (value, typed) {
+        (_, Some(typed)) => typed_at(f, (value, typed), &chain, &expect),
+        ("none", None) => driven(f, value, &chain, &HELD, |_, _, held, _| drop(held)).0,
+        ("repeated", None) => repeat(f, &chain, &expect),
+        ("quit" | "ClosingNormal", None) => shutdown(f, value, &chain, &expect, quit_two),
+        ("Emergency", None) => shutdown(f, value, &chain, &expect, pressed),
+        ("Failed", None) => shutdown(f, value, &chain, &expect, |o| {
+            o.ingress.fail();
+            Ok(())
+        }),
+        ("ClosingRestricted", None) => shutdown(f, value, &chain, &expect, |o| {
+            quit_two(o).and_then(|()| pressed(o))
+        }),
+        _ => panic!("called: no applier for {value}"),
+    };
+    let steps = std::mem::take(&mut *STEPS.lock().unwrap());
+    if !steps.last().is_some_and(|s| want.contains(&s.as_str())) {
+        later(
+            &mut facts,
+            format!("called: the advance {steps:?}, not {want:?}"),
+        );
+    }
     facts
 }
