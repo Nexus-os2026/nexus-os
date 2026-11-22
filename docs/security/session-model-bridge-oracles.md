@@ -1729,14 +1729,15 @@ U20a credits no cell: all 45 set-B rows of the R9 `close_obligations`, `producer
 
 `close_caller_findings` (`mother/src/oracles/route_seams_guard.rs`; rule test
 `sb3e_u20a_close_callers`) checks them over the tokens of every production source of
-Mother: all but the exact paths in `CALLER_EXCLUDED` and the modules declared under
-`#[cfg(test)]` (with `#[path]`, and what they declare). Every call site of the guarded
-callees, as `.name(..)`, `Type::name` or `name(..)`, and one level up the callers of
+Mother: all but the exact paths in `CALLER_EXCLUDED` (with the test modules loaded by
+`#[path]`, named) and the modules declared under `#[cfg(test)]` at their default path.
+Every occurrence of a guarded callee (a call, a method value, a `use` alias; same-named
+locals and fields too), but its own `fn`, and one level up the callers of
 `receive`, `goal_line`, `route_read`, `read_input`, `close` and `close_report`, must equal
 `CLOSE_CALLERS`; the crate-private and private callees must stay that narrow. It fails on
 (a) the R9 path, (b) `accept`/`emergency`, (c) the reader path, (d) U21a's O1 rule read
 through `order_findings`, (e) a shipped host file using any `legacy_*` module (plants
-`u20a_p1`-`p8`, `u21a_p12`); if it fails, every row below reopens as set B. It reads
+`u20a_p1`-`p10`, `u21a_p12`); if it fails, every row below reopens as set B. It reads
 Mother only; governed-control calls none of these methods (`h:1018`, `:1641`, `:1694`).
 
 **TR-1, `hold:unreachable_by_production_order` (never a credit):** x:205-211
