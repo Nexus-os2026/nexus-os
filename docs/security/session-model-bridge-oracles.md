@@ -1742,8 +1742,12 @@ path (s5.rs `reg_drive`).
 **TR-1 (independently reviewed, data commit).**
 - x:405-410: `ledger=+0:all[s=S]` → `+1:emergency_stop[s=S]` (the bound Stop's record, as
   14.17; the R202 S1 whole-window clause applies).
-- The 32 gate rows: the entry tag `kind=<name>` → `kind=metadata`, and the check tag loses its
-  `kind` key; the ord is kept. S1 records only `chat` or `metadata` (route_seams.rs:127-131),
+- Every tagged row of registration_show, _status, _tags and _version (the 32 credited rows
+  and 36 uncredited ones: x:459-460, 462-463, 471-472, 474-475, 483-484, 486-487, 495-496,
+  498-499, 680, 685, 690, 695, 829, 831-832, 834-835, 837-838, 840, 897-904): the entry tag
+  `kind=<name>` → `kind=metadata`, and the check tag loses its `kind` key; the ord is kept.
+  The table verifier binds the identity per sink (session_model_bridge.rs `expected_identity`,
+  `check_identity`), so the sink's rows change together. S1 records only `chat` or `metadata` (route_seams.rs:127-131),
   and a held-and-refused request is never sent (exchange.rs:295), so its name is not
   observable. **The request name of a row comes from its ord in the kernel's fixed metadata
   sequence, not from an observation:** ord 1 `/api/version` (ollama.rs:249), ord 2
@@ -1756,7 +1760,8 @@ value (reader.rs `tied`: CR `stop0d`, LF `stop0a`, CRLF `stop0d0a`, EOF `04`, pa
 `partial+04`, master_close, read_failure); a bare terminator renders `ack=unread[..]`. This
 closes U19a's R202 C1 and C3 ledger items.
 
-**Ledger by key, not credited.** read_failure x:411, 459, 471, 483, 495 (GB4b, R46.3). W1:
+**Ledger by key, not credited (W1 5, W3 34; the mission's "4 W1, 26 W3" is corrected by
+`rows.py`).** read_failure x:411, 459, 471, 483, 495 (GB4b, R46.3). W1:
 stop_all x:414, 462, 474, 486, 498. W3: original_cell_unscheduled x:412, 460, 472, 484, 496;
 fatal x:415, 463, 475, 487, 499; Bootstrap x:652, 680, 685, 690, 695; fault none x:809, 829,
 832, 835, 838; panic x:831, 834, 837, 840; schedule x:889, 890, 897-904. **A guard row is owed
