@@ -3160,6 +3160,37 @@ fn route_s5_registered_notes_the_refused_reserve() {
     });
 }
 
+/// U19b-1 (SB3E-R216 F4): a real `registered` run held at `show`'s ord 4;
+/// the gate ack rule admits that run's exchange-thread acknowledgement and
+/// refuses it as the worker's own entry, at another ord, or of another
+/// session (rule level, as `route_s5_registered_applies_and_collects`).
+#[test]
+fn route_s5_gate_ack_binds_the_exchange_thread() {
+    child("s5::route_s5_gate_ack_binds_the_exchange_thread", |f| {
+        let facts = registered(f, ("registration_show", "ingress"), "none", &[Ok(())]);
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("no acknowledgement")
+        };
+        let (s, harness) = (facts.session, std::thread::current().id());
+        assert_eq!(gate_ack(Some(ack), (s, 4), harness), Ok(()));
+        assert!(
+            gate_ack(Some(ack), (s, 4), ack.thread).is_err(),
+            "the worker's"
+        );
+        assert!(gate_ack(Some(ack), (s, 3), harness).is_err(), "another ord");
+        let other = SessionSeed::new().unwrap().identity();
+        assert!(
+            gate_ack(Some(ack), (other, 4), harness).is_err(),
+            "another session"
+        );
+        assert!(
+            gate_ack(None, (s, 4), harness).is_err(),
+            "no acknowledgement"
+        );
+    });
+}
+
 /// U21a (SB3E-R197, R199): the passive `close_report` collection, once the
 /// `hands::run` thread is joined: both traces drained; S and Q are the
 /// close worker's own `close.seal` (S1, before the acknowledgement on its
