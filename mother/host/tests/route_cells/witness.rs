@@ -43,7 +43,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 27] = [
+const TOKENS: [Token; 28] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no model.call.admitted of the row's ord.
     ("CAS:m:774", "model.call.observed", |v, _, tag| {
@@ -104,6 +104,9 @@ const TOKENS: [Token; 27] = [
     ("note:scope_live", "identity:scope_live", after_ack),
     ("CAS:r:2301", "model.bind.checked", acked),
     ("note:cas@r:2301", "bind:cas", bind_refused),
+    // U20b (SB3E-R226): the acknowledged door.cancel_run (host_session.rs:1405;
+    // the frozen label h:1382-1390 is `SessionDoor::cancel_run`, now h:1400-1419).
+    ("h:1382-1390", "door.cancel_run", acked),
 ];
 /// U19c (SB3E-R228 S1): the CAS note after the acknowledgement on its thread
 /// (`after_ack`), and no `bind.done` of its run after it there: the refusal
@@ -264,6 +267,7 @@ bind.entry|s q run|host_session/model.rs:565; host_session.rs:89-91
 model.bind.checked|run|authority/run.rs:2330
 bind.done|run|authority/run.rs:2345
 bind:cas|run|authority/run.rs:2335
+door.cancel_run|s q run|host_session.rs:1405; 89-91
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -493,7 +497,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 23] = [
+const CONTROLS: [(&str, &str, &str); 24] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -517,6 +521,7 @@ const CONTROLS: [(&str, &str, &str); 23] = [
     ("call_tags", "ingress", CALL_CONTROLS[2]),
     ("identity_view", "ingress", PRE_CONTROLS[0]),
     ("inference_binding", "ingress", PRE_CONTROLS[1]),
+    ("cancel_run", "ingress", DOOR_CONTROL),
 ];
 /// U19c (SB3E-R228): each sink held at its first arrival and released: it
 /// passes, with no refusal note (`branch=none`).
@@ -527,6 +532,11 @@ out=passed@m:571;branch=none;ledger=+5:all[s=S];window=boundary;deadline_fired=n
 value=none@model.bind.checked ack=held won=route;out=passed@CAS:r:2301;branch=none;\
 ledger=+4:all[s=S];window=boundary;deadline_fired=none",
 ];
+/// U20b (SB3E-R226): the cancel_run control, held at `door.cancel_run` and
+/// released with no value: the sink passes (`Ok`).
+const DOOR_CONTROL: &str = "entry=door.cancel_run[s=S run=RUN];check=h:1382-1390[s=S run=RUN];\
+value=none@door.cancel_run ack=held won=route;out=passed@h:1382-1390;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
 /// U19b-2 (SB3E-R217): the call controls, each held at its own ord of
 /// `model.call.observed` and released: the call completes (`charge_append=1`).
 const CALL_CONTROLS: [&str; 3] = [
@@ -2296,6 +2306,28 @@ fn tr1_stray(f: &super::Fixture) -> Facts {
     let refused: [Result<(), &str>; 1] = [Err("Restricted")];
     let row = ("registration_reserve", "ingress");
     let mut facts = super::s5::read_registered(f, row, ("CR", "stop0d"), &refused);
+    let mut stray = facts.native.first().cloned().expect("the Stop record");
+    stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
+    facts.native.push(stray);
+    facts
+}
+/// U20b (SB3E-R226 F-C; R202 S1 at d_cancel, row 171): a stray non-Stop record
+/// fails `ledger`.
+#[test]
+fn witness_control_tr1_stray_record_fails_the_cancel_run_ledger() {
+    let name = "witness::witness_control_tr1_stray_record_fails_the_cancel_run_ledger";
+    let row = ("cancel_run", "ingress", "CR");
+    differs_at(
+        name,
+        "ctl_tr1_stray_cancel_run",
+        tr1_stray_cancel_run,
+        row,
+        &["ledger"],
+    );
+}
+fn tr1_stray_cancel_run(f: &super::Fixture) -> Facts {
+    let row = ("cancel_run", "ingress");
+    let mut facts = super::s5::d_cancel(f, row, "CR", Some("stop0d"));
     let mut stray = facts.native.first().cloned().expect("the Stop record");
     stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
     facts.native.push(stray);

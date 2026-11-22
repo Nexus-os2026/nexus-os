@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "cc4e0baee8db209f7223f8de930d122977d53b1064a57566df3de509bb745585";
+const EXPECT_SHA256: &str = "7c1ce670e8e4ea12179608a7b93f188b48e8c82a9e0474342c918c0677f26af8";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -2109,8 +2109,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (207, 0, 548, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36 and U19c's five credited cells: {summary:?}"
+        (219, 0, 536, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12 and U19c's five credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
@@ -2129,8 +2129,9 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// U21a (SB3E-R197, R199): the five set-B R9 close_report cells (rows 580,
 /// 581, 761, 868, 869). U19b-1 (SB3E-R216): twelve registration_install and
 /// 32 metadata-gate cells. U19b-2 (SB3E-R217): 36 call cells at ords 1-3.
-/// U19c (SB3E-R228): three identity_view and two inference_binding cells.
-const CREDITED: [&str; 162] = [
+/// U20b (SB3E-R226): twelve R6 cancel_run cells. U19c (SB3E-R228): three
+/// identity_view and two inference_binding cells.
+const CREDITED: [&str; 174] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2288,6 +2289,18 @@ const CREDITED: [&str; 162] = [
     "r5/call_tags/lifecycle/Failed",
     "r5/call_tags/lifecycle/ClosingNormal",
     "r5/call_tags/lifecycle/ClosingRestricted",
+    "r6/cancel_run/ingress/CR",
+    "r6/cancel_run/ingress/LF",
+    "r6/cancel_run/ingress/CRLF",
+    "r6/cancel_run/ingress/EOF",
+    "r6/cancel_run/ingress/partial_Ctrl_D",
+    "r6/cancel_run/ingress/master_close",
+    "r6/cancel_run/ingress/repeated",
+    "r6/cancel_run/ingress/quit",
+    "r6/cancel_run/lifecycle/Emergency",
+    "r6/cancel_run/lifecycle/Failed",
+    "r6/cancel_run/lifecycle/ClosingNormal",
+    "r6/cancel_run/lifecycle/ClosingRestricted",
     "r1/identity_view/ingress/quit",
     "r1/identity_view/lifecycle/Failed",
     "r1/identity_view/lifecycle/ClosingNormal",
