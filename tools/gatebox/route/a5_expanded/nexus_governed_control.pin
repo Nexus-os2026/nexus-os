@@ -1,5 +1,76 @@
 # SB-3E A5 C2 pin (SB3E-R72): nexus_governed_control (crates/nexus-governed-control/src/lib.rs), rustc -Zunpretty=expanded, shipped vs lane recipe.
 # Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's unit, bytes (tab-separated); then exactly that many bytes of text.
+=== ship	pub mod host_session > mod model > impl RegistrationGate < '_ >	fn admission ( & self , state : & State ) -> Result < ( ) , ModelError >	count 1	bytes 368
+            fn admission(&self, state: &State) -> Result<(), ModelError> {
+                if !state.active || state.owner_complete {
+                    return Err(ModelError::Cancelled);
+                }
+                self.validate()?;
+                self.scope.admit(&self.core.cell).map_err(|_|
+                        { ModelError::Cancelled })
+            }
+=== ship	pub mod host_session > mod model > impl HostSession	pub ( super ) fn register_model_private ( & self , endpoint : & str , spec : & ModelPinSpec ) -> Result < ModelIdentityView , SessionError >	count 1	bytes 3846
+            pub(super) fn register_model_private(&self, endpoint: &str,
+                spec: &ModelPinSpec)
+                -> Result<ModelIdentityView, SessionError> {
+                let deadline =
+                    AbsoluteDeadline::within(SystemClocks,
+                        Duration::from_secs(30));
+                let mut owner = reserve(&self.core, &self.bootstrap.scope)?;
+                let original_watch =
+                    self.control.kernel_stop_authority().admit();
+                let mut record = "not_required";
+                let result =
+                    (||
+                                {
+                                    self.startup_report().require_ready()?;
+                                    let watch =
+                                        original_watch.map_err(|_| SessionError::Restricted)?;
+                                    let gate =
+                                        RegistrationGate {
+                                            core: &self.core,
+                                            scope: &self.bootstrap.scope,
+                                            primary: &self.evidence,
+                                            watch: &watch,
+                                            deadline: &deadline,
+                                        };
+                                    let endpoint =
+                                        LoopbackEndpoint::parse(endpoint).map_err(model_error)?;
+                                    let transport =
+                                        VerifiedOllama::verify(endpoint, spec, &gate, &deadline,
+                                                    &watch).map_err(model_error)?;
+                                    let model =
+                                        crate::inference::RegisteredModel::verified(transport);
+                                    let (identity, view) = (model.identity, model.view.clone());
+                                    hold(&self.core)?.child_complete = true;
+                                    record = "unknown";
+                                    let sequence =
+                                        self.control.authority().record_session_model_registered(<[_]>::into_vec(::alloc::boxed::box_new([("model_digest".into(),
+                                                                        view.digest.clone()),
+                                                                    ("identity".into(),
+                                                                        view.identity.clone())]))).map_err(|_|
+                                                    SessionError::Backend("evidence_unavailable"))?;
+                                    record = "recorded";
+                                    let mut s = hold(&self.core)?;
+                                    gate.admission(&s).map_err(|e| { model_error(e) })?;
+                                    s.registration =
+                                        Some(RegistrationReceipt {
+                                                sequence,
+                                                digest: identity,
+                                                model: Arc::new(model),
+                                                watch: watch.clone(),
+                                                primary: self.evidence.clone(),
+                                            });
+                                    owner.complete_held(record, &mut s)?;
+                                    Ok(view)
+                                })();
+                let completion =
+                    if owner.done { Ok(()) } else { owner.complete(record) };
+                match result {
+                    Ok(view) => { completion?; Ok(view) }
+                    Err(error) => Err(error),
+                }
+            }
 === ship	pub mod host_session > mod model > impl CallGate < '_ >	fn predicates ( & self , kind : RequestKind ) -> Result < ( ) , Refusal >	count 1	bytes 4807
             fn predicates(&self, kind: RequestKind) -> Result<(), Refusal> {
                 use {
@@ -460,7 +531,7 @@
                 })
         }
     }
-=== lane	pub mod broker	pub mod route_seams	count 1	bytes 17798
+=== lane	pub mod broker	pub mod route_seams	count 1	bytes 17835
     pub mod route_seams {
         //! SB-3E S1 (design 4.2): the broker's route seams. Compiled only with
         //! `--cfg mother_route_seams`, which only the route lane's wrapper sets; the
@@ -483,10 +554,11 @@
         const PATIENCE: Duration = Duration::from_secs(10);
         /// Every point a harness may arm: the broker rows of design 4.4 and S1's
         /// two store points.
-        pub(crate) const POINTS: [&str; 35] =
+        pub(crate) const POINTS: [&str; 36] =
             ["reg.reserve", "model.reserved", "model.record.before",
-                    "model.install.before", "model.install.after", "reg.ready",
-                    "identity", "bind.entry", "model.bind.checked", "bind.done",
+                    "model.install.before", "reg.admission",
+                    "model.install.after", "reg.ready", "identity",
+                    "bind.entry", "model.bind.checked", "bind.done",
                     "attempt.slot", "model.attempt.reserved",
                     "model.attempt.granted", "model.attempt.checked",
                     "model.gate.before", "model.gate.checked", "call.gate",
@@ -1339,7 +1411,7 @@
             s.record = Some("pending");
             Ok(Owner { core: core.clone(), done: false })
         }
-=== lane	pub mod host_session > mod model > impl RegistrationGate < '_ >	fn admission ( & self , state : & State ) -> Result < ( ) , ModelError >	count 1	bytes 443
+=== lane	pub mod host_session > mod model > impl RegistrationGate < '_ >	fn admission ( & self , state : & State ) -> Result < ( ) , ModelError >	count 1	bytes 581
             fn admission(&self, state: &State) -> Result<(), ModelError> {
                 if !state.active || state.owner_complete {
                     return Err(ModelError::Cancelled);
@@ -1347,7 +1419,10 @@
                 self.validate()?;
                 route_seams::at("model.gate.checked", self.scope.route_ctx());
                 self.scope.admit(&self.core.cell).map_err(|_|
-                        ModelError::Cancelled)
+                        {
+                            route_seams::note("reg:cas", self.scope.route_ctx());
+                            ModelError::Cancelled
+                        })
             }
 === lane	pub mod host_session > mod model > impl CallCancel for RegistrationGate < '_ >	fn admit_request ( & self , kind : RequestKind ) -> Result < ( ) , ModelError >	count 1	bytes 491
             fn admit_request(&self, kind: RequestKind)
@@ -1361,7 +1436,7 @@
                     hold(self.core).map_err(|_| ModelError::Cancelled)?;
                 self.admission(&state)
             }
-=== lane	pub mod host_session > mod model > impl HostSession	pub ( super ) fn register_model_private ( & self , endpoint : & str , spec : & ModelPinSpec ) -> Result < ModelIdentityView , SessionError >	count 1	bytes 4391
+=== lane	pub mod host_session > mod model > impl HostSession	pub ( super ) fn register_model_private ( & self , endpoint : & str , spec : & ModelPinSpec ) -> Result < ModelIdentityView , SessionError >	count 1	bytes 4726
             pub(super) fn register_model_private(&self, endpoint: &str,
                 spec: &ModelPinSpec)
                 -> Result<ModelIdentityView, SessionError> {
@@ -1410,7 +1485,12 @@
                                     route_seams::at("model.install.before",
                                         self.bootstrap.scope.route_ctx());
                                     let mut s = hold(&self.core)?;
-                                    gate.admission(&s).map_err(model_error)?;
+                                    gate.admission(&s).map_err(|e|
+                                                {
+                                                    route_seams::at("reg.admission",
+                                                        self.bootstrap.scope.route_ctx());
+                                                    model_error(e)
+                                                })?;
                                     s.registration =
                                         Some(RegistrationReceipt {
                                                 sequence,
