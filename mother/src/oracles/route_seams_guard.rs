@@ -1074,6 +1074,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     more.extend(t7_findings(sources));
     more.extend(reader_timeout_findings(text(sources, READER)));
     more.extend(order_findings(text(sources, "host/src/hands.rs")));
+    more.extend(close_caller_findings(sources));
     for finding in more {
         check(false, finding);
     }
@@ -1133,6 +1134,246 @@ fn order_findings(hands: &str) -> Vec<String> {
     ] {
         if !ok {
             found.push(format!("order: {what}"));
+        }
+    }
+    found
+}
+/// U20a (SB3E-R214, R214.2-3; docs 14.19 O1-O3): every production occurrence of
+/// the close sinks' callees and, one level up (S1), of their callers, as
+/// `file|enclosing fn|callee[*count]`, over tokens (a comment or literal is not
+/// one; same-named locals and fields count too). R9: only `Runtime::close` on
+/// hands-close; R6 and Stop: only the reader thread's `read_input`.
+const CLOSE_CALLERS: &str = "\
+host/src/hands.rs|close|settle_close_resources
+host/src/hands.rs|close|seal_close
+host/src/hands.rs|close_report|close_obligations
+host/src/hands.rs|close|close_report*2
+host/src/hands.rs|run|close*9
+host/src/hands.rs|-|close*2
+host/src/hands.rs|run|close_report*3
+host/src/stop.rs|press|emergency
+src/coordinator.rs|advance|emergency*2
+host/src/terminal.rs|receive|accept*2
+host/src/terminal.rs|receive|press*2
+host/src/terminal.rs|read_input|press*2
+host/src/terminal.rs|goal_line|receive*3
+host/src/terminal.rs|route_read|receive*2
+host/src/terminal.rs|read_input|receive
+host/src/terminal.rs|route_read|goal_line
+host/src/terminal.rs|-|goal_line
+host/src/terminal.rs|goal_begin|goal_line
+host/src/terminal.rs|goal_end|goal_line
+host/src/terminal.rs|publish_goal|goal_line
+host/src/terminal.rs|read_goal_inner|goal_line
+host/src/terminal.rs|read_input|route_read
+host/src/terminal.rs|open|read_input
+";
+/// Each callee: clause, where it is visible (all of Mother if empty) and the file that
+/// keeps it that narrow (stop.rs:88; terminal.rs:313, :516, :1303, :1389; hands.rs:721, :757).
+const GUARDED: [(&str, &str, &str, &str); 12] = [
+    ("close_obligations", "(a)", "", ""),
+    ("settle_close_resources", "(a)", "", ""),
+    ("seal_close", "(a)", "", ""),
+    ("close", "(a)", "host/src/hands", "host/src/hands.rs"),
+    ("close_report", "(a)", "host/src/hands", "host/src/hands.rs"),
+    ("accept", "(b)", "", ""),
+    ("emergency", "(b)", "", ""),
+    ("press", "(c)", "host/src/", "host/src/stop.rs"),
+    ("receive", "(c)", "host/src/", "host/src/terminal.rs"),
+    ("goal_line", "(c)", "host/src/", "host/src/terminal.rs"),
+    ("route_read", "(c)", "host/src/", "host/src/terminal.rs"),
+    (
+        "read_input",
+        "(c)",
+        "host/src/terminal",
+        "host/src/terminal.rs",
+    ),
+];
+/// Not production (R214.2 S3, exact paths; (e) keeps the legacy modules off the shipped
+/// path), beside the modules declared under `#[cfg(test)]` and their files. The
+/// `src/adapter/` files are test modules loaded by `#[path]` (R214.3 D2): adapter/lite.rs:331
+/// (lite.rs is test-only, adapter/mod.rs:1346-1347); coordinator/lite.rs:62, :87, :92, :102,
+/// :470; private_file.rs:283; session_close_oracles_tests.rs:194, :196.
+const CALLER_EXCLUDED: &str =
+    "host/tests/ host/examples/ desktop/tests/ host/src/legacy_terminal.rs \
+host/src/legacy_stop.rs src/adapter/lite_review2_mixed.rs src/adapter/lite_review3.rs \
+src/adapter/session_continuation_oracles_tests.rs src/adapter/session_close_oracles_tests.rs \
+src/adapter/session_budget_fix1_tests.rs src/adapter/session_terminal_fix2_tests.rs \
+src/adapter/private_session_oracles_tests.rs src/adapter/session_lifecycle_fix1_tests.rs \
+src/adapter/session_native_record_fix1_tests.rs";
+/// Clause (e): the shipped host files, and `lib.rs` but for its `mod` lines.
+const SHIPPED: &str =
+    "host/src/bin/ host/src/hands.rs host/src/terminal.rs host/src/stop.rs host/src/lib.rs";
+fn caller_excluded(file: &str, test_mods: &[String]) -> bool {
+    let named = |e: &&str| file == *e || e.ends_with('/') && file.starts_with(e);
+    CALLER_EXCLUDED.split_whitespace().any(|e| named(&e))
+        || test_mods
+            .iter()
+            .any(|m| file == format!("{m}.rs") || file.starts_with(&format!("{m}/")))
+}
+/// `#[cfg(test)]` at `t[i..]`.
+fn cfg_test(t: &[&str], i: usize) -> bool {
+    t.get(i..i + 7) == Some(&["#", "[", "cfg", "(", "test", ")", "]"][..])
+}
+/// The modules a file declares under `#[cfg(test)]` at their default path
+/// (R214.3 D2: a `#[path]` module is not followed; a test module loaded that way
+/// is named in `CALLER_EXCLUDED`).
+fn test_mods(lexed: &[(&str, Vec<&str>)]) -> Vec<String> {
+    let mut found = Vec::new();
+    for (file, t) in lexed {
+        let stem = file.strip_suffix(".rs").unwrap_or(file);
+        let root = ["/mod", "/lib", "/main"].iter().any(|e| stem.ends_with(e));
+        let parent = if root {
+            stem.rsplit_once('/').map_or("", |p| p.0)
+        } else {
+            stem
+        };
+        let (mut test, mut path) = (false, false);
+        for i in 0..t.len() {
+            let open = !matches!(t[i], ";" | "{" | "}");
+            test = (test || cfg_test(t, i)) && open;
+            path = (path || t[i] == "path" && t.get(i + 1) == Some(&"=")) && open;
+            if test && !path && t[i] == "mod" && t.get(i + 2) == Some(&";") {
+                found.push(format!("{parent}/{}", t[i + 1]));
+            }
+        }
+    }
+    found
+}
+/// Each non-test occurrence in `t` of a guarded callee as `(enclosing fn,
+/// callee)`. A pending
+/// `#[cfg(test)]` ends at its item's `;`, block or `}`, and (S4) at a `,`,
+/// `)` or `]` of its own level.
+fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
+    let (mut found, mut stack) = (Vec::new(), Vec::<(Option<&str>, bool)>::new());
+    let (mut name, mut test, mut depth, mut skip) = (None, false, 0usize, 0);
+    for i in 0..t.len() {
+        if cfg_test(t, i) {
+            (test, depth, skip) = (true, 0, i + 7);
+        }
+        if i < skip {
+            continue;
+        }
+        match t[i] {
+            "fn" => {
+                name = t
+                    .get(i + 1)
+                    .copied()
+                    .filter(|n| n.starts_with(char::is_alphabetic))
+            }
+            "{" => {
+                stack.push((name.take(), test));
+                test = false;
+            }
+            "}" | ";" => {
+                if t[i] == "}" {
+                    stack.pop();
+                }
+                (name, test) = (None, false);
+            }
+            "(" | "[" if test => depth += 1,
+            ")" | "]" | "," if test && depth == 0 => test = false,
+            ")" | "]" if test => depth -= 1,
+            _ => {}
+        }
+        // R214.3 D1: every occurrence counts (a call, a method value, a `use`
+        // alias), but for the callee's own `fn` definition.
+        let called = i > 0 && t[i - 1] != "fn";
+        let guarded = GUARDED.iter().any(|g| g.0 == t[i] && file.starts_with(g.2));
+        if guarded && called && !test && !stack.iter().any(|s| s.1) {
+            found.push((stack.iter().rev().find_map(|s| s.0).unwrap_or("-"), t[i]));
+        }
+    }
+    found
+}
+fn close_caller_findings(sources: &[(String, String)]) -> Vec<String> {
+    let lexed: Vec<(&str, Vec<&str>)> = sources
+        .iter()
+        .filter(|(_, s)| tokens(s).is_ok())
+        .map(|(f, s)| (f.as_str(), lex(s)))
+        .collect();
+    let mods = test_mods(&lexed);
+    let mut rows = Vec::new();
+    for (file, t) in lexed.iter().filter(|(f, _)| !caller_excluded(f, &mods)) {
+        let found = close_calls(file, t).into_iter();
+        rows.extend(found.map(|(within, callee)| format!("{file}|{within}|{callee}")));
+    }
+    let clause = |row: &str| {
+        let callee = row.rsplit('|').next();
+        GUARDED
+            .iter()
+            .find(|g| Some(g.0) == callee)
+            .map_or("?", |g| g.1)
+    };
+    let count = |l: &'static str| {
+        l.split_once('*')
+            .map_or((l, 1), |(r, n)| (r, n.parse().unwrap_or(0)))
+    };
+    let listed = CLOSE_CALLERS.lines().map(count);
+    let mut listed: Vec<&str> = listed
+        .flat_map(|(r, n)| std::iter::repeat_n(r, n))
+        .collect();
+    let mut found = Vec::new();
+    for row in &rows {
+        match listed.iter().position(|l| l == row) {
+            Some(at) => {
+                listed.remove(at);
+            }
+            None => found.push(format!("close callers {}: unlisted {row}", clause(row))),
+        }
+    }
+    found.extend(
+        listed
+            .iter()
+            .map(|l| format!("close callers {}: missing {l}", clause(l))),
+    );
+    // S1: a scoped callee stays as narrow as its scope: one `fn`, not `pub`
+    // (nor `pub(..)` when its scope is one module).
+    for (callee, which, scope, definer) in GUARDED.iter().filter(|g| !g.3.is_empty()) {
+        let t = lexed
+            .iter()
+            .find(|(f, _)| f == definer)
+            .map_or(&[][..], |x| &x.1[..]);
+        let defs: Vec<usize> = (1..t.len())
+            .filter(|&i| t[i - 1] == "fn" && t[i] == *callee)
+            .collect();
+        let lead = |i: usize| {
+            (0..i - 1)
+                .rev()
+                .find(|&k| !["const", "async", "unsafe"].contains(&t[k]))
+        };
+        let narrow = |&i: &usize| {
+            lead(i).is_some_and(|k| t[k] != "pub" && (scope.ends_with('/') || t[k] != ")"))
+        };
+        if defs.len() != 1 || !defs.iter().all(narrow) {
+            found.push(format!(
+                "close callers {which}: {definer} widens fn {callee}"
+            ));
+        }
+    }
+    // (d): U21a's O1 rule itself, not a copy of it.
+    let hands = sources.iter().find(|(f, _)| f == "host/src/hands.rs");
+    let order = hands.map_or_else(
+        || vec!["no host/src/hands.rs".into()],
+        |h| order_findings(&h.1),
+    );
+    let kept = [
+        "no host/src/hands.rs",
+        "does not tokenize",
+        "the reader is not",
+    ];
+    let reader = order.iter().filter(|o| kept.iter().any(|k| o.contains(k)));
+    found.extend(reader.map(|o| format!("close callers (d): {o}")));
+    // (e) (R214.2 S3): no shipped file uses any `legacy_*` module.
+    for (file, t) in lexed
+        .iter()
+        .filter(|(f, _)| SHIPPED.split(' ').any(|s| f.starts_with(s)))
+    {
+        for (i, w) in t.iter().enumerate() {
+            let modded = *file == "host/src/lib.rs" && i > 0 && t[i - 1] == "mod";
+            if w.starts_with("legacy_") && !modded {
+                found.push(format!("close callers (e): {file} uses {w}"));
+            }
         }
     }
     found
@@ -4061,6 +4302,161 @@ fn sb3e_w0b_compact_arms() {
     ] {
         let planted = planted(&sources, &mains, main, &text);
         shown(&mut misses, plant, &inventory_findings(&planted), &[expected]);
+    }
+    fail_on(misses);
+}
+
+/// U20a (SB3E-R214, R214.2): each clause of `close_caller_findings` refuses
+/// its own planted text, and the real tree passes. A commented-out call, a
+/// string, a `#[cfg(test)]` item or module and an excluded path are no
+/// production callers.
+#[test]
+fn sb3e_u20a_close_callers() {
+    let sources = walked().0;
+    let real = close_caller_findings(&sources);
+    let mut misses = match real.is_empty() {
+        true => Vec::new(),
+        false => vec![format!("the real tree: {real:?}")],
+    };
+    let h = "host/src/hands.rs";
+    let run = "    let request = screen.input().quit.take();\n";
+    let uses = "use crate::session_home::SessionServices;\n";
+    let call = "fn f(i: &I) {\n    i.emergency();\n}\n";
+    let edit = |f: &str, old: &str, new: &str| planted(&sources, f, old, new);
+    let at = |old: &str, line: &str| edit(h, old, &format!("{line}\n{old}"));
+    let with = |mut s: Vec<(String, String)>, f: &str, text: &str| {
+        s.push((f.to_string(), text.to_string()));
+        s
+    };
+    let add = |f: &str, text: &str| with(sources.clone(), f, text);
+    // A line put in the run loop: its clause and callee (R214.2 S1 and S2 among them).
+    for (line, clause, callee) in [
+        (
+            "let _ = session.close_obligations();",
+            "(a)",
+            "close_obligations",
+        ),
+        (
+            "let _ = runtime.close_report(\"x\");",
+            "(a)",
+            "close_report",
+        ),
+        ("let _ = ingress.emergency();", "(b)", "emergency"),
+        (
+            "let _ = SessionIngress::emergency(&ingress);",
+            "(b)",
+            "emergency",
+        ),
+        ("screen.stop.press();", "(c)", "press"),
+        ("screen.receive(Line::Stop, false);", "(c)", "receive"),
+        ("let f = SessionIngress::emergency;", "(b)", "emergency"),
+    ] {
+        let expected = format!("close callers {clause}: unlisted {h}|run|{callee}");
+        let found = close_caller_findings(&at(run, line));
+        shown(&mut misses, line, &found, &[&expected]);
+    }
+    let report = "        let model = self.home.session.close_obligations();\n";
+    let reader = "    let reader_done = terminal.stop_reader(producers_until);\n";
+    let (bin, exit) = (
+        "host/src/bin/mother-hands.rs",
+        "use std::process::ExitCode;\n",
+    );
+    let (term, input) = (
+        "host/src/terminal.rs",
+        "\nfn read_input(shared: Arc<Shared>) {\n",
+    );
+    let widened = input.replace("\nfn", "\npub(crate) fn");
+    let join = "fn join<T>(handle: &mut Option<JoinHandle<T>>, deadline: Instant, screen: &Shared)";
+    let hooked = join.replace("(handle", "(#[cfg(test)] _h: u8, handle");
+    let hooked = format!("{hooked} -> Option<T> {{\n    screen.stop.press();\n");
+    let accepts = "fn q(i: &I) { i.accept(k, 9); }";
+    let press = "fn f(s: &S) {\n    s.stop.press();\n}\n";
+    let (lib, stop) = ("host/src/lib.rs", "mod stop;\n");
+    let receive = at(run, "screen.receive(Line::Stop, false);");
+    let again = format!("{stop}#[cfg(test)]\n#[path = \"hands.rs\"]\nmod again;\n");
+    let alias = "use crate::terminal::{route_read as feed};";
+    for (planted, expected) in [
+        (
+            edit(h, report, ""),
+            "(a): missing host/src/hands.rs|close_report|close_obligations",
+        ),
+        (
+            add("host/src/x.rs", accepts),
+            "(b): unlisted host/src/x.rs|q|accept",
+        ),
+        (
+            edit(h, reader, "let reader_done = true;\n"),
+            "(d): order: the reader is not joined",
+        ),
+        (
+            at(uses, "use crate::legacy_terminal;"),
+            "(e): host/src/hands.rs uses legacy_terminal",
+        ),
+        (
+            edit(bin, exit, "use x::legacy_stop;\n"),
+            "(e): host/src/bin/mother-hands.rs uses legacy_stop",
+        ),
+        // R214.2 S1: a scoped callee is not widened; S3: exact exclusions; S4: a parameter's cfg(test).
+        (
+            edit(term, input, &widened),
+            "(c): host/src/terminal.rs widens fn read_input",
+        ),
+        (
+            add("host/src/legacy_x.rs", press),
+            "(c): unlisted host/src/legacy_x.rs|f|press",
+        ),
+        (
+            at(uses, "use crate::legacy_x;"),
+            "(e): host/src/hands.rs uses legacy_x",
+        ),
+        (
+            add("host/src/x_tests.rs", call),
+            "(b): unlisted host/src/x_tests.rs|f|emergency",
+        ),
+        (
+            edit(h, &format!("{join} -> Option<T> {{\n"), &hooked),
+            "(c): unlisted host/src/hands.rs|join|press",
+        ),
+        // R214.3 D1: a `use` alias; D2: a `#[path]` test module hides no production file.
+        (
+            at(uses, alias),
+            "(c): unlisted host/src/hands.rs|-|route_read",
+        ),
+        (
+            planted(&receive, lib, stop, &again),
+            "(c): unlisted host/src/hands.rs|run|receive",
+        ),
+    ] {
+        let expected = format!("close callers {expected}");
+        let found = close_caller_findings(&planted);
+        shown(&mut misses, &expected, &found, &[&expected]);
+    }
+    let lib = edit(lib, stop, &format!("{stop}#[cfg(test)]\nmod u20a_t;\n"));
+    for (plant, planted) in [
+        (
+            "a comment",
+            at(run, "// let _ = session.close_obligations();"),
+        ),
+        (
+            "a string",
+            at(run, "let _ = \"session.close_obligations()\";"),
+        ),
+        (
+            "a cfg(test) module",
+            at(uses, &format!("#[cfg(test)]\nmod u {{\n{call}}}")),
+        ),
+        ("a cfg(test) fn", at(uses, &format!("#[cfg(test)]\n{call}"))),
+        ("an integration test", add("host/tests/u20a.rs", call)),
+        ("an example", add("host/examples/u20a.rs", call)),
+        (
+            "a cfg(test)-declared module",
+            with(lib, "host/src/u20a_t.rs", call),
+        ),
+    ] {
+        let found = close_caller_findings(&planted);
+        if found != real {
+            misses.push(format!("{plant} counted as a production caller: {found:?}"));
+        }
     }
     fail_on(misses);
 }

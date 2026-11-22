@@ -1716,6 +1716,58 @@ with no `reg:word_compare` note (`s5.rs` `collect_report`; R202 C1), never the b
 ready literal;
 model-mode equivalence for close_report is M-7's ledger item (R199 Q-U21-2).
 
+### 14.19 SB-3E U20a: the five close sinks' set-B rows (SB3E-R214, R214.2)
+
+U20a credits no cell: all 45 set-B rows of the R9 `close_obligations`, `producer_join`,
+`seal` and the R6 `close_restrict`, `emergency_restrict` contradict the production order.
+
+| # | Fact | Citation |
+|---|---|---|
+| O1 | The three R9 methods are called only in `Runtime::close` / `close_report`, and `close` only on `hands-close`, which spawns only if `reader_done`: the reader thread has finished and been joined | `hands.rs:734`, `:740`, `:794`, `:1390`, `:1401-1418`; `terminal.rs:1204-1217` |
+| O2 | EOF, partial+EOF, master close and a read failure fail the ingress; the spawn needs `!ingress.failed()` | `terminal.rs:534-537`, `:1404-1406`, `:1434-1436`; `hands.rs:1406` |
+| O3 | Every production `SessionIngress::accept` / `::emergency` call is on the one reader thread (`hands-input`, `read_input`): `accept` in `receive`, `emergency` only via `StopRoute::press`; the EMERGENCY bit is set only in `emergency()` | `terminal.rs:516-535`, `:571`, `:1105`, `:1389`, `:1405`, `:1435`; `stop.rs:88-91`; `h:1641-1663`, `:1724-1725` |
+
+`close_caller_findings` (`mother/src/oracles/route_seams_guard.rs`; rule test
+`sb3e_u20a_close_callers`) checks them over the tokens of every production source of
+Mother: all but the exact paths in `CALLER_EXCLUDED` (with the test modules loaded by
+`#[path]`, named) and the modules declared under `#[cfg(test)]` at their default path.
+Every occurrence of a guarded callee (a call, a method value, a `use` alias; same-named
+locals and fields too), but its own `fn`, and one level up the callers of
+`receive`, `goal_line`, `route_read`, `read_input`, `close` and `close_report`, must equal
+`CLOSE_CALLERS`; the crate-private and private callees must stay that narrow. It fails on
+(a) the R9 path, (b) `accept`/`emergency`, (c) the reader path, (d) U21a's O1 rule read
+through `order_findings`, (e) a shipped host file using any `legacy_*` module (plants
+`u20a_p1`-`p10`, `u21a_p12`); if it fails, every row below reopens as set B. It reads
+Mother only; governed-control calls none of these methods (`h:1018`, `:1641`, `:1694`).
+
+**TR-1, `hold:unreachable_by_production_order` (never a credit):** x:205-211
+close_obligations, x:377-383 producer_join, x:501-507 seal (each CR, LF, CRLF, EOF,
+partial_Ctrl_D, master_close, read_failure; O1, and O2 for the last four; with a live
+reader the seal refuses `seal:producers`, `close.rs:390-392`); x:235-241 close_restrict
+and x:269-275 emergency_restrict (O3: the thread held at the sink is the reader, so no
+byte is read until it returns; x:269-271 also stand over the `c:` citation).
+
+**W1-type (R199 Q-U21-4), open for U22's list:** repeated and quit at x:213, 218
+(close_obligations), 385, 390 (producer_join), 508, 514 (seal): O1, O3; at x:243, 248
+(close_restrict) and 277, 282 (emergency_restrict): O3, a second Stop or Quit while the
+reader is held would need a second reader.
+
+**Kept credits (F-S0-C):** x:575, 577, 584, 600, 647, 705: reached by harness press;
+production order O1/O3 (the real `ingress.emergency()` on the real session while held).
+
+**Ledger by key:** W1 (15): mission_stop x:214, 244, 278, 386, 510; stop_all x:215, 245,
+279, 387, 511; grant_revocation x:220, 250, 284, 392, 516. W3 (52): original_cell_unscheduled
+x:212, 242, 276, 384, 509; door_fence x:216, 246, 280, 388, 512; fatal x:217, 247, 281, 389,
+513; budget x:219, 249, 283, 391, 515; grant_expiry x:221, 251, 285, 393; Normal x:583, 598;
+ClosedUnclean x:578; fault none x:756, 764, 773, 804, 841; record_failed x:757, 842;
+record_unknown x:759, 845; panic x:760, 767, 776, 806, 844; poison x:805; schedule x:866,
+867, 870, 871, 875, 876, 887, 888, 905, 906. **F-S0-B (binding, R214):** a bare terminator
+rendered the frozen close byte rows byte-equal through `read_ack`'s bare arm (x:205, 235,
+377). Closed by U19b-1's renderer tie guard (reader.rs `tied`, called in witness.rs's read
+arm; 14.20 F7): a byte row's value admits exactly one reader value, so a bare terminator
+renders `ack=unread[..]` for every byte row; the bare-terminator plants are
+`u19b1_p_bare_d_register` and `u19b1_p_bare_d_call` (closes U19a's R202 C1).
+
 ### 14.20 SB-3E U19b-1: registration install and metadata gates (SB3E-R216, R216.1)
 
 **Credited (44, set B; real reader composed as hands.rs:1092, :1130 compose it; the
@@ -1747,7 +1799,8 @@ path (s5.rs `reg_drive`).
   498-499, 680, 685, 690, 695, 829, 831-832, 834-835, 837-838, 840, 897-904): the entry tag
   `kind=<name>` → `kind=metadata`, and the check tag loses its `kind` key; the ord is kept.
   The table verifier binds the identity per sink (session_model_bridge.rs `expected_identity`,
-  `check_identity`), so the sink's rows change together. S1 records only `chat` or `metadata` (route_seams.rs:127-131),
+  `check_identity`), so the sink's rows change together. S1 records only `chat` or
+  `metadata` (route_seams.rs:128-132),
   and a held-and-refused request is never sent (exchange.rs:295), so its name is not
   observable. **The request name of a row comes from its ord in the kernel's fixed metadata
   sequence, not from an observation:** ord 1 `/api/version` (ollama.rs:249), ord 2
