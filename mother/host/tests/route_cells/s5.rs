@@ -2712,11 +2712,63 @@ fn route_s5_close_window_opens_at_the_hold() {
 /// R1 (R100.2, R101.3: points are compared only with `REG_POINTS` and the
 /// literal lists): each d_register sink's held point (model.rs:301, 122) and
 /// the d_bootstrap sink's (host_session.rs:858; SEAM-1).
-const REG_POINTS: [(&str, &str); 3] = [
+const REG_POINTS: [(&str, &str); 4] = [
     ("registration_record", "model.record.before"),
     ("registration_reserve", "reg.reserve"),
     ("registration_readiness", "reg.ready"),
+    // U19b-1: the install (model.rs:319), after the record.
+    ("registration_install", "model.install.before"),
 ];
+/// U19b-1 (SB3E-R216 F4): the metadata gates (model.rs:243), each held at
+/// its own arrival: the gate ordinal (ollama.rs:103-104, ords 1-4).
+const REG_GATES: [(&str, usize); 4] = [
+    ("registration_version", 1),
+    ("registration_status", 2),
+    ("registration_tags", 3),
+    ("registration_show", 4),
+];
+const GATE: &str = "model.gate.checked";
+/// U19b-1: a registration row's held point and arrival.
+fn reg_point(sink: &str) -> Option<(&'static str, usize)> {
+    let point = REG_POINTS.iter().find(|p| p.0 == sink).map(|p| (p.1, 1));
+    point.or_else(|| REG_GATES.iter().find(|g| g.0 == sink).map(|g| (GATE, g.1)))
+}
+/// U19b-1 (F4): the `n`-th arrival at `point`, re-armed between arrivals
+/// (as `chained`'s `Arrival`); `None` if one is not acknowledged.
+fn reg_drive_nth(
+    f: &Fixture,
+    held: &mut s1::Held,
+    point: &'static str,
+    n: usize,
+) -> Option<s1::Entry> {
+    for _ in 1..n {
+        held.acknowledged.recv_timeout(PATIENCE).ok()?;
+        drop(std::mem::replace(held, f.pause(point)));
+    }
+    held.acknowledged.recv_timeout(PATIENCE).ok()
+}
+/// U19b-1 (F4): a gate is acknowledged on the kernel's per-request
+/// `nexus-model-exchange` thread (exchange.rs:187-189), at the row's ord, of
+/// S and request 0; never the worker's own install-time entry (model.rs:321
+/// calls `admission`, model.rs:243, on the worker).
+fn gate_ack(
+    ack: Option<&s1::Entry>,
+    (s, n): (SessionIdentity, usize),
+    worker: ThreadId,
+) -> Result<(), String> {
+    let ours = |a: &&s1::Entry| {
+        (a.point, a.note, a.session, a.request, a.request_ordinal)
+            == (GATE, false, Some(s), Some(0), Some(n as u64))
+            && a.thread != worker
+    };
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "registered: gate acknowledgement {:?}, ord {n}, the worker {worker:?}",
+            ack.map(|a| (a.point, a.request_ordinal, a.thread))
+        )),
+    }
+}
 /// R2: the registration-time reductions, lock-free (design 4.4 `free`), each
 /// with its effect checked while the hold stands; the findings. U19a: the
 /// lifecycle values reached while held (set B, SB3E-R196.1).
@@ -2901,7 +2953,7 @@ fn reg_drive(
     want: &[Result<(), &str>],
 ) -> Facts {
     let mut b = open_broker(f);
-    let Some(point) = REG_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1) else {
+    let Some((point, n)) = reg_point(row.0) else {
         let missing = vec![format!("registered: {} has no d_register point", row.0)];
         let held = (Vec::new(), Vec::new());
         return collect_reg(&b, held, (row, value), (None, missing), "collect_reg");
@@ -2926,17 +2978,26 @@ fn reg_drive(
             ));
         }
     }
-    let held = f.pause(point);
+    let mut held = f.pause(point);
     let (ack, since, result, typed) = std::thread::scope(|scope| {
         let worker = scope.spawn(move || match ready {
             true => session.finish_bootstrap(),
             false => session.register_local_model(endpoint, spec()).map(|_| ()),
         });
         let thread = worker.thread().id();
-        let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
-        let since = (b.native.records().len(), b.peer.lock().unwrap().len());
+        let ack = reg_drive_nth(f, &mut held, point, n);
+        // U19b-1 (F8): a gate row's peer window opens at `open_broker`.
+        let peer = match point == GATE {
+            true => b.since.1,
+            false => b.peer.lock().unwrap().len(),
+        };
+        let since = (b.native.records().len(), peer);
         let mut typed = None;
-        match reg_ack(ack.as_ref(), point, session.identity(), thread) {
+        let acked = match point == GATE {
+            true => gate_ack(ack.as_ref(), (session.identity(), n), thread),
+            false => reg_ack(ack.as_ref(), point, session.identity(), thread),
+        };
+        match acked {
             Ok(()) => {
                 let at = Instant::now();
                 match (how, &reading) {
@@ -2972,6 +3033,15 @@ fn reg_drive(
     let phases: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
     println!("WITNESS registered {value}: native {phases:?}");
     let s = facts.session;
+    // U19b-1 (SB3E-R216.1 F-B2 inverse control): the admitted path writes no
+    // refusal record, neither the install's S1 entry nor the gate's note.
+    let refusal = |e: &&s1::Entry| ["reg.admission", "reg:cas"].contains(&e.point);
+    if value == "none" && facts.broker.iter().any(|e| refusal(&e)) {
+        later(
+            &mut facts,
+            "registered: a refusal record on the admitted path".into(),
+        );
+    }
     let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
     let applications = facts.broker.iter().filter(mine).count();
     if value == "repeated" && applications != 2 {

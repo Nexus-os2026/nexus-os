@@ -1457,13 +1457,13 @@ ind,ScopeKind::Bootstrap)||scope.session!=core.identity||!scope.core.ptr_eq(&Arc
 )||scope.admit(&core.cell).is_err(){ note(reg:scope_admit,scope.route_ctx());¦.is_err(){¦returnEr\
 r( >fnadmission(&self\
 ,state:&State)->Result<(),ModelError>{>implRegistrationGate<'_>{ at(model.gate.checked,self.sco\
-pe.route_ctx());¦e.cell),);¦self.scope >fnadmit_request(&self,kind:RequestKind)->Result<(),Mode\
+pe.route_ctx());¦e.cell),);¦self.scope +self.scope.admit(&self.core.cell).map_err(|_|{ note(reg:cas,self.scope.route_ctx());¦p_err(|_|{¦ModelError >fnadmit_request(&self,kind:RequestKind)->Result<(),Mode\
 lError>{>implCallCancelforRegistrationGate<'_>{ at(model.gate.before,self.scope.route_ctx().kin\
 d(kind));¦e.cell),);¦ifkind!=Re >pub(super)fnregister_model_private(&self,endpoint:&str,spec:&M\
 odelPinSpec,)->Result<ModelIdentityView,SessionError>{>implHostSession{ at(model.reserved,self.\
 bootstrap.scope.route_ctx());¦e.cell),);¦letmutreco +letresult=(||{ at(model.record.before,self\
 .bootstrap.scope.route_ctx());¦e.cell),);¦letsequenc at(model.install.before,self.bootstrap.sco\
-pe.route_ctx());¦e.cell),);¦letmuts=ho at(model.install.after,self.bootstrap.scope.route_ctx())\
+pe.route_ctx());¦e.cell),);¦letmuts=ho +gate.admission(&s).map_err(|e|{>letresult=(||{ at(reg.admission,self.bootstrap.scope.route_ctx());¦p_err(|e|{¦model_erro +letresult=(||{ at(model.install.after,self.bootstrap.scope.route_ctx())\
 ;¦e.cell),);¦#[cfg(test >pub(super)fnacquire(core:&Arc<Core>,authority:&Authority,(run,agent,gr\
 oup,identity):(RunId,&AgentId,GroupId,[u8;32]),original:&HaltCell,grant:&OriginalGrant<'_>,invo\
 cation:&InvocationObserver,)->Result<Self,AuthorityError>{>implAttempt{ at(attempt.slot,Ctx::se\
@@ -2351,7 +2351,7 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     let mut points: Vec<&str> = points.collect();
     points.sort_unstable();
     points.dedup();
-    let listed = seams.split("POINTS: [&str; 35] = [").nth(1).unwrap();
+    let listed = seams.split("POINTS: [&str; 36] = [").nth(1).unwrap();
     let listed = listed.split("];").next().unwrap().split('"');
     let mut listed: Vec<&str> = listed.skip(1).step_by(2).collect();
     listed.sort_unstable();

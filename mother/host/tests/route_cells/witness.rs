@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 19] = [
+const TOKENS: [Token; 23] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no ord-4 model.call.admitted.
     ("CAS:m:774", "model.call.observed", |v, _, _| {
@@ -82,7 +82,24 @@ const TOKENS: [Token; 19] = [
     // exit point `string` (hands.rs `close_report`).
     ("note", "host.close_report.string", reported),
     ("string", "host.close_report.string", acked),
+    // U19b-1 (SB3E-R216 F2, R216.1 F-B2): the acknowledged install
+    // (model.rs:319) and, after it on its thread, the admission refusal's S1
+    // entry (model.rs:325, an entry, not a note: R199); the acknowledged
+    // metadata gate (model.rs:243) and, after it on its thread, the CAS
+    // refusal's note (model.rs:247).
+    ("m:304", "model.install.before", acked),
+    ("note:admission", "reg.admission", after_ack),
+    ("CAS:m:238", "model.gate.checked", acked),
+    ("note:cas", "reg:cas", after_ack),
 ];
+/// U19b-1: the admitted entry or note at `point` after the cell's last
+/// acknowledgement, on that acknowledgement's thread (the first such).
+fn after_ack<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = v.f.acks.last().map(of)?;
+    let later = |e: &&Seen| e.point == point && e.thread == a.thread && e.tick > a.tick;
+    let at = |e: &&Seen| later(e) && admitted(v, e, tag);
+    v.seen.iter().filter(at).min_by_key(|e| e.tick).copied()
+}
 /// U21a (SB3E-R199 Q-U21-1): the admitted S7 `host.close_report` entry of
 /// S, then on its thread, in order, the `resources`, `inventory` and `model`
 /// branch records, each `Ok`, and the exit at `point` whose report holds no
@@ -195,6 +212,10 @@ model.install.before|s q ord=4|host_session/model.rs:314 (after the 4 metadata g
 reg.ready|s q ord=4|host_session.rs:858 (after the 4 metadata gates)
 reg:scope_admit|s q|host_session/model.rs:142; host_session.rs:89-91
 reg:word_compare|s q ord=4|host_session.rs:865 (after the 4 metadata gates); 89-91
+reg.admission|s q ord=4|host_session/model.rs:325 (after the 4 metadata gates); host_session.rs:89-91
+model.gate.before|s q kind=metadata ord|host_session/model.rs:263; broker/route_seams.rs:127-131
+model.gate.checked|s q ord|host_session/model.rs:243; host_session.rs:89-91
+reg:cas|s q ord|host_session/model.rs:247; host_session.rs:89-91
 close.obligations|s|host_session/close.rs:271
 close.delivery|s|host_session/close.rs:232
 close.mother_end|s|host_session/close.rs:205, 499
@@ -427,7 +448,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 13] = [
+const CONTROLS: [(&str, &str, &str); 18] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -441,6 +462,11 @@ const CONTROLS: [(&str, &str, &str); 13] = [
     ("registration_reserve", "ingress", RESERVE_CONTROL),
     ("registration_readiness", "ingress", READY_CONTROL),
     ("close_report", "lifecycle", REPORT_CONTROL),
+    ("registration_install", "ingress", INSTALL_CONTROL),
+    ("registration_version", "ingress", GATE_CONTROLS[0]),
+    ("registration_status", "ingress", GATE_CONTROLS[1]),
+    ("registration_tags", "ingress", GATE_CONTROLS[2]),
+    ("registration_show", "ingress", GATE_CONTROLS[3]),
 ];
 /// U21a: the close_report control, `quit` held at the entry with no value:
 /// the credited rows' text with `none`.
@@ -464,6 +490,31 @@ ledger=+1:all[s=S];window=boundary;deadline_fired=none";
 const READY_CONTROL: &str = "entry=reg.ready[s=S];check=h:838[s=S];\
 value=none@reg.ready ack=held won=route;out=passed@h:838;branch=none;\
 ledger=+0:all[s=S];window=boundary;deadline_fired=none";
+/// U19b-1 (SB3E-R216 F2): the install control, measured: admitted, so
+/// `branch=none` (no `reg:admission` note on the admitted path).
+const INSTALL_CONTROL: &str = "entry=model.install.before[s=S q=Q];check=m:304[s=S q=Q];\
+value=none@model.install.before ack=held won=route;out=passed@m:304;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
+/// U19b-1 (SB3E-R216, R216.1 F-B1): the four metadata-gate controls, each
+/// held at its own ord and admitted (`branch=none`: no `reg:cas` note).
+const GATE_CONTROLS: [&str; 4] = [
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=1];check=CAS:m:238[s=S q=Q ord=1];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=2];check=CAS:m:238[s=S q=Q ord=2];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=3];check=CAS:m:238[s=S q=Q ord=3];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=4];check=CAS:m:238[s=S q=Q ord=4];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+];
 /// U6a-1 (SB3E-R120.6 Q7): the registration_record control as measured at
 /// U6a-1 Step 0, 10/10: the record rows' text with no value.
 const REG_CONTROL: &str = "entry=model.record.before[s=S q=Q];check=m:292-299[s=S q=Q];\
@@ -793,7 +844,11 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
         .read
         .as_ref()
         .map(|r| match last.is_some_and(|l| l <= r.since) {
-            true => super::reader::read_ack(r.value, &r.trace, &f.broker, &r.echo, r.since),
+            // U19b-1 (SB3E-R214 F-S0-B, R216 F7): the row's value admits one
+            // reader value; a bare terminator never renders `read`.
+            true => super::reader::tied(f.value, r.value).and_then(|()| {
+                super::reader::read_ack(r.value, &r.trace, &f.broker, &r.echo, r.since)
+            }),
             false => Err("read: before the hold".into()),
         });
     let ack = match (answered, read, f.applied.zip(first)) {

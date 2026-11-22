@@ -1715,3 +1715,56 @@ on the File-mode Normal line (`hands.rs:1294-1295`) and the session's own S1 `re
 with no `reg:word_compare` note (`s5.rs` `collect_report`; R202 C1), never the bare
 ready literal;
 model-mode equivalence for close_report is M-7's ledger item (R199 Q-U21-2).
+
+### 14.20 SB-3E U19b-1: registration install and metadata gates (SB3E-R216, R216.1)
+
+**Credited (44, set B; real reader composed as hands.rs:1092, :1130 compose it; the
+registration worker stands for `hands-startup`, hands.rs:1114-1180).**
+
+| Rows | Sink | Value | How |
+|---|---|---|---|
+| x:405-410 | registration_install | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close | typed on the reader while `model.install.before` (model.rs:319) is held; C1 `want` = {model_stopped, model_cancelled} (the bound Stop races, F9) |
+| x:413, 416 | registration_install | repeated, quit | applied while held; `want` = model_cancelled |
+| x:653-656 | registration_install | Emergency, Failed, ClosingNormal, ClosingRestricted | applied while held; `want` = model_cancelled |
+| x:453-458, 465-470, 477-482, 489-494 | registration_show / status / tags / version | the six byte values | typed while the row's own ord of `model.gate.checked` (model.rs:243) is held on the kernel's `nexus-model-exchange` thread (exchange.rs:187-189); `want` = model_cancelled |
+| x:461, 464, 473, 476, 485, 488, 497, 500 | the same four | repeated, quit | applied while held |
+
+**Refusal records (R216 F2, R216.1 F-B2).** `reg:cas` is an S1 note at the gate CAS refusal
+(model.rs:244-249); `reg.admission` is an S1 *entry*, not a note, at the install admission
+refusal (model.rs:321-327; route_seams.rs `POINTS`), because a note there would render as a
+branch note in the 13 credited registration_record rows, whose path refuses the install
+afterwards (R199 Q-U21-1). Both are `#[cfg(mother_route_seams)]`; ship builds are unchanged.
+Tokens `note:admission` and `note:cas` bind each only after the cell's acknowledgement, on its
+thread (witness.rs `after_ack`). Inverse controls: `ctl_registration_install` and
+`ctl_registration_{version,status,tags,show}` fail if either record appears on the admitted
+path (s5.rs `reg_drive`).
+
+**TR-1 (independently reviewed, data commit).**
+- x:405-410: `ledger=+0:all[s=S]` → `+1:emergency_stop[s=S]` (the bound Stop's record, as
+  14.17; the R202 S1 whole-window clause applies).
+- The 32 gate rows: the entry tag `kind=<name>` → `kind=metadata`, and the check tag loses its
+  `kind` key; the ord is kept. S1 records only `chat` or `metadata` (route_seams.rs:127-131),
+  and a held-and-refused request is never sent (exchange.rs:295), so its name is not
+  observable. **The request name of a row comes from its ord in the kernel's fixed metadata
+  sequence, not from an observation:** ord 1 `/api/version` (ollama.rs:249), ord 2
+  `/api/status` (:265), ord 3 `/api/tags` (:285), ord 4 `/api/show` (:314), called in that
+  order by `VerifiedOllama::verify` (ollama.rs:103-104). Fail safe: every metadata request
+  passes the same gate and refusal path.
+
+**F7 (R214 F-S0-B, binding).** The renderer ties a byte row's value to exactly one reader
+value (reader.rs `tied`: CR `stop0d`, LF `stop0a`, CRLF `stop0d0a`, EOF `04`, partial
+`partial+04`, master_close, read_failure); a bare terminator renders `ack=unread[..]`. This
+closes U19a's R202 C1 and C3 ledger items.
+
+**Ledger by key, not credited.** read_failure x:411, 459, 471, 483, 495 (GB4b, R46.3). W1:
+stop_all x:414, 462, 474, 486, 498. W3: original_cell_unscheduled x:412, 460, 472, 484, 496;
+fatal x:415, 463, 475, 487, 499; Bootstrap x:652, 680, 685, 690, 695; fault none x:809, 829,
+832, 835, 838; panic x:831, 834, 837, 840; schedule x:889, 890, 897-904. **A guard row is owed
+if the kernel's metadata sequence (ollama.rs:103-104, :249-314) ever becomes dynamic.**
+
+**Rule for later call rows (R216 F1).** The R5 call rows (U19a's x:86-91 and 534-537, and
+U19b-2's) are credited as harness-composition evidence: production makes no model call before
+M-5b (hands.rs:1312-1323). Binding on M-5b: a production-order guard (the page call runs on a
+worker or exchange thread, never the reader; the reader stays live until after the work join,
+hands.rs:1363-1364; Stop is bound before the run, hands.rs:1130), a re-run of every call row on
+M-5b's composition, and U22's set-B check re-run after M-5b and before O-4.

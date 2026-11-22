@@ -23,11 +23,12 @@ const M: &str = "nexus-mother-route-seam-S1";
 const PATIENCE: Duration = Duration::from_secs(10);
 /// Every point a harness may arm: the broker rows of design 4.4 and S1's
 /// two store points.
-pub(crate) const POINTS: [&str; 35] = [
+pub(crate) const POINTS: [&str; 36] = [
     "reg.reserve",
     "model.reserved",
     "model.record.before",
     "model.install.before",
+    "reg.admission",
     "model.install.after",
     "reg.ready",
     "identity",

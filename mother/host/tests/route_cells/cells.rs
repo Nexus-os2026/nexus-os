@@ -5,7 +5,8 @@
 // (SB3E-R120.1), U9b's five R6 held-sink lifecycle cells (SB3E-R135) and
 // SEAM-1's three registration_reserve and three registration_readiness
 // ingress cells and the R9 primary_end lifecycle cell (SB3E-R139), and
-// U21a's five R9 close_report cells (SB3E-R197, R199). The
+// U21a's five R9 close_report cells (SB3E-R197, R199) and U19b-1's twelve
+// R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216). The
 // route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
@@ -89,4 +90,48 @@ cells! {
     r9 close_report fault none;
     r9 close_report schedule before;
     r9 close_report schedule after;
+    r0 registration_install ingress CR;
+    r0 registration_install ingress LF;
+    r0 registration_install ingress CRLF;
+    r0 registration_install ingress EOF;
+    r0 registration_install ingress partial_Ctrl_D;
+    r0 registration_install ingress master_close;
+    r0 registration_install ingress repeated;
+    r0 registration_install ingress quit;
+    r0 registration_install lifecycle Emergency;
+    r0 registration_install lifecycle Failed;
+    r0 registration_install lifecycle ClosingNormal;
+    r0 registration_install lifecycle ClosingRestricted;
+    r5 registration_version ingress CR;
+    r5 registration_version ingress LF;
+    r5 registration_version ingress CRLF;
+    r5 registration_version ingress EOF;
+    r5 registration_version ingress partial_Ctrl_D;
+    r5 registration_version ingress master_close;
+    r5 registration_version ingress repeated;
+    r5 registration_version ingress quit;
+    r5 registration_status ingress CR;
+    r5 registration_status ingress LF;
+    r5 registration_status ingress CRLF;
+    r5 registration_status ingress EOF;
+    r5 registration_status ingress partial_Ctrl_D;
+    r5 registration_status ingress master_close;
+    r5 registration_status ingress repeated;
+    r5 registration_status ingress quit;
+    r5 registration_tags ingress CR;
+    r5 registration_tags ingress LF;
+    r5 registration_tags ingress CRLF;
+    r5 registration_tags ingress EOF;
+    r5 registration_tags ingress partial_Ctrl_D;
+    r5 registration_tags ingress master_close;
+    r5 registration_tags ingress repeated;
+    r5 registration_tags ingress quit;
+    r5 registration_show ingress CR;
+    r5 registration_show ingress LF;
+    r5 registration_show ingress CRLF;
+    r5 registration_show ingress EOF;
+    r5 registration_show ingress partial_Ctrl_D;
+    r5 registration_show ingress master_close;
+    r5 registration_show ingress repeated;
+    r5 registration_show ingress quit;
 }
