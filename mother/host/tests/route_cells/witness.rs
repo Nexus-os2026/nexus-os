@@ -1285,8 +1285,9 @@ fn coverage() {
     for t in &tags {
         println!("WITNESS B1 tag set [{}] group={}", t.0, t.1);
     }
-    // U21a (SB3E-R197 TR-1): six close_report rows are held (no witness).
-    assert_eq!(rows, 788, "every row with a witness");
+    // U21a (SB3E-R197 TR-1): six close_report rows are held (no witness);
+    // U20a (SB3E-R214.1): and the 35 close-sink byte rows (TR-1 holds).
+    assert_eq!(rows, 753, "every row with a witness");
     // W0b B2', U6a-1: `collect_reg`'s sinks are exactly the no-Mother drivers' rows.
     let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
     let no_mother = |c: &Vec<&str>| ["d_register", "d_bootstrap"].contains(&c[6]);

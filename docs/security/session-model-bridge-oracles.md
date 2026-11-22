@@ -1715,3 +1715,66 @@ on the File-mode Normal line (`hands.rs:1294-1295`) and the session's own S1 `re
 with no `reg:word_compare` note (`s5.rs` `collect_report`; R202 C1), never the bare
 ready literal;
 model-mode equivalence for close_report is M-7's ledger item (R199 Q-U21-2).
+
+### 14.19 SB-3E U20a: the five close sinks' set-B rows (SB3E-R214)
+
+U20a credits no cell. Its Step 0 (`/home/nexus/.m2d/u20a/step0-report.md`) found that
+all 45 set-B rows of `close_obligations`, `producer_join`, `seal` (R9),
+`close_restrict` and `emergency_restrict` (R6) contradict the production order. A
+harness can render them only by keeping a live reader next to a sink on a harness
+thread, which production cannot do.
+
+| # | Fact | Citation |
+|---|---|---|
+| O1 | `close_obligations`, `settle_close_resources` (producer.join) and `seal_close` have production callers only in `Runtime::close` and `close_report`. Those run on `hands-close`, which spawns only if `reader_done`. `reader_done` is true only after the reader thread has finished and been joined. | `hands.rs:734`, `:740`, `:794`, `:1390`, `:1401-1418`; `terminal.rs:1204-1217` |
+| O2 | EOF, partial+EOF, master close and a read failure fail the ingress, and the spawn needs `!ingress.failed()` | `terminal.rs:534-537`, `:1404-1406`, `:1434-1436`; `hands.rs:1406` |
+| O3 | Every production `SessionIngress::accept` and `::emergency` call is on the single reader thread (`hands-input`): `accept` in `receive`, and `emergency` only through `StopRoute::press`, whose callers are `receive` and `read_input`. The EMERGENCY bit is set only inside `emergency()`. | `terminal.rs:516-535`, `:571`, `:1105`, `:1389`, `:1405`, `:1435`; `stop.rs:88-91`; `h:1641-1663`, `:1724-1725` ("Input has one producer") |
+
+`close_caller_findings` in `mother/src/oracles/route_seams_guard.rs` checks these facts
+(route sites test; rule test `sb3e_u20a_close_callers`). It reads every production
+source of Mother as tokens, with the excluded paths in `CALLER_EXCLUDED` and the
+modules a file declares under `#[cfg(test)]` left out. It fails on:
+
+- (a) a call of the three R9 methods outside `close`/`close_report`;
+- (b) an `accept(..)` or `emergency()` call outside `receive` and `press`;
+- (c) a `press()` call outside `receive` and `read_input`;
+- (d) U21a's O1 rule failing, read through `order_findings` itself;
+- (e) a shipped host file (`host/src/bin/`, `hands.rs`, `terminal.rs`, `stop.rs`, or `lib.rs` other than its `mod` lines) using `legacy_terminal` or `legacy_stop`.
+
+The plants are `u20a_p1`-`u20a_p4`, plus U21a's `u21a_p12`. If the guard fails, every
+row below reopens as set B. It reads Mother's sources only: governed-control has no
+caller of these methods besides their definitions at this tree (`h:1641`, `:1694`;
+`close.rs:269`, `:365`; `h:1018`).
+
+**TR-1, unreachable by production order (table status `hold:unreachable_by_production_order`, never a credit).**
+
+| Rows | Sink, values | Reason |
+|---|---|---|
+| x:205-211 | close_obligations: CR, LF, CRLF, EOF, partial_Ctrl_D, master_close, read_failure | O1; also O2 for the last four. No byte can be read while it runs, so `ack=read` cannot be produced. |
+| x:377-383 | producer_join: the same seven | O1 (O2). A live reader is itself a live `Input` producer (`terminal.rs:1022-1024`). |
+| x:501-507 | seal: the same seven | O1 (O2). Measured: with a live reader the seal refuses `seal:producers` (`close.rs:390-392`), never the frozen `stop_obligations` or `word`. |
+| x:235-241 | close_restrict: the same seven | O3: the thread held at `ingress.accept` is the reader, so no byte is read until it returns (measured 10/10) |
+| x:269-275 | emergency_restrict: the same seven | O3: the thread held at `ingress.emergency` is the reader (measured 10/10). x:269-271 also stand over the `c:` citation (`HOLD_ON_CITED`). |
+
+**W1-type, no producer at the held sink (R199 Q-U21-4). The rows stay open for U22's list; each rests on a static proof and the guard above.**
+
+| Row | Value | Static proof |
+|---|---|---|
+| x:213, x:218 | close_obligations repeated, quit | O1: Stop and Quit come only from the reader (O3), which is joined before the sink can run |
+| x:385, x:390 | producer_join repeated, quit | O1, O3 |
+| x:508, x:514 | seal repeated, quit | O1, O3 |
+| x:243, x:248 | close_restrict repeated, quit | O3: a Stop, or a second Quit, while the reader is held in `accept` would need a second reader |
+| x:277, x:282 | emergency_restrict repeated, quit | O3: as above, while the reader is held in `emergency` |
+
+**Kept credits reached by harness press (F-S0-C, R214):** x:575 close_obligations
+Emergency, x:577 close_obligations ClosingRestricted, x:584 close_restrict Emergency,
+x:600 emergency_restrict Emergency, x:647 producer_join ClosingRestricted and x:705
+seal ClosingRestricted. Reached by harness press; production order O1/O3. Each drives
+the real `ingress.emergency()` on the real session while the sink is held, as evidence
+of the sink's behaviour in that state, not as a claim that the terminal causes it.
+
+**Ledger by key, not credited:**
+
+- W1 (15): mission_stop x:214, 244, 278, 386, 510; stop_all x:215, 245, 279, 387, 511; grant_revocation x:220, 250, 284, 392, 516.
+- W3 (52): original_cell_unscheduled x:212, 242, 276, 384, 509; door_fence x:216, 246, 280, 388, 512; fatal x:217, 247, 281, 389, 513; budget x:219, 249, 283, 391, 515; grant_expiry x:221, 251, 285, 393; Normal x:583, 598; ClosedUnclean x:578; fault none x:756, 764, 773, 804, 841; record_failed x:757, 842; record_unknown x:759, 845; panic x:760, 767, 776, 806, 844; poison x:805; schedule x:866, 867, 870, 871, 875, 876, 887, 888, 905, 906.
+- **F-S0-B, binding rule (R214).** A bare terminator renders the frozen close byte rows byte-equal through `read_ack`'s bare arm (measured 10/10 at x:205, x:235 and x:377). Every later unit that credits a byte row (the TR table pass, U19b-d, U20b-c) must keep the bare arm from rendering `read` for a byte row, with a plant that types a bare terminator. This joins U19a's R202 C1 ledger item.
