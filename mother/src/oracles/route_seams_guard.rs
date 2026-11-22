@@ -144,8 +144,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "bb22d3ca73d2797fc3d04218492291b22985ec875de72325829187593ae86d11";
-const MUTANTS: usize = 2592;
+const PINS_SHA256: &str = "0af42bc361189884bd0e5876380b84456a9cdff7a18e134c3f9dfa25386e6964";
+const MUTANTS: usize = 2643;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -154,20 +154,21 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 91cf5be628ff57bd4373c0c0cdc6a5eacddefedf727d7587162b48d6fff96adb
+cells.rs 4bc4c0108af7b41da70d9c9ece9da8b1f31ad621c54c193c69dd301820a799a6
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 7217583280778af6338c7278ad1d53fd377e6c8becab88f23abbc6cb66788ba3
+main.rs 619e4d156f796ce6129b31b399e72f38c05adcab2bf5f193107e1acc24078e22
 reader.rs f0e072b6911653d806059786c6b9c822a908d0b6dbdad832c03ffbec4c7fe66b
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 793ce6467af6e35c885ce7f131d61abf01d0d0db1f773608324a04c8dd6d5c10
+s5.rs debb823dffa1ad156cf6541e1af1ecf944f3aff16e4ddcac1c74c61369d0b2fb
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
 s5_reg.rs 14561ee08b9feb518d8d61901f075c2f80b2dd7af465a09c6537ef055f4009a0
 s5_call_b.rs 2d7e695e5e214bf07d644db6c525b7216003e31e73d26ba6871fed0894f4e271
+s5_ident.rs d467c2f963694c2a603b0cce39c413bf8709c230b5ad426b3fb4f9ab27d2f966
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 49bf5de87ebf2bd3977e6f72ba65ecc69d7da9ba11609357b3514519753bfdf7
+witness.rs 4ce59315a210c0869360ce299d35a4d6ae22e41250bbbf1f2ecdf69652f1d349
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 report.rs 7340ef6e54425d9655e70be86370e09d0db18615236c02a73655b272089423fd
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
@@ -187,6 +188,7 @@ s5.rs|U5|call_chat:ingress,call_chat:lifecycle|ctl_call_chat|S5_SUPER|-
 s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture,nexus_governed_control::host_session::close::CloseSeal,nexus_governed_control::host_session::SessionRequest|-
 s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress,registration_reserve:lifecycle,registration_record:lifecycle,registration_readiness:lifecycle,registration_install:lifecycle,registration_version:ingress,registration_status:ingress,registration_tags:ingress,registration_show:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness,ctl_registration_version,ctl_registration_status,ctl_registration_tags,ctl_registration_show|super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_call_b.rs|U19b-2|call_version:ingress,call_version:lifecycle,call_status:ingress,call_status:lifecycle,call_tags:ingress,call_tags:lifecycle|ctl_call_version,ctl_call_status,ctl_call_tags|super::s5::called,super::s5::read_called,super::s5::Facts,super::Fixture|-
+s5_ident.rs|U19c|identity_view:ingress,identity_view:lifecycle,inference_binding:ingress|ctl_identity_view,ctl_inference_binding|super::s5::identified,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
 s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
 s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
@@ -288,6 +290,7 @@ modreport;\n\
 mods5;\n\
 mods5_call_b;\n\
 mods5_close;\n\
+mods5_ident;\n\
 mods5_r34;\n\
 mods5_r6;\n\
 mods5_reg;\n\
@@ -3062,6 +3065,8 @@ h|fn pressed_registered
 s|fn collect_report
 s|fn called
 s|fn read_called
+s|fn identified
+s|fn read_identified
 ";
 /// The one export that hands out a composed type (`T7_TYPES`): by value.
 const S5_BY_VALUE: &str = "Mother.m";
@@ -3673,7 +3678,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); ctl!(ctl_identity_view, identity_view ingress, s5_ident::ctl_identity_view); ctl!(ctl_inference_binding, inference_binding ingress, s5_ident::ctl_inference_binding); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
         "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
@@ -4238,7 +4243,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); ctl!(ctl_identity_view, identity_view ingress, s5_ident::ctl_identity_view); ctl!(ctl_inference_binding, inference_binding ingress, s5_ident::ctl_inference_binding); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";

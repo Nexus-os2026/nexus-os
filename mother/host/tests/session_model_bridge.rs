@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "cbf6b97aa6b5b7a49334d36af017f92eeee68a78cdced5e034812b3bffed16e7";
+const EXPECT_SHA256: &str = "cc4e0baee8db209f7223f8de930d122977d53b1064a57566df3de509bb745585";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -320,7 +320,7 @@ const BYTE_APPLY: [(&str, &str); 7] = [
     ("read_failure", "read_failure"),
 ];
 /// R5.3: which identity keys a driver's trace entries carry (design 2.3).
-const DRIVER_KEYS: &str = "d_register=s,q d_bootstrap=s d_identity=s,run,inv d_bind=s,run,inv \
+const DRIVER_KEYS: &str = "d_register=s,q d_bootstrap=s d_identity=s,q d_bind=s,run \
     d_call=s,q,run,inv,att d_lane=s,run,inv d_cancel=s,run d_halt=s d_stop=s d_quit=s,q \
     d_close=s host=s";
 /// Real S2/shim record selectors (design 4.2.1); `none` is not one.
@@ -328,7 +328,8 @@ const RECORDS: &str = "model_registered model_call";
 /// R6.3: `record=keys` a delta must carry, of those the driver's identity has.
 /// Mother's `SessionClosed` is not native `session_closed`; `+0:all` is empty.
 const LEDGER_RECORDS: &str = "ModelCallCharged=inv LaneReturned=inv model_call=run,att \
-    model_registered=s,q session_closed=s SessionClosed=s all=s emergency_stop=s";
+    model_registered=s,q session_closed=s SessionClosed=s all=s emergency_stop=s \
+    MissionEnd=s run_cancelled=s";
 const LOCKS: &str = "ModelState EvidenceInner RunTable Coordinator Pending Producers Actions";
 const AMEND_REASON: &str = "NO_SUCH_EVENT_AT_THIS_BOUNDARY";
 /// Composed applicability oracles (6.2). None exists yet: U11 lists them.
@@ -2108,8 +2109,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (202, 0, 553, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44 and U19b-2's 36 credited cells: {summary:?}"
+        (207, 0, 548, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36 and U19c's five credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
@@ -2128,7 +2129,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// U21a (SB3E-R197, R199): the five set-B R9 close_report cells (rows 580,
 /// 581, 761, 868, 869). U19b-1 (SB3E-R216): twelve registration_install and
 /// 32 metadata-gate cells. U19b-2 (SB3E-R217): 36 call cells at ords 1-3.
-const CREDITED: [&str; 157] = [
+/// U19c (SB3E-R228): three identity_view and two inference_binding cells.
+const CREDITED: [&str; 162] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2286,6 +2288,11 @@ const CREDITED: [&str; 157] = [
     "r5/call_tags/lifecycle/Failed",
     "r5/call_tags/lifecycle/ClosingNormal",
     "r5/call_tags/lifecycle/ClosingRestricted",
+    "r1/identity_view/ingress/quit",
+    "r1/identity_view/lifecycle/Failed",
+    "r1/identity_view/lifecycle/ClosingNormal",
+    "r2/inference_binding/ingress/repeated",
+    "r2/inference_binding/ingress/quit",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own

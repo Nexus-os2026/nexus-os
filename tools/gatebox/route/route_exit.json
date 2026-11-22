@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253; U19c: 261) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -21,6 +21,8 @@
    "cells::ctl_close_restrict",
    "cells::ctl_delivery",
    "cells::ctl_emergency_restrict",
+   "cells::ctl_identity_view",
+   "cells::ctl_inference_binding",
    "cells::ctl_mother_end",
    "cells::ctl_primary_end",
    "cells::ctl_producer_join",
@@ -84,6 +86,11 @@
    "cells::rc_r0_registration_reserve_lifecycle_closingrestricted",
    "cells::rc_r0_registration_reserve_lifecycle_emergency",
    "cells::rc_r0_registration_reserve_lifecycle_failed",
+   "cells::rc_r1_identity_view_ingress_quit",
+   "cells::rc_r1_identity_view_lifecycle_closingnormal",
+   "cells::rc_r1_identity_view_lifecycle_failed",
+   "cells::rc_r2_inference_binding_ingress_quit",
+   "cells::rc_r2_inference_binding_ingress_repeated",
    "cells::rc_r5_call_chat_ingress_cr",
    "cells::rc_r5_call_chat_ingress_crlf",
    "cells::rc_r5_call_chat_ingress_eof",
@@ -226,6 +233,7 @@
    "s5::route_s5_join_plants_each_refuse",
    "s5::route_s5_panicking_call_is_counted",
    "s5::route_s5_pause_release_and_panic_at_one_point",
+   "s5::route_s5_pre_ack_binds_the_advancing_worker",
    "s5::route_s5_recorded_path_is_measured_and_credited",
    "s5::route_s5_registered_applies_and_collects",
    "s5::route_s5_registered_bootstraps_then_holds_ready",
@@ -266,13 +274,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "452a8dcf4183384d67bef826af1a10c7a87b7be0ed1d4836ff2fb6a72027e218"
+  "sha256": "98de02323142cf78b885828d1b32c5b54ee3a99351d71804e6084fd5ac7111de"
  },
  "plants": {
-  "count": 417,
-  "names_sha256": "a56c0a4987d816cdbb0f33680fce9043330a19889e40e447a91978cf14ba01d6",
+  "count": 428,
+  "names_sha256": "c16163abfc5d3f63bad68d0620f5f63ed9f58d4297b9e83effeb388f45d4bf8f",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "a2469bfd73483a1a1285010fd7bd348784e2a0cb74df3838242f6c9f24b36fd6"
+  "file_sha256": "1971a092f4534703cf3f76c29396c0408642ef7d0548ce26833d8cac5a9d2282"
  }
 }

@@ -1843,11 +1843,13 @@ call's first arrival (`s5.rs` `called`, as `ord3_quit`).
 | x:557-560, 552-555, 547-550 | the same | Emergency, Failed, ClosingNormal, ClosingRestricted | reached while the ord's `call.gate` is held |
 
 **F1 (binding on M-5b, restated).** Every credited call row is "harness composition until
-M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; and these 36. M-5b owes: a
-production-order guard (the page call runs on a worker or exchange thread, never the reader;
-the reader stays live until after the work join, hands.rs:1390-1391; Stop is bound before the
-run, hands.rs:1157); a re-run of each of those 52 rows, by key, on M-5b's own composition; and
-U22's set-B check re-run after M-5b and before O-4.
+M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; and U19c's 5 identity and
+bind rows x:298, 307, 312, 607, 608 (14.23). M-5b owes: a production-order guard (the page call
+and the identity and bind sinks run on a worker or exchange thread, never the reader; the reader
+stays live until after the work join, hands.rs:1390-1391; Stop is bound before the run,
+hands.rs:1157); a re-run of each of those 57 rows, by key, on M-5b's own composition; U19c's 15
+open rows (x:286-291, 294, 606, 609, S2; x:299-304, F5) run there first; and U22's set-B check
+re-run after M-5b and before O-4.
 
 **Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
 no charge position); INV bound by the Builder's `mother.recheck` of S and Q
@@ -1874,3 +1876,65 @@ door_fence x:131, 148, 165; fatal x:132, 149, 166; budget x:134, 151, 168; grant
 153, 170; Normal x:546, 551, 556; fault none x:737, 741, 745, poison x:738, 742, 746, panic
 x:740, 744, 748; schedule before x:856, 858, 860. W2 unchanged: decline x:739, 743, 747; hold
 x:857, 859, 861.
+
+### 14.23 SB-3E U19c: identity_view and inference_binding (SB3E-R228)
+
+**Credited (5, set B), harness composition until M-5b (F1).** Every shipped lane has model cap 0
+(hands.rs:172-187, lane.rs:146-148), so the shipped binary never reaches `model_identity`
+(coordinator.rs:1866) or `admit_inference` (:1915). Each cell drives the real sink on the real
+session through the harness's own model lane (`s5.rs` `identified`, section `s5_ident.rs`).
+
+| Rows | Sink | Value | Held at | C1: last step, mission end |
+|---|---|---|---|---|
+| x:298, 607, 608 | identity_view | quit, Failed, ClosingNormal | the advance's first `identity` (model.rs:619) | `Err(Stopped)`, `Block { reason: ModelNotPinned }` |
+| x:307 | inference_binding | repeated | its first `model.bind.checked` (run.rs:2330) | `Err(Stopped)`, `Stop { reason: EmergencyStop }` |
+| x:312 | inference_binding | quit | the same | `Err(Stopped)`, `Block { reason: ModelAdmissionRefused }` |
+
+**Refusal notes (F2).** `identity:scope_live` at the live refusal (model.rs:620-625) and
+`bind:cas` at the CAS refusal (run.rs:2332-2336, `inspect_err`), each
+`#[cfg(mother_route_seams)]`; ship builds are unchanged (A5 re-pin, judged by the Architect).
+Token `note:scope_live` binds the note after the acknowledgement on its thread. F4 (option C):
+`note:cas@r:2301` is keyed by the whole branch text, so it is not U19b-1's `note:cas`. **S1:**
+it also requires that no `bind.done` of the run follows the note on its thread
+(witness.rs `bind_refused`). Inverse controls `ctl_identity_view` and `ctl_inference_binding`
+(held, released, the sink passes) fail if either note fires on the admitted path.
+
+**Harness pieces (`collect_pre`).** The window opens at the hold's acknowledgement; RUN is the
+session's own native `run_opened` (exactly one; ATT is never bound); the no-call profile (no
+counted call, attempt site, opening or binding entry, as `credit_close`, and no Builder lane);
+T6 at the row's entry point (`identity`, `bind.entry`); the ack rule: acknowledged on the
+advancing worker, never the reader or the harness, of S and Q (`identity`) or of RUN
+(`model.bind.checked`; rule test `route_s5_pre_ack_binds_the_advancing_worker`); C1 as above;
+the settle barrier (F5): the window closes only after the advance has returned and no stop
+event of the session is pending or in flight (the bound Stop's worker has finished). S at
+`model.bind.checked` and `bind:cas` is bound by CORRELATIONS `bindentry` (an earlier
+`bind.entry` of S and Q of the run on that thread).
+
+**TR-1 (independently reviewed; data commit).**
+- T1: all 29 d_identity rows `[s=S run=RUN inv=INV]` → `[s=S q=Q]` (group suffix kept), and
+  DRIVER_KEYS `d_identity=s,q`: `identity` records S and Q only (host_session.rs:89-91), and the
+  refused path ends before the Builder's reservation (coordinator.rs:1884-1887, :1891).
+- T3: all 33 d_bind rows drop `inv` (`[s=S run=RUN]`, `d_bind=s,run`; R216.1 F-B1 pattern).
+- T2 (F5): the 5 credited ledgers `+0:all[s=S]` → `+1:MissionEnd[s=S],+1:run_cancelled[s=S]`
+  under the R202 S1 whole-window clause (the named counts must sum to the window, else
+  ` of <whole>`). LEDGER gains `MissionEnd` (the journal's Stop, Block or Fail transition) and
+  native `run_cancelled`; `+N:all` stays refused. Each was identical in every run after the
+  barrier (10 sequential, 10 parallel, 11 whole-lane runs).
+
+**Not credited, M-5b (F5, S2).** The six bind byte rows x:299-304 still vary after the barrier:
+the bound Stop's worker and the coordinator's `door.cancel_run` race to cancel the run, and when
+the worker wins no `run_cancelled` is written (x:299 in 2 of 11 whole-lane runs, x:301 in 1;
+the other four share the mechanism). The nine identity stop-class rows x:286-291, 294, 606, 609
+stay open (S2: no harness-visible fact depends on the sink's return on the stop class).
+identity_view and inference_binding then have no credited byte row, so no bare-terminator plant
+applies (F-S0-B).
+
+**Ledger by key.** read_failure x:292, 305 (GB4b). W1: stop_all x:295, mission_stop x:308,
+stop_all x:309 (U22). W3: x:293, 296, 297, 605, 610-612, 777, 778, 780, 877, 878 (identity) and
+x:306, 310, 311, 313, 613, 781, 784, 879, 880 (bind). W2 unchanged: hold x:2-5, 314, 315,
+614-620, 783; amend x:779, 782.
+
+**Re-anchored plants (R59.2, data).** Eleven earlier rows whose `old` text U19c's code moved keep
+their mutation, tests and expect: the seven main.rs terminal-arm rows (now with U19c's two
+`ctl!` entries), u5a_passive_store_commit and u19a_p1/p2 (widened to a unique span), and
+u19a_p_tr1_whole_window_dropped (the new whole-window clause made dead, as before).
