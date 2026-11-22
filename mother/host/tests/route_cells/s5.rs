@@ -3579,8 +3579,8 @@ fn settled(o: &Opened) -> Result<(), String> {
             .session
             .stop_events()
             .map_err(|e| format!("settle: {e:?}"))?;
-        let open = |p: &StopPhase| matches!(p, StopPhase::Pending | StopPhase::InFlight);
-        if !events.iter().any(|e| open(&e.phase)) {
+        let open = [StopPhase::Pending, StopPhase::InFlight];
+        if !events.iter().any(|e| open.contains(&e.phase)) {
             return Ok(());
         }
         if Instant::now() >= deadline {
@@ -3609,12 +3609,12 @@ fn collect_pre(
     let s = SOURCES.lock().unwrap().take();
     let s = s.expect("collect_pre: no observation");
     let (session, request, calls, recorded) = &s.driver;
-    let calls = calls.load(Ordering::SeqCst);
+    let made = calls.load(Ordering::SeqCst);
     let recorded = recorded.lock().unwrap().clone();
     let builder = recorded.iter().any(|r| r.0 == LaneRole::Builder);
     let profile = match value {
-        "none" => (calls != 1).then_some("driver_calls"),
-        _ => credit_close(calls, *session, &broker, &mother)
+        "none" => (made != 1).then_some("driver_calls"),
+        _ => credit_close(made, *session, &broker, &mother)
             .err()
             .or(builder.then_some("builder")),
     };

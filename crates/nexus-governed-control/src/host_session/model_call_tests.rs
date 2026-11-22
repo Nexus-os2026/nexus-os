@@ -1549,7 +1549,7 @@ nsettle_session_attempt(&self,ticket:SessionAttempt,deadline:Instant,)->Result<(
 r>{>implRunRegistry{ at(model.settle.before,Ctx::default().run(ticket.run).attempt(ticket.ordin\
 al),);¦t.cell),);¦letmuttabl >pub(crate)fnadmit_session_inference(&self,b:SessionBinding<'_>,)-\
 >Result<(),AuthorityError>{>implRunRegistry{ at(model.bind.checked,Ctx::default().run(b.run));¦\
-iginal),);¦b.original +b.original.admit().map_err(|e|{ note(bind:cas,Ctx::default().run(b.run));¦p_err(|e|{¦e})?;iffre = at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
+iginal),);¦b.original +b.original.admit().inspect_err(|_|{ note(bind:cas,Ctx::default().run(b.run));¦t_err(|_|{¦})?;iffres = at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
 evidence_store.rs: >fnappend(&mutself,phase:&str,commitment:Option<&str>,body:&str)->Append{>im\
 plInner{ +#[cfg(mother_route_seams)]ifself.route_refused(kind,phase,commitment){ note(store.ref\
 used,Ctx::store(kind,phase,commitment));¦mmitment){¦ifrolled_b = at(store.commit,Ctx::store(kin\

@@ -107,7 +107,7 @@ const TOKENS: [Token; 27] = [
 ];
 /// U19c (SB3E-R228 S1): the CAS note after the acknowledgement on its thread
 /// (`after_ack`), and no `bind.done` of its run after it there: the refusal
-/// returned (run.rs:2332-2337, before :2346), as `cas` binds no admission.
+/// returned (run.rs:2332-2336, before :2345), as `cas` binds no admission.
 fn bind_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
     let n = after_ack(v, point, tag)?;
     let done = |e: &&Seen| {
@@ -262,7 +262,7 @@ identity|s q|host_session/model.rs:619; host_session.rs:89-91
 identity:scope_live|s q|host_session/model.rs:623; host_session.rs:89-91
 bind.entry|s q run|host_session/model.rs:565; host_session.rs:89-91
 model.bind.checked|run|authority/run.rs:2330
-bind.done|run|authority/run.rs:2346
+bind.done|run|authority/run.rs:2345
 bind:cas|run|authority/run.rs:2335
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
